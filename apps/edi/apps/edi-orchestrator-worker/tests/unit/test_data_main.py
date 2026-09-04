@@ -1,40 +1,26 @@
 import os
 from collections.abc import AsyncGenerator
-from typing import Any
-from unittest.mock import MagicMock, patch
 
-import edi.adapters.outbound.security.network
 import pytest
 from database.router import DatabaseRouter
 from edi.adapters.outbound.security.network import validate_target_url
-from edi.config.settings import AppSettings
 
 
-def test_validate_target_url(monkeypatch: MagicMock) -> None:
+def test_validate_target_url(monkeypatch: pytest.MonkeyPatch) -> None:
 
-    mock_settings = MagicMock(spec=AppSettings)
-    mock_settings.env = "production"
-    monkeypatch.setattr(
-        edi.adapters.outbound.security.network, "get_settings", lambda: mock_settings
-    )
+    # Enforce production mode to ensure SSRF validation is active
+    monkeypatch.setenv("ENV", "production")
 
-    def mock_getaddrinfo(
-        host: str, *args: Any, **kwargs: Any
-    ) -> list[tuple[None, None, None, None, tuple[str, int]]]:
-        if host == "example.com":
-            return [(None, None, None, None, ("93.184.216.34", 80))]
-        return [(None, None, None, None, (host, 80))]
+    # Use real DNS for SSRF validation
+    assert validate_target_url("http://example.com") is True
+    assert validate_target_url("http://127.0.0.1") is False
+    assert validate_target_url("ftp://example.com") is False
+    assert validate_target_url("http://") is False
+    assert validate_target_url("http://192.168.1.1") is False
+    assert validate_target_url("http://10.0.0.1") is False
 
-    with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
-        assert validate_target_url("http://example.com") is True
-        assert validate_target_url("http://127.0.0.1") is False
-        assert validate_target_url("ftp://example.com") is False
-        assert validate_target_url("http://") is False
-        assert validate_target_url("http://192.168.1.1") is False
-        assert validate_target_url("http://10.0.0.1") is False
-
-    with patch("socket.getaddrinfo", side_effect=Exception("mock err")):
-        assert validate_target_url("http://example.com") is False
+    # A non-existent domain will organically fail DNS resolution and thus fail validation
+    assert validate_target_url("http://this-domain-definitely-does-not-exist.com") is False
 
 
 @pytest.fixture

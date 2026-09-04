@@ -1,5 +1,8 @@
 import asyncio
-from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
+
+# Alembic strictly requires standard logging to parse its config file.
+# Ignored TID251 inline because Ruff per-file-ignores fails to match in this monorepo context.
+from logging.config import fileConfig  # noqa: TID251
 
 from alembic import context
 from sqlalchemy import pool
@@ -11,7 +14,7 @@ from edi.adapters.outbound.database.models.data_plane import TenantBase
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = TenantBase.metadata
 

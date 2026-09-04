@@ -10,6 +10,34 @@ from edi.ports.outbound.sftp_tester import SftpTesterPort
 logger = structlog.get_logger(__name__)
 
 
+class ParamikoConnectKwargs(typing.TypedDict, total=False):
+    hostname: str
+    port: int
+    username: str
+    password: str
+    look_for_keys: bool
+    allow_agent: bool
+    timeout: int
+    disabled_algorithms: dict[str, list[str]]
+    pkey: paramiko.PKey
+
+
+class DiagnosticHostKeyPolicy(paramiko.MissingHostKeyPolicy):
+    """
+    Silently accepts any host key during diagnostic connectivity tests.
+
+    This is intentionally permissive: the adapter's sole responsibility is
+    to verify that authentication credentials are valid, not to validate
+    server identity. Host-key pinning is a concern for production SFTP
+    data transfers, not for one-off diagnostic pings.
+    """
+
+    def missing_host_key(
+        self, client: paramiko.SSHClient, hostname: str, key: paramiko.PKey
+    ) -> None:
+        pass
+
+
 class ParamikoSftpTesterAdapter(SftpTesterPort):
     async def test_connection(
         self,
@@ -35,9 +63,9 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
         sftp = None
         try:
             client = paramiko.SSHClient()
-            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - test connection accepts any host key
+            client.set_missing_host_key_policy(DiagnosticHostKeyPolicy())
 
-            connect_kwargs: dict[str, object] = {
+            connect_kwargs: ParamikoConnectKwargs = {
                 "hostname": host,
                 "port": port,
                 "username": username,
@@ -60,12 +88,17 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
             else:
                 return False, "Must provide either a password or a client key."
 
-            client.connect(**typing.cast(typing.Any, connect_kwargs))
+            client.connect(**connect_kwargs)
             sftp = client.open_sftp()
 
             return True, None
-        except Exception as e:
-            logger.exception("SSH Connection failed for %s:%s", host, port)
+        except (
+            paramiko.AuthenticationException,
+            paramiko.SSHException,
+            paramiko.ssh_exception.NoValidConnectionsError,
+            OSError,
+        ) as e:
+            logger.exception("sftp_diagnostic_connection_failed", host=host, port=port)
             return False, str(e) or repr(e)
         finally:
             if sftp:

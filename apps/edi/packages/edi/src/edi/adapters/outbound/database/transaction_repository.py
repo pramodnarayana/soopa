@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from collections.abc import Sequence
-from typing import Any, Protocol, cast
+from typing import Protocol, cast
 
 
 class RouteModelProtocol(Protocol):
@@ -14,7 +14,8 @@ class RouteModelProtocol(Protocol):
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonValue
 from sqlalchemy import Select, and_, or_, select
-from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.orm import Mapped
+from sqlalchemy.sql.elements import ColumnElement
 
 from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
@@ -209,7 +210,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     async def get_route(
         self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
     ) -> InboundRouteDTO | None:
-        stmt: Select[tuple[Any, ...]] | None = None
+        stmt: Select[tuple[InboundRoute]] | Select[tuple[OutboundRoute]] | None = None
         if direction == EdiDirection.INBOUND:
             stmt = select(InboundRoute).where(
                 InboundRoute.isa_sender_id == sender_id,
@@ -461,16 +462,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     def _apply_dynamic_filters(
         self,
-        stmt: Select[tuple[Any, ...]],
-        model: type[DeclarativeBase],
+        stmt: Select[tuple[EdiMessage]] | Select[tuple[EdiJson]],
+        model: type[EdiMessage] | type[EdiJson],
         filters: list[dict[str, JsonValue]],
-    ) -> Select[tuple[Any, ...]]:
+    ) -> Select[tuple[EdiMessage]] | Select[tuple[EdiJson]]:
 
         for f in filters:
             field = f.get("field")
             operator = f.get("operator", "eq")
             value = f.get("value")
-            if not field or value is None:
+            if not isinstance(field, str) or value is None:
                 continue
 
             # Reject unknown fields and operators
@@ -478,74 +479,52 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 continue
 
             if field == "trading_partner_id":
-                if hasattr(model, "sender_id") and hasattr(model, "receiver_id"):
-                    has_gs = hasattr(model, "gs_sender_id") and hasattr(model, "gs_receiver_id")
+                if operator == "eq":
+                    conds = [
+                        model.sender_id == str(value),
+                        model.receiver_id == str(value),
+                        model.gs_sender_id == str(value),
+                        model.gs_receiver_id == str(value),
+                        model.trading_partner_id == str(value),
+                    ]
+                    stmt = stmt.where(or_(*conds))
 
-                    has_tp = hasattr(model, "trading_partner_id")
+                elif operator == "neq":
+                    conds = [
+                        model.sender_id != str(value),
+                        model.receiver_id != str(value),
+                        model.gs_sender_id != str(value),
+                        model.gs_receiver_id != str(value),
+                        model.trading_partner_id != str(value),
+                    ]
+                    stmt = stmt.where(and_(*conds))
 
-                    if operator == "eq":
-                        conds = [model.sender_id == value, model.receiver_id == value]
-                        if has_gs:
-                            conds.extend(
-                                [
-                                    cast(Any, model).gs_sender_id == value,
-                                    cast(Any, model).gs_receiver_id == value,
-                                ]
-                            )
-                        if has_tp:
-                            conds.append(cast(Any, model).trading_partner_id == value)
-                        stmt = stmt.where(or_(*conds))
+                elif operator == "contains":
+                    escaped_value = (
+                        str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    )
+                    pattern = f"%{escaped_value}%"
+                    conds = [
+                        model.sender_id.ilike(pattern, escape="\\"),
+                        model.receiver_id.ilike(pattern, escape="\\"),
+                        model.gs_sender_id.ilike(pattern, escape="\\"),
+                        model.gs_receiver_id.ilike(pattern, escape="\\"),
+                        model.trading_partner_id.ilike(pattern, escape="\\"),
+                    ]
+                    stmt = stmt.where(or_(*conds))
 
-                    elif operator == "neq":
-                        conds = [model.sender_id != value, model.receiver_id != value]
-                        if has_gs:
-                            conds.extend(
-                                [
-                                    cast(Any, model).gs_sender_id != value,
-                                    cast(Any, model).gs_receiver_id != value,
-                                ]
-                            )
-                        if has_tp:
-                            conds.append(cast(Any, model).trading_partner_id != value)
-                        stmt = stmt.where(and_(*conds))
-
-                    elif operator == "contains":
-                        escaped_value = (
-                            str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                        )
-                        pattern = f"%{escaped_value}%"
-                        conds = [
-                            model.sender_id.ilike(pattern, escape="\\"),
-                            model.receiver_id.ilike(pattern, escape="\\"),
-                        ]
-                        if has_gs:
-                            conds.extend(
-                                [
-                                    cast(Any, model).gs_sender_id.ilike(pattern, escape="\\"),
-                                    cast(Any, model).gs_receiver_id.ilike(pattern, escape="\\"),
-                                ]
-                            )
-                        if has_tp:
-                            conds.append(
-                                cast(Any, model).trading_partner_id.ilike(pattern, escape="\\")
-                            )
-                        stmt = stmt.where(or_(*conds))
-
-                    elif operator == "in" and isinstance(value, list):
-                        conds = [model.sender_id.in_(value), model.receiver_id.in_(value)]
-                        if has_gs:
-                            conds.extend(
-                                [
-                                    cast(Any, model).gs_sender_id.in_(value),
-                                    cast(Any, model).gs_receiver_id.in_(value),
-                                ]
-                            )
-                        if has_tp:
-                            conds.append(cast(Any, model).trading_partner_id.in_(value))
-                        stmt = stmt.where(or_(*conds))
+                elif operator == "in" and isinstance(value, list):
+                    conds = [
+                        model.sender_id.in_(value),
+                        model.receiver_id.in_(value),
+                        model.gs_sender_id.in_(value),
+                        model.gs_receiver_id.in_(value),
+                        model.trading_partner_id.in_(value),
+                    ]
+                    stmt = stmt.where(or_(*conds))
                 continue
 
-            if field.startswith("business_metadata.") and hasattr(model, "business_metadata"):
+            if field.startswith("business_metadata.") and issubclass(model, EdiJson):
                 json_key = field.split("business_metadata.")[1]
                 column = model.business_metadata[json_key]
                 column_astext = column.astext
@@ -571,28 +550,51 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     )
                     stmt = stmt.where(column_astext.ilike(f"%{escaped_value}%", escape="\\"))
                 elif operator == "in" and isinstance(value, list):
-                    conds = [column_astext.in_([str(v) for v in value])]
+                    json_conds = [column_astext.in_([str(v) for v in value])]
                     for v in value:
-                        conds.append(model.business_metadata.contains({json_key: v}))
-                        conds.append(model.business_metadata.contains({json_key: [v]}))
-                    stmt = stmt.where(or_(*conds))
+                        json_conds.append(model.business_metadata.contains({json_key: v}))
+                        json_conds.append(model.business_metadata.contains({json_key: [v]}))
+                    stmt = stmt.where(or_(*json_conds))
                 continue
 
-            if not hasattr(model, field):
+            attr: Mapped[object] | None = None
+            if field == "direction":
+                attr = model.direction
+            elif field == "status":
+                attr = model.status
+            elif field == "transaction_type":
+                attr = model.transaction_type
+            elif field == "sender_id":
+                attr = model.sender_id
+            elif field == "receiver_id":
+                attr = model.receiver_id
+            elif field == "gs_sender_id":
+                attr = model.gs_sender_id
+            elif field == "gs_receiver_id":
+                attr = model.gs_receiver_id
+            elif field == "format_standard" and issubclass(model, EdiMessage):
+                attr = model.format_standard
+            elif field == "connection_type" and issubclass(model, EdiMessage):
+                attr = model.connection_type
+
+            if attr is None:
                 continue
-            column = getattr(model, field)
 
             if operator == "eq":
-                stmt = stmt.where(column == value)
+                stmt = stmt.where(attr == value)
             elif operator == "neq":
-                stmt = stmt.where(column != value)
+                stmt = stmt.where(attr != value)
             elif operator == "contains":
                 escaped_value = (
                     str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                 )
-                stmt = stmt.where(column.ilike(f"%{escaped_value}%", escape="\\"))
+                # Mapped[object] typehint in sqlalchemy might not expose ilike, so we cast to string column element
+                stmt = stmt.where(
+                    cast(ColumnElement[bool], attr.ilike(f"%{escaped_value}%", escape="\\"))
+                )
             elif operator == "in" and isinstance(value, list):
-                stmt = stmt.where(column.in_(value))
+                stmt = stmt.where(attr.in_(value))
+
         return stmt
 
     async def explorer_list_edi_messages(
@@ -601,13 +603,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         tid_str = tenant_id if tenant_id is not None else None
         base_stmt = select(EdiMessage).where(EdiMessage.tenant_id == tid_str)
-        stmt = cast(
-            Select[tuple[EdiMessage]],
-            self._apply_dynamic_filters(
-                cast(Select[tuple[DeclarativeBase, ...]], base_stmt),
-                cast(type[DeclarativeBase], EdiMessage),
-                filters,
-            ),
+        stmt = self._apply_dynamic_filters(
+            base_stmt,
+            EdiMessage,
+            filters,
         )
         stmt = stmt.order_by(EdiMessage.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)
@@ -656,13 +655,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         tid_str = tenant_id if tenant_id is not None else None
         base_stmt = select(EdiJson).where(EdiJson.tenant_id == tid_str)
-        stmt = cast(
-            Select[tuple[EdiJson]],
-            self._apply_dynamic_filters(
-                cast(Select[tuple[DeclarativeBase, ...]], base_stmt),
-                cast(type[DeclarativeBase], EdiJson),
-                filters,
-            ),
+        stmt = self._apply_dynamic_filters(
+            base_stmt,
+            EdiJson,
+            filters,
         )
         stmt = stmt.order_by(EdiJson.created_at.desc()).limit(limit).offset(offset)
         result = await self.session.execute(stmt)

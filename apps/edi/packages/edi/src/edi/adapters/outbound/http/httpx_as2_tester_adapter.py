@@ -46,6 +46,9 @@ class HttpxAS2TesterAdapter:
     constitutes a business-level success.
     """
 
+    def __init__(self, allow_private_ips: bool = False):
+        self.allow_private_ips = allow_private_ips
+
     async def test_connection(
         self,
         remote_url: str,
@@ -100,7 +103,7 @@ class HttpxAS2TesterAdapter:
             return False, f"Failed to build AS2 message: {e}", payload_str, None
 
         try:
-            with ssrf_safe_context(remote_url):
+            with ssrf_safe_context(remote_url, allow_private_ips=self.allow_private_ips):
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
                         remote_url,
@@ -122,6 +125,15 @@ class HttpxAS2TesterAdapter:
 
         if not (200 <= response.status_code < 300):
             return False, f"Remote returned HTTP {response.status_code}", payload_str, full_mdn
+
+        content_type = response.headers.get("content-type", "").lower()
+        if "multipart/report" not in content_type:
+            return (
+                False,
+                f"MDN parse error: missing Content-Type multipart/report, got {content_type}",
+                payload_str,
+                full_mdn,
+            )
 
         try:
             mdn = parse_mdn(dict(response.headers), response.content)

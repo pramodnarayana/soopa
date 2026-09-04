@@ -1,10 +1,8 @@
-from typing import cast
-from unittest.mock import MagicMock
-
-from database.repository import HasDomainEvents
-from database.types import GlobalSession
+import pytest
+from database.testing import TransactionalTestRouter
 
 from edi.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
+from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 
@@ -19,20 +17,30 @@ class EventAggregate:
         self.domain_events.clear()
 
 
-def test_drain_events_prefers_explicit_event_idempotency_key() -> None:
-    session = MagicMock()
-    repository = GlobalSqlAlchemyRepository(cast(GlobalSession, session))
-    aggregate = EventAggregate(
-        ProvisioningEvent(
-            tenant_id="tenant-1",
-            event_type=EdiEventType.edi_as2_partner_created,
-            resource_id="partner-1",
-            explicit_idempotency_key="request-1",
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_drain_events_prefers_explicit_event_idempotency_key(
+    db_router: TransactionalTestRouter,
+) -> None:
+    async for session in db_router.get_global_session():
+        repository = GlobalSqlAlchemyRepository(session)
+        aggregate = EventAggregate(
+            ProvisioningEvent(
+                tenant_id="tenant-1",
+                event_type=EdiEventType.edi_as2_partner_created,
+                resource_id="partner-1",
+                explicit_idempotency_key="request-1",
+            )
         )
-    )
 
-    repository._drain_events(cast(HasDomainEvents, aggregate))
+        repository._drain_events(aggregate)
 
-    outbox_event = session.add.call_args.args[0]
-    assert outbox_event.idempotency_key == "request-1"
-    assert aggregate.domain_events == []
+        # The outbox event is added to the session
+        added_objects = list(session.new)
+        assert len(added_objects) == 1
+
+        outbox_event = added_objects[0]
+        assert isinstance(outbox_event, ControlPlaneOutbox)
+        assert outbox_event.idempotency_key == "request-1"
+        assert aggregate.domain_events == []
+        break

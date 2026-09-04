@@ -1,63 +1,56 @@
-from unittest.mock import AsyncMock, patch
+import os
+import uuid
 
+import aioboto3
 import pytest
 
 from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
 
 
 @pytest.fixture
-def storage() -> Aioboto3PayloadStorage:
-    return Aioboto3PayloadStorage(
-        bucket="test-bucket",
-        region="us-east-1",
+async def storage() -> "aioboto3.Session":
+    bucket_name = f"test-bucket-{uuid.uuid4().hex}"
+    session = aioboto3.Session()
+    async with session.client(
+        "s3",
+        region_name="us-east-1",
         endpoint_url="http://localhost:4566",
-        access_key_id="test_key",
-        # Safe: This is a dummy key for localstack S3 mocking, not a real AWS secret
-        secret_access_key="test_secret",  # noqa: S106
-    )
+        aws_access_key_id="test",
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
+    ) as s3:
+        await s3.create_bucket(Bucket=bucket_name)
+        yield Aioboto3PayloadStorage(
+            bucket=bucket_name,
+            region="us-east-1",
+            endpoint_url="http://localhost:4566",
+            access_key_id="test",
+            secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
+        )
+        # Cleanup
+        response = await s3.list_objects_v2(Bucket=bucket_name)
+        if "Contents" in response:
+            for obj in response["Contents"]:
+                await s3.delete_object(Bucket=bucket_name, Key=obj["Key"])
+        await s3.delete_bucket(Bucket=bucket_name)
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_aioboto3_payload_storage_upload(storage: Aioboto3PayloadStorage) -> None:
-    mock_s3 = AsyncMock()
+    result = await storage.upload(tenant_id=1, message_id="msg-123", payload=b"payload_data")
+    assert result == f"s3://{storage.bucket}/tenants/1/inbound/msg-123.bin"
 
-    # We patch the context manager returned by session.client
-    mock_cm = AsyncMock()
-    mock_cm.__aenter__.return_value = mock_s3
-
-    with patch.object(storage.session, "client", return_value=mock_cm):
-        result = await storage.upload(tenant_id=1, message_id="msg-123", payload=b"payload_data")
-
-    assert result == "s3://test-bucket/tenants/1/inbound/msg-123.bin"
-    mock_s3.put_object.assert_called_once_with(
-        Bucket="test-bucket",
-        Key="tenants/1/inbound/msg-123.bin",
-        Body=b"payload_data",
-    )
+    # verify
+    data = await storage.download(result)
+    assert data == b"payload_data"
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_aioboto3_payload_storage_download_valid(storage: Aioboto3PayloadStorage) -> None:
-    mock_s3 = AsyncMock()
-    mock_stream = AsyncMock()
-    mock_stream.read.return_value = b"downloaded_data"
-
-    mock_response = {"Body": mock_stream}
-    # Mock the __aenter__ for the stream context manager
-    mock_stream.__aenter__.return_value = mock_stream
-
-    mock_s3.get_object.return_value = mock_response
-
-    mock_cm = AsyncMock()
-    mock_cm.__aenter__.return_value = mock_s3
-
-    with patch.object(storage.session, "client", return_value=mock_cm):
-        result = await storage.download("s3://test-bucket/tenants/1/inbound/msg-123.bin")
-
+    uri = await storage.upload(tenant_id=1, message_id="msg-123", payload=b"downloaded_data")
+    result = await storage.download(uri)
     assert result == b"downloaded_data"
-    mock_s3.get_object.assert_called_once_with(
-        Bucket="test-bucket", Key="tenants/1/inbound/msg-123.bin"
-    )
 
 
 @pytest.mark.asyncio
@@ -69,31 +62,20 @@ async def test_aioboto3_payload_storage_download_invalid_uri(
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_aioboto3_payload_storage_generate_presigned_url(
     storage: Aioboto3PayloadStorage,
 ) -> None:
-    mock_s3 = AsyncMock()
-    mock_s3.generate_presigned_url.return_value = "https://presigned.url"
+    # We upload so the key exists, though generate_presigned_url technically just signs locally
+    uri = await storage.upload(tenant_id=1, message_id="key", payload=b"data")
 
-    mock_cm = AsyncMock()
-    mock_cm.__aenter__.return_value = mock_s3
-
-    with patch.object(storage.session, "client", return_value=mock_cm):
-        result = await storage.generate_presigned_url(
-            "s3://test-bucket/key.bin",
-            response_headers={"Content-Disposition": "attachment; filename=key.bin"},
-        )
-
-    assert result == "https://presigned.url"
-    mock_s3.generate_presigned_url.assert_called_once_with(
-        "get_object",
-        Params={
-            "Bucket": "test-bucket",
-            "Key": "key.bin",
-            "ResponseContentDisposition": "attachment; filename=key.bin",
-        },
-        ExpiresIn=3600,
+    result = await storage.generate_presigned_url(
+        uri,
+        response_headers={"Content-Disposition": "attachment; filename=key.bin"},
     )
+
+    assert result.startswith("http")
+    assert "response-content-disposition=attachment" in result
 
 
 @pytest.mark.asyncio

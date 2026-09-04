@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 # We need the outbox publisher and sqs poller
 # They were in orchestrator-worker, but let's copy them or import them if they are still there
 from edi.config.settings import AppSettings, get_settings
-from edi.domain.enums import MessageQueueName
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -188,14 +187,14 @@ async def main() -> None:
     dp_consumer, cp_consumer = _create_scheduled_job_consumers(settings)
     dp_manager = SqsConsumerManager(
         consumer=dp_consumer,
-        queue_name=MessageQueueName.DATA_PLANE_JOBS_QUEUE.value,
+        queue_name=settings.sqs.data_plane_jobs_queue_url.rsplit("/", 1)[-1],
         handler=functools.partial(process_scheduled_job, registry=job_registry),
     )
     dp_manager.start()
 
     cp_manager = SqsConsumerManager(
         consumer=cp_consumer,
-        queue_name=MessageQueueName.CONTROL_PLANE_JOBS_QUEUE.value,
+        queue_name=settings.sqs.control_plane_jobs_queue_url.rsplit("/", 1)[-1],
         handler=functools.partial(process_scheduled_job, registry=job_registry),
     )
     cp_manager.start()

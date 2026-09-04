@@ -31,7 +31,7 @@ from edi.config.settings import AppSettings, get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.enums import MessageQueueName, PipelineEventType
+from edi.domain.enums import PipelineEventType
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
@@ -165,7 +165,7 @@ async def main() -> None:
     )
     transform_manager = SqsConsumerManager(
         consumer=transform_consumer,
-        queue_name=MessageQueueName.TRANSFORM_QUEUE,
+        queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
     )
     transform_manager.start()
@@ -177,7 +177,7 @@ async def main() -> None:
     )
     lifecycle_manager = SqsConsumerManager(
         consumer=lifecycle_consumer,
-        queue_name=MessageQueueName.LIFECYCLE_QUEUE,
+        queue_name=settings.sqs.lifecycle_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
     )
     lifecycle_manager.start()
@@ -189,7 +189,7 @@ async def main() -> None:
     )
     deliver_manager = SqsConsumerManager(
         consumer=deliver_consumer,
-        queue_name=MessageQueueName.DELIVER_QUEUE,
+        queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
     )
     deliver_manager.start()

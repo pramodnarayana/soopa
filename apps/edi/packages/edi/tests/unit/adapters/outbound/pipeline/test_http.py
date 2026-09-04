@@ -17,7 +17,7 @@ async def test_httpx_delivery_adapter(
         '{"success": true}', status=200
     )
 
-    adapter = HttpxDeliveryClient()
+    adapter = HttpxDeliveryClient(allow_private_ips=True)
     status, response_body = await adapter.deliver(
         httpserver.url_for("/webhook"), b'{"data": "test"}'
     )
@@ -30,7 +30,7 @@ async def test_httpx_delivery_adapter_validator() -> None:
     def fail_validator(url: str) -> bool:
         return False
 
-    adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator)
+    adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator, allow_private_ips=True)
 
     with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
         await adapter.deliver("https://bad.com", b"{}")

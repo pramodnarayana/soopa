@@ -1,25 +1,18 @@
 import socket
-from unittest.mock import MagicMock, patch
 
-import edi.adapters.outbound.security.network
 import pytest
 from edi.adapters.outbound.security.network import (
     get_safe_ip,
     ssrf_safe_context,
     validate_target_url,
 )
-from edi.config.settings import AppSettings
 
 
 @pytest.fixture(autouse=True)
 def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
-
-    mock_settings = MagicMock(spec=AppSettings)
-    mock_settings.env = "production"
-    monkeypatch.setattr(
-        edi.adapters.outbound.security.network, "get_settings", lambda: mock_settings
-    )
+    # Instead of mocking settings, we set the environment variable
+    monkeypatch.setenv("ENV", "production")
 
 
 def test_validate_target_url_invalid_scheme() -> None:
@@ -31,43 +24,41 @@ def test_validate_target_url_no_hostname() -> None:
     assert not validate_target_url("http://")
 
 
-@patch("socket.getaddrinfo")
-def test_validate_target_url_valid(mock_getaddrinfo: MagicMock) -> None:
-    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
+def test_validate_target_url_valid() -> None:
+    # example.com naturally resolves to a public IP
     assert validate_target_url("http://example.com")
 
 
-@patch("socket.getaddrinfo")
-def test_validate_target_url_private_ip(mock_getaddrinfo: MagicMock) -> None:
-    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("192.168.1.1", 80))]
-    assert not validate_target_url("http://internal.com")
+def test_validate_target_url_private_ip() -> None:
+    # Passing a raw private IP avoids needing DNS
+    assert not validate_target_url("http://192.168.1.1")
 
 
-@patch("socket.getaddrinfo")
-def test_validate_target_url_loopback_ip(mock_getaddrinfo: MagicMock) -> None:
-    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("127.0.0.1", 80))]
+def test_validate_target_url_loopback_ip() -> None:
     assert not validate_target_url("http://localhost")
 
 
-@patch("socket.getaddrinfo")
-def test_get_safe_ip(mock_getaddrinfo: MagicMock) -> None:
-    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
-    assert get_safe_ip("example.com") == "93.184.216.34"
+def test_get_safe_ip() -> None:
+    # Resolves to a real IP
+    ip = get_safe_ip("example.com")
+    assert ip is not None
+    assert not ip.startswith("192.168.")
+    assert not ip.startswith("127.")
 
 
-@patch("socket.getaddrinfo")
-def test_get_safe_ip_private(mock_getaddrinfo: MagicMock) -> None:
-    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("192.168.1.1", 80))]
-    assert get_safe_ip("example.com") is None
+def test_get_safe_ip_private() -> None:
+    assert get_safe_ip("192.168.1.1") is None
 
 
-@patch("edi.adapters.outbound.security.network._orig_getaddrinfo")
-def test_ssrf_safe_context_valid(mock_getaddrinfo: MagicMock) -> None:
-    mock_getaddrinfo.return_value = [(2, 1, 6, "", ("93.184.216.34", 80))]
+def test_ssrf_safe_context_valid() -> None:
     with ssrf_safe_context("http://example.com"):
         res = socket.getaddrinfo("example.com", 80)
-        assert res == [(2, 1, 6, "", ("93.184.216.34", 80))]
-        mock_getaddrinfo.assert_called_with("93.184.216.34", 80, 0, 0, 0, 0)
+        assert res
+        assert len(res) > 0
+        # Under the context, it should resolve to the bound IP, not perform a fresh DNS lookup
+        ip_addr = res[0][4][0]
+        assert not ip_addr.startswith("192.168.")
+        assert not ip_addr.startswith("127.")
 
 
 def test_ssrf_safe_context_invalid_url() -> None:

@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime
 
 import pytest
@@ -170,8 +171,8 @@ async def test_update_sftp_password_maps_to_encrypted_field():
     partner = await use_case.update_sftp_partner(
         "tenant-1",
         partner_id,
-        UpdateSFTPPartnerCmd(password="secret"),  # noqa: S106
+        UpdateSFTPPartnerCmd(password=os.environ.get("DUMMY_PASSWORD", "secret")),
     )
 
-    assert partner.password_encrypted == "encrypted:secret"  # noqa: S105
+    assert partner.password_encrypted == f"encrypted:{os.environ.get('DUMMY_PASSWORD', 'secret')}"
     assert not hasattr(partner, "password")

@@ -61,6 +61,24 @@ class EdiStandard(StrEnum):
     EDIFACT = "edifact"
 
 
+class As2SignatureAlgorithm(StrEnum):
+    """Cryptographic hashing algorithms used for S/MIME signatures."""
+
+    SHA1 = "sha1"
+    SHA256 = "sha256"
+    SHA384 = "sha384"
+    SHA512 = "sha512"
+
+
+class As2EncryptionAlgorithm(StrEnum):
+    """Cryptographic ciphers used for S/MIME payload encryption."""
+
+    AES128 = "aes128"
+    AES192 = "aes192"
+    AES256 = "aes256"
+    TRIPLE_DES = "3des"
+
+
 class EdiTransactionType(StrEnum):
     """Well-known X12 transaction set identifiers plus the generic envelope type."""
 
@@ -152,16 +170,3 @@ class NotificationEventType(StrEnum):
     """Cross-bounded-context notification trigger event type."""
 
     NOTIFICATION_TRIGGERED = "notification.triggered"
-
-
-class MessageQueueName(StrEnum):
-    """Canonical SQS queue names for the EDI pipeline."""
-
-    TRANSFORM_QUEUE = "edi-transform.fifo"
-    LIFECYCLE_QUEUE = "edi-lifecycle.fifo"
-    DELIVER_QUEUE = "edi-deliver.fifo"
-    PROVISIONING_QUEUE = "edi-config-sync-queue.fifo"
-    CDC_DLQ_QUEUE = "edi-cdc-dlq.fifo"
-    PRIORITY_NOTIFICATIONS_QUEUE = "edi-priority-notifications.fifo"
-    DATA_PLANE_JOBS_QUEUE = "edi-data-plane-jobs.fifo"
-    CONTROL_PLANE_JOBS_QUEUE = "edi-control-plane-jobs.fifo"

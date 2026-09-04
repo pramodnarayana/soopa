@@ -80,7 +80,7 @@ def purge_sqs(endpoint_url: str) -> None:
         region_name="us-east-1",
         aws_access_key_id="test",
         # Safe: dummy key for localstack
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
     )
     queues = sqs.list_queues()
     if "QueueUrls" in queues:

@@ -175,6 +175,15 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     finally:
         # Cleanup seeded data autonomously
         async with db_engine.connect() as conn:
+            await conn.execute(
+                text("DELETE FROM outbox WHERE tenant_id = :tid"), {"tid": tenant_id}
+            )
+            await conn.execute(
+                text("DELETE FROM api_gateway WHERE trace_id = :trace_id"), {"trace_id": trace_id}
+            )
+            await conn.execute(
+                text("DELETE FROM edi_json WHERE trace_id = :trace_id"), {"trace_id": trace_id}
+            )
             await conn.execute(text("DELETE FROM edi_messages WHERE id = :mid"), {"mid": msg_id})
             await conn.execute(
                 text("DELETE FROM inbound_routes WHERE id = :rid"), {"rid": route_id}

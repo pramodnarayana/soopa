@@ -11,9 +11,15 @@ class HttpxDeliveryClient(HttpDeliveryPort):
     Concrete implementation of HttpDeliveryPort using HTTPX.
     """
 
-    def __init__(self, timeout_secs: int = 30, validator: Callable[[str], bool] | None = None):
+    def __init__(
+        self,
+        timeout_secs: int = 30,
+        validator: Callable[[str], bool] | None = None,
+        allow_private_ips: bool = False,
+    ):
         self.timeout = timeout_secs
         self.validator = validator
+        self.allow_private_ips = allow_private_ips
 
     async def deliver(
         self,
@@ -31,7 +37,7 @@ class HttpxDeliveryClient(HttpDeliveryPort):
         if self.validator and not self.validator(url):
             raise ValueError("URL validation failed for provided destination.")
 
-        with ssrf_safe_context(url):
+        with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
                 response = await client.post(url, content=payload, headers=headers)
                 return response.status_code, response.text

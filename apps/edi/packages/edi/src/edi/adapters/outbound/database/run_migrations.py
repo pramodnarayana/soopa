@@ -78,7 +78,7 @@ def run_migrations():
                 credentials, host_info = rest.split("@", 1)
                 user = credentials.split(":", 1)[0]
                 masked_url = f"{protocol}://{user}:***@{host_info}"
-            except Exception:  # noqa: BLE001
+            except ValueError:
                 masked_url = "***redacted***"
 
         logger.info(

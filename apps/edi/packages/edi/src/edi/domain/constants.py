@@ -13,9 +13,6 @@ from enum import StrEnum
 
 from edi.domain.enums import (
     EdiEventType,
-    MessageQueueName,
-    NotificationEventType,
-    PipelineEventType,
     UcpEventType,
     WebhookEventType,
 )
@@ -37,16 +34,6 @@ class EdiIdPrefix(StrEnum):
 
 
 EDI_MESSAGE_ID_PREFIX = EdiIdPrefix.EDI_MESSAGE.value
-
-# ── Pipeline event → queue routing map ──────────────────────────────────────
-PIPELINE_EVENT_ROUTING_MAP: dict[str, str] = {
-    PipelineEventType.TRANSFORM_EVENT: MessageQueueName.TRANSFORM_QUEUE,
-    PipelineEventType.COMPUTE_TRANSFORM_EVENT: MessageQueueName.TRANSFORM_QUEUE,
-    PipelineEventType.TRANSFORM_COMPLETED: MessageQueueName.LIFECYCLE_QUEUE,
-    PipelineEventType.DELIVER_EVENT: MessageQueueName.DELIVER_QUEUE,
-    PipelineEventType.DELIVERY_COMPLETED: MessageQueueName.LIFECYCLE_QUEUE,
-    NotificationEventType.NOTIFICATION_TRIGGERED: MessageQueueName.PRIORITY_NOTIFICATIONS_QUEUE,
-}
 
 # ── Aggregated provisioning event set ────────────────────────────────────────
 ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType

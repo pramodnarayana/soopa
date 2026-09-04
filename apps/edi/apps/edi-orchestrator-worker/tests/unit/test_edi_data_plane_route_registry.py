@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
 
 import pytest
 
@@ -13,10 +13,14 @@ pytestmark = pytest.mark.asyncio
 async def test_route_registry_success() -> None:
     """Test that a registered route is successfully found and executed."""
     registry = EdiDataPlaneRouteRegistry()
-    mock_factory = AsyncMock()
+
+    events_routed = []
+
+    async def real_factory(evt: EdiDataPlaneEventMessage, uow_fact: Any) -> None:
+        events_routed.append((evt, uow_fact))
 
     # Register an INBOUND TRANSFORM_EVENT route
-    registry.register("TRANSFORM_EVENT", "INBOUND", mock_factory)
+    registry.register("TRANSFORM_EVENT", "INBOUND", real_factory)
 
     event = EdiDataPlaneEventMessage(
         trace_id="trace123",
@@ -25,20 +29,28 @@ async def test_route_registry_success() -> None:
         payload={"direction": "INBOUND"},
         idempotency_key=None,
     )
-    mock_uow_factory = MagicMock()
 
-    await registry.route(event, mock_uow_factory)
+    def real_uow_factory() -> None:
+        pass
 
-    mock_factory.assert_called_once_with(event, mock_uow_factory)
+    await registry.route(event, real_uow_factory)
+
+    assert len(events_routed) == 1
+    assert events_routed[0][0] == event
+    assert events_routed[0][1] == real_uow_factory
 
 
 async def test_route_registry_fallback_to_none_direction() -> None:
     """Test that if a direction is provided but not specifically mapped, it falls back to None."""
     registry = EdiDataPlaneRouteRegistry()
-    mock_factory = AsyncMock()
+
+    events_routed = []
+
+    async def real_factory(evt: EdiDataPlaneEventMessage, uow_fact: Any) -> None:
+        events_routed.append((evt, uow_fact))
 
     # Register a generic DELIVER_EVENT route without direction
-    registry.register("DELIVER_EVENT", None, mock_factory)
+    registry.register("DELIVER_EVENT", None, real_factory)
 
     event = EdiDataPlaneEventMessage(
         trace_id="trace123",
@@ -47,11 +59,15 @@ async def test_route_registry_fallback_to_none_direction() -> None:
         payload={"direction": "OUTBOUND"},  # OUTBOUND is in the payload
         idempotency_key=None,
     )
-    mock_uow_factory = MagicMock()
 
-    await registry.route(event, mock_uow_factory)
+    def real_uow_factory() -> None:
+        pass
 
-    mock_factory.assert_called_once_with(event, mock_uow_factory)
+    await registry.route(event, real_uow_factory)
+
+    assert len(events_routed) == 1
+    assert events_routed[0][0] == event
+    assert events_routed[0][1] == real_uow_factory
 
 
 async def test_route_registry_no_route_found() -> None:
@@ -66,7 +82,9 @@ async def test_route_registry_no_route_found() -> None:
         payload={},
         idempotency_key=None,
     )
-    mock_uow_factory = MagicMock()
+
+    def real_uow_factory() -> None:
+        pass
 
     with pytest.raises(ValueError, match="No route registered for UNKNOWN_EVENT None"):
-        await registry.route(event, mock_uow_factory)
+        await registry.route(event, real_uow_factory)

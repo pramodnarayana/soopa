@@ -165,6 +165,9 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging".msg = "Use structlog via ILogger port instead of standard logging."
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.params.Depends"]
+
 [tool.ruff.lint.per-file-ignores]
 # FastAPI dependencies use default arguments
 "apps/edi/packages/edi/src/api/main.py" = ["B008", "E402"]
@@ -177,7 +180,11 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 "core/platform/packages/identity/src/identity/**/*.py" = ["B008"]
 "core/ucp/packages/ucp/src/**/*.py" = ["B008", "E402"]
 "core/platform/apps/unified-api/src/**/*.py" = ["B008"]
+"**/module.py" = ["B008"]
 "apps/edi/packages/edi/tests/**/*.py" = ["E402"]
+"apps/edi/packages/edi/src/edi/adapters/outbound/database/migrations/global/env.py" = ["TID251"]
+"apps/edi/packages/edi/src/edi/adapters/outbound/database/migrations/tenant/env.py" = ["TID251"]
+"apps/edi/packages/edi/src/edi/adapters/outbound/security/smime.py" = ["S303"]
 
 "apps/edi/apps/edi-as2-server/tests/conftest.py" = ["S603", "S607"]
 # Legacy BOTS engine formatting ignores

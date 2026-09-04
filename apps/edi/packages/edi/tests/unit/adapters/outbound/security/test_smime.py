@@ -1,14 +1,13 @@
 import datetime
-from unittest.mock import patch
 
 from cryptography import x509
-from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from edi.adapters.outbound.security.smime import (
+    _manual_asn1crypto_decrypt,
     decrypt_payload,
     encrypt_payload,
     sign_payload,
@@ -87,7 +86,7 @@ def test_sign_verify_smime():
     assert verified_payload == payload
 
 
-def test_decrypt_fallback_on_unsupported_algorithm():
+def test_manual_asn1crypto_decrypt_fallback_logic():
     private_key = rsa.generate_private_key(
         public_exponent=65537, key_size=2048, backend=default_backend()
     )
@@ -104,21 +103,14 @@ def test_decrypt_fallback_on_unsupported_algorithm():
         .sign(private_key, hashes.SHA256(), default_backend())
     )
 
-    private_pem = private_key.private_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PrivateFormat.PKCS8,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
     cert_pem = cert.public_bytes(serialization.Encoding.PEM)
 
-    payload = b"test EDI payload data"
+    payload = b"test EDI payload data fallback"
     encrypted_data = encrypt_payload(payload, cert_pem, "AES256")
 
-    with patch("edi.adapters.outbound.security.smime.pkcs7") as mock_pkcs7:
-        mock_pkcs7.pkcs7_decrypt_der.side_effect = UnsupportedAlgorithm("test der")
-        mock_pkcs7.pkcs7_decrypt_smime.side_effect = UnsupportedAlgorithm("test smime")
-        mock_pkcs7.pkcs7_decrypt_pem.side_effect = UnsupportedAlgorithm("test pem")
+    # Instead of mocking the cryptography library to fail, we test the pure python
+    # fallback directly with the encrypted payload.
+    decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
 
-        decrypted = decrypt_payload(encrypted_data, private_pem, cert_pem)
-
+    assert decrypted is not None
     assert payload in decrypted

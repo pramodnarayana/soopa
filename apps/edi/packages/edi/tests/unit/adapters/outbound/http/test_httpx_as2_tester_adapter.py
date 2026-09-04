@@ -1,7 +1,3 @@
-from contextlib import contextmanager
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import httpx
 import pytest
 
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
@@ -9,20 +5,25 @@ from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAd
 
 @pytest.fixture
 def adapter():
-    return HttpxAS2TesterAdapter()
+    return HttpxAS2TesterAdapter(allow_private_ips=True)
 
 
-@pytest.fixture(autouse=True)
-def mock_ssrf():
+VALID_MDN = b"""\
+------=_Part_0
+Content-Type: text/plain
 
-    @contextmanager
-    def mock_ssrf_context(url):
-        yield
+The MDN receipt
+------=_Part_0
+Content-Type: message/disposition-notification
 
-    with patch(
-        "edi.adapters.outbound.http.httpx_as2_tester_adapter.ssrf_safe_context", mock_ssrf_context
-    ):
-        yield
+Reporting-UA: test
+Original-Recipient: rfc822; YOU
+Final-Recipient: rfc822; YOU
+Original-Message-ID: <123>
+Disposition: automatic-action/MDN-sent-automatically; processed
+
+------=_Part_0--
+"""
 
 
 from pytest_httpserver import HTTPServer
@@ -32,94 +33,64 @@ from pytest_httpserver import HTTPServer
 async def test_test_connection_success(adapter: HttpxAS2TesterAdapter, httpserver: HTTPServer):
     # Set up the real HTTP server to respond with a 200 and a dummy MDN
     httpserver.expect_request("/as2", method="POST").respond_with_data(
-        "mdn content",
+        VALID_MDN,
         status=200,
-        headers={"Content-Type": "multipart/report"},
+        headers={
+            "Content-Type": 'multipart/report; report-type=disposition-notification; boundary="----=_Part_0"'
+        },
     )
 
-    with (
-        patch(
-            "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-        ) as mock_build,
-        patch("edi.adapters.outbound.http.httpx_as2_tester_adapter.parse_mdn") as mock_parse,
-    ):
-        mock_msg = MagicMock()
-        mock_msg.body = b"mock_body"
-        mock_msg.headers = {"Content-Type": "application/edi-x12"}
-        mock_build.return_value = mock_msg
+    success, disposition, payload_str, full_mdn = await adapter.test_connection(
+        remote_url=httpserver.url_for("/as2"),
+        as2_from="ME",
+        as2_to="YOU",
+        local_private_key_pem=None,
+        local_cert_pem=None,
+        remote_cert_pem=None,
+        encryption_algorithm="none",
+        signature_algorithm="none",
+    )
 
-        mock_mdn = MagicMock()
-        mock_mdn.disposition = "processed"
-        mock_parse.return_value = mock_mdn
-
-        success, disposition, payload_str, full_mdn = await adapter.test_connection(
-            remote_url=httpserver.url_for("/as2"),
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is True
-        assert disposition == "processed"
-        assert payload_str is not None
-        assert full_mdn is not None
+    assert success is True
+    assert disposition == "automatic-action/MDN-sent-automatically; processed"
+    assert payload_str is not None
+    assert full_mdn is not None
 
 
 @pytest.mark.asyncio
-async def test_test_connection_build_fail(adapter):
-    with patch(
-        "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-    ) as mock_build:
-        mock_build.side_effect = ValueError("build error")
+async def test_test_connection_build_fail(adapter: HttpxAS2TesterAdapter):
+    # Pass invalid algorithm to trigger build failure organically
+    success, reason, _payload, _mdn = await adapter.test_connection(
+        remote_url="http://example.com/as2",
+        as2_from="ME",
+        as2_to="YOU",
+        local_private_key_pem=None,
+        local_cert_pem=None,
+        remote_cert_pem=b"fakecert",
+        encryption_algorithm="INVALID_ALG",
+        signature_algorithm="none",
+    )
 
-        success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url="http://test.com",
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is False
-        assert "build error" in reason
+    assert success is False
+    assert "Failed to build AS2 message" in reason
 
 
 @pytest.mark.asyncio
-async def test_test_connection_http_fail(adapter):
-    with (
-        patch(
-            "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-        ) as mock_build,
-        patch("httpx.AsyncClient") as mock_client_cls,
-    ):
-        mock_build.return_value = MagicMock(body=b"", headers={})
+async def test_test_connection_http_fail(adapter: HttpxAS2TesterAdapter):
+    # Hit a closed local port to get connection refused organically
+    success, reason, _payload, _mdn = await adapter.test_connection(
+        remote_url="http://127.0.0.1:49150/closed",
+        as2_from="ME",
+        as2_to="YOU",
+        local_private_key_pem=None,
+        local_cert_pem=None,
+        remote_cert_pem=None,
+        encryption_algorithm="none",
+        signature_algorithm="none",
+    )
 
-        mock_client = AsyncMock()
-        mock_client.post.side_effect = httpx.ConnectError("refused")
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
-        mock_client_cls.return_value = mock_client
-
-        success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url="http://test.com",
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is False
-        assert "refused" in reason
+    assert success is False
+    assert "refused" in reason.lower() or "connect" in reason.lower()
 
 
 @pytest.mark.asyncio
@@ -128,115 +99,58 @@ async def test_test_connection_http_500(adapter: HttpxAS2TesterAdapter, httpserv
         "internal server error", status=500
     )
 
-    with patch(
-        "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-    ) as mock_build:
-        mock_build.return_value = MagicMock(body=b"", headers={})
+    success, reason, _payload, _mdn = await adapter.test_connection(
+        remote_url=httpserver.url_for("/as2"),
+        as2_from="ME",
+        as2_to="YOU",
+        local_private_key_pem=None,
+        local_cert_pem=None,
+        remote_cert_pem=None,
+        encryption_algorithm="none",
+        signature_algorithm="none",
+    )
 
-        success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url=httpserver.url_for("/as2"),
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is False
-        assert "HTTP 500" in reason
+    assert success is False
+    assert "HTTP 500" in reason
 
 
 @pytest.mark.asyncio
 async def test_test_connection_parse_fail(adapter: HttpxAS2TesterAdapter, httpserver: HTTPServer):
+    # Respond with plain text to cause organic MDN parsing failure
     httpserver.expect_request("/as2", method="POST").respond_with_data(
-        "mdn content",
+        "not a valid mdn multipart message",
         status=200,
-        headers={"Content-Type": "multipart/report"},
+        headers={"Content-Type": "text/plain"},
     )
 
-    with (
-        patch(
-            "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-        ) as mock_build,
-        patch("edi.adapters.outbound.http.httpx_as2_tester_adapter.parse_mdn") as mock_parse,
-    ):
-        mock_build.return_value = MagicMock(body=b"", headers={})
-        mock_parse.side_effect = ValueError("parse fail")
+    success, reason, _payload, _mdn = await adapter.test_connection(
+        remote_url=httpserver.url_for("/as2"),
+        as2_from="ME",
+        as2_to="YOU",
+        local_private_key_pem=None,
+        local_cert_pem=None,
+        remote_cert_pem=None,
+        encryption_algorithm="none",
+        signature_algorithm="none",
+    )
 
-        success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url=httpserver.url_for("/as2"),
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is False
-        assert "parse fail" in reason
+    assert success is False
+    assert "parse error" in reason.lower() or "missing content-type" in reason.lower()
 
 
 @pytest.mark.asyncio
-async def test_test_connection_timeout(adapter):
-    with (
-        patch(
-            "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-        ) as mock_build,
-        patch("httpx.AsyncClient") as mock_client_cls,
-    ):
-        mock_build.return_value = MagicMock(body=b"", headers={})
+async def test_test_connection_ssrf_fail(adapter: HttpxAS2TesterAdapter):
+    # A private IP will fail the real SSRF check
+    success, reason, _payload, _mdn = await adapter.test_connection(
+        remote_url="http://192.168.1.5",
+        as2_from="ME",
+        as2_to="YOU",
+        local_private_key_pem=None,
+        local_cert_pem=None,
+        remote_cert_pem=None,
+        encryption_algorithm="none",
+        signature_algorithm="none",
+    )
 
-        mock_client = AsyncMock()
-        mock_client.post.side_effect = httpx.TimeoutException("timeout")
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
-        mock_client_cls.return_value = mock_client
-
-        success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url="http://test.com",
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is False
-        assert "timed out" in reason
-
-
-@pytest.mark.asyncio
-async def test_test_connection_generic_exception(adapter):
-    with (
-        patch(
-            "edi.adapters.outbound.http.httpx_as2_tester_adapter.build_outbound_message"
-        ) as mock_build,
-        patch("httpx.AsyncClient") as mock_client_cls,
-    ):
-        mock_build.return_value = MagicMock(body=b"", headers={})
-
-        mock_client = AsyncMock()
-        mock_client.post.side_effect = httpx.RequestError("generic error", request=MagicMock())
-        mock_client.__aenter__.return_value = mock_client
-        mock_client.__aexit__.return_value = None
-        mock_client_cls.return_value = mock_client
-
-        success, reason, _payload, _mdn = await adapter.test_connection(
-            remote_url="http://test.com",
-            as2_from="ME",
-            as2_to="YOU",
-            local_private_key_pem=None,
-            local_cert_pem=None,
-            remote_cert_pem=None,
-            encryption_algorithm="AES256",
-            signature_algorithm="SHA256",
-        )
-
-        assert success is False
-        assert "HTTP error" in reason
+    assert success is False
+    assert "SSRF" in reason

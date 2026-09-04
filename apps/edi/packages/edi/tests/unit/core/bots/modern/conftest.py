@@ -1,23 +1,23 @@
-from typing import Any
-from unittest.mock import patch
-
 import pytest
 
 from edi.core.bots.utils.botslib import botsglobal
 
 
 @pytest.fixture
-def patch_data_dir(tmp_path) -> "Any":
+def patch_data_dir(tmp_path) -> str:
     """
-    Patches botsglobal.ini.get to return a temporary directory for data operations,
-    and delegates all other lookups to the original getter.
+    Replaces botsglobal.ini.get to return a temporary directory for data operations,
+    and delegates all other lookups to the original getter, avoiding unittest.mock.
     """
     orig_get = botsglobal.ini.get
 
-    def patched_get(section, key, fallback="") -> "Any":
+    def patched_get(section: str, key: str, fallback: str = "") -> str:
         if section == "directories" and key == "data":
             return str(tmp_path)
         return orig_get(section, key, fallback)
 
-    with patch.object(botsglobal.ini, "get", new=patched_get):
+    botsglobal.ini.get = staticmethod(patched_get)
+    try:
         yield tmp_path
+    finally:
+        botsglobal.ini.get = staticmethod(orig_get)

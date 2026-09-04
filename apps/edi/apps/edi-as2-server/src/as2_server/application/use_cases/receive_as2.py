@@ -213,15 +213,18 @@ class ReceiveAS2UseCase:
                 logger.warning("as2_partner_cert_missing", as2_from=as2_msg.as2_from)
                 return payload, Disposition.INSUFFICIENT_SECURITY
 
-            is_valid, verified_payload = verify_signature(
-                payload, partner.public_cert_pem.encode("utf-8")
-            )
-            if not is_valid:
+            try:
+                is_valid, verified_payload = verify_signature(
+                    payload, partner.public_cert_pem.encode("utf-8")
+                )
+                if not is_valid:
+                    raise ValueError("Signature check returned false")
+            except ValueError as e:
                 span.set_status_error("Signature invalid")
                 self.metrics.increment(
                     "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
                 )
-                logger.warning("as2_signature_invalid")
+                logger.warning("as2_signature_invalid", error=str(e))
                 return payload, Disposition.AUTHENTICATION_FAILED
 
             logger.info("as2_signature_verified")

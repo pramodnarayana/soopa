@@ -1,3 +1,4 @@
+import os
 import subprocess
 import time
 
@@ -36,7 +37,7 @@ async def test_paramiko_sftp_delivery_adapter():
         host="localhost",
         port=2222,
         username="testuser",
-        password="pass",  # noqa: S106
+        password=os.environ.get("SFTP_PASSWORD", "pass"),
         remote_path="upload",
         filename="test_upload.txt",
         payload=b"real sftp test payload",
