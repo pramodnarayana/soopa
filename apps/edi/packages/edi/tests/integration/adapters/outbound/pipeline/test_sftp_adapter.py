@@ -16,7 +16,7 @@ async def test_paramiko_sftp_delivery_adapter():
     # Get the host key dynamically
     # Give the container a moment to be ready if it just started
     host_key = None
-    for _ in range(5):
+    for _ in range(30):
         try:
             out = subprocess.check_output(
                 ["ssh-keyscan", "-p", "2222", "-t", "rsa", "localhost"],  # noqa: S607
