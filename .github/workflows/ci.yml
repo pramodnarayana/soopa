@@ -65,7 +65,7 @@ jobs:
 
       - name: Start Database & Infrastructure
         run: |
-          docker compose up -d postgres_global edi_postgres_shard localstack --wait
+          docker compose up -d postgres_global edi_postgres_shard localstack debezium_shard otel-collector sftp --wait
           pnpm db:migrate:platform
           pnpm db:seed
           pnpm db:migrate:edi
