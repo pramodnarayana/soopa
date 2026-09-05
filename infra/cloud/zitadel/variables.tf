@@ -25,5 +25,40 @@ variable "edi_project_name" {
 variable "idp_project_name" {
   description = "Name of the IDP Project"
   type        = string
-  default     = "Soopaidp"
+}
+
+variable "zitadel_domain" {
+  description = "The domain of the Zitadel instance"
+  type        = string
+  default     = "ucp.localhost"
+}
+
+variable "zitadel_port" {
+  description = "The port of the Zitadel instance"
+  type        = string
+  default     = "8080"
+}
+
+variable "zitadel_insecure" {
+  description = "Whether to use an insecure connection to Zitadel"
+  type        = bool
+  default     = true
+}
+
+variable "ucp_web_dashboard_redirect_uris" {
+  description = "Redirect URIs for the UCP Web Dashboard"
+  type        = list(string)
+  default     = ["http://localhost:5173/auth/callback", "http://localhost:5173/callback"]
+}
+
+variable "ucp_web_dashboard_post_logout_redirect_uris" {
+  description = "Post logout redirect URIs for the UCP Web Dashboard"
+  type        = list(string)
+  default     = ["http://localhost:5173", "http://localhost:5173/"]
+}
+
+variable "dev_mode" {
+  description = "Enable dev mode for Zitadel applications"
+  type        = bool
+  default     = true
 }

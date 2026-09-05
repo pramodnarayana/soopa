@@ -8,8 +8,8 @@ terraform {
 }
 
 provider "zitadel" {
-  domain           = "ucp.localhost"
-  insecure         = true
-  port             = "8080"
+  domain           = var.zitadel_domain
+  insecure         = var.zitadel_insecure
+  port             = var.zitadel_port
   jwt_profile_file = "machinekey.json"
 }

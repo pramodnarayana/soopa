@@ -24,10 +24,13 @@ create_queue_with_dlq() {
     dlq_url=$(awslocal sqs get-queue-url --queue-name "$dlq" --query 'QueueUrl' --output text)
     dlq_arn=$(awslocal sqs get-queue-attributes --queue-url "$dlq_url" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 
+    local queue_arn="arn:aws:sqs:us-east-1:000000000000:$source_queue"
+    local policy="{\\\"Version\\\":\\\"2012-10-17\\\",\\\"Statement\\\":[{\\\"Effect\\\":\\\"Allow\\\",\\\"Principal\\\":\\\"*\\\",\\\"Action\\\":\\\"sqs:SendMessage\\\",\\\"Resource\\\":\\\"$queue_arn\\\",\\\"Condition\\\":{\\\"ArnLike\\\":{\\\"aws:SourceArn\\\":\\\"arn:aws:sns:us-east-1:000000000000:*\\\"}}}]}"
+
     if [ "$fifo" = "true" ]; then
-        queue_attributes=$(printf '{"FifoQueue":"true","ContentBasedDeduplication":"true","RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"5\\"}"}' "$dlq_arn")
+        queue_attributes=$(printf '{"FifoQueue":"true","ContentBasedDeduplication":"true","RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"5\\"}","Policy":"%s"}' "$dlq_arn" "$policy")
     else
-        queue_attributes=$(printf '{"RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"5\\"}"}' "$dlq_arn")
+        queue_attributes=$(printf '{"RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"5\\"}","Policy":"%s"}' "$dlq_arn" "$policy")
     fi
 
     awslocal sqs create-queue --queue-name "$source_queue" --attributes "$queue_attributes"

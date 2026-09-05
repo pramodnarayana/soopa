@@ -16,5 +16,5 @@ services:
       - OPENOBSERVE_BASIC_AUTH=${OPENOBSERVE_BASIC_AUTH}
       - OPENOBSERVE_OTLP_ENDPOINT=${OPENOBSERVE_OTLP_ENDPOINT}
     ports:
-      - "4317:4317"   # OTLP gRPC receiver (services send telemetry here)
-      - "4318:4318"   # OTLP HTTP receiver
+      - "127.0.0.1:4317:4317"   # OTLP gRPC receiver (services send telemetry here)
+      - "127.0.0.1:4318:4318"   # OTLP HTTP receiver

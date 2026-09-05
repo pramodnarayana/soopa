@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 // Paths
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const envPath = path.resolve(__dirname, '../../../../.env');
+const envPath = path.resolve(__dirname, '../../../.env');
 
 try {
   console.log('Extracting Terraform outputs from Zitadel infra...');
@@ -25,7 +25,7 @@ try {
     ZITADEL_UCP_WEB_CLIENT_ID: tfOutput.ucp_web_client_id?.value,
     ZITADEL_UCP_API_CLIENT_ID: tfOutput.ucp_api_client_id?.value,
     ZITADEL_EDI_API_CLIENT_ID: tfOutput.edi_api_client_id?.value,
-    ZITADEL_API_TOKEN: tfOutput.ucp_backend_pat_token?.value,
+    ZITADEL_MACHINE_KEY: tfOutput.ucp_backend_machine_key?.value,
     ZITADEL_PLATFORM_ADMIN_ID: tfOutput.platform_admin_id?.value,
   };
 

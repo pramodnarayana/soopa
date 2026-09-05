@@ -550,8 +550,8 @@ def upgrade() -> None:
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(["local_partner_id"], ["edi.as2_partners.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["remote_partner_id"], ["edi.as2_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["local_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["remote_partner_id"], ["as2_partners.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -591,15 +591,15 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["as2_partner_id"],
-            ["edi.as2_partners.id"],
+            ["as2_partners.id"],
         ),
         sa.ForeignKeyConstraint(
             ["sftp_partner_id"],
-            ["edi.sftp_partners.id"],
+            ["sftp_partners.id"],
         ),
         sa.ForeignKeyConstraint(
             ["webhook_id"],
-            ["edi.webhooks.id"],
+            ["webhooks.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -639,11 +639,11 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(
             ["as2_partner_id"],
-            ["edi.as2_partners.id"],
+            ["as2_partners.id"],
         ),
         sa.ForeignKeyConstraint(
             ["sftp_partner_id"],
-            ["edi.sftp_partners.id"],
+            ["sftp_partners.id"],
         ),
         sa.PrimaryKeyConstraint("id"),
     )

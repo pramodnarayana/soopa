@@ -27,10 +27,27 @@ edi-priority-notifications.fifo ← notification.triggered
 """
 
 import json
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
 import pulumi
 import pulumi_aws as aws
+
+# Add the application source to sys.path so infra can share domain constants
+# preserving the single source of truth for business logic.
+app_src_dir = (
+    Path(__file__).resolve().parent.parent.parent.parent.parent
+    / "apps"
+    / "edi"
+    / "packages"
+    / "edi"
+    / "src"
+)
+if str(app_src_dir) not in sys.path:
+    sys.path.append(str(app_src_dir))
+
+from edi.domain.enums import NotificationEventType, PipelineEventType
 
 
 @dataclass(frozen=True)
@@ -43,8 +60,6 @@ class FifoQueuePair:
 
 def _make_fifo_queue_pair(
     logical_name: str,
-    queue_name: str,
-    dlq_name: str,
     max_receive_count: int | None = None,
 ) -> FifoQueuePair:
     config = pulumi.Config("edi-platform")
@@ -61,7 +76,6 @@ def _make_fifo_queue_pair(
     """
     dlq = aws.sqs.Queue(
         f"{logical_name}-dlq",
-        name=dlq_name,
         fifo_queue=True,
         content_based_deduplication=True,
         tags={"ManagedBy": "pulumi", "Component": "edi"},
@@ -73,7 +87,6 @@ def _make_fifo_queue_pair(
 
     queue = aws.sqs.Queue(
         logical_name,
-        name=queue_name,
         fifo_queue=True,
         content_based_deduplication=True,
         redrive_policy=redrive_policy,
@@ -83,11 +96,10 @@ def _make_fifo_queue_pair(
     return FifoQueuePair(queue=queue, dlq=dlq)
 
 
-def _make_fifo_topic(logical_name: str, topic_name: str) -> aws.sns.Topic:
+def _make_fifo_topic(logical_name: str) -> aws.sns.Topic:
     """Provisions a FIFO SNS topic with content-based deduplication."""
     return aws.sns.Topic(
         logical_name,
-        name=topic_name,
         fifo_topic=True,
         content_based_deduplication=True,
         tags={"ManagedBy": "pulumi", "Component": "edi"},
@@ -155,70 +167,25 @@ class EdiMessagingStack:
 
     def __init__(self) -> None:
         # ── SNS Topics ────────────────────────────────────────────────────────
-        self.edi_events_topic = _make_fifo_topic("edi-events-topic", "edi-events-topic.fifo")
-        self.ucp_events_topic = _make_fifo_topic("ucp-events-topic", "ucp-events-topic.fifo")
-        self.identity_events_topic = _make_fifo_topic(
-            "identity-events-topic", "identity-events-topic.fifo"
-        )
+        self.edi_events_topic = _make_fifo_topic("edi-events-topic")
+        self.ucp_events_topic = _make_fifo_topic("ucp-events-topic")
+        self.identity_events_topic = _make_fifo_topic("identity-events-topic")
 
         # ── SQS Queue Pairs ───────────────────────────────────────────────────
-        self.edi_transform = _make_fifo_queue_pair(
-            "edi-transform",
-            queue_name="edi-transform.fifo",
-            dlq_name="edi-transform-dlq.fifo",
-        )
-        self.edi_lifecycle = _make_fifo_queue_pair(
-            "edi-lifecycle",
-            queue_name="edi-lifecycle.fifo",
-            dlq_name="edi-lifecycle-dlq.fifo",
-        )
-        self.edi_deliver = _make_fifo_queue_pair(
-            "edi-deliver",
-            queue_name="edi-deliver.fifo",
-            dlq_name="edi-deliver-dlq.fifo",
-        )
-        self.edi_config_sync = _make_fifo_queue_pair(
-            "edi-config-sync",
-            queue_name="edi-config-sync-queue.fifo",
-            dlq_name="edi-config-sync-queue-dlq.fifo",
-        )
-        self.edi_data_plane_jobs = _make_fifo_queue_pair(
-            "edi-data-plane-jobs",
-            queue_name="edi-data-plane-jobs.fifo",
-            dlq_name="edi-data-plane-jobs-dlq.fifo",
-        )
-        self.edi_control_plane_jobs = _make_fifo_queue_pair(
-            "edi-control-plane-jobs",
-            queue_name="edi-control-plane-jobs.fifo",
-            dlq_name="edi-control-plane-jobs-dlq.fifo",
-        )
-        self.edi_priority_notifications = _make_fifo_queue_pair(
-            "edi-priority-notifications",
-            queue_name="edi-priority-notifications.fifo",
-            dlq_name="edi-priority-notifications-dlq.fifo",
-        )
+        self.edi_transform = _make_fifo_queue_pair("edi-transform")
+        self.edi_lifecycle = _make_fifo_queue_pair("edi-lifecycle")
+        self.edi_deliver = _make_fifo_queue_pair("edi-deliver")
+        self.edi_config_sync = _make_fifo_queue_pair("edi-config-sync")
+        self.edi_data_plane_jobs = _make_fifo_queue_pair("edi-data-plane-jobs")
+        self.edi_control_plane_jobs = _make_fifo_queue_pair("edi-control-plane-jobs")
+        self.edi_priority_notifications = _make_fifo_queue_pair("edi-priority-notifications")
 
         # UCP and Identity queues (consumed by their respective bounded contexts)
-        self.ucp_events = _make_fifo_queue_pair(
-            "ucp-events",
-            queue_name="ucp-events.fifo",
-            dlq_name="ucp-events-dlq.fifo",
-        )
-        self.ucp_jobs = _make_fifo_queue_pair(
-            "ucp-jobs",
-            queue_name="ucp-jobs.fifo",
-            dlq_name="ucp-jobs-dlq.fifo",
-        )
-        self.identity_events = _make_fifo_queue_pair(
-            "identity-events",
-            queue_name="identity-events.fifo",
-            dlq_name="identity-events-dlq.fifo",
-        )
-        self.email_delivery = _make_fifo_queue_pair(
-            "email-delivery",
-            queue_name="email-delivery.fifo",
-            dlq_name="email-delivery-dlq.fifo",
-        )
+        self.ucp_events = _make_fifo_queue_pair("ucp-events")
+        self.ucp_jobs = _make_fifo_queue_pair("ucp-jobs")
+        self.identity_events = _make_fifo_queue_pair("identity-events")
+
+        self.email_delivery = _make_fifo_queue_pair("email-delivery")
 
         # ── SNS→SQS Subscriptions ─────────────────────────────────────────────
         # UCP events → ucp-events queue
@@ -240,7 +207,12 @@ class EdiMessagingStack:
             "edi-transform-subscription",
             topic=self.edi_events_topic,
             queue_pair=self.edi_transform,
-            filter_policy={"eventType": ["TRANSFORM_EVENT", "COMPUTE_TRANSFORM_EVENT"]},
+            filter_policy={
+                "eventType": [
+                    PipelineEventType.TRANSFORM_EVENT,
+                    PipelineEventType.COMPUTE_TRANSFORM_EVENT,
+                ]
+            },
         )
 
         # EDI events → lifecycle queue (lifecycle completion events only)
@@ -248,7 +220,12 @@ class EdiMessagingStack:
             "edi-lifecycle-subscription",
             topic=self.edi_events_topic,
             queue_pair=self.edi_lifecycle,
-            filter_policy={"eventType": ["TRANSFORM_COMPLETED", "DELIVERY_COMPLETED"]},
+            filter_policy={
+                "eventType": [
+                    PipelineEventType.TRANSFORM_COMPLETED,
+                    PipelineEventType.DELIVERY_COMPLETED,
+                ]
+            },
         )
 
         # EDI events → deliver queue (deliver events only)
@@ -256,7 +233,7 @@ class EdiMessagingStack:
             "edi-deliver-subscription",
             topic=self.edi_events_topic,
             queue_pair=self.edi_deliver,
-            filter_policy={"eventType": ["DELIVER_EVENT"]},
+            filter_policy={"eventType": [PipelineEventType.DELIVER_EVENT]},
         )
 
         # EDI events → config-sync queue (all provisioning events — everything
@@ -269,14 +246,22 @@ class EdiMessagingStack:
                 "eventType": [
                     {
                         "anything-but": [
-                            "TRANSFORM_EVENT",
-                            "COMPUTE_TRANSFORM_EVENT",
-                            "TRANSFORM_COMPLETED",
-                            "DELIVERY_COMPLETED",
-                            "DELIVER_EVENT",
-                            "notification.triggered",
+                            PipelineEventType.TRANSFORM_EVENT,
+                            PipelineEventType.COMPUTE_TRANSFORM_EVENT,
+                            PipelineEventType.TRANSFORM_COMPLETED,
+                            PipelineEventType.DELIVERY_COMPLETED,
+                            PipelineEventType.DELIVER_EVENT,
+                            NotificationEventType.NOTIFICATION_TRIGGERED,
                         ]
                     }
                 ]
             },
+        )
+
+        # EDI events → priority notifications queue
+        _subscribe_queue(
+            "edi-priority-notifications-subscription",
+            topic=self.edi_events_topic,
+            queue_pair=self.edi_priority_notifications,
+            filter_policy={"eventType": [NotificationEventType.NOTIFICATION_TRIGGERED]},
         )

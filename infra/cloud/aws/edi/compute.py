@@ -69,6 +69,7 @@ from dataclasses import dataclass
 import pulumi
 import pulumi_aws as aws
 
+from edi.constants import AppEnvKeys
 from edi.messaging import EdiMessagingStack
 from edi.storage import EdiStorageStack
 
@@ -130,6 +131,7 @@ class _ServiceSpec:
     desired_count: int
     task_role: aws.iam.Role
     port: int | None = None
+    environment: pulumi.Output[list[dict[str, str]]] | None = None
 
 
 @dataclass(frozen=True)
@@ -541,7 +543,7 @@ def _make_task_definition(
     cpu: str = "512",
     memory: str = "1024",
     port: int | None = None,
-    environment: list[dict[str, str]] | None = None,
+    environment: pulumi.Output[list[dict[str, str]]] | None = None,
 ) -> aws.ecs.TaskDefinition:
     """
     Builds an ECS Fargate task definition with two containers:
@@ -563,7 +565,7 @@ def _make_task_definition(
     The ``awslogs-region`` is resolved from ``_region.name`` (module-level, deploy-time)
     rather than being hardcoded, so the same Pulumi program works in any AWS region.
     """
-    env: list[dict[str, str]] = environment or []
+    env = environment if environment is not None else pulumi.Output.from_input([])
 
     port_mappings: list[dict[str, object]] = []
     if port is not None:
@@ -571,7 +573,9 @@ def _make_task_definition(
 
     # All values inside this .apply() are fully resolved Pulumi Outputs.
     # _region.name is a plain str (synchronous result of get_region()).
-    container_definitions: pulumi.Output[str] = pulumi.Output.all(image_uri, log_group.name).apply(
+    container_definitions: pulumi.Output[str] = pulumi.Output.all(
+        image_uri, log_group.name, env
+    ).apply(
         lambda args: json.dumps(
             [
                 # ── Container 1: edi-secrets-sidecar ──────────────────────
@@ -610,7 +614,7 @@ def _make_task_definition(
                     "command": command,
                     "essential": True,
                     "portMappings": port_mappings,
-                    "environment": env,
+                    "environment": args[2],
                     "mountPoints": [
                         {
                             "sourceVolume": "secrets",
@@ -668,6 +672,7 @@ def _provision_service(
     log_group: aws.cloudwatch.LogGroup,
     net: _Networking,
     load_balancers: list[aws.ecs.ServiceLoadBalancerArgs] | None = None,
+    listener: aws.lb.Listener | None = None,
 ) -> _ServiceResources:
     """
     Provisions a task definition + ECS Fargate service from a ``_ServiceSpec``.
@@ -689,6 +694,7 @@ def _provision_service(
         cpu=spec.cpu,
         memory=spec.memory,
         port=spec.port,
+        environment=spec.environment,
     )
 
     service = aws.ecs.Service(
@@ -707,6 +713,7 @@ def _provision_service(
             enable=True,
             rollback=True,
         ),
+        opts=pulumi.ResourceOptions(depends_on=[listener]) if listener else None,
         tags=_TAGS,
     )
 
@@ -718,7 +725,7 @@ def _provision_service(
 
 def _provision_alb(
     net: _Networking,
-) -> tuple[aws.lb.LoadBalancer, aws.lb.TargetGroup]:
+) -> tuple[aws.lb.LoadBalancer, aws.lb.TargetGroup, aws.lb.Listener]:
     """
     Provisions an internet-facing ALB for the AS2 HTTP server.
 
@@ -783,7 +790,7 @@ def _provision_alb(
     )
 
     # HTTPS listener — TLS 1.3 preferred, TLS 1.2 minimum
-    aws.lb.Listener(
+    https_listener = aws.lb.Listener(
         "edi-as2-alb-https",
         load_balancer_arn=alb.arn,
         port=443,
@@ -798,7 +805,7 @@ def _provision_alb(
         ],
     )
 
-    return alb, tg
+    return alb, tg, https_listener
 
 
 # ── Main Compute Stack ─────────────────────────────────────────────────────────
@@ -856,8 +863,29 @@ class EdiComputeStack:
         image_uri: pulumi.Output[str] = ecr.repository_url.apply(lambda url: f"{url}:{image_tag}")
 
         # ── ALB for AS2 server ─────────────────────────────────────────────
-        alb, as2_tg = _provision_alb(net)
+        alb, as2_tg, https_listener = _provision_alb(net)
         self.alb_dns_name: pulumi.Output[str] = alb.dns_name
+
+        # ── Shared Application Environment ─────────────────────────────────
+        app_env: pulumi.Output[list[dict[str, str]]] = pulumi.Output.all(
+            storage.edi_payloads.bucket,
+            messaging.edi_events_topic.arn,
+            messaging.edi_transform.queue.url,
+            messaging.edi_deliver.queue.url,
+            messaging.edi_lifecycle.queue.url,
+            messaging.edi_data_plane_jobs.queue.url,
+            messaging.edi_control_plane_jobs.queue.url,
+        ).apply(
+            lambda a: [
+                {"name": AppEnvKeys.S3_BUCKET, "value": a[0]},
+                {"name": AppEnvKeys.AWS_SNS_TOPIC_ARN, "value": a[1]},
+                {"name": AppEnvKeys.SQS_TRANSFORM_QUEUE_URL, "value": a[2]},
+                {"name": AppEnvKeys.SQS_DELIVER_QUEUE_URL, "value": a[3]},
+                {"name": AppEnvKeys.SQS_LIFECYCLE_QUEUE_URL, "value": a[4]},
+                {"name": AppEnvKeys.SQS_DATA_PLANE_JOBS_QUEUE_URL, "value": a[5]},
+                {"name": AppEnvKeys.SQS_CONTROL_PLANE_JOBS_QUEUE_URL, "value": a[6]},
+            ]
+        )
 
         # ── edi-as2-server ─────────────────────────────────────────────────
         # Internet-facing HTTP service. Needs:
@@ -874,6 +902,7 @@ class EdiComputeStack:
             messaging.edi_data_plane_jobs.queue.arn,
             messaging.edi_control_plane_jobs.queue.arn,
             messaging.edi_priority_notifications.queue.arn,
+            config.require("kms_key_arn"),
         ).apply(
             lambda a: [
                 {
@@ -893,6 +922,12 @@ class EdiComputeStack:
                     "Effect": "Allow",
                     "Action": ["sqs:SendMessage"],
                     "Resource": [a[2], a[3], a[4], a[5], a[6], a[7], a[8]],
+                },
+                {
+                    "Sid": "AS2ServerKMSAccess",
+                    "Effect": "Allow",
+                    "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+                    "Resource": a[9],
                 },
             ]
         )
@@ -916,6 +951,7 @@ class EdiComputeStack:
             desired_count=config.require_int("as2_server_replicas"),
             task_role=as2_task_role,
             port=8000,
+            environment=app_env,
         )
         as2_resources = _provision_service(
             spec=as2_spec,
@@ -931,6 +967,7 @@ class EdiComputeStack:
                     container_port=8000,
                 )
             ],
+            listener=https_listener,
         )
         # Suppress unused variable warning — kept for explicit service graph reference.
         _ = as2_resources
@@ -973,6 +1010,7 @@ class EdiComputeStack:
                 memory=config.require("background_worker_memory"),
                 desired_count=1,
                 task_role=bg_task_role,
+                environment=app_env,
             ),
             cluster=cluster,
             execution_role=execution_role,
@@ -987,6 +1025,7 @@ class EdiComputeStack:
             messaging.edi_transform.queue.arn,
             messaging.edi_transform.dlq.arn,
             storage.edi_payloads.arn,
+            config.require("kms_key_arn"),
         ).apply(
             lambda a: [
                 {
@@ -1006,6 +1045,12 @@ class EdiComputeStack:
                     "Action": ["s3:GetObject", "s3:PutObject"],
                     "Resource": f"{a[2]}/*",
                 },
+                {
+                    "Sid": "ComputeWorkerKMSAccess",
+                    "Effect": "Allow",
+                    "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
+                    "Resource": a[3],
+                },
             ]
         )
         compute_task_role = _make_task_role("compute-worker", compute_extra)
@@ -1017,6 +1062,7 @@ class EdiComputeStack:
                 memory=config.require("compute_worker_memory"),
                 desired_count=config.require_int("compute_worker_replicas"),
                 task_role=compute_task_role,
+                environment=app_env,
             ),
             cluster=cluster,
             execution_role=execution_role,
@@ -1054,6 +1100,7 @@ class EdiComputeStack:
                 memory=config.require("orchestrator_worker_memory"),
                 desired_count=1,
                 task_role=orch_task_role,
+                environment=app_env,
             ),
             cluster=cluster,
             execution_role=execution_role,
@@ -1091,6 +1138,7 @@ class EdiComputeStack:
                 memory=config.require("config_sync_worker_memory"),
                 desired_count=1,
                 task_role=sync_task_role,
+                environment=app_env,
             ),
             cluster=cluster,
             execution_role=execution_role,

@@ -6,10 +6,10 @@ resource "zitadel_machine_user" "ucp_backend_service" {
   access_token_type = "ACCESS_TOKEN_TYPE_BEARER"
 }
 
-resource "zitadel_personal_access_token" "ucp_backend_pat" {
+resource "zitadel_machine_key" "ucp_backend_machine_key" {
   org_id          = zitadel_org.platform_org.id
   user_id         = zitadel_machine_user.ucp_backend_service.id
-  expiration_date = "2029-12-31T23:59:59Z"
+  key_type        = "KEY_TYPE_JSON"
 }
 
 resource "random_password" "platform_admin_password" {
