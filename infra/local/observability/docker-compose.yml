@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector
+  # Receives OTLP traces/metrics/logs from all services,
+  # then forwards them to OpenObserve.
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    container_name: otel-collector
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - ./otel-collector-config.yml:/etc/otel-collector-config.yml
+    environment:
+      - OPENOBSERVE_BASIC_AUTH=${OPENOBSERVE_BASIC_AUTH}
+      - OPENOBSERVE_OTLP_ENDPOINT=${OPENOBSERVE_OTLP_ENDPOINT}
+    ports:
+      - "127.0.0.1:4317:4317"   # OTLP gRPC receiver (services send telemetry here)
+      - "127.0.0.1:4318:4318"   # OTLP HTTP receiver

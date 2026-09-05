@@ -1,6 +1,6 @@
 import structlog
 
-from edi.domain.constants import TransactionDirection
+from edi.domain.enums import EdiDirection
 from edi.domain.models.base import ConnectionType
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
@@ -60,7 +60,7 @@ class ListOutboundRoutesUseCase:
                     updated_at=out_r.updated_at,
                     as2_partner_id=str(out_r.as2_partner_id) if out_r.as2_partner_id else None,
                     sftp_partner_id=str(out_r.sftp_partner_id) if out_r.sftp_partner_id else None,
-                    direction=TransactionDirection.OUTBOUND.value,
+                    direction=EdiDirection.OUTBOUND,
                     destination_name=_dest_name,
                 )
             )

@@ -1,6 +1,4 @@
-import contextlib
 from collections.abc import Callable
-from typing import Any
 
 import httpx
 
@@ -13,9 +11,15 @@ class HttpxDeliveryClient(HttpDeliveryPort):
     Concrete implementation of HttpDeliveryPort using HTTPX.
     """
 
-    def __init__(self, timeout_secs: int = 30, validator: Callable[[str], Any] | None = None):
+    def __init__(
+        self,
+        timeout_secs: int = 30,
+        validator: Callable[[str], bool] | None = None,
+        allow_private_ips: bool = False,
+    ):
         self.timeout = timeout_secs
         self.validator = validator
+        self.allow_private_ips = allow_private_ips
 
     async def deliver(
         self,
@@ -30,15 +34,10 @@ class HttpxDeliveryClient(HttpDeliveryPort):
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
 
-        ctx = self.validator(url) if self.validator else contextlib.nullcontext()
+        if self.validator and not self.validator(url):
+            raise ValueError("URL validation failed for provided destination.")
 
-        # If validator returns a boolean (legacy), handle it
-        if isinstance(ctx, bool):
-            if not ctx:
-                raise ValueError("URL validation failed for provided destination.")
-            ctx = contextlib.nullcontext()
-
-        with ctx, ssrf_safe_context(url):
+        with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
             async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
                 response = await client.post(url, content=payload, headers=headers)
                 return response.status_code, response.text

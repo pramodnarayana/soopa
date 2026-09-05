@@ -5,27 +5,21 @@ The extractor uses compiled JSONPath expressions. It is pure Python — no I/O.
 Zero mocks; test all transaction types, missing configs, and edge cases.
 """
 
-from edi.core.pipeline.metadata_extractor import EXTRACTOR_CONFIG, MetadataExtractorService
+from edi.core.pipeline.metadata_extractor import MetadataExtractorService
+from edi.domain.metadata.extractors import EXTRACTOR_CONFIG
 
 
 class TestMetadataExtractorInit:
     def test_uses_default_config_when_none_provided(self):
         svc = MetadataExtractorService()
         assert svc.config is EXTRACTOR_CONFIG
-        assert "850" in svc.compiled_config
+        assert "850" in svc.config
 
     def test_accepts_custom_config(self):
         custom = {"999": {"my_field": "$.heading.MY_SEGMENT.MY01"}}
         svc = MetadataExtractorService(config=custom)
-        assert "999" in svc.compiled_config
-        assert "850" not in svc.compiled_config
-
-    def test_invalid_jsonpath_does_not_raise_on_init(self):
-        """Malformed JSONPath should be logged but not crash the constructor."""
-        # jsonpath_ng is lenient; we verify no exception bubbles up
-        svc = MetadataExtractorService(config={"bad": {"f": "this is not valid jsonpath [[["}})
-        # No exception raised — invalid paths are skipped during compile
-        assert isinstance(svc.compiled_config, dict)
+        assert "999" in svc.config
+        assert "850" not in svc.config
 
 
 class TestMetadataExtractorExtract:

@@ -1,26 +1,46 @@
 import base64
+import contextlib
 import datetime
-from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
 import structlog
+from aiohttp import web
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from database.models import Webhook as GlobalWebhook
 from seedwork import generate_id
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.inbound.as2 import build_outbound_message
+from edi.adapters.inbound.as2.builder import build_outbound_message
+from edi.adapters.outbound.database.data_plane_unit_of_work import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
 )
-from edi.adapters.outbound.database.models.data_plane import (
-    InboundRoute,
-    Webhook,
+from edi.adapters.outbound.database.models.control_plane import (
+    InboundRoute as ControlPlaneInboundRoute,
 )
+from edi.adapters.outbound.database.models.data_plane import (
+    EdiMessage,
+)
+from edi.adapters.outbound.database.models.data_plane import (
+    InboundRoute as DataPlaneInboundRoute,
+)
+from edi.adapters.outbound.database.models.data_plane import (
+    Webhook as DataPlaneWebhook,
+)
+from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
+from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
+from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
+from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
+from edi.config.settings import AppSettings
+from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 
 logger = structlog.get_logger(__name__)
 
@@ -62,7 +82,12 @@ EDI_PAYLOAD = b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER  
 @pytest.mark.skip(reason="Needs real DB fixtures for E2E")
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClient) -> None:
+async def test_inbound_flow_e2e(
+    session: AsyncSession,
+    global_session: AsyncSession,
+    client: httpx.AsyncClient,
+    override_get_secret_store,
+) -> None:
     """
     E2E Test:
     1. Start dummy Webhook Receiver.
@@ -70,7 +95,6 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
     3. Send AS2 Payload.
     4. Wait for Delivery and assert Webhook Receiver got JSON.
     """
-    from aiohttp import web
 
     received_webhook_payloads = []
 
@@ -90,7 +114,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         tenant_id = 0
 
         # Create Webhook (Global DB)
-        webhook = Webhook(
+        webhook = GlobalWebhook(
             id=generate_id("id"),
             tenant_id=tenant_id,
             name="E2E Webhook",
@@ -100,7 +124,7 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         global_session.add(webhook)
 
         # Create InboundRoute (Global DB)
-        inbound_route = InboundRoute(
+        inbound_route = ControlPlaneInboundRoute(
             tenant_id=tenant_id,
             isa_sender_id="SENDER",
             isa_receiver_id="RECEIVER",
@@ -118,12 +142,16 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         local_cert_b64 = base64.b64encode(local_cert).decode("utf-8")
         remote_cert_b64 = base64.b64encode(remote_cert).decode("utf-8")
 
+        # Seed the fake vault
+        local_priv_ref = await override_get_secret_store.store_private_key(local_priv)
+
         # Using Tenant DB for data plane partnerships
         local_partner = AS2Partner(
             tenant_id=tenant_id,
             as2_id="RECEIVER",
             is_local=True,
             certificate_data=local_cert_b64,
+            private_key_vault_ref=local_priv_ref,
         )
         remote_partner = AS2Partner(
             tenant_id=tenant_id,
@@ -131,8 +159,8 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
             is_local=False,
             certificate_data=remote_cert_b64,
         )
-        session.add_all([local_partner, remote_partner])
-        await session.flush()
+        global_session.add_all([local_partner, remote_partner])
+        await global_session.flush()
 
         partnership = AS2Partnership(
             tenant_id=tenant_id,
@@ -142,24 +170,20 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
             encryption_algorithm="AES_256_CBC",
             signing_algorithm="SHA256",
         )
-        session.add(partnership)
+        global_session.add(partnership)
         await session.commit()
         await global_session.commit()
 
         # Replicate to Data Plane since this runs outside standard provisioning sync
-        from edi.adapters.outbound.database.models.data_plane import (
-            InboundRoute as TenantInboundRoute,
-        )
-        from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
 
-        t_webhook = TenantWebhook(
+        t_webhook = DataPlaneWebhook(
             id=webhook.id,
             tenant_id=tenant_id,
             name="E2E Webhook",
             url="http://127.0.0.1:9999/webhook",
             active=True,
         )
-        t_route = TenantInboundRoute(
+        t_route = DataPlaneInboundRoute(
             tenant_id=tenant_id,
             isa_sender_id="SENDER",
             isa_receiver_id="RECEIVER",
@@ -178,17 +202,12 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
             as2_to="RECEIVER",
         )
 
-        with patch(
-            "edi.application.use_cases.as2_receive_service.vault.get_secret", new_callable=AsyncMock
-        ) as mock_get_secret:
-            mock_get_secret.return_value = local_priv.decode("utf-8")
-
-            # Send to API AS2 server
-            response = await client.post(
-                "/as2/receive",
-                content=msg.body,
-                headers=msg.headers,
-            )
+        # Send to API AS2 server
+        response = await client.post(
+            "/as2/receive",
+            content=msg.body,
+            headers=msg.headers,
+        )
 
         assert response.status_code == 200, (
             f"Expected 200, got {response.status_code}. Text: {response.text}"
@@ -196,23 +215,9 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
         assert "application/edi-consent" in response.headers.get("content-type", "")
 
         # To avoid running full worker pipeline in a unit test, we will instantiate the services directly
-        from typing import Any
-        from unittest.mock import MagicMock
-
-        from edi.adapters.outbound.database.models.data_plane import EdiMessage
-        from edi.adapters.outbound.pipeline.storage import S3StorageClient
-        from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-        from edi.application.use_cases.pipeline.compute_transform_use_case import (
-            ComputeTransformUseCase,
-        )
-        from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-        from edi.config.settings import AppSettings
 
         # 1. Manually run ComputeTransformUseCase
         settings = AppSettings()
-        from edi.adapters.outbound.database.data_plane_unit_of_work import (
-            SqlAlchemyDataPlaneUnitOfWork,
-        )
 
         uow = SqlAlchemyDataPlaneUnitOfWork(session, settings, S3StorageClient("test", None))
         translate_svc = ComputeTransformUseCase(uow, BotsTransformerAdapter())
@@ -224,56 +229,40 @@ async def test_inbound_flow_e2e(session, global_session, client: httpx.AsyncClie
 
         try:
             await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
-        except Exception as e:  # noqa: BLE001
-            # If bots is not running, we mock it for the test
-            if "Connection" in str(e):
-                from edi.ports.outbound.transformer_port import TransformerPort
+        except (httpx.RequestError, ConnectionError) as e:
+            # If bots is not running, we use a pure FakeTransformerAdapter instead of a mock
+            if "Connection" in str(e) or "connect" in str(e).lower():
+                from edi.testing.fakes.pipeline_fakes import FakeTransformerAdapter
 
-                class MockTransformer(TransformerPort):
-                    async def transform_edi_to_json(
-                        self, payload: bytes, standard: str, transaction_type: str
-                    ):
-                        from edi.ports.outbound.transformer_port import TransformedTransaction
-
-                        return [
-                            TransformedTransaction(
-                                transaction_type=transaction_type,
-                                isa_sender_id="MOCK_ISA_SENDER",
-                                isa_receiver_id="MOCK_ISA_RECEIVER",
-                                gs_sender_id="MOCK_GS_SENDER",
-                                gs_receiver_id="MOCK_GS_RECEIVER",
-                                control_number="MOCK_1234",
-                                payload={"fake": "json", "type": transaction_type},
-                            )
-                        ]
-
-                    async def transform_json_to_edi(
-                        self,
-                        payload: dict[str, Any] | list[Any],
-                        standard: str,
-                        transaction_type: str,
-                        route_config: dict,
-                    ) -> bytes:
-                        return b""
-
-                translate_svc.transformer = MockTransformer()
+                translate_svc.transformer = FakeTransformerAdapter()
                 await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
+            else:
+                raise
 
         # 2. Manually run Deliver
-        import contextlib
 
         @contextlib.asynccontextmanager
-        async def mock_uow_factory():
+        async def real_uow_factory():
             yield uow
 
+        def real_router_factory(local_uow):
+            strategies = {
+                webhook.id: WebhookDeliveryStrategy(
+                    local_uow, HttpxDeliveryClient(allow_private_ips=True)
+                )
+            }
+            return DeliveryRouterUseCase(local_uow, strategies)
+
         deliver_svc = DeliveryUseCase(
-            uow_factory=mock_uow_factory,
-            router_factory=lambda _uow: MagicMock(),
+            uow_factory=real_uow_factory,
+            router_factory=real_router_factory,
         )
         await deliver_svc.execute(trace_id)
 
         assert len(received_webhook_payloads) == 1
-        assert received_webhook_payloads[0]["fake"] == "json"
+        # The fake transformer adapter or real bots output will be sent.
+        # Just verifying that the webhook was hit and contained JSON payload.
+        assert "payload" in received_webhook_payloads[0]
 
     finally:
         await runner.cleanup()

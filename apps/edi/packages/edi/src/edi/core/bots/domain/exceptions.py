@@ -5,10 +5,9 @@ Bots Exception classes
 
 import collections
 import traceback
-from typing import Any
 
 
-def safe_unicode(value: Any) -> str:
+def safe_unicode(value: object) -> str:
     """For errors: return best possible unicode...should never lead to errors."""
     # print("safe_unicode00")
     try:
@@ -65,7 +64,7 @@ class BotsError(Exception):
     - BotsError('tekst %(var1)s %(var2)s',var1='value1',var2='value2')
     """
 
-    def __init__(self, exc: Any, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, exc: object, *args: object, **kwargs: object) -> None:
         self.exc = safe_unicode(exc)
         if args:
             # expect args[0] to be a dict

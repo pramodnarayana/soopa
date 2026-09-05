@@ -1,7 +1,3 @@
-import asyncio
-import contextlib
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
 
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
@@ -9,38 +5,32 @@ from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 pytestmark = pytest.mark.asyncio
 
 
-@patch("edi.adapters.outbound.pipeline.http.ssrf_safe_context")
-@patch("edi.adapters.outbound.pipeline.http.httpx.AsyncClient")
-async def test_httpx_delivery_adapter(mock_client_cls: MagicMock, mock_ssrf: MagicMock) -> None:
+from pytest_httpserver import HTTPServer
 
-    mock_ssrf.return_value = contextlib.nullcontext()
-    mock_client = AsyncMock()
-    mock_client_cls.return_value.__aenter__.return_value = mock_client
 
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.text = '{"success": true}'
-    mock_client.post.return_value = mock_response
+async def test_httpx_delivery_adapter(
+    monkeypatch: pytest.MonkeyPatch, httpserver: HTTPServer
+) -> None:
+    monkeypatch.setenv("APP_ENV", "test")
 
-    adapter = HttpxDeliveryClient()
+    httpserver.expect_request("/webhook", method="POST").respond_with_data(
+        '{"success": true}', status=200
+    )
+
+    adapter = HttpxDeliveryClient(allow_private_ips=True)
     status, response_body = await adapter.deliver(
-        "https://example.com/webhook", b'{"data": "test"}'
+        httpserver.url_for("/webhook"), b'{"data": "test"}'
     )
 
     assert status == 200
     assert response_body == '{"success": true}'
-    mock_client.post.assert_awaited_once_with(
-        "https://example.com/webhook",
-        content=b'{"data": "test"}',
-        headers={"Content-Type": "application/json"},
-    )
 
 
-def test_httpx_delivery_adapter_validator() -> None:
+async def test_httpx_delivery_adapter_validator() -> None:
     def fail_validator(url: str) -> bool:
         return False
 
-    adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator)
+    adapter = HttpxDeliveryClient(timeout_secs=5, validator=fail_validator, allow_private_ips=True)
 
     with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
-        asyncio.run(adapter.deliver("https://bad.com", b"{}"))
+        await adapter.deliver("https://bad.com", b"{}")

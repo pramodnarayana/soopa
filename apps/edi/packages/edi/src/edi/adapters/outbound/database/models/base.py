@@ -5,6 +5,5 @@ from database.models.core import GlobalRegistry
 
 class EdiGlobalBase(DeclarativeBase):
     registry = GlobalRegistry
-    from typing import Any
 
-    __table_args__: Any = {"schema": "edi"}
+    __table_args__: dict[str, object] | tuple[object, ...] = {"schema": "edi"}

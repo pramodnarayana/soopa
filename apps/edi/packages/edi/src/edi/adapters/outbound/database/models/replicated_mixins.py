@@ -1,7 +1,7 @@
 import os
 from datetime import UTC, datetime
-from typing import Any
 
+from seedwork.domain.types import JsonValue
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -122,7 +122,7 @@ class AS2PartnershipMixin(TimestampMixin):
         return mapped_column(String(50), nullable=False, default="SHA256")
 
     @declared_attr
-    def advanced_flags(cls) -> Mapped[dict[str, Any] | None]:
+    def advanced_flags(cls) -> Mapped[dict[str, JsonValue] | None]:
         return mapped_column(JSONB, nullable=True)
 
     @declared_attr

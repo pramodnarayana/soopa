@@ -5,13 +5,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from database.models.identity import Tenant
-from edi.adapters.inbound.as2 import (
+from edi.adapters.outbound.security import decrypt_payload, verify_signature
+from edi.domain.models.as2 import (
     AS2MDN,
     AS2Message,
     Disposition,
-    generate_mdn,
 )
-from edi.adapters.outbound.security import decrypt_payload, verify_signature
+from edi.domain.services.as2_protocol import generate_mdn
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import ObservabilityProvider
 from sqlalchemy import select
@@ -77,7 +77,7 @@ class ReceiveAS2UseCase:
                 return None
 
             return elements[6].strip(), elements[8].strip()
-        except Exception as e:  # noqa: BLE001
+        except (IndexError, ValueError, AttributeError, TypeError) as e:
             self.logger.warning("isa_extraction_failed", error=str(e))
             return None
 
@@ -213,15 +213,18 @@ class ReceiveAS2UseCase:
                 logger.warning("as2_partner_cert_missing", as2_from=as2_msg.as2_from)
                 return payload, Disposition.INSUFFICIENT_SECURITY
 
-            is_valid, verified_payload = verify_signature(
-                payload, partner.public_cert_pem.encode("utf-8")
-            )
-            if not is_valid:
+            try:
+                is_valid, verified_payload = verify_signature(
+                    payload, partner.public_cert_pem.encode("utf-8")
+                )
+                if not is_valid:
+                    raise ValueError("Signature check returned false")
+            except ValueError as e:
                 span.set_status_error("Signature invalid")
                 self.metrics.increment(
                     "as2_verify_errors_total", labels={"tenant_id": str(tenant_id)}
                 )
-                logger.warning("as2_signature_invalid")
+                logger.warning("as2_signature_invalid", error=str(e))
                 return payload, Disposition.AUTHENTICATION_FAILED
 
             logger.info("as2_signature_verified")

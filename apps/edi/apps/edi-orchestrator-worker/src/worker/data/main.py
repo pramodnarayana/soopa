@@ -1,6 +1,8 @@
 import asyncio
 import signal
 from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+from functools import partial
 from typing import Any
 
 import structlog
@@ -26,15 +28,20 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.config.settings import get_settings
+from edi.config.settings import AppSettings, get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.events import MessageQueueName, PipelineEventType
+from edi.domain.enums import PipelineEventType
+from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
+from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
+from edi.ports.outbound.transformer_port import TransformerPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -42,36 +49,21 @@ from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
 )
 from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
 
+UowFactory = Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]
+
 load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:  # noqa: C901
-    settings = get_settings()
-    aws_endpoint = settings.aws.endpoint_url
-    s3_bucket = "soopaedi-dev"
-
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
-    resolver = TenantResolver(db_router)
-
-    # ─────────────────────────────────────────────────────────────
-    # Inbound SQS Adapters (Hexagonal: Protocol Translation Only)
-    # ─────────────────────────────────────────────────────────────
-    transformer = BotsTransformerAdapter()
-    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
-
-    uow_provider = TenantUowProvider(
-        resolver=resolver,
-        db_router=db_router,
-        settings=settings,
-        s3_bucket=s3_bucket,
-        aws_endpoint=aws_endpoint,
-    )
-
-    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
-    sftp_delivery = ParamikoSftpClient()
-    as2_delivery = HttpxAS2DeliveryClient(validator=validate_target_url)
-
+def _setup_registry(
+    transformer: TransformerPort,
+    settings: AppSettings,
+    uow_provider: TenantUowProvider,
+    http_delivery: HttpDeliveryPort,
+    sftp_delivery: SftpDeliveryPort,
+    as2_delivery: AS2DeliveryPort,
+    vault: SecretStorePort,
+) -> EdiDataPlaneEventDispatcher:
     def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
         strategies = {
             "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
@@ -82,11 +74,11 @@ async def main() -> None:  # noqa: C901
 
     registry = EdiDataPlaneRouteRegistry()
 
-    async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
+    async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         async with uow_fact() as uow:
             await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
 
-    async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
+    async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         async with uow_fact() as uow:
             await DispatchOutboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
 
@@ -102,7 +94,7 @@ async def main() -> None:  # noqa: C901
         async with uow_fact() as uow:
             await PipelineLifecycleUseCase(uow).handle_delivery_completed(e.payload)
 
-    async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
+    async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await DeliveryUseCase(uow_factory=uow_fact, router_factory=router_factory).execute(
             trace_id=e.trace_id, idempotency_key=e.idempotency_key
         )
@@ -137,7 +129,39 @@ async def main() -> None:  # noqa: C901
         uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
         await registry.route(event, uow_factory)
 
-    consumer = EdiDataPlaneEventDispatcher(callback=route_event)
+    return EdiDataPlaneEventDispatcher(callback=route_event)
+
+
+async def main() -> None:
+    settings = get_settings()
+    aws_endpoint = settings.aws.endpoint_url
+    s3_bucket = "soopaedi-dev"
+
+    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+    resolver = TenantResolver(db_router)
+
+    transformer = BotsTransformerAdapter()
+    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
+
+    uow_provider = TenantUowProvider(
+        resolver=resolver,
+        db_router=db_router,
+        settings=settings,
+        s3_bucket=s3_bucket,
+        aws_endpoint=aws_endpoint,
+    )
+
+    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
+    sftp_delivery = ParamikoSftpClient()
+    allow_private_ips = settings.env == "development"
+    as2_delivery = HttpxAS2DeliveryClient(
+        validator=partial(validate_target_url, allow_private_ips=allow_private_ips),
+        allow_private_ips=allow_private_ips,
+    )
+
+    consumer = _setup_registry(
+        transformer, settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
+    )
 
     transform_consumer = AwsSqsConsumer(
         queue_url=settings.sqs.transform_queue_url,
@@ -146,7 +170,7 @@ async def main() -> None:  # noqa: C901
     )
     transform_manager = SqsConsumerManager(
         consumer=transform_consumer,
-        queue_name=MessageQueueName.TRANSFORM_QUEUE,
+        queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
     )
     transform_manager.start()
@@ -158,7 +182,7 @@ async def main() -> None:  # noqa: C901
     )
     lifecycle_manager = SqsConsumerManager(
         consumer=lifecycle_consumer,
-        queue_name=MessageQueueName.LIFECYCLE_QUEUE,
+        queue_name=settings.sqs.lifecycle_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
     )
     lifecycle_manager.start()
@@ -170,7 +194,7 @@ async def main() -> None:  # noqa: C901
     )
     deliver_manager = SqsConsumerManager(
         consumer=deliver_consumer,
-        queue_name=MessageQueueName.DELIVER_QUEUE,
+        queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
     )
     deliver_manager.start()

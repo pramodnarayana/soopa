@@ -6,16 +6,13 @@ from contextvars import ContextVar
 from urllib.parse import urlparse
 
 import structlog
-from seedwork.constants import DeploymentEnvironment
-
-from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 logger = structlog.get_logger(__name__)
 
 
-def validate_target_url(url: str) -> bool:
+def validate_target_url(url: str, allow_private_ips: bool = False) -> bool:
     """
     Validate target URL to prevent SSRF attacks.
     Returns True if URL is safe, False otherwise.
@@ -57,7 +54,7 @@ def validate_target_url(url: str) -> bool:
                 or ip.is_reserved
                 or ip.is_multicast
             ):
-                if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
+                if allow_private_ips and ip.is_loopback:
                     pass
                 else:
                     logger.warning("SSRF check failed: resolved to private/internal IP {ip}", ip=ip)
@@ -99,7 +96,7 @@ def _patched_getaddrinfo(
 socket.getaddrinfo = _patched_getaddrinfo
 
 
-def get_safe_ip(hostname: str) -> str | None:
+def get_safe_ip(hostname: str, allow_private_ips: bool = False) -> str | None:
     try:
         addr_info = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
@@ -109,7 +106,7 @@ def get_safe_ip(hostname: str) -> str | None:
         ip_str = str(sockaddr[0])
         ip = ipaddress.ip_address(ip_str)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            if get_settings().env == DeploymentEnvironment.DEVELOPMENT.value and ip.is_loopback:
+            if allow_private_ips and ip.is_loopback:
                 return ip_str
             return None
         return ip_str
@@ -117,7 +114,7 @@ def get_safe_ip(hostname: str) -> str | None:
 
 
 @contextmanager
-def ssrf_safe_context(url: str) -> Iterator[None]:
+def ssrf_safe_context(url: str, allow_private_ips: bool = False) -> Iterator[None]:
     """
     Context manager that pins the validated IP address for the given URL's hostname
     to prevent DNS rebinding SSRF attacks.
@@ -126,7 +123,7 @@ def ssrf_safe_context(url: str) -> Iterator[None]:
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("Invalid URL scheme or hostname for SSRF validation")
 
-    safe_ip = get_safe_ip(parsed.hostname)
+    safe_ip = get_safe_ip(parsed.hostname, allow_private_ips=allow_private_ips)
     if not safe_ip:
         raise ValueError(
             f"SSRF validation failed: unsafe or unresolvable hostname {parsed.hostname}"

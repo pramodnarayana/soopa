@@ -25,15 +25,15 @@ import email
 import functools
 import re
 from email import policy
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dto import ProcessInboundAs2Command
-from edi.domain.constants import EdiConnectionType, TransactionDirection, TransactionStatus
+from edi.application.dtos.commands import ProcessInboundAs2Command
+from edi.domain.enums import EdiConnectionType, EdiDirection, MessageStatus
 from edi.domain.models.as2 import (
     AS2Message,
     AS2PartnerDomainModel,
@@ -280,10 +280,11 @@ class ProcessInboundAs2MessageUseCase:
             )
             if decrypted:
                 return decrypted
-        except Exception as e:  # noqa: BLE001
+        except (ValueError, TypeError, KeyError) as e:
             logger.debug("as2_decrypt_initial_attempt_failed_trying_fallback", error=str(e))
 
-        # Fallback: prepend reconstructed S/MIME headers before retrying
+        # External Interoperability Fallback: prepend reconstructed S/MIME headers before retrying.
+        # This is strictly required for legacy external AS2 servers that malform the S/MIME envelope.
         smime_headers = self._reconstruct_smime_headers(original_headers)
         try:
             decrypted = self.crypto_service.decrypt(
@@ -347,12 +348,15 @@ class ProcessInboundAs2MessageUseCase:
             logger.exception("as2_signature_verification_failed")
             raise ValueError(f"Signature verification failed: {e}") from e
 
-    def _extract_pure_edi(self, final_payload_bytes: bytes | Any) -> bytes:
+    def _extract_pure_edi(self, final_payload_bytes: bytes | object) -> bytes:
         if not isinstance(final_payload_bytes, bytes):
-            if hasattr(final_payload_bytes, "as_bytes"):
-                final_payload_bytes = final_payload_bytes.as_bytes()
+            if hasattr(final_payload_bytes, "as_bytes") and callable(final_payload_bytes.as_bytes):
+                final_payload_bytes = final_payload_bytes.as_bytes()  # type: ignore
             elif isinstance(final_payload_bytes, str):
                 final_payload_bytes = final_payload_bytes.encode("utf-8")
+
+            if not isinstance(final_payload_bytes, bytes):
+                raise TypeError("Payload must be bytes")
 
         parsed_msg = email.message_from_bytes(final_payload_bytes, policy=policy.HTTP)
         if "content-type" in parsed_msg:
@@ -421,7 +425,7 @@ class ProcessInboundAs2MessageUseCase:
 
         edi_record = {
             "trace_id": generate_id(SystemIdPrefix.GENERIC),
-            "direction": TransactionDirection.INBOUND.value,
+            "direction": EdiDirection.INBOUND.value,
             "connection_type": EdiConnectionType.AS2.value,
             "sender_id": isa_sender,
             "receiver_id": isa_receiver,
@@ -432,7 +436,7 @@ class ProcessInboundAs2MessageUseCase:
             "signature_algorithm": partnership.signature_algorithm,
             "encryption_algorithm": partnership.encryption_algorithm,
             "edi_data": pure_edi_bytes,
-            "status": TransactionStatus.RECEIVED.value,
+            "status": MessageStatus.RECEIVED.value,
         }
 
         # 3. Save to the true Tenant's Data Plane Shard via factory
@@ -493,7 +497,7 @@ class ProcessInboundAs2MessageUseCase:
                 edi_message_id=str(msg_id),
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
-                status=TransactionStatus.RECEIVED.value,
+                status=MessageStatus.RECEIVED.value,
                 explicit_idempotency_key=str(msg_id),
             )
 

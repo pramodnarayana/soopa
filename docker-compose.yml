@@ -1,6 +1,6 @@
 include:
-  - infra/docker-compose.yml
-  - infra/observability/docker-compose.yml
+  - infra/local/docker-compose.yml
+  - infra/local/observability/docker-compose.yml
   - apps/edi/docker-compose.yml
 
 # Single image built once, reused by all runtime containers.

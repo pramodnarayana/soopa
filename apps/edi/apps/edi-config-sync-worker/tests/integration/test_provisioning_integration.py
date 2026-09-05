@@ -7,7 +7,6 @@ from typing import Any
 
 import aioboto3
 import pytest
-import structlog
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 
@@ -37,7 +36,7 @@ from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
-from edi.domain.events import EdiEventType
+from edi.domain.enums import EdiEventType
 from sqlalchemy import select
 from ucp_models.infrastructure import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
@@ -78,119 +77,114 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         endpoint_url=sqs_endpoint,
     )
 
-    # Create the queue if it doesn't exist, and purge it
-    async with message_publisher.session.client(
-        "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
-    ) as sqs:
-        try:
+    queue_url = None
+    try:
+        # Create the queue if it doesn't exist, and purge it
+        async with message_publisher.session.client(
+            "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
+        ) as sqs:
             await sqs.create_queue(QueueName=queue_name, Attributes={"FifoQueue": "true"})
             resp = await sqs.get_queue_url(QueueName=queue_name)
             queue_url = resp["QueueUrl"]
             await sqs.purge_queue(QueueUrl=queue_url)
             await asyncio.sleep(1)
-        except Exception:  # noqa: BLE001
-            structlog.get_logger(__name__).warning("Could not setup queue: {e}")
-            pytest.skip("LocalStack is not available. Skipping integration test.")
+        # 1. Initialize the core replication service
+        worker_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
 
-    # 1. Initialize the core replication service
-    worker_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
-
-    # 2. Initialize the dispatcher with the translator
-    translator = DefaultEventTranslator()
-    dispatcher = EdiConfigSyncSqsDispatcher(
-        domain_service=worker_service, translator_port=translator
-    )
-
-    # 3. Create a raw consumer so tests can manually poll and dispatch exactly once
-
-    test_consumer = AwsSqsConsumer(
-        queue_url=queue_url,
-        endpoint_url=sqs_endpoint,
-        region_name="us-east-1",
-    )
-
-    async def process_next_event_helper() -> bool:
-        async with test_consumer.poll_raw_message() as ackable_msg:
-            if ackable_msg:
-                await dispatcher.dispatch_raw(ackable_msg.payload)
-                await ackable_msg.ack()
-                return True
-        return False
-
-    worker_service.process_next_event = process_next_event_helper
-
-    test_partner_id = generate_id("id")
-    test_tenant_id = generate_id("id")
-
-    async for session in db_router.get_global_session():
-        tenant = Tenant(
-            id=test_tenant_id,
-            name=f"Test Tenant {test_tenant_id}",
-            idp_tenant_id=f"idp_{test_tenant_id}",
-            slug=f"tenant_{test_tenant_id}",
+        # 2. Initialize the dispatcher with the translator
+        translator = DefaultEventTranslator()
+        dispatcher = EdiConfigSyncSqsDispatcher(
+            domain_service=worker_service, translator_port=translator
         )
-        session.add(tenant)
-        await session.flush()
 
-        shard = await session.get(DatabaseShard, "edi_shard_1")
-        if not shard:
-            shard = DatabaseShard(
-                id="edi_shard_1",
-                name="EDI Primary Shard",
-                dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
-                status="active",
+        # 3. Create a raw consumer so tests can manually poll and dispatch exactly once
+
+        test_consumer = AwsSqsConsumer(
+            queue_url=queue_url,
+            endpoint_url=sqs_endpoint,
+            region_name="us-east-1",
+        )
+
+        async def process_next_event_helper() -> bool:
+            async with test_consumer.poll_raw_message() as ackable_msg:
+                if ackable_msg:
+                    await dispatcher.dispatch_raw(ackable_msg.payload)
+                    await ackable_msg.ack()
+                    return True
+            return False
+
+        worker_service.process_next_event = process_next_event_helper
+
+        test_partner_id = generate_id("id")
+        test_tenant_id = generate_id("id")
+
+        async for session in db_router.get_global_session():
+            tenant = Tenant(
+                id=test_tenant_id,
+                name=f"Test Tenant {test_tenant_id}",
+                idp_tenant_id=f"idp_{test_tenant_id}",
+                slug=f"tenant_{test_tenant_id}",
             )
-            await session.merge(shard)
+            session.add(tenant)
             await session.flush()
 
-        app_res = await session.execute(select(App).where(App.slug == "edi"))
-        edi_app = app_res.scalars().first()
-        if not edi_app:
-            edi_app = App(
-                id="ucp_app_{test_tenant_id}",
-                slug="edi",
-                name="EDI Application",
+            shard = await session.get(DatabaseShard, "edi_shard_1")
+            if not shard:
+                shard = DatabaseShard(
+                    id="edi_shard_1",
+                    name="EDI Primary Shard",
+                    dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                    status="active",
+                )
+                await session.merge(shard)
+                await session.flush()
+
+            app_res = await session.execute(select(App).where(App.slug == "edi"))
+            edi_app = app_res.scalars().first()
+            if not edi_app:
+                edi_app = App(
+                    id="ucp_app_{test_tenant_id}",
+                    slug="edi",
+                    name="EDI Application",
+                )
+                session.add(edi_app)
+                await session.commit()
+
+            tenant_shard = ShardRegistry(
+                tenant_id=test_tenant_id,
+                app_id=edi_app.id,
+                shard_id=shard.id,
             )
-            session.add(edi_app)
+            session.add(tenant_shard)
+
+            partner = AS2Partner(
+                id=test_partner_id,
+                tenant_id=test_tenant_id,
+                name="Integration Test Partner",
+                as2_id="INT_TEST_AS2",
+                active=True,
+            )
+            session.add(partner)
             await session.commit()
 
-        tenant_shard = ShardRegistry(
-            tenant_id=test_tenant_id,
-            app_id=edi_app.id,
-            shard_id=shard.id,
-        )
-        session.add(tenant_shard)
+        yield {
+            "db_router": db_router,
+            "worker_service": worker_service,
+            "message_publisher": message_publisher,
+            "partner_id": test_partner_id,
+            "tenant_id": test_tenant_id,
+            "queue_name": queue_name,
+            "base_url": base_url,
+        }
 
-        partner = AS2Partner(
-            id=test_partner_id,
-            tenant_id=test_tenant_id,
-            name="Integration Test Partner",
-            as2_id="INT_TEST_AS2",
-            active=True,
-        )
-        session.add(partner)
-        await session.commit()
-
-    yield {
-        "db_router": db_router,
-        "worker_service": worker_service,
-        "message_publisher": message_publisher,
-        "partner_id": test_partner_id,
-        "tenant_id": test_tenant_id,
-        "queue_name": queue_name,
-        "base_url": base_url,
-    }
-
-    # Cleanup is now handled entirely by transaction rollbacks via TestDatabaseRouter
-    # We only need to delete the queue
-    async with message_publisher.session.client(
-        "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
-    ) as sqs:
-        try:
-            resp = await sqs.get_queue_url(QueueName=queue_name)
-            await sqs.delete_queue(QueueUrl=resp["QueueUrl"])
-        except Exception:  # noqa: BLE001
-            structlog.get_logger(__name__).warning("Could not delete queue {queue_name}: {e}")
+    finally:
+        # Cleanup is now handled entirely by transaction rollbacks via TestDatabaseRouter
+        # We only need to delete the queue
+        if queue_url:
+            async with message_publisher.session.client(
+                "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
+            ) as sqs:
+                await sqs.delete_queue(QueueUrl=queue_url)
 
 
 @pytest.mark.integration

@@ -1,9 +1,9 @@
 import dataclasses
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.domain.types import UnsetType
 from sqlalchemy import select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
@@ -12,7 +12,6 @@ from edi.adapters.outbound.database.models.control_plane import (
     OutboundRoute,
     SFTPPartner,
 )
-from edi.application.dto import UnsetType
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 
@@ -22,7 +21,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         GlobalSqlAlchemyRepository.__init__(self, session)
 
     @staticmethod
-    def _to_domain_model(record: Any) -> OutboundRouteDomainModel:
+    def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
         return OutboundRouteDomainModel(
             id=record.id,
             tenant_id=record.tenant_id,

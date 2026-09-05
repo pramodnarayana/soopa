@@ -1,6 +1,6 @@
 import structlog
 
-from edi.domain.constants import TransactionDirection
+from edi.domain.enums import EdiDirection
 from edi.domain.models.base import ConnectionType
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
@@ -74,7 +74,7 @@ class ListInboundRoutesUseCase:
                     webhook_id=str(r.webhook_id) if r.webhook_id else None,
                     as2_partner_id=str(r.as2_partner_id) if r.as2_partner_id else None,
                     sftp_partner_id=str(r.sftp_partner_id) if r.sftp_partner_id else None,
-                    direction=TransactionDirection.INBOUND.value,
+                    direction=EdiDirection.INBOUND,
                     destination_name=_dest_name,
                 )
             )

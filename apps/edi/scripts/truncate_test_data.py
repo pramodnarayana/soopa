@@ -47,7 +47,7 @@ def purge_sqs_queues() -> bool:
         endpoint_url=AWS_ENDPOINT,
         aws_access_key_id="test",
         # Safe: dummy key for localstack
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
     )
 
     failed = False
@@ -77,12 +77,12 @@ async def main():
     # Safety guard: require local targets or explicit opt-in
     try:
         db_host = urllib.parse.urlparse(DATABASE_URL).hostname
-    except Exception:  # noqa: BLE001
+    except ValueError:
         db_host = None
 
     try:
         sqs_host = urllib.parse.urlparse(AWS_ENDPOINT).hostname
-    except Exception:  # noqa: BLE001
+    except ValueError:
         sqs_host = None
 
     db_is_local = db_host in ("localhost", "127.0.0.1")

@@ -10,9 +10,7 @@ All test doubles are imported from fakes.py (DRY). No mock library used.
 
 import pytest
 
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork, FakeTransformerAdapter
 
 
@@ -58,7 +56,7 @@ async def test_transform_edi_to_json_success() -> None:
     event = uow.outbox.events[0]
     assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORM_EVENT.value
     assert event["payload"]["trace_id"] == trace_id
-    assert event["payload"]["direction"] == MessageDirection.INBOUND.value
+    assert event["payload"]["direction"] == EdiDirection.INBOUND.value
     assert event["payload"]["standard"] == "X12"
     # UoW was committed
     assert uow.committed

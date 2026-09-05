@@ -17,7 +17,7 @@ class ReplayTransactionUseCase:
         Publishes an outbox event.
         """
         # Validate existence
-        result = await self.uow.transactions.get_transaction(tenant_id, trace_id)
+        result = await self.uow.traces.get_edi_trace(tenant_id, trace_id)
         if not result or not result.edi_message:
             raise TransactionNotFoundError(trace_id=trace_id)
 
@@ -28,7 +28,7 @@ class ReplayTransactionUseCase:
             explicit_idempotency_key=f"replay_{trace_id}_{generate_random_hex(6)}",
         )
 
-        # We assume the result is a TransactionDetailDTO which doesn't have domain_events,
+        # We assume the result is a EdiTraceDTO which doesn't have domain_events,
         # so we need to instantiate a domain model just to act as the aggregate for outbox.
         # But wait, replay is on EdiMessage or EdiJson.
         # We can just fetch the EdiMessage and drain on it, since it's the aggregate root for transactions.

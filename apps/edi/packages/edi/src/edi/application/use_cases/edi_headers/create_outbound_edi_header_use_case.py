@@ -2,8 +2,9 @@ from datetime import UTC, datetime
 
 import structlog
 
-from edi.application.dto import CreateOutboundEdiHeaderCmd
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.application.dtos.commands import CreateOutboundEdiHeaderCmd
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 

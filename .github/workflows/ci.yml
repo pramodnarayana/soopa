@@ -65,27 +65,16 @@ jobs:
 
       - name: Start Database & Infrastructure
         run: |
-          docker compose up -d postgres_global edi_postgres_shard localstack --wait
+          docker compose up -d postgres_global edi_postgres_shard localstack debezium_shard otel-collector sftp --wait
           pnpm db:migrate:platform
           pnpm db:seed
           pnpm db:migrate:edi
 
-      - name: Test (Node)
-        run: CI=true pnpm turbo test
+      - name: Test (Unit)
+        run: CI=true pnpm test
 
-      - name: Test (Python)
-        run: |
-          # Test all python packages
-          for d in core/ucp/packages/* core/ucp/apps/* core/platform/packages/* core/platform/apps/* apps/edi/packages/* apps/edi/apps/* apps/edi/apps/edi-worker/*; do
-            if [ -f "$d/pyproject.toml" ]; then
-              (cd "$d" && uv run pytest) || {
-                code=$?
-                if [ $code -ne 5 ]; then
-                  exit $code
-                fi
-              }
-            fi
-          done
+      - name: Test (Integration)
+        run: CI=true pnpm test:integration
 
       - name: Build Frontend/Node
         run: pnpm turbo build

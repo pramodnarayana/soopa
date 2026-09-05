@@ -395,9 +395,17 @@ The taxonomy drifted organically as different engineers built different bounded 
 ## [Type Safety] Eradicate `typing.Any` (Scheduled for Next Ticket)
 
 - **Date Added**: 2026-09-02
-- **Status**: TO DO
+- **Status**: IN PROGRESS
 - **Description**: The codebase currently relies on `typing.Any` (and `dict[str, Any]`) as crutches in various domain models, DTOs, and repositories.
 - **Action Item**: Systematically replace all instances of `typing.Any` with strict `TypedDict`s, Pydantic schemas, or Generic `TypeVars` across domain models, DTOs, and repositories. This ensures adherence to strict structural typing standards.
+
+## [Type Safety] Replace `AstNode` with Proper `TypedDict` Node Models
+
+- **Date Added**: 2026-09-02
+- **Status**: TO DO
+- **Description**: The EDI transformer pipeline uses `AstNode` (a recursive `dict` type alias defined in `edi.domain.types`) as a pragmatic step up from `typing.Any`. While it constrains value types and communicates intent, it is still a stringly-keyed recursive dict — mypy cannot verify key access on it. True structural typing requires a proper `TypedDict` per AST node type.
+- **Action Item**: Model the X12 and EDIFACT AST node shapes as explicit `TypedDict` classes (e.g., `X12SegmentNode`, `X12LoopNode`, `X12InterchangeNode`, `EdifactSegmentNode`, `EdifactMessageNode`). Replace all `AstNode` usages in the transformer pipeline with these typed structures. This is a distinct, significant effort — do not bundle with the `Any` eradication sweep.
+- **Affected Area**: `edi.adapters.outbound.transformer`, `edi.ports.outbound.transformer_port`
 
 ## [Architecture Cleanup] Magic Strings and Monkey-Patching in `cryptography.py`
 

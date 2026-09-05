@@ -12,6 +12,13 @@ from .adapters.outbound.repository import (
 from .adapters.outbound.vault import EnvironmentVaultService
 from .application.use_cases.receive_as2 import ReceiveAS2UseCase
 
+
+def get_vault_service() -> EnvironmentVaultService:
+    return EnvironmentVaultService()
+
+
+VaultDep = Annotated[EnvironmentVaultService, Depends(get_vault_service)]
+
 GlobalSessionDep = Annotated[AsyncSession, Depends(get_global_session)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
@@ -20,6 +27,7 @@ def get_receive_as2_use_case(
     request: Request,
     global_session: GlobalSessionDep,
     session: SessionDep,
+    vault: VaultDep,
 ) -> ReceiveAS2UseCase:
     """
     Dependency injection for the ReceiveAS2UseCase.
@@ -36,7 +44,7 @@ def get_receive_as2_use_case(
         partner_repo=TradingPartnerRepositoryAdapter(global_session),
         message_repo=EdiMessageRepositoryAdapter(session),
         storage=s3_storage,
-        vault=EnvironmentVaultService(),
+        vault=vault,
         db_router=db_router,
         global_session=global_session,
     )

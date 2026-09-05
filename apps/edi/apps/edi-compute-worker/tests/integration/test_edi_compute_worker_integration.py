@@ -8,6 +8,7 @@ import pytest_asyncio
 from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 from seedwork import generate_random_hex
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -93,7 +94,9 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     async def fake_use_case_factory(tenant_id: str):
         @contextlib.asynccontextmanager
         async def fake_uow_factory():
-            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=db_session_factory())
+            yield SqlAlchemyDataPlaneUnitOfWork(
+                tenant_session=db_session_factory(), storage=InMemoryStorageAdapter()
+            )
 
         return ComputeTransformUseCase(uow_factory=fake_uow_factory, transformer=transformer)
 
@@ -113,25 +116,25 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     async with db_engine.connect() as conn:
         await conn.execute(
             text(
-                "INSERT INTO edi.as2_partners (id, tenant_id, name, as2_id, active, is_local, created_at, updated_at) VALUES (:pid, :tid, 'Test Partner', 'AS2TEST', true, false, NOW(), NOW())"
+                "INSERT INTO as2_partners (id, tenant_id, name, as2_id, active, is_local, created_at, updated_at) VALUES (:pid, :tid, 'Test Partner', 'AS2TEST', true, false, NOW(), NOW())"
             ),
             {"pid": partner_id, "tid": tenant_id},
         )
         await conn.execute(
             text(
-                "INSERT INTO edi.webhooks (id, tenant_id, name, url, active, created_at, updated_at) VALUES (:wid, :tid, 'Test Webhook', 'https://test.com/webhook', true, NOW(), NOW())"
+                "INSERT INTO webhooks (id, tenant_id, name, url, active, created_at, updated_at) VALUES (:wid, :tid, 'Test Webhook', 'https://test.com/webhook', true, NOW(), NOW())"
             ),
             {"wid": webhook_id, "tid": tenant_id},
         )
         await conn.execute(
             text(
-                "INSERT INTO edi.inbound_routes (id, tenant_id, name, trading_partner_id, webhook_id, isa_sender_id, isa_receiver_id, transaction_type, active, processing_mode, created_at, updated_at) VALUES (:rid, :tid, 'Route', :pid, :wid, 'SENDER123', 'RECEIVER123', '850', true, 'TRANSFORM', NOW(), NOW())"
+                "INSERT INTO inbound_routes (id, tenant_id, name, trading_partner_id, webhook_id, isa_sender_id, isa_receiver_id, transaction_type, active, processing_mode, created_at, updated_at) VALUES (:rid, :tid, 'Route', :pid, :wid, 'SENDER123', 'RECEIVER123', '850', true, 'TRANSFORM', NOW(), NOW())"
             ),
             {"rid": route_id, "tid": tenant_id, "pid": partner_id, "wid": webhook_id},
         )
         await conn.execute(
             text(
-                "INSERT INTO edi.edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, is_resend, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', false, NOW(), NOW())"
+                "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, is_resend, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', false, NOW(), NOW())"
             ),
             {"mid": msg_id, "trid": trace_id, "tid": tenant_id},
         )
@@ -145,7 +148,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
 
         # 4. Verify outcomes.
         res = await db_connection.execute(
-            text("SELECT status, payload FROM edi.edi_json WHERE trace_id = :tid"),
+            text("SELECT status, payload FROM edi_json WHERE trace_id = :tid"),
             {"tid": trace_id},
         )
         json_rows = res.fetchall()
@@ -154,7 +157,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
 
         # Verify API Gateway request was created.
         res = await db_connection.execute(
-            text("SELECT status, webhook_url, payload FROM edi.api_gateway WHERE trace_id = :tid"),
+            text("SELECT status, webhook_url, payload FROM api_gateway WHERE trace_id = :tid"),
             {"tid": trace_id},
         )
         gw_rows = res.fetchall()
@@ -163,7 +166,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
 
         # Verify Outbox event was published.
         res = await db_connection.execute(
-            text("SELECT status, event_type FROM edi.outbox WHERE tenant_id = :tid"),
+            text("SELECT status, event_type FROM outbox WHERE tenant_id = :tid"),
             {"tid": tenant_id},
         )
         outbox_rows = res.fetchall()
@@ -173,15 +176,20 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
         # Cleanup seeded data autonomously
         async with db_engine.connect() as conn:
             await conn.execute(
-                text("DELETE FROM edi.edi_messages WHERE id = :mid"), {"mid": msg_id}
+                text("DELETE FROM outbox WHERE tenant_id = :tid"), {"tid": tenant_id}
             )
             await conn.execute(
-                text("DELETE FROM edi.inbound_routes WHERE id = :rid"), {"rid": route_id}
+                text("DELETE FROM api_gateway WHERE trace_id = :trace_id"), {"trace_id": trace_id}
             )
             await conn.execute(
-                text("DELETE FROM edi.webhooks WHERE id = :wid"), {"wid": webhook_id}
+                text("DELETE FROM edi_json WHERE trace_id = :trace_id"), {"trace_id": trace_id}
             )
+            await conn.execute(text("DELETE FROM edi_messages WHERE id = :mid"), {"mid": msg_id})
             await conn.execute(
-                text("DELETE FROM edi.as2_partners WHERE id = :pid"), {"pid": partner_id}
+                text("DELETE FROM inbound_routes WHERE id = :rid"), {"rid": route_id}
+            )
+            await conn.execute(text("DELETE FROM webhooks WHERE id = :wid"), {"wid": webhook_id})
+            await conn.execute(
+                text("DELETE FROM as2_partners WHERE id = :pid"), {"pid": partner_id}
             )
             await conn.commit()

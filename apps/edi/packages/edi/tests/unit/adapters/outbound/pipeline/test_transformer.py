@@ -1,5 +1,3 @@
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
@@ -8,27 +6,31 @@ from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload, Tr
 pytestmark = pytest.mark.asyncio
 
 
-@patch(
-    "edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter.BotsEDIAdapter.transform"
-)
-async def test_bots_transformer_edi_to_json(mock_transform: AsyncMock) -> None:
-    mock_payload = ParsedEdiPayload(
-        sender_id="A",
-        receiver_id="B",
-        interchange_control_number="1",
-        transactions=[
-            TransactionSet(
-                transaction_type="850",
-                control_number="1",
-                gs_sender_id="GS_SENDER",
-                gs_receiver_id="GS_RECEIVER",
-                data={"foo": "bar"},
-            )
-        ],
-    )
-    mock_transform.return_value = mock_payload
+class FakeBotsEDIAdapter:
+    async def transform(self, payload: bytes) -> ParsedEdiPayload:
+        return ParsedEdiPayload(
+            sender_id="A",
+            receiver_id="B",
+            interchange_control_number="1",
+            transactions=[
+                TransactionSet(
+                    transaction_type="850",
+                    control_number="1",
+                    gs_sender_id="GS_SENDER",
+                    gs_receiver_id="GS_RECEIVER",
+                    data={"foo": "bar"},
+                )
+            ],
+        )
 
-    adapter = BotsTransformerAdapter()
+    def serialize_to_edi(self, ast: dict, standard: str) -> tuple[str, list[str]]:
+        return "ISA*...~", []
+
+
+async def test_bots_transformer_edi_to_json() -> None:
+    fake_adapter = FakeBotsEDIAdapter()
+    adapter = BotsTransformerAdapter(adapter=fake_adapter)
+
     result = await adapter.transform_edi_to_json(b"ISA*00*", "X12", "850")
 
     assert result is not None
@@ -41,13 +43,11 @@ async def test_bots_transformer_edi_to_json(mock_transform: AsyncMock) -> None:
     assert txn.gs_receiver_id == "GS_RECEIVER"
     assert txn.control_number == "1"
     assert txn.payload == {"foo": "bar"}
-    mock_transform.assert_awaited_once_with(b"ISA*00*")
 
 
 async def test_bots_transformer_json_to_edi_success() -> None:
+    fake_adapter = FakeBotsEDIAdapter()
+    adapter = BotsTransformerAdapter(adapter=fake_adapter)
 
-    adapter = BotsTransformerAdapter()
-
-    with patch.object(adapter._adapter, "serialize_to_edi", return_value=("ISA*...~", [])):
-        result = await adapter.transform_json_to_edi({"foo": "bar"}, "X12", "850", {})
-        assert result == b"ISA*...~"
+    result = await adapter.transform_json_to_edi({"foo": "bar"}, "X12", "850", {})
+    assert result == b"ISA*...~"

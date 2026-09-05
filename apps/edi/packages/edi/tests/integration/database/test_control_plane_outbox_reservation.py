@@ -10,7 +10,8 @@ from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutb
 from edi.adapters.outbound.database.outbox_repository import (
     SqlAlchemyControlPlaneOutboxRepository,
 )
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 
 
 @pytest_asyncio.fixture

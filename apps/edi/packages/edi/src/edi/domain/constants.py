@@ -1,23 +1,21 @@
+"""
+EDI Domain Constants
+====================
+
+Non-enumeration constants for the EDI bounded context.
+All StrEnum definitions live in ``edi.domain.enums``.
+"""
+
+# ── ID prefixes ──────────────────────────────────────────────────────────────
+# Kept here because EdiIdPrefix drives repository ID generation and is referenced
+# in many adapters — it is not a business-status enum, it is a naming convention.
 from enum import StrEnum
 
-
-class TransactionDirection(StrEnum):
-    INBOUND = "INBOUND"
-    OUTBOUND = "OUTBOUND"
-
-
-class TransactionStatus(StrEnum):
-    RECEIVED = "RECEIVED"
-    PROCESSING = "PROCESSING"
-    PROCESSED = "PROCESSED"
-    FAILED = "FAILED"
-    UNKNOWN = "UNKNOWN"
-
-
-class EdiConnectionType(StrEnum):
-    AS2 = "AS2"
-    API = "API"
-    SFTP = "SFTP"
+from edi.domain.enums import (
+    EdiEventType,
+    UcpEventType,
+    WebhookEventType,
+)
 
 
 class EdiIdPrefix(StrEnum):
@@ -36,3 +34,12 @@ class EdiIdPrefix(StrEnum):
 
 
 EDI_MESSAGE_ID_PREFIX = EdiIdPrefix.EDI_MESSAGE.value
+
+# ── Aggregated provisioning event set ────────────────────────────────────────
+ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType
+
+ALL_PROVISIONING_EVENT_TYPES = (
+    [e.value for e in EdiEventType]
+    + [e.value for e in WebhookEventType]
+    + [e.value for e in UcpEventType]
+)

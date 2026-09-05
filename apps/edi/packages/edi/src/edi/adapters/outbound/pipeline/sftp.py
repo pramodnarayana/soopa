@@ -1,12 +1,41 @@
 import asyncio
 import base64
 import io
-from typing import Any
+import typing
 
 import paramiko
 import structlog
+from cryptography.hazmat.primitives import hashes
 
-import edi.core.patches.paramiko  # noqa: F401 — applies legacy ssh-rsa patch on import
+# paramiko legacy patch
+if hasattr(paramiko.Transport, "_key_info") and "ssh-rsa" not in paramiko.Transport._key_info:
+    paramiko.Transport._key_info["ssh-rsa"] = paramiko.RSAKey
+
+if hasattr(paramiko.RSAKey, "HASHES") and "ssh-rsa" not in paramiko.RSAKey.HASHES:
+    paramiko.RSAKey.HASHES["ssh-rsa"] = hashes.SHA1
+
+if (
+    hasattr(paramiko.Transport, "_preferred_keys")
+    and "ssh-rsa" not in paramiko.Transport._preferred_keys
+):
+    _keys = list(paramiko.Transport._preferred_keys)
+    _keys.append("ssh-rsa")
+    if "ssh-dss" in getattr(paramiko.Transport, "_key_info", {}):
+        _keys.append("ssh-dss")
+    paramiko.Transport._preferred_keys = tuple(_keys)
+
+if (
+    hasattr(paramiko.Transport, "_preferred_pubkeys")
+    and "ssh-rsa" not in paramiko.Transport._preferred_pubkeys
+):
+    _pubkeys = list(paramiko.Transport._preferred_pubkeys)
+    _pubkeys.append("ssh-rsa")
+    if "ssh-dss" in getattr(paramiko.Transport, "_key_info", {}):
+        _pubkeys.append("ssh-dss")
+    paramiko.Transport._preferred_pubkeys = tuple(_pubkeys)
+
+# end paramiko legacy patch
+
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
 logger = structlog.get_logger(__name__)
@@ -43,11 +72,11 @@ def _parse_client_key(client_key_string: str) -> paramiko.PKey:
     key_io = io.StringIO(client_key_string)
     try:
         return paramiko.RSAKey.from_private_key(key_io)
-    except Exception:  # noqa: BLE001
+    except (paramiko.SSHException, ValueError):
         key_io.seek(0)
         try:
             return paramiko.ECDSAKey.from_private_key(key_io)
-        except Exception:  # noqa: BLE001
+        except (paramiko.SSHException, ValueError):
             key_io.seek(0)
             return paramiko.Ed25519Key.from_private_key(key_io)
 
@@ -60,16 +89,14 @@ def get_ssh_client(
     client_key_string: str | None = None,
     host_key_string: str | None = None,
     timeout: int = 10,
-    use_legacy_rsa: bool = False,
 ) -> paramiko.SSHClient:
     """
     Creates an enterprise-grade, configured SSHClient.
-    Supports both legacy servers (ssh-rsa) and modern cryptographic algorithms.
     """
     client = paramiko.SSHClient()
     _setup_host_key(client, host, port, host_key_string)
 
-    connect_kwargs: dict[str, Any] = {
+    connect_kwargs: dict[str, object] = {
         "hostname": host,
         "port": port,
         "username": username,
@@ -77,9 +104,6 @@ def get_ssh_client(
         "allow_agent": False,
         "timeout": timeout,
     }
-
-    if use_legacy_rsa:
-        connect_kwargs["disabled_algorithms"] = {"pubkeys": ["rsa-sha2-512", "rsa-sha2-256"]}
 
     if client_key_string:
         connect_kwargs["pkey"] = _parse_client_key(client_key_string)
@@ -89,7 +113,7 @@ def get_ssh_client(
         raise ValueError("Must provide either a password or a client key.")
 
     try:
-        client.connect(**connect_kwargs)
+        client.connect(**typing.cast(typing.Any, connect_kwargs))
         return client
     except Exception:
         logger.exception("SSH Connection failed for %s:%s", host, port)

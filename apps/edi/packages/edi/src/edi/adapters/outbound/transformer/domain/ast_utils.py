@@ -1,4 +1,7 @@
-from typing import Any
+import typing
+from collections.abc import Callable
+
+JsonValue = typing.Any
 
 
 class ASTUtils:
@@ -11,7 +14,7 @@ class ASTUtils:
         return k.isupper() and 2 <= len(k) <= 3 and k.isalnum()
 
     @staticmethod
-    def _is_loop_list(v: list[Any]) -> bool:
+    def _is_loop_list(v: list[JsonValue]) -> bool:
         if not v:
             return False
         first_item = v[0]
@@ -22,7 +25,7 @@ class ASTUtils:
         return False
 
     @staticmethod
-    def _count_segment_node(k: str, v: Any, traverse_fn: Any) -> int:
+    def _count_segment_node(k: str, v: JsonValue, traverse_fn: Callable[[JsonValue], None]) -> int:
         if ASTUtils._is_segment_key(k):
             if isinstance(v, list) and len(v) > 0:
                 if ASTUtils._is_loop_list(v):
@@ -36,13 +39,13 @@ class ASTUtils:
         return 0
 
     @staticmethod
-    def count_segments(txn: dict[str, Any]) -> int:
+    def count_segments(txn: JsonValue) -> int:
         """
         Recursively counts the number of valid EDI segments in a transaction AST dictionary.
         """
         count = 0
 
-        def traverse(node: Any) -> None:
+        def traverse(node: JsonValue) -> None:
             nonlocal count
             if isinstance(node, dict):
                 for k, v in node.items():

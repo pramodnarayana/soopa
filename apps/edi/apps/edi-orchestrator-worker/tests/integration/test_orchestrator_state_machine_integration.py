@@ -1,18 +1,20 @@
 import contextlib
 from collections.abc import Callable
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.data_plane_unit_of_work import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
     DispatchInboundTransformUseCase,
 )
+from edi.config.settings import get_settings
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.events import PipelineEventType
+from edi.domain.enums import PipelineEventType
+from pytest_httpserver import HTTPServer
 from seedwork import generate_random_hex
 from sqlalchemy import text
 
@@ -41,7 +43,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         await test_session.execute(
             text("""
-                INSERT INTO edi.edi_messages
+                INSERT INTO edi_messages
                 (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_resend)
                 VALUES (:id, :id, :tenant_id, 'partner', 'soopa', 'INBOUND', 'X12', '850', 'RECEIVED', 'test_data', false)
             """),
@@ -51,9 +53,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
 
     # 2. Setup Registries and Dispatchers
     registry = EdiDataPlaneRouteRegistry()
-    settings = MagicMock()
-    settings.storage.bucket = "test-bucket"
-    settings.storage.endpoint_url = "http://localhost:4566"
+    settings = get_settings()
     transformer = BotsTransformerAdapter()
 
     # Simple factory representing the actual Orchestrator wiring
@@ -97,9 +97,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     # 4. Verify Database State Machine Outbox Event
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         result = await test_session.execute(
-            text(
-                "SELECT payload, event_type FROM edi.outbox WHERE payload->>'trace_id' = :trace_id"
-            ),
+            text("SELECT payload, event_type FROM outbox WHERE payload->>'trace_id' = :trace_id"),
             {"trace_id": trace_id},
         )
         outbox_events = result.mappings().all()
@@ -119,7 +117,9 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestRouter) -> None:
+async def test_inbound_webhook_dispatch_transition(
+    db_router: TransactionalTestRouter, httpserver: HTTPServer
+) -> None:
     # 1. Setup DB Data
     tenant_id = f"ten_orch_web_{generate_random_hex(6)}"
     trace_id = f"trace_web_{generate_random_hex(6)}"
@@ -137,32 +137,38 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         # Insert EDI message
         await test_session.execute(
             text("""
-                INSERT INTO edi.edi_messages
+                INSERT INTO edi_messages
                 (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_resend)
                 VALUES (:id, :id, :tenant_id, 'sender1', 'receiver1', 'INBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', false)
             """),
             {"id": trace_id, "tenant_id": tenant_id},
         )
+        webhook_target_url = httpserver.url_for("/webhook")
         # Insert API Payload (used by webhook strategy)
         await test_session.execute(
             text("""
-                INSERT INTO edi.api_gateway (id, trace_id, tenant_id, payload, status, webhook_url, direction, transaction_type, created_at, updated_at)
-                VALUES (:id, :trace_id, :tenant_id, '{"payload": {"hello": "world"}}'::jsonb, 'PENDING_DELIVERY', 'https://example.com', 'INBOUND', '850', NOW(), NOW())
+                INSERT INTO api_gateway (id, trace_id, tenant_id, payload, status, webhook_url, direction, transaction_type, created_at, updated_at)
+                VALUES (:id, :trace_id, :tenant_id, '{"payload": {"hello": "world"}}'::jsonb, 'PENDING_DELIVERY', :url, 'INBOUND', '850', NOW(), NOW())
             """),
-            {"id": f"api_{generate_random_hex(6)}", "trace_id": trace_id, "tenant_id": tenant_id},
+            {
+                "id": f"api_{generate_random_hex(6)}",
+                "trace_id": trace_id,
+                "tenant_id": tenant_id,
+                "url": webhook_target_url,
+            },
         )
         # Insert Webhook destination
         await test_session.execute(
             text("""
-                INSERT INTO edi.webhooks (id, tenant_id, name, url, active, created_at, updated_at)
-                VALUES (:id, :tenant_id, 'Test Hook', 'https://example.com', true, NOW(), NOW())
+                INSERT INTO webhooks (id, tenant_id, name, url, active, created_at, updated_at)
+                VALUES (:id, :tenant_id, 'Test Hook', :url, true, NOW(), NOW())
             """),
-            {"id": webhook_id, "tenant_id": tenant_id},
+            {"id": webhook_id, "tenant_id": tenant_id, "url": webhook_target_url},
         )
         # Insert Route
         await test_session.execute(
             text("""
-                INSERT INTO edi.inbound_routes
+                INSERT INTO inbound_routes
                 (id, tenant_id, name, isa_sender_id, isa_receiver_id, transaction_type, processing_mode, active, webhook_id, created_at, updated_at)
                 VALUES (:id, :tenant_id, 'Test Route', 'sender1', 'receiver1', '850', 'TRANSFORM', true, :webhook_id, NOW(), NOW())
             """),
@@ -171,10 +177,13 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         await test_session.commit()
 
     # 2. Setup Delivery Router Use Case inside Orchestrator
+    # Serve a local endpoint on a real socket to capture the webhook
+    httpserver.expect_request("/webhook", method="POST").respond_with_json({"status": "ok"})
+
     registry = EdiDataPlaneRouteRegistry()
-    settings = MagicMock()
-    mock_http_delivery = AsyncMock()
-    mock_http_delivery.deliver.return_value = (200, "OK")
+    settings = get_settings()
+    # Use real HTTPX client instead of AsyncMock
+    real_http_delivery = HttpxDeliveryClient(allow_private_ips=True)
 
     @contextlib.asynccontextmanager
     async def uow_factory():
@@ -182,14 +191,16 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
             await session.execute(
                 text(f"SELECT set_config('app.current_tenant', '{tenant_id}', true)")
             )
+            # We don't have a fake storage, use the real Transformer adapter
+            # or just leave it empty if not used by WebhookDeliveryStrategy
             yield SqlAlchemyDataPlaneUnitOfWork(
-                session=session, settings=settings, storage=MagicMock()
+                session=session, settings=settings, storage=BotsTransformerAdapter()
             )
             break
 
     async def run_delivery(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
         async with uow_fact() as uow:
-            strategies = {"webhook_id": WebhookDeliveryStrategy(uow, mock_http_delivery)}
+            strategies = {"webhook_id": WebhookDeliveryStrategy(uow, real_http_delivery)}
             await DeliveryRouterUseCase(uow, strategies).deliver(e.trace_id)
             await uow.commit()
 
@@ -216,9 +227,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
     # 4. Verify Delivery Success Outbox Event was written
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         result = await test_session.execute(
-            text(
-                "SELECT payload, event_type FROM edi.outbox WHERE payload->>'trace_id' = :trace_id"
-            ),
+            text("SELECT payload, event_type FROM outbox WHERE payload->>'trace_id' = :trace_id"),
             {"trace_id": trace_id},
         )
         outbox_events = result.mappings().all()
@@ -229,15 +238,17 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
     ]
     assert len(delivery_events) == 1, "Expected DELIVERY_COMPLETED"
 
-    # Verify Http request was made
-    mock_http_delivery.deliver.assert_called_once()
-    kwargs = mock_http_delivery.deliver.call_args.kwargs
-    assert kwargs["url"] == "https://example.com"
+    # Verify Http request was made successfully against our local HTTPServer
+    httpserver.check_assertions()
+    # Assuming only one request was made to /webhook
+    assert len(httpserver.log) == 1
+    req, _ = httpserver.log[0]
+    assert req.method == "POST"
 
     # Verify API Gateway Status updated
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         result = await test_session.execute(
-            text("SELECT status FROM edi.api_gateway WHERE trace_id = :id"), {"id": trace_id}
+            text("SELECT status FROM api_gateway WHERE trace_id = :id"), {"id": trace_id}
         )
         status = result.scalar_one()
         assert status == "DELIVERED"

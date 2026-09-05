@@ -26,7 +26,7 @@ POSTGRES_DB=zitadel
 
 # Zitadel IAM
 ZITADEL_MASTERKEY=a-32-byte-long-secret-key-for-zi
-ZITADEL_API_TOKEN=test-token
+ZITADEL_MACHINE_KEY='<machine-key-json>'
 ZITADEL_API_URL=http://ucp.localhost:8080
 
 # Database Connections

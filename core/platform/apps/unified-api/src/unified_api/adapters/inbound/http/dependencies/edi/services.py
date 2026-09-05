@@ -8,7 +8,6 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
 )
 from edi.bootstrap.container import Container
 from edi.ports.outbound.as2_tester import AS2TesterPort
-from edi.ports.outbound.message_queue import MessageQueuePort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from fastapi import Depends, Request
@@ -30,13 +29,6 @@ def get_as2_tester(as2_tester: Any = Depends(Provide[Container.as2_tester])) -> 
 @inject
 def get_secret_store(vault_port: Any = Depends(Provide[Container.vault_port])) -> SecretStorePort:
     return cast(SecretStorePort, vault_port)
-
-
-@inject
-def get_message_queue(
-    message_queue: Any = Depends(Provide[Container.message_queue]),
-) -> MessageQueuePort:
-    return cast(MessageQueuePort, message_queue)
 
 
 @inject

@@ -1,4 +1,3 @@
-from typing import Any
 from uuid import UUID
 
 from seedwork import generate_random_hex
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.enums import MessageStatus
 
 from .models.control_plane import AS2Partner, AS2Partnership, InboundRoute
 from .models.data_plane import EdiMessage
@@ -34,7 +34,7 @@ class PartnershipRepository:
 
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
-    ) -> tuple[Any, Any, Any] | None:
+    ) -> tuple[AS2Partnership, AS2Partner, AS2Partner] | None:
 
         LocalPartner = aliased(AS2Partner)
         RemotePartner = aliased(AS2Partner)
@@ -70,7 +70,7 @@ class InboundRouteRepository:
         isa_receiver_id: str,
         tenant_id: str,
         transaction_type: str | None = None,
-    ) -> Any | None:
+    ) -> InboundRoute | None:
 
         conditions = [
             InboundRoute.isa_sender_id == isa_sender_id,
@@ -102,7 +102,7 @@ class EdiMessageRepository:
         edi_data: str,
         sender_id: str | None = None,
         receiver_id: str | None = None,
-        status: str = "RECEIVED",
+        status: str = MessageStatus.RECEIVED,
         message_id: str | None = None,
     ) -> EdiMessage:
 

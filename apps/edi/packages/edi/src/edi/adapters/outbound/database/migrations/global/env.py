@@ -1,5 +1,8 @@
 import asyncio
-from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
+
+# Alembic strictly requires standard logging to parse its config file.
+# Ignored TID251 inline because Ruff per-file-ignores fails to match in this monorepo context.
+from logging.config import fileConfig  # noqa: TID251
 
 from alembic import context
 from sqlalchemy import pool, text
@@ -7,9 +10,10 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import database models to ensure they are registered with GlobalRegistry
-import edi.adapters.outbound.database.models.control_plane
-import edi.adapters.outbound.database.models.data_plane
-import edi.adapters.outbound.database.models.platform_settings  # noqa: F401
+from edi.adapters.outbound.database.models import platform_settings
+
+# Register models with SQLAlchemy metadata
+_ = platform_settings
 from edi.adapters.outbound.database.models.base import EdiGlobalBase
 from edi.config.settings import get_settings
 
@@ -20,7 +24,7 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # add your model's MetaData object here
 # for 'autogenerate' support

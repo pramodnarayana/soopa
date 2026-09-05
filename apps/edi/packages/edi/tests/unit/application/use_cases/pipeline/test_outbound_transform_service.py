@@ -11,9 +11,7 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.config.settings import AppSettings
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork, FakeTransformerAdapter
 
 pytestmark = pytest.mark.asyncio
@@ -45,7 +43,8 @@ def make_use_case(
     return DispatchOutboundTransformUseCase(uow=uow_casted, transformer=t, settings=s_casted)
 
 
-async def test_outbound_transform_success() -> None:
+@pytest.mark.parametrize("payload", [{"data": "test"}, [{"data": "test"}]])
+async def test_outbound_transform_success(payload: dict[str, str] | list[dict[str, str]]) -> None:
     uow = FakeDataPlaneUnitOfWork()
     transformer = FakeTransformerAdapter()
     trace_id = "trace-123"
@@ -53,7 +52,7 @@ async def test_outbound_transform_success() -> None:
     # Seed data
     uow.repository.edi_json[trace_id] = {
         "trace_id": trace_id,
-        "payload": {"data": "test"},
+        "payload": payload,
         "trading_partner_id": "tp1",
         "tenant_id": "tenant1",
         "business_metadata": {},
@@ -82,7 +81,7 @@ async def test_outbound_transform_success() -> None:
     # Assertions
     saved_edi = uow.repository.edi_messages.get(trace_id)
     assert saved_edi is not None
-    assert saved_edi["direction"] == MessageDirection.OUTBOUND
+    assert saved_edi["direction"] == EdiDirection.OUTBOUND
     assert saved_edi["status"] == MessageStatus.PENDING_DELIVERY
     assert saved_edi["trading_partner_id"] == "tp1"
     assert saved_edi["connection_type"] == "AS2"
@@ -93,6 +92,50 @@ async def test_outbound_transform_success() -> None:
     assert event["event_type"] == PipelineEventType.TRANSFORM_COMPLETED
     assert event["payload"]["trace_id"] == trace_id
     assert event["payload"]["trading_partner_id"] == "tp1"
+
+
+async def test_outbound_transform_rejects_list_with_non_ast_node() -> None:
+    uow = FakeDataPlaneUnitOfWork()
+    transformer = FakeTransformerAdapter()
+    trace_id = "trace-invalid-list"
+    uow.repository.edi_json[trace_id] = {
+        "trace_id": trace_id,
+        "payload": [1],
+        "trading_partner_id": "tp1",
+        "tenant_id": "tenant1",
+        "business_metadata": {},
+        "transaction_type": "850",
+    }
+
+    with pytest.raises(ValueError, match="Payload is missing"):
+        await make_use_case(uow=uow, transformer=transformer).execute(trace_id)
+
+    assert transformer.transform_json_calls == []
+
+
+async def test_pipeline_fake_preserves_saved_edi_json_payload() -> None:
+    repository = FakeDataPlaneUnitOfWork().repository
+    payload = {"data": "saved"}
+
+    await repository.save_edi_json(
+        trace_id="trace-saved",
+        direction="OUTBOUND",
+        partnership_id=None,
+        transaction_type="850",
+        standard="X12",
+        sender_id=None,
+        receiver_id=None,
+        gs_sender_id=None,
+        gs_receiver_id=None,
+        business_metadata={},
+        payload=payload,
+        status="RECEIVED",
+    )
+
+    saved = await repository.get_edi_json("trace-saved")
+
+    assert saved is not None
+    assert saved.payload == payload
 
 
 async def test_outbound_transform_heavy_compute_offload() -> None:
@@ -186,7 +229,6 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
 
     uow.repository.outbound_edi_headers["tp-meta"] = {
         "trading_partner_id": "tp-meta",
-        "connection_type": "VAN",
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer)
@@ -195,4 +237,4 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
     saved_edi = uow.repository.edi_messages.get(trace_id)
     assert saved_edi is not None
     assert saved_edi["trading_partner_id"] == "tp-meta"
-    assert saved_edi["connection_type"] == "VAN"
+    assert saved_edi["connection_type"] == "AS2"

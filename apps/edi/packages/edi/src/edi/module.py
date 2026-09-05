@@ -1,8 +1,8 @@
 import os
-from typing import Any
 
 import structlog
 from dotenv import load_dotenv
+from seedwork.domain.types import JsonValue
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -17,7 +17,8 @@ load_dotenv()
 # Do not configure root loggers or StreamHandlers here.
 # ---------------------------------------------------------------------------
 
-from fastapi import Depends, FastAPI, HTTPException
+import fastapi
+from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
@@ -127,10 +128,10 @@ def create_edi_app() -> FastAPI:
 
     @app.get("/api/me", tags=["Identity"])
     async def get_me(
-        tenant_id: str = Depends(get_current_tenant_id),
-        session: AsyncSession = Depends(get_tenant_session),  # noqa: B008
-        profile: dict[str, Any] = Depends(get_current_user_profile),  # noqa: B008
-    ) -> Any:
+        tenant_id: str = fastapi.Depends(get_current_tenant_id),
+        session: AsyncSession = fastapi.Depends(get_tenant_session),
+        profile: dict[str, JsonValue] = fastapi.Depends(get_current_user_profile),
+    ) -> dict[str, JsonValue]:
         """
         Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
         """

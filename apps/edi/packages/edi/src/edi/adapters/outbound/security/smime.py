@@ -1,41 +1,84 @@
 import contextlib
+import email
 import io
+import re
 import warnings
-from typing import cast
+from collections.abc import Callable
+from email import policy
+from typing import Protocol, cast
 
 import endesive.verifier
+import structlog
 from asn1crypto import cms, pem
 from asn1crypto import x509 as asn1_x509
+from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives.ciphers import Cipher, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.serialization import pkcs7
 from cryptography.utils import CryptographyDeprecationWarning
 
-"""
-S/MIME cryptographic operations for AS2.
-Handles encryption, decryption, signing, and signature verification.
+from edi.domain.enums import As2EncryptionAlgorithm, As2SignatureAlgorithm
 
-All operations are fully native (cryptography.hazmat) and in-memory.
-No private keys or payloads are ever written to disk.
-"""
 
-import email
-import re
-from email import policy
-from typing import Any
+class BlockCipherFactory(Protocol):
+    block_size: int
 
-import structlog
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.ciphers import algorithms
-from cryptography.hazmat.primitives.serialization import pkcs7
+    def __call__(self, key: bytes) -> algorithms.CipherAlgorithm: ...
 
-import edi.core.patches.cryptography  # noqa: F401 - applies legacy 3DES patch
+
+# Supported ciphers registry for S/MIME encryption
+_CIPHER_REGISTRY: dict[str, BlockCipherFactory] = {
+    "AES256": cast(BlockCipherFactory, algorithms.AES256),
+    "AES-256": cast(BlockCipherFactory, algorithms.AES256),
+    "AES256_CBC": cast(BlockCipherFactory, algorithms.AES256),
+    "AES128": cast(BlockCipherFactory, algorithms.AES128),
+    "AES-128": cast(BlockCipherFactory, algorithms.AES128),
+    "AES128_CBC": cast(BlockCipherFactory, algorithms.AES128),
+}
+
+# ASN.1 OID to cryptography primitive mapping for native decryption
+_ASN1_OID_TO_CIPHER_REGISTRY: dict[str, BlockCipherFactory] = {
+    "aes256_cbc": cast(BlockCipherFactory, algorithms.AES256),
+    "aes128_cbc": cast(BlockCipherFactory, algorithms.AES128),
+}
+
+try:
+    from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
+
+    _CIPHER_REGISTRY.update(
+        {
+            "3DES": cast(BlockCipherFactory, TripleDES),
+            "DES3": cast(BlockCipherFactory, TripleDES),
+            "TRIPLEDES": cast(BlockCipherFactory, TripleDES),
+        }
+    )
+    _ASN1_OID_TO_CIPHER_REGISTRY.update(
+        {
+            "des_ede3_cbc": cast(BlockCipherFactory, TripleDES),
+            "tripledes_3key": cast(BlockCipherFactory, TripleDES),
+        }
+    )
+except ImportError:
+    _CIPHER_REGISTRY.update(
+        {
+            "3DES": cast(BlockCipherFactory, algorithms.TripleDES),
+            "DES3": cast(BlockCipherFactory, algorithms.TripleDES),
+            "TRIPLEDES": cast(BlockCipherFactory, algorithms.TripleDES),
+        }
+    )
+    _ASN1_OID_TO_CIPHER_REGISTRY.update(
+        {
+            "des_ede3_cbc": cast(BlockCipherFactory, algorithms.TripleDES),
+            "tripledes_3key": cast(BlockCipherFactory, algorithms.TripleDES),
+        }
+    )
 
 logger = structlog.get_logger(__name__)
 
 
-def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
-
+def _parse_asn1_content_info(encrypted_data: bytes) -> cms.ContentInfo | None:
     # 1. Try raw bytes (BER/DER)
     with contextlib.suppress(Exception):
         return cms.ContentInfo.load(encrypted_data)
@@ -46,26 +89,28 @@ def _parse_asn1_content_info(encrypted_data: bytes) -> Any:
         pl = msg.get_payload(decode=True)
         if pl:
             return cms.ContentInfo.load(pl)
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, TypeError, KeyError) as exc:
         logger.debug("smime_payload_extraction_fallback_failed", error=str(exc))
 
     # 3. Try PEM unarmoring
     try:
         _, _, der_bytes = pem.unarmor(encrypted_data)
         return cms.ContentInfo.load(der_bytes)
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, TypeError, KeyError) as exc:
         logger.debug("pem_unarmoring_fallback_failed", error=str(exc))
 
     return None
 
 
-def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes | None:
+def _manual_asn1crypto_decrypt(
+    encrypted_data: bytes, private_key: rsa.RSAPrivateKey
+) -> bytes | None:
     """
     Ultimate pure-Python native fallback for BouncyCastle BER envelopes.
     Bypasses cryptography's strict Rust PKCS7 parser entirely by manually
     extracting the symmetric key and decrypting the payload using raw primitives.
+    (Required for External System Interoperability with legacy B2B partners)
     """
-
     try:
         content_info = _parse_asn1_content_info(encrypted_data)
         if not content_info:
@@ -107,13 +152,13 @@ def _manual_asn1crypto_decrypt(encrypted_data: bytes, private_key: Any) -> bytes
 
         # Remove PKCS7 padding
         pad_len = padded_plaintext[-1]
-        block_size = cast(Any, cipher_class).block_size
+        block_size = cipher_class.block_size
         if pad_len < 1 or pad_len > block_size // 8:
             raise ValueError("Invalid PKCS7 padding length")
         if padded_plaintext[-pad_len:] != bytes([pad_len]) * pad_len:
             raise ValueError("Invalid PKCS7 padding bytes")
         return padded_plaintext[:-pad_len]
-    except Exception as e:  # noqa: BLE001
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         logger.debug("manual_asn1_decryption_failed", error=str(e))
         return None
 
@@ -124,35 +169,47 @@ def decrypt_payload(encrypted_data: bytes, private_key_pem: bytes, public_cert_p
     This is memory-safe and avoids writing sensitive private keys to disk.
     """
     private_key = serialization.load_pem_private_key(private_key_pem, password=None)
+    rsa_key = cast(rsa.RSAPrivateKey, private_key)
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
-    strategies = [
-        ("DER", pkcs7.pkcs7_decrypt_der),
-        ("SMIME", pkcs7.pkcs7_decrypt_smime),
-        ("PEM", pkcs7.pkcs7_decrypt_pem),
+    DecryptionStrategy = Callable[
+        [bytes, x509.Certificate, rsa.RSAPrivateKey, list[object] | None], bytes
+    ]
+
+    strategies: list[tuple[str, DecryptionStrategy]] = [
+        ("DER", cast(DecryptionStrategy, pkcs7.pkcs7_decrypt_der)),
+        ("SMIME", cast(DecryptionStrategy, pkcs7.pkcs7_decrypt_smime)),
+        ("PEM", cast(DecryptionStrategy, pkcs7.pkcs7_decrypt_pem)),
     ]
 
     for strat_name, strat_func in strategies:
         try:
-            return cast(Any, strat_func)(encrypted_data, cert, private_key, options=[])
-        except Exception as e:  # noqa: BLE001
+            return strat_func(encrypted_data, cert, rsa_key, [])
+        except (ValueError, TypeError, KeyError, IndexError, UnsupportedAlgorithm) as e:
             logger.debug("decryption_strategy_failed", strategy=strat_name, error=str(e))
 
     # Enterprise Fallback: Manually parse the ASN.1 tree and decrypt using primitives
-    # This completely eliminates the need for OpenSSL shell commands, bypassing Rust strictness.
+    # This is required for external legacy AS2 partners who send envelopes that fail
+    # strict Rust parser rules (e.g., older BouncyCastle implementations).
     try:
-        manual_decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
-        if manual_decrypted:
-            logger.info("Successfully decrypted payload using pure Python ASN.1 manual primitives.")
-            return manual_decrypted
-    except Exception as e:  # noqa: BLE001
+        if isinstance(private_key, rsa.RSAPrivateKey):
+            manual_decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
+            if manual_decrypted:
+                logger.info(
+                    "Successfully decrypted payload using pure Python ASN.1 manual primitives."
+                )
+                return manual_decrypted
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         logger.debug("manual_fallback_decryption_failed", error=str(e))
 
     raise ValueError("All native decryption strategies failed.")
 
 
 def sign_payload(
-    payload: bytes, private_key_pem: bytes, public_cert_pem: bytes, algorithm: str = "sha256"
+    payload: bytes,
+    private_key_pem: bytes,
+    public_cert_pem: bytes,
+    algorithm: As2SignatureAlgorithm | str = As2SignatureAlgorithm.SHA256,
 ) -> bytes:
     """
     Signs a payload for AS2 transmission (S/MIME multipart/signed).
@@ -162,16 +219,19 @@ def sign_payload(
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
     alg_map = {
-        # AS2 explicitly supports SHA1
-        "sha1": hashes.SHA1(),  # noqa: S303
-        "sha256": hashes.SHA256(),
-        "sha384": hashes.SHA384(),
-        "sha512": hashes.SHA512(),
+        # AS2 structurally mandates SHA1 for backward compatibility.
+        # Ignored S303 inline because Ruff per-file-ignores fails to match in this monorepo context.
+        As2SignatureAlgorithm.SHA1: hashes.SHA1(),  # noqa: S303
+        As2SignatureAlgorithm.SHA256: hashes.SHA256(),
+        As2SignatureAlgorithm.SHA384: hashes.SHA384(),
+        As2SignatureAlgorithm.SHA512: hashes.SHA512(),
     }
-    alg_key = algorithm.lower()
-    if alg_key not in alg_map:
+    if isinstance(algorithm, str):
+        algorithm = As2SignatureAlgorithm(algorithm.lower())
+
+    if algorithm not in alg_map:
         raise ValueError(f"Unsupported signature algorithm: {algorithm}")
-    hash_alg = alg_map[alg_key]
+    hash_alg = alg_map[algorithm]
 
     builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
 
@@ -186,46 +246,10 @@ def sign_payload(
     return builder.sign(serialization.Encoding.SMIME, options=[])
 
 
-from typing import Any
-
-# Supported ciphers registry for S/MIME encryption
-_CIPHER_REGISTRY: dict[str, Any] = {
-    "AES256": algorithms.AES256,
-    "AES-256": algorithms.AES256,
-    "AES256_CBC": algorithms.AES256,
-    "AES128": algorithms.AES128,
-    "AES-128": algorithms.AES128,
-    "AES128_CBC": algorithms.AES128,
-}
-
-# ASN.1 OID to cryptography primitive mapping for native decryption
-_ASN1_OID_TO_CIPHER_REGISTRY: dict[str, Any] = {
-    "aes256_cbc": algorithms.AES256,
-    "aes128_cbc": algorithms.AES128,
-}
-
-try:
-    from cryptography.hazmat.decrepit.ciphers.algorithms import TripleDES
-
-    _CIPHER_REGISTRY.update({"3DES": TripleDES, "DES3": TripleDES, "TRIPLEDES": TripleDES})
-    _ASN1_OID_TO_CIPHER_REGISTRY.update({"des_ede3_cbc": TripleDES, "tripledes_3key": TripleDES})
-except ImportError:
-    _CIPHER_REGISTRY.update(
-        {
-            "3DES": algorithms.TripleDES,
-            "DES3": algorithms.TripleDES,
-            "TRIPLEDES": algorithms.TripleDES,
-        }
-    )
-    _ASN1_OID_TO_CIPHER_REGISTRY.update(
-        {"des_ede3_cbc": algorithms.TripleDES, "tripledes_3key": algorithms.TripleDES}
-    )
-
-
 def encrypt_payload(
     payload: bytes,
     public_cert_pem: bytes,
-    algorithm: str = "AES256",
+    algorithm: As2EncryptionAlgorithm | str = As2EncryptionAlgorithm.AES256,
 ) -> bytes:
     """
     Encrypts a payload for AS2 transmission using S/MIME CMS enveloped data.
@@ -233,17 +257,22 @@ def encrypt_payload(
     """
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
-    cipher_class = _CIPHER_REGISTRY.get(algorithm.upper())
+    if isinstance(algorithm, str):
+        algorithm = As2EncryptionAlgorithm(algorithm.lower())
+
+    cipher_class = _CIPHER_REGISTRY.get(algorithm.value.upper())
     if not cipher_class:
         raise ValueError(
-            f"Unsupported encryption algorithm: {algorithm!r}. Supported: {list(_CIPHER_REGISTRY.keys())}"
+            f"Unsupported encryption algorithm: {algorithm.value!r}. Supported: {list(_CIPHER_REGISTRY.keys())}"
         )
+
+    content_alg = cast(type[algorithms.AES128] | type[algorithms.AES256], cipher_class)
 
     return (
         pkcs7.PKCS7EnvelopeBuilder()
         .set_data(payload)
         .add_recipient(cert)
-        .set_content_encryption_algorithm(cipher_class)
+        .set_content_encryption_algorithm(content_alg)
         .encrypt(serialization.Encoding.SMIME, options=[])
     )
 
@@ -312,7 +341,7 @@ def _inject_certificate_into_cms(binary_sig: bytes, cert_bytes: bytes) -> bytes:
                 signed_data_cms["certificates"].append(choice)
 
         return cast(bytes, content_info.dump())
-    except Exception as e:  # noqa: BLE001
+    except (ValueError, TypeError, KeyError, IndexError) as e:
         logger.debug("certificate_injection_into_cms_failed", error=str(e))
         return binary_sig
 

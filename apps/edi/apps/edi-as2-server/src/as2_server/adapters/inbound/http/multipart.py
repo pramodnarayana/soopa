@@ -1,4 +1,4 @@
-from edi.adapters.inbound.as2 import AS2MDN
+from edi.domain.models.as2 import AS2MDN
 
 
 def render_mdn_report(mdn: AS2MDN, boundary: str = "----=_MDNBoundary") -> bytes:

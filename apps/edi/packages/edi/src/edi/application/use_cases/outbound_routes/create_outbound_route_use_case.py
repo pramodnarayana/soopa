@@ -2,8 +2,9 @@ from datetime import UTC, datetime
 
 import structlog
 
-from edi.application.dto import CreateOutboundRouteCmd
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.application.dtos.commands import CreateOutboundRouteCmd
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 

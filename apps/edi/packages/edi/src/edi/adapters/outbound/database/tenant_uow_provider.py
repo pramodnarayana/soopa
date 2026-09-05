@@ -46,7 +46,9 @@ class TenantUowProvider:
                 self._db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
             ) as session_gen:
                 async for session in session_gen:
-                    yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session)
+                    yield SqlAlchemyDataPlaneUnitOfWork(
+                        tenant_session=session, storage=self._storage
+                    )
                     break
 
         return uow_factory

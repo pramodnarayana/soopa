@@ -10,9 +10,8 @@ Uses Fake Data Plane Unit Of Work.
 import pytest
 
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection as MessageDirection
+from edi.domain.enums import MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork
 
 pytestmark = pytest.mark.asyncio
@@ -122,6 +121,25 @@ async def test_handle_delivery_completed_inbound() -> None:
     saved_api = uow.repository.api_gateway.get(trace_id)
     assert saved_api is not None
     assert saved_api["status"] == str(MessageStatus.DELIVERED)
+
+
+async def test_handle_delivery_completed_null_direction_defaults_to_inbound() -> None:
+    uow = FakeDataPlaneUnitOfWork()
+    trace_id = "trace-null-direction-dlv"
+    uow.repository.api_gateway[trace_id] = {
+        "trace_id": trace_id,
+        "status": MessageStatus.PENDING_DELIVERY,
+    }
+
+    await make_use_case(uow=uow).handle_delivery_completed(
+        {
+            "trace_id": trace_id,
+            "direction": None,
+            "status": MessageStatus.DELIVERED,
+        }
+    )
+
+    assert uow.repository.api_gateway[trace_id]["status"] == str(MessageStatus.DELIVERED)
 
 
 async def test_handle_delivery_completed_outbound() -> None:

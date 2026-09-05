@@ -6,10 +6,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+from contextlib import asynccontextmanager
+
 import pytest
 import pytest_asyncio
 from database.provider import get_async_engine
 from database.testing import get_test_shard_url_async
+from dependency_injector import providers
 from fastapi import Depends
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
@@ -28,10 +31,12 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
 )
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
+from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
 )
 from edi.module import create_edi_app
+from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
 @pytest.fixture(scope="session")
@@ -100,6 +105,23 @@ async def db_session(db_connection):
 
 
 @pytest_asyncio.fixture(scope="function")
+async def tenant_db_session(tenant_db_connection):
+    """
+    Provide an AsyncSession that rolls back after each test, for the tenant shard.
+    """
+    SessionLocal = async_sessionmaker(
+        bind=tenant_db_connection,
+        expire_on_commit=False,
+        class_=AsyncSession,
+        join_transaction_mode="create_savepoint",
+    )
+
+    session = SessionLocal()
+    yield session
+    await session.close()
+
+
+@pytest_asyncio.fixture(scope="function")
 async def override_get_global_session(db_connection):
 
     SessionLocal = async_sessionmaker(
@@ -137,8 +159,13 @@ async def override_get_tenant_session(tenant_db_connection):
 
 
 class FakeVault:
+    def __init__(self):
+        self.secrets: dict[str, str] = {}
+
     async def get_secret(self, vault_ref: str) -> str:
-        return "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+        return self.secrets.get(
+            vault_ref, "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
+        )
 
     async def retrieve_secret(self, vault_ref: str) -> bytes:
         val = await self.get_secret(vault_ref)
@@ -148,10 +175,19 @@ class FakeVault:
         return await self.retrieve_secret(vault_ref)
 
     async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
-        return "vault_ref_123"
+        import uuid
+
+        ref = f"vault_ref_{uuid.uuid4().hex[:8]}"
+        self.secrets[ref] = (
+            private_key_pem.decode("utf-8")
+            if isinstance(private_key_pem, bytes)
+            else private_key_pem
+        )
+        return ref
 
     async def delete_secret(self, vault_ref: str) -> None:
-        pass
+        if vault_ref in self.secrets:
+            del self.secrets[vault_ref]
 
 
 @pytest.fixture(scope="function")
@@ -166,6 +202,9 @@ async def client(
 
     app = create_edi_app()
 
+    app.state.db_router = None
+    app.container.vault_port.override(providers.Object(override_get_secret_store))
+
     old_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_global_session] = override_get_global_session
     app.dependency_overrides[get_tenant_session] = override_get_tenant_session
@@ -175,7 +214,7 @@ async def client(
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "test-user",
         "tenant_id": "1",
-        "permissions": ["*"],
+        "permissions": ["*", "certificates:rotate", "certificates:export_private"],
     }
     app.dependency_overrides[get_platform_user_profile] = lambda: {
         "sub": "test-user",
@@ -189,12 +228,30 @@ async def client(
         await gs_gen.__anext__()
         ts = await ts_gen.__anext__()
         try:
-            yield DataPlaneUnitOfWorkPort(tenant_session=ts)
+            yield DataPlaneUnitOfWorkPort(tenant_session=ts, storage=InMemoryStorageAdapter())
         finally:
             await gs_gen.aclose()
             await ts_gen.aclose()
 
     app.dependency_overrides[get_data_plane_uow] = _uow
+
+    class FakeDpFactory:
+        def __init__(self, global_session, db_router):
+            pass
+
+        @asynccontextmanager
+        async def get_data_plane_uow(self, tenant_id: str, app_slug: str):
+            ts_gen = override_get_tenant_session(tenant_id)
+            ts = await ts_gen.__anext__()
+
+            try:
+                yield SqlAlchemyDataPlaneUnitOfWork(
+                    tenant_session=ts, storage=InMemoryStorageAdapter()
+                )
+            finally:
+                await ts_gen.aclose()
+
+    app.container.dp_factory.override(providers.Factory(FakeDpFactory))
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
@@ -209,6 +266,9 @@ async def platform_client(
 
     app = create_edi_app()
 
+    app.state.db_router = None
+    app.container.vault_port.override(providers.Object(override_get_secret_store))
+
     old_overrides = dict(app.dependency_overrides)
     app.dependency_overrides[get_global_session] = override_get_global_session
     app.dependency_overrides[get_tenant_session] = override_get_tenant_session
@@ -219,12 +279,12 @@ async def platform_client(
     app.dependency_overrides[get_platform_user_profile] = lambda: {
         "sub": "admin-user",
         "tenant_id": PLATFORM_TENANT_ID,
-        "permissions": ["platform:admin"],
+        "permissions": ["platform:admin", "certificates:rotate", "certificates:export_private"],
     }
     app.dependency_overrides[get_current_user_profile] = lambda: {
         "sub": "admin-user",
         "tenant_id": PLATFORM_TENANT_ID,
-        "permissions": ["*"],
+        "permissions": ["*", "certificates:rotate", "certificates:export_private"],
     }
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:

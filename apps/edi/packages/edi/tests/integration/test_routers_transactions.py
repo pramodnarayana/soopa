@@ -1,312 +1,181 @@
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
-from seedwork import generate_id
-from unified_api.adapters.inbound.http.dependencies.edi.auth import (
-    get_current_tenant_id,
-    get_current_user_profile,
-)
-from unified_api.adapters.inbound.http.dependencies.edi.database import (
-    get_data_plane_uow,
-    get_global_session,
-)
+from httpx import AsyncClient
+from seedwork.utils import generate_id
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-)
-from edi.application.dto import EdiJsonDTO, TransactionDetailDTO
-from edi.domain.status import MessageStatus
-from edi.module import create_edi_app
-
-app = create_edi_app()
+from edi.adapters.outbound.database.models.data_plane import EdiJson, EdiMessage
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiMessageDomainModel
 
 
-def override_get_current_user_profile():
-    return {"sub": "test-user", "tenant_id": "1"}
+@pytest.mark.asyncio
+async def test_list_transactions(
+    client: AsyncClient, db_session: AsyncSession, tenant_db_session: AsyncSession
+):
+    # Insert a dummy message via ORM
+    tenant_id = "1"
+    trace_id = generate_id("trace")
 
-
-def override_get_current_tenant_id():
-    return "1"
-
-
-def _make_mock_msg() -> MagicMock:
-    m = MagicMock()
-    m.id = generate_id("id")
-    m.trace_id = generate_id("id")
-    m.direction = "INBOUND"
-    m.connection_type = "UNKNOWN"
-    m.sender_id = "A"
-    m.receiver_id = "B"
-    m.gs_sender_id = "A"
-    m.gs_receiver_id = "B"
-    m.status = "SUCCESS"
-    m.edi_data = "TEST"
-    m.created_at = datetime.now(UTC)
-    m.trading_partner_id = "TEST_PARTNER_01"
-    return m
-
-
-def _make_mock_json() -> MagicMock:
-    j = MagicMock()
-    j.id = generate_id("id")
-    j.transaction_type = "850"
-    j.sender_id = "A"
-    j.receiver_id = "B"
-    j.gs_sender_id = "A"
-    j.gs_receiver_id = "B"
-    j.business_metadata = {"_routing": {"trading_partner_id": generate_id("id")}}
-    j.payload = "{}"
-    j.status = "SUCCESS"
-    j.created_at = datetime.now(UTC)
-    return j
-
-
-def _make_mock_gw() -> MagicMock:
-    gw = MagicMock()
-    gw.id = generate_id("id")
-    gw.webhook_url = "http://test"
-    gw.http_status_code = 200
-    gw.payload = "{}"
-    gw.response = "{}"
-    gw.status = "SUCCESS"
-    gw.created_at = datetime.now(UTC)
-    return gw
-
-
-@pytest.fixture
-def base_mock_uow():
-    """Fresh mock UoW for every test — prevents side_effect state leakage."""
-
-    mock_msg = _make_mock_msg()
-    mock_json = _make_mock_json()
-    mock_gw = _make_mock_gw()
-
-    mock_repo = AsyncMock()
-    mock_repo.list_transactions.return_value = [mock_msg]
-
-    mock_repo.get_transaction.return_value = TransactionDetailDTO(
-        edi_message=mock_msg,
-        edi_jsons=[mock_json],
-        api_gateways=[mock_gw],
-    )
-    mock_repo.get_transaction_thread.return_value = [mock_json]
-
-    mock_route = MagicMock()
-    mock_route.as2_partner_id = generate_id("id")
-    mock_route.sftp_partner_id = None
-
-    mock_db_result = MagicMock()
-    mock_db_result.scalar_one_or_none.side_effect = [mock_route, "Test Partner"]
-
-    mock_scalars = MagicMock()
-    mock_scalars.first.side_effect = [mock_route, "Test Partner"]
-    mock_db_result.scalars.return_value = mock_scalars
-
-    mock_tenant = AsyncMock()
-    mock_tenant.execute.return_value = mock_db_result
-    mock_global = AsyncMock()
-    mock_global.execute.return_value = mock_db_result
-
-    uow = DataPlaneUnitOfWorkPort(tenant_session=mock_tenant)
-    uow._mock_global = mock_global
-    uow.transactions = mock_repo
-    return uow
-
-
-@pytest.fixture(autouse=True)
-def setup_dependencies(base_mock_uow):
-    app.dependency_overrides[get_current_user_profile] = override_get_current_user_profile
-    app.dependency_overrides[get_current_tenant_id] = override_get_current_tenant_id
-    app.dependency_overrides[get_data_plane_uow] = lambda: base_mock_uow
-    app.dependency_overrides[get_global_session] = lambda: base_mock_uow._mock_global
-    yield
-    app.dependency_overrides.clear()
-
-
-client = TestClient(app)
-
-
-def test_list_transactions():
-    response = client.get("/api/v1/tenants/1/edi/transactions")
-    assert response.status_code == 200
-
-
-def test_get_transaction_detail():
-    uid = generate_id("id")
-    response = client.get(f"/api/v1/tenants/1/edi/transactions/{uid}")
-    assert response.status_code == 200
-
-
-def test_get_transaction_thread():
-    response = client.get(
-        "/api/v1/tenants/1/edi/transactions/thread?key=isa_control_number&value=123"
-    )
-    assert response.status_code == 200
-
-
-def test_get_transaction_detail_sftp():
-
-    mock_msg = MagicMock()
-    mock_msg.id = generate_id("id")
-    mock_msg.trace_id = generate_id("id")
-    mock_msg.trading_partner_id = "TEST_PARTNER_01"
-    mock_msg.created_at = None
-
-    mock_repo = AsyncMock()
-    mock_repo.get_transaction.return_value = TransactionDetailDTO(
-        edi_message=mock_msg,
-        edi_jsons=[],
-        api_gateways=[],
+    msg = EdiMessageDomainModel(
+        id=generate_id("msg"),
+        tenant_id=tenant_id,
+        trace_id=trace_id,
+        direction=Direction.INBOUND,
+        status=RecordStatus.SUCCESS,
+        connection_type="AS2",
     )
 
-    mock_route = MagicMock()
-    mock_route.as2_partner_id = None
-    mock_route.sftp_partner_id = generate_id("id")
+    # We use the tenant_db_session to persist the model manually since it's a tenant data plane record
 
-    mock_db_result = MagicMock()
-    mock_db_result.scalar_one_or_none.side_effect = [mock_route, "SFTP Partner"]
-    mock_scalars = MagicMock()
-    mock_scalars.first.side_effect = [mock_route, "SFTP Partner"]
-    mock_db_result.scalars.return_value = mock_scalars
-
-    mock_tenant = AsyncMock()
-    mock_tenant.execute.return_value = mock_db_result
-    mock_global = AsyncMock()
-    mock_global.execute.return_value = mock_db_result
-
-    mock_uow = DataPlaneUnitOfWorkPort(tenant_session=mock_tenant)
-    mock_uow._mock_global = mock_global
-    mock_uow.transactions = mock_repo
-
-    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
-    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
-    response = client.get(f"/api/v1/tenants/1/edi/transactions/{mock_msg.trace_id}")
-    assert response.status_code == 200
-    assert response.json()["trading_partner_name"] == "SFTP Partner"
-
-
-def test_get_transaction_detail_fallback():
-
-    mock_msg = MagicMock()
-    mock_msg.id = generate_id("id")
-    mock_msg.trace_id = generate_id("id")
-    mock_msg.trading_partner_id = None
-    mock_msg.created_at = None
-
-    mock_json = EdiJsonDTO(
-        id="file_2",
+    db_msg = EdiMessage(
+        id=msg.id,
+        tenant_id=msg.tenant_id,
+        trace_id=msg.trace_id,
+        direction=msg.direction.value,
+        status=msg.status.value,
+        edi_data="test_data",
+        connection_type=msg.connection_type,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
-        trace_id=generate_id("id"),
-        status=MessageStatus.RECEIVED,
-        transaction_type="mock_type",
-        business_metadata={"_routing": {"trading_partner_id": generate_id("id")}},
     )
+    tenant_db_session.add(db_msg)
+    await tenant_db_session.flush()
 
-    mock_repo = AsyncMock()
-    mock_repo.get_transaction.return_value = TransactionDetailDTO(
-        edi_message=mock_msg,
-        edi_jsons=[mock_json],
-        api_gateways=[],
-    )
-
-    mock_db_result = MagicMock()
-    # first call returns None (AS2Partner lookup misses), second returns "Fallback Partner" (SFTPPartner lookup hits)
-    mock_db_result.scalar_one_or_none.side_effect = [None, "Fallback Partner"]
-    mock_scalars = MagicMock()
-    mock_scalars.first.side_effect = [None, "Fallback Partner"]
-    mock_db_result.scalars.return_value = mock_scalars
-
-    mock_tenant = AsyncMock()
-    mock_tenant.execute.return_value = mock_db_result
-    mock_global = AsyncMock()
-    mock_global.execute.return_value = mock_db_result
-
-    mock_uow = DataPlaneUnitOfWorkPort(tenant_session=mock_tenant)
-    mock_uow._mock_global = mock_global
-    mock_uow.transactions = mock_repo
-
-    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
-    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
-    response = client.get(f"/api/v1/tenants/1/edi/transactions/{mock_msg.trace_id}")
+    response = await client.get("/api/v1/tenants/1/edi/transactions/messages")
     assert response.status_code == 200
-    assert response.json()["trading_partner_name"] == "Fallback Partner"
+    data = response.json()
+    assert len(data["items"]) >= 1
+    # Check our inserted trace_id is returned
+    found = any(i["trace_id"] == trace_id for i in data["items"])
+    assert found
 
 
-def test_get_transaction_not_found():
+@pytest.mark.asyncio
+async def test_get_transaction_trace(client: AsyncClient, tenant_db_session: AsyncSession):
+    tenant_id = "1"
+    trace_id = generate_id("trace")
 
-    mock_uow = DataPlaneUnitOfWorkPort(tenant_session=AsyncMock())
-    mock_uow._mock_global = AsyncMock()
+    db_msg = EdiMessage(
+        id=generate_id("msg"),
+        tenant_id=tenant_id,
+        trace_id=trace_id,
+        direction=Direction.INBOUND.value,
+        status=RecordStatus.SUCCESS.value,
+        edi_data="test_data",
+        connection_type="AS2",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    tenant_db_session.add(db_msg)
+    await tenant_db_session.flush()
 
-    mock_repo = AsyncMock()
-    mock_repo.get_transaction.return_value = None
-    mock_uow.transactions = mock_repo
+    response = await client.get(f"/api/v1/tenants/1/edi/transactions/{trace_id}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["edi_message"]["trace_id"] == trace_id
 
-    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
-    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
-    uid = generate_id("id")
-    response = client.get(f"/api/v1/tenants/1/edi/transactions/{uid}")
+
+@pytest.mark.asyncio
+async def test_get_transaction_trace_not_found(client: AsyncClient):
+    response = await client.get("/api/v1/tenants/1/edi/transactions/nonexistent")
     assert response.status_code == 404
 
 
-def test_get_transaction_webhook_fallback():
+@pytest.mark.asyncio
+async def test_list_transaction_json(client: AsyncClient, tenant_db_session: AsyncSession):
+    tenant_id = "1"
+    trace_id = generate_id("trace")
 
-    mock_repo = AsyncMock()
-
-    mock_msg = MagicMock()
-    mock_msg.id = generate_id("id")
-    mock_msg.trace_id = generate_id("id")
-    mock_msg.direction = "INBOUND"
-    mock_msg.sender_id = "SENDER"
-    mock_msg.receiver_id = "RECEIVER"
-    mock_msg.connection_type = "API"
-    mock_msg.status = "RECEIVED"
-    mock_msg.edi_data = "raw edi payload"
-    mock_msg.created_at = None
-    mock_msg.trading_partner_id = None
-
-    mock_json = EdiJsonDTO(
-        id=generate_id("id"),
-        trace_id=generate_id("id"),
-        status=MessageStatus.RECEIVED,
+    db_json = EdiJson(
+        id=generate_id("json"),
+        tenant_id=tenant_id,
+        trace_id=trace_id,
         transaction_type="850",
+        direction=Direction.INBOUND.value,
+        payload='{"doc": "val"}',
+        status=RecordStatus.SUCCESS.value,
+        business_metadata={"invoice_id": "INV-123"},
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+    tenant_db_session.add(db_json)
+    await tenant_db_session.flush()
 
-    mock_repo.get_transaction.return_value = TransactionDetailDTO(
-        edi_message=mock_msg,
-        edi_jsons=[mock_json],
-        api_gateways=[],
+    response = await client.get(
+        "/api/v1/tenants/1/edi/transactions/json?key=invoice_id&value=INV-123"
     )
-
-    mock_tenant_session = AsyncMock()
-    mock_inbound_route = MagicMock()
-    mock_inbound_route.webhook_id = generate_id("id")
-
-    mock_tenant_execute = MagicMock()
-    mock_tenant_execute.scalar_one_or_none.return_value = mock_inbound_route
-    mock_tenant_scalars = MagicMock()
-    mock_tenant_scalars.first.return_value = mock_inbound_route
-    mock_tenant_execute.scalars.return_value = mock_tenant_scalars
-    mock_tenant_session.execute.return_value = mock_tenant_execute
-
-    mock_global_session = AsyncMock()
-    mock_global_execute = MagicMock()
-    mock_global_execute.scalar_one_or_none.return_value = "https://webhook.soopa.com"
-    mock_global_scalars = MagicMock()
-    mock_global_scalars.first.return_value = "https://webhook.soopa.com"
-    mock_global_execute.scalars.return_value = mock_global_scalars
-    mock_global_session.execute.return_value = mock_global_execute
-
-    mock_uow = DataPlaneUnitOfWorkPort(tenant_session=mock_tenant_session)
-    mock_uow._mock_global = mock_global_session
-    mock_uow.transactions = mock_repo
-
-    app.dependency_overrides[get_data_plane_uow] = lambda: mock_uow
-    app.dependency_overrides[get_global_session] = lambda: mock_uow._mock_global
-    response = client.get(f"/api/v1/tenants/1/edi/transactions/{mock_msg.trace_id}")
     assert response.status_code == 200
-    assert response.json()["trading_partner_name"] == "https://webhook.soopa.com"
+    data = response.json()
+    assert len(data["items"]) >= 1
+    found = any(i["trace_id"] == trace_id for i in data["items"])
+    assert found
+
+
+@pytest.mark.asyncio
+async def test_replay_transaction(client: AsyncClient, tenant_db_session: AsyncSession):
+    tenant_id = "1"
+    trace_id = generate_id("trace")
+
+    db_msg = EdiMessage(
+        id=generate_id("msg"),
+        tenant_id=tenant_id,
+        trace_id=trace_id,
+        direction=Direction.INBOUND.value,
+        status=RecordStatus.SUCCESS.value,
+        edi_data="test_data",
+        connection_type="AS2",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    tenant_db_session.add(db_msg)
+    await tenant_db_session.flush()
+
+    response = await client.post(
+        f"/api/v1/tenants/1/edi/transactions/{trace_id}/replay",
+        json={"tier": "translation"},
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_bulk_replay_transactions(client: AsyncClient, tenant_db_session: AsyncSession):
+    tenant_id = "1"
+    trace_id_1 = generate_id("trace1")
+    trace_id_2 = generate_id("trace2")
+
+    tenant_db_session.add(
+        EdiMessage(
+            id=generate_id("msg"),
+            tenant_id=tenant_id,
+            trace_id=trace_id_1,
+            direction=Direction.INBOUND.value,
+            status=RecordStatus.SUCCESS.value,
+            edi_data="test_data",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    tenant_db_session.add(
+        EdiMessage(
+            id=generate_id("msg"),
+            tenant_id=tenant_id,
+            trace_id=trace_id_2,
+            direction=Direction.INBOUND.value,
+            status=RecordStatus.SUCCESS.value,
+            edi_data="test_data",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    await tenant_db_session.flush()
+
+    response = await client.post(
+        "/api/v1/tenants/1/edi/transactions/bulk-replay",
+        json={"trace_ids": [trace_id_1, trace_id_2], "tier": "translation"},
+    )
+    assert response.status_code == 202
+    assert response.json()["status"] == "accepted"
+    assert response.json()["processed_count"] == 2

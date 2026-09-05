@@ -22,6 +22,7 @@ from edi.adapters.outbound.database.platform_settings_repository import (
     SqlAlchemyPlatformSettingsRepository,
 )
 from edi.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
+from edi.adapters.outbound.database.trace_repository import SqlAlchemyTraceRepository
 from edi.adapters.outbound.database.transaction_repository import SqlAlchemyTransactionRepository
 from edi.adapters.outbound.sftp.sftp_repository import SqlAlchemySFTPPartnerRepository
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
@@ -34,7 +35,9 @@ from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPo
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 from edi.ports.outbound.platform_settings_repository import PlatformSettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
+from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
+from edi.ports.outbound.trace_repository import TraceRepositoryPort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 
 
@@ -78,11 +81,13 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     """
 
     transactions: TransactionRepositoryPort
+    traces: TraceRepositoryPort
 
-    def __init__(self, tenant_session: AsyncSession) -> None:
+    def __init__(self, tenant_session: AsyncSession, storage: StoragePort) -> None:
         super().__init__(tenant_session)
         self.tenant_session = tenant_session
 
         ts = cast(TenantSession, tenant_session)
 
-        self.transactions = SqlAlchemyTransactionRepository(ts)
+        self.transactions = SqlAlchemyTransactionRepository(ts, storage)
+        self.traces = SqlAlchemyTraceRepository(ts, storage)

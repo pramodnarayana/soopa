@@ -120,7 +120,7 @@ class TestRoutingResolutionOutbound:
 
     @pytest.mark.asyncio
     async def test_outbound_falls_back_to_business_metadata_when_no_route(self):
-        """trading_partner_id is set but outbound route returns None → try business metadata."""
+        """trading_partner_id is set but outbound route returns None. It should not fall back."""
         self.repo.seed_outbound_route(TP_001, None)
         self.repo.seed_business_metadata([TP_001], "MetaPartner")
         msg = FakeMsg(
@@ -129,7 +129,7 @@ class TestRoutingResolutionOutbound:
         )
         edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": TP_001}})
         name, _ = await self.use_case.resolve_routing_context(msg, [edi_json])
-        assert name == "MetaPartner"
+        assert name is None
 
     @pytest.mark.asyncio
     async def test_outbound_returns_none_when_no_routes_and_no_metadata(self):
@@ -144,6 +144,17 @@ class TestRoutingResolutionOutbound:
         msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=None)
         name, _ = await self.use_case.resolve_routing_context(msg, [])
         assert name is None  # no routes seeded; should not crash
+
+    @pytest.mark.asyncio
+    async def test_outbound_uses_persisted_routing_partner_id(self):
+        self.repo.seed_outbound_route(TP_META, ("Persisted Partner", "AS2"))
+        msg = FakeMsg(direction=Direction.OUTBOUND, trading_partner_id=None)
+        edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": TP_META}})
+
+        name, conn_type = await self.use_case.resolve_routing_context(msg, [edi_json])
+
+        assert name == "Persisted Partner"
+        assert conn_type == "AS2"
 
     @pytest.mark.asyncio
     async def test_exception_in_outbound_route_bubbles_up(self):
@@ -199,7 +210,7 @@ class TestRoutingResolutionInbound:
 
     @pytest.mark.asyncio
     async def test_inbound_business_metadata_has_priority_over_route(self):
-        """If business_metadata._routing.trading_partner_id resolves, it wins first."""
+        """Legacy behavior was to check metadata. It should now resolve route and ignore metadata."""
         self.repo.seed_business_metadata([TP_META], "MetaPartner")
         self.repo.seed_inbound_route("S1", "R1", "850", ("RoutePartner", "AS2"))
         msg = FakeMsg(
@@ -210,7 +221,7 @@ class TestRoutingResolutionInbound:
         )
         edi_json = FakeEdiJson(business_metadata={"_routing": {"trading_partner_id": TP_META}})
         name, _ = await self.use_case.resolve_routing_context(msg, [edi_json])
-        assert name == "MetaPartner"
+        assert name == "RoutePartner"
 
     @pytest.mark.asyncio
     async def test_inbound_returns_connection_type_when_partner_not_resolved(self):

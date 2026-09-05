@@ -24,7 +24,7 @@ TP_007 = generate_id("tp")
 TP_META = generate_id("tp")
 TP_X = generate_id("tp")
 
-from edi.application.dto import ProcessApiEdiJsonCommand
+from edi.application.dtos.commands import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
 
 # ---------------------------------------------------------------------------
@@ -69,9 +69,17 @@ class FakeTransactionRepository:
         aggregate.clear_domain_events()
 
 
+class FakeTraceRepository:
+    """Minimal TraceRepositoryPort-conforming in-memory store."""
+
+    async def get_edi_trace(self, tenant_id: str, trace_id: str) -> None:
+        return None
+
+
 class FakeDataPlaneUnitOfWork:
     def __init__(self, repo: FakeTransactionRepository):
         self.transactions = repo
+        self.traces = FakeTraceRepository()
         self.committed = False
 
     async def __aenter__(self):

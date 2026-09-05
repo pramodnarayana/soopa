@@ -6,7 +6,6 @@ import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.config.settings import get_settings
-from edi.domain.events import MessageQueueName
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -52,7 +51,7 @@ async def main() -> None:
     )
     sqs_manager = SqsConsumerManager(
         consumer=provisioning_consumer,
-        queue_name=MessageQueueName.PROVISIONING_QUEUE.value,
+        queue_name=settings.sqs.provisioning_queue_url.rsplit("/", 1)[-1],
         handler=dispatcher.dispatch_raw,
     )
     sqs_manager.start()

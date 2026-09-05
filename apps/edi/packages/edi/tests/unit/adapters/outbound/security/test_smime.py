@@ -1,5 +1,6 @@
 import datetime
 
+import pytest
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
@@ -7,11 +8,25 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from edi.adapters.outbound.security.smime import (
+    _manual_asn1crypto_decrypt,
     decrypt_payload,
     encrypt_payload,
     sign_payload,
     verify_signature,
 )
+from edi.application.dtos.commands import EncryptionAlgorithm
+from edi.domain.enums import As2EncryptionAlgorithm
+
+
+def test_encryption_enums_reject_unsupported_algorithms() -> None:
+    with pytest.raises(ValueError):
+        As2EncryptionAlgorithm("aes192")
+    with pytest.raises(ValueError):
+        As2EncryptionAlgorithm("3des")
+    with pytest.raises(ValueError):
+        EncryptionAlgorithm("AES192")
+    with pytest.raises(ValueError):
+        EncryptionAlgorithm("3DES")
 
 
 def test_encrypt_decrypt_smime():
@@ -83,3 +98,33 @@ def test_sign_verify_smime():
     is_valid, verified_payload = verify_signature(signed_data, cert_pem)
     assert is_valid is True
     assert verified_payload == payload
+
+
+def test_manual_asn1crypto_decrypt_fallback_logic():
+    private_key = rsa.generate_private_key(
+        public_exponent=65537, key_size=2048, backend=default_backend()
+    )
+    public_key = private_key.public_key()
+    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "test")])
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(public_key)
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=10))
+        .sign(private_key, hashes.SHA256(), default_backend())
+    )
+
+    cert_pem = cert.public_bytes(serialization.Encoding.PEM)
+
+    payload = b"test EDI payload data fallback"
+    encrypted_data = encrypt_payload(payload, cert_pem, "AES256")
+
+    # Instead of mocking the cryptography library to fail, we test the pure python
+    # fallback directly with the encrypted payload.
+    decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
+
+    assert decrypted is not None
+    assert payload in decrypted

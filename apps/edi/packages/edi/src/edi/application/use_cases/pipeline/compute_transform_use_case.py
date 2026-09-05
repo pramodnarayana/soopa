@@ -1,14 +1,15 @@
 import contextlib
 import copy
 from collections.abc import Callable
+from typing import cast
 
 import structlog
+from seedwork.domain.types import JsonValue
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
-from edi.domain.direction import MessageDirection
-from edi.domain.events import PipelineEventType, TransformCompleted
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
+from edi.domain.events import TransformCompleted
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -82,7 +83,7 @@ class ComputeTransformUseCase:
             )
             route = (
                 await uow.transactions.get_route(
-                    MessageDirection.INBOUND,
+                    EdiDirection.INBOUND,
                     str(edi_msg.sender_id),
                     str(edi_msg.receiver_id),
                     str(transaction_type_global) if transaction_type_global else "",
@@ -114,7 +115,7 @@ class ComputeTransformUseCase:
 
                 await uow.transactions.save_edi_json(
                     trace_id=trace_id,
-                    direction=MessageDirection.INBOUND.value,
+                    direction=EdiDirection.INBOUND.value,
                     partnership_id=partnership_id_str,
                     transaction_type=txn_type,
                     standard=standard,
@@ -122,8 +123,8 @@ class ComputeTransformUseCase:
                     receiver_id=edi_msg.receiver_id,
                     gs_sender_id=gs_sender,
                     gs_receiver_id=gs_receiver,
-                    business_metadata=business_metadata,
-                    payload=json_dict,
+                    business_metadata=cast("dict[str, JsonValue]", business_metadata),
+                    payload=cast("dict[str, JsonValue]", json_dict),
                     status=MessageStatus.PARSED.value,
                     tenant_id=edi_msg.tenant_id,
                 )
@@ -160,19 +161,19 @@ class ComputeTransformUseCase:
 
             envelope = EdiWebhookPayload.build(
                 trace_id=trace_id,
-                direction=MessageDirection.INBOUND.value,
+                direction=EdiDirection.INBOUND.value,
                 sender_id=edi_msg.sender_id,
                 receiver_id=edi_msg.receiver_id,
                 trading_partner_id=trading_partner_id,
                 format_standard=standard,
-                transactions=json_payloads,
+                transactions=cast(list[dict[str, JsonValue]], json_payloads),
             )
 
             # Save ApiGateway to DB as a single webhook delivery
             await uow.transactions.save_api_payload(
                 trace_id=trace_id,
                 tenant_id=edi_msg.tenant_id,
-                direction=MessageDirection.OUTBOUND.value,
+                direction=EdiDirection.OUTBOUND.value,
                 payload=envelope.model_dump(),
                 status=MessageStatus.PENDING_DELIVERY.value,
                 transaction_type=standard,
@@ -185,7 +186,7 @@ class ComputeTransformUseCase:
                 TransformCompleted(
                     trace_id=trace_id,
                     tenant_id=edi_msg.tenant_id or "",
-                    direction=MessageDirection.INBOUND.value,
+                    direction=EdiDirection.INBOUND.value,
                     gs_sender_id=gs_sender_global,
                     gs_receiver_id=gs_receiver_global,
                     transaction_type=txn_type_for_parent,

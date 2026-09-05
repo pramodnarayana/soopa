@@ -1,13 +1,12 @@
-from typing import Any
-
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.adapters.inbound.as2 import parse_mdn
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
+from edi.domain.enums import MessageStatus
+from edi.domain.models.as2 import OutboundAS2Message
 from edi.domain.models.transactions import EdiMessageDomainModel
-from edi.domain.status import MessageStatus
+from edi.domain.services.as2_protocol import parse_mdn
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 
@@ -29,7 +28,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         self,
         trace_id: str,
         direction: str,
-        as2_msg: Any,
+        as2_msg: OutboundAS2Message,
         status_code: int,
         response_headers: dict[str, str],
         response_body: bytes,
@@ -111,16 +110,18 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             return
 
         try:
-            remote_partner = await self.uow.repository.get_as2_partner(partner_id)
-            if not remote_partner:
-                raise ValueError("AS2 partner {partner_id} not found.")
+            config_tuple = await self.uow.repository.get_as2_partner(partner_id)
+            if not config_tuple:
+                raise ValueError(f"AS2 partner {partner_id} not found.")
 
-            remote_url: str | None = remote_partner.get("remote_url")
+            remote_partner_dto, partnership_dto = config_tuple
+
+            remote_url: str | None = remote_partner_dto.url
             if not remote_url:
-                raise ValueError("AS2 partner {partner_id} has no remote_url configured.")
+                raise ValueError(f"AS2 partner {partner_id} has no remote_url configured.")
 
-            local_partner_id: str | None = remote_partner.get("local_partner_id")
-            local_partner = (
+            local_partner_id: str | None = partnership_dto.local_partner_id
+            local_partner_dto = (
                 await self.uow.repository.get_local_as2_partner(local_partner_id)
                 if local_partner_id
                 else None
@@ -132,8 +133,9 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
 
             as2_msg = await self._as2_orchestrator.build(
                 raw_payload=raw_payload,
-                local_partner=local_partner,
-                remote_partner=remote_partner,
+                local_partner=local_partner_dto,
+                remote_partner=remote_partner_dto,
+                partnership=partnership_dto,
                 idempotency_key=idempotency_key,
             )
         except Exception as e:

@@ -5,7 +5,7 @@ from database.exceptions import DuplicateEntityError
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.dto import (
+from edi.application.dtos import (
     UNSET,
     CreateAS2PartnershipCmd,
     EncryptionAlgorithm,

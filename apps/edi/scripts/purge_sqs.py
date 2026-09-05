@@ -1,4 +1,7 @@
+import os
+
 import boto3
+from botocore.exceptions import ClientError
 
 sqs = boto3.client(
     "sqs",
@@ -6,7 +9,7 @@ sqs = boto3.client(
     region_name="us-east-1",
     aws_access_key_id="test",
     # Safe: dummy key for localstack
-    aws_secret_access_key="test",  # noqa: S106
+    aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
 )
 queues = sqs.list_queues()
 if "QueueUrls" in queues:
@@ -14,5 +17,5 @@ if "QueueUrls" in queues:
         try:
             sqs.purge_queue(QueueUrl=q)
             print(f"Purged {q}")
-        except Exception as e:  # noqa: BLE001
+        except ClientError as e:
             print(f"Failed {q}: {e}")

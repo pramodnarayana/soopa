@@ -1,4 +1,4 @@
-from typing import Any
+from seedwork.domain.types import JsonValue
 
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 
@@ -13,7 +13,7 @@ class AuthorizationService:
         is_platform_admin: bool,
         current_rls_tenant: str | None,
         roles: list[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> dict[str, JsonValue]:
         """
         Calculates the user's roles, permissions, and feature flags without touching HTTP or SQLAlchemy.
         """
@@ -31,7 +31,7 @@ class AuthorizationService:
         else:
             role = "Standard"
 
-        permissions = []
+        permissions: list[JsonValue] = []
 
         if role in ["Owner", "Admin"]:
             permissions.extend(

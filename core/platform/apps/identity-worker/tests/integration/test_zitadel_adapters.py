@@ -22,8 +22,8 @@ from seedwork import generate_id
 pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.skipif(
-        not os.environ.get("ZITADEL_API_TOKEN"),
-        reason="ZITADEL_API_TOKEN is not set",
+        not os.environ.get("ZITADEL_MACHINE_KEY"),
+        reason="ZITADEL_MACHINE_KEY is not set",
     ),
 ]
 

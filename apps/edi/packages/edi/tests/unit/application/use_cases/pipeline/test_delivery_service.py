@@ -15,8 +15,7 @@ from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.direction import MessageDirection
-from edi.domain.status import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus
 from edi.testing.fakes.pipeline_fakes import (
     FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,
@@ -67,7 +66,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     trace_id = "trace-456"
     uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
-        "direction": MessageDirection.INBOUND,
+        "direction": EdiDirection.INBOUND,
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "850",
@@ -82,7 +81,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     uow.repository.routes.append(
         {
             "route_id": "r1",
-            "direction": MessageDirection.INBOUND,
+            "direction": EdiDirection.INBOUND,
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
             "transaction_type": "850",
@@ -90,8 +89,10 @@ async def test_delivery_service_inbound_webhook() -> None:
         }
     )
     uow.repository.webhooks["wp1"] = {
+        "id": "wp1",
         "name": "Test Webhook",
         "url": "https://webhook.example.com/edi",
+        "active": True,
         "auth_header_vault_ref": None,
     }
 
@@ -114,7 +115,7 @@ async def test_delivery_service_outbound_sftp() -> None:
     trace_id = "trace-sftp"
     uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
-        "direction": MessageDirection.OUTBOUND,
+        "direction": EdiDirection.OUTBOUND,
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "trading_partner_id": "sftp1",
@@ -125,7 +126,7 @@ async def test_delivery_service_outbound_sftp() -> None:
     uow.repository.routes.append(
         {
             "route_id": "r2",
-            "direction": MessageDirection.OUTBOUND,
+            "direction": EdiDirection.OUTBOUND,
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
             "transaction_type": "*",
@@ -133,11 +134,17 @@ async def test_delivery_service_outbound_sftp() -> None:
         }
     )
     uow.repository.sftp_partners["sftp1"] = {
+        "id": "sftp1",
+        "name": "sftp1",
         "host": "sftp.example.com",
         "port": 22,
         "username": "user",
-        "credentials_vault_ref": "mock_password",
+        "inbound_remote_path": None,
         "outbound_remote_path": "/out",
+        "host_key": None,
+        "password": None,
+        "credentials_vault_ref": "mock_password",
+        "active": True,
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
@@ -158,7 +165,7 @@ async def test_delivery_service_no_route_raises() -> None:
     trace_id = "trace-err"
     uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
-        "direction": MessageDirection.INBOUND,
+        "direction": EdiDirection.INBOUND,
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "850",
@@ -178,7 +185,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     trace_id = "trace-fail"
     uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
-        "direction": MessageDirection.INBOUND,
+        "direction": EdiDirection.INBOUND,
         "sender_id": "SENDER1",
         "receiver_id": "RECV1",
         "transaction_type": "850",
@@ -193,7 +200,7 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     uow.repository.routes.append(
         {
             "route_id": "r1",
-            "direction": MessageDirection.INBOUND,
+            "direction": EdiDirection.INBOUND,
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
             "transaction_type": "850",
@@ -201,8 +208,11 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
         }
     )
     uow.repository.webhooks["wp1"] = {
+        "id": "wp1",
         "name": "Test",
         "url": "https://webhook.example.com/edi",
+        "active": True,
+        "auth_header_vault_ref": None,
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────

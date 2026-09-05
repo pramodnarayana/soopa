@@ -1,12 +1,9 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from edi.domain.events import (
-    EdiEventType,
-    ProvisioningEvent,
-    ProvisioningEventType,
-    WebhookEventType,
-)
+from edi.domain.constants import ProvisioningEventType
+from edi.domain.enums import EdiEventType, WebhookEventType
+from edi.domain.events import ProvisioningEvent
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
@@ -64,7 +61,7 @@ class ProvisioningWorkerService:
                     await replicate_fn(t_id, *args)
                 except PermanentProvisioningError as e:
                     permanent_errors.append(f"Tenant {t_id}: {e}")
-                except Exception as e:  # noqa: BLE001
+                except (TransientProvisioningError, TimeoutError, ConnectionError) as e:
                     transient_errors.append(f"Tenant {t_id}: {e}")
             if transient_errors:
                 raise TransientProvisioningError(
@@ -90,4 +87,4 @@ class ProvisioningWorkerService:
         except (PermanentProvisioningError, TransientProvisioningError):
             raise
         except Exception as e:
-            raise TransientProvisioningError(f"Failed to process event: {e}") from e
+            raise PermanentProvisioningError(f"Failed to process event: {e}") from e

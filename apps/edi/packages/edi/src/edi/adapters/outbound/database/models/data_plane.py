@@ -1,7 +1,7 @@
 import os
 from datetime import UTC, datetime
-from typing import Any
 
+from seedwork.domain.types import JsonValue
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -19,6 +19,7 @@ from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
 from database.models.common import OutboxMixin, TimestampMixin
+from edi.domain.enums import MessageStatus
 
 from .replicated_mixins import (
     AS2PartnerMixin,
@@ -41,7 +42,7 @@ class SanitizedText(TypeDecorator[str]):
     impl = Text
     cache_ok = True
 
-    def process_bind_param(self, value: Any, dialect: Any) -> str | None:
+    def process_bind_param(self, value: object, dialect: object) -> str | None:
         if value is None:
             return value
         if isinstance(value, bytes):
@@ -51,9 +52,7 @@ class SanitizedText(TypeDecorator[str]):
 
 
 class TenantBase(DeclarativeBase):
-    from typing import Any
-
-    __table_args__: Any = {"schema": "edi"}
+    __table_args__: dict[str, object] | tuple[object, ...] = {}
 
 
 class TenantAwareMixin:
@@ -85,10 +84,10 @@ class AS2Partnership(TenantBase, TenantAwareMixin, AS2PartnershipMixin, Timestam
     __tablename__ = "as2_partnerships"
 
     local_partner_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
     remote_partner_id: Mapped[str] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
+        String(128), ForeignKey("as2_partners.id", ondelete="CASCADE"), nullable=False
     )
 
 
@@ -109,13 +108,13 @@ class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMix
     __tablename__ = "inbound_routes"
 
     webhook_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.webhooks.id"), nullable=True
+        String(128), ForeignKey("webhooks.id"), nullable=True
     )
     as2_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id"), nullable=True
+        String(128), ForeignKey("as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.sftp_partners.id"), nullable=True
+        String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -132,7 +131,6 @@ class InboundRoute(TenantBase, TenantAwareMixin, InboundRouteMixin, TimestampMix
             unique=True,
             postgresql_where=text("active = true"),
         ),
-        {"schema": "edi"},
     )
 
 
@@ -140,10 +138,10 @@ class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampM
     __tablename__ = "outbound_routes"
 
     as2_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.as2_partners.id"), nullable=True
+        String(128), ForeignKey("as2_partners.id"), nullable=True
     )
     sftp_partner_id: Mapped[str | None] = mapped_column(
-        String(128), ForeignKey("edi.sftp_partners.id"), nullable=True
+        String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
 
     __table_args__ = (
@@ -158,7 +156,6 @@ class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampM
             unique=True,
             postgresql_where=text("active = true"),
         ),
-        {"schema": "edi"},
     )
 
 
@@ -172,7 +169,6 @@ class OutboundEdiHeader(TenantBase, TenantAwareMixin, OutboundEdiHeaderMixin, Ti
             "trading_partner_id",
             unique=True,
         ),
-        {"schema": "edi"},
     )
 
 
@@ -220,7 +216,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
 
     __table_args__ = (
         Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),
@@ -228,7 +224,6 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
             "(edi_data IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_edi_msg_data_or_uri",
         ),
-        {"schema": "edi"},
     )
 
 
@@ -250,11 +245,13 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     gs_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gs_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    business_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    business_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="TRANSFORMED")
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=MessageStatus.TRANSFORMED
+    )
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
@@ -263,7 +260,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_edi_json_data_or_uri",
         ),
-        {"schema": "edi"},
     )
 
 
@@ -282,19 +278,18 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     http_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
     target_format: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    payload: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
-    headers: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    headers: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="RECEIVED")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
 
     __table_args__ = (
         CheckConstraint(
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_apigw_data_or_uri",
         ),
-        {"schema": "edi"},
     )
 
 
@@ -306,7 +301,7 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSFORM, DELIVER
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="PENDING")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.PENDING)
     attempt_count: Mapped[int] = mapped_column(Integer, default=0)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -320,7 +315,6 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
-        {"schema": "edi"},
     )
     ID_PREFIX = "edi_dp_ob"
 
@@ -351,7 +345,7 @@ class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
+    metadata_: Mapped[dict[str, JsonValue] | None] = mapped_column("metadata", JSONB, nullable=True)
 
 
 class AckReceipt(TenantBase, TenantAwareMixin):

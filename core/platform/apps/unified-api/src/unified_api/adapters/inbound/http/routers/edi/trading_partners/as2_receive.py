@@ -1,10 +1,10 @@
 import structlog
-from edi.adapters.inbound.as2.mdn import build_mdn
-from edi.application.dto import ProcessInboundAs2Command
+from edi.application.dtos import ProcessInboundAs2Command
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
 from edi.domain.exceptions import OrchestrationError
+from edi.domain.services.as2_protocol import build_mdn
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_as2_receiver_service

@@ -1,9 +1,9 @@
 import json
 from datetime import UTC, datetime
-from typing import Any, cast
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_random_hex
+from seedwork.domain.types import JsonValue
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,10 +27,18 @@ from edi.adapters.outbound.database.models.data_plane import (
     Webhook,
 )
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox as Outbox
+from edi.application.dtos.partners import (
+    AS2PartnershipDTO,
+    LocalAS2PartnerDTO,
+    RemoteAS2PartnerDTO,
+    SFTPPartnerDTO,
+)
+from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, OutboundRouteDTO
+from edi.application.dtos.webhooks import WebhookDTO
 from edi.config.settings import AppSettings
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.enums import ConnectionType, EdiDirection, MessageStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
-from edi.domain.status import MessageStatus
 from edi.ports.outbound.edi_message_port import RepositoryPort
 from edi.ports.outbound.storage_port import StoragePort
 
@@ -123,7 +131,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         format_standard: str,
         transaction_type: str,
         status: str,
-        connection_type: str | None = "UNKNOWN",
+        connection_type: str | None = ConnectionType.UNKNOWN.value,
         sender_id: str | None = None,
         receiver_id: str | None = None,
         gs_sender_id: str | None = None,
@@ -177,8 +185,8 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         receiver_id: str | None,
         gs_sender_id: str | None,
         gs_receiver_id: str | None,
-        business_metadata: dict[str, Any],
-        payload: dict[str, Any],
+        business_metadata: dict[str, JsonValue],
+        payload: dict[str, JsonValue],
         status: str,
         tenant_id: str | None = None,
     ) -> str:
@@ -268,7 +276,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         )
         await self.session.flush()
 
-    async def update_edi_json(self, trace_id: str, **kwargs: Any) -> None:
+    async def update_edi_json(self, trace_id: str, **kwargs: JsonValue) -> None:
 
         if not kwargs:
             return
@@ -278,7 +286,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         await self.session.flush()
 
     async def publish_outbox_event(
-        self, idempotency_key: str, event_type: str, payload: dict[str, Any]
+        self, idempotency_key: str, event_type: str, payload: dict[str, JsonValue]
     ) -> None:
 
         stmt = (
@@ -322,7 +330,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         self,
         trace_id: str,
         direction: str,
-        payload: dict[str, Any],
+        payload: dict[str, JsonValue],
         status: str,
         transaction_type: str | None = None,
         webhook_url: str | None = None,
@@ -354,7 +362,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         self.session.add(record)
         await self.session.flush()
 
-    async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
+    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None:
         result = await self.session.execute(
             select(ApiGateway)
             .where(ApiGateway.trace_id == str(trace_id))
@@ -384,7 +392,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         http_status_code: int | None = None,
         response: str | None = None,
     ) -> None:
-        values: dict[str, Any] = {"status": status}
+        values: dict[str, JsonValue] = {"status": status}
         if webhook_url is not None:
             values["webhook_url"] = webhook_url
         if http_status_code is not None:
@@ -428,26 +436,26 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         transaction_type: str,
         gs_sender_id: str | None = None,
         gs_receiver_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> InboundRouteDTO | None:
 
-        if direction not in ("INBOUND", "OUTBOUND"):
-            raise ValueError(f"Invalid direction: {direction}")
-        model = InboundRoute if direction == "INBOUND" else OutboundRoute
+        if direction != EdiDirection.INBOUND:
+            raise ValueError(f"get_route only supports INBOUND, got: {direction}")
+        model_class = InboundRoute
 
         # Exact match or wildcard transaction type
         conditions = [
-            cast(Any, model).isa_sender_id == sender_id,
-            cast(Any, model).isa_receiver_id == receiver_id,
-            cast(Any, model).transaction_type.in_([transaction_type, "*"]),
-            cast(Any, model).active.is_(True),
+            model_class.isa_sender_id == sender_id,
+            model_class.isa_receiver_id == receiver_id,
+            model_class.transaction_type.in_([transaction_type, "*"]),
+            model_class.active.is_(True),
         ]
 
         if gs_sender_id:
-            conditions.append(cast(Any, model).gs_sender_id == gs_sender_id)
+            conditions.append(model_class.gs_sender_id == gs_sender_id)
         if gs_receiver_id:
-            conditions.append(cast(Any, model).gs_receiver_id == gs_receiver_id)
+            conditions.append(model_class.gs_receiver_id == gs_receiver_id)
 
-        stmt = select(model).where(*conditions)
+        stmt = select(model_class).where(*conditions)
 
         result = await self.session.execute(stmt)
         # Fetch all matches, prefer exact transaction_type over wildcard
@@ -456,38 +464,36 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             return None
 
         # Sort so specific transaction types match before generic "*"
-        records = sorted(records, key=lambda r: getattr(r, "transaction_type", "*") == "*")
+        records = sorted(records, key=lambda r: r.transaction_type == "*")
 
-        # mypy gets confused by TenantBase being the base class but returning specific derived models
-        record: Any = records[0]
-        return {
-            "route_id": str(record.id),
-            "trading_partner_id": getattr(record, "trading_partner_id", None),
-            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
-            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
-            "webhook_id": str(record.webhook_id)
-            if hasattr(record, "webhook_id") and record.webhook_id
-            else None,
-        }
+        record = records[0]
+        return InboundRouteDTO(
+            trading_partner_id=record.trading_partner_id,
+            as2_partner_id=str(record.as2_partner_id) if record.as2_partner_id else None,
+            sftp_partner_id=str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            webhook_id=str(record.webhook_id) if record.webhook_id else None,
+            processing_mode=record.processing_mode,
+        )
 
-    async def get_outbound_route(self, route_id: str) -> dict[str, Any] | None:
+    async def get_outbound_route(self, route_id: str) -> OutboundRouteDTO | None:
         result = await self.session.execute(
             select(OutboundRoute).where(OutboundRoute.id == str(route_id))
         )
         record = result.scalar_one_or_none()
         if not record:
             return None
-        return {
-            "id": str(record.id),
-            "tenant_id": record.tenant_id,
-            "trading_partner_id": record.trading_partner_id,
-            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
-            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
-        }
+        return OutboundRouteDTO(
+            route_id=str(record.id),
+            trading_partner_id=record.trading_partner_id,
+            sftp_partner_id=str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            as2_partner_id=str(record.as2_partner_id) if record.as2_partner_id else None,
+            webhook_id=None,
+            protocol=record.protocol,
+        )
 
     async def get_outbound_route_by_trading_partner_id(
         self, trading_partner_id: str, tenant_id: str
-    ) -> dict[str, Any] | None:
+    ) -> OutboundRouteDTO | None:
         result = await self.session.execute(
             select(OutboundRoute).where(
                 OutboundRoute.trading_partner_id == trading_partner_id,
@@ -497,20 +503,21 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         record = result.scalar_one_or_none()
         if not record:
             return None
-        return {
-            "id": str(record.id),
-            "tenant_id": record.tenant_id,
-            "trading_partner_id": record.trading_partner_id,
-            "sftp_partner_id": str(record.sftp_partner_id) if record.sftp_partner_id else None,
-            "as2_partner_id": str(record.as2_partner_id) if record.as2_partner_id else None,
-        }
+        return OutboundRouteDTO(
+            route_id=str(record.id),
+            trading_partner_id=record.trading_partner_id,
+            sftp_partner_id=str(record.sftp_partner_id) if record.sftp_partner_id else None,
+            as2_partner_id=str(record.as2_partner_id) if record.as2_partner_id else None,
+            webhook_id=None,
+            protocol=record.protocol,
+        )
 
     async def get_outbound_edi_header_by_route_or_partner(
         self,
         route_id: str | None = None,
         trading_partner_id: str | None = None,
         tenant_id: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> OutboundEdiHeaderDTO | None:
 
         query = select(OutboundEdiHeader)
         if route_id:
@@ -543,22 +550,24 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if not record:
             return None
 
-        return {
-            "id": str(record.id),
-            "tenant_id": record.tenant_id,
-            "trading_partner_id": record.trading_partner_id,
-            "default_standard": record.default_standard,
-            "default_version": record.default_version,
-            "isa_sender_qualifier": record.isa_sender_qualifier,
-            "isa_sender_id": record.isa_sender_id,
-            "isa_receiver_qualifier": record.isa_receiver_qualifier,
-            "isa_receiver_id": record.isa_receiver_id,
-            "gs_sender_id": record.gs_sender_id,
-            "gs_receiver_id": record.gs_receiver_id,
-            "transaction_type": record.transaction_type,
-        }
+        return OutboundEdiHeaderDTO(
+            default_standard=record.default_standard,
+            default_version=record.default_version,
+            isa_sender_qualifier=record.isa_sender_qualifier,
+            isa_sender_id=record.isa_sender_id,
+            isa_receiver_qualifier=record.isa_receiver_qualifier,
+            isa_receiver_id=record.isa_receiver_id,
+            gs_sender_id=record.gs_sender_id,
+            gs_receiver_id=record.gs_receiver_id,
+            isa_control_version=None,
+            isa_usage_indicator=None,
+            gs_version=None,
+            segment_terminator=None,
+            element_separator=None,
+            subelement_separator=None,
+        )
 
-    async def get_sftp_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_sftp_partner(self, partner_id: str) -> SFTPPartnerDTO | None:
         result = await self.session.execute(
             select(SFTPPartner).where(
                 SFTPPartner.id == str(partner_id), SFTPPartner.active.is_(True)
@@ -567,34 +576,40 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         record = result.scalar_one_or_none()
         if not record:
             return None
-        return {
-            "name": record.name,
-            "host": record.host,
-            "port": record.port,
-            "username": record.username,
-            "inbound_remote_path": record.inbound_remote_path,
-            "outbound_remote_path": record.outbound_remote_path,
-            "host_key": record.host_key,
-            "password": db_encryption.decrypt(record.password_encrypted)
+        return SFTPPartnerDTO(
+            id=str(record.id),
+            name=record.name,
+            host=record.host,
+            port=record.port,
+            username=record.username,
+            inbound_remote_path=record.inbound_remote_path,
+            outbound_remote_path=record.outbound_remote_path,
+            host_key=record.host_key,
+            password=db_encryption.decrypt(record.password_encrypted)
             if record.password_encrypted
             else None,
-            "credentials_vault_ref": record.credentials_vault_ref,
-        }
+            credentials_vault_ref=record.credentials_vault_ref,
+            active=record.active,
+        )
 
-    async def get_webhook(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
         result = await self.session.execute(
             select(Webhook).where(Webhook.id == str(partner_id), Webhook.active.is_(True))
         )
         record = result.scalar_one_or_none()
         if not record:
             return None
-        return {
-            "name": record.name,
-            "url": record.url,
-            "auth_header_vault_ref": record.auth_header_vault_ref,
-        }
+        return WebhookDTO(
+            id=str(record.id),
+            name=record.name,
+            url=record.url,
+            active=record.active,
+            auth_header_vault_ref=record.auth_header_vault_ref,
+        )
 
-    async def get_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_as2_partner(
+        self, partner_id: str
+    ) -> tuple[RemoteAS2PartnerDTO, AS2PartnershipDTO] | None:
         stmt = (
             select(AS2Partner, AS2Partnership)
             .join(AS2Partnership, AS2Partnership.remote_partner_id == AS2Partner.id)
@@ -613,21 +628,32 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if not partnership.active:
             raise ValueError(f"AS2 Partnership for {partner_id} exists but is inactive.")
 
-        return {
-            "name": partner.name,
-            "as2_id": partner.as2_id,
-            "public_cert_pem": partner.public_cert_pem,
-            "public_cert_vault_ref": partner.public_cert_vault_ref,
-            "remote_url": partner.url,
-            "local_partner_id": str(partnership.local_partner_id),
-            "credentials_vault_ref": partnership.credentials_vault_ref,
-            "encryption_algorithm": partnership.encryption_algorithm,
-            "signature_algorithm": partnership.signature_algorithm,
-            "mdn_type": partnership.mdn_type,
-            "mdn_url": partnership.mdn_url,
-        }
+        return (
+            RemoteAS2PartnerDTO(
+                id=str(partner.id),
+                name=partner.name,
+                as2_id=partner.as2_id,
+                url=partner.url,
+                public_cert_pem=partner.public_cert_pem,
+                public_cert_vault_ref=partner.public_cert_vault_ref,
+                prev_public_cert_pem=partner.prev_public_cert_pem,
+                prev_public_cert_vault_ref=partner.prev_public_cert_vault_ref,
+            ),
+            AS2PartnershipDTO(
+                id=str(partnership.id),
+                name=partnership.name,
+                local_partner_id=str(partnership.local_partner_id),
+                remote_partner_id=str(partnership.remote_partner_id),
+                credentials_vault_ref=partnership.credentials_vault_ref,
+                encryption_algorithm=partnership.encryption_algorithm,
+                signature_algorithm=partnership.signature_algorithm,
+                mdn_type=partnership.mdn_type,
+                mdn_url=partnership.mdn_url,
+                advanced_flags=getattr(partnership, "advanced_flags", None),
+            ),
+        )
 
-    async def get_local_as2_partner(self, partner_id: str) -> dict[str, Any] | None:
+    async def get_local_as2_partner(self, partner_id: str) -> LocalAS2PartnerDTO | None:
         """Fetches the local (our) AS2 partner to retrieve signing key and cert refs."""
         result = await self.session.execute(
             select(AS2Partner).where(
@@ -641,10 +667,13 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
         if not partner.active:
             raise ValueError(f"Local AS2 Partner {partner_id} exists but is inactive.")
 
-        return {
-            "name": partner.name,
-            "as2_id": partner.as2_id,
-            "public_cert_pem": partner.public_cert_pem,
-            "public_cert_vault_ref": partner.public_cert_vault_ref,
-            "private_key_vault_ref": partner.private_key_vault_ref,
-        }
+        return LocalAS2PartnerDTO(
+            id=str(partner.id),
+            name=partner.name,
+            as2_id=partner.as2_id,
+            public_cert_pem=partner.public_cert_pem,
+            public_cert_vault_ref=partner.public_cert_vault_ref,
+            private_key_vault_ref=partner.private_key_vault_ref,
+            prev_private_key_vault_ref=getattr(partner, "prev_private_key_vault_ref", None),
+            prev_public_cert_vault_ref=getattr(partner, "prev_public_cert_vault_ref", None),
+        )

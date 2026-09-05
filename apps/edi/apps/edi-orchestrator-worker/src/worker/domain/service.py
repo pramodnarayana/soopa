@@ -2,12 +2,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from edi.domain.events import (
-    EdiEventType,
-    ProvisioningEvent,
-    ProvisioningEventType,
-    WebhookEventType,
-)
+from edi.domain.constants import ProvisioningEventType
+from edi.domain.enums import EdiEventType, WebhookEventType
+from edi.domain.events import ProvisioningEvent
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 
@@ -76,7 +73,7 @@ class ProvisioningWorkerService:
                     # Log permanent errors but don't retry them
                     logger.exception("permanent_provisioning_error_ignored", tenant_id=t_id)
 
-                except Exception as e:  # noqa: BLE001
+                except (ValueError, TypeError, KeyError, RuntimeError) as e:
                     transient_errors.append(e)
             if transient_errors:
                 raise TransientProvisioningError(

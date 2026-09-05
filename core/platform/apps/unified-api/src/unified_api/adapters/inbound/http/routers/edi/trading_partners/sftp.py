@@ -5,7 +5,7 @@ from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.dto import (
+from edi.application.dtos import (
     UNSET,
     CreateSFTPPartnerCmd,
     UpdateSFTPPartnerCmd,

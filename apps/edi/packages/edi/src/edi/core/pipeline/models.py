@@ -1,6 +1,6 @@
-from typing import Any
-
 from pydantic import BaseModel
+
+from edi.domain.types import JsonDict
 
 
 class EdiWebhookMetadata(BaseModel):
@@ -14,7 +14,7 @@ class EdiWebhookMetadata(BaseModel):
 
 class EdiWebhookPayload(BaseModel):
     metadata: EdiWebhookMetadata
-    transactions: list[dict[str, Any]] | None = None
+    transactions: list[JsonDict] | None = None
 
     @classmethod
     def build(
@@ -25,7 +25,7 @@ class EdiWebhookPayload(BaseModel):
         receiver_id: str | None,
         trading_partner_id: str | None,
         format_standard: str | None,
-        transactions: list[dict[str, Any]] | None,
+        transactions: list[JsonDict] | None,
     ) -> "EdiWebhookPayload":
         """
         Enterprise factory method to build a strongly-typed webhook payload

@@ -1,6 +1,9 @@
 import datetime
-from unittest.mock import AsyncMock, MagicMock
+import json
+import os
+import uuid
 
+import aioboto3
 import pytest
 from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
@@ -44,21 +47,53 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
 
         await test_session.commit()
 
-    # 2. Mock external SQS boundary
-    mock_publisher = MagicMock()
-    mock_publisher.publish_batch = AsyncMock(side_effect=lambda events: [e.id for e in events])
+    # 2. Use real LocalStack SQS publisher
+    sqs_endpoint = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
+    # We will create a temporary queue for this test to ensure isolation
+    queue_name = f"test-sweeper-{int(datetime.datetime.now().timestamp())}-{uuid.uuid4().hex}"
 
-    repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
+    async with aioboto3.Session().client(
+        "sqs", endpoint_url=sqs_endpoint, region_name="us-east-1"
+    ) as sqs:
+        resp = await sqs.create_queue(QueueName=queue_name)
+        queue_url = resp["QueueUrl"]
 
-    use_case = OutboxSweeperUseCase(
-        repository=repo, publisher=mock_publisher
-    )  # 3. Execute Sweeper against real local DB
-    await use_case.execute()
+        try:
+            from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 
-    # 4. Verify
-    assert mock_publisher.publish_batch.call_count == 1
-    call_args = mock_publisher.publish_batch.call_args[0][0]
-    assert len(call_args) == 2
+            real_publisher = AwsSqsPublisher(
+                queue_url=queue_url,
+                endpoint_url=sqs_endpoint,
+                region_name="us-east-1",
+            )
+
+            repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
+
+            use_case = OutboxSweeperUseCase(repository=repo, publisher=real_publisher)
+
+            # 3. Execute Sweeper against real local DB and real LocalStack SQS
+            await use_case.execute()
+
+            # 4. Verify by authentically polling the real queue
+            messages_received = []
+            for _ in range(5):  # Poll a few times just in case
+                resp = await sqs.receive_message(
+                    QueueUrl=queue_url, MaxNumberOfMessages=10, WaitTimeSeconds=1
+                )
+                if "Messages" in resp:
+                    messages_received.extend(resp["Messages"])
+                if len(messages_received) >= 2:
+                    break
+
+            assert len(messages_received) >= 2
+
+            # Validate payload actually contains outbox message contents
+            bodies = [json.loads(m["Body"]) for m in messages_received]
+            assert any("TRANSFORM_EVENT" in str(b) for b in bodies)
+            assert any("DELIVER_EVENT" in str(b) for b in bodies)
+
+        finally:
+            await sqs.delete_queue(QueueUrl=queue_url)
 
 
 @pytest.mark.integration

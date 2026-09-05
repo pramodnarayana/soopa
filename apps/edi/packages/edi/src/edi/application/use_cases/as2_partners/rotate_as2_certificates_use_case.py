@@ -1,12 +1,11 @@
-from typing import Any
-
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.application.dto import RotateAS2CertificateCmd
+from edi.application.dtos.commands import RotateAS2CertificateCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
-from edi.domain.events import EdiEventType, ProvisioningEvent
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import (
     InvalidCertificateActionError,
     MissingCertificateError,
@@ -29,7 +28,7 @@ class RotateAS2CertificatesUseCase:
 
     async def _provision_certificates(
         self,
-        partner: Any,
+        partner: AS2PartnerDomainModel,
         cmd: RotateAS2CertificateCmd,
         secret_store: SecretStorePort,
     ) -> tuple[str, str | None]:

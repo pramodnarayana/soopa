@@ -1,5 +1,4 @@
 import email
-from unittest.mock import patch
 
 """
 Integration tests for the AS2 inbound receiver endpoint: POST /as2
@@ -173,11 +172,11 @@ class TestAS2MessageReceiving:
             content_type='application/pkcs7-mime; smime-type=enveloped-data; name="smime.p7m"',
         )
 
-        with patch(
-            "as2_server.application.use_cases.receive_as2.decrypt_payload",
-            side_effect=Exception("Decryption simulated error"),
-        ):
-            response = await as2_client.post("/as2", content=encrypted_as2_payload, headers=headers)
+        # Altering a few bytes in the middle of the encrypted payload will cause
+        # the ASN.1 parser or the decryption algorithm to fail organically.
+        tampered_payload = encrypted_as2_payload[:500] + b"X" * 10 + encrypted_as2_payload[510:]
+
+        response = await as2_client.post("/as2", content=tampered_payload, headers=headers)
 
         assert response.status_code == 200
         assert b"decryption-failed" in response.content
@@ -195,11 +194,11 @@ class TestAS2MessageReceiving:
             content_type='multipart/signed; protocol="application/pkcs7-signature"; micalg=sha-256',
         )
 
-        with patch(
-            "as2_server.application.use_cases.receive_as2.verify_signature",
-            return_value=(False, b""),
-        ):
-            response = await as2_client.post("/as2", content=signed_as2_payload, headers=headers)
+        # Altering a single byte in the signature body (usually at the end)
+        # causes organic signature verification failure.
+        tampered_payload = signed_as2_payload[:-50] + b"X" * 10 + signed_as2_payload[-40:]
+
+        response = await as2_client.post("/as2", content=tampered_payload, headers=headers)
 
         assert response.status_code == 200
         assert b"authentication-failed" in response.content

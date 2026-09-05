@@ -1,5 +1,5 @@
+import typing
 import urllib.parse
-from typing import Any
 
 """
 Base library for bots.
@@ -20,6 +20,7 @@ import structlog
 from edi.core.bots.domain.exceptions import (
     ScriptImportError,
 )
+from edi.domain.enums import EdiStandard, EdiTransactionType
 
 gettext = std_gettext.gettext
 
@@ -27,15 +28,15 @@ gettext = std_gettext.gettext
 class _BotsGlobalStub:
     class ini:
         @staticmethod
-        def get(*args: Any, **kwargs: Any) -> Any:
+        def get(*args: object, **kwargs: object) -> str:
             return ""
 
         @staticmethod
-        def getint(*args: Any, **kwargs: Any) -> Any:
+        def getint(*args: object, **kwargs: object) -> int:
             return 0
 
         @staticmethod
-        def getboolean(*args: Any, **kwargs: Any) -> Any:
+        def getboolean(*args: object, **kwargs: object) -> bool:
             return False
 
     version = ""
@@ -60,7 +61,7 @@ logger = structlog.get_logger(__name__)
 # **********************************************************/**
 # ************** Logging, Error handling *******************/**
 # **********************************************************/**
-def sendbotserrorreport(subject: Any, reporttext: Any) -> Any:
+def sendbotserrorreport(subject: str, reporttext: str) -> None:
     """
     Log an error report. Legacy email functionality has been removed in favor
     of enterprise observability (structlog).
@@ -68,7 +69,7 @@ def sendbotserrorreport(subject: Any, reporttext: Any) -> Any:
     botsglobal.logger.error("bots_error_report", subject=subject, report=reporttext)
 
 
-def sendbotsemail(partner: Any, subject: Any, reporttext: Any) -> bool | None:
+def sendbotsemail(partner: str, subject: str, reporttext: str) -> bool:
     """
     Legacy partner email function. Removed.
     """
@@ -84,7 +85,7 @@ def sendbotsemail(partner: Any, subject: Any, reporttext: Any) -> bool | None:
 # **********************************************************/**
 # ************************ import **************************/**
 # **********************************************************/**
-def botsbaseimport(modulename: Any) -> Any:
+def botsbaseimport(modulename: str) -> object:
     """
     Do a dynamic import.
     Errors/exceptions are handled in calling functions.
@@ -92,14 +93,14 @@ def botsbaseimport(modulename: Any) -> Any:
     return importlib.import_module(modulename)
 
 
-def botsimport(*args: Any) -> Any:
+def botsimport(*args: str) -> tuple[object, str]:
     """
     import modules from usersys.
     return: imported module, filename imported module;
     """
     # assemble import string
     if args and args[0] == "grammars":
-        if len(args) == 3 and args[1] == "x12" and args[2] != "envelope":
+        if len(args) == 3 and args[1] == EdiStandard.X12 and args[2] != EdiTransactionType.ENVELOPE:
             # X12 transaction sets are named like 850004010. Version is the last 4 chars (e.g. 4010)
             grammarname = args[2]
             if len(grammarname) > 4:
@@ -138,17 +139,17 @@ def join(*paths: str) -> str:
     return os.path.normpath(os.path.join(*paths))
 
 
-def readdata(filename: Any, charset: Any = "utf-8", errors: Any = "strict") -> Any:
+def readdata(filename: str, charset: str = "utf-8", errors: str = "strict") -> str:
     with open(filename, encoding=charset, errors=errors) as f:
         return f.read()
 
 
-def readdata_bin(filename: Any) -> Any:
+def readdata_bin(filename: str) -> bytes:
     with open(filename, "rb") as f:
         return f.read()
 
 
-def opendata(filename: Any, mode: Any, charset: Any = "utf-8", errors: Any = "strict") -> Any:
+def opendata(filename: str, mode: str, charset: str = "utf-8", errors: str = "strict") -> typing.IO:
     if "b" in mode:
         return open(filename, mode)
     return open(filename, mode, encoding=charset, errors=errors)
@@ -159,8 +160,8 @@ def opendata(filename: Any, mode: Any, charset: Any = "utf-8", errors: Any = "st
 # Removed runscript, confirmrules, database locks, and tracing logic
 
 
-def botsinfo() -> Any:
-    db_settings: dict[str, Any] = {}
+def botsinfo() -> list[tuple[str, str | int]]:
+    db_settings: dict[str, str | int] = {}
     infos = [
         (_("webserver port"), botsglobal.ini.getint("webserver", "port", 8080)),
         (_("platform"), platform.platform()),
@@ -188,7 +189,7 @@ def botsinfo() -> Any:
     return infos
 
 
-def botsinfo_display() -> Any:
+def botsinfo_display() -> str:
     """:return str: Display bots infos"""
     txt = f"{os.linesep}---------- [Bots Environment] ----------{os.linesep}"
     txt += os.linesep.join(
@@ -198,7 +199,7 @@ def botsinfo_display() -> Any:
     return txt
 
 
-def datetime() -> Any:
+def datetime() -> python_datetime.datetime:
     """
     for use in acceptance testing: returns pythons usual datetime
     - but frozen value for acceptance testing.
@@ -208,7 +209,7 @@ def datetime() -> Any:
     return python_datetime.datetime.today()
 
 
-def strftime(timeformat: Any) -> Any:
+def strftime(timeformat: str) -> str:
     """
     for use in acceptance testing: returns pythons usual string with date/time
     - but frozen value for acceptance testing.
@@ -216,12 +217,12 @@ def strftime(timeformat: Any) -> Any:
     return datetime().strftime(timeformat)
 
 
-def settimeout(milliseconds: Any) -> Any:
+def settimeout(milliseconds: int) -> None:
     """set a time-out for TCP-IP connections"""
     socket.setdefaulttimeout(milliseconds / 1000.0)
 
 
-def updateunlessset(updatedict: Any, fromdict: Any) -> Any:
+def updateunlessset(updatedict: dict[str, object], fromdict: dict[str, object]) -> None:
     """
     # !! TODO !! when is this valid?
     Note: prevents setting charset from grammar
@@ -229,7 +230,7 @@ def updateunlessset(updatedict: Any, fromdict: Any) -> Any:
     updatedict.update((key, value) for key, value in fromdict.items() if not updatedict.get(key))
 
 
-def rreplace(org: Any, old: Any, new: Any = "", count: Any = 1) -> Any:
+def rreplace(org: str, old: str, new: str = "", count: int = 1) -> str:
     """
     string handling:
     replace old with new in org, max count times.
@@ -240,13 +241,13 @@ def rreplace(org: Any, old: Any, new: Any = "", count: Any = 1) -> Any:
 
 
 # pylint: disable=invalid-name
-def get_relevant_text_for_UnicodeError(exc: Any) -> Any:
+def get_relevant_text_for_UnicodeError(exc: UnicodeError) -> str:
     """see python doc for details of UnicodeError"""
     start = exc.start - 10 if exc.start >= 10 else 0
     return exc.object[start : exc.end + 35]
 
 
-def indent_xml(node: Any, level: Any = 0, indentstring: Any = "    ") -> Any:
+def indent_xml(node: object, level: int = 0, indentstring: str = "    ") -> None:
     """Indent xml node"""
     text2indent = "\n" + level * indentstring
     if len(node):
@@ -275,8 +276,8 @@ class Uri:
     Usage: uri = Uri(scheme='http',hostname='test.com',port='80', path='test')
     """
 
-    def __init__(self, **kw: Any) -> None:
-        self._uri: dict[str, Any] = {
+    def __init__(self, **kw: object) -> None:
+        self._uri: dict[str, object] = {
             "scheme": "",
             "username": "",
             "password": "",
@@ -289,15 +290,15 @@ class Uri:
         }
         self.update(**kw)
 
-    def update(self, **kw: Any) -> Any:
+    def update(self, **kw: object) -> None:
         self._uri.update(**kw)
 
-    def uri(self, **kw: Any) -> str:
+    def uri(self, **kw: object) -> str:
         """Return formated uri str"""
         self.update(**kw)
         return str(self)
 
-    def __str__(self) -> Any:
+    def __str__(self) -> str:
         scheme = self._uri["scheme"] + ":" if self._uri["scheme"] else ""
         password = ":" + self._uri["password"] if self._uri["password"] else ""
         userinfo = self._uri["username"] + password + "@" if self._uri["username"] else ""

@@ -7,6 +7,7 @@ from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.x12_ack import (
     generate_997_ast as internal_generate_997,
 )
+from edi.domain.enums import EdiStandard
 
 
 def edi_to_json(
@@ -116,7 +117,7 @@ def json_to_edi(
             result = out.ta_info.get("output_string", "")
 
         # Ensure X12 ISA fixed-length structural integrity
-        if editype == "x12" and result.startswith("ISA"):
+        if editype == EdiStandard.X12 and result.startswith("ISA"):
             field_sep = out.ta_info.get("field_sep", "*")
             sfield_sep = out.ta_info.get("sfield_sep", ">")
             record_sep = out.ta_info.get("record_sep", "~")

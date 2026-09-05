@@ -1,40 +1,37 @@
 import os
+import socket
 from collections.abc import AsyncGenerator
-from typing import Any
-from unittest.mock import MagicMock, patch
 
-import edi.adapters.outbound.security.network
 import pytest
 from database.router import DatabaseRouter
+from edi.adapters.outbound.security import network
 from edi.adapters.outbound.security.network import validate_target_url
-from edi.config.settings import AppSettings
 
 
-def test_validate_target_url(monkeypatch: MagicMock) -> None:
+def test_validate_target_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Enforce production mode to ensure SSRF validation is active
+    monkeypatch.setenv("ENV", "production")
 
-    mock_settings = MagicMock(spec=AppSettings)
-    mock_settings.env = "production"
-    monkeypatch.setattr(
-        edi.adapters.outbound.security.network, "get_settings", lambda: mock_settings
-    )
+    public_host = "public.example"
+    failed_host = "unresolvable.example"
 
-    def mock_getaddrinfo(
-        host: str, *args: Any, **kwargs: Any
-    ) -> list[tuple[None, None, None, None, tuple[str, int]]]:
-        if host == "example.com":
-            return [(None, None, None, None, ("93.184.216.34", 80))]
-        return [(None, None, None, None, (host, 80))]
+    def resolve(host: object, port: object, *_args: object) -> list[tuple[object, ...]]:
+        host_text = str(host)
+        if host_text == failed_host:
+            raise socket.gaierror
+        address = "93.184.216.34" if host_text == public_host else host_text
+        return [(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", (address, port or 0))]
 
-    with patch("socket.getaddrinfo", side_effect=mock_getaddrinfo):
-        assert validate_target_url("http://example.com") is True
-        assert validate_target_url("http://127.0.0.1") is False
-        assert validate_target_url("ftp://example.com") is False
-        assert validate_target_url("http://") is False
-        assert validate_target_url("http://192.168.1.1") is False
-        assert validate_target_url("http://10.0.0.1") is False
+    monkeypatch.setattr(network, "_orig_getaddrinfo", resolve)
 
-    with patch("socket.getaddrinfo", side_effect=Exception("mock err")):
-        assert validate_target_url("http://example.com") is False
+    assert validate_target_url(f"http://{public_host}") is True
+    assert validate_target_url("http://127.0.0.1") is False
+    assert validate_target_url("ftp://example.com") is False
+    assert validate_target_url("http://") is False
+    assert validate_target_url("http://192.168.1.1") is False
+    assert validate_target_url("http://10.0.0.1") is False
+
+    assert validate_target_url(f"http://{failed_host}") is False
 
 
 @pytest.fixture

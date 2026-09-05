@@ -1,9 +1,7 @@
-from unittest.mock import MagicMock
-
 import pytest
 from seedwork import generate_id
 
-from edi.application.dto import (
+from edi.application.dtos.commands import (
     UNSET,
     CreateAS2TradingPartnerCmd,
     CreateInboundRouteCmd,
@@ -30,29 +28,17 @@ from edi.application.use_cases.outbound_routes import (
 from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
     CreateSFTPPartnerUseCase,
 )
-from edi.testing.fakes.api_fakes import FakeGlobalStore
+from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 
 
 @pytest.fixture
 def global_repo():
-    return FakeGlobalStore()
+    return FakeControlPlaneUnitOfWork()
 
 
 @pytest.fixture
 def mock_uow(global_repo):
-
-    uow = MagicMock()
-    uow.api_tokens = global_repo
-    uow.as2_partners = global_repo
-    uow.as2_partnerships = global_repo
-    uow.inbound_routes = global_repo
-    uow.outbound_routes = global_repo
-    uow.control_plane_outbox = global_repo
-    uow.sftp_partners = global_repo
-    uow.tenants = global_repo
-    uow.webhooks = global_repo
-    uow.edi_headers = global_repo
-    return uow
+    return global_repo
 
 
 @pytest.fixture
@@ -77,15 +63,15 @@ async def test_create_sftp_partner(sftp_partner_service: CreateSFTPPartnerUseCas
 
     assert getattr(partner, "type", "SFTP") == "SFTP"
     assert getattr(partner, "status", "INACTIVE") == "INACTIVE"
-    assert len(global_repo.sftp_partners) == 1
+    assert len(global_repo.sftp_partners.sftp_partners) == 1
 
 
 @pytest.mark.asyncio
 async def test_list_routes(mock_uow, global_repo):
-    as2_id = await global_repo.create_as2_identity(
+    as2_id = await global_repo.as2_partners.create_as2_identity(
         tenant_id=1, cmd=CreateAS2TradingPartnerCmd(name="Walmart", as2_id="WM")
     )
-    sftp_id = await global_repo.create_sftp_partner(
+    sftp_id = await global_repo.sftp_partners.create_sftp_partner(
         tenant_id=1,
         cmd=CreateSFTPPartnerCmd(
             name="Internal SFTP",
@@ -123,9 +109,9 @@ async def test_list_routes(mock_uow, global_repo):
             return getattr(self, key)
 
     route_in = FakeRoute(generate_id("id"), as2_id, sftp_id, None)
-    global_repo.inbound_routes = {route_in.id: route_in}
+    global_repo.inbound_routes.inbound_routes = {route_in.id: route_in}
     route_out = FakeRoute(generate_id("id"), as2_id, None, None)
-    global_repo.outbound_routes = {route_out.id: route_out}
+    global_repo.outbound_routes.outbound_routes = {route_out.id: route_out}
 
     inbound_service = ListInboundRoutesUseCase(uow=mock_uow)
     outbound_use_case = ListOutboundRoutesUseCase(uow=mock_uow)
@@ -154,7 +140,7 @@ async def test_create_inbound_route(mock_uow, global_repo):
     )
     route = await service.create_inbound_route(tenant_id="1", cmd=cmd)
     assert route.direction == "INBOUND"
-    assert len(global_repo.inbound_routes) == 1
+    assert len(global_repo.inbound_routes.inbound_routes) == 1
 
 
 @pytest.mark.asyncio
@@ -192,4 +178,4 @@ async def test_create_outbound_route(mock_uow, global_repo):
     route = await use_case.execute(tenant_id="1", cmd=cmd)
 
     assert route.direction == "OUTBOUND"
-    assert len(global_repo.outbound_routes) == 1
+    assert len(global_repo.outbound_routes.outbound_routes) == 1

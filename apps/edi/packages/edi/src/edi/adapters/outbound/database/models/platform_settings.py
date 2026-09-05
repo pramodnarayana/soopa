@@ -1,5 +1,4 @@
-from typing import Any
-
+from seedwork.domain.types import JsonValue
 from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,6 +10,4 @@ class PlatformSettings(IdentityBase, TimestampMixin):
     __tablename__ = "platform_settings"
 
     key: Mapped[str] = mapped_column(String, primary_key=True)
-    value: Mapped[dict[str, Any] | list[Any] | str | int | bool | None] = mapped_column(
-        JSON, nullable=True
-    )
+    value: Mapped[JsonValue] = mapped_column(JSON, nullable=True)

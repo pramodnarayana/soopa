@@ -1,0 +1,33 @@
+config:
+  aws:region: us-east-1
+  # Credentials are provided via AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+  # environment variables injected by CI/CD — never committed here.
+  #
+  # Staging uses isolated AWS account/VPC from production.
+  # Resource names are suffixed with -staging to prevent collision.
+  #
+  # ── Compute layer config ───────────────────────────────────────────────────
+  # image_tag: overridden by CI to the git SHA of the build being deployed.
+  edi-platform:image_tag: latest
+  # acm_certificate_arn: ACM cert ARN for the AS2 server ALB HTTPS listener.
+  # Replace with your actual staging cert ARN before deploying.
+  edi-platform:acm_certificate_arn: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/STAGING_CERT_ID
+  # Replica counts — staging runs minimum footprint.
+  edi-platform:as2_server_replicas: "1"
+  edi-platform:compute_worker_replicas: "1"
+  edi-platform:dlq_max_receive_count: "3"
+  edi-platform:log_retention_days: "30"
+  # Required at deploy time; deployment CI must set this from the staging environment:
+  # pulumi config set edi-platform:kms_key_arn "$KMS_KEY_ARN" --stack staging
+  # Compute and memory sizing
+  edi-platform:as2_server_cpu: "512"
+  edi-platform:as2_server_memory: "1024"
+  edi-platform:as2_server_workers: "2"
+  edi-platform:background_worker_cpu: "256"
+  edi-platform:background_worker_memory: "512"
+  edi-platform:compute_worker_cpu: "512"
+  edi-platform:compute_worker_memory: "1024"
+  edi-platform:orchestrator_worker_cpu: "256"
+  edi-platform:orchestrator_worker_memory: "512"
+  edi-platform:config_sync_worker_cpu: "256"
+  edi-platform:config_sync_worker_memory: "512"

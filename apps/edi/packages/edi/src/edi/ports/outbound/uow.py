@@ -1,4 +1,5 @@
-from typing import Any, Protocol
+from types import TracebackType
+from typing import Protocol
 
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
@@ -11,6 +12,7 @@ from edi.ports.outbound.outbound_route_repository import OutboundRouteRepository
 from edi.ports.outbound.platform_settings_repository import PlatformSettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
+from edi.ports.outbound.trace_repository import TraceRepositoryPort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 
 
@@ -36,7 +38,7 @@ class ControlPlaneUnitOfWorkPort(Protocol):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any | None,
+        exc_tb: TracebackType | None,
     ) -> None: ...
 
     async def commit(self) -> None: ...
@@ -51,6 +53,7 @@ class DataPlaneUnitOfWorkPort(Protocol):
     """
 
     transactions: TransactionRepositoryPort
+    traces: TraceRepositoryPort
 
     async def __aenter__(self) -> "DataPlaneUnitOfWorkPort": ...
 
@@ -58,7 +61,7 @@ class DataPlaneUnitOfWorkPort(Protocol):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: Any | None,
+        exc_tb: TracebackType | None,
     ) -> None: ...
 
     async def commit(self) -> None: ...

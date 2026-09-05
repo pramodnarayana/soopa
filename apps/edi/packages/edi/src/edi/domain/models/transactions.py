@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Any
 
+from seedwork.domain.types import JsonValue
 from seedwork.models import AggregateRoot
 
 from edi.domain.models.base import EdiRecordBase
@@ -15,8 +15,8 @@ class EdiJsonDomainModel(EdiRecordBase):
     receiver_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
-    business_metadata: dict[str, Any] | None = None
-    payload: dict[str, Any] | list[Any] | None = None
+    business_metadata: dict[str, JsonValue] | None = None
+    payload: JsonValue | None = None
     storage_uri: str | None = None
 
 
@@ -29,7 +29,6 @@ class EdiMessageDomainModel(EdiRecordBase):
     receiver_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
-    inbound_route_id: str | None = None
     trading_partner_id: str | None = None
     as2_sender_id: str | None = None
     as2_receiver_id: str | None = None
@@ -39,7 +38,7 @@ class EdiMessageDomainModel(EdiRecordBase):
     encryption_algorithm: str | None = None
     edi_data: str | None = None
     response: str | None = None
-    headers: dict[str, Any] | None = None
+    headers: dict[str, JsonValue] | None = None
     storage_uri: str | None = None
 
 
@@ -49,10 +48,10 @@ class ApiGatewayReceiptDomainModel(EdiRecordBase):
     webhook_url: str | None = None
     http_status_code: int | None = None
     target_format: str | None = None
-    payload: dict[str, Any] | None = None
+    payload: JsonValue | None = None
     storage_uri: str | None = None
     response: str | None = None
-    headers: dict[str, Any] | None = None
+    headers: dict[str, JsonValue] | None = None
 
 
 @dataclass(kw_only=True)

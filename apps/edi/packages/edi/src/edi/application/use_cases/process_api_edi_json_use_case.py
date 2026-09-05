@@ -1,12 +1,13 @@
-from typing import Any
+from collections.abc import Mapping
 
 import structlog
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonValue
 from seedwork.utils import generate_id
 
-from edi.application.dto import ProcessApiEdiJsonCommand
+from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.domain.constants import TransactionDirection
+from edi.domain.enums import EdiDirection
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel
@@ -25,7 +26,60 @@ class ProcessApiEdiJsonUseCase:
         self.uow = uow
         self.extractor = MetadataExtractorService()
 
-    async def process_api_edi_json(  # noqa: C901
+    @staticmethod
+    def _extract_from_flat_field(payload_dict: Mapping[str, object]) -> str | None:
+        """Extract transaction type from the flat `transaction_type` field."""
+        tt_val = payload_dict.get("transaction_type")
+        return tt_val if isinstance(tt_val, str) else None
+
+    @staticmethod
+    def _extract_from_heading(payload_dict: Mapping[str, object]) -> str | None:
+        """Extract transaction type from EDI JSON `heading` structure."""
+        heading = payload_dict.get("heading")
+        if not isinstance(heading, dict):
+            return None
+        for key in heading:
+            if isinstance(key, str) and key.startswith("transaction_set_header_ST"):
+                inner = heading[key]
+                if isinstance(inner, dict):
+                    val = inner.get("transaction_set_identifier_code")
+                    if isinstance(val, str):
+                        return val
+                break
+        return None
+
+    @staticmethod
+    def _extract_from_st_segment(payload_dict: Mapping[str, object]) -> str | None:
+        """Extract transaction type from the raw `ST` segment shorthand."""
+        st = payload_dict.get("ST")
+        if isinstance(st, dict):
+            val = st.get("ST01")
+            if isinstance(val, str):
+                return val
+        return None
+
+    def _resolve_transaction_type(
+        self, transaction_type: str | None, payload: JsonValue
+    ) -> str | None:
+        if transaction_type:
+            return transaction_type
+
+        first_payload = (
+            payload[0]
+            if isinstance(payload, list) and payload
+            else (payload if isinstance(payload, dict) else {})
+        )
+
+        if not isinstance(first_payload, dict):
+            return None
+
+        return (
+            self._extract_from_flat_field(first_payload)
+            or self._extract_from_heading(first_payload)
+            or self._extract_from_st_segment(first_payload)
+        )
+
+    async def process_api_edi_json(
         self,
         command: ProcessApiEdiJsonCommand,
     ) -> str:
@@ -47,51 +101,21 @@ class ProcessApiEdiJsonUseCase:
             )
 
             # 1. Resolve transaction_type from payload if not provided explicitly
-            transaction_type = command.transaction_type
-            if not transaction_type:
-                first_payload = (
-                    command.payload[0]
-                    if isinstance(command.payload, list) and command.payload
-                    else (command.payload if isinstance(command.payload, dict) else {})
-                )
-                transaction_type = first_payload.get("transaction_type")
-                if not transaction_type:
-                    heading = first_payload.get("heading", {})
-                    for key in heading:
-                        if key.startswith("transaction_set_header_ST"):
-                            transaction_type = heading[key].get("transaction_set_identifier_code")
-                            break
-                if not transaction_type:
-                    # Try ST segment directly (for raw transaction payloads)
-                    st = first_payload.get("ST", {})
-                    if st:
-                        transaction_type = st.get("ST01")
-
-            business_metadata: dict[str, Any] = {}
-            if isinstance(command.payload, dict):
-                business_metadata = self.extractor.extract(transaction_type or "", command.payload)
-            elif isinstance(command.payload, list) and len(command.payload) > 0:
-                extracted_list = [
-                    self.extractor.extract(transaction_type or "", item) for item in command.payload
-                ]
-                for extracted in extracted_list:
-                    for k, v in extracted.items():
-                        if k not in business_metadata:
-                            business_metadata[k] = []
-                        # Avoid duplicates
-                        if v not in business_metadata[k]:
-                            business_metadata[k].append(v)
-
-                # Flatten single-item lists for backward compatibility
-                for k, v in business_metadata.items():
-                    if isinstance(v, list) and len(v) == 1:
-                        business_metadata[k] = v[0]
+            transaction_type = self._resolve_transaction_type(
+                command.transaction_type, command.payload
+            )
+            business_metadata = self.extractor.extract(transaction_type or "", command.payload)
 
             business_metadata["_routing"] = {"trading_partner_id": command.trading_partner_id}
 
             # 2. Create Trace ID
             trace_id = generate_id(SystemIdPrefix.GENERIC)
             logger.info("trace_id_generated", trace_id=trace_id)
+
+            if isinstance(command.payload, list):
+                domain_payload: JsonValue = [item for item in command.payload]
+            else:
+                domain_payload = command.payload
 
             # 3. Instantiate Domain Model and record event
             edi_json_aggregate = EdiJsonDomainModel(
@@ -101,7 +125,7 @@ class ProcessApiEdiJsonUseCase:
                 direction=Direction.OUTBOUND,
                 transaction_type=transaction_type,
                 business_metadata=business_metadata,
-                payload=command.payload,
+                payload=domain_payload,
                 status=RecordStatus.RECEIVED,
             )
 
@@ -111,7 +135,7 @@ class ProcessApiEdiJsonUseCase:
                     trace_id=str(trace_id),
                     tenant_id=command.tenant_id,
                     trading_partner_id=command.trading_partner_id,
-                    direction=TransactionDirection.OUTBOUND.value,
+                    direction=EdiDirection.OUTBOUND.value,
                 )
             )
 
