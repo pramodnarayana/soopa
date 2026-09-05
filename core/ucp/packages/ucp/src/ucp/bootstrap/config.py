@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # Zitadel Identity Provider
     zitadel_api_url: str
-    zitadel_api_token: str = "test"  # noqa: S105
+    zitadel_machine_key: str = ""
     zitadel_ucp_project_id: str = "test"
     zitadel_tenant_role_group: str = "Tenant"
     zitadel_platform_org_id: str = "test"

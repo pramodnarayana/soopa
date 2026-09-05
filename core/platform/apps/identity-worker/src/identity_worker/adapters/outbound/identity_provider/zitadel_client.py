@@ -2,6 +2,7 @@ from typing import Any
 
 import httpx
 import structlog
+from identity.adapters.outbound.zitadel import ZitadelMachineTokenProvider
 
 from identity_worker.bootstrap.config import get_settings
 from identity_worker.domain.exceptions import IdentityProviderPortError
@@ -13,14 +14,15 @@ class ZitadelClient:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.api_url = self.settings.zitadel_api_url
-        self.token = self.settings.zitadel_api_token
+        self.machine_key = self.settings.zitadel_machine_key
         self.ucp_project_id = self.settings.zitadel_ucp_project_id
         self.default_user_password = self.settings.zitadel_default_user_password
         self._client: httpx.AsyncClient | None = None
+        self._token_provider: ZitadelMachineTokenProvider | None = None
 
     def _assert_config(self) -> None:
-        if not self.token:
-            raise ValueError("ZITADEL_API_TOKEN is not configured")
+        if not self.machine_key:
+            raise ValueError("ZITADEL_MACHINE_KEY is not configured")
         if not self.ucp_project_id:
             raise ValueError("ZITADEL_UCP_PROJECT_ID is not configured")
 
@@ -45,11 +47,17 @@ class ZitadelClient:
     ) -> httpx.Response:
         self._assert_config()
 
-        req_headers = {"Authorization": f"Bearer {self.token}", "Accept": "application/json"}
+        client = self._get_client()
+        if self._token_provider is None:
+            self._token_provider = ZitadelMachineTokenProvider(self.api_url, self.machine_key)
+        access_token = await self._token_provider.get_access_token(client)
+        req_headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        }
         if headers:
             req_headers.update(headers)
 
-        client = self._get_client()
         url = f"{self.api_url}{endpoint}"
         response = await client.request(method, url, headers=req_headers, json=json)
         return response

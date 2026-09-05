@@ -9,7 +9,10 @@ pytestmark = pytest.mark.integration
 import os
 from typing import Any
 
-os.environ.setdefault("ZITADEL_API_TOKEN", "mock_token")
+os.environ.setdefault(
+    "ZITADEL_MACHINE_KEY",
+    '{"keyId":"mock-key","key":"mock-private-key","userId":"mock-user"}',
+)
 os.environ.setdefault("ZITADEL_UCP_PROJECT_ID", "mock_project_id")
 os.environ.setdefault("ZITADEL_PLATFORM_ORG_ID", "mock_org_id")
 os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")

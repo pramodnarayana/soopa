@@ -1,0 +1,27 @@
+from enum import StrEnum
+
+
+class AppEnvKeys(StrEnum):
+    S3_BUCKET = "S3_BUCKET"
+    AWS_SNS_TOPIC_ARN = "AWS_SNS_TOPIC_ARN"
+    SQS_TRANSFORM_QUEUE_URL = "SQS_TRANSFORM_QUEUE_URL"
+    SQS_DELIVER_QUEUE_URL = "SQS_DELIVER_QUEUE_URL"
+    SQS_LIFECYCLE_QUEUE_URL = "SQS_LIFECYCLE_QUEUE_URL"
+    SQS_DATA_PLANE_JOBS_QUEUE_URL = "SQS_DATA_PLANE_JOBS_QUEUE_URL"
+    SQS_CONTROL_PLANE_JOBS_QUEUE_URL = "SQS_CONTROL_PLANE_JOBS_QUEUE_URL"
+
+
+class PipelineEventType(StrEnum):
+    """EDI pipeline event discriminators used in messaging filters."""
+
+    TRANSFORM_EVENT = "TRANSFORM_EVENT"
+    COMPUTE_TRANSFORM_EVENT = "COMPUTE_TRANSFORM_EVENT"
+    TRANSFORM_COMPLETED = "TRANSFORM_COMPLETED"
+    DELIVER_EVENT = "DELIVER_EVENT"
+    DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
+
+
+class NotificationEventType(StrEnum):
+    """Cross-context notification event discriminator."""
+
+    NOTIFICATION_TRIGGERED = "notification.triggered"

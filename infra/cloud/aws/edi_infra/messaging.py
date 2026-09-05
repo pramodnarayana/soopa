@@ -27,27 +27,12 @@ edi-priority-notifications.fifo ← notification.triggered
 """
 
 import json
-import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 import pulumi
 import pulumi_aws as aws
 
-# Add the application source to sys.path so infra can share domain constants
-# preserving the single source of truth for business logic.
-app_src_dir = (
-    Path(__file__).resolve().parent.parent.parent.parent.parent
-    / "apps"
-    / "edi"
-    / "packages"
-    / "edi"
-    / "src"
-)
-if str(app_src_dir) not in sys.path:
-    sys.path.append(str(app_src_dir))
-
-from edi.domain.enums import NotificationEventType, PipelineEventType
+from edi_infra.constants import NotificationEventType, PipelineEventType
 
 
 @dataclass(frozen=True)

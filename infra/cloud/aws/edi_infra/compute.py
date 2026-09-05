@@ -69,9 +69,9 @@ from dataclasses import dataclass
 import pulumi
 import pulumi_aws as aws
 
-from edi.constants import AppEnvKeys
-from edi.messaging import EdiMessagingStack
-from edi.storage import EdiStorageStack
+from edi_infra.constants import AppEnvKeys
+from edi_infra.messaging import EdiMessagingStack
+from edi_infra.storage import EdiStorageStack
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 

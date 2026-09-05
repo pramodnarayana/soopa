@@ -17,7 +17,8 @@ config:
   edi-platform:compute_worker_replicas: "1"
   edi-platform:dlq_max_receive_count: "3"
   edi-platform:log_retention_days: "30"
-  edi-platform:kms_key_arn: arn:aws:kms:us-east-1:ACCOUNT_ID:key/STAGING_KMS_KEY_ID
+  # Required at deploy time; deployment CI must set this from the staging environment:
+  # pulumi config set edi-platform:kms_key_arn "$KMS_KEY_ARN" --stack staging
   # Compute and memory sizing
   edi-platform:as2_server_cpu: "512"
   edi-platform:as2_server_memory: "1024"

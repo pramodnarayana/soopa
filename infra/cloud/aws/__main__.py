@@ -13,9 +13,9 @@ dynamically at runtime.
 Directory
 ---------
 infra/cloud/aws/           ← this Pulumi project root
-    edi/messaging.py       ← SQS queues, SNS topics, subscriptions
-    edi/storage.py         ← S3 buckets
-    edi/compute.py         ← ECR, VPC, ECS cluster, task definitions, ALB
+    edi_infra/messaging.py ← SQS queues, SNS topics, subscriptions
+    edi_infra/storage.py   ← S3 buckets
+    edi_infra/compute.py   ← ECR, VPC, ECS cluster, task definitions, ALB
 
 Environment variable → Pulumi export mapping
 --------------------------------------------
@@ -33,9 +33,9 @@ AS2_SERVER_ALB_DNS               ← as2_server_alb_dns
 """
 
 import pulumi
-from edi.compute import EdiComputeStack
-from edi.messaging import EdiMessagingStack
-from edi.storage import EdiStorageStack
+from edi_infra.compute import EdiComputeStack
+from edi_infra.messaging import EdiMessagingStack
+from edi_infra.storage import EdiStorageStack
 
 # ── Compose stacks ────────────────────────────────────────────────────────────
 

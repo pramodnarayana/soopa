@@ -1,4 +1,4 @@
-"""Unqualify tenant foreign keys.
+"""Unqualify AS2 partnership foreign keys.
 
 Revision ID: 8c1a4f6b9d2e
 Revises: d09f3e74ebd0
@@ -31,41 +31,6 @@ _FOREIGN_KEYS = (
         "remote_partner_id",
         "as2_partners",
         "CASCADE",
-    ),
-    (
-        "inbound_routes_as2_partner_id_fkey",
-        "inbound_routes",
-        "as2_partner_id",
-        "as2_partners",
-        None,
-    ),
-    (
-        "inbound_routes_sftp_partner_id_fkey",
-        "inbound_routes",
-        "sftp_partner_id",
-        "sftp_partners",
-        None,
-    ),
-    (
-        "inbound_routes_webhook_id_fkey",
-        "inbound_routes",
-        "webhook_id",
-        "webhooks",
-        None,
-    ),
-    (
-        "outbound_routes_as2_partner_id_fkey",
-        "outbound_routes",
-        "as2_partner_id",
-        "as2_partners",
-        None,
-    ),
-    (
-        "outbound_routes_sftp_partner_id_fkey",
-        "outbound_routes",
-        "sftp_partner_id",
-        "sftp_partners",
-        None,
     ),
 )
 

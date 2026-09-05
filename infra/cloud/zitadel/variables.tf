@@ -28,37 +28,31 @@ variable "idp_project_name" {
 }
 
 variable "zitadel_domain" {
-  description = "The domain of the Zitadel instance"
+  description = "The non-localhost domain of the cloud Zitadel instance"
   type        = string
-  default     = "ucp.localhost"
 }
 
 variable "zitadel_port" {
-  description = "The port of the Zitadel instance"
+  description = "The TLS port of the cloud Zitadel instance"
   type        = string
-  default     = "8080"
 }
 
 variable "zitadel_insecure" {
-  description = "Whether to use an insecure connection to Zitadel"
+  description = "Whether to disable TLS for the Zitadel provider"
   type        = bool
-  default     = true
 }
 
 variable "ucp_web_dashboard_redirect_uris" {
-  description = "Redirect URIs for the UCP Web Dashboard"
+  description = "HTTPS redirect URIs for the cloud UCP Web Dashboard"
   type        = list(string)
-  default     = ["http://localhost:5173/auth/callback", "http://localhost:5173/callback"]
 }
 
 variable "ucp_web_dashboard_post_logout_redirect_uris" {
-  description = "Post logout redirect URIs for the UCP Web Dashboard"
+  description = "HTTPS post-logout redirect URIs for the cloud UCP Web Dashboard"
   type        = list(string)
-  default     = ["http://localhost:5173", "http://localhost:5173/"]
 }
 
 variable "dev_mode" {
   description = "Enable dev mode for Zitadel applications"
   type        = bool
-  default     = true
 }

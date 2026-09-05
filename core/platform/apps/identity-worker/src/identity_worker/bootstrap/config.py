@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     app_env: str = "production"
     zitadel_api_url: str = ""
-    zitadel_api_token: str = ""
+    zitadel_machine_key: str = ""
     zitadel_ucp_project_id: str = ""
     zitadel_default_user_password: str
     zitadel_tenant_role_group: str = "Tenant"

@@ -9,8 +9,7 @@ Design decisions
 - Versioning is enabled on all buckets so payloads can be recovered after
   accidental deletion without relying on database backups.
 - Public access is blocked at the bucket level in all environments.
-- Server-side encryption (SSE-S3) is enabled by default. For production,
-  override with SSE-KMS via stack config.
+- Server-side encryption uses the stack's required customer-managed KMS key.
 """
 
 import pulumi

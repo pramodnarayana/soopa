@@ -29,6 +29,7 @@ import asyncpg
 import httpx
 import structlog
 from dotenv import load_dotenv
+from identity.adapters.outbound.zitadel import ZitadelMachineTokenProvider
 
 load_dotenv()
 
@@ -42,10 +43,10 @@ ZITADEL_SYSTEM_ORG_NAME = "ZITADEL"
 async def list_all_orgs(
     client: httpx.AsyncClient,
     zitadel_url: str,
-    api_token: str,
+    access_token: str,
 ) -> list[dict[str, Any]]:
     headers = {
-        "Authorization": f"Bearer {api_token}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
     response = await client.post(
@@ -62,12 +63,12 @@ async def list_all_orgs(
 async def delete_org_from_zitadel(
     client: httpx.AsyncClient,
     zitadel_url: str,
-    api_token: str,
+    access_token: str,
     org_id: str,
     org_name: str,
 ) -> None:
     headers = {
-        "Authorization": f"Bearer {api_token}",
+        "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json",
     }
     response = await client.delete(
@@ -92,11 +93,11 @@ async def delete_org_from_zitadel(
 
 async def main() -> None:
     zitadel_url = os.environ.get("ZITADEL_API_URL", "http://ucp.localhost:8080")
-    api_token = os.environ.get("ZITADEL_API_TOKEN", "")
+    machine_key = os.environ.get("ZITADEL_MACHINE_KEY", "")
     platform_org_id = os.environ.get("ZITADEL_PLATFORM_ORG_ID", "")
 
-    if not api_token:
-        logger.error("ZITADEL_API_TOKEN environment variable is not set.")
+    if not machine_key:
+        logger.error("ZITADEL_MACHINE_KEY environment variable is not set.")
         sys.exit(1)
     if not platform_org_id:
         logger.error("ZITADEL_PLATFORM_ORG_ID environment variable is not set.")
@@ -104,7 +105,9 @@ async def main() -> None:
 
     # --- Step 1: Query Zitadel directly for all orgs ---
     async with httpx.AsyncClient() as http_client:
-        all_orgs = await list_all_orgs(http_client, zitadel_url, api_token)
+        token_provider = ZitadelMachineTokenProvider(zitadel_url, machine_key)
+        access_token = await token_provider.get_access_token(http_client)
+        all_orgs = await list_all_orgs(http_client, zitadel_url, access_token)
 
         tenant_orgs = [
             org
@@ -121,7 +124,7 @@ async def main() -> None:
                     await delete_org_from_zitadel(
                         client=http_client,
                         zitadel_url=zitadel_url,
-                        api_token=api_token,
+                        access_token=access_token,
                         org_id=org["id"],
                         org_name=org.get("name", "unknown"),
                     )
