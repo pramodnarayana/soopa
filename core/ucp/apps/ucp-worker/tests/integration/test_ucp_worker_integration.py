@@ -82,6 +82,7 @@ async def test_ucp_worker_handles_tenant_deleted_event(
     container = WorkerContainer()
     container.session_factory = db_session_factory
     container.settings.sqs_ucp_identity_sync_queue_url = "http://dummy"
+    container.settings.sqs_ucp_jobs_queue_url = "http://dummy"
     container.wire()
 
     # 3. Construct Payload

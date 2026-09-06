@@ -1,8 +1,11 @@
-from typing import Any
+from typing import cast
 
 import structlog
-from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
-from notification.domain.models import NotificationEvent
+from notification.application.notification_compiler_use_case import (
+    CompileNotificationCommand,
+    NotificationCompilerUseCase,
+)
+from seedwork.domain.types import JsonDict
 
 from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job import (
     NotificationOutboxSweeperJobHandler,
@@ -21,7 +24,7 @@ class NotificationEventDispatcher:
         self.notification_compiler = notification_compiler
         self.cleanup_job_handler = cleanup_job_handler
 
-    async def dispatch_raw(self, body: dict[str, Any]) -> None:
+    async def dispatch_raw(self, body: JsonDict) -> None:
         """
         Parses the incoming SQS payload (which matches the Outbox event payload)
         and passes it to the domain use case.
@@ -45,8 +48,8 @@ class NotificationEventDispatcher:
         #       }
         #   }
         # }
-        envelope_payload = body.get("payload")
-        event_wrapper = envelope_payload.get("event") if envelope_payload else None
+        envelope_payload = cast(JsonDict, body.get("payload"))
+        event_wrapper = cast(JsonDict, envelope_payload.get("event") if envelope_payload else None)
         if not event_wrapper:
             logger.error(
                 "notification_sqs_message_missing_event_key",
@@ -55,7 +58,7 @@ class NotificationEventDispatcher:
             )
             return
 
-        payload = event_wrapper.get("payload")
+        payload = cast(JsonDict, event_wrapper.get("payload"))
         if not payload:
             logger.error(
                 "notification_sqs_message_missing_payload_key",
@@ -64,13 +67,14 @@ class NotificationEventDispatcher:
             return
 
         # Ensure tenant_id is available in the payload if not already there
+        # Ensure tenant_id is available in the payload if not already there
         if "tenant_id" not in payload and "tenant_id" in event_wrapper:
             payload["tenant_id"] = event_wrapper["tenant_id"]
 
-        domain_event_type = event_wrapper.get("event_type")
+        domain_event_type = cast(str | None, event_wrapper.get("event_type"))
 
         # Validate required fields before constructing domain event
-        tenant_id = payload.get("tenant_id")
+        tenant_id = cast(str | None, payload.get("tenant_id"))
         if not tenant_id:
             logger.error("SQS message payload missing 'tenant_id'")
             return
@@ -80,7 +84,9 @@ class NotificationEventDispatcher:
 
         logger.info("notification_event_dispatching", domain_event_type=domain_event_type)
 
-        notification_event = NotificationEvent(
-            tenant_id=tenant_id, event_type=domain_event_type, data=payload
+        notification_event = CompileNotificationCommand(
+            tenant_id=tenant_id,
+            event_type=domain_event_type,
+            data=payload,
         )
         await self.notification_compiler.execute(notification_event)

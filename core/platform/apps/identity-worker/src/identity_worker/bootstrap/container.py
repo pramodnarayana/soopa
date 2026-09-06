@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, Literal
+from typing import Literal
 
 import structlog
 from database.provider import get_async_engine
@@ -46,8 +46,9 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
     ZitadelUsersAdapter,
 )
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
-from identity_worker.bootstrap.config import get_settings
+from identity_worker.bootstrap.config import Settings, get_settings
 from identity_worker.constants import IdentityJobName
+from identity_worker.ports.inbound.identity_event_consumer_port import IdentityEventMessage
 from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
@@ -95,7 +96,7 @@ class UserDeletedPayload(BaseModel):
 class WorkerContainer:
     """Dependency Injection container for the Identity Worker."""
 
-    def __init__(self, settings: Any = None) -> None:
+    def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or get_settings()
 
         database_url = self.settings.database_url
@@ -113,7 +114,7 @@ class WorkerContainer:
 
         self.outbox_relay: PostgresOutboxRelay | None = None
         self.events_dispatcher: IdentityEventDispatcher | None = None
-        self.events_consumer: Any | None = None
+        self.events_consumer: SqsConsumerManager | None = None
 
     def wire(self) -> None:
         # Construct shared infrastructure once — both the relay and the sweeper
@@ -158,11 +159,11 @@ class WorkerContainer:
         consumer: IdentityEventDispatcher,
         identity_service: IdentitySyncService,
     ) -> None:
-        async def identity_tenant_provisioned_handler(event: Any) -> None:
+        async def identity_tenant_provisioned_handler(event: IdentityEventMessage) -> None:
             payload = TenantProvisionedPayload.model_validate(event.payload)
             await identity_service.handle_tenant_provisioned(payload.tenant_id)
 
-        async def identity_user_created_handler(event: Any) -> None:
+        async def identity_user_created_handler(event: IdentityEventMessage) -> None:
             payload = UserCreatedPayload.model_validate(event.payload)
             await identity_service.handle_user_created(
                 user_id=payload.user_id,
@@ -173,7 +174,7 @@ class WorkerContainer:
                 role=payload.role,
             )
 
-        async def identity_user_updated_handler(event: Any) -> None:
+        async def identity_user_updated_handler(event: IdentityEventMessage) -> None:
             payload = UserUpdatedPayload.model_validate(event.payload)
             await identity_service.handle_user_updated(
                 idp_user_id=payload.idp_user_id,
@@ -183,7 +184,7 @@ class WorkerContainer:
                 role=payload.role,
             )
 
-        async def identity_user_role_assigned_handler(event: Any) -> None:
+        async def identity_user_role_assigned_handler(event: IdentityEventMessage) -> None:
             payload = UserRoleAssignedPayload.model_validate(event.payload)
             await identity_service.handle_user_role_assigned(
                 user_id=payload.user_id,
@@ -192,7 +193,7 @@ class WorkerContainer:
                 role=payload.role_name,
             )
 
-        async def identity_user_status_toggled_handler(event: Any) -> None:
+        async def identity_user_status_toggled_handler(event: IdentityEventMessage) -> None:
             payload = UserStatusToggledPayload.model_validate(event.payload)
             await identity_service.handle_user_status_toggled(
                 idp_user_id=payload.idp_user_id,
@@ -200,7 +201,7 @@ class WorkerContainer:
                 action=payload.action,
             )
 
-        async def identity_user_deleted_handler(event: Any) -> None:
+        async def identity_user_deleted_handler(event: IdentityEventMessage) -> None:
             payload = UserDeletedPayload.model_validate(event.payload)
             await identity_service.handle_user_deleted(idp_user_id=payload.idp_user_id)
 
@@ -217,10 +218,10 @@ class WorkerContainer:
         )
         consumer.subscribe(IdentityEventType.USER_DELETED, identity_user_deleted_handler)
 
-        async def sweep_handler(event: Any) -> None:
+        async def sweep_handler(event: IdentityEventMessage) -> None:
             await self.sweeper_job_handler.execute()
 
-        async def cleanup_handler(event: Any) -> None:
+        async def cleanup_handler(event: IdentityEventMessage) -> None:
             await self.cleanup_job_handler.execute()
 
         consumer.subscribe(IdentityJobName.IDENTITY_OUTBOX_SWEEPER.value, sweep_handler)

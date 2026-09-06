@@ -13,10 +13,11 @@ from database.provider import get_async_engine
 from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from notification.adapters.outbound.channel_dispatcher import NotificationChannelDispatcher
 from notification.adapters.outbound.channels import (
-    EmailDeliveryStrategy,
-    InAppDeliveryStrategy,
-    SlackDeliveryStrategy,
+    EmailChannelStrategy,
+    InAppChannelStrategy,
+    SlackChannelStrategy,
 )
 from notification.adapters.outbound.channels.dummy_email_provider import DummyEmailProvider
 from notification.adapters.outbound.database.postgres_notification_query_repository import (
@@ -29,7 +30,6 @@ from notification.adapters.outbound.database.postgres_template_repository import
     SqlAlchemyTemplateRepository,
 )
 from notification.adapters.outbound.database.uow import SqlAlchemyNotificationUnitOfWork
-from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
 from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
@@ -137,20 +137,20 @@ class Container(containers.DeclarativeContainer):
     )
 
     email_strategy = providers.Factory(
-        EmailDeliveryStrategy,
+        EmailChannelStrategy,
         email_provider=email_provider,
     )
 
     in_app_strategy = providers.Factory(
-        InAppDeliveryStrategy,
+        InAppChannelStrategy,
     )
 
     slack_strategy = providers.Factory(
-        SlackDeliveryStrategy,
+        SlackChannelStrategy,
     )
 
-    delivery_dispatcher = providers.Factory(
-        NotificationDeliveryDispatcher,
+    channel_dispatcher = providers.Factory(
+        NotificationChannelDispatcher,
         email_strategy=email_strategy,
         in_app_strategy=in_app_strategy,
         slack_strategy=slack_strategy,

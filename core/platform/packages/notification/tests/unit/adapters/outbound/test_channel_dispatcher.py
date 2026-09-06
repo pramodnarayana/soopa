@@ -1,10 +1,9 @@
-from typing import Any
-
 import pytest
+from seedwork.domain.types import JsonDict
 
-from notification.adapters.outbound.delivery_dispatcher import NotificationDeliveryDispatcher
+from notification.adapters.outbound.channel_dispatcher import NotificationChannelDispatcher
 from notification.domain.models import Channel
-from notification.ports.outbound.notification_delivery_strategy_port import DeliveryStrategyPort
+from notification.ports.outbound.notification_channel_strategy_port import DeliveryStrategyPort
 
 
 class FakeDeliveryStrategy(DeliveryStrategyPort):
@@ -12,18 +11,18 @@ class FakeDeliveryStrategy(DeliveryStrategyPort):
         self.deliveries = []
 
     async def deliver(
-        self, tenant_id: str, content: str, subject: str | None, data: dict[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: JsonDict
     ) -> None:
         self.deliveries.append((tenant_id, content, subject, data))
 
 
 @pytest.mark.asyncio
-async def test_delivery_dispatcher_success():
+async def test_channel_dispatcher_success():
     email = FakeDeliveryStrategy()
     in_app = FakeDeliveryStrategy()
     slack = FakeDeliveryStrategy()
 
-    dispatcher = NotificationDeliveryDispatcher(email, in_app, slack)
+    dispatcher = NotificationChannelDispatcher(email, in_app, slack)
 
     await dispatcher.dispatch(Channel.EMAIL, "t1", "Email Content", "Email Subject", {"a": 1})
     await dispatcher.dispatch(Channel.IN_APP, "t1", "In App Content", None, {"a": 2})
@@ -37,9 +36,9 @@ async def test_delivery_dispatcher_success():
 
 
 @pytest.mark.asyncio
-async def test_delivery_dispatcher_missing_strategy():
+async def test_channel_dispatcher_missing_strategy():
     # What if a channel isn't registered? (Type system should theoretically prevent this, but testing safety guard)
-    dispatcher = NotificationDeliveryDispatcher(
+    dispatcher = NotificationChannelDispatcher(
         FakeDeliveryStrategy(), FakeDeliveryStrategy(), FakeDeliveryStrategy()
     )
     # Remove one dynamically

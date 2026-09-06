@@ -1,6 +1,7 @@
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 import structlog
 from database.provider import DatabaseProvider
@@ -38,8 +39,8 @@ from ucp_worker.adapters.inbound.jobs.ucp_idempotency_cleanup_job import (
 )
 from ucp_worker.adapters.inbound.jobs.ucp_outbox_cleanup_job import UcpOutboxCleanupJobHandler
 from ucp_worker.adapters.inbound.jobs.ucp_outbox_sweeper_job import UcpOutboxSweeperJobHandler
-from ucp_worker.core.job_registry import JobHandlerRegistry
-from ucp_worker.core.scheduler.models import JobName
+from ucp_worker.adapters.inbound.workers.ucp_job_dispatcher import UcpJobDispatcher
+from ucp_worker.constants import UcpJobName
 
 logger = structlog.get_logger(__name__)
 
@@ -53,10 +54,15 @@ class WorkerContainer:
         self.db_provider = DatabaseProvider.from_url(self.database_url)
         self.session_factory = self.db_provider.session_factory
 
-        self.registry: JobHandlerRegistry | None = None
         self.outbox_relay: PostgresOutboxRelay | None = None
         self.events_dispatcher: UcpEventDispatcher | None = None
         self.events_consumer: SqsConsumerManager | None = None
+        self.jobs_consumer: SqsConsumerManager | None = None
+
+        self.sweeper_job_handler: UcpOutboxSweeperJobHandler | None = None
+        self.outbox_cleanup_job_handler: UcpOutboxCleanupJobHandler | None = None
+        self.idemp_cleanup_job_handler: UcpIdempotencyCleanupJobHandler | None = None
+        self.audit_cleanup_job_handler: UcpAuditLogCleanupJobHandler | None = None
 
     def wire(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
@@ -67,6 +73,7 @@ class WorkerContainer:
         self._wire_scheduled_jobs(outbox_repo, outbox_pub)
         self._wire_outbox_relay(outbox_repo, outbox_pub)
         self._wire_events_consumer()
+        self._wire_jobs_consumer()
 
     def _wire_scheduled_jobs(
         self, outbox_repo: PostgresOutboxRepository, outbox_pub: AwsSnsPublisher
@@ -81,22 +88,10 @@ class WorkerContainer:
         idemp_cleanup_use_case = UcpIdempotencyCleanupUseCase(idemp_cleanup_repo)
         audit_cleanup_use_case = UcpAuditLogCleanupUseCase(audit_cleanup_repo)
 
-        self.registry = JobHandlerRegistry()
-        self.registry.register(
-            JobName.UCP_OUTBOX_SWEEPER.value, UcpOutboxSweeperJobHandler(sweeper_use_case)
-        )
-        self.registry.register(
-            JobName.UCP_OUTBOX_CLEANUP.value,
-            UcpOutboxCleanupJobHandler(outbox_cleaner_use_case),
-        )
-        self.registry.register(
-            JobName.UCP_IDEMPOTENCY_CLEANUP.value,
-            UcpIdempotencyCleanupJobHandler(idemp_cleanup_use_case),
-        )
-        self.registry.register(
-            JobName.UCP_AUDIT_LOG_CLEANUP.value,
-            UcpAuditLogCleanupJobHandler(audit_cleanup_use_case),
-        )
+        self.sweeper_job_handler = UcpOutboxSweeperJobHandler(sweeper_use_case)
+        self.outbox_cleanup_job_handler = UcpOutboxCleanupJobHandler(outbox_cleaner_use_case)
+        self.idemp_cleanup_job_handler = UcpIdempotencyCleanupJobHandler(idemp_cleanup_use_case)
+        self.audit_cleanup_job_handler = UcpAuditLogCleanupJobHandler(audit_cleanup_use_case)
 
     def _wire_outbox_relay(
         self, outbox_repo: PostgresOutboxRepository, outbox_pub: AwsSnsPublisher
@@ -143,6 +138,8 @@ class WorkerContainer:
 
         self._register_tenant_handlers(consumer, tenant_deleted_handler)
 
+        # Cron-triggered scheduled jobs are handled by jobs_consumer.
+
         ucp_identity_sync_consumer = AwsSqsConsumer(
             queue_url=self.settings.sqs_ucp_identity_sync_queue_url,
             region_name=self.settings.aws_region,
@@ -152,6 +149,41 @@ class WorkerContainer:
             consumer=ucp_identity_sync_consumer,
             queue_name="ucp-events.fifo",
             handler=self.events_dispatcher.dispatch,
+        )
+
+    def _wire_jobs_consumer(self) -> None:
+        job_dispatcher = UcpJobDispatcher()
+
+        async def sweep_handler(message: dict[str, Any]) -> None:
+            if self.sweeper_job_handler:
+                await self.sweeper_job_handler.execute()
+
+        async def outbox_cleanup_handler(message: dict[str, Any]) -> None:
+            if self.outbox_cleanup_job_handler:
+                await self.outbox_cleanup_job_handler.execute()
+
+        async def idemp_cleanup_handler(message: dict[str, Any]) -> None:
+            if self.idemp_cleanup_job_handler:
+                await self.idemp_cleanup_job_handler.execute()
+
+        async def audit_cleanup_handler(message: dict[str, Any]) -> None:
+            if self.audit_cleanup_job_handler:
+                await self.audit_cleanup_job_handler.execute()
+
+        job_dispatcher.subscribe(UcpJobName.UCP_OUTBOX_SWEEPER.value, sweep_handler)
+        job_dispatcher.subscribe(UcpJobName.UCP_OUTBOX_CLEANUP.value, outbox_cleanup_handler)
+        job_dispatcher.subscribe(UcpJobName.UCP_IDEMPOTENCY_CLEANUP.value, idemp_cleanup_handler)
+        job_dispatcher.subscribe(UcpJobName.UCP_AUDIT_LOG_CLEANUP.value, audit_cleanup_handler)
+
+        jobs_sqs_consumer = AwsSqsConsumer(
+            queue_url=self.settings.sqs_ucp_jobs_queue_url,
+            region_name=self.settings.aws_region,
+            endpoint_url=self.settings.aws_endpoint_url,
+        )
+        self.jobs_consumer = SqsConsumerManager(
+            consumer=jobs_sqs_consumer,
+            queue_name="ucp-jobs.fifo",
+            handler=job_dispatcher.dispatch,
         )
 
     async def dispose(self) -> None:

@@ -1,14 +1,16 @@
-from typing import Any, Protocol
+from typing import Protocol
+
+from seedwork.domain.types import JsonDict
 
 from notification.domain.models import Channel
 
 
-class DeliveryDispatcherPort(Protocol):
+class ChannelDispatcherPort(Protocol):
     async def dispatch(
         self,
         channel: Channel,
         tenant_id: str,
         content: str,
         subject: str | None,
-        data: dict[str, Any],
+        data: JsonDict,
     ) -> None: ...

@@ -1,4 +1,5 @@
 import pytest
+from database.events import EventEnvelope
 from database.models.identity import Tenant
 from seedwork import generate_random_hex
 from ucp.domain.constants import LifecycleStatus
@@ -7,7 +8,6 @@ from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxPublisher,
     SqlAlchemyNotificationOutboxRepository,
 )
-from notification.domain.models import NotificationOutboxEvent
 
 
 @pytest.mark.asyncio
@@ -27,7 +27,9 @@ async def test_outbox_save_and_fetch(db_session_factory):
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
 
     # Save
-    event = NotificationOutboxEvent(
+    event = EventEnvelope(
+        id="mock_id_123",
+        source="notification",
         tenant_id=tenant_id,
         event_type="test.event",
         payload={"msg": "hello"},
@@ -68,7 +70,9 @@ async def test_outbox_mark_failed_and_sweep(db_session_factory):
         session.add(tenant)
 
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
-    event = NotificationOutboxEvent(
+    event = EventEnvelope(
+        id="mock_id_456",
+        source="notification",
         tenant_id=tenant_id,
         event_type="test.fail",
         payload={"msg": "fail"},
@@ -107,7 +111,9 @@ async def test_outbox_mark_failed_and_sweep(db_session_factory):
 
     # Sweep stuck events test
     # Save a new event
-    event_sweep = NotificationOutboxEvent(
+    event_sweep = EventEnvelope(
+        id="mock_id_789",
+        source="notification",
         tenant_id=tenant_id,
         event_type="test.sweep",
         payload={"msg": "sweep"},
@@ -147,7 +153,9 @@ async def test_sqlalchemy_notification_outbox_publisher(db_session_factory):
         session.add(tenant)
 
         publisher = SqlAlchemyNotificationOutboxPublisher(session)
-        event = NotificationOutboxEvent(
+        event = EventEnvelope(
+            id="mock_id_999",
+            source="notification",
             tenant_id=tenant_id,
             event_type="test.publish",
             payload={"pub": "msg"},

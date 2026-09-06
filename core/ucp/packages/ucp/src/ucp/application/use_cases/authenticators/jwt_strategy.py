@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import structlog
 from identity.application.authenticate_use_case import (
+    AuthenticateCommand,
     TenantNotProvisionedError,
     authenticate_bearer_token,
 )
@@ -43,9 +44,8 @@ class JwtStrategy(AuthenticationStrategyPort):
     async def authenticate(self, token: str) -> IdentityContext:
 
         # Note: We let AuthenticationError propagate up so the caller handles it
-        identity: IdentityContext = await authenticate_bearer_token(
-            f"Bearer {token}", self.token_verifier
-        )
+        command = AuthenticateCommand(authorization_header=f"Bearer {token}")
+        identity: IdentityContext = await authenticate_bearer_token(command, self.token_verifier)
 
         subject = identity.subject
         tenant_id = identity.tenant_id

@@ -28,7 +28,7 @@ async def test_tenants_full_crud(auth_client: httpx.AsyncClient, seeded_api_toke
             "name": "Integration Test Tenant",
             "admin_first_name": "Admin",
             "admin_last_name": "Test",
-            "admin_email": "admin@integration.test",
+            "admin_email": "admin@example.com",
         },
     )
     assert res.status_code == 200

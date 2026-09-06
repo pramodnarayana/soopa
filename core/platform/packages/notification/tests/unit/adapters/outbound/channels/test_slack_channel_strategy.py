@@ -1,14 +1,12 @@
-from collections.abc import Mapping
-from typing import Any
-
 import pytest
 from identity.domain.constants import IdentityIdPrefix
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
-from notification.adapters.outbound.channels.slack_delivery_strategy import (
+from notification.adapters.outbound.channels.slack_channel_strategy import (
     DeliveryError,
-    SlackDeliveryStrategy,
+    SlackChannelStrategy,
     SlackIntegrationPort,
 )
 
@@ -18,7 +16,7 @@ class FakeSlackIntegration(SlackIntegrationPort):
         self.sent_messages = []
 
     async def send_message(
-        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: JsonDict
     ) -> None:
         self.sent_messages.append(
             {
@@ -31,9 +29,9 @@ class FakeSlackIntegration(SlackIntegrationPort):
 
 
 @pytest.mark.asyncio
-async def test_slack_delivery_strategy_delivers():
+async def test_slack_channel_strategy_delivers():
     integration = FakeSlackIntegration()
-    strategy = SlackDeliveryStrategy(slack_integration=integration)
+    strategy = SlackChannelStrategy(slack_integration=integration)
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with capture_logs() as cap_logs:
@@ -52,8 +50,8 @@ async def test_slack_delivery_strategy_delivers():
 
 
 @pytest.mark.asyncio
-async def test_slack_delivery_strategy_fails_without_integration():
-    strategy = SlackDeliveryStrategy(slack_integration=None)
+async def test_slack_channel_strategy_fails_without_integration():
+    strategy = SlackChannelStrategy(slack_integration=None)
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with pytest.raises(DeliveryError, match="Slack integration not configured"):

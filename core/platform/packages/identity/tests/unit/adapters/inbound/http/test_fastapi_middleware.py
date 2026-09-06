@@ -19,7 +19,7 @@ class FakeHeaders:
     def __init__(self, headers: dict[str, str]) -> None:
         self._headers = headers
 
-    def get(self, key: str) -> str | None:  # noqa: D102
+    def get(self, key: str) -> str | None:
         return self._headers.get(key)
 
 

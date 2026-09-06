@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from typing import Any
 
 import pytest
 from database.models.identity import Tenant
@@ -20,7 +19,7 @@ class FakeDispatcher:
     def __init__(self):
         self.dispatches = []
 
-    async def publish_batch(self, events: Sequence[Any]) -> Sequence[str]:
+    async def publish_batch(self, events: Sequence) -> Sequence[str]:
         successful_ids = []
         for event in events:
             self.dispatches.append(

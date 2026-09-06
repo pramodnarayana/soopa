@@ -1,5 +1,5 @@
-from .email_delivery_strategy import EmailDeliveryStrategy
-from .in_app_delivery_strategy import InAppDeliveryStrategy
-from .slack_delivery_strategy import SlackDeliveryStrategy
+from .email_channel_strategy import EmailChannelStrategy
+from .in_app_channel_strategy import InAppChannelStrategy
+from .slack_channel_strategy import SlackChannelStrategy
 
-__all__ = ["EmailDeliveryStrategy", "InAppDeliveryStrategy", "SlackDeliveryStrategy"]
+__all__ = ["EmailChannelStrategy", "InAppChannelStrategy", "SlackChannelStrategy"]

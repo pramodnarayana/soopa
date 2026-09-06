@@ -1,7 +1,5 @@
-from collections.abc import Mapping
-from typing import Any
-
 import structlog
+from seedwork.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
 
@@ -10,12 +8,12 @@ class DeliveryError(Exception):
     """Raised when message delivery fails."""
 
 
-class InAppDeliveryStrategy:
+class InAppChannelStrategy:
     def __init__(self) -> None:
         pass
 
     async def deliver(
-        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: JsonDict
     ) -> None:
 
         logger.info(

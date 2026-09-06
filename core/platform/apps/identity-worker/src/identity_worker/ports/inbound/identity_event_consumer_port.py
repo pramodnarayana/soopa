@@ -1,6 +1,9 @@
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import Any, Protocol
+from types import TracebackType
+from typing import Protocol
+
+from seedwork.domain.types import JsonDict
 
 
 @dataclass(frozen=True)
@@ -13,7 +16,7 @@ class IdentityEventMessage:
     id: str
     source: str
     event_type: str
-    payload: dict[str, Any]
+    payload: JsonDict
     idempotency_key: str | None = None
     tenant_id: str | None = None
 
@@ -24,6 +27,11 @@ class IdentityEventConsumerPort(Protocol):
     """
 
     async def __aenter__(self) -> "IdentityEventConsumerPort": ...
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None: ...
 
     def process_next_event(self) -> AbstractAsyncContextManager[IdentityEventMessage | None]: ...

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
-from typing import Any
 
+from seedwork.domain.types import JsonDict
 from seedwork.events import DomainEvent
 
 
@@ -10,7 +10,7 @@ class NotificationDispatchedEvent(DomainEvent):
     channel: str
     subject: str | None
     content: str
-    data: dict[str, Any]
+    data: JsonDict
     id: str
 
     @property

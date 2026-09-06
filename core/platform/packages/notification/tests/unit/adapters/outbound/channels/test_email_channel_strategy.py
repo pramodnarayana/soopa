@@ -1,14 +1,12 @@
-from collections.abc import Mapping
-from typing import Any
-
 import pytest
 from identity.domain.constants import IdentityIdPrefix
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
-from notification.adapters.outbound.channels.email_delivery_strategy import (
+from notification.adapters.outbound.channels.email_channel_strategy import (
     DeliveryError,
-    EmailDeliveryStrategy,
+    EmailChannelStrategy,
     EmailProviderPort,
 )
 
@@ -18,7 +16,7 @@ class FakeEmailProvider(EmailProviderPort):
         self.sent_emails = []
 
     async def send_email(
-        self, tenant_id: str, content: str, subject: str | None, data: Mapping[str, Any]
+        self, tenant_id: str, content: str, subject: str | None, data: JsonDict
     ) -> None:
         self.sent_emails.append(
             {
@@ -31,9 +29,9 @@ class FakeEmailProvider(EmailProviderPort):
 
 
 @pytest.mark.asyncio
-async def test_email_delivery_strategy_delivers():
+async def test_email_channel_strategy_delivers():
     provider = FakeEmailProvider()
-    strategy = EmailDeliveryStrategy(email_provider=provider)
+    strategy = EmailChannelStrategy(email_provider=provider)
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with capture_logs() as cap_logs:
@@ -52,8 +50,8 @@ async def test_email_delivery_strategy_delivers():
 
 
 @pytest.mark.asyncio
-async def test_email_delivery_strategy_fails_without_provider():
-    strategy = EmailDeliveryStrategy(email_provider=None)
+async def test_email_channel_strategy_fails_without_provider():
+    strategy = EmailChannelStrategy(email_provider=None)
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with pytest.raises(DeliveryError, match="Email provider not configured"):

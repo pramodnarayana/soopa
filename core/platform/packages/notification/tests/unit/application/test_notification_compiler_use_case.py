@@ -3,10 +3,12 @@ import hashlib
 import pytest
 from seedwork import generate_random_hex
 
-from notification.application.notification_compiler_use_case import NotificationCompilerUseCase
+from notification.application.notification_compiler_use_case import (
+    CompileNotificationCommand,
+    NotificationCompilerUseCase,
+)
 from notification.domain.models import (
     Channel,
-    NotificationEvent,
     Template,
 )
 from notification.testing.fakes import (
@@ -57,7 +59,7 @@ async def test_dispatch_success():
     # Missing template for IN_APP, should skip gracefully
 
     # Execute
-    event = NotificationEvent(
+    event = CompileNotificationCommand(
         tenant_id=tenant_id, event_type=event_type, data={"id": "123", "event_id": "evt1"}
     )
 
@@ -88,7 +90,7 @@ async def test_dispatch_no_routes():
     )
     uc = NotificationCompilerUseCase(uow=uow, template_renderer=FakeTemplateRenderer())
 
-    event = NotificationEvent(tenant_id="t1", event_type="unknown", data={})
+    event = CompileNotificationCommand(tenant_id="t1", event_type="unknown", data={})
 
     await uc.execute(event)
     assert len(uc.uow.outbox_repo.events) == 0
@@ -125,7 +127,7 @@ async def test_only_in_app_channel_creates_notification_record():
         )
 
     await uc.execute(
-        NotificationEvent(
+        CompileNotificationCommand(
             tenant_id=tenant_id,
             event_type=event_type,
             data={"id": "123", "event_id": "evt1"},

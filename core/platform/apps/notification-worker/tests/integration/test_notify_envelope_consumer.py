@@ -2,7 +2,7 @@ from dataclasses import asdict
 from unittest.mock import AsyncMock
 
 import pytest
-from notification.domain.models import NotificationEvent
+from notification.application.notification_compiler_use_case import CompileNotificationCommand
 from notification.facade import notify
 
 from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
@@ -12,9 +12,9 @@ from notification_worker.adapters.inbound.workers.notification_event_dispatcher 
 
 class RecordingCompiler:
     def __init__(self) -> None:
-        self.events: list[NotificationEvent] = []
+        self.events: list[CompileNotificationCommand] = []
 
-    async def execute(self, event: NotificationEvent) -> None:
+    async def execute(self, event: CompileNotificationCommand) -> None:
         self.events.append(event)
 
 

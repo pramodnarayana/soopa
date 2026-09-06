@@ -1,7 +1,8 @@
-from typing import Any
+from typing import cast
 
 import structlog
-from notification.adapters.outbound.channels import EmailDeliveryStrategy
+from notification.adapters.outbound.channels import EmailChannelStrategy
+from seedwork.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
 
@@ -9,11 +10,11 @@ logger = structlog.get_logger(__name__)
 class EmailChannelDispatcher:
     def __init__(
         self,
-        email_strategy: EmailDeliveryStrategy,
+        email_strategy: EmailChannelStrategy,
     ) -> None:
         self.email_strategy = email_strategy
 
-    async def dispatch_raw(self, body: dict[str, Any]) -> None:
+    async def dispatch_raw(self, body: JsonDict) -> None:
         """
         Parses the incoming SQS payload for email delivery.
         """
@@ -33,19 +34,19 @@ class EmailChannelDispatcher:
             )
             return
 
-        payload = body.get("payload")
-        if not payload or not isinstance(payload, dict):
+        payload = cast(JsonDict, body.get("payload"))
+        if not payload:
             logger.error("SQS message missing 'payload' dictionary")
             return
 
-        tenant_id = body.get("tenant_id")
+        tenant_id = cast(str | None, body.get("tenant_id"))
         if not tenant_id:
             logger.error("SQS message payload missing 'tenant_id'")
             return
 
-        content = payload.get("content")
-        subject = payload.get("subject")
-        data = payload.get("data", {})
+        content = cast(str | None, payload.get("content"))
+        subject = cast(str | None, payload.get("subject"))
+        data = cast(JsonDict, payload.get("data", {}))
 
         if not content:
             logger.error("SQS message payload missing 'content'")

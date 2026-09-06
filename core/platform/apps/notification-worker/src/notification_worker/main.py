@@ -3,100 +3,79 @@ import os
 import signal
 import sys
 from collections.abc import Awaitable
-from typing import Any, cast
+from typing import TypeVar, cast
 
 import structlog
 from dotenv import load_dotenv
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from notification_worker.bootstrap.container import WorkerContainer as Container
 
 logger = structlog.get_logger(__name__)
 
 
-async def run_consumer(  # noqa: C901
-    stop_event: asyncio.Event | None = None, container: Container | None = None
-) -> None:
-    dotenv_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../../../../../.env")
+def _setup_container() -> Container:
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        logger.error("DATABASE_URL is not set")
+        sys.exit(1)
+
+    sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
+    if not sns_topic_arn:
+        logger.error("SNS_TOPIC_ARN is not set")
+        sys.exit(1)
+
+    container = Container()
+    container.config.database_url.from_value(database_url)
+    container.config.sns_topic_arn.from_value(sns_topic_arn)
+    container.config.priority_queue_url.from_env(
+        "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", required=True
     )
-    load_dotenv(dotenv_path)
+    container.config.email_delivery_queue_url.from_env(
+        "SQS_EMAIL_DELIVERY_QUEUE_URL", required=True
+    )
+    container.config.aws_endpoint_url.from_env("AWS_ENDPOINT_URL")
+    container.config.aws_region.from_env("AWS_REGION", default="us-east-1")
+    return container
 
-    if container is None:
-        database_url = os.environ.get("DATABASE_URL")
-        if not database_url:
-            logger.error("DATABASE_URL is not set")
-            sys.exit(1)
 
-        sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
-        if not sns_topic_arn:
-            logger.error("SNS_TOPIC_ARN is not set")
-            sys.exit(1)
+T = TypeVar("T")
 
-        container = Container()
-        container.config.database_url.from_value(database_url)
-        container.config.sns_topic_arn.from_value(sns_topic_arn)
-        container.config.priority_queue_url.from_env(
-            "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", required=True
-        )
-        container.config.email_delivery_queue_url.from_env(
-            "SQS_EMAIL_DELIVERY_QUEUE_URL", required=True
-        )
-        container.config.aws_endpoint_url.from_env("AWS_ENDPOINT_URL")
-        container.config.aws_region.from_env("AWS_REGION", default="us-east-1")
 
-    await cast(Awaitable[None], container.init_resources())
+async def _resolve_dependency(dep: T | Awaitable[T]) -> T:
+    if asyncio.isfuture(dep) or asyncio.iscoroutine(dep):
+        return await cast(Awaitable[T], dep)
+    return cast(T, dep)
 
-    consumer = container.consumer_worker()
-    if asyncio.isfuture(consumer) or asyncio.iscoroutine(consumer):
-        consumer = await consumer
 
-    email_worker = container.email_worker()
-    if asyncio.isfuture(email_worker) or asyncio.iscoroutine(email_worker):
-        email_worker = await email_worker
+def _setup_signal_handlers(shutdown_event: asyncio.Event) -> None:
+    def handle_signal() -> None:
+        logger.info("Received termination signal, shutting down workers...")
+        shutdown_event.set()
 
-    outbox_listener = container.outbox_listener()
-    if asyncio.isfuture(outbox_listener) or asyncio.iscoroutine(outbox_listener):
-        outbox_listener = await outbox_listener
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, handle_signal)
 
-    shutdown_event = stop_event or asyncio.Event()
 
-    if stop_event is None:
-
-        def handle_signal() -> None:
-            logger.info("Received termination signal, shutting down workers...")
-            shutdown_event.set()
-
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, handle_signal)
-
-    logger.info("Starting workers...")
-
-    # 1. Compiler Worker (Stage 2)
-    consumer.start()
-
-    # 2. Email Delivery Worker (Stage 3)
-    email_worker.start()
-
-    # 3. Outbox Relay
-    outbox_listener.start()
-
-    shutdown_task = asyncio.create_task(shutdown_event.wait())
-
-    tasks: list[asyncio.Task[Any]] = [cast(asyncio.Task[Any], shutdown_task)]
-    if consumer.task:
-        tasks.append(cast(asyncio.Task[Any], consumer.task))
-    if email_worker.task:
-        tasks.append(cast(asyncio.Task[Any], email_worker.task))
-
+async def _wait_and_handle_errors(
+    tasks: list[asyncio.Task[None]], shutdown_task: asyncio.Task[None]
+) -> None:
     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
     for task in done:
         if task is not shutdown_task:
             exc = task.exception()
             if exc:
                 raise exc
 
+
+async def _graceful_shutdown(
+    outbox_listener: PostgresOutboxRelay,
+    consumer: SqsConsumerManager,
+    email_worker: SqsConsumerManager,
+    container: Container,
+) -> None:
     logger.info("Stopping workers...")
     await outbox_listener.stop()
     await consumer.stop()
@@ -115,6 +94,54 @@ async def run_consumer(  # noqa: C901
 
     await cast(Awaitable[None], container.shutdown_resources())
     logger.info("Container resources shut down successfully.")
+
+
+async def run_consumer(
+    stop_event: asyncio.Event | None = None, container: Container | None = None
+) -> None:
+    dotenv_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../../../../../.env")
+    )
+    load_dotenv(dotenv_path)
+
+    if container is None:
+        container = _setup_container()
+
+    await cast(Awaitable[None], container.init_resources())
+
+    consumer = await _resolve_dependency(container.consumer_worker())
+    email_worker = await _resolve_dependency(container.email_worker())
+    outbox_listener = await _resolve_dependency(container.outbox_listener())
+
+    shutdown_event = stop_event or asyncio.Event()
+
+    if stop_event is None:
+        _setup_signal_handlers(shutdown_event)
+
+    logger.info("Starting workers...")
+
+    # 1. Compiler Worker (Stage 2)
+    consumer.start()
+
+    # 2. Email Delivery Worker (Stage 3)
+    email_worker.start()
+
+    # 3. Outbox Relay
+    outbox_listener.start()
+
+    async def wait_shutdown() -> None:
+        await shutdown_event.wait()
+
+    shutdown_task = asyncio.create_task(wait_shutdown())
+
+    tasks: list[asyncio.Task[None]] = [shutdown_task]
+    if consumer.task:
+        tasks.append(consumer.task)
+    if email_worker.task:
+        tasks.append(email_worker.task)
+
+    await _wait_and_handle_errors(tasks, shutdown_task)
+    await _graceful_shutdown(outbox_listener, consumer, email_worker, container)
 
 
 if __name__ == "__main__":

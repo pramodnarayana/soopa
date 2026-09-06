@@ -1,14 +1,13 @@
-from typing import Any
-
 import structlog
+from seedwork.domain.types import JsonDict
 
 from ...domain.models import Channel
-from ...ports.outbound.notification_delivery_strategy_port import DeliveryStrategyPort
+from ...ports.outbound.notification_channel_strategy_port import DeliveryStrategyPort
 
 logger = structlog.get_logger(__name__)
 
 
-class NotificationDeliveryDispatcher:
+class NotificationChannelDispatcher:
     def __init__(
         self,
         email_strategy: DeliveryStrategyPort,
@@ -27,7 +26,7 @@ class NotificationDeliveryDispatcher:
         tenant_id: str,
         content: str,
         subject: str | None,
-        data: dict[str, Any],
+        data: JsonDict,
     ) -> None:
         strategy = self.strategies.get(channel)
         if not strategy:

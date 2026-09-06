@@ -1,8 +1,9 @@
 import asyncio
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import cast
 
 import structlog
+from seedwork.domain.types import JsonDict
 
 from identity_worker.ports.inbound.identity_event_consumer_port import IdentityEventMessage
 
@@ -17,15 +18,17 @@ class IdentityEventDispatcher:
 
     def __init__(self) -> None:
         # Route mapping: event_type -> list of async handlers
-        self._handlers: dict[str, list[Callable[[IdentityEventMessage], Any]]] = {}
+        self._handlers: dict[str, list[Callable[[IdentityEventMessage], Awaitable[None]]]] = {}
 
-    def subscribe(self, event_type: str, handler: Callable[[IdentityEventMessage], Any]) -> None:
+    def subscribe(
+        self, event_type: str, handler: Callable[[IdentityEventMessage], Awaitable[None]]
+    ) -> None:
         """Register a handler for a specific domain event type."""
         if event_type not in self._handlers:
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
 
-    async def dispatch_raw(self, payload: dict[str, Any]) -> None:
+    async def dispatch_raw(self, payload: JsonDict) -> None:
         """Entrypoint called by the SqsConsumerManager."""
         event_type = str(payload.get("eventType") or payload.get("event_type") or "")
         if not event_type:
@@ -35,9 +38,11 @@ class IdentityEventDispatcher:
             id=str(payload.get("eventId") or payload.get("id") or ""),
             source=str(payload.get("source") or ""),
             event_type=event_type,
-            payload=payload.get("payload", {}),
-            idempotency_key=payload.get("idempotencyKey") or payload.get("idempotency_key"),
-            tenant_id=payload.get("tenantId") or payload.get("tenant_id"),
+            payload=cast(JsonDict, payload.get("payload", {})),
+            idempotency_key=cast(
+                str | None, payload.get("idempotencyKey") or payload.get("idempotency_key")
+            ),
+            tenant_id=cast(str | None, payload.get("tenantId") or payload.get("tenant_id")),
         )
         await self._dispatch(event)
 

@@ -1,6 +1,7 @@
-from collections.abc import Mapping
-from typing import Any, Protocol
+from typing import Protocol
+
+from seedwork.domain.types import JsonDict
 
 
 class TemplateRendererPort(Protocol):
-    def render(self, template_str: str, data: Mapping[str, Any]) -> str: ...
+    def render(self, template_str: str, data: JsonDict) -> str: ...

@@ -2,13 +2,15 @@ import asyncio
 import hashlib
 import time
 from dataclasses import dataclass, fields
-from typing import Any, cast
+from typing import cast
 
 import httpx
 import jwt
 import structlog
-from jwt import PyJWKClient
+from jwt import PyJWK, PyJWKClient
+from seedwork.domain.types import JsonDict
 
+from identity.adapters.outbound.zitadel.constants import ZitadelClaims
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
 from identity.ports.outbound.token_verifier_port import TokenValidationError, TokenVerifierPort
 
@@ -30,7 +32,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         self._jwks_client = PyJWKClient(self._jwks_url)
         # Thread-safe async cache for userinfo to prevent network calls on every request
         # Format: {jti: (userinfo_dict, timestamp)}
-        self._userinfo_cache: dict[str, tuple[dict[str, Any], float]] = {}
+        self._userinfo_cache: dict[str, tuple[JsonDict, float]] = {}
 
     async def verify(self, token: str) -> TokenClaims:
         try:
@@ -51,7 +53,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             raise TokenValidationError(str(e)) from e
 
         # Fallback to /userinfo if roles are missing (with enterprise caching)
-        if "urn:zitadel:iam:org:project:roles" not in payload:
+        if ZitadelClaims.PROJECT_ROLES not in payload:
             jti = payload.get("jti")
             if jti is None:
                 # Hash token to derive cache key when jti is absent
@@ -59,11 +61,11 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             try:
                 userinfo = await self._get_cached_userinfo(token, jti)
                 payload.update(userinfo)
-            except Exception as e:  # noqa: BLE001 — any network/decode failure during optional userinfo enrichment must not block token verification
+            except (httpx.RequestError, ValueError) as e:
                 logger.warning("Failed to fetch userinfo", exc_info=e)
 
         # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
-        roles_dict = payload.get("urn:zitadel:iam:org:project:roles")
+        roles_dict = payload.get(ZitadelClaims.PROJECT_ROLES)
         if roles_dict and isinstance(roles_dict, dict) and self._options.platform_org_id:
             for _role, orgs in roles_dict.items():
                 if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
@@ -74,17 +76,17 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         tenant_roles: dict[str, list[str]] = {}
         roles: list[str] = []
 
-        tenant_id = payload.get("tenant_id") or payload.get("urn:zitadel:iam:org:id")
+        tenant_id = payload.get("tenant_id") or payload.get(ZitadelClaims.ORG_ID)
         if tenant_id:
             authorized_tenants.add(str(tenant_id))
 
-        idp_org_id = payload.get("urn:zitadel:iam:org:id")
+        idp_org_id = payload.get(ZitadelClaims.ORG_ID)
         if idp_org_id:
             authorized_tenants.add(str(idp_org_id))
 
         project_roles_found = False
         for key, value in payload.items():
-            if key.startswith("urn:zitadel:iam:org:project:") and key.endswith(":roles"):
+            if key == ZitadelClaims.PROJECT_ROLES:
                 project_roles_found = True
                 if isinstance(value, dict):
                     for role, orgs in value.items():
@@ -124,10 +126,10 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             logger.error("Token claims validation failed", exc_info=e)
             raise TokenValidationError(f"Invalid token claims: {e}") from e
 
-    async def _get_signing_key(self, token: str) -> Any:
+    async def _get_signing_key(self, token: str) -> PyJWK:
         return await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)
 
-    async def _get_cached_userinfo(self, token: str, jti: str) -> dict[str, Any]:
+    async def _get_cached_userinfo(self, token: str, jti: str) -> JsonDict:
         now = time.time()
 
         # Check TTL cache (O(1) access)
@@ -157,4 +159,4 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             oldest_key = next(iter(self._userinfo_cache))
             del self._userinfo_cache[oldest_key]
 
-        return cast(dict[str, Any], userinfo)
+        return cast(JsonDict, userinfo)

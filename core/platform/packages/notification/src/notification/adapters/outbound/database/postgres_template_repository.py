@@ -1,10 +1,11 @@
 from database.models.notifications import NotificationTemplate
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork import generate_random_hex
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....domain.models import PLATFORM_TENANT_ID, Channel, Template
+from notification.domain.models import Channel, Template
 
 
 class SqlAlchemyTemplateRepository:

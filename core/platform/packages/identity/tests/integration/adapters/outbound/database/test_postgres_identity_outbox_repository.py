@@ -4,9 +4,8 @@ import pytest
 from database.models.identity import IdentityOutbox as OrmIdentityOutbox
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
     PostgresIdentityOutboxRepository,
@@ -17,18 +16,12 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-async def outbox_session_factory(db_engine):
-    """A real (non-wrapped) session factory for outbox tests that commits to the DB."""
-    yield async_sessionmaker(bind=db_engine, expire_on_commit=False)
+async def outbox_repo(db_session_factory):
+    yield PostgresIdentityOutboxRepository(db_session_factory)
 
 
 @pytest.fixture
-async def outbox_repo(outbox_session_factory):
-    yield PostgresIdentityOutboxRepository(outbox_session_factory)
-
-
-@pytest.fixture
-async def create_dummy_outbox_event(outbox_session_factory):
+async def create_dummy_outbox_event(db_session_factory):
     """Inserts a real, committed outbox event so the outbox_repo can see it."""
     created_event_ids: list[str] = []
 
@@ -41,7 +34,7 @@ async def create_dummy_outbox_event(outbox_session_factory):
         event_id = generate_id(IdentityIdPrefix.OUTBOX)
         now = updated_at or datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
-        async with outbox_session_factory() as session:
+        async with db_session_factory() as session:
             stmt = pg_insert(OrmIdentityOutbox).values(
                 id=event_id,
                 idempotency_key=f"idemp_{event_id}",
@@ -61,13 +54,6 @@ async def create_dummy_outbox_event(outbox_session_factory):
         return event_id
 
     yield _create
-
-    if created_event_ids:
-        async with outbox_session_factory() as session:
-            await session.execute(
-                delete(OrmIdentityOutbox).where(OrmIdentityOutbox.id.in_(created_event_ids))
-            )
-            await session.commit()
 
 
 @pytest.mark.asyncio

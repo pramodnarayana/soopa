@@ -1,9 +1,9 @@
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from functools import lru_cache
-from typing import Any
 
 from jinja2 import ChainableUndefined, Template
 from jinja2.sandbox import SandboxedEnvironment
+from seedwork.domain.types import JsonDict
 
 
 class _SilentUndefined(ChainableUndefined):
@@ -16,7 +16,7 @@ class _SilentUndefined(ChainableUndefined):
     def __str__(self) -> str:
         return ""
 
-    def __iter__(self) -> Iterator[Any]:
+    def __iter__(self) -> Iterator[str]:
         return iter([])
 
     def __bool__(self) -> bool:
@@ -44,6 +44,6 @@ class Jinja2TemplateRenderer:
         """Compile a template string into a Jinja2 Template object."""
         return self._env.from_string(template_str)
 
-    def render(self, template_str: str, data: Mapping[str, Any]) -> str:
+    def render(self, template_str: str, data: JsonDict) -> str:
         template = self._compile_template(template_str)
         return template.render(**data)

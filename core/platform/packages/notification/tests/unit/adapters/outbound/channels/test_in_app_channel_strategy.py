@@ -3,14 +3,14 @@ from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
-from notification.adapters.outbound.channels.in_app_delivery_strategy import (
-    InAppDeliveryStrategy,
+from notification.adapters.outbound.channels.in_app_channel_strategy import (
+    InAppChannelStrategy,
 )
 
 
 @pytest.mark.asyncio
-async def test_in_app_delivery_strategy():
-    strategy = InAppDeliveryStrategy()
+async def test_in_app_channel_strategy():
+    strategy = InAppChannelStrategy()
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     with capture_logs() as cap_logs:

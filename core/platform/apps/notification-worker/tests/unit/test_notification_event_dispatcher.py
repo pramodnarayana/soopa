@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from notification.domain.models import NotificationEvent
+from notification.application.notification_compiler_use_case import CompileNotificationCommand
 
 from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
     NotificationEventDispatcher,
@@ -12,7 +12,7 @@ class FakeDispatchUseCase:
     def __init__(self):
         self.events = []
 
-    async def execute(self, event: NotificationEvent) -> None:
+    async def execute(self, event: CompileNotificationCommand) -> None:
         self.events.append(event)
 
 

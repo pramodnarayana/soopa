@@ -2,7 +2,7 @@ import asyncio
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from database.events import EventEnvelope
@@ -57,7 +57,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                     .values(status=OutboxStatus.PENDING.value, owner_token=None)
                 )
                 result = await session.execute(stmt)
-                swept = cast(CursorResult[Any], result).rowcount
+                swept = cast(CursorResult[tuple[()]], result).rowcount
                 total_swept += swept
                 await session.commit()
 
@@ -125,7 +125,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                 .values(status=OutboxStatus.PROCESSED.value, updated_at=datetime.now(UTC))
             )
             result = await session.execute(stmt)
-            if cast(CursorResult[Any], result).rowcount == 0:
+            if cast(CursorResult[tuple[()]], result).rowcount == 0:
                 logger.warning(
                     "Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_completed",
                     message_id=message_id,
@@ -153,7 +153,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                 )
             )
             result = await session.execute(stmt)
-            if cast(CursorResult[Any], result).rowcount == 0:
+            if cast(CursorResult[tuple[()]], result).rowcount == 0:
                 logger.warning(
                     "Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_failed",
                     message_id=message_id,
