@@ -4,6 +4,7 @@ from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from seedwork import generate_id
 from sqlalchemy import text
 from ucp_models.sharding import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 
 @pytest.mark.integration
@@ -16,8 +17,15 @@ async def test_tenant_resolver_success(test_db_router: DatabaseRouterPort) -> No
         # Shard requires a DatabaseShard row first (typically seeded, but we'll ensure one exists)
         # Using a dummy shard name just for this test
         shard_name = f"shard_{test_tenant_id}"
-        session.add(DatabaseShard(name=shard_name, dsn="postgresql://user:pass@host/db"))
-        session.add(ShardRegistry(tenant_id=test_tenant_id, shard_name=shard_name))
+        edi_app = App(slug="edi", name="EDI", description="EDI application")
+        shard = DatabaseShard(
+            id=generate_id("ucp_shard"),
+            name=shard_name,
+            dsn="postgresql://user:pass@host/db",
+        )
+        session.add_all([edi_app, shard])
+        await session.flush()
+        session.add(ShardRegistry(tenant_id=test_tenant_id, app_id=edi_app.id, shard_id=shard.id))
         await session.commit()
 
     resolver = TenantResolver(db_router=db_router, ttl_secs=300)
@@ -61,13 +69,16 @@ async def test_tenant_resolver_eviction(test_db_router: DatabaseRouterPort) -> N
     # Insert 3 tenants
     t1, t2, t3 = generate_id("t1"), generate_id("t2"), generate_id("t3")
     async for session in db_router.get_global_session():
-        session.add(DatabaseShard(name=f"shard_{t1}", dsn="dsn1"))
-        session.add(DatabaseShard(name=f"shard_{t2}", dsn="dsn2"))
-        session.add(DatabaseShard(name=f"shard_{t3}", dsn="dsn3"))
+        edi_app = App(slug="edi", name="EDI", description="EDI application")
+        shard1 = DatabaseShard(id=generate_id("ucp_shard"), name=f"shard_{t1}", dsn="dsn1")
+        shard2 = DatabaseShard(id=generate_id("ucp_shard"), name=f"shard_{t2}", dsn="dsn2")
+        shard3 = DatabaseShard(id=generate_id("ucp_shard"), name=f"shard_{t3}", dsn="dsn3")
+        session.add_all([edi_app, shard1, shard2, shard3])
+        await session.flush()
 
-        session.add(ShardRegistry(tenant_id=t1, shard_name=f"shard_{t1}"))
-        session.add(ShardRegistry(tenant_id=t2, shard_name=f"shard_{t2}"))
-        session.add(ShardRegistry(tenant_id=t3, shard_name=f"shard_{t3}"))
+        session.add(ShardRegistry(tenant_id=t1, app_id=edi_app.id, shard_id=shard1.id))
+        session.add(ShardRegistry(tenant_id=t2, app_id=edi_app.id, shard_id=shard2.id))
+        session.add(ShardRegistry(tenant_id=t3, app_id=edi_app.id, shard_id=shard3.id))
         await session.commit()
 
     await resolver.resolve(tenant_id=t1)

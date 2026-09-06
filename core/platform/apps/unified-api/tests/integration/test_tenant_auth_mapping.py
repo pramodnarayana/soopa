@@ -39,6 +39,7 @@ async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> N
             subject=generate_id("usr"),
             tenant_id=None,
             authorized_tenants={idp_id},
+            tenant_mapping={idp_id: canonical_id},
             claims={},
             capabilities={Capability.TENANT_ADMIN.value},
         )
@@ -60,4 +61,4 @@ async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> N
 
         # We only care that it returned the identity and didn't raise 403 Forbidden.
         assert identity.subject == raw_identity.subject
-        assert request.state.ucp_tenant_id == idp_id
+        assert request.state.ucp_tenant_id == canonical_id

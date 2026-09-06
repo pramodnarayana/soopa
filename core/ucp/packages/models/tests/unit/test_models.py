@@ -1,5 +1,5 @@
 from outbox.domain.constants import OutboxStatus
-from ucp.domain.constants import LifecycleStatus
+from seedwork.constants import LifecycleStatus
 
 from ucp_models.events import ControlPlaneOutbox
 from ucp_models.sharding import DatabaseShard, ShardRegistry

@@ -6,7 +6,7 @@ authors = [
     {name = "Platform Team", email = "platform@company.com"}
 ]
 requires-python = ">=3.11"
-dependencies = ["sqlalchemy[asyncio]>=2.0.0", "database"]
+dependencies = ["sqlalchemy[asyncio]>=2.0.0", "database", "seedwork"]
 
 [build-system]
 requires = ["hatchling"]
@@ -27,3 +27,4 @@ extend = "../../../../pyproject.toml"
 
 [tool.uv.sources]
 database = { workspace = true }
+seedwork = { workspace = true }

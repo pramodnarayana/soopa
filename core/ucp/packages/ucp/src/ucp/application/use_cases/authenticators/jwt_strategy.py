@@ -96,14 +96,15 @@ class JwtStrategy(AuthenticationStrategyPort):
         # 1. Map the primary tenant_id if present
         if tenant_id and not tenant_id.startswith("ten_"):
             resolved = await repo.find_by_idp_tenant_id(tenant_id)
-            if resolved:
-                tenant_id = resolved.id
-                identity.authorized_tenants.add(resolved.id)
+            if not resolved:
+                raise TenantNotProvisionedError(tenant_id)
+            tenant_id = resolved.id
+            identity.authorized_tenants.add(resolved.id)
 
         # 2. Map all authorized tenants that are IdP IDs
         mapped_tenants = set()
         for tid in identity.authorized_tenants:
-            if not tid.startswith("iam_ten_") and tid != "ten_000000000000000000000000":
+            if not tid.startswith("iam_ten_") and not tid.startswith("ten_"):
                 resolved_t = await repo.find_by_idp_tenant_id(tid)
                 if resolved_t:
                     mapped_tenants.add(resolved_t.id)

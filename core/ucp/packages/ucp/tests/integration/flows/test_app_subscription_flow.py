@@ -94,12 +94,7 @@ async def test_app_subscription_flow(
 
     # 2. Trigger Business Logic (Provision Tenant)
     use_case = ProvisionTenantUseCase(uow=uow)
-    command = ProvisionTenantCommand(
-        name="Stark Industries",
-        admin_first_name="Tony",
-        admin_last_name="Stark",
-        admin_email="tony@stark.com",
-    )
+    command = ProvisionTenantCommand(name="Stark Industries")
 
     tenant = await use_case.execute(command)
 

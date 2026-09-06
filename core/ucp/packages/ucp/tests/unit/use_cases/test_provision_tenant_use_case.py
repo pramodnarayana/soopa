@@ -56,12 +56,7 @@ async def test_provision_tenant_success(
     fake_uow: FakeUcpUnitOfWork,
 ) -> None:
     # Arrange
-    command = ProvisionTenantCommand(
-        name="Test Tenant",
-        admin_first_name="Admin",
-        admin_last_name="User",
-        admin_email="admin@example.com",
-    )
+    command = ProvisionTenantCommand(name="Test Tenant")
 
     # Act
     tenant = await provision_use_case.execute(command, idempotency_key="idemp-1")

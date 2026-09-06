@@ -125,6 +125,25 @@ async def test_jwt_strategy_raises_if_tenant_not_provisioned(jwt_strategy, db_se
 
 
 @pytest.mark.asyncio
+async def test_jwt_strategy_raises_if_primary_tenant_is_not_provisioned(jwt_strategy, db_session):
+    idp_org_id = "unprovisioned_primary_org"
+    strategy = jwt_strategy(
+        TokenClaims(
+            sub="idp_usr",
+            iss="https://zitadel",
+            aud="test",
+            exp=9999999999,
+            tenant_id=idp_org_id,
+            authorized_tenants=set(),
+            roles=[],
+        )
+    )
+
+    with pytest.raises(TenantNotProvisionedError, match=idp_org_id):
+        await strategy.authenticate("mock_token")
+
+
+@pytest.mark.asyncio
 async def test_jwt_strategy_passes_unmapped_claims(jwt_strategy, db_session):
     # If the user has a claim but it's not a platform organization, it should map properly.
     idp_user_id = "idp_usr_789"

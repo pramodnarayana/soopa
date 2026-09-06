@@ -11,8 +11,8 @@ logger = structlog.get_logger(__name__)
 
 
 class ScheduledJobMessage(BaseModel):
-    job_id: str
-    job_name: str
+    job_id: str = Field(min_length=1)
+    job_name: str = Field(min_length=1)
     payload: JsonDict = Field(default_factory=dict)
     correlation_id: str | None = None
 

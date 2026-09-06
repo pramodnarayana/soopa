@@ -174,12 +174,7 @@ async def provision(
             detail="Invalid user identity: creator must be a resolved platform user ID (usr_...)",
         )
 
-    command = ProvisionTenantCommand(
-        name=dto.name,
-        admin_first_name=dto.admin_first_name,
-        admin_last_name=dto.admin_last_name,
-        admin_email=dto.admin_email,
-    )
+    command = ProvisionTenantCommand(name=dto.name)
     tenant = await use_case.execute(command, idempotency_key)
 
     tenant_rm = await query_service.get_tenant_by_id(tenant.id)

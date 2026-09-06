@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 
 from database.models.core import UcpBase
+from seedwork.constants import LifecycleStatus
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
-from ucp.domain.constants import LifecycleStatus
 
 
 class DatabaseShard(UcpBase):

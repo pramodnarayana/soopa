@@ -1,16 +1,13 @@
 from enum import StrEnum
 
+from seedwork.constants import LifecycleStatus as LifecycleStatus
+
 
 class UcpIdPrefix(StrEnum):
     APP = "ucp_app"
     SHARD = "ucp_shard"
     OUTBOX = "ucp_ob"
     WEBHOOK = "ucp_wh"
-
-
-class LifecycleStatus(StrEnum):
-    ACTIVE = "active"
-    INACTIVE = "inactive"
 
 
 class UcpEventType(StrEnum):

@@ -12,12 +12,7 @@ from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 @dataclass(frozen=True, kw_only=True)
 class ProvisionTenantCommand:
-    id: str | None = None
     name: str
-    admin_first_name: str
-    admin_last_name: str
-    admin_email: str
-    subscriptions: list[str] | None = None
 
 
 logger = structlog.get_logger(__name__)
@@ -44,7 +39,6 @@ class ProvisionTenantUseCase:
             "provision_tenant.started",
             tenant_id=local_id,
             tenant_name=command.name,
-            admin_email=command.admin_email,
             base_slug=base_slug,
             idempotency_key=idempotency_key,
         )
