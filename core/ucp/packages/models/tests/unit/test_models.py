@@ -2,7 +2,7 @@ from outbox.domain.constants import OutboxStatus
 from ucp.domain.constants import LifecycleStatus
 
 from ucp_models.events import ControlPlaneOutbox
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
 
 

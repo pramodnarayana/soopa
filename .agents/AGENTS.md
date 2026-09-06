@@ -70,7 +70,7 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Centralized Database Engine & Connection Pooling**: NEVER use `create_async_engine` or `async_sessionmaker` directly inside a bounded context or worker container. ALWAYS import and inject the centralized `DatabaseProvider` from `core/platform/packages/database`.
 
 # Strict Boundary DTOs / Command Objects
-- **Strict DTO Standard**: Every bounded context MUST define a pure `application/dto.py` file to hold its Request/Command/Query objects (as `@dataclass(frozen=True)`).
+- **Co-located CQRS Standard**: Command and Query DTOs (as `@dataclass(frozen=True)`) MUST be co-located directly inside the Use Case file that handles them (e.g., `CreateUserCommand` at the top of `create_user_use_case.py`). Shared queries/responses can be placed in `queries.py` or `responses.py`. Do NOT use a single massive `dto.py` file or arbitrary entity-based folders like `dtos/users.py`.
 - **No Infrastructure Leaks**: NEVER pass web-specific framework models (e.g., FastAPI/Pydantic `BaseModel`) or ORM models directly into the Application Layer (Use Cases/Services).
 - **Adapter Translation**: The HTTP or Event adapter must strictly translate incoming payloads into these pure Command/DTO objects before passing them to the Application Layer.
 

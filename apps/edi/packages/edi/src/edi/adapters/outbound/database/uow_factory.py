@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from database.router import DatabaseRouterPort

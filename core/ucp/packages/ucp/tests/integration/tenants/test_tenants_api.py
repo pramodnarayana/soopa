@@ -12,7 +12,15 @@ from httpx import AsyncClient
 async def test_provision_and_get_tenant(client: AsyncClient) -> "Any":
     # Provision
     name = f"Integration Test Tenant {generate_random_hex(6)}"
-    response = await client.post("/api/v1/tenants", json={"name": name})
+    response = await client.post(
+        "/api/v1/tenants",
+        json={
+            "name": name,
+            "admin_first_name": "Test",
+            "admin_last_name": "Admin",
+            "admin_email": "admin@example.com",
+        },
+    )
     assert response.status_code == 200
 
     data = response.json()
@@ -39,7 +47,15 @@ async def test_update_tenant_name(client: AsyncClient) -> "Any":
     # Provision
     old_name = f"Old Name {generate_random_hex(6)}"
     new_name = f"New Name {generate_random_hex(6)}"
-    response = await client.post("/api/v1/tenants", json={"name": old_name})
+    response = await client.post(
+        "/api/v1/tenants",
+        json={
+            "name": old_name,
+            "admin_first_name": "Test",
+            "admin_last_name": "Admin",
+            "admin_email": "admin@example.com",
+        },
+    )
     tenant_id = response.json()["id"]
 
     # Update Name
@@ -56,7 +72,15 @@ async def test_update_tenant_name(client: AsyncClient) -> "Any":
 async def test_delete_tenant(client: AsyncClient) -> "Any":
     # Provision
     name = f"To Delete {generate_random_hex(6)}"
-    response = await client.post("/api/v1/tenants", json={"name": name})
+    response = await client.post(
+        "/api/v1/tenants",
+        json={
+            "name": name,
+            "admin_first_name": "Test",
+            "admin_last_name": "Admin",
+            "admin_email": "admin@example.com",
+        },
+    )
     tenant_id = response.json()["id"]
 
     # Delete

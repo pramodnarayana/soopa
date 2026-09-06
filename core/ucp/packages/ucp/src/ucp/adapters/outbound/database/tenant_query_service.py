@@ -33,7 +33,7 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
             slug=row.slug,
             idp_tenant_id=row.idp_tenant_id,
             status=typing.cast(
-                typing.Literal["active", "inactive"],
+                typing.Literal[LifecycleStatus.ACTIVE, LifecycleStatus.INACTIVE],
                 row.status,
             ),
             subscriptions=app_slugs,

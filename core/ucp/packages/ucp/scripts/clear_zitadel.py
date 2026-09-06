@@ -146,7 +146,7 @@ async def main() -> None:
             logger.info("Truncated identity.tenants table.")
         finally:
             await conn.close()
-    except Exception as exc:  # noqa: BLE001
+    except (asyncpg.PostgresError, OSError) as exc:
         logger.warning(
             "Could not truncate identity.tenants: %s (safe to ignore if DB is already down).",
             exc,

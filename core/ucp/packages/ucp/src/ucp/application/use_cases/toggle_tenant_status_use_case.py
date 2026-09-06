@@ -5,10 +5,10 @@ from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class ToggleTenantStatusCommand:
     tenant_id: str
-    status: LifecycleStatus
+    is_active: bool
 
 
 class ToggleTenantStatusUseCase:
@@ -26,7 +26,8 @@ class ToggleTenantStatusUseCase:
             if not tenant:
                 raise ResourceNotFoundError("Tenant not found")
 
-            tenant.change_status(command.status)
+            status = LifecycleStatus.ACTIVE if command.is_active else LifecycleStatus.INACTIVE
+            tenant.change_status(status)
             await self._uow.tenant_repo.save(tenant, idempotency_key)
 
             await self._uow.commit()

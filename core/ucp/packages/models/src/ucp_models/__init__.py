@@ -1,5 +1,5 @@
 from .events import ControlPlaneOutbox
-from .infrastructure import DatabaseShard, ShardRegistry
+from .sharding import DatabaseShard, ShardRegistry
 from .subscriptions import App, AppSubscription
 
 __all__ = [

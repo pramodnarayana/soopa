@@ -6,8 +6,8 @@ from seedwork import generate_id, generate_random_hex
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.application.dto import AssignUserRoleRequest
 from ucp.application.use_cases.roles.assign_user_role_use_case import (
+    AssignUserRoleCommand,
     AssignUserRoleUseCase,
 )
 from ucp.domain.exceptions import ResourceNotFoundError
@@ -75,7 +75,7 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
     await db_session.flush()
 
     # 2. Execute Use Case
-    request = AssignUserRoleRequest(user_id=user_id, role_id=role_id)
+    request = AssignUserRoleCommand(user_id=user_id, role_id=role_id)
     await use_case.execute(tenant_id=tenant_id, request=request)
 
     # 3. Verify
@@ -90,7 +90,7 @@ async def test_assign_user_role_not_found(db_session: AsyncSession) -> None:
     use_case = AssignUserRoleUseCase(uow)
 
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    request = AssignUserRoleRequest(user_id="iam_usr_doesnt_exist", role_id="iam_rol_xyz")
+    request = AssignUserRoleCommand(user_id="iam_usr_doesnt_exist", role_id="iam_rol_xyz")
 
     with pytest.raises(ResourceNotFoundError):
         await use_case.execute(tenant_id=tenant_id, request=request)
@@ -135,7 +135,7 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
     )
     await db_session.flush()
 
-    request = AssignUserRoleRequest(user_id=user_id, role_id=role_id)
+    request = AssignUserRoleCommand(user_id=user_id, role_id=role_id)
 
     with pytest.raises(ResourceNotFoundError):
         await use_case.execute(tenant_id=tenant_id, request=request)

@@ -5,11 +5,9 @@ from contextlib import asynccontextmanager
 import pytest
 import pytest_asyncio
 from database.events import EventEnvelope
-from identity.domain.constants import IdentityIdPrefix
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
-from seedwork.utils import generate_id
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App
@@ -17,13 +15,15 @@ from ucp_models.subscriptions import App
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.application.dto import SubscribeAppCommand
 from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
-from ucp.application.use_cases.subscribe_app_use_case import SubscribeAppUseCase
+from ucp.application.use_cases.subscribe_app_use_case import (
+    SubscribeAppCommand,
+    SubscribeAppUseCase,
+)
 from ucp.domain.constants import LifecycleStatus, UcpEventType
 
 pytestmark = pytest.mark.integration
@@ -96,7 +96,9 @@ async def test_app_subscription_flow(
     use_case = ProvisionTenantUseCase(uow=uow)
     command = ProvisionTenantCommand(
         name="Stark Industries",
-        creator_id=generate_id(IdentityIdPrefix.USER),
+        admin_first_name="Tony",
+        admin_last_name="Stark",
+        admin_email="tony@stark.com",
     )
 
     tenant = await use_case.execute(command)
@@ -148,13 +150,10 @@ async def test_app_subscription_flow(
                 payload=raw_event.get("payload", {}),
             )
 
-            try:
-                await dispatcher._dispatch(event)
-                await ackable_msg.ack()
-                if event.event_type == UcpEventType.APP_SUBSCRIBED.value:
-                    found_app_subscribed = True
-            except Exception:  # noqa: BLE001
-                await ackable_msg.nack()
+            await dispatcher.dispatch(raw_event)
+            await ackable_msg.ack()
+            if event.event_type == UcpEventType.APP_SUBSCRIBED.value:
+                found_app_subscribed = True
 
     assert found_app_subscribed, "app.subscribed event was never received from SQS"
 

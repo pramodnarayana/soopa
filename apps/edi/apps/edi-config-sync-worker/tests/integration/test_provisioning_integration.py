@@ -38,7 +38,7 @@ from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
 from edi.domain.enums import EdiEventType
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator

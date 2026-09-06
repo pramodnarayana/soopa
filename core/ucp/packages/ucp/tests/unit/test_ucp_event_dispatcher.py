@@ -21,15 +21,15 @@ from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
         },
     ],
 )
-async def test_dispatch_raw_rejects_malformed_envelopes(payload: dict[str, Any]) -> None:
+async def test_dispatch_rejects_malformed_envelopes(payload: dict[str, Any]) -> None:
     dispatcher = UcpEventDispatcher()
 
     with pytest.raises(ValueError, match="event envelope"):
-        await dispatcher.dispatch_raw(payload)
+        await dispatcher.dispatch(payload)
 
 
 @pytest.mark.asyncio
-async def test_dispatch_raw_accepts_camel_case_envelope_fields() -> None:
+async def test_dispatch_accepts_valid_envelope() -> None:
     dispatcher = UcpEventDispatcher()
     received: list[UcpEventMessage] = []
 
@@ -38,11 +38,11 @@ async def test_dispatch_raw_accepts_camel_case_envelope_fields() -> None:
 
     dispatcher.subscribe("tenant.created", handler)
 
-    await dispatcher.dispatch_raw(
+    await dispatcher.dispatch(
         {
-            "eventId": "event-1",
-            "eventType": "tenant.created",
-            "tenantId": "tenant-1",
+            "id": "event-1",
+            "event_type": "tenant.created",
+            "tenant_id": "tenant-1",
             "payload": {"name": "Example"},
         }
     )

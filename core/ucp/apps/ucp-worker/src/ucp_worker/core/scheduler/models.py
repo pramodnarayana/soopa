@@ -1,9 +1,9 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
 
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 
 
@@ -30,7 +30,7 @@ class AppNamespace(StrEnum):
 @dataclass
 class Job:
     name: str
-    payload: dict[str, Any]
+    payload: JsonDict
     status: JobStatus = JobStatus.PENDING
     target_queue: str | None = None
     app_namespace: str | None = None

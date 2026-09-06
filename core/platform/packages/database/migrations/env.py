@@ -2,7 +2,7 @@ import asyncio
 import os
 from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
 
-import ucp_models.infrastructure  # noqa: F401
+import ucp_models.sharding  # noqa: F401
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool, text

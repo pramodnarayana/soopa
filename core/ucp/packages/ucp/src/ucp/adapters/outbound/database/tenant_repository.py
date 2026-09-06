@@ -15,7 +15,7 @@ from database.models.webhooks import Webhook
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
-from ucp_models.infrastructure import ShardRegistry
+from ucp_models.sharding import ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
 from ucp.domain.constants import LifecycleStatus
@@ -128,9 +128,7 @@ class TenantRepository(TenantRepositoryPort):
             event_name = event.event_name
 
             final_idemp_key = (
-                f"{idempotency_key}_{index}"
-                if idempotency_key
-                else getattr(event, "id", f"{event_name}_{tenant.id}_{index}")
+                f"{idempotency_key}_{index}" if idempotency_key else event.idempotency_key
             )
 
             payload_dict = serialize_domain_event(event)

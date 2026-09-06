@@ -4,8 +4,10 @@ import pytest
 from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
-from ucp.application.dto import UnsubscribeAppCommand
-from ucp.application.use_cases.unsubscribe_app_use_case import UnsubscribeAppUseCase
+from ucp.application.use_cases.unsubscribe_app_use_case import (
+    UnsubscribeAppCommand,
+    UnsubscribeAppUseCase,
+)
 from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
 from ucp.domain.models.tenant import Tenant, TenantSubscription
 from ucp.testing.fakes import FakeUcpUnitOfWork

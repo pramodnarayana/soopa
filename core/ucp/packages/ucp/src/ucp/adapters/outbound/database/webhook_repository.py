@@ -3,6 +3,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from database.models import Webhook as DbWebhook
+from database.outbox_serializer import serialize_domain_event
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import ControlPlaneOutbox
@@ -98,9 +99,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
             event_name = event.event_name
 
             final_idemp_key = (
-                f"{idempotency_key}_{index}"
-                if idempotency_key
-                else getattr(event, "id", f"{event_name}_{webhook.id}_{index}")
+                f"{idempotency_key}_{index}" if idempotency_key else event.idempotency_key
             )
 
             outbox_event = ControlPlaneOutbox(
@@ -108,7 +107,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
                 idempotency_key=final_idemp_key,
                 tenant_id=webhook.tenant_id,
                 event_type=event_name,
-                payload=event.to_dict() if hasattr(event, "to_dict") else {},
+                payload=serialize_domain_event(event),
             )
             self.session.add(outbox_event)
 

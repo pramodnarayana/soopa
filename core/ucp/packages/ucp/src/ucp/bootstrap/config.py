@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     aws_endpoint_url: str | None = None
     aws_region: str = "us-east-1"
     aws_access_key_id: str = "test"
-    aws_secret_access_key: str = "test"  # noqa: S105
+    aws_secret_access_key: str = Field(default="test")
     use_localstack: bool = False
 
     # Daemon / Sweep
@@ -29,17 +29,7 @@ class Settings(BaseSettings):
     # For Zitadel this is the same as the API URL (e.g. http://ucp.localhost:8080).
     zitadel_issuer: str
     # Default password for newly created users (local dev only - users must change on first login)
-    zitadel_default_user_password: str = "Password1!"  # noqa: S105
-
-    # Database
-    database_url: str
-
-    @field_validator("database_url")
-    @classmethod
-    def inject_asyncpg_driver(cls, v: str) -> str:
-        if v and v.startswith("postgresql://"):
-            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return v
+    zitadel_default_user_password: str = Field(default="Password1!")
 
     model_config = SettingsConfigDict(
         env_file=".env",

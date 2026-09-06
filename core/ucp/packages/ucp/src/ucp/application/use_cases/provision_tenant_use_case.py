@@ -9,25 +9,22 @@ from ucp.domain.models.tenant import Tenant
 from ucp.domain.services.slug_service import generate_slug
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
+
+@dataclass(frozen=True, kw_only=True)
+class ProvisionTenantCommand:
+    id: str | None = None
+    name: str
+    admin_first_name: str
+    admin_last_name: str
+    admin_email: str
+    subscriptions: list[str] | None = None
+
+
 logger = structlog.get_logger(__name__)
 
 # Maximum number of slug variants to try before giving up.
 # e.g. "acme-corp", "acme-corp-2", ..., "acme-corp-10"
 _MAX_SLUG_ATTEMPTS = 10
-
-
-@dataclass(frozen=True)
-class ProvisionTenantCommand:
-    """
-    Immutable command object carrying the intent to provision a new tenant.
-
-    This is a pure application-layer concept with no dependency on HTTP or
-    serialisation frameworks. Routers map their HTTP DTOs into this command
-    before invoking the use case.
-    """
-
-    name: str
-    creator_id: str
 
 
 class ProvisionTenantUseCase:
@@ -47,7 +44,7 @@ class ProvisionTenantUseCase:
             "provision_tenant.started",
             tenant_id=local_id,
             tenant_name=command.name,
-            creator_id=command.creator_id,
+            admin_email=command.admin_email,
             base_slug=base_slug,
             idempotency_key=idempotency_key,
         )

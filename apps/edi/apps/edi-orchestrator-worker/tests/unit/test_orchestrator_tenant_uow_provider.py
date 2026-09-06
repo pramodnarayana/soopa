@@ -7,7 +7,7 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from edi.config.settings import get_settings
 from seedwork import generate_id
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 
 
 @pytest.mark.integration

@@ -1,8 +1,8 @@
 import asyncio
 from collections.abc import Callable
-from typing import Any
 
 import structlog
+from seedwork.domain.types import JsonDict
 
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 
@@ -17,22 +17,22 @@ class UcpEventDispatcher:
 
     def __init__(self) -> None:
         # Route mapping: event_type -> list of async handlers
-        self._handlers: dict[str, list[Callable[[UcpEventMessage], Any]]] = {}
+        self._handlers: dict[str, list[Callable[[UcpEventMessage], object]]] = {}
 
-    def subscribe(self, event_type: str, handler: Callable[[UcpEventMessage], Any]) -> None:
+    def subscribe(self, event_type: str, handler: Callable[[UcpEventMessage], object]) -> None:
         """Register a handler for a specific domain event type."""
         if event_type not in self._handlers:
             self._handlers[event_type] = []
         self._handlers[event_type].append(handler)
 
-    async def dispatch_raw(self, payload: dict[str, Any]) -> None:
+    async def dispatch(self, payload: JsonDict) -> None:
         """Entrypoint called by the SqsConsumerManager."""
         if not isinstance(payload, dict):
             raise TypeError("UCP event envelope must be a dictionary")
 
-        event_id = str(payload.get("eventId") or payload.get("id") or "").strip()
-        event_type = str(payload.get("eventType") or payload.get("event_type") or "").strip()
-        tenant_id = str(payload.get("tenantId") or payload.get("tenant_id") or "").strip()
+        event_id = str(payload.get("id", "")).strip()
+        event_type = str(payload.get("event_type", "")).strip()
+        tenant_id = str(payload.get("tenant_id", "")).strip()
         event_payload = payload.get("payload")
 
         if not event_id or not event_type or not tenant_id or not isinstance(event_payload, dict):
@@ -46,9 +46,7 @@ class UcpEventDispatcher:
             tenant_id=tenant_id,
             payload=event_payload,
         )
-        await self._dispatch(event)
 
-    async def _dispatch(self, event: UcpEventMessage) -> None:
         handlers = self._handlers.get(event.event_type, [])
         if not handlers:
             logger.debug("no_handlers_registered_for_event", event_type=event.event_type)

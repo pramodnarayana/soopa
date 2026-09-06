@@ -1,10 +1,9 @@
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
 
 import structlog
-from database.provider import get_async_engine
+from database.provider import DatabaseProvider
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
@@ -12,7 +11,6 @@ from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.postgres_ucp_audit_log_cleanup_repository import (
@@ -31,6 +29,7 @@ from ucp.application.use_cases.ucp_audit_log_cleanup_use_case import UcpAuditLog
 from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
 from ucp.bootstrap.config import get_settings
 from ucp.domain.constants import UcpEventType
+from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 from ucp_worker.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
@@ -51,20 +50,13 @@ class WorkerContainer:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.database_url = os.environ.get("DATABASE_URL", "")
-        if self.database_url.startswith("postgresql://"):
-            self.database_url = self.database_url.replace(
-                "postgresql://", "postgresql+asyncpg://", 1
-            )
-
-        self._engine = get_async_engine(self.database_url)
-        self.session_factory = async_sessionmaker(
-            self._engine, expire_on_commit=False, class_=AsyncSession
-        )
+        self.db_provider = DatabaseProvider.from_url(self.database_url)
+        self.session_factory = self.db_provider.session_factory
 
         self.registry: JobHandlerRegistry | None = None
         self.outbox_relay: PostgresOutboxRelay | None = None
         self.events_dispatcher: UcpEventDispatcher | None = None
-        self.events_consumer: Any | None = None
+        self.events_consumer: SqsConsumerManager | None = None
 
     def wire(self) -> None:
         outbox_repo = PostgresOutboxRepository(self.session_factory)
@@ -124,15 +116,13 @@ class WorkerContainer:
         consumer: UcpEventDispatcher,
         tenant_deleted_handler: TenantDeletedEventHandler,
     ) -> None:
-        async def tenant_deleted_event_handler(event: Any) -> None:
+        async def tenant_deleted_event_handler(event: UcpEventMessage) -> None:
             payload = event.payload
-            tenant_id = payload.get("tenant_id") or getattr(event, "tenant_id", None)
+            tenant_id = payload.get("tenant_id") or event.tenant_id
             if tenant_id:
-                await tenant_deleted_handler.handle(tenant_id)
+                await tenant_deleted_handler.handle(str(tenant_id))
             else:
-                logger.error(
-                    "tenant_deleted_missing_tenant_id", event_id=getattr(event, "id", None)
-                )
+                logger.error("tenant_deleted_missing_tenant_id", event_id=event.id)
 
         consumer.subscribe(UcpEventType.TENANT_DELETED.value, tenant_deleted_event_handler)
 
@@ -161,9 +151,9 @@ class WorkerContainer:
         self.events_consumer = SqsConsumerManager(
             consumer=ucp_identity_sync_consumer,
             queue_name="ucp-events.fifo",
-            handler=self.events_dispatcher.dispatch_raw,
+            handler=self.events_dispatcher.dispatch,
         )
 
     async def dispose(self) -> None:
-        if self._engine:
-            await self._engine.dispose()
+        if self.db_provider:
+            await self.db_provider.close()

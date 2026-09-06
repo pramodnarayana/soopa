@@ -7,7 +7,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp_models.events import ControlPlaneOutbox
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
 
 pytestmark = pytest.mark.integration

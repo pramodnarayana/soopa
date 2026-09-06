@@ -3,7 +3,7 @@ import contextlib
 from database.models.identity import Tenant
 from database.router import DatabaseRouter
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from config_sync_worker.domain.constants import EDI_APP_SLUG

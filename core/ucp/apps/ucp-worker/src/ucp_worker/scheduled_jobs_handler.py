@@ -1,33 +1,44 @@
-from typing import Any
+from typing import cast
 
 import structlog
+from pydantic import BaseModel, Field, ValidationError
+from seedwork.domain.types import JsonDict
 
+from ucp_worker.core.job_registry import JobHandlerRegistry
 from ucp_worker.core.scheduler.models import Job
 
 logger = structlog.get_logger(__name__)
 
 
-async def process_scheduled_job(message: dict[str, Any], **kwargs: Any) -> None:
+class ScheduledJobMessage(BaseModel):
+    job_id: str
+    job_name: str
+    payload: JsonDict = Field(default_factory=dict)
+    correlation_id: str | None = None
+
+
+async def process_scheduled_job(message: JsonDict, **kwargs: object) -> None:
     """
     Generic dispatcher for scheduled jobs.
     It requires a 'registry' to be passed in via **kwargs.
     """
-    job_id = message.get("job_id")
-    job_name = message.get("job_name")
-    job_payload = message.get("payload", {})
-
-    if not job_id or not job_name:
-        logger.error(
-            "missing_job_identifier",
+    try:
+        job_msg = ScheduledJobMessage.model_validate(message)
+    except ValidationError:
+        logger.exception(
+            "invalid_scheduled_job_message",
             available_keys=list(message.keys()),
-            payload_size=len(str(job_payload)),
             correlation_id=message.get("correlation_id"),
         )
         return
 
+    job_id = job_msg.job_id
+    job_name = job_msg.job_name
+    job_payload = job_msg.payload
+
     logger.info("processing_scheduled_job", job_name=job_name, job_id=job_id)
 
-    registry = kwargs.get("registry")
+    registry = cast(JobHandlerRegistry | None, kwargs.get("registry"))
     if not registry:
         logger.error("job_handler_registry_missing_in_kwargs")
         return

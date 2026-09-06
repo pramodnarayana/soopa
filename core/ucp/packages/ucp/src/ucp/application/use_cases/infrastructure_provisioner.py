@@ -3,6 +3,7 @@ from contextlib import AbstractAsyncContextManager
 
 import structlog
 
+from ucp.domain.constants import LifecycleStatus
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
@@ -41,8 +42,7 @@ class InfrastructureProvisioner:
                     logger.error("app_subscribed_missing_app_id", event_id=event_id)
                     return
 
-                # Look up the App ID strictly
-                app = await uow.app_repo.find_by_id(app_id_from_event)
+                app = await uow.app_repo.find_by_id(str(app_id_from_event))
                 if not app:
                     logger.error(
                         "app_subscribed_unknown_app_id",
@@ -52,7 +52,9 @@ class InfrastructureProvisioner:
                     return
 
                 # Upsert the AppSubscription to 'active'
-                await uow.tenant_repo.upsert_app_subscription(tenant_id, app.id, "active")
+                await uow.tenant_repo.upsert_app_subscription(
+                    tenant_id, app.id, LifecycleStatus.ACTIVE.value
+                )
 
                 # Allocate Database Shard (Hardcoded to edi_shard_1 for now)
                 shard_id = "edi_shard_1"
@@ -87,8 +89,7 @@ class InfrastructureProvisioner:
                     logger.error("app_unsubscribed_missing_app_id", event_id=event_id)
                     return
 
-                # Look up the App ID strictly
-                app = await uow.app_repo.find_by_id(app_id_from_event)
+                app = await uow.app_repo.find_by_id(str(app_id_from_event))
                 if not app:
                     logger.error(
                         "app_unsubscribed_unknown_app_id",

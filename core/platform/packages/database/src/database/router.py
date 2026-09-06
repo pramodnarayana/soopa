@@ -1,5 +1,5 @@
 from sqlalchemy import select, text
-from ucp_models.infrastructure import DatabaseShard
+from ucp_models.sharding import DatabaseShard
 
 from database.constants import DatabaseShardStatus
 

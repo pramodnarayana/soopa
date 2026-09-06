@@ -34,8 +34,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator
 from ucp.domain.constants import LifecycleStatus
-from ucp_models.infrastructure import DatabaseShard as UcpDatabaseShard
-from ucp_models.infrastructure import ShardRegistry as UcpShardRegistry
+from ucp_models.sharding import DatabaseShard as UcpDatabaseShard
+from ucp_models.sharding import ShardRegistry as UcpShardRegistry
 from ucp_models.subscriptions import App as UcpApp
 from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
 

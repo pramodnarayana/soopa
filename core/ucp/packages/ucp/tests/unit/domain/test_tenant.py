@@ -5,6 +5,7 @@ from identity.domain.constants import IdentityIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.domain.events import TenantDeletedEvent
+from ucp.domain.exceptions import StateConflictError
 from ucp.domain.models.tenant import Tenant
 
 
@@ -35,5 +36,5 @@ def test_tenant_mark_deleted_already_deleted() -> None:
     )
     tenant.mark_deleted()
 
-    with pytest.raises(ValueError, match="already been deleted"):
+    with pytest.raises(StateConflictError, match="already been deleted"):
         tenant.mark_deleted()

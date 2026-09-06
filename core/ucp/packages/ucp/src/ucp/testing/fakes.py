@@ -153,7 +153,7 @@ class DummyAppRepository(AppRepositoryPort):
         return self.apps
 
     async def find_by_id(self, app_id: str) -> Any | None:
-        return next((a for a in self.apps if getattr(a, "id", None) == app_id), None)
+        return next((a for a in self.apps if a.id == app_id), None)
 
 
 class DummyWebhookRepository(WebhookRepositoryPort):

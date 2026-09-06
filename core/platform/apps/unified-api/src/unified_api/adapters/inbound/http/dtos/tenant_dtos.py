@@ -14,6 +14,9 @@ class ProvisionTenantRequest(BaseModel):
     """Request body for POST /tenants/."""
 
     name: str = Field(..., min_length=1, description="Human-readable name for the new tenant.")
+    admin_first_name: str = Field(..., description="First name of the tenant administrator")
+    admin_last_name: str = Field(..., description="Last name of the tenant administrator")
+    admin_email: str = Field(..., description="Email address of the tenant administrator")
 
 
 class UpdateTenantNameRequest(BaseModel):

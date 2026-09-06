@@ -1,12 +1,11 @@
 from dataclasses import dataclass
-from typing import Any
 
 from seedwork.events import DomainEvent
 
 from ucp.domain.constants import UcpEventType
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RoleCreatedEvent(DomainEvent):
     role_id: str
     name: str
@@ -23,7 +22,7 @@ class RoleCreatedEvent(DomainEvent):
         return None  # Global event
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UserRoleAssignedEvent(DomainEvent):
     user_id: str
     role_id: str
@@ -39,7 +38,7 @@ class UserRoleAssignedEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class TenantProvisionedEvent(DomainEvent):
     tenant_id: str
     tenant_name: str
@@ -56,7 +55,7 @@ class TenantProvisionedEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AppSubscribedEvent(DomainEvent):
     tenant_id: str
     app_id: str
@@ -69,7 +68,7 @@ class AppSubscribedEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AppUnsubscribedEvent(DomainEvent):
     tenant_id: str
     app_id: str
@@ -82,7 +81,7 @@ class AppUnsubscribedEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class TenantNameUpdatedEvent(DomainEvent):
     org_id: str
     name: str
@@ -95,7 +94,7 @@ class TenantNameUpdatedEvent(DomainEvent):
         return self.org_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class TenantStatusToggledEvent(DomainEvent):
     org_id: str
     active: bool
@@ -108,7 +107,7 @@ class TenantStatusToggledEvent(DomainEvent):
         return self.org_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class TenantDeletedEvent(DomainEvent):
     org_id: str
 
@@ -120,7 +119,7 @@ class TenantDeletedEvent(DomainEvent):
         return self.org_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UserUpdatedEvent(DomainEvent):
     idp_user_id: str
     tenant_id: str
@@ -136,7 +135,7 @@ class UserUpdatedEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UserStatusToggledEvent(DomainEvent):
     idp_user_id: str
     tenant_id: str
@@ -150,7 +149,7 @@ class UserStatusToggledEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UserDeletedEvent(DomainEvent):
     idp_user_id: str
 
@@ -162,7 +161,7 @@ class UserDeletedEvent(DomainEvent):
         return None  # Global event
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UserMembershipRemovedEvent(DomainEvent):
     idp_user_id: str
     tenant_id: str
@@ -175,7 +174,7 @@ class UserMembershipRemovedEvent(DomainEvent):
         return self.tenant_id
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class WebhookCreatedEvent(DomainEvent):
     """
     Emitted when a new Webhook is created.
@@ -192,15 +191,8 @@ class WebhookCreatedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "tenant_id": self.tenant_id,
-            "webhook_id": self.webhook_id,
-            "event_type": self.event_type,
-        }
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class WebhookUpdatedEvent(DomainEvent):
     """
     Emitted when a Webhook is updated.
@@ -217,15 +209,8 @@ class WebhookUpdatedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "tenant_id": self.tenant_id,
-            "webhook_id": self.webhook_id,
-            "event_type": self.event_type,
-        }
 
-
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class WebhookDeletedEvent(DomainEvent):
     """
     Emitted when a Webhook is deleted.
@@ -241,10 +226,3 @@ class WebhookDeletedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "tenant_id": self.tenant_id,
-            "webhook_id": self.webhook_id,
-            "event_type": self.event_type,
-        }

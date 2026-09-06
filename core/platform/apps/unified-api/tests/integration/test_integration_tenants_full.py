@@ -22,7 +22,15 @@ async def test_tenants_full_crud(auth_client: httpx.AsyncClient, seeded_api_toke
     assert len(roles) > 0
 
     # 3. Provision a new tenant
-    res = await auth_client.post("/api/v1/tenants", json={"name": "Integration Test Tenant"})
+    res = await auth_client.post(
+        "/api/v1/tenants",
+        json={
+            "name": "Integration Test Tenant",
+            "admin_first_name": "Admin",
+            "admin_last_name": "Test",
+            "admin_email": "admin@integration.test",
+        },
+    )
     assert res.status_code == 200
     new_tenant = res.json()
     tenant_id = new_tenant["id"]

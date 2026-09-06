@@ -3,7 +3,7 @@ from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from seedwork import generate_id
 from sqlalchemy import text
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 
 
 @pytest.mark.integration

@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, Protocol
 
+from ucp.domain.constants import LifecycleStatus
+
 
 @dataclass(frozen=True)
 class TenantReadModel:
@@ -9,7 +11,7 @@ class TenantReadModel:
     name: str
     slug: str
     idp_tenant_id: str | None
-    status: Literal["active", "inactive"]
+    status: Literal[LifecycleStatus.ACTIVE, LifecycleStatus.INACTIVE]
     subscriptions: list[str]  # List of application slugs
     created_at: datetime
     updated_at: datetime

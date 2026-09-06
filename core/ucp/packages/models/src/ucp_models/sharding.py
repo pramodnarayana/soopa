@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from database.models.core import UcpBase
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import LifecycleStatus
 
 
 class DatabaseShard(UcpBase):
@@ -20,7 +21,9 @@ class DatabaseShard(UcpBase):
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=LifecycleStatus.ACTIVE.value
+    )
 
 
 class ShardRegistry(UcpBase):
@@ -43,4 +46,6 @@ class ShardRegistry(UcpBase):
         default=lambda: datetime.now(UTC).replace(tzinfo=None),
         onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
     )
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=LifecycleStatus.ACTIVE.value
+    )

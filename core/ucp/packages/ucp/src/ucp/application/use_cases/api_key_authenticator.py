@@ -2,7 +2,7 @@ import hashlib
 import hmac
 
 import structlog
-from fastapi import HTTPException, status
+from identity.application.authenticate_use_case import AuthenticationError
 from identity.domain.identity_context import M2M_API_KEY_PREFIX, IdentityContext
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 
@@ -22,20 +22,12 @@ async def authenticate_api_key(
     Validates an M2M API token and returns a Machine IdentityContext.
     """
     if not token.startswith(M2M_API_KEY_PREFIX):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="APIKEY_INVALID_PREFIX",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError("APIKEY_INVALID_PREFIX")
 
     stripped_token = token.removeprefix(M2M_API_KEY_PREFIX)
     parts = stripped_token.rsplit(".", 1)
     if len(parts) != 2:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="APIKEY_INVALID_FORMAT",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError("APIKEY_INVALID_FORMAT")
 
     client_id, client_secret = parts[0], parts[1]
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
@@ -52,11 +44,7 @@ async def authenticate_api_key(
         logger.warning(
             "API key authentication failed for client_id={client_id}", client_id=client_id
         )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="APIKEY_INVALID_OR_REVOKED",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise AuthenticationError("APIKEY_INVALID_OR_REVOKED")
 
     tenant_id = token_record.tenant_id
 

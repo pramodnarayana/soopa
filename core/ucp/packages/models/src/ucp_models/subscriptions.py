@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from database.models.core import UcpBase
 from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import LifecycleStatus
 
 
 class App(UcpBase):
@@ -36,7 +37,9 @@ class AppSubscription(UcpBase):
         String(128), ForeignKey("ucp.apps.id", ondelete="CASCADE"), primary_key=True
     )
     tier: Mapped[str] = mapped_column(String(50), nullable=False, default="standard")
-    status: Mapped[str] = mapped_column(String(50), nullable=False, default="active")
+    status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default=LifecycleStatus.ACTIVE.value
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None)
     )

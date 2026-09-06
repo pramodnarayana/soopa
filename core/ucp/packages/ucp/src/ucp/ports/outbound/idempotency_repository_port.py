@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any
+
+from seedwork.domain.types import JsonDict
 
 
 class IdempotencyRepositoryPort(ABC):
     @abstractmethod
     async def get_result(
         self, tenant_id: str, idempotency_key: str
-    ) -> tuple[bool, dict[str, Any] | None, int | None]:
+    ) -> tuple[bool, JsonDict | None, int | None]:
         """
         Retrieves the result of an idempotent operation.
         Returns a tuple: (is_completed, response_body, response_status_code)
@@ -18,7 +19,7 @@ class IdempotencyRepositoryPort(ABC):
         self,
         tenant_id: str,
         idempotency_key: str,
-        response_body: dict[str, Any],
+        response_body: JsonDict,
         response_status_code: int,
     ) -> None:
         """

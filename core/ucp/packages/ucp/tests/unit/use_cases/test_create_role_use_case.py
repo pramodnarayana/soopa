@@ -3,8 +3,10 @@ from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.authorization import Capability
 from seedwork.utils import generate_id
 
-from ucp.application.dto import CreateRoleRequest
-from ucp.application.use_cases.roles.create_role_use_case import CreateRoleUseCase
+from ucp.application.use_cases.roles.create_role_use_case import (
+    CreateRoleCommand,
+    CreateRoleUseCase,
+)
 from ucp.domain.exceptions import InvalidCapabilityError
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
@@ -22,7 +24,7 @@ def use_case(fake_uow: FakeUcpUnitOfWork) -> CreateRoleUseCase:
 @pytest.mark.asyncio
 async def test_create_role_success(use_case: CreateRoleUseCase, fake_uow: FakeUcpUnitOfWork):
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    request = CreateRoleRequest(
+    request = CreateRoleCommand(
         name="Custom Role",
         description="A role with read access.",
         capabilities=[Capability.INVOICES_READ.value, Capability.USERS_READ.value],
@@ -46,7 +48,7 @@ async def test_create_role_invalid_capability(
     use_case: CreateRoleUseCase, fake_uow: FakeUcpUnitOfWork
 ):
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    request = CreateRoleRequest(
+    request = CreateRoleCommand(
         name="Custom Role",
         capabilities=["invalid:capability"],
     )
@@ -62,7 +64,7 @@ async def test_create_role_invalid_capability(
 async def test_create_platform_role_success(
     use_case: CreateRoleUseCase, fake_uow: FakeUcpUnitOfWork
 ):
-    request = CreateRoleRequest(
+    request = CreateRoleCommand(
         name="Platform Auditor",
         description="Global auditor with read access to tenants.",
         capabilities=[Capability.PLATFORM_ADMIN.value],

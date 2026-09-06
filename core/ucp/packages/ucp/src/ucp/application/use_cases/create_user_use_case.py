@@ -11,7 +11,7 @@ from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 logger = structlog.get_logger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CreateUserCommand:
     tenant_id: str
     email: str

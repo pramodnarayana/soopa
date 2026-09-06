@@ -5,13 +5,14 @@ import structlog
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
-logger = structlog.get_logger(__name__)
 
-
-@dataclass
+@dataclass(frozen=True, kw_only=True)
 class UpdateTenantNameCommand:
     tenant_id: str
     name: str
+
+
+logger = structlog.get_logger(__name__)
 
 
 class UpdateTenantNameUseCase:

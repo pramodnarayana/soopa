@@ -95,7 +95,7 @@ async def test_ucp_worker_handles_tenant_deleted_event(
 
     # 4. Dispatch directly to bypass SQS connection polling and threading issues in tests
     try:
-        await container.events_dispatcher.dispatch_raw(payload)
+        await container.events_dispatcher.dispatch(payload)
 
         # 5. Verify Soft Deletion
         async with db_session_factory() as session:
