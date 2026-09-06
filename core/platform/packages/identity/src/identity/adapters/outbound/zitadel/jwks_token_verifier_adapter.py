@@ -2,7 +2,6 @@ import asyncio
 import hashlib
 import time
 from dataclasses import dataclass, fields
-from typing import cast
 
 import httpx
 import jwt
@@ -149,6 +148,9 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             response.raise_for_status()
             userinfo = response.json()
 
+        if not isinstance(userinfo, dict):
+            raise ValueError("userinfo response must be a JSON object")
+
         # Update cache
         self._userinfo_cache[jti] = (userinfo, now)
 
@@ -159,4 +161,4 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             oldest_key = next(iter(self._userinfo_cache))
             del self._userinfo_cache[oldest_key]
 
-        return cast(JsonDict, userinfo)
+        return userinfo

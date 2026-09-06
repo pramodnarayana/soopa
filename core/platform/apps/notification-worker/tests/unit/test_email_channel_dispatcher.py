@@ -103,6 +103,22 @@ async def test_email_dispatcher_missing_payload():
 
 
 @pytest.mark.asyncio
+async def test_email_dispatcher_rejects_truthy_non_dictionary_payload():
+    strategy = FakeEmailStrategy()
+    dispatcher = EmailChannelDispatcher(email_strategy=strategy)
+
+    body = {
+        "event_type": "email.requested",
+        "tenant_id": "tenant-1",
+        "payload": "not-a-dictionary",
+    }
+
+    await dispatcher.dispatch_raw(body)
+
+    assert len(strategy.delivered) == 0
+
+
+@pytest.mark.asyncio
 async def test_email_dispatcher_missing_tenant_id():
     strategy = FakeEmailStrategy()
     dispatcher = EmailChannelDispatcher(email_strategy=strategy)

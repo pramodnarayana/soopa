@@ -48,25 +48,35 @@ class NotificationEventDispatcher:
         #       }
         #   }
         # }
-        envelope_payload = cast(JsonDict, body.get("payload"))
-        event_wrapper = cast(JsonDict, envelope_payload.get("event") if envelope_payload else None)
-        if not event_wrapper:
+        raw_envelope_payload = body.get("payload")
+        if not isinstance(raw_envelope_payload, dict):
+            logger.error(
+                "notification_sqs_message_invalid_payload",
+                event_type=top_level_event_type,
+                body_keys=list(body.keys()),
+            )
+            return
+        envelope_payload = raw_envelope_payload
+
+        raw_event_wrapper = envelope_payload.get("event")
+        if not isinstance(raw_event_wrapper, dict):
             logger.error(
                 "notification_sqs_message_missing_event_key",
                 event_type=top_level_event_type,
                 body_keys=list(body.keys()),
             )
             return
+        event_wrapper = raw_event_wrapper
 
-        payload = cast(JsonDict, event_wrapper.get("payload"))
-        if not payload:
+        raw_payload = event_wrapper.get("payload")
+        if not isinstance(raw_payload, dict):
             logger.error(
                 "notification_sqs_message_missing_payload_key",
                 event_type=top_level_event_type,
             )
             return
+        payload = raw_payload
 
-        # Ensure tenant_id is available in the payload if not already there
         # Ensure tenant_id is available in the payload if not already there
         if "tenant_id" not in payload and "tenant_id" in event_wrapper:
             payload["tenant_id"] = event_wrapper["tenant_id"]

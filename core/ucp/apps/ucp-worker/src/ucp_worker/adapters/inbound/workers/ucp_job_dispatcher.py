@@ -23,7 +23,7 @@ class UcpJobDispatcher:
 
     async def dispatch(self, message: dict[str, Any]) -> None:
         job_name = message.get("job_name", "")
-        handler = self._handlers.get(job_name)
+        handler = self._handlers.get(job_name) if isinstance(job_name, str) else None
         if handler is None:
             logger.error("ucp_unknown_job_name", job_name=job_name)
             raise ValueError(f"Unknown UCP job name: {job_name}")

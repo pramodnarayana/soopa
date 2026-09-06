@@ -63,6 +63,7 @@ class NotificationDispatch(AggregateRoot):
         data: JsonDict,
         idempotency_key: str,
     ) -> "NotificationDispatch":
+        target_user_id = data.get("user_id") or data.get("target_user_id")
         dispatch = cls(
             id=idempotency_key,
             tenant_id=tenant_id,
@@ -70,7 +71,7 @@ class NotificationDispatch(AggregateRoot):
             subject=subject,
             body=body,
             data=data,
-            target_user_id=str(data.get("user_id")) if data.get("user_id") else None,
+            target_user_id=str(target_user_id) if target_user_id else None,
         )
         dispatch.add_domain_event(
             NotificationDispatchedEvent(

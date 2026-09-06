@@ -80,6 +80,36 @@ async def test_dispatcher_handles_missing_payload():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"event_type": "notification.requested", "payload": "invalid"},
+        {"event_type": "notification.requested", "payload": {"event": "invalid"}},
+        {
+            "event_type": "notification.requested",
+            "payload": {
+                "event": {
+                    "event_type": "invoice.paid",
+                    "tenant_id": "t1",
+                    "payload": "invalid",
+                }
+            },
+        },
+    ],
+)
+async def test_dispatcher_rejects_non_dictionary_nested_objects(body):
+    use_case = FakeDispatchUseCase()
+    dispatcher = NotificationEventDispatcher(
+        notification_compiler=use_case,
+        cleanup_job_handler=AsyncMock(),
+    )
+
+    await dispatcher.dispatch_raw(body)
+
+    assert use_case.events == []
+
+
+@pytest.mark.asyncio
 async def test_dispatcher_sweeper_job():
     use_case = FakeDispatchUseCase()
     cleanup_mock = AsyncMock()

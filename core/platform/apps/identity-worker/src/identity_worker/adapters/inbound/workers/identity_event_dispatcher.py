@@ -1,4 +1,4 @@
-import asyncio
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import cast
 
@@ -57,7 +57,7 @@ class IdentityEventDispatcher:
         for handler in handlers:
             try:
                 result = handler(event)
-                if asyncio.iscoroutine(result) or asyncio.isfuture(result):
+                if inspect.isawaitable(result):
                     await result
             except Exception:
                 handler_name = getattr(handler, "__name__", repr(handler))

@@ -5,6 +5,7 @@ from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
+import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -120,3 +121,36 @@ async def test_verify_expired_token(
 
     with pytest.raises(TokenValidationError, match="Signature has expired"):
         await verifier.verify(token)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("userinfo", [None, 42, [], "invalid"])
+async def test_get_cached_userinfo_rejects_non_object_json(
+    monkeypatch, verifier: ZitadelTokenVerifierPort, userinfo: object
+) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> object:
+            return userinfo
+
+    class FakeAsyncClient:
+        def __init__(self, timeout: float) -> None:
+            self.timeout = timeout
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict[str, str]) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(ValueError, match="userinfo response must be a JSON object"):
+        await verifier._get_cached_userinfo("token", "jti")
+
+    assert "jti" not in verifier._userinfo_cache

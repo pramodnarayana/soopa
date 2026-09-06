@@ -77,9 +77,18 @@ async def _graceful_shutdown(
     container: Container,
 ) -> None:
     logger.info("Stopping workers...")
-    await outbox_listener.stop()
-    await consumer.stop()
-    await email_worker.stop()
+    cleanup_errors: list[BaseException] = []
+
+    for worker_name, stop in (
+        ("outbox_listener", outbox_listener.stop),
+        ("consumer", consumer.stop),
+        ("email_worker", email_worker.stop),
+    ):
+        try:
+            await stop()
+        except BaseException as exc:
+            cleanup_errors.append(exc)
+            logger.exception("worker_stop_failed", worker=worker_name)
 
     try:
         tasks_to_wait = []
@@ -91,9 +100,19 @@ async def _graceful_shutdown(
             await asyncio.wait_for(asyncio.gather(*tasks_to_wait), timeout=5.0)
     except TimeoutError:
         logger.warning("Tasks did not shut down gracefully")
+    except BaseException as exc:
+        cleanup_errors.append(exc)
+        logger.exception("worker_task_shutdown_failed")
 
-    await cast(Awaitable[None], container.shutdown_resources())
-    logger.info("Container resources shut down successfully.")
+    try:
+        await cast(Awaitable[None], container.shutdown_resources())
+        logger.info("Container resources shut down successfully.")
+    except BaseException as exc:
+        cleanup_errors.append(exc)
+        logger.exception("container_resource_shutdown_failed")
+
+    if cleanup_errors:
+        raise cleanup_errors[0]
 
 
 async def run_consumer(
@@ -140,8 +159,16 @@ async def run_consumer(
     if email_worker.task:
         tasks.append(email_worker.task)
 
-    await _wait_and_handle_errors(tasks, shutdown_task)
-    await _graceful_shutdown(outbox_listener, consumer, email_worker, container)
+    try:
+        await _wait_and_handle_errors(tasks, shutdown_task)
+    finally:
+        active_exception = sys.exception()
+        try:
+            await _graceful_shutdown(outbox_listener, consumer, email_worker, container)
+        except BaseException:
+            if active_exception is None:
+                raise
+            logger.exception("graceful_shutdown_failed_after_worker_error")
 
 
 if __name__ == "__main__":

@@ -14,12 +14,7 @@ async def test_provision_and_get_tenant(client: AsyncClient) -> "Any":
     name = f"Integration Test Tenant {generate_random_hex(6)}"
     response = await client.post(
         "/api/v1/tenants",
-        json={
-            "name": name,
-            "admin_first_name": "Test",
-            "admin_last_name": "Admin",
-            "admin_email": "admin@example.com",
-        },
+        json={"name": name},
     )
     assert response.status_code == 200
 
@@ -49,12 +44,7 @@ async def test_update_tenant_name(client: AsyncClient) -> "Any":
     new_name = f"New Name {generate_random_hex(6)}"
     response = await client.post(
         "/api/v1/tenants",
-        json={
-            "name": old_name,
-            "admin_first_name": "Test",
-            "admin_last_name": "Admin",
-            "admin_email": "admin@example.com",
-        },
+        json={"name": old_name},
     )
     tenant_id = response.json()["id"]
 
@@ -74,12 +64,7 @@ async def test_delete_tenant(client: AsyncClient) -> "Any":
     name = f"To Delete {generate_random_hex(6)}"
     response = await client.post(
         "/api/v1/tenants",
-        json={
-            "name": name,
-            "admin_first_name": "Test",
-            "admin_last_name": "Admin",
-            "admin_email": "admin@example.com",
-        },
+        json={"name": name},
     )
     tenant_id = response.json()["id"]
 

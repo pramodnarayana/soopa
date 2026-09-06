@@ -34,10 +34,14 @@ class EmailChannelDispatcher:
             )
             return
 
-        payload = cast(JsonDict, body.get("payload"))
-        if not payload:
+        raw_payload = body.get("payload")
+        if not raw_payload:
             logger.error("SQS message missing 'payload' dictionary")
             return
+        if not isinstance(raw_payload, dict):
+            logger.error("SQS message 'payload' must be a dictionary")
+            return
+        payload = raw_payload
 
         tenant_id = cast(str | None, body.get("tenant_id"))
         if not tenant_id:
