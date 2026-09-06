@@ -4,9 +4,9 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from outbox.domain.constants import OutboxStatus
-from pubsub.events import EventEnvelope
 from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.events import EventEnvelope
 from seedwork.utils import generate_id, generate_random_hex
 from sqlalchemy import CursorResult, or_, text, update
 from sqlalchemy.dialects.postgresql import insert

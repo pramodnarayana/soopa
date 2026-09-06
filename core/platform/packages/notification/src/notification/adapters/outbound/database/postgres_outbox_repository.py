@@ -7,7 +7,7 @@ from typing import cast
 import structlog
 from database.models.notifications import NotificationOutbox
 from outbox.domain.constants import OutboxStatus
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 from sqlalchemy import case, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -6,8 +6,8 @@ import pytest
 import pytest_asyncio
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from pubsub.events import EventEnvelope
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
+from seedwork.events import EventEnvelope
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.subscriptions import App

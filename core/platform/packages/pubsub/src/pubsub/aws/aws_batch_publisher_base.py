@@ -5,7 +5,7 @@ import aioboto3
 import structlog
 from database.outbox_serializer import serialize_domain_event
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 
 logger = structlog.get_logger(__name__)
 

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 
 
 class OutboxRepositoryPort(Protocol):

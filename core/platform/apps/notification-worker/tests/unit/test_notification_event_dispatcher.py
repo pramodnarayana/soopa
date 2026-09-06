@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from notification.application.notification_compiler_use_case import CompileNotificationCommand
+from notification.domain.constants import NotificationEventType
 
 from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
     NotificationEventDispatcher,
@@ -25,7 +26,7 @@ async def test_dispatcher_process_message_valid():
     )
 
     body = {
-        "event_type": "notification.requested",
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
         "tenant_id": "t1",
         "payload": {
             "notification_type": "invoice.paid",
@@ -53,11 +54,37 @@ async def test_dispatcher_ignores_other_events():
 
     body = {
         "event_type": "some.other.event",
-        "payload": {},
+        "tenant_id": "t1",
+        "payload": {
+            "notification_type": "invoice.paid",
+            "notification_data": {"foo": "bar"},
+        },
     }
 
     await dispatcher.dispatch_raw(body)
     assert len(use_case.events) == 0
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_rejects_numeric_top_level_tenant_id():
+    use_case = FakeDispatchUseCase()
+    dispatcher = NotificationEventDispatcher(
+        notification_compiler=use_case,
+        cleanup_job_handler=AsyncMock(),
+    )
+
+    body = {
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+        "tenant_id": 123,
+        "payload": {
+            "notification_type": "invoice.paid",
+            "notification_data": {"foo": "bar"},
+        },
+    }
+
+    await dispatcher.dispatch_raw(body)
+
+    assert use_case.events == []
 
 
 @pytest.mark.asyncio
@@ -69,7 +96,7 @@ async def test_dispatcher_handles_missing_payload():
     )
 
     body = {
-        "event_type": "notification.requested",
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
         # no payload
     }
 
@@ -81,8 +108,14 @@ async def test_dispatcher_handles_missing_payload():
 @pytest.mark.parametrize(
     "body",
     [
-        {"event_type": "notification.requested", "payload": "invalid"},
-        {"event_type": "notification.requested", "payload": {"notification_data": "invalid"}},
+        {
+            "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+            "payload": "invalid",
+        },
+        {
+            "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+            "payload": {"notification_data": "invalid"},
+        },
     ],
 )
 async def test_dispatcher_rejects_non_dictionary_nested_objects(body):

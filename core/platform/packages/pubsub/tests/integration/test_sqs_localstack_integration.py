@@ -6,9 +6,9 @@ import boto3
 import pytest
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
-from pubsub.events import EventEnvelope
 from pubsub.message import AckableMessage
 from seedwork import generate_random_hex
+from seedwork.events import EventEnvelope
 
 
 @pytest.fixture(scope="session")

@@ -15,9 +15,9 @@ import asyncio
 import dataclasses
 
 import pytest
-from pubsub.events import EventEnvelope
 from pubsub.message import AckableMessage
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
+from seedwork.events import EventEnvelope
 
 
 def _make_event(event_type: str = "order.created", index: int = 1) -> EventEnvelope:

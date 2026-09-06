@@ -1,7 +1,9 @@
-from pubsub.events import EventEnvelope
 from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.events import EventEnvelope
 from seedwork.utils import generate_id
+
+from notification.domain.constants import NotificationEventType
 
 
 def notify(
@@ -21,7 +23,7 @@ def notify(
     return EventEnvelope(
         id=generate_id(SystemIdPrefix.GENERIC),
         source=source,
-        event_type="notification.requested",
+        event_type=NotificationEventType.NOTIFICATION_TRIGGERED.value,
         tenant_id=tenant_id,
         idempotency_key=idempotency_key,
         payload={

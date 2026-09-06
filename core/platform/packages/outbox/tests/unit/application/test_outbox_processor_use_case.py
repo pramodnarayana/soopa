@@ -1,7 +1,7 @@
 import pytest
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.testing.fakes import FakeOutboxPublisher, FakeOutboxRepository
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 
 
 def _event(event_id: str) -> EventEnvelope:

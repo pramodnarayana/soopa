@@ -6,7 +6,7 @@ import structlog
 from database.router import DatabaseRouter
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 from sqlalchemy import CursorResult, text
 
 logger = structlog.get_logger(__name__)

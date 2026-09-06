@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.testing.fakes import FakeOutboxPublisher, FakeOutboxRepository
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 
 
 def _event(event_id: str) -> EventEnvelope:

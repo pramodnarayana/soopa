@@ -1,7 +1,7 @@
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 
 
 class FakeOutboxCleanupRepository(OutboxCleanupRepositoryPort):

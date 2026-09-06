@@ -5,6 +5,7 @@ from notification.application.notification_compiler_use_case import (
     CompileNotificationCommand,
     NotificationCompilerUseCase,
 )
+from notification.domain.constants import NotificationEventType
 from seedwork.domain.types import JsonDict
 
 from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job import (
@@ -37,9 +38,16 @@ class NotificationEventDispatcher:
             await self.cleanup_job_handler.execute()
             return
 
+        if top_level_event_type != NotificationEventType.NOTIFICATION_TRIGGERED.value:
+            logger.error(
+                "notification_sqs_message_unsupported_event_type",
+                event_type=top_level_event_type,
+            )
+            return
+
         # Notification dispatch messages wrap the domain event in the envelope payload:
         # {
-        #   "event_type": "notification.requested",
+        #   "event_type": "notification.triggered",
         #   "tenant_id": "...",
         #   "payload": {
         #       "notification_type": "invoice.failed",
@@ -67,14 +75,14 @@ class NotificationEventDispatcher:
         payload = raw_data
 
         # Ensure tenant_id is available in the payload if not already there
-        if "tenant_id" not in payload and top_level_tenant_id:
+        if "tenant_id" not in payload and isinstance(top_level_tenant_id, str):
             payload["tenant_id"] = top_level_tenant_id
 
         domain_event_type = cast(str | None, envelope_payload.get("notification_type"))
 
         # Validate required fields before constructing domain event
-        tenant_id = cast(str | None, payload.get("tenant_id"))
-        if not tenant_id:
+        tenant_id = payload.get("tenant_id")
+        if not isinstance(tenant_id, str) or not tenant_id:
             logger.error("SQS message payload missing 'tenant_id'")
             return
         if not domain_event_type:

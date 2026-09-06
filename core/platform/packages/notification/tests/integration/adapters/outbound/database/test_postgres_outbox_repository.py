@@ -1,7 +1,7 @@
 import pytest
 from database.models.identity import Tenant
-from pubsub.events import EventEnvelope
 from seedwork import generate_random_hex
+from seedwork.events import EventEnvelope
 from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_outbox_repository import (

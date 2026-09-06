@@ -10,7 +10,7 @@ from outbox.application.outbox_sweeper_use_case import (
     OutboxSweeperUseCase,
 )
 from outbox.domain.constants import OutboxStatus
-from pubsub.events import EventEnvelope
+from seedwork.events import EventEnvelope
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
