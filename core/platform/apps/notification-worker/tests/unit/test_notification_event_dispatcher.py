@@ -26,13 +26,11 @@ async def test_dispatcher_process_message_valid():
 
     body = {
         "event_type": "notification.requested",
+        "tenant_id": "t1",
         "payload": {
-            "event": {
-                "event_type": "invoice.paid",
-                "tenant_id": "t1",
-                "payload": {"foo": "bar"},
-                "source": "billing",
-            }
+            "notification_type": "invoice.paid",
+            "notification_data": {"foo": "bar"},
+            "source": "billing",
         },
     }
 
@@ -84,17 +82,7 @@ async def test_dispatcher_handles_missing_payload():
     "body",
     [
         {"event_type": "notification.requested", "payload": "invalid"},
-        {"event_type": "notification.requested", "payload": {"event": "invalid"}},
-        {
-            "event_type": "notification.requested",
-            "payload": {
-                "event": {
-                    "event_type": "invoice.paid",
-                    "tenant_id": "t1",
-                    "payload": "invalid",
-                }
-            },
-        },
+        {"event_type": "notification.requested", "payload": {"notification_data": "invalid"}},
     ],
 )
 async def test_dispatcher_rejects_non_dictionary_nested_objects(body):

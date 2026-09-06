@@ -37,17 +37,16 @@ class NotificationEventDispatcher:
             await self.cleanup_job_handler.execute()
             return
 
-        # Notification dispatch messages wrap the event in the envelope payload:
+        # Notification dispatch messages wrap the domain event in the envelope payload:
         # {
         #   "event_type": "notification.requested",
+        #   "tenant_id": "...",
         #   "payload": {
-        #       "event": {
-        #           "event_type": "invoice.failed",
-        #           "payload": { ... },
-        #           "tenant_id": "..."
-        #       }
+        #       "notification_type": "invoice.failed",
+        #       "notification_data": { ... }
         #   }
         # }
+        top_level_tenant_id = body.get("tenant_id")
         raw_envelope_payload = body.get("payload")
         if not isinstance(raw_envelope_payload, dict):
             logger.error(
@@ -58,30 +57,20 @@ class NotificationEventDispatcher:
             return
         envelope_payload = raw_envelope_payload
 
-        raw_event_wrapper = envelope_payload.get("event")
-        if not isinstance(raw_event_wrapper, dict):
+        raw_data = envelope_payload.get("notification_data")
+        if not isinstance(raw_data, dict):
             logger.error(
-                "notification_sqs_message_missing_event_key",
-                event_type=top_level_event_type,
-                body_keys=list(body.keys()),
-            )
-            return
-        event_wrapper = raw_event_wrapper
-
-        raw_payload = event_wrapper.get("payload")
-        if not isinstance(raw_payload, dict):
-            logger.error(
-                "notification_sqs_message_missing_payload_key",
+                "notification_sqs_message_missing_notification_data_key",
                 event_type=top_level_event_type,
             )
             return
-        payload = raw_payload
+        payload = raw_data
 
         # Ensure tenant_id is available in the payload if not already there
-        if "tenant_id" not in payload and "tenant_id" in event_wrapper:
-            payload["tenant_id"] = event_wrapper["tenant_id"]
+        if "tenant_id" not in payload and top_level_tenant_id:
+            payload["tenant_id"] = top_level_tenant_id
 
-        domain_event_type = cast(str | None, event_wrapper.get("event_type"))
+        domain_event_type = cast(str | None, envelope_payload.get("notification_type"))
 
         # Validate required fields before constructing domain event
         tenant_id = cast(str | None, payload.get("tenant_id"))

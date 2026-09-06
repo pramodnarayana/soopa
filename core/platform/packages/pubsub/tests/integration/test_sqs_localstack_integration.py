@@ -4,9 +4,9 @@ from collections.abc import AsyncGenerator
 
 import boto3
 import pytest
-from database.events import EventEnvelope
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
+from pubsub.events import EventEnvelope
 from pubsub.message import AckableMessage
 from seedwork import generate_random_hex
 
@@ -57,9 +57,6 @@ async def test_sqs_pubsub_integration_via_localstack(
     endpoint_url = localstack_sqs["endpoint_url"]
 
     # Configure boto3 environment for aioboto3 used internally by the adapters
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
 
     publisher = AwsSqsPublisher(
         queue_url=queue_url,

@@ -2,9 +2,9 @@ import asyncio
 from unittest.mock import patch
 
 import pytest
-from database.events import EventEnvelope
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.testing.fakes import FakeOutboxPublisher, FakeOutboxRepository
+from pubsub.events import EventEnvelope
 
 
 def _event(event_id: str) -> EventEnvelope:

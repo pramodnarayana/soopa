@@ -1,8 +1,8 @@
 import asyncio
 from typing import cast
 
-from database.events import EventEnvelope
 from outbox.domain.constants import OutboxStatus
+from pubsub.events import EventEnvelope
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

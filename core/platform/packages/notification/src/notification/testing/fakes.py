@@ -2,7 +2,7 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-from database.events import EventEnvelope
+from pubsub.events import EventEnvelope
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 

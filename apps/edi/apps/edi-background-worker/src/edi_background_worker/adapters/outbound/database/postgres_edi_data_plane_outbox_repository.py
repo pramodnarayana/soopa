@@ -2,11 +2,11 @@ import asyncio
 from typing import Any
 
 import structlog
-from database.events import EventEnvelope
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from pubsub.events import EventEnvelope
 from sqlalchemy import and_, case, func, or_, select, text, update
 
 logger = structlog.get_logger(__name__)

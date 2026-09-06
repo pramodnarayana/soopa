@@ -15,7 +15,7 @@ import asyncio
 import dataclasses
 
 import pytest
-from database.events import EventEnvelope
+from pubsub.events import EventEnvelope
 from pubsub.message import AckableMessage
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 

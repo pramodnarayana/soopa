@@ -11,7 +11,6 @@ from edi.adapters.outbound.security.network import validate_target_url
 def test_validate_target_url(monkeypatch: pytest.MonkeyPatch) -> None:
     # Enforce production mode to ensure SSRF validation is active
     monkeypatch.setenv("ENV", "production")
-
     public_host = "public.example"
     failed_host = "unresolvable.example"
 

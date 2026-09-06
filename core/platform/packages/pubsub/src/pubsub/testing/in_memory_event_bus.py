@@ -4,8 +4,8 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from database.events import EventEnvelope
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from pubsub.events import EventEnvelope
 from pubsub.message import AckableMessage
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 

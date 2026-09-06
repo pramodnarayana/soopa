@@ -2,20 +2,8 @@ import asyncio
 import contextlib
 import hashlib
 import os
-from unittest.mock import AsyncMock, Mock, patch
-
-os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-)
-os.environ.setdefault("ENVIRONMENT", "test")
-os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
-os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
-os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
-
 import tempfile
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -87,12 +75,7 @@ def event_loop():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
 
     # In integration tests, the EDI bounded context expects its Tenant schema (e.g. edi_messages)

@@ -53,12 +53,7 @@ def localstack_container() -> Generator[dict[str, str]]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine() -> AsyncGenerator[Any]:
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()
@@ -112,9 +107,6 @@ async def test_scheduler_worker_claims_and_dispatches_job(
     await db_connection.execute(text("SAVEPOINT seed_complete"))
 
     # 2. Setup Container
-    monkeypatch.setenv("AWS_ENDPOINT_URL", localstack_container["endpoint_url"])
-    monkeypatch.setenv("AWS_REGION", "us-east-1")
-    monkeypatch.setenv("SQS_DATA_PLANE_JOBS_QUEUE_URL", localstack_container["sqs_queue_url"])
 
     container = Container()
     container.session_factory.override(db_session_factory)

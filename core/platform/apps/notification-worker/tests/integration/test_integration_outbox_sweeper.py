@@ -6,11 +6,11 @@ from database.models.notifications import NotificationOutbox
 from notification.adapters.outbound.database.postgres_outbox_repository import (
     SqlAlchemyNotificationOutboxRepository,
 )
-from notification.domain.models import NotificationOutboxEvent
 from outbox.application.outbox_sweeper_use_case import (
     OutboxSweeperUseCase,
 )
 from outbox.domain.constants import OutboxStatus
+from pubsub.events import EventEnvelope
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -50,8 +50,9 @@ async def test_outbox_sweeper_integration(db_session_factory):
         await session.execute(stmt)
 
     # 1. Insert a pending message into the outbox
-    message = NotificationOutboxEvent(
+    message = EventEnvelope(
         id="msg-123",
+        source="notification",
         event_type="invoice.paid",
         idempotency_key="idemp-123",
         tenant_id="t1",

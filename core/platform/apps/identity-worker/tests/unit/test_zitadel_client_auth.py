@@ -29,11 +29,7 @@ def _machine_key_json() -> str:
 async def test_client_authenticates_when_only_machine_key_is_configured(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("DATABASE_URL", "postgresql://test:test@localhost/test")
-    monkeypatch.setenv("ZITADEL_API_URL", "https://identity.example.com")
     monkeypatch.setenv("ZITADEL_MACHINE_KEY", _machine_key_json())
-    monkeypatch.setenv("ZITADEL_UCP_PROJECT_ID", "project-1")
-    monkeypatch.setenv("ZITADEL_DEFAULT_USER_PASSWORD", "not-for-production")
     get_settings.cache_clear()
 
     def zitadel(request: httpx.Request) -> httpx.Response:

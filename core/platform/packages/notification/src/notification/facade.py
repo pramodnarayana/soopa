@@ -1,15 +1,14 @@
-from typing import Any
-
-from database.events import EventEnvelope
+from pubsub.events import EventEnvelope
 from seedwork.constants import SystemIdPrefix
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 
 
 def notify(
     tenant_id: str,
     source: str,
-    domain_event_type: str,
-    payload: dict[str, Any],
+    notification_type: str,
+    notification_data: JsonDict,
     idempotency_key: str | None = None,
 ) -> EventEnvelope:
     """
@@ -26,10 +25,7 @@ def notify(
         tenant_id=tenant_id,
         idempotency_key=idempotency_key,
         payload={
-            "event": {
-                "event_type": domain_event_type,
-                "tenant_id": tenant_id,
-                "payload": payload,
-            }
+            "notification_type": notification_type,
+            "notification_data": notification_data,
         },
     )

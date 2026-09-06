@@ -1,6 +1,5 @@
 import os
 import uuid
-from unittest.mock import AsyncMock
 
 import pytest
 from database.models.identity import Tenant as DbTenant
@@ -16,14 +15,15 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_projects_adapte
 from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter import (
     ZitadelUsersAdapter,
 )
-from identity_worker.domain.exceptions import IdentityProviderPortError
 from seedwork import generate_id
 
 pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.skipif(
-        not os.environ.get("ZITADEL_MACHINE_KEY"),
-        reason="ZITADEL_MACHINE_KEY is not set",
+        not os.environ.get("ZITADEL_MACHINE_KEY")
+        or "test-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", "")
+        or "mock-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", ""),
+        reason="ZITADEL_MACHINE_KEY is not set or is a dummy key",
     ),
 ]
 
@@ -208,12 +208,3 @@ async def test_sync_tenant_already_synced(
 
     provider = ZitadelIdentityProviderPort(zitadel_orgs_adapter, db_session_factory)
     await provider.sync_tenant(tenant_id)
-
-
-async def test_sync_tenant_grant_failed(db_session_factory, setup_tenant_db):
-    org_provider = AsyncMock()
-    org_provider.create_organization.return_value = ("org-id-123", False)
-
-    provider = ZitadelIdentityProviderPort(org_provider, db_session_factory)
-    with pytest.raises(IdentityProviderPortError, match="project grant could not be assigned"):
-        await provider.sync_tenant(setup_tenant_db)

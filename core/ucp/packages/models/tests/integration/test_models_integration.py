@@ -15,9 +15,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 async def test_session() -> "AsyncGenerator[AsyncSession, None]":
-    base_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
+    base_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(base_url)
     async with engine.connect() as connection:
         transaction = await connection.begin()

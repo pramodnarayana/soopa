@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 
 import pytest
 import pytest_asyncio
-from database.events import EventEnvelope
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from pubsub.events import EventEnvelope
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,13 +46,7 @@ async def test_app_subscription_flow(
     # Use InMemoryEventBus instead of AWS SNS/SQS
     event_bus = InMemoryEventBus()
 
-    base_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if base_url.startswith("postgresql://"):
-        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
-
-    db_url = base_url
+    db_url = os.environ["DATABASE_URL"]
 
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,

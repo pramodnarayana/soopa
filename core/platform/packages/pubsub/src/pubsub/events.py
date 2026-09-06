@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from typing import Any
+
+from seedwork.domain.types import JsonDict
 
 
 @dataclass(frozen=True)
@@ -14,4 +15,4 @@ class EventEnvelope:
     event_type: str
     tenant_id: str | None
     idempotency_key: str | None
-    payload: dict[str, Any]
+    payload: JsonDict

@@ -1,6 +1,6 @@
 import pytest
-from database.events import EventEnvelope
 from database.models.identity import Tenant
+from pubsub.events import EventEnvelope
 from seedwork import generate_random_hex
 from ucp.domain.constants import LifecycleStatus
 

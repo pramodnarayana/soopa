@@ -23,12 +23,7 @@ def event_loop() -> AsyncGenerator[asyncio.AbstractEventLoop, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine() -> AsyncGenerator[Any, None]:
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()

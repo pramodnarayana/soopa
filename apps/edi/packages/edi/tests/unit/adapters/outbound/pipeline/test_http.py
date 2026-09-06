@@ -11,7 +11,6 @@ from pytest_httpserver import HTTPServer
 async def test_httpx_delivery_adapter(
     monkeypatch: pytest.MonkeyPatch, httpserver: HTTPServer
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "test")
 
     httpserver.expect_request("/webhook", method="POST").respond_with_data(
         '{"success": true}', status=200

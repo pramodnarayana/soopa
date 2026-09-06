@@ -39,9 +39,7 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
 
     # Pass in the correct settings for the integration test environment
     container = WorkerContainer()
-    container.config.database_url.from_value(
-        "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
+    container.config.database_url.from_value(os.environ["DATABASE_URL"])
     container.config.sns_topic_arn.from_value(
         "arn:aws:sns:us-east-1:000000000000:identity-events-topic"
     )

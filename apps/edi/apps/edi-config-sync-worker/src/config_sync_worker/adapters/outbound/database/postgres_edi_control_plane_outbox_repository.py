@@ -3,10 +3,10 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 
 import structlog
-from database.events import EventEnvelope
 from database.router import DatabaseRouter
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from pubsub.events import EventEnvelope
 from sqlalchemy import CursorResult, text
 
 logger = structlog.get_logger(__name__)

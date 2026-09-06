@@ -1,14 +1,9 @@
 import asyncio
 import os
 
-os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-os.environ.setdefault("ZITADEL_DEFAULT_USER_PASSWORD", "not-for-production")
-os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
-os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
-
 import pytest
 import pytest_asyncio
-from database.provider import get_async_engine
+from database.provider import DatabaseProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
@@ -20,33 +15,26 @@ def event_loop():
 
 
 @pytest_asyncio.fixture(scope="function")
-async def db_engine():
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
-    engine = get_async_engine(db_url)
-    yield engine
-    await engine.dispose()
-
-
-@pytest_asyncio.fixture(scope="function")
-async def db_session_factory(db_engine):
+async def db_session_factory():
     """
-    Provide an async_sessionmaker bound to a transaction for isolation.
+    Provide an async_sessionmaker bound to a nested transaction (SAVEPOINT) for
+    full test isolation. Rolls back all changes after each test — nothing is
+    written to the physical database.
     """
-    connection = await db_engine.connect()
+    db_url = os.environ["DATABASE_URL"]
+    provider = DatabaseProvider.from_url(db_url)
+
+    connection = await provider.engine.connect()
     transaction = await connection.begin()
 
-    SessionLocal = async_sessionmaker(
+    session_factory = async_sessionmaker(
         bind=connection,
         expire_on_commit=False,
         class_=AsyncSession,
         join_transaction_mode="create_savepoint",
     )
-    yield SessionLocal
+    yield session_factory
 
     await transaction.rollback()
     await connection.close()
+    await provider.close()

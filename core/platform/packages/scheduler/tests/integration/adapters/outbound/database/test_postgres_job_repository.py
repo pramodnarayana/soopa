@@ -17,9 +17,7 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def db_connection() -> AsyncGenerator[Any]:
-    base_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
+    base_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(base_url)
     connection = await engine.connect()
     transaction = await connection.begin()
@@ -45,7 +43,7 @@ async def test_session(db_connection: Any) -> AsyncGenerator[AsyncSession]:
 @pytest.mark.integration
 async def test_claim_next_jobs(test_session: AsyncSession) -> None:
     # Insert some jobs manually
-    now = datetime.now(UTC)
+    now = datetime.now(UTC) - timedelta(seconds=10)
     job_1_id = generate_id("id")
     job_2_id = generate_id("id")
     future_job_id = generate_id("id")

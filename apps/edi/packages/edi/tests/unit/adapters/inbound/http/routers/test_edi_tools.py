@@ -8,13 +8,7 @@ from edi.module import create_edi_app
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4317")
-    monkeypatch.setenv("IDENTITY_AUTHORIZATION_URL", "http://localhost:8080")
-    monkeypatch.setenv("IDENTITY_TOKEN_URL", "http://localhost:8080")
-    monkeypatch.setenv("IDENTITY_ISSUER", "http://localhost:8080")
-    monkeypatch.setenv("IDENTITY_JWKS_URL", "http://localhost:8080")
-    monkeypatch.setenv("IDENTITY_USERINFO_URL", "http://localhost:8080")
-    monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:8080")
+
     app = create_edi_app()
     return TestClient(app)
 

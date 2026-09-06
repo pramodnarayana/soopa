@@ -1,9 +1,9 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from database.events import EventEnvelope
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
+from pubsub.events import EventEnvelope
 
 
 def _events(count: int) -> list[EventEnvelope]:
