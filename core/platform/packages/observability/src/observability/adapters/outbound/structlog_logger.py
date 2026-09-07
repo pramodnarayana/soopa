@@ -32,19 +32,16 @@ def _inject_trace_context(_logger: WrappedLogger, _method: str, event_dict: Even
     return event_dict
 
 
-def _make_otlp_log_processor(
-    name: str,
-) -> structlog.types.Processor:
+def _make_otlp_log_processor() -> structlog.types.Processor:
     """
-    Factory that returns a structlog processor bound to the given logger name.
-    Avoids the magic string anti-pattern by capturing the caller-provided name.
+    Factory that returns a processor that resolves the logger name per event.
     """
 
     def _otlp_log_processor(
         _logger: WrappedLogger, method_name: str, event_dict: EventDict
     ) -> EventDict:
         """structlog processor: emits the log to the global OTLP logger provider."""
-        otel_logger = get_otel_logger(name)
+        otel_logger = get_otel_logger(str(event_dict.get("logger_name", "")))
 
         level_map = {
             "debug": SeverityNumber.DEBUG,
@@ -83,7 +80,7 @@ def _make_otlp_log_processor(
     return _otlp_log_processor
 
 
-def _configure_structlog(log_level: str, name: str) -> None:
+def _configure_structlog(log_level: str) -> None:
     # Map string log levels to structlog filtering int values (same as standard logging ints)
     level_filter_map = {
         "DEBUG": 10,
@@ -99,7 +96,7 @@ def _configure_structlog(log_level: str, name: str) -> None:
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             _inject_trace_context,
-            _make_otlp_log_processor(name),  # push to OTel BEFORE stringification
+            _make_otlp_log_processor(),  # push to OTel BEFORE stringification
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
@@ -132,8 +129,8 @@ class StructlogLogger(LoggerPort):
                     log_exporter = OTLPLogExporter(endpoint=otlp_endpoint)
                     logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
                 set_logger_provider(logger_provider)
-            _configure_structlog(log_level, name)
-        self._logger = _bound_logger or structlog.get_logger(name)
+            _configure_structlog(log_level)
+        self._logger = _bound_logger or structlog.get_logger(logger_name=name)
 
     def debug(self, event: str, **kwargs: Any) -> None:
         self._logger.debug(event, **kwargs)

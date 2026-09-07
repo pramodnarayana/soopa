@@ -88,6 +88,29 @@ async def test_dispatcher_rejects_numeric_top_level_tenant_id():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("notification_type", [123, ["invoice.paid"]])
+async def test_dispatcher_rejects_non_string_notification_type(notification_type):
+    use_case = FakeDispatchUseCase()
+    dispatcher = NotificationEventDispatcher(
+        notification_compiler=use_case,
+        cleanup_job_handler=AsyncMock(),
+    )
+
+    body = {
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+        "tenant_id": "t1",
+        "payload": {
+            "notification_type": notification_type,
+            "notification_data": {"foo": "bar"},
+        },
+    }
+
+    await dispatcher.dispatch_raw(body)
+
+    assert use_case.events == []
+
+
+@pytest.mark.asyncio
 async def test_dispatcher_handles_missing_payload():
     use_case = FakeDispatchUseCase()
     cleanup_mock = AsyncMock()

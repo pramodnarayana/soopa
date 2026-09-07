@@ -1,5 +1,3 @@
-from typing import cast
-
 import structlog
 from notification.application.notification_compiler_use_case import (
     CompileNotificationCommand,
@@ -78,14 +76,14 @@ class NotificationEventDispatcher:
         if "tenant_id" not in payload and isinstance(top_level_tenant_id, str):
             payload["tenant_id"] = top_level_tenant_id
 
-        domain_event_type = cast(str | None, envelope_payload.get("notification_type"))
+        domain_event_type = envelope_payload.get("notification_type")
 
         # Validate required fields before constructing domain event
         tenant_id = payload.get("tenant_id")
         if not isinstance(tenant_id, str) or not tenant_id:
             logger.error("SQS message payload missing 'tenant_id'")
             return
-        if not domain_event_type:
+        if not isinstance(domain_event_type, str) or not domain_event_type:
             logger.error("SQS message payload missing 'event_type' / domain_event_type")
             return
 

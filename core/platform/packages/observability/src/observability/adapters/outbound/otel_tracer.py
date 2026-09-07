@@ -65,6 +65,11 @@ class OtelTracer(TracerPort):
 
         self._tracer = self._trace_provider.get_tracer(service_name)
 
+    @property
+    def trace_provider(self) -> TracerProvider:
+        """Return the local provider used by framework instrumentation."""
+        return self._trace_provider
+
     @contextmanager
     def start_span(self, name: str) -> Generator[SpanPort, None, None]:
         with self._tracer.start_as_current_span(name) as span:

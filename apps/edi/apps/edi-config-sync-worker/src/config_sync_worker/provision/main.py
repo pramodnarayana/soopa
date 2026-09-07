@@ -6,6 +6,10 @@ import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.config.settings import get_settings
+from edi.domain.enums import EdiConstants
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
@@ -14,6 +18,9 @@ from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdap
 from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
     EdiConfigSyncSqsDispatcher,
+)
+from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
+    PostgresEdiControlPlaneOutboxRepository,
 )
 from config_sync_worker.domain.service import ProvisioningWorkerService
 
@@ -48,13 +55,32 @@ async def main() -> None:
         queue_name=settings.sqs.provisioning_queue_url.rsplit("/", 1)[-1],
         handler=dispatcher.dispatch_raw,
     )
-    sqs_manager.start()
+
+    outbox_repository = PostgresEdiControlPlaneOutboxRepository(db_router)
+    outbox_publisher = AwsSnsPublisher(
+        topic_arn=settings.aws.sns_topic_arn,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+    outbox_processor = OutboxProcessorUseCase(
+        repository=outbox_repository,
+        publisher=outbox_publisher,
+        worker_id="edi_config_sync_worker",
+    )
+    outbox_relay = PostgresOutboxRelay(
+        processor=outbox_processor,
+        database_url=settings.database.global_url,
+        listen_channel=EdiConstants.OUTBOX_CHANNEL.value,
+    )
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop_event.set)
     try:
+        sqs_manager.start()
+        outbox_relay.start()
+
         # Wait for stop signal, or if sqs_manager fails
         manager_task = sqs_manager.task
         tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
@@ -73,6 +99,7 @@ async def main() -> None:
 
     finally:
         logger.info("shutting_down_gracefully")
+        await outbox_relay.stop()
         await sqs_manager.stop()
 
         # Close adapter resources
