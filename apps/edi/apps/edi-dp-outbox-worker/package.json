@@ -1,10 +1,11 @@
 {
-  "name": "@soopa/secret_store",
+  "name": "@soopa/edi-dp-outbox-worker",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "test": "echo 'No tests implemented yet'",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
+    "test:integration": "uv run pytest tests/integration",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
   }
 }

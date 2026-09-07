@@ -187,3 +187,10 @@ class EdiJobName(StrEnum):
 class EdiConstants(StrEnum):
     OUTBOX_CHANNEL = "edi_outbox_channel"
     EDI_APP_SLUG = "edi"
+
+
+class EdiOutboxSource(StrEnum):
+    """Source tag for EDI outbox events."""
+
+    EDI_DATA_PLANE = "edi_data_plane"
+    EDI_CONTROL_PLANE = "edi_control_plane"

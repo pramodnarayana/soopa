@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.domain.constants import EdiIdPrefix
-from edi.domain.enums import PipelineEventType
+from edi.domain.enums import EdiJobName, PipelineEventType
 
 
 @dataclass
@@ -50,7 +50,7 @@ class DataPlaneOutboxBuilder:
 class ControlPlaneOutboxBuilder:
     session: AsyncSession
     tenant_id: str = "ten_default_cp_123"
-    event_type: str = "CONFIG_SYNC_EVENT"
+    event_type: str = EdiJobName.EDI_CONTROL_PLANE_OUTBOX_SWEEPER.value
     payload: dict[str, object] = field(default_factory=dict)
     status: str = OutboxStatus.PENDING.value
     attempts: int = 0
