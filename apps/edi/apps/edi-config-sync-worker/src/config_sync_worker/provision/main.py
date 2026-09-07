@@ -7,6 +7,7 @@ from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.config.settings import get_settings
 from edi.domain.enums import EdiConstants
+from observability import ObservabilityProvider
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -30,7 +31,9 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("config-sync-worker")
     settings = get_settings()
+    logger.info("config_sync_worker_starting")
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)

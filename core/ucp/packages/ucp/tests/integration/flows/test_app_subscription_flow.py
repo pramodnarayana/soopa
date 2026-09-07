@@ -15,7 +15,7 @@ from ucp_models.subscriptions import App
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
-from ucp.application.use_cases.infrastructure_provisioner import InfrastructureProvisioner
+from ucp.application.use_cases.app_subscription_manager import AppSubscriptionManager
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
@@ -66,7 +66,7 @@ async def test_app_subscription_flow(
     async def fake_uow_factory():
         yield SqlAlchemyUcpUnitOfWork(session=db_session)
 
-    provisioner = InfrastructureProvisioner(uow_factory=fake_uow_factory)
+    provisioner = AppSubscriptionManager(uow_factory=fake_uow_factory)
 
     dispatcher.subscribe(UcpEventType.APP_SUBSCRIBED.value, provisioner.handle_app_subscribed)
 
@@ -146,7 +146,7 @@ async def test_app_subscription_flow(
 
     assert found_app_subscribed, "app.subscribed event was never received from SQS"
 
-    # 5. Verify InfrastructureProvisioner Side Effects
+    # 5. Verify AppSubscriptionManager Side Effects
     # The provisioner creates ShardRegistry and AppSubscription records in the global schema.
     # Let's verify the Shard was created.
     res = await db_session.execute(

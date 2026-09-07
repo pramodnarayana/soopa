@@ -3,6 +3,7 @@ import contextlib
 import signal
 
 import structlog
+from observability import ObservabilityProvider
 
 from ucp_cleanup.bootstrap.container import WorkerContainer
 
@@ -10,6 +11,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("ucp-cleanup")
     logger.info("Starting UCP Cleanup Worker...")
 
     container = WorkerContainer()

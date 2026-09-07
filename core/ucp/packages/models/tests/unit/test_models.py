@@ -1,13 +1,13 @@
 from outbox.domain.constants import OutboxStatus
 from seedwork.constants import LifecycleStatus
 
-from ucp_models.events import ControlPlaneOutbox
+from ucp_models.events import UcpOutbox
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
 
 
 def test_control_plane_outbox_instantiation():
-    event = ControlPlaneOutbox(
+    event = UcpOutbox(
         id="cp_ucp_ob_123",
         tenant_id="tenant-1",
         event_type="test_event",

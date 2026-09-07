@@ -6,7 +6,7 @@ from database.provider import get_async_engine
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from ucp_models.events import ControlPlaneOutbox
+from ucp_models.events import UcpOutbox
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App, AppSubscription
 
@@ -89,8 +89,8 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     )
     test_session.add(sub)
 
-    # 6. Persist ControlPlaneOutbox
-    outbox = ControlPlaneOutbox(
+    # 6. Persist UcpOutbox
+    outbox = UcpOutbox(
         id=outbox_id,
         tenant_id=tenant_id,
         event_type="test.event",
@@ -119,9 +119,7 @@ async def test_ucp_models_persistence_and_relationships(test_session: AsyncSessi
     assert fetched_sub.tier == "enterprise"
 
     # Outbox
-    result = await test_session.execute(
-        select(ControlPlaneOutbox).where(ControlPlaneOutbox.id == outbox_id)
-    )
+    result = await test_session.execute(select(UcpOutbox).where(UcpOutbox.id == outbox_id))
     fetched_outbox = result.scalar_one_or_none()
     assert fetched_outbox is not None
     assert fetched_outbox.payload == {"some": "data"}

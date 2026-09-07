@@ -6,7 +6,7 @@ from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryP
 from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from ucp_models.events import ControlPlaneOutbox
+from ucp_models.events import UcpOutbox
 
 
 class SqlAlchemyUcpOutboxCleanupRepository(OutboxCleanupRepositoryPort):
@@ -18,12 +18,12 @@ class SqlAlchemyUcpOutboxCleanupRepository(OutboxCleanupRepositoryPort):
         outbox_deleted = 0
         async with self.session_factory() as session:
             while True:
-                stmt_outbox = delete(ControlPlaneOutbox).where(
-                    ControlPlaneOutbox.id.in_(
-                        select(ControlPlaneOutbox.id)
+                stmt_outbox = delete(UcpOutbox).where(
+                    UcpOutbox.id.in_(
+                        select(UcpOutbox.id)
                         .where(
-                            ControlPlaneOutbox.status == OutboxStatus.PROCESSED,
-                            ControlPlaneOutbox.created_at < cutoff_date,
+                            UcpOutbox.status == OutboxStatus.PROCESSED,
+                            UcpOutbox.created_at < cutoff_date,
                         )
                         .limit(5000)
                     )

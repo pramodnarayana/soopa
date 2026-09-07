@@ -8,7 +8,7 @@ class GetEdiTraceUseCase:
         self.uow = uow
 
     async def get_edi_trace(
-        self, tenant_id: str, trace_id: str, routing_resolver: object | None = None
+        self, tenant_id: str, trace_id: str, _routing_resolver: object | None = None
     ) -> EdiTraceDTO:
         """
         Get details for a specific trace lifecycle.

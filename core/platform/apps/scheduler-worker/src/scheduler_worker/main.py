@@ -6,6 +6,7 @@ import sys
 import structlog
 from database.provider import get_async_engine
 from dotenv import load_dotenv
+from observability import ObservabilityProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scheduler_worker.bootstrap.container import Container
@@ -17,6 +18,8 @@ _background_tasks: set[asyncio.Task[None]] = set()
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("scheduler-worker")
+    logger.info("scheduler_worker_starting")
     # Load .env file from project root
     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../../.env"))
     load_dotenv(dotenv_path)

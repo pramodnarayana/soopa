@@ -37,6 +37,8 @@ create_queue_with_dlq() {
 }
 
 create_queue_with_dlq ucp-jobs.fifo ucp-jobs-dlq.fifo true
+create_queue_with_dlq notification-jobs.fifo notification-jobs-dlq.fifo true
+create_queue_with_dlq identity-jobs.fifo identity-jobs-dlq.fifo true
 create_queue_with_dlq ucp-events.fifo ucp-events-dlq.fifo true
 create_queue_with_dlq identity-events.fifo identity-events-dlq.fifo true
 create_queue_with_dlq edi-config-sync-queue.fifo edi-config-sync-queue-dlq.fifo true
@@ -46,7 +48,7 @@ create_queue_with_dlq edi-data-plane-jobs.fifo edi-data-plane-jobs-dlq.fifo true
 create_queue_with_dlq edi-control-plane-jobs.fifo edi-control-plane-jobs-dlq.fifo true
 create_queue_with_dlq edi-deliver.fifo edi-deliver-dlq.fifo true
 create_queue_with_dlq edi-priority-notifications.fifo edi-priority-notifications-dlq.fifo true
-create_queue_with_dlq email-delivery.fifo email-delivery-dlq.fifo true
+create_queue_with_dlq email-channel.fifo email-channel-dlq.fifo true
 
 # 3. Get ARNs
 UCP_EVENTS_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:ucp-events-topic.fifo --query 'Attributes.TopicArn' --output text)

@@ -30,7 +30,7 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
         Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
     )
     sqs.create_queue(
-        QueueName="email-delivery.fifo",
+        QueueName="email-channel.fifo",
         Attributes={"FifoQueue": "true", "ContentBasedDeduplication": "true"},
     )
 
@@ -47,7 +47,7 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
         "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-priority-notifications.fifo"
     )
     container.config.email_delivery_queue_url.from_value(
-        "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/email-delivery.fifo"
+        "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/email-channel.fifo"
     )
     container.config.aws_endpoint_url.from_value("http://localhost:4566")
     container.config.aws_region.from_value("us-east-1")

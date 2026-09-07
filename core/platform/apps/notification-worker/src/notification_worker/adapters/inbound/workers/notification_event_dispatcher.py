@@ -6,11 +6,6 @@ from notification.application.notification_compiler_use_case import (
 from notification.domain.constants import NotificationEventType
 from seedwork.domain.types import JsonDict
 
-from notification_worker.adapters.inbound.jobs.notification_outbox_sweeper_job import (
-    NotificationOutboxSweeperJobHandler,
-)
-from notification_worker.constants import NotificationJobName
-
 logger = structlog.get_logger(__name__)
 
 
@@ -18,23 +13,15 @@ class NotificationEventDispatcher:
     def __init__(
         self,
         notification_compiler: NotificationCompilerUseCase,
-        sweeper_job_handler: NotificationOutboxSweeperJobHandler,
     ) -> None:
         self.notification_compiler = notification_compiler
-        self.sweeper_job_handler = sweeper_job_handler
 
     async def dispatch_raw(self, body: JsonDict) -> None:
         """
         Parses the incoming SQS payload (which matches the Outbox event payload)
         and passes it to the domain use case.
         """
-        # Job-type messages (e.g. NOTIFICATION_OUTBOX_SWEEPER) are top-level envelopes
-        # that do NOT contain an inner 'event' key. Route them before the event guard.
         top_level_event_type = body.get("event_type")
-        if top_level_event_type == NotificationJobName.NOTIFICATION_OUTBOX_SWEEPER.value:
-            logger.info("notification_sweeper_job_triggered")
-            await self.sweeper_job_handler.execute()
-            return
 
         if top_level_event_type != NotificationEventType.NOTIFICATION_TRIGGERED.value:
             logger.error(

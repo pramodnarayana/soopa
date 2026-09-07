@@ -67,6 +67,31 @@ class ObservabilityProvider:
         cls._default_logger = logger
 
     @classmethod
+    def auto_configure_from_env(cls, service_name: str) -> None:
+        """
+        Automatically reads OTLP_ENDPOINT and LOG_LEVEL from the environment and configures all adapters.
+        Use this to prevent duplicating composition root logic across workers and APIs.
+        """
+        import os
+
+        from observability.adapters.outbound.otel_tracer import OtelTracer
+        from observability.adapters.outbound.structlog_logger import StructlogLogger
+
+        otlp_endpoint = os.getenv("OTLP_ENDPOINT")
+        log_level = os.getenv("LOG_LEVEL", "INFO")
+
+        cls.configure(
+            tracer=OtelTracer(service_name=service_name, otlp_endpoint=otlp_endpoint),
+            metrics=NoOpMetrics(),  # OtelMetrics implementation pending
+            logger=StructlogLogger(
+                name=service_name,
+                log_level=log_level,
+                service_name=service_name,
+                otlp_endpoint=otlp_endpoint,
+            ),
+        )
+
+    @classmethod
     def tracer(cls) -> TracerPort:
         return cls._tracer
 

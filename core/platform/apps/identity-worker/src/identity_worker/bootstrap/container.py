@@ -4,22 +4,12 @@ from typing import Literal
 
 import structlog
 from database.provider import get_async_engine
-from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
-    PostgresIdentityOutboxRepository,
-)
 from identity.domain.constants import IdentityEventType
-from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
-from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
-from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from identity_worker.adapters.inbound.jobs.identity_outbox_sweeper_job import (
-    IdentityOutboxSweeperJobHandler,
-)
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
@@ -40,7 +30,6 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
 )
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
 from identity_worker.bootstrap.config import Settings, get_settings
-from identity_worker.constants import IdentityJobName
 from identity_worker.ports.inbound.identity_event_consumer_port import IdentityEventMessage
 from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
@@ -105,46 +94,8 @@ class WorkerContainer:
             self._engine, expire_on_commit=False, class_=AsyncSession
         )
 
-        self.outbox_relay: PostgresOutboxRelay | None = None
-        self.events_dispatcher: IdentityEventDispatcher | None = None
-        self.events_consumer: SqsConsumerManager | None = None
-
     def wire(self) -> None:
-        # Construct shared infrastructure once — both the relay and the sweeper
-        # job must operate on the same logical repository and publisher.
-        outbox_repo = PostgresIdentityOutboxRepository(self.session_factory)
-        outbox_pub = AwsSnsPublisher(
-            topic_arn=self.settings.sns_identity_events_topic_arn,
-            endpoint_url=self.settings.aws_endpoint_url,
-        )
-        self._wire_scheduled_jobs(outbox_repo, outbox_pub)
-        self._wire_outbox_relay(outbox_repo, outbox_pub)
         self._wire_events_consumer()
-
-    def _wire_scheduled_jobs(
-        self,
-        outbox_repo: PostgresIdentityOutboxRepository,
-        outbox_pub: AwsSnsPublisher,
-    ) -> None:
-        # NOTE: Outbox cleanup (deleting old PROCESSED records) is handled by the
-        # dedicated identity-cleanup worker container, not here.
-        sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
-        self.sweeper_job_handler = IdentityOutboxSweeperJobHandler(sweeper_use_case)
-
-    def _wire_outbox_relay(
-        self,
-        outbox_repo: PostgresIdentityOutboxRepository,
-        outbox_pub: AwsSnsPublisher,
-    ) -> None:
-        outbox_processor = OutboxProcessorUseCase(
-            repository=outbox_repo,
-            publisher=outbox_pub,
-        )
-        self.outbox_relay = PostgresOutboxRelay(
-            processor=outbox_processor,
-            database_url=self.database_url,
-            listen_channel="identity_outbox_wakeup",
-        )
 
     def _register_identity_handlers(
         self,
@@ -209,11 +160,6 @@ class WorkerContainer:
             IdentityEventType.USER_STATUS_TOGGLED, identity_user_status_toggled_handler
         )
         consumer.subscribe(IdentityEventType.USER_DELETED, identity_user_deleted_handler)
-
-        async def sweep_handler(event: IdentityEventMessage) -> None:
-            await self.sweeper_job_handler.execute()
-
-        consumer.subscribe(IdentityJobName.IDENTITY_OUTBOX_SWEEPER.value, sweep_handler)
 
     def _wire_events_consumer(self) -> None:
         @asynccontextmanager

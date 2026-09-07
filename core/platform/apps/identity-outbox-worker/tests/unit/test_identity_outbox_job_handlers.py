@@ -1,10 +1,10 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from identity_worker.adapters.inbound.jobs.identity_outbox_cleanup_job import (
+from identity_outbox_worker.adapters.inbound.jobs.identity_outbox_cleanup_job import (
     IdentityOutboxCleanupJobHandler,
 )
-from identity_worker.adapters.inbound.jobs.identity_outbox_sweeper_job import (
+from identity_outbox_worker.adapters.inbound.jobs.identity_outbox_sweeper_job import (
     IdentityOutboxSweeperJobHandler,
 )
 

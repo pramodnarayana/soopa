@@ -3,6 +3,7 @@ import contextlib
 import signal
 
 import structlog
+from observability import ObservabilityProvider
 
 from notification_cleanup.bootstrap.container import WorkerContainer
 
@@ -10,6 +11,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("notification-cleanup")
     logger.info("notification_cleanup_worker_starting")
 
     container = WorkerContainer()

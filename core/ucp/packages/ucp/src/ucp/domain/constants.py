@@ -33,3 +33,13 @@ class SubscriptionTier(StrEnum):
 class IdempotencyStatus(StrEnum):
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
+
+
+class UcpJobName(StrEnum):
+    UCP_OUTBOX_SWEEPER = "UCP_OUTBOX_SWEEPER"
+
+
+class UcpCleanupJobName(StrEnum):
+    UCP_OUTBOX_CLEANUP = "UCP_OUTBOX_CLEANUP"
+    UCP_IDEMPOTENCY_CLEANUP = "UCP_IDEMPOTENCY_CLEANUP"
+    UCP_AUDIT_LOG_CLEANUP = "UCP_AUDIT_LOG_CLEANUP"

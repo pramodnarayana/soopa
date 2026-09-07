@@ -6,7 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 
-class ControlPlaneOutbox(UcpBase, OutboxMixin):
+class UcpOutbox(UcpBase, OutboxMixin):
     __tablename__ = "outbox"
     ID_PREFIX = "ucp_cp_ob"
 

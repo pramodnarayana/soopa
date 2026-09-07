@@ -6,7 +6,7 @@ from database.models import Webhook as DbWebhook
 from database.outbox_serializer import serialize_domain_event
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.events import ControlPlaneOutbox
+from ucp_models.events import UcpOutbox
 
 from ucp.domain.models.webhook import WebhookDomainModel
 from ucp.ports.outbound.webhook_repository_port import WebhookRepositoryPort
@@ -95,14 +95,14 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
         self, webhook: WebhookDomainModel, idempotency_key: str | None = None
     ) -> None:
         for index, event in enumerate(webhook.domain_events):
-            outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = f"{UcpOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
             event_name = event.event_name
 
             final_idemp_key = (
                 f"{idempotency_key}_{index}" if idempotency_key else event.idempotency_key
             )
 
-            outbox_event = ControlPlaneOutbox(
+            outbox_event = UcpOutbox(
                 id=outbox_id,
                 idempotency_key=final_idemp_key,
                 tenant_id=webhook.tenant_id,

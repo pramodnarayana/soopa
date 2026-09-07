@@ -4,7 +4,7 @@ import sys
 from types import FrameType
 
 import structlog
-from observability.config import configure_logging, configure_tracer
+from observability import ObservabilityProvider
 
 from ucp_outbox_worker.bootstrap.container import WorkerContainer
 
@@ -12,8 +12,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
-    configure_logging()
-    configure_tracer("ucp-outbox-worker")
+    ObservabilityProvider.auto_configure_from_env("ucp-outbox-worker")
 
     container = WorkerContainer()
     container.wire()
@@ -21,22 +20,19 @@ async def main() -> None:
 
     shutdown_event = asyncio.Event()
 
-    def handle_sigint(sig: int, frame: FrameType | None) -> None:
+    def handle_sigint(_sig: int, _frame: FrameType | None) -> None:
         logger.info("received_shutdown_signal")
         shutdown_event.set()
 
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
 
-    tasks: list[asyncio.Task[None]] = []
-
     if container.outbox_relay:
-        relay_task = asyncio.create_task(container.outbox_relay.start())
-        tasks.append(relay_task)
+        container.outbox_relay.start()
     if container.jobs_consumer:
         container.jobs_consumer.start()
 
-    if not tasks:
+    if not container.outbox_relay and not container.jobs_consumer:
         logger.warning("no_tasks_configured_for_outbox_worker")
         return
 
@@ -48,7 +44,6 @@ async def main() -> None:
     if container.outbox_relay:
         await container.outbox_relay.stop()
 
-    await asyncio.gather(*tasks, return_exceptions=True)
     await container.dispose()
     logger.info("ucp_outbox_worker_shutdown_complete")
 

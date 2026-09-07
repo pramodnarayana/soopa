@@ -3,6 +3,7 @@ import contextlib
 import signal
 
 import structlog
+from observability import ObservabilityProvider
 
 from ucp_worker.bootstrap.container import WorkerContainer
 
@@ -10,7 +11,9 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
-    logger.info("Starting UCP Worker...")
+    ObservabilityProvider.auto_configure_from_env("ucp-worker")
+
+    logger.info("ucp_worker_starting")
 
     container = WorkerContainer()
     container.wire()

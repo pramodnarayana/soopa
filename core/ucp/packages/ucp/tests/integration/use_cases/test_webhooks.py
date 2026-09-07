@@ -4,7 +4,7 @@ import pytest
 from seedwork import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.events import ControlPlaneOutbox
+from ucp_models.events import UcpOutbox
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.webhooks import (
@@ -50,7 +50,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     assert created_webhook.active is True
 
     # Verify outbox event was created in the DB
-    stmt = select(ControlPlaneOutbox).where(ControlPlaneOutbox.tenant_id == tenant_id)
+    stmt = select(UcpOutbox).where(UcpOutbox.tenant_id == tenant_id)
     outbox_records = (await db_session.execute(stmt)).scalars().all()
     assert len(outbox_records) == 1
     assert outbox_records[0].event_type == "webhook.created"

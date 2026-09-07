@@ -3,6 +3,7 @@ import signal
 from typing import Any
 
 import structlog
+from observability import ObservabilityProvider
 
 from edi_dp_cleanup.bootstrap.container import CleanupContainer
 
@@ -10,6 +11,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("edi-dp-cleanup")
     logger.info("edi_dp_cleanup.starting")
     container = CleanupContainer()
     container.wire()
