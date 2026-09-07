@@ -21,19 +21,18 @@ from .ports.outbound.tracer_port import SpanPort, TracerPort
 # Provider — the single composition root
 from .provider import ObservabilityProvider
 
-__all__ = [  # noqa: RUF022 - intentionally grouped by layer: Ports → Provider → Adapters
-    # Ports
-    "TracerPort",
-    "SpanPort",
-    "MetricsPort",
+# Public API surface. Adapters are exposed for composition-root use only;
+# business logic must import ports (LoggerPort, MetricsPort, TracerPort) exclusively.
+__all__ = [
     "LoggerPort",
-    # Provider
-    "ObservabilityProvider",
-    # Adapters (for use in composition root only)
-    "NoOpTracer",
-    "NoOpMetrics",
+    "MetricsPort",
     "NoOpLogger",
-    "OtelTracer",
+    "NoOpMetrics",
+    "NoOpTracer",
+    "ObservabilityProvider",
     "OtelMetrics",
+    "OtelTracer",
+    "SpanPort",
     "StructlogLogger",
+    "TracerPort",
 ]

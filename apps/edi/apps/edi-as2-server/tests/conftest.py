@@ -15,6 +15,7 @@ Key fixtures:
 """
 
 import asyncio
+import contextlib
 import datetime
 import os
 import subprocess
@@ -34,11 +35,25 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from database.provider import get_async_engine
 from database.testing import get_test_shard_url_async
+from dotenv import load_dotenv
+from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from httpx import ASGITransport, AsyncClient
 from observability import NoOpLogger, NoOpMetrics, NoOpTracer, ObservabilityProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from as2_server.dependencies import get_global_session, get_session
+from as2_server.dependencies import get_global_session, get_session, get_vault_service
+
+load_dotenv()
+
+"""
+Shared test fixtures for the AS2 Server integration tests.
+
+Key fixtures:
+  - sender_keypair / receiver_keypair: Real RSA-2048 keys + self-signed X.509 certs
+  - signed_as2_payload: A real multipart/signed AS2 body
+  - encrypted_as2_payload: A real enveloped PKCS#7 AS2 body
+  - as2_client: FastAPI AsyncClient wired with NoOp observability + mocked DB
+"""
 
 
 @pytest.fixture(scope="session")
@@ -112,8 +127,6 @@ async def tenant_db_session(tenant_db_connection):
 class FakeDatabaseRouter:
     def __init__(self, session):
         self.session = session
-
-    import contextlib
 
     @contextlib.asynccontextmanager
     async def get_session(self, tenant_id: str):
@@ -331,9 +344,6 @@ async def as2_client(
             return b""
 
     # Seed the AS2 Keypair into the global_db_session
-    from edi.adapters.outbound.database.models.control_plane import AS2Partner
-    from seedwork import generate_id
-
     tenant_id = "test-tenant"
     sender_partner = AS2Partner(
         id=generate_id("as2p"),
@@ -375,8 +385,6 @@ async def as2_client(
 
         def get_host_certificate(self) -> bytes:
             return receiver_keypair.public_cert_pem
-
-    from as2_server.dependencies import get_vault_service
 
     app.dependency_overrides[get_vault_service] = lambda: FakeHostVault()
 

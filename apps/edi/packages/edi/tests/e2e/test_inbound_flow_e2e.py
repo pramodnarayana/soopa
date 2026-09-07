@@ -41,6 +41,7 @@ from edi.application.use_cases.pipeline.delivery_router_use_case import Delivery
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.config.settings import AppSettings
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
+from edi.testing.fakes.pipeline_fakes import FakeTransformerAdapter
 
 logger = structlog.get_logger(__name__)
 
@@ -232,8 +233,6 @@ async def test_inbound_flow_e2e(
         except (httpx.RequestError, ConnectionError) as e:
             # If bots is not running, we use a pure FakeTransformerAdapter instead of a mock
             if "Connection" in str(e) or "connect" in str(e).lower():
-                from edi.testing.fakes.pipeline_fakes import FakeTransformerAdapter
-
                 translate_svc.transformer = FakeTransformerAdapter()
                 await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
             else:

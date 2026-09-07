@@ -14,7 +14,7 @@ from typing import cast
 
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
-from database.router import DatabaseRouterPort
+from database.router import DatabaseRouter, DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
 
 
@@ -99,8 +99,6 @@ async def get_test_shard_url_async(global_db_url: str) -> str:
     """
     Dynamically fetches the first active testing shard URL using the production DatabaseRouter.
     """
-    from database.router import DatabaseRouter
-
     router = DatabaseRouter(global_db_url=global_db_url)
     shards = await router.get_all_shards()
     await router.close_all()
