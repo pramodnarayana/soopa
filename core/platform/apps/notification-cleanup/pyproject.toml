@@ -30,6 +30,8 @@ build-backend = "hatchling.build"
 dev = [
     "ruff>=0.15.22",
     "mypy",
+    "pytest",
+    "pytest-cov",
 ]
 
 [tool.hatch.build.targets.wheel]

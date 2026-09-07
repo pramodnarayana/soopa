@@ -9,6 +9,7 @@ dependencies = [
     "outbox",
     "pubsub",
     "database",
+    "observability",
     "aioboto3>=13.1.1",
     "sqlalchemy>=2.0.29",
     "structlog"
@@ -19,6 +20,7 @@ ucp = { workspace = true }
 outbox = { workspace = true }
 pubsub = { workspace = true }
 database = { workspace = true }
+observability = { workspace = true }
 
 [tool.deptry]
 known_first_party = ["ucp_outbox_worker"]
@@ -57,6 +59,7 @@ extraPaths = [
     "../../../platform/packages/outbox/src",
     "../../../platform/packages/pubsub/src",
     "../../../platform/packages/database/src",
+    "../../../platform/packages/observability/src",
     "src",
 ]
 

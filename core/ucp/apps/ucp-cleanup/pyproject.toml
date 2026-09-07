@@ -4,12 +4,24 @@ version = "0.1.0"
 description = "Worker service for handling UCP Control Plane jobs"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["ucp", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "structlog"]
+dependencies = [
+    "ucp",
+    "database",
+    "outbox",
+    "pubsub",
+    "seedwork",
+    "aioboto3>=13.1.1",
+    "sqlalchemy>=2.0.29",
+    "structlog",
+]
 
 [tool.uv.sources]
 ucp = { workspace = true }
 ucp_models = { workspace = true }
 database = { workspace = true }
+outbox = { workspace = true }
+pubsub = { workspace = true }
+seedwork = { workspace = true }
 observability = { workspace = true }
 
 [tool.deptry]
