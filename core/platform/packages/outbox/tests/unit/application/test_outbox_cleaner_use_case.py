@@ -31,3 +31,9 @@ async def test_outbox_cleaner_execute_when_nothing_to_delete():
     await use_case.execute()
 
     assert repository.cleanup_calls == [30]
+
+
+def test_outbox_cleaner_use_case_validation():
+    repository = FakeOutboxCleanupRepository()
+    with pytest.raises(ValueError, match="retention_days cannot be negative"):
+        OutboxCleanerUseCase(repository=repository, retention_days=-1)

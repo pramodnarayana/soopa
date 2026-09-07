@@ -5,6 +5,7 @@ from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_ou
     PostgresEdiControlPlaneOutboxRepository,
 )
 from database.router import DatabaseRouterPort
+from edi.domain.enums import EdiEventType
 from edi.testing.factories.outbox import ControlPlaneOutboxBuilder
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.domain.constants import OutboxStatus
@@ -19,10 +20,10 @@ async def test_cp_sweeper_fetches_and_processes_events(db_router: DatabaseRouter
     async for test_session in db_router.get_global_session():
         builder = ControlPlaneOutboxBuilder(session=test_session)
         event1 = await builder.create(
-            event_type="PROVISIONING_EVENT", status=OutboxStatus.PROCESSING
+            event_type=EdiEventType.edi_as2_partner_created.value, status=OutboxStatus.PROCESSING
         )
         event2 = await builder.create(
-            event_type="PROVISIONING_EVENT_2", status=OutboxStatus.PROCESSING
+            event_type=EdiEventType.edi_as2_partner_updated.value, status=OutboxStatus.PROCESSING
         )
 
         event1.lease_expires_at = datetime.now(UTC) - timedelta(minutes=10)
@@ -54,5 +55,9 @@ async def test_cp_sweeper_fetches_and_processes_events(db_router: DatabaseRouter
 
     assert len(messages_received) == 2
 
-    assert any("PROVISIONING_EVENT" in str(b) for b in messages_received)
-    assert any("PROVISIONING_EVENT_2" in str(b) for b in messages_received)
+    assert any(
+        b.get("event_type") == EdiEventType.edi_as2_partner_created.value for b in messages_received
+    )
+    assert any(
+        b.get("event_type") == EdiEventType.edi_as2_partner_updated.value for b in messages_received
+    )

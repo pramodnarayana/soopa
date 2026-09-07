@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from database.router import DatabaseRouterPort
+from edi.domain.enums import PipelineEventType
 from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.domain.constants import OutboxStatus
@@ -20,8 +21,12 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
     async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
         # We will create events with default properties that makes them look "stuck".
-        event1 = await builder.create(event_type="TRANSFORM_EVENT", status=OutboxStatus.PROCESSING)
-        event2 = await builder.create(event_type="DELIVER_EVENT", status=OutboxStatus.PROCESSING)
+        event1 = await builder.create(
+            event_type=PipelineEventType.TRANSFORM_EVENT.value, status=OutboxStatus.PROCESSING
+        )
+        event2 = await builder.create(
+            event_type=PipelineEventType.DELIVER_EVENT.value, status=OutboxStatus.PROCESSING
+        )
 
         # Manually force them to be "stuck" by setting lease_expires_at to the past
         event1.lease_expires_at = datetime.now(UTC) - timedelta(minutes=10)
@@ -53,5 +58,9 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
 
     assert len(messages_received) == 2
 
-    assert any("TRANSFORM_EVENT" in str(b) for b in messages_received)
-    assert any("DELIVER_EVENT" in str(b) for b in messages_received)
+    assert any(
+        b.get("event_type") == PipelineEventType.TRANSFORM_EVENT.value for b in messages_received
+    )
+    assert any(
+        b.get("event_type") == PipelineEventType.DELIVER_EVENT.value for b in messages_received
+    )

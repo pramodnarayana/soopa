@@ -4,15 +4,11 @@ from typing import Literal
 
 import structlog
 from database.provider import get_async_engine
-from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
-    SqlAlchemyIdentityOutboxCleanupRepository,
-)
 from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
     PostgresIdentityOutboxRepository,
 )
 from identity.domain.constants import IdentityEventType
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
-from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -21,9 +17,6 @@ from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from identity_worker.adapters.inbound.jobs.identity_outbox_cleanup_job import (
-    IdentityOutboxCleanupJobHandler,
-)
 from identity_worker.adapters.inbound.jobs.identity_outbox_sweeper_job import (
     IdentityOutboxSweeperJobHandler,
 )
@@ -133,11 +126,10 @@ class WorkerContainer:
         outbox_repo: PostgresIdentityOutboxRepository,
         outbox_pub: AwsSnsPublisher,
     ) -> None:
-        outbox_cleanup_repo = SqlAlchemyIdentityOutboxCleanupRepository(self.session_factory)
+        # NOTE: Outbox cleanup (deleting old PROCESSED records) is handled by the
+        # dedicated identity-cleanup worker container, not here.
         sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
-        outbox_cleaner_use_case = OutboxCleanerUseCase(outbox_cleanup_repo)
         self.sweeper_job_handler = IdentityOutboxSweeperJobHandler(sweeper_use_case)
-        self.cleanup_job_handler = IdentityOutboxCleanupJobHandler(outbox_cleaner_use_case)
 
     def _wire_outbox_relay(
         self,
@@ -221,11 +213,7 @@ class WorkerContainer:
         async def sweep_handler(event: IdentityEventMessage) -> None:
             await self.sweeper_job_handler.execute()
 
-        async def cleanup_handler(event: IdentityEventMessage) -> None:
-            await self.cleanup_job_handler.execute()
-
         consumer.subscribe(IdentityJobName.IDENTITY_OUTBOX_SWEEPER.value, sweep_handler)
-        consumer.subscribe(IdentityJobName.IDENTITY_OUTBOX_CLEANUP.value, cleanup_handler)
 
     def _wire_events_consumer(self) -> None:
         @asynccontextmanager

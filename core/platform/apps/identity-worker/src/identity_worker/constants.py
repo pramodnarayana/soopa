@@ -1,11 +1,5 @@
-from enum import StrEnum
+# Job names are defined in the canonical identity domain package.
+# Re-exported here for backward compatibility within identity-worker.
+from identity.domain.constants import IdentityJobName as IdentityJobName
 
-
-class IdentityJobName(StrEnum):
-    """
-    Canonical event type names for identity worker scheduled jobs.
-    These must match the event_type values dispatched by the scheduler.
-    """
-
-    IDENTITY_OUTBOX_SWEEPER = "IDENTITY_OUTBOX_SWEEPER"
-    IDENTITY_OUTBOX_CLEANUP = "IDENTITY_OUTBOX_CLEANUP"
+__all__ = ["IdentityJobName"]

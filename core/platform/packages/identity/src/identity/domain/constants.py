@@ -23,3 +23,13 @@ class IdentityEventType(StrEnum):
 class UserStatus(StrEnum):
     ACTIVE = "active"
     INACTIVE = "inactive"
+
+
+class IdentityJobName(StrEnum):
+    """
+    Canonical job type names dispatched by the scheduler to identity workers.
+    These must match the event_type values sent by the scheduler.
+    """
+
+    IDENTITY_OUTBOX_SWEEPER = "IDENTITY_OUTBOX_SWEEPER"
+    IDENTITY_OUTBOX_CLEANUP = "IDENTITY_OUTBOX_CLEANUP"

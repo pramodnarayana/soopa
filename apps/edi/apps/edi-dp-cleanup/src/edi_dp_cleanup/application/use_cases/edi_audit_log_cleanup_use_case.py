@@ -11,6 +11,8 @@ class EdiAuditLogCleanupUseCase:
     """Application UseCase to clean up old EDI Data Plane audit logs."""
 
     def __init__(self, repository: EdiAuditLogCleanupRepositoryPort, retention_days: int = 90):
+        if retention_days < 0:
+            raise ValueError("retention_days cannot be negative")
         self.repository = repository
         self.retention_days = retention_days
 

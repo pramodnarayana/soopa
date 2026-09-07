@@ -18,10 +18,10 @@ class NotificationEventDispatcher:
     def __init__(
         self,
         notification_compiler: NotificationCompilerUseCase,
-        cleanup_job_handler: NotificationOutboxSweeperJobHandler,
+        sweeper_job_handler: NotificationOutboxSweeperJobHandler,
     ) -> None:
         self.notification_compiler = notification_compiler
-        self.cleanup_job_handler = cleanup_job_handler
+        self.sweeper_job_handler = sweeper_job_handler
 
     async def dispatch_raw(self, body: JsonDict) -> None:
         """
@@ -33,7 +33,7 @@ class NotificationEventDispatcher:
         top_level_event_type = body.get("event_type")
         if top_level_event_type == NotificationJobName.NOTIFICATION_OUTBOX_SWEEPER.value:
             logger.info("notification_sweeper_job_triggered")
-            await self.cleanup_job_handler.execute()
+            await self.sweeper_job_handler.execute()
             return
 
         if top_level_event_type != NotificationEventType.NOTIFICATION_TRIGGERED.value:

@@ -12,6 +12,7 @@ edi = { workspace = true }
 outbox = { workspace = true }
 pubsub = { workspace = true }
 seedwork = { workspace = true }
+database = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

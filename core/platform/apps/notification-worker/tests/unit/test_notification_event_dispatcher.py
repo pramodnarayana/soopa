@@ -22,7 +22,7 @@ async def test_dispatcher_process_message_valid():
     use_case = FakeDispatchUseCase()
     cleanup_mock = AsyncMock()
     dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
+        notification_compiler=use_case, sweeper_job_handler=cleanup_mock
     )
 
     body = {
@@ -49,7 +49,7 @@ async def test_dispatcher_ignores_other_events():
     use_case = FakeDispatchUseCase()
     cleanup_mock = AsyncMock()
     dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
+        notification_compiler=use_case, sweeper_job_handler=cleanup_mock
     )
 
     body = {
@@ -70,7 +70,7 @@ async def test_dispatcher_rejects_numeric_top_level_tenant_id():
     use_case = FakeDispatchUseCase()
     dispatcher = NotificationEventDispatcher(
         notification_compiler=use_case,
-        cleanup_job_handler=AsyncMock(),
+        sweeper_job_handler=AsyncMock(),
     )
 
     body = {
@@ -93,7 +93,7 @@ async def test_dispatcher_rejects_non_string_notification_type(notification_type
     use_case = FakeDispatchUseCase()
     dispatcher = NotificationEventDispatcher(
         notification_compiler=use_case,
-        cleanup_job_handler=AsyncMock(),
+        sweeper_job_handler=AsyncMock(),
     )
 
     body = {
@@ -115,7 +115,7 @@ async def test_dispatcher_handles_missing_payload():
     use_case = FakeDispatchUseCase()
     cleanup_mock = AsyncMock()
     dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
+        notification_compiler=use_case, sweeper_job_handler=cleanup_mock
     )
 
     body = {
@@ -145,7 +145,7 @@ async def test_dispatcher_rejects_non_dictionary_nested_objects(body):
     use_case = FakeDispatchUseCase()
     dispatcher = NotificationEventDispatcher(
         notification_compiler=use_case,
-        cleanup_job_handler=AsyncMock(),
+        sweeper_job_handler=AsyncMock(),
     )
 
     await dispatcher.dispatch_raw(body)
@@ -158,7 +158,7 @@ async def test_dispatcher_sweeper_job():
     use_case = FakeDispatchUseCase()
     cleanup_mock = AsyncMock()
     dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
+        notification_compiler=use_case, sweeper_job_handler=cleanup_mock
     )
 
     body = {

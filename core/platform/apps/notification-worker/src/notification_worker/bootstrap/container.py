@@ -23,6 +23,9 @@ from notification_worker.adapters.inbound.workers.notification_event_dispatcher 
 
 logger = structlog.get_logger(__name__)
 
+# NOTE: Outbox cleanup (deletion of old PROCESSED records) is handled by the
+# dedicated notification-cleanup worker container, not here.
+
 
 class WorkerContainer(containers.DeclarativeContainer):
     """
@@ -68,7 +71,7 @@ class WorkerContainer(containers.DeclarativeContainer):
         publisher=outbox_publisher,
     )
 
-    cleanup_worker = providers.Singleton(
+    sweeper_job = providers.Singleton(
         NotificationOutboxSweeperJobHandler,
         use_case=outbox_sweeper,
     )
@@ -76,7 +79,7 @@ class WorkerContainer(containers.DeclarativeContainer):
     notification_dispatcher = providers.Singleton(
         NotificationEventDispatcher,
         notification_compiler=notification_package.notification_compiler,
-        cleanup_job_handler=cleanup_worker,
+        sweeper_job_handler=sweeper_job,
     )
 
     priority_queue_consumer = providers.Singleton(

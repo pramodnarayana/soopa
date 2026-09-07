@@ -11,6 +11,8 @@ class EdiIdempotencyCleanupUseCase:
     """Application UseCase to clean up old EDI Data Plane idempotency results (ProcessedEvents)."""
 
     def __init__(self, repository: EdiIdempotencyCleanupRepositoryPort, retention_days: int = 14):
+        if retention_days < 0:
+            raise ValueError("retention_days cannot be negative")
         self.repository = repository
         self.retention_days = retention_days
 

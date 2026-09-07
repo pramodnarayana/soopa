@@ -19,6 +19,8 @@ class SqlAlchemyEdiAuditLogCleanupRepository(EdiAuditLogCleanupRepositoryPort):
         self.db_router = db_router
 
     async def cleanup_audit_logs(self, retention_days: int, concurrency_limit: int = 5) -> None:
+        if concurrency_limit <= 0:
+            raise ValueError("concurrency_limit must be strictly positive")
         sem = asyncio.Semaphore(concurrency_limit)
         shards = await self.db_router.get_all_shards()
 

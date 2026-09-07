@@ -1,0 +1,12 @@
+{
+  "name": "@soopa/identity-cleanup",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
+    "test": "echo 'No tests implemented yet'",
+    "cov": "uv run pytest --cov=identity_cleanup --cov-report=term-missing --cov-fail-under=80"
+  }
+}
