@@ -33,7 +33,7 @@ rules:
     severity: ERROR
   - id: ban-defensive-getattr
     patterns:
-      - pattern: getattr($OBJ, "...", ...)
+      - pattern: getattr($OBJ, $ATTR, ...)
     message: "Enterprise Rule: NEVER use getattr(obj, 'field', fallback) defensively. Use standard dot access to explicitly fail on missing properties."
     languages: [python]
     severity: ERROR
@@ -62,9 +62,27 @@ rules:
           - pattern: "def $FUNC(..., $ARG: dict, ...): ..."
           - pattern: "def $FUNC(..., $ARG: typing.Dict, ...): ..."
           - pattern: "def $FUNC(..., $ARG: Dict, ...): ..."
+          - pattern: "def $FUNC(..., $ARG: dict[$KEY, $VALUE], ...): ..."
+          - pattern: "def $FUNC(..., $ARG: typing.Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "def $FUNC(..., $ARG: Dict[$KEY, $VALUE], ...): ..."
           - pattern: "def $FUNC(...) -> dict: ..."
           - pattern: "def $FUNC(...) -> typing.Dict: ..."
           - pattern: "def $FUNC(...) -> Dict: ..."
+          - pattern: "def $FUNC(...) -> dict[$KEY, $VALUE]: ..."
+          - pattern: "def $FUNC(...) -> typing.Dict[$KEY, $VALUE]: ..."
+          - pattern: "def $FUNC(...) -> Dict[$KEY, $VALUE]: ..."
+          - pattern: "async def $FUNC(..., $ARG: dict, ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: typing.Dict, ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: Dict, ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: dict[$KEY, $VALUE], ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: typing.Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "async def $FUNC(...) -> dict: ..."
+          - pattern: "async def $FUNC(...) -> typing.Dict: ..."
+          - pattern: "async def $FUNC(...) -> Dict: ..."
+          - pattern: "async def $FUNC(...) -> dict[$KEY, $VALUE]: ..."
+          - pattern: "async def $FUNC(...) -> typing.Dict[$KEY, $VALUE]: ..."
+          - pattern: "async def $FUNC(...) -> Dict[$KEY, $VALUE]: ..."
     message: "Enterprise Rule: Strict Data Structures. Do not pass opaque `dict` objects in the domain or application layers. Use strongly typed dataclasses, Pydantic models, or JsonDict if dynamic data is required."
     languages: [python]
     severity: ERROR

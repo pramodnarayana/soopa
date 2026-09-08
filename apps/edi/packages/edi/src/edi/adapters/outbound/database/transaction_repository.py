@@ -14,6 +14,11 @@ class RouteModelProtocol(Protocol):
     trading_partner_id: str | None
 
 
+def _event_idempotency_key(idempotency_key: str | None, *, index: int, event_count: int) -> str:
+    base_key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
+    return f"{base_key}_{index}" if event_count > 1 else base_key
+
+
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonValue
 from sqlalchemy import Select, and_, or_, select
@@ -124,16 +129,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         for index, event in enumerate(aggregate.domain_events):
             event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
-            idempotency_key = (
-                f"{event.idempotency_key}_{index}"
-                if len(aggregate.domain_events) > 1
-                else event.idempotency_key
+            idempotency_key = _event_idempotency_key(
+                event.idempotency_key,
+                index=index,
+                event_count=len(aggregate.domain_events),
             )
             payload_dict = serialize_domain_event(event)
             outbox_record = DataPlaneOutbox(
                 id=event_id,
                 tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                idempotency_key=idempotency_key,
                 event_type=event.event_name,
                 payload=payload_dict,
                 status=OutboxStatus.PENDING,
@@ -174,16 +179,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         for index, event in enumerate(aggregate.domain_events):
             event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
-            idempotency_key = (
-                f"{event.idempotency_key}_{index}"
-                if len(aggregate.domain_events) > 1
-                else event.idempotency_key
+            idempotency_key = _event_idempotency_key(
+                event.idempotency_key,
+                index=index,
+                event_count=len(aggregate.domain_events),
             )
             payload_dict = serialize_domain_event(event)
             outbox_record = DataPlaneOutbox(
                 id=event_id,
                 tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                idempotency_key=idempotency_key,
                 event_type=event.event_name,
                 payload=payload_dict,
                 status=OutboxStatus.PENDING,

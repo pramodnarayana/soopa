@@ -75,6 +75,26 @@ async def test_sqs_consumer_missing_tenant_id_drops_message() -> None:
     assert len(events_received) == 0
 
 
+async def test_sqs_consumer_missing_idempotency_key_raises_validation_error() -> None:
+    """A missing producer key must prevent delivery and leave the SQS message unacknowledged."""
+    events_received = []
+
+    async def real_callback(event: EdiDataPlaneEventMessage) -> None:
+        events_received.append(event)
+
+    consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
+    body = {
+        "tenant_id": "tenant123",
+        "event_type": "DELIVER",
+        "payload": {"trace_id": "trace123"},
+    }
+
+    with pytest.raises(ValueError, match="idempotency_key is required"):
+        await consumer.handle(body)
+
+    assert events_received == []
+
+
 async def test_sqs_consumer_callback_exception_propogates() -> None:
     """Test that if the callback throws an exception, it propagates up."""
 
@@ -86,6 +106,7 @@ async def test_sqs_consumer_callback_exception_propogates() -> None:
     body = {
         "tenant_id": "tenant123",
         "event_type": "TRANSFORM_EVENT",
+        "idempotency_key": "idem123",
         "payload": {"trace_id": "trace123"},
     }
 

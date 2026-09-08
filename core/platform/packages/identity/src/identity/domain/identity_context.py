@@ -33,7 +33,7 @@ class IdentityContext:
     tenant_id: str | None = None
     organization_id: str | None = None
     authorized_tenants: set[str] = field(default_factory=set)
-    tenant_mapping: JsonDict = field(default_factory=dict)
+    tenant_mapping: Mapping[str, str] = field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
     tenant_roles: Mapping[str, list[str]] = field(default_factory=dict)
@@ -58,7 +58,7 @@ class IdentityContext:
 
 
 def identity_context_from_claims(
-    claims: TokenClaims, tenant_mapping: JsonDict | None = None
+    claims: TokenClaims, tenant_mapping: Mapping[str, str] | None = None
 ) -> IdentityContext:
     """
     Constructs an IdentityContext from validated token claims.
