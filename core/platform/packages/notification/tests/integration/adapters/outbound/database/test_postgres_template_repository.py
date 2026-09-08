@@ -1,13 +1,14 @@
 import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationTemplate
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork import generate_id, generate_random_hex
 from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
 )
-from notification.domain.models import PLATFORM_TENANT_ID, Channel
+from notification.domain.models import Channel
 
 
 @pytest.mark.asyncio

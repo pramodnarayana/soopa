@@ -1,7 +1,7 @@
 import time
 
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from database.models.identity import Tenant

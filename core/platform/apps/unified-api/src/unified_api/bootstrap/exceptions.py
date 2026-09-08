@@ -22,7 +22,11 @@ from edi.domain.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from ucp.domain.exceptions import IdentityProviderPortError, ResourceNotFoundError
+from ucp.domain.exceptions import (
+    IdentityProviderPortError,
+    ResourceNotFoundError,
+    StateConflictError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -62,6 +66,16 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
             status_code=500,
             content={"detail": "An internal identity provider error occurred."},
         )
+
+    @app.exception_handler(StateConflictError)
+    async def state_conflict_exception_handler(
+        request: Request, exc: StateConflictError
+    ) -> JSONResponse:
+        sanitized_path = (
+            request.url.path.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+        )
+        logger.warning("state_conflict", path=sanitized_path, error=str(exc))
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(

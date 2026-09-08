@@ -1,0 +1,10 @@
+{
+  "name": "@soopa/identity-outbox-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Worker service for handling Identity outbox relay and sweeping",
+  "scripts": {
+    "start": "uv run python -m identity_outbox_worker.main",
+    "dev": "uv run python -m identity_outbox_worker.main"
+  }
+}

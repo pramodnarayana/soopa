@@ -70,7 +70,7 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Centralized Database Engine & Connection Pooling**: NEVER use `create_async_engine` or `async_sessionmaker` directly inside a bounded context or worker container. ALWAYS import and inject the centralized `DatabaseProvider` from `core/platform/packages/database`.
 
 # Strict Boundary DTOs / Command Objects
-- **Strict DTO Standard**: Every bounded context MUST define a pure `application/dto.py` file to hold its Request/Command/Query objects (as `@dataclass(frozen=True)`).
+- **Co-located CQRS Standard**: Command and Query DTOs (as `@dataclass(frozen=True)`) MUST be co-located directly inside the Use Case file that handles them (e.g., `CreateUserCommand` at the top of `create_user_use_case.py`). Shared queries/responses can be placed in `queries.py` or `responses.py`. Do NOT use a single massive `dto.py` file or arbitrary entity-based folders like `dtos/users.py`.
 - **No Infrastructure Leaks**: NEVER pass web-specific framework models (e.g., FastAPI/Pydantic `BaseModel`) or ORM models directly into the Application Layer (Use Cases/Services).
 - **Adapter Translation**: The HTTP or Event adapter must strictly translate incoming payloads into these pure Command/DTO objects before passing them to the Application Layer.
 
@@ -105,3 +105,12 @@ The following paradigms define the entire system structure. Any new design or mo
 # No Defensive getattr() Masking
 - **Strict Attribute Access**: NEVER use `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`).
 - **Fail Fast**: If a database column is dropped or renamed, the application MUST fail statically (via typecheckers) or loudly at runtime rather than silently returning `None` and propagating phantom data.
+
+# Dual Architecture & Legacy Discovery Methodology (Strictly Enforced)
+
+To guarantee that no legacy code or "Dual Architectures" (multiple ways of solving the same problem) slip through the cracks, agents MUST NEVER rely exclusively on shallow, keyword-based static analysis (e.g., grepping for `Any`, `unittest.mock`, or `legacy`).
+
+When auditing the codebase, agents MUST execute the following methodologies:
+1. **Top-Down Execution Path Tracing (Dependency Graphing):** Do not just audit bottom-up from the database to the Use Case. You MUST trace the execution path starting from the absolute entry points (`main.py`, FastAPI routers, SQS pollers) all the way down. If `identity-worker` maps `SqsConsumerManager -> Dispatcher -> UseCase`, you must rigidly verify that EVERY other worker uses this exact same control flow. Any deviation in plumbing is a Dual Architecture violation.
+2. **Cross-Module Taxonomy Auditing:** Compare the folder structures and file names of all bounded contexts. If one worker has a `core/scheduler/` directory and others do not, immediately flag this as a taxonomy drift and investigate for legacy patterns.
+3. **Semantic Structural Analysis:** When tasked with deep audits, consider using structural analysis tools (like custom `semgrep` rules) to mathematically enforce architectural invariants (e.g., "no file named `main.py` may directly invoke `AwsSqsConsumer.poll_raw_message()`).

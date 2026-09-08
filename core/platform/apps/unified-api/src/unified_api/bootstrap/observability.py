@@ -35,7 +35,7 @@ def setup_observability(app: FastAPI) -> None:
     )
 
     # 3. Instrument the FastAPI application to automatically generate traces for HTTP requests
-    FastAPIInstrumentor.instrument_app(app)
+    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer.trace_provider)
 
     # Let the log system know we started
     ObservabilityProvider.logger(__name__).info(

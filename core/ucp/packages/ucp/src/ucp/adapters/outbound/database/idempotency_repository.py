@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from database.models.idempotency import IdempotencyResult
+from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +17,7 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
 
     async def get_result(
         self, tenant_id: str, idempotency_key: str
-    ) -> tuple[bool, dict[str, Any] | None, int | None]:
+    ) -> tuple[bool, JsonDict | None, int | None]:
         expires_at = datetime.now(UTC) + timedelta(hours=24)
         now = datetime.now(UTC)
 
@@ -79,7 +79,7 @@ class SqlAlchemyIdempotencyRepository(IdempotencyRepositoryPort):
         self,
         tenant_id: str,
         idempotency_key: str,
-        response_body: dict[str, Any],
+        response_body: JsonDict,
         response_status_code: int,
     ) -> None:
         result = await self.session.execute(

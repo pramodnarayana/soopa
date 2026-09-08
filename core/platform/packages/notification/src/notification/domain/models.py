@@ -1,8 +1,7 @@
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any
 
+from seedwork.domain.types import JsonDict
 from seedwork.models import AggregateRoot
 
 from notification.domain.events import NotificationDispatchedEvent
@@ -12,13 +11,6 @@ class Channel(StrEnum):
     EMAIL = "EMAIL"
     IN_APP = "IN_APP"
     SLACK = "SLACK"
-
-
-@dataclass(frozen=True)
-class NotificationEvent:
-    tenant_id: str
-    event_type: str
-    data: Mapping[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -42,15 +34,6 @@ class NotificationPreference:
 
 
 @dataclass(frozen=True)
-class NotificationOutboxEvent:
-    tenant_id: str
-    event_type: str
-    idempotency_key: str
-    payload: Mapping[str, Any]
-    id: str | None = None
-
-
-@dataclass(frozen=True)
 class UserNotificationPreference:
     id: str
     tenant_id: str
@@ -60,10 +43,6 @@ class UserNotificationPreference:
     is_enabled: bool
 
 
-# Platform-level sentinel tenant ID used for global default notification templates.
-PLATFORM_TENANT_ID = "iam_ten_000"
-
-
 @dataclass
 class NotificationDispatch(AggregateRoot):
     id: str
@@ -71,7 +50,7 @@ class NotificationDispatch(AggregateRoot):
     channel: Channel
     subject: str | None
     body: str
-    data: dict[str, Any]
+    data: JsonDict
     target_user_id: str | None
 
     @classmethod
@@ -81,9 +60,10 @@ class NotificationDispatch(AggregateRoot):
         channel: Channel,
         subject: str | None,
         body: str,
-        data: dict[str, Any],
+        data: JsonDict,
         idempotency_key: str,
     ) -> "NotificationDispatch":
+        target_user_id = data.get("user_id") or data.get("target_user_id")
         dispatch = cls(
             id=idempotency_key,
             tenant_id=tenant_id,
@@ -91,7 +71,7 @@ class NotificationDispatch(AggregateRoot):
             subject=subject,
             body=body,
             data=data,
-            target_user_id=data.get("user_id") or data.get("target_user_id"),
+            target_user_id=str(target_user_id) if target_user_id else None,
         )
         dispatch.add_domain_event(
             NotificationDispatchedEvent(

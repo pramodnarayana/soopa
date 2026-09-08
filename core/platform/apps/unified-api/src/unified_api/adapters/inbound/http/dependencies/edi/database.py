@@ -19,7 +19,7 @@ from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id

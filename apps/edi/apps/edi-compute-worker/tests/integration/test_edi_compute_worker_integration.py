@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import os
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -56,7 +57,7 @@ def event_loop() -> AsyncGenerator[asyncio.AbstractEventLoop, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine() -> AsyncGenerator[Any, None]:
-    db_url = "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1"
+    db_url = os.environ["TEST_SHARD_DB_URL"]
     engine = create_async_engine(db_url, echo=True, future=True, pool_pre_ping=True)
     yield engine
     await engine.dispose()

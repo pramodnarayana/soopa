@@ -3,10 +3,11 @@ from contextlib import asynccontextmanager
 from typing import Any, cast
 
 import structlog
-from database.events import EventEnvelope
 from database.router import DatabaseRouter
+from edi.domain.enums import EdiOutboxSource
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from seedwork.events import EventEnvelope
 from sqlalchemy import CursorResult, text
 
 logger = structlog.get_logger(__name__)
@@ -54,7 +55,7 @@ class PostgresEdiControlPlaneOutboxRepository(OutboxRepositoryPort):
                         event_type=str(mapping["event_type"]),
                         payload=cast(dict[str, Any], mapping["payload"]),
                         idempotency_key=mapping.get("idempotency_key"),
-                        source="edi_control_plane",
+                        source=EdiOutboxSource.EDI_CONTROL_PLANE.value,
                     )
                 )
             return events

@@ -1,8 +1,16 @@
+from dataclasses import dataclass
+
 import structlog
 
-from ucp.application.dto import AssignUserRoleRequest
-from ucp.domain.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import InvalidTenantNameError, ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+
+
+@dataclass(frozen=True, kw_only=True)
+class AssignUserRoleCommand:
+    user_id: str
+    role_id: str
+
 
 logger = structlog.get_logger(__name__)
 
@@ -12,17 +20,17 @@ class AssignUserRoleUseCase:
     Assigns a role to a user within a tenant.
     """
 
-    def __init__(self, uow: UcpUnitOfWorkPort):
+    def __init__(self, uow: UcpUnitOfWorkPort) -> None:
         self.uow = uow
 
-    async def execute(self, tenant_id: str | None, request: AssignUserRoleRequest) -> None:
+    async def execute(self, tenant_id: str | None, request: AssignUserRoleCommand) -> None:
         bound_logger = logger.bind(
             tenant_id=tenant_id, user_id=request.user_id, role_id=request.role_id
         )
         bound_logger.info("assign_user_role.started")
 
         if not tenant_id:
-            raise ValueError("Role assignment requires a valid tenant ID.")
+            raise InvalidTenantNameError("Role assignment requires a valid tenant ID.")
 
         async with self.uow:
             # Domain-Driven Design: Use Repository Ports to fetch aggregates, no ORM leakage.

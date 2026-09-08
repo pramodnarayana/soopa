@@ -1,6 +1,6 @@
 import asyncio
 import datetime
-from typing import Any, cast
+from typing import cast
 
 from database.models.idempotency import IdempotencyResult
 from sqlalchemy import delete, select, tuple_
@@ -28,7 +28,9 @@ class SqlAlchemyUcpIdempotencyCleanupRepository(UcpIdempotencyCleanupRepositoryP
                         .limit(5000)
                     )
                 )
-                res_idempotency = cast(CursorResult[Any], await session.execute(stmt_idempotency))
+                res_idempotency = cast(
+                    CursorResult[tuple[()]], await session.execute(stmt_idempotency)
+                )
                 deleted = res_idempotency.rowcount
                 idempotency_deleted += deleted
                 await session.commit()

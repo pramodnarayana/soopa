@@ -28,6 +28,13 @@ def resolver_for(addresses: dict[str, str]) -> Callable[..., list[tuple[object, 
     return resolve
 
 
+@pytest.fixture(autouse=True)
+def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
+    # Instead of mocking settings, we set the environment variable
+    monkeypatch.setenv("ENV", "production")
+
+
 @pytest.fixture
 def public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
@@ -35,13 +42,6 @@ def public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
         "_orig_getaddrinfo",
         resolver_for({PUBLIC_HOST: PUBLIC_IP, "localhost": "127.0.0.1"}),
     )
-
-
-@pytest.fixture(autouse=True)
-def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
-    # Instead of mocking settings, we set the environment variable
-    monkeypatch.setenv("ENV", "production")
 
 
 def test_validate_target_url_invalid_scheme() -> None:

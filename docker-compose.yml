@@ -24,7 +24,7 @@ x-monolith-base: &monolith-base
     SQS_UCP_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/ucp-events.fifo
     SQS_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/identity-events.fifo
     SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL: http://localstack:4566/000000000000/edi-priority-notifications.fifo
-    SQS_EMAIL_DELIVERY_QUEUE_URL: http://localstack:4566/000000000000/email-delivery.fifo
+    SQS_EMAIL_CHANNEL_QUEUE_URL: http://localstack:4566/000000000000/email-channel.fifo
   depends_on:
     postgres_global:
       condition: service_healthy
@@ -65,24 +65,60 @@ services:
     <<: *monolith-base
     command: ["python", "-m", "config_sync_worker.provision.main"]
 
-  edi-background-worker:
+  edi-cp-outbox-worker:
     <<: *monolith-base
-    command: ["python", "-m", "edi_background_worker.main"]
+    command: ["python", "-m", "edi_cp_outbox_worker.main"]
+
+  edi-dp-outbox-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "edi_dp_outbox_worker.main"]
+
+  edi-cp-cleanup:
+    <<: *monolith-base
+    command: ["python", "-m", "edi_cp_cleanup.main"]
 
   ucp-worker:
     <<: *monolith-base
     command: ["python", "-m", "ucp_worker.main"]
 
+  ucp-outbox-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "ucp_outbox_worker.main"]
+
+  ucp-cleanup:
+    <<: *monolith-base
+    command: ["python", "-m", "ucp_cleanup.main"]
+
   identity-worker:
     <<: *monolith-base
     command: ["python", "-m", "identity_worker.main"]
 
+  identity-outbox-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "identity_outbox_worker.main"]
+
+  identity-cleanup:
+    <<: *monolith-base
+    command: ["python", "-m", "identity_cleanup.main"]
+
   # -------------------------------------------------------------------------
   # 3. Replication & Reliability Tier (Background Daemons)
   # -------------------------------------------------------------------------
-  notification-sweeper:
+  notification-worker:
     <<: *monolith-base
-    command: ["python", "-m", "notification.workers.sweeper"]
+    command: ["python", "-m", "notification_worker.main"]
+
+  notification-outbox-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "notification_outbox_worker.main"]
+
+  notification-email-worker:
+    <<: *monolith-base
+    command: ["python", "-m", "notification_email_worker.main"]
+
+  notification-cleanup:
+    <<: *monolith-base
+    command: ["python", "-m", "notification_cleanup.main"]
 
   # -------------------------------------------------------------------------
   # 4. Scheduler Tier (Cron)
@@ -90,3 +126,7 @@ services:
   scheduler-engine:
     <<: *monolith-base
     command: ["python", "-m", "scheduler_engine.main"]
+
+  edi-dp-cleanup:
+    <<: *monolith-base
+    command: ["python", "-m", "edi_dp_cleanup.main"]

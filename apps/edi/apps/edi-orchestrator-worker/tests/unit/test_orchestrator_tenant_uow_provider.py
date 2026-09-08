@@ -1,4 +1,5 @@
 import pytest
+from database.models.identity import Tenant
 from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
@@ -7,7 +8,9 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from edi.config.settings import get_settings
 from seedwork import generate_id
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from sqlalchemy import select, text
+from ucp_models.sharding import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
 
 
 @pytest.mark.integration
@@ -16,15 +19,34 @@ async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort) -> Non
     test_tenant_id = generate_id("t")
     shard_name = f"shard_{test_tenant_id}"
 
-    # 1. Setup Data - real tenant in real db
+    # 1. Setup Data - self-contained, creates all required FK rows
     async for session in db_router.get_global_session():
-        session.add(
-            DatabaseShard(
-                name=shard_name,
-                dsn="postgresql+asyncpg://postgres:postgres@localhost:5432/platform_db",
-            )
+        # ShardRegistry FK requires the tenant to exist in identity.tenants
+        tenant = Tenant(
+            id=test_tenant_id,
+            name=f"Test Tenant {test_tenant_id[:8]}",
+            slug=f"test-{test_tenant_id[:8]}",
         )
-        session.add(ShardRegistry(tenant_id=test_tenant_id, shard_name=shard_name))
+        session.add(tenant)
+        await session.flush()
+
+        # The 'edi' app slug is globally unique — fetch existing or create new
+        existing_app = await session.scalar(select(App).where(App.slug == "edi"))
+        if existing_app is None:
+            edi_app = App(slug="edi", name="EDI", description="EDI application")
+            session.add(edi_app)
+            await session.flush()
+        else:
+            edi_app = existing_app
+
+        shard = DatabaseShard(
+            id=generate_id("ucp_shard"),
+            name=shard_name,
+            dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+        )
+        session.add(shard)
+        await session.flush()
+        session.add(ShardRegistry(tenant_id=test_tenant_id, app_id=edi_app.id, shard_id=shard.id))
         await session.commit()
 
     # 2. Use Real components
@@ -45,8 +67,5 @@ async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort) -> Non
     # 4. Verify it creates a real SQL Alchemy UOW
     async with uow_factory() as uow:
         assert isinstance(uow, SqlAlchemyDataPlaneUnitOfWork)
-        # Should be able to execute a dummy query on the tenant session
-        from sqlalchemy import text
-
-        res = await uow._session.execute(text("SELECT 1"))
+        res = await uow.session.execute(text("SELECT 1"))
         assert res.scalar() == 1

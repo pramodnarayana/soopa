@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from ucp.domain.exceptions import ResourceNotFoundError
+from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class UpdateUserCommand:
     tenant_id: str
     user_id: str
@@ -27,7 +27,9 @@ class UpdateUserUseCase:
                 raise ResourceNotFoundError(f"Tenant {command.tenant_id} not found")
 
             if not tenant.idp_tenant_id:
-                raise ValueError(f"Tenant {command.tenant_id} has no associated IDP organization")
+                raise StateConflictError(
+                    f"Tenant {command.tenant_id} has no associated IDP organization"
+                )
 
             user = await self._uow.user_repo.find_by_id_and_tenant(
                 user_id=command.user_id, tenant_id=command.tenant_id

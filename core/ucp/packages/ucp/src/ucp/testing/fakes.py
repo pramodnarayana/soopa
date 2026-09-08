@@ -8,6 +8,7 @@ from identity.ports.outbound.api_token_repository_port import ApiTokenRepository
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
+from ucp.domain.models.app import App
 from ucp.domain.models.tenant import Tenant
 from ucp.ports.outbound.app_repository_port import AppRepositoryPort
 from ucp.ports.outbound.idempotency_repository_port import IdempotencyRepositoryPort
@@ -147,13 +148,13 @@ class DummyApiTokenRepository(ApiTokenRepositoryPort):
 
 class DummyAppRepository(AppRepositoryPort):
     def __init__(self) -> None:
-        self.apps: list[Any] = []
+        self.apps: list[App] = []
 
-    async def find_all(self) -> list[Any]:
+    async def find_all(self) -> list[App]:
         return self.apps
 
-    async def find_by_id(self, app_id: str) -> Any | None:
-        return next((a for a in self.apps if getattr(a, "id", None) == app_id), None)
+    async def find_by_id(self, app_id: str) -> App | None:
+        return next((a for a in self.apps if a.id == app_id), None)
 
 
 class DummyWebhookRepository(WebhookRepositoryPort):

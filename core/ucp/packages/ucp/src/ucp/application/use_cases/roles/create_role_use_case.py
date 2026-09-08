@@ -1,10 +1,26 @@
+from dataclasses import dataclass
+
 import structlog
 from identity.domain.models.authorization import Capability, Role
 from seedwork import generate_id
 
-from ucp.application.dto import CreateRoleRequest, CreateRoleResponse
 from ucp.domain.exceptions import InvalidCapabilityError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateRoleCommand:
+    name: str
+    capabilities: tuple[str, ...]
+    description: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateRoleResponse:
+    id: str
+    name: str
+    capabilities: list[str]
+
 
 logger = structlog.get_logger(__name__)
 
@@ -18,7 +34,7 @@ class CreateRoleUseCase:
         self.uow = uow
 
     async def execute(
-        self, tenant_id: str | None, request: CreateRoleRequest
+        self, tenant_id: str | None, request: CreateRoleCommand
     ) -> CreateRoleResponse:
         bound_logger = logger.bind(tenant_id=tenant_id, role_name=request.name)
         bound_logger.info("create_role.started")
@@ -36,7 +52,7 @@ class CreateRoleUseCase:
                 tenant_id=tenant_id,
                 name=request.name,
                 description=request.description,
-                capabilities=request.capabilities,
+                capabilities=list(request.capabilities),
             )
             await self.uow.role_repo.save(role)
             await self.uow.commit()

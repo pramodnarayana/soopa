@@ -12,6 +12,7 @@ from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
+from observability import ObservabilityProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
@@ -22,6 +23,7 @@ logger = structlog.get_logger("worker_runner")
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("edi-compute-worker")
     logger.info("compute_worker_initialization_started")
     settings = get_settings()
     aws_endpoint = settings.aws.endpoint_url

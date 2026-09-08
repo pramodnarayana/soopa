@@ -1,13 +1,12 @@
-from typing import Any
-
 from database.models.common import OutboxMixin
 from database.models.core import UcpBase
+from seedwork.domain.types import JsonDict
 from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 
-class ControlPlaneOutbox(UcpBase, OutboxMixin):
+class UcpOutbox(UcpBase, OutboxMixin):
     __tablename__ = "outbox"
     ID_PREFIX = "ucp_cp_ob"
 
@@ -25,6 +24,6 @@ class ControlPlaneOutbox(UcpBase, OutboxMixin):
     )
 
     @property
-    def body(self) -> dict[str, Any]:
+    def body(self) -> JsonDict:
         """Alias for payload to satisfy OutboxEvent protocol."""
         return self.payload

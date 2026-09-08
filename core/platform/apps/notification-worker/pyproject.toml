@@ -6,12 +6,16 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "notification",
+    "outbox",
+    "seedwork",
     "aioboto3",
     "structlog",
 ]
 
 [tool.uv.sources]
 notification = { workspace = true }
+outbox = { workspace = true }
+seedwork = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

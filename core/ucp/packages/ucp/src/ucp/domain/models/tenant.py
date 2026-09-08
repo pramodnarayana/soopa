@@ -12,7 +12,11 @@ from ucp.domain.events import (
     TenantProvisionedEvent,
     TenantStatusToggledEvent,
 )
-from ucp.domain.exceptions import AppSubscriptionError, TenantRenameError
+from ucp.domain.exceptions import (
+    AppSubscriptionError,
+    StateConflictError,
+    TenantRenameError,
+)
 
 
 @dataclass
@@ -90,7 +94,7 @@ class Tenant(AggregateRoot):
             if self.idp_tenant_id == idp_tenant_id:
                 # Idempotent no-op when re-setting to the same ID
                 return
-            raise ValueError(
+            raise StateConflictError(
                 f"Tenant already has a different IDP organization associated: {self.idp_tenant_id}"
             )
         self.idp_tenant_id = idp_tenant_id
@@ -141,7 +145,7 @@ class Tenant(AggregateRoot):
         Raises AlreadyDeletedError if the tenant has already been deleted.
         """
         if self.deleted_at is not None:
-            raise ValueError(f"Tenant '{self.id}' has already been deleted.")
+            raise StateConflictError(f"Tenant '{self.id}' has already been deleted.")
         self.deleted_at = datetime.now(UTC)
         self.updated_at = self.deleted_at
         if self.idp_tenant_id:

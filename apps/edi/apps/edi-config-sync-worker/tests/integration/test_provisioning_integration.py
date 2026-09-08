@@ -38,7 +38,7 @@ from edi.adapters.outbound.database.models.control_plane import AS2Partner
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
 from edi.domain.enums import EdiEventType
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
@@ -59,12 +59,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     Cleans up inserted data at the end of the test.
     """
     db_router = test_db_router
-    base_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if base_url.startswith("postgresql://"):
-        base_url = base_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    base_url = os.environ["DATABASE_URL"]
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 

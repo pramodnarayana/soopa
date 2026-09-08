@@ -8,9 +8,7 @@ from database.provider import get_async_engine
 from sqlalchemy import text
 
 # Database Connection
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/soopa_data_plane"
-)
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 # SQS Connection (LocalStack)
 AWS_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")

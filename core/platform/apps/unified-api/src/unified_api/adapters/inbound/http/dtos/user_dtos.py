@@ -5,9 +5,10 @@ must NOT be imported from the Application or Domain layers.
 """
 
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field
+
+from unified_api.adapters.inbound.http.constants import ToggleUserAction
 
 
 class UserStateResponse(StrEnum):
@@ -41,7 +42,7 @@ class UpdateUserRequest(BaseModel):
 class ToggleUserStatusRequest(BaseModel):
     """Request body for PATCH /tenants/{tenant_id}/users/{user_id}/status."""
 
-    action: Literal["activate", "deactivate"]
+    action: ToggleUserAction
 
 
 class UserResponse(BaseModel):

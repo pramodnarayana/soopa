@@ -29,6 +29,7 @@ from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
+from unified_api.adapters.inbound.http.constants import ToggleUserAction
 from unified_api.adapters.inbound.http.dtos.user_dtos import (
     CreateUserRequest,
     ToggleUserStatusRequest,
@@ -171,7 +172,7 @@ async def toggle_status(
     command = ToggleUserStatusCommand(
         tenant_id=canonical_tenant_id,
         user_id=user_id,
-        action=dto.action,
+        is_active=(dto.action == ToggleUserAction.ACTIVATE),
     )
 
     try:

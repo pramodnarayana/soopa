@@ -6,6 +6,8 @@ import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.config.settings import get_settings
+from edi.domain.enums import EdiConstants
+from observability import ObservabilityProvider
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
@@ -29,7 +31,9 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("config-sync-worker")
     settings = get_settings()
+    logger.info("config_sync_worker_starting")
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
@@ -54,56 +58,52 @@ async def main() -> None:
         queue_name=settings.sqs.provisioning_queue_url.rsplit("/", 1)[-1],
         handler=dispatcher.dispatch_raw,
     )
-    sqs_manager.start()
+
+    outbox_repository = PostgresEdiControlPlaneOutboxRepository(db_router)
+    outbox_publisher = AwsSnsPublisher(
+        topic_arn=settings.aws.sns_topic_arn,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+    outbox_processor = OutboxProcessorUseCase(
+        repository=outbox_repository,
+        publisher=outbox_publisher,
+        worker_id="edi_config_sync_worker",
+    )
+    outbox_relay = PostgresOutboxRelay(
+        processor=outbox_processor,
+        database_url=settings.database.global_url,
+        listen_channel=EdiConstants.OUTBOX_CHANNEL.value,
+    )
 
     loop = asyncio.get_running_loop()
     stop_event = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop_event.set)
-    # Instantiate Adapters for Outbox Relay
-    outbox_relay_repository = PostgresEdiControlPlaneOutboxRepository(db_router=db_router)
-    outbox_relay_publisher = AwsSnsPublisher(
-        topic_arn=settings.aws.sns_topic_arn,
-        endpoint_url=settings.aws.endpoint_url,
-        region_name=settings.aws.default_region,
-    )
-
-    # 2. Outbox Processor & Postgres Listener (Control Plane)
-    logger.info("initializing_outbox_processor_and_listener")
-    outbox_processor = OutboxProcessorUseCase(
-        repository=outbox_relay_repository,
-        publisher=outbox_relay_publisher,
-    )
-    outbox_listener = PostgresOutboxRelay(
-        listen_channel="edi_outbox_channel",
-        processor=outbox_processor,
-        database_url=settings.database.global_url,
-    )
-
     try:
-        async with outbox_relay_publisher:
-            outbox_listener.start()
+        sqs_manager.start()
+        outbox_relay.start()
 
-            # Wait for stop signal, or if sqs_manager/outbox_listener fails
-            manager_task = sqs_manager.task
-            tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-            if manager_task:
-                tasks_to_wait.append(manager_task)
+        # Wait for stop signal, or if sqs_manager fails
+        manager_task = sqs_manager.task
+        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
+        if manager_task:
+            tasks_to_wait.append(manager_task)
 
-            done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
+        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
 
-            # If the manager task completed with an exception, re-raise it
-            for task in done:
-                if task is manager_task and task.exception():
-                    exc = task.exception()
-                    logger.error("sqs_consumer_manager_failed", exc_info=exc)
-                    if exc:
-                        raise exc
+        # If the manager task completed with an exception, re-raise it
+        for task in done:
+            if task is manager_task and task.exception():
+                exc = task.exception()
+                logger.error("sqs_consumer_manager_failed", exc_info=exc)
+                if exc:
+                    raise exc
 
     finally:
         logger.info("shutting_down_gracefully")
+        await outbox_relay.stop()
         await sqs_manager.stop()
-        await outbox_listener.stop()
 
         # Close adapter resources
         await db_router.close_all()

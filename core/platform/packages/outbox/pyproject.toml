@@ -5,6 +5,7 @@ description = "Generic PostgreSQL Outbox Engine"
 requires-python = ">=3.12"
 dependencies = [
     "database",
+    "seedwork",
     "asyncpg>=0.29.0",
     "structlog>=24.0.0",
 ]
@@ -18,3 +19,4 @@ packages = ["src/outbox"]
 
 [tool.uv.sources]
 database = { workspace = true }
+seedwork = { workspace = true }

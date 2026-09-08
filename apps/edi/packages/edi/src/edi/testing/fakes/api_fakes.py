@@ -774,7 +774,7 @@ class MockSession:
     def __init__(self) -> None:
         pass
 
-    async def execute(self, statement: object, params: dict | None = None) -> MockResult:
+    async def execute(self, _statement: object, params: dict | None = None) -> MockResult:
         return MockResult([])
 
 

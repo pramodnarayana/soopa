@@ -1,0 +1,66 @@
+[project]
+name = "notification_cleanup"
+version = "0.1.0"
+description = "Dedicated cleanup worker for the Notification bounded context outbox"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "notification",
+    "database",
+    "outbox",
+    "pubsub",
+    "seedwork",
+    "structlog",
+    "sqlalchemy>=2.0.29",
+    "asyncpg>=0.29.0",
+]
+
+[tool.uv.sources]
+notification = { workspace = true }
+database = { workspace = true }
+outbox = { workspace = true }
+pubsub = { workspace = true }
+seedwork = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.22",
+    "mypy",
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/notification_cleanup"]
+
+[tool.mypy]
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "asyncpg",
+    "aioboto3",
+    "aioboto3.*",
+    "botocore",
+    "botocore.*",
+]
+ignore_missing_imports = true
+
+[tool.pyright]
+venvPath = "../../../.."
+venv = ".venv"
+extraPaths = [
+    "../../packages/notification/src",
+    "../../packages/outbox/src",
+    "../../packages/pubsub/src",
+    "../../packages/seedwork/src",
+    "../../packages/database/src",
+    "src",
+]
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"

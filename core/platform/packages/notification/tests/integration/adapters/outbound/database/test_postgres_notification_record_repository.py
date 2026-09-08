@@ -39,7 +39,7 @@ async def test_save_notification_persists_to_database(db_session_factory):
             channel=Channel.IN_APP,
             subject="Important Alert",
             body="This is the message body.",
-            data={"tx_id": "123", "target_user_id": "user-123"},
+            data={"tx_id": "123", "user_id": "user-123"},
             idempotency_key="idemp_123",
         )
         await repo.save(dispatch)

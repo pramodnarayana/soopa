@@ -54,6 +54,12 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self.strategies = strategies
         self.public_paths = public_paths
 
+    @staticmethod
+    def _preserve_bearer_challenge(response: Response, identity: object | None) -> Response:
+        if identity is None:
+            response.headers.setdefault("WWW-Authenticate", "Bearer")
+        return response
+
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         logger.debug(
             "auth_middleware_intercepted_request",
@@ -128,4 +134,5 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
             path=request.url.path,
             has_identity=hasattr(request.state, "identity") and request.state.identity is not None,
         )
-        return await call_next(request)
+        response = await call_next(request)
+        return self._preserve_bearer_challenge(response, request.state.identity)

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from database.events import EventEnvelope
+from seedwork.events import EventEnvelope
 
 
 class NotificationOutboxRepositoryPort(Protocol):

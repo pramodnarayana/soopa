@@ -6,12 +6,12 @@ import structlog
 from outbox.domain.constants import OutboxStatus
 from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.events import EventEnvelope
 from seedwork.utils import generate_id, generate_random_hex
 from sqlalchemy import CursorResult, or_, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from database.events import EventEnvelope
 from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort

@@ -4,7 +4,7 @@ from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DeleteUserCommand:
     tenant_id: str
     user_id: str

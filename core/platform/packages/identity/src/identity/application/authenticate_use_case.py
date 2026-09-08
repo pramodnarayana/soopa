@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import structlog
 
 from identity.domain.identity_context import IdentityContext, identity_context_from_claims
@@ -20,15 +22,22 @@ class TenantNotProvisionedError(Exception):
         self.tenant_id = tenant_id
 
 
+@dataclass(frozen=True)
+class AuthenticateCommand:
+    """Command to authenticate a user via bearer token."""
+
+    authorization_header: str | None
+
+
 async def authenticate_bearer_token(
-    authorization_header: str | None,
+    command: AuthenticateCommand,
     token_verifier: TokenVerifierPort,
 ) -> IdentityContext:
-    if authorization_header is None:
+    if command.authorization_header is None:
         logger.warning("authentication_failed", reason="missing_header")
         raise AuthenticationError("Missing bearer token.")
 
-    parts = authorization_header.split(maxsplit=1)
+    parts = command.authorization_header.split(maxsplit=1)
     if not parts or parts[0].lower() != "bearer":
         logger.warning("authentication_failed", reason="missing_bearer_prefix")
         raise AuthenticationError("Missing bearer token.")

@@ -2,6 +2,7 @@ import asyncio
 import signal
 
 import structlog
+from observability import ObservabilityProvider
 
 from worker.data.main import main as data_main
 
@@ -9,6 +10,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("edi-orchestrator-worker")
     logger.info("orchestrator_worker_starting")
 
     data_task = asyncio.create_task(data_main())

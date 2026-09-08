@@ -8,6 +8,8 @@ class OutboxCleanerUseCase:
     """Application UseCase to clean up old PROCESSED outbox events."""
 
     def __init__(self, repository: OutboxCleanupRepositoryPort, retention_days: int = 3):
+        if retention_days < 0:
+            raise ValueError("retention_days cannot be negative")
         self.repository = repository
         self.retention_days = retention_days
 

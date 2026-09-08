@@ -2,11 +2,11 @@ import contextlib
 
 from database.models.identity import Tenant
 from database.router import DatabaseRouter
+from edi.domain.enums import EdiConstants
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard, ShardRegistry
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
-from worker.domain.constants import EDI_APP_SLUG
 from worker.ports.outbound.tenant_port import TenantPort
 
 
@@ -23,7 +23,7 @@ class SqlAlchemyTenantAdapter(TenantPort):
                 select(Tenant.id)
                 .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
                 .join(App, App.id == ShardRegistry.app_id)
-                .where(App.slug == EDI_APP_SLUG)
+                .where(App.slug == EdiConstants.EDI_APP_SLUG.value)
             )
             result = await global_session.execute(stmt)
             return [str(t_id) for t_id in result.scalars().all()]
@@ -43,7 +43,7 @@ class SqlAlchemyTenantAdapter(TenantPort):
                 .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
                 .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
                 .join(App, App.id == ShardRegistry.app_id)
-                .where(Tenant.id == tenant_id, App.slug == EDI_APP_SLUG)
+                .where(Tenant.id == tenant_id, App.slug == EdiConstants.EDI_APP_SLUG.value)
             )
             result = await global_session.execute(stmt)
             row = result.first()

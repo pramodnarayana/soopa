@@ -8,7 +8,11 @@ At startup, call ObservabilityProvider.configure(...) once.
 Everywhere else, call ObservabilityProvider.tracer(), .metrics(), .logger(name).
 """
 
+import os
+
 from .adapters.outbound.noop import NoOpLogger, NoOpMetrics, NoOpTracer
+from .adapters.outbound.otel_tracer import OtelTracer
+from .adapters.outbound.structlog_logger import StructlogLogger
 from .ports.outbound.logger_port import LoggerPort
 from .ports.outbound.metrics_port import MetricsPort
 from .ports.outbound.tracer_port import TracerPort
@@ -65,6 +69,26 @@ class ObservabilityProvider:
         cls._tracer = tracer
         cls._metrics = metrics
         cls._default_logger = logger
+
+    @classmethod
+    def auto_configure_from_env(cls, service_name: str) -> None:
+        """
+        Automatically reads OTLP_ENDPOINT and LOG_LEVEL from the environment and configures all adapters.
+        Use this to prevent duplicating composition root logic across workers and APIs.
+        """
+        otlp_endpoint = os.getenv("OTLP_ENDPOINT")
+        log_level = os.getenv("LOG_LEVEL", "INFO")
+
+        cls.configure(
+            tracer=OtelTracer(service_name=service_name, otlp_endpoint=otlp_endpoint),
+            metrics=NoOpMetrics(),  # OtelMetrics implementation pending
+            logger=StructlogLogger(
+                name=service_name,
+                log_level=log_level,
+                service_name=service_name,
+                otlp_endpoint=otlp_endpoint,
+            ),
+        )
 
     @classmethod
     def tracer(cls) -> TracerPort:

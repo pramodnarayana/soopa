@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any, Self
+from types import TracebackType
+from typing import Self
 
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
@@ -30,7 +31,12 @@ class UcpUnitOfWorkPort(ABC):
         pass
 
     @abstractmethod
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass
 
     @abstractmethod

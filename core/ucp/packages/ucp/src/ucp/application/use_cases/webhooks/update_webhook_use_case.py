@@ -1,5 +1,6 @@
 import structlog
 
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.domain.models.webhook import WebhookDomainModel
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
@@ -26,7 +27,7 @@ class UpdateWebhookUseCase:
             webhook = await self.uow.webhook_repo.find_by_id(tenant_id, webhook_id)
             if not webhook:
                 bound_logger.error("update_webhook.not_found")
-                raise ValueError(f"Webhook {webhook_id} not found")
+                raise ResourceNotFoundError(f"Webhook {webhook_id} not found")
 
             webhook.update(name=name, url=url, active=active)
 

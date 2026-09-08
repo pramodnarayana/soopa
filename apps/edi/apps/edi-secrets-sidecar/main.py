@@ -17,7 +17,13 @@ POLL_INTERVAL_SECONDS = settings.secrets.sync_interval_seconds
 
 class SecretsManagerClient(Protocol):
     def get_paginator(self, operation_name: str) -> Any: ...
-    def get_secret_value(self, *, SecretId: str) -> dict[str, str]: ...
+    def get_secret_value(
+        self,
+        *,
+        SecretId: str,
+        VersionId: str | None = None,
+        VersionStage: str | None = None,
+    ) -> dict[str, str]: ...
 
 
 def get_client() -> SecretsManagerClient:

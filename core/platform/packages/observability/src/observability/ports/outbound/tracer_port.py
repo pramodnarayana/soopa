@@ -7,14 +7,15 @@ The concrete implementation (OpenTelemetry, Datadog, etc.) is injected at startu
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any
+
+from opentelemetry.util.types import AttributeValue
 
 
 class SpanPort(ABC):
     """Represents a single unit of work in a distributed trace."""
 
     @abstractmethod
-    def set_attribute(self, key: str, value: Any) -> None:
+    def set_attribute(self, key: str, value: AttributeValue) -> None:
         """Attach a key-value attribute to the span for querying in the UI."""
         ...
 

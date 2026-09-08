@@ -23,12 +23,7 @@ def event_loop() -> AsyncGenerator[asyncio.AbstractEventLoop, None]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine() -> AsyncGenerator[Any, None]:
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()
@@ -82,6 +77,7 @@ async def test_ucp_worker_handles_tenant_deleted_event(
     container = WorkerContainer()
     container.session_factory = db_session_factory
     container.settings.sqs_ucp_identity_sync_queue_url = "http://dummy"
+    container.settings.sqs_ucp_jobs_queue_url = "http://dummy"
     container.wire()
 
     # 3. Construct Payload
@@ -95,7 +91,7 @@ async def test_ucp_worker_handles_tenant_deleted_event(
 
     # 4. Dispatch directly to bypass SQS connection polling and threading issues in tests
     try:
-        await container.events_dispatcher.dispatch_raw(payload)
+        await container.events_dispatcher.dispatch(payload)
 
         # 5. Verify Soft Deletion
         async with db_session_factory() as session:

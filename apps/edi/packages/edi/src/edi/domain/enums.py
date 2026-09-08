@@ -168,3 +168,29 @@ class NotificationEventType(StrEnum):
     """Cross-bounded-context notification trigger event type."""
 
     NOTIFICATION_TRIGGERED = "notification.triggered"
+
+
+class EdiJobName(StrEnum):
+    """
+    Canonical event type names for EDI scheduled jobs.
+    These must match the event_type values dispatched by the scheduler.
+    """
+
+    EDI_CONTROL_PLANE_OUTBOX_SWEEPER = "EDI_CONTROL_PLANE_OUTBOX_SWEEPER"
+    EDI_DATA_PLANE_OUTBOX_SWEEPER = "EDI_DATA_PLANE_OUTBOX_SWEEPER"
+    EDI_CONTROL_PLANE_OUTBOX_CLEANUP = "EDI_CONTROL_PLANE_OUTBOX_CLEANUP"
+    EDI_DATA_PLANE_OUTBOX_CLEANUP = "EDI_DATA_PLANE_OUTBOX_CLEANUP"
+    EDI_IDEMPOTENCY_CLEANUP = "EDI_IDEMPOTENCY_CLEANUP"
+    EDI_AUDIT_LOG_CLEANUP = "EDI_AUDIT_LOG_CLEANUP"
+
+
+class EdiConstants(StrEnum):
+    OUTBOX_CHANNEL = "edi_outbox_channel"
+    EDI_APP_SLUG = "edi"
+
+
+class EdiOutboxSource(StrEnum):
+    """Source tag for EDI outbox events."""
+
+    EDI_DATA_PLANE = "edi_data_plane"
+    EDI_CONTROL_PLANE = "edi_control_plane"

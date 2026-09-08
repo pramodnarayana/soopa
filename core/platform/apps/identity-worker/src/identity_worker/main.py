@@ -1,17 +1,21 @@
 import asyncio
 import contextlib
 import signal
-from typing import Any
+import sys
 
 import structlog
+from observability import ObservabilityProvider
 
+from identity_worker.bootstrap.config import Settings
 from identity_worker.bootstrap.container import WorkerContainer
 
 logger = structlog.get_logger(__name__)
 
 
-async def main(stop_event: asyncio.Event | None = None, settings: Any = None) -> None:
-    logger.info("Starting Identity Worker...")
+async def main(stop_event: asyncio.Event | None = None, settings: Settings | None = None) -> None:
+    ObservabilityProvider.auto_configure_from_env("identity-worker")
+
+    logger.info("identity_worker_starting")
 
     container = WorkerContainer(settings=settings)
     try:
@@ -24,20 +28,13 @@ async def main(stop_event: asyncio.Event | None = None, settings: Any = None) ->
                 with contextlib.suppress(NotImplementedError, RuntimeError):
                     loop.add_signal_handler(sig, stop_event.set)
 
-        if container.outbox_relay:
-            container.outbox_relay.start()
-            logger.info("identity_outbox_relay_started_in_worker")
-
         if container.events_consumer:
             container.events_consumer.start()
             logger.info("identity_event_sqs_consumer_started_in_worker")
 
         await stop_event.wait()
     finally:
-        logger.info("Shutting down Identity worker tasks gracefully...")
-
-        if container.outbox_relay:
-            await container.outbox_relay.stop()
+        logger.info("identity_worker_shutting_down_tasks")
 
         if container.events_consumer:
             await container.events_consumer.stop()
@@ -46,4 +43,7 @@ async def main(stop_event: asyncio.Event | None = None, settings: Any = None) ->
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        sys.exit(0)

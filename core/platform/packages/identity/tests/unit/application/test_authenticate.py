@@ -1,6 +1,7 @@
 import pytest
 
 from identity.application.authenticate_use_case import (
+    AuthenticateCommand,
     AuthenticationError,
     authenticate_bearer_token,
 )
@@ -25,7 +26,8 @@ async def test_authenticate_bearer_token_valid(fake_verifier: FakeTokenVerifier)
     )
     fake_verifier.given_valid_token("valid.jwt.token", claims)
 
-    context = await authenticate_bearer_token("Bearer valid.jwt.token", fake_verifier)
+    command = AuthenticateCommand(authorization_header="Bearer valid.jwt.token")
+    context = await authenticate_bearer_token(command, fake_verifier)
 
     assert isinstance(context, IdentityContext)
     assert context.subject == "user-123"
@@ -36,15 +38,17 @@ async def test_authenticate_bearer_token_valid(fake_verifier: FakeTokenVerifier)
 
 @pytest.mark.asyncio
 async def test_authenticate_bearer_token_missing_header(fake_verifier: FakeTokenVerifier) -> None:
-    with pytest.raises(AuthenticationError, match="Missing bearer token"):
-        await authenticate_bearer_token(None, fake_verifier)
+    command = AuthenticateCommand(authorization_header=None)
+    with pytest.raises(AuthenticationError, match="Missing bearer token."):
+        await authenticate_bearer_token(command, fake_verifier)
     assert len(fake_verifier.verified_calls) == 0
 
 
 @pytest.mark.asyncio
 async def test_authenticate_bearer_token_empty_token(fake_verifier: FakeTokenVerifier) -> None:
-    with pytest.raises(AuthenticationError, match="Empty bearer token"):
-        await authenticate_bearer_token("Bearer ", fake_verifier)
+    command = AuthenticateCommand(authorization_header="Bearer ")
+    with pytest.raises(AuthenticationError, match="Empty bearer token."):
+        await authenticate_bearer_token(command, fake_verifier)
     assert len(fake_verifier.verified_calls) == 0
 
 
@@ -65,7 +69,8 @@ async def test_authenticate_bearer_token_case_insensitive(
     )
     fake_verifier.given_valid_token("valid.jwt.token", claims)
 
-    context = await authenticate_bearer_token(header, fake_verifier)
+    command = AuthenticateCommand(authorization_header=header)
+    context = await authenticate_bearer_token(command, fake_verifier)
 
     assert context.subject == "user-123"
     assert "valid.jwt.token" in fake_verifier.verified_calls
@@ -78,4 +83,5 @@ async def test_authenticate_bearer_token_invalid_format(fake_verifier: FakeToken
     with pytest.raises(
         AuthenticationError, match="Authentication failed: Invalid token format or signature"
     ):
-        await authenticate_bearer_token("Bearer invalid.token", fake_verifier)
+        command = AuthenticateCommand(authorization_header="Bearer invalid.token")
+        await authenticate_bearer_token(command, fake_verifier)

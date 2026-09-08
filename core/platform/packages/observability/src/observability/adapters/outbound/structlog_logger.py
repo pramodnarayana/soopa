@@ -6,21 +6,23 @@ Swap this out by registering a different LoggerPort implementation in provider.p
 
 import sys
 import time
-from collections.abc import MutableMapping
 from typing import Any
 
 import structlog
 from opentelemetry import trace
-from opentelemetry._logs import LogRecord
+from opentelemetry._logs import LogRecord, set_logger_provider
 from opentelemetry._logs import get_logger as get_otel_logger
 from opentelemetry._logs.severity import SeverityNumber
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.sdk.resources import SERVICE_NAME, Resource
+from structlog.types import EventDict, WrappedLogger
 
 from observability.ports.outbound.logger_port import LoggerPort
 
 
-def _inject_trace_context(
-    _logger: Any, _method: Any, event_dict: MutableMapping[str, Any]
-) -> MutableMapping[str, Any]:
+def _inject_trace_context(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
     """structlog processor: injects OTel trace_id/span_id for log-trace correlation."""
     span = trace.get_current_span()
     if span and span.is_recording():
@@ -30,45 +32,52 @@ def _inject_trace_context(
     return event_dict
 
 
-def _otlp_log_processor(
-    _logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
-) -> MutableMapping[str, Any]:
-    """structlog processor: emits the log to the global OTLP logger provider."""
-    otel_logger = get_otel_logger("edi-structlog")
+def _make_otlp_log_processor() -> structlog.types.Processor:
+    """
+    Factory that returns a processor that resolves the logger name per event.
+    """
 
-    level_map = {
-        "debug": SeverityNumber.DEBUG,
-        "info": SeverityNumber.INFO,
-        "warning": SeverityNumber.WARN,
-        "error": SeverityNumber.ERROR,
-        "exception": SeverityNumber.ERROR,
-        "critical": SeverityNumber.FATAL,
-    }
-    level = level_map.get(method_name, SeverityNumber.INFO)
+    def _otlp_log_processor(
+        _logger: WrappedLogger, method_name: str, event_dict: EventDict
+    ) -> EventDict:
+        """structlog processor: emits the log to the global OTLP logger provider."""
+        otel_logger = get_otel_logger(str(event_dict.get("logger_name", "")))
 
-    span_ctx = trace.get_current_span().get_span_context()
+        level_map = {
+            "debug": SeverityNumber.DEBUG,
+            "info": SeverityNumber.INFO,
+            "warning": SeverityNumber.WARN,
+            "error": SeverityNumber.ERROR,
+            "exception": SeverityNumber.ERROR,
+            "critical": SeverityNumber.FATAL,
+        }
+        level = level_map.get(method_name, SeverityNumber.INFO)
 
-    # Exclude basic fields from attributes
-    attributes = {
-        k: v
-        for k, v in event_dict.items()
-        if k not in ["event", "trace_id", "span_id", "level", "timestamp"]
-    }
+        span_ctx = trace.get_current_span().get_span_context()
 
-    otel_logger.emit(
-        LogRecord(
-            timestamp=time.time_ns(),
-            observed_timestamp=time.time_ns(),
-            trace_id=span_ctx.trace_id if span_ctx.is_valid else None,
-            span_id=span_ctx.span_id if span_ctx.is_valid else None,
-            trace_flags=span_ctx.trace_flags if span_ctx.is_valid else None,
-            severity_text=method_name.upper(),
-            severity_number=level,
-            body=str(event_dict.get("event", "")),
-            attributes=attributes,
+        # Exclude transport-level fields from attributes — these are already in the envelope
+        attributes = {
+            k: v
+            for k, v in event_dict.items()
+            if k not in ["event", "trace_id", "span_id", "level", "timestamp"]
+        }
+
+        otel_logger.emit(
+            LogRecord(
+                timestamp=time.time_ns(),
+                observed_timestamp=time.time_ns(),
+                trace_id=span_ctx.trace_id if span_ctx.is_valid else None,
+                span_id=span_ctx.span_id if span_ctx.is_valid else None,
+                trace_flags=span_ctx.trace_flags if span_ctx.is_valid else None,
+                severity_text=method_name.upper(),
+                severity_number=level,
+                body=str(event_dict.get("event", "")),
+                attributes=attributes,
+            )
         )
-    )
-    return event_dict
+        return event_dict
+
+    return _otlp_log_processor
 
 
 def _configure_structlog(log_level: str) -> None:
@@ -87,7 +96,7 @@ def _configure_structlog(log_level: str) -> None:
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
             _inject_trace_context,
-            _otlp_log_processor,  # push to OTel BEFORE stringification
+            _make_otlp_log_processor(),  # push to OTel BEFORE stringification
             structlog.processors.StackInfoRenderer(),
             structlog.processors.format_exc_info,
             structlog.processors.UnicodeDecoder(),
@@ -97,13 +106,6 @@ def _configure_structlog(log_level: str) -> None:
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(sys.stdout),
     )
-
-
-from opentelemetry._logs import set_logger_provider
-from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-from opentelemetry.sdk._logs import LoggerProvider
-from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-from opentelemetry.sdk.resources import SERVICE_NAME, Resource
 
 
 class StructlogLogger(LoggerPort):
@@ -128,7 +130,7 @@ class StructlogLogger(LoggerPort):
                     logger_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
                 set_logger_provider(logger_provider)
             _configure_structlog(log_level)
-        self._logger = _bound_logger or structlog.get_logger(name)
+        self._logger = _bound_logger or structlog.get_logger(logger_name=name)
 
     def debug(self, event: str, **kwargs: Any) -> None:
         self._logger.debug(event, **kwargs)

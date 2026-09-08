@@ -1,12 +1,22 @@
 import hashlib
+from dataclasses import dataclass, field
 
 import structlog
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.domain.types import JsonDict
 
-from ..domain.models import PLATFORM_TENANT_ID, NotificationDispatch, NotificationEvent
+from ..domain.models import NotificationDispatch
 from ..ports.outbound.template_renderer_port import TemplateRendererPort
 from ..ports.outbound.uow_port import NotificationUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class CompileNotificationCommand:
+    tenant_id: str
+    event_type: str
+    data: JsonDict = field(default_factory=dict)
 
 
 class NotificationCompilerUseCase:
@@ -18,7 +28,7 @@ class NotificationCompilerUseCase:
         self.uow = uow
         self.template_renderer = template_renderer
 
-    async def execute(self, event: NotificationEvent) -> None:
+    async def execute(self, event: CompileNotificationCommand) -> None:
         bound_logger = logger.bind(
             tenant_id=event.tenant_id,
             event_type=event.event_type,
@@ -36,7 +46,7 @@ class NotificationCompilerUseCase:
 
         for channel in channels:
             # Check user-level preferences if this is a user-specific event
-            user_id = event.data.get("user_id")
+            user_id = str(event.data.get("user_id")) if event.data.get("user_id") else None
             if user_id:
                 pref = await self.uow.user_preference_repo.get_preference(
                     tenant_id=event.tenant_id,

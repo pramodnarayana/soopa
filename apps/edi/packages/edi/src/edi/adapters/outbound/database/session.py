@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from ucp_models.infrastructure import DatabaseShard
+from ucp_models.sharding import DatabaseShard
 
 from database.models.identity import Tenant
 

@@ -1,0 +1,10 @@
+{
+  "name": "@soopa/ucp-outbox-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Worker service for handling UCP outbox relay and sweeping",
+  "scripts": {
+    "start": "uv run python -m ucp_outbox_worker.main",
+    "dev": "uv run python -m ucp_outbox_worker.main"
+  }
+}

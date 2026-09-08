@@ -2,21 +2,10 @@ import asyncio
 import contextlib
 import hashlib
 import os
-from unittest.mock import AsyncMock, Mock, patch
-
-os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-)
-os.environ.setdefault("ENVIRONMENT", "test")
-os.environ.setdefault("ZITADEL_ISSUER", "http://mock-zitadel")
-os.environ.setdefault("ZITADEL_API_URL", "http://mock-zitadel")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "test")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "test")
-os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
-
 import tempfile
 
+import database.provider
+import edi.bootstrap.lifespan
 import httpx
 import pytest
 import pytest_asyncio
@@ -34,8 +23,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator
 from ucp.domain.constants import LifecycleStatus
-from ucp_models.infrastructure import DatabaseShard as UcpDatabaseShard
-from ucp_models.infrastructure import ShardRegistry as UcpShardRegistry
+from ucp_models.sharding import DatabaseShard as UcpDatabaseShard
+from ucp_models.sharding import ShardRegistry as UcpShardRegistry
 from ucp_models.subscriptions import App as UcpApp
 from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
 
@@ -87,12 +76,7 @@ def event_loop():
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
-    db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
-    )
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-
+    db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
 
     # In integration tests, the EDI bounded context expects its Tenant schema (e.g. edi_messages)
@@ -106,8 +90,39 @@ async def db_engine():
     await engine.dispose()
 
 
+class FakeDatabaseProvider:
+    def __init__(self, session_factory):
+        self.session_factory = session_factory
+
+    @contextlib.asynccontextmanager
+    async def session(self):
+        async with self.session_factory() as session:
+            yield session
+
+    async def close(self):
+        pass
+
+
+class FakeDatabaseRouter:
+    def __init__(self, session_factory):
+        self.session_factory = session_factory
+
+    async def get_global_session(self, *args, **kwargs):
+        async with self.session_factory() as session:
+            session.info["session_type"] = "global"
+            yield session
+
+    async def get_tenant_session(self, *args, **kwargs):
+        async with self.session_factory() as session:
+            session.info["session_type"] = "tenant"
+            yield session
+
+    async def close_all(self):
+        pass
+
+
 @pytest_asyncio.fixture(scope="function")
-async def db_session_factory(db_engine):
+async def db_session_factory(db_engine, monkeypatch):
     """
     Provide an async_sessionmaker bound to a transaction for isolation.
     """
@@ -121,38 +136,18 @@ async def db_session_factory(db_engine):
         join_transaction_mode="create_savepoint",
     )
 
-    mock_provider = Mock()
-    mock_provider.session_factory = SessionLocal
+    fake_provider = FakeDatabaseProvider(SessionLocal)
+    fake_router = FakeDatabaseRouter(SessionLocal)
 
-    @contextlib.asynccontextmanager
-    async def mock_session():
-        async with SessionLocal() as session:
-            yield session
+    monkeypatch.setattr(
+        database.provider.DatabaseProvider, "from_url", classmethod(lambda cls, url: fake_provider)
+    )
 
-    mock_provider.session = mock_session
-    mock_provider.close = AsyncMock()
+    monkeypatch.setattr(
+        edi.bootstrap.lifespan, "DatabaseRouter", lambda *args, **kwargs: fake_router
+    )
 
-    async def mock_global_session(*args, **kwargs):
-        async with SessionLocal() as session:
-            session.info["session_type"] = "global"
-            yield session
-
-    async def mock_tenant_session(*args, **kwargs):
-        async with SessionLocal() as session:
-            session.info["session_type"] = "tenant"
-            yield session
-
-    mock_router = Mock()
-    mock_router.get_global_session = mock_global_session
-    mock_router.get_tenant_session = mock_tenant_session
-    mock_router.close_all = AsyncMock()
-
-    # Patch the session makers across all domains that unified_api touches
-    with (
-        patch("database.provider.DatabaseProvider.from_url", return_value=mock_provider),
-        patch("edi.bootstrap.lifespan.DatabaseRouter", return_value=mock_router),
-    ):
-        yield SessionLocal
+    yield SessionLocal
 
     await transaction.rollback()
     await connection.close()
@@ -286,8 +281,10 @@ async def seeded_api_token(db_session_factory):
                 )
                 session.add(shard_reg)
                 await session.flush()
+        import secrets
+
         # Create API token
-        raw_secret = "test_super_secret"  # noqa: S105
+        raw_secret = secrets.token_urlsafe(32)
         secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
 
         client_id = "client_test_123"
@@ -314,7 +311,7 @@ from identity.domain.identity_context import IdentityContext
 
 
 @pytest_asyncio.fixture(scope="function")
-async def auth_client(app, seeded_api_token):
+async def auth_client(app, seeded_api_token, monkeypatch):
     """
     Authenticated test client using a valid API token.
     Patches the token verifier to grant the PLATFORM_ADMIN capability
@@ -334,13 +331,17 @@ async def auth_client(app, seeded_api_token):
         capabilities={"*"},
     )
 
-    with patch(
+    async def fake_authenticate_api_key(*args, **kwargs):
+        return mock_identity
+
+    monkeypatch.setattr(
         "ucp.application.use_cases.authenticators.api_key_strategy.authenticate_api_key",
-        return_value=mock_identity,
-    ):
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
-            c.headers.update({"Authorization": f"Bearer {seeded_api_token['header_value']}"})
-            yield c
+        fake_authenticate_api_key,
+    )
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        c.headers.update({"Authorization": f"Bearer {seeded_api_token['header_value']}"})
+        yield c
 
 
 @pytest_asyncio.fixture(scope="function")

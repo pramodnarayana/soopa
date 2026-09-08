@@ -78,8 +78,9 @@ async def require_tenant_member(
 
     # Standard users: the token must carry the correct tenant context.
     if tenant_id in identity.authorized_tenants or identity.tenant_id == tenant_id:
+        canonical_tenant_id = identity.tenant_mapping.get(tenant_id, tenant_id)
         request.state.identity = identity
-        request.state.ucp_tenant_id = tenant_id
+        request.state.ucp_tenant_id = canonical_tenant_id
         return identity
 
     # If the user reaches this point, they do not have the requested tenant in their context.

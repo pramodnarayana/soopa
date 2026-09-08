@@ -1,8 +1,8 @@
 import asyncio
-from typing import Any, cast
+from typing import cast
 
-from database.events import EventEnvelope
 from outbox.domain.constants import OutboxStatus
+from seedwork.events import EventEnvelope
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -30,7 +30,7 @@ class PostgresOutboxRepository:
                     WHERE id IN (SELECT id FROM cte)
                 """)
                 result = cast(
-                    CursorResult[Any],
+                    CursorResult[tuple[()]],
                     await session.execute(
                         query,
                         {

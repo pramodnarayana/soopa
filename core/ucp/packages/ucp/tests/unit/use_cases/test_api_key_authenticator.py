@@ -2,7 +2,7 @@ import hashlib
 from datetime import UTC, datetime
 
 import pytest
-from fastapi import HTTPException
+from identity.application.authenticate_use_case import AuthenticationError
 from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from identity.domain.models.api_token import ApiTokenDomainModel
@@ -38,12 +38,12 @@ def clear_cache():
 @pytest.mark.asyncio
 async def test_authenticate_api_key_success_and_cache(mock_token_repo):
     client_id = "test_client_id"
-    client_secret = "test_client_secret"  # noqa: S105
-    token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_secret}"
+    client_key_val = "test_client_secret"
+    token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_key_val}"
     tenant_id = generate_id(IdentityIdPrefix.TENANT)
     token_id = generate_id(IdentityIdPrefix.TOKEN)
 
-    secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
+    secret_hash = hashlib.sha256(client_key_val.encode("utf-8")).hexdigest()
 
     mock_token_repo.tokens[client_id] = ApiTokenDomainModel(
         id=token_id,
@@ -80,27 +80,27 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
 
 @pytest.mark.asyncio
 async def test_authenticate_api_key_invalid_prefix(mock_token_repo):
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key("wrong_prefix.client.secret", mock_token_repo)
-    assert exc.value.status_code == 401
-    assert exc.value.detail == "APIKEY_INVALID_PREFIX"
+
+    assert str(exc.value) == "APIKEY_INVALID_PREFIX"
 
 
 @pytest.mark.asyncio
 async def test_authenticate_api_key_invalid_format(mock_token_repo):
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(f"{M2M_API_KEY_PREFIX}invalid_format_no_dot", mock_token_repo)
-    assert exc.value.status_code == 401
-    assert exc.value.detail == "APIKEY_INVALID_FORMAT"
+
+    assert str(exc.value) == "APIKEY_INVALID_FORMAT"
 
 
 @pytest.mark.asyncio
 async def test_authenticate_api_key_not_found(mock_token_repo):
     token = f"{M2M_API_KEY_PREFIX}unknown_client.secret"
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(token, mock_token_repo)
-    assert exc.value.status_code == 401
-    assert exc.value.detail == "APIKEY_INVALID_OR_REVOKED"
+
+    assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
 
 
 @pytest.mark.asyncio
@@ -125,7 +125,7 @@ async def test_authenticate_api_key_wrong_secret(mock_token_repo):
         active=True,
     )
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(token, mock_token_repo)
-    assert exc.value.status_code == 401
-    assert exc.value.detail == "APIKEY_INVALID_OR_REVOKED"
+
+    assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"

@@ -4,6 +4,7 @@ from typing import Any, Protocol, runtime_checkable
 from fastapi import Depends, Header, HTTPException, status
 
 from identity.application.authenticate_use_case import (
+    AuthenticateCommand,
     AuthenticationError,
     authenticate_bearer_token,
 )
@@ -34,7 +35,8 @@ def identity_dependency(
 ) -> Callable[[str | None], Awaitable[IdentityContext]]:
     async def dependency(authorization: str | None = Header(default=None)) -> IdentityContext:
         try:
-            return await authenticate_bearer_token(authorization, token_verifier)
+            command = AuthenticateCommand(authorization_header=authorization)
+            return await authenticate_bearer_token(command, token_verifier)
         except AuthenticationError as exc:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -57,4 +59,5 @@ async def attach_identity_to_request(
     Request and lightweight test fakes.
     """
     authorization = request.headers.get("authorization")
-    request.state.identity = await authenticate_bearer_token(authorization, token_verifier)
+    command = AuthenticateCommand(authorization_header=authorization)
+    request.state.identity = await authenticate_bearer_token(command, token_verifier)

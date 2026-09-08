@@ -1,7 +1,8 @@
+import os
+
 from database.provider import DatabaseProvider
 from dependency_injector import providers
 from starlette.routing import Mount
-from ucp.bootstrap.config import get_settings
 
 """
 Shell Application Lifespan.
@@ -67,8 +68,7 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
 
-    settings = get_settings()
-    db_provider = DatabaseProvider.from_url(settings.database_url)
+    db_provider = DatabaseProvider.from_url(os.environ.get("DATABASE_URL", ""))
     app.state.db_provider = db_provider
     edi_app.state.db_provider = db_provider
     ucp_container = app.state.ucp_container

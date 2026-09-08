@@ -1,7 +1,6 @@
-from unittest.mock import AsyncMock
-
 import pytest
-from notification.domain.models import NotificationEvent
+from notification.application.notification_compiler_use_case import CompileNotificationCommand
+from notification.domain.constants import NotificationEventType
 
 from notification_worker.adapters.inbound.workers.notification_event_dispatcher import (
     NotificationEventDispatcher,
@@ -12,27 +11,22 @@ class FakeDispatchUseCase:
     def __init__(self):
         self.events = []
 
-    async def execute(self, event: NotificationEvent) -> None:
+    async def execute(self, event: CompileNotificationCommand) -> None:
         self.events.append(event)
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_process_message_valid():
     use_case = FakeDispatchUseCase()
-    cleanup_mock = AsyncMock()
-    dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
-    )
+    dispatcher = NotificationEventDispatcher(notification_compiler=use_case)
 
     body = {
-        "event_type": "notification.requested",
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+        "tenant_id": "t1",
         "payload": {
-            "event": {
-                "event_type": "invoice.paid",
-                "tenant_id": "t1",
-                "payload": {"foo": "bar"},
-                "source": "billing",
-            }
+            "notification_type": "invoice.paid",
+            "notification_data": {"foo": "bar"},
+            "source": "billing",
         },
     }
 
@@ -48,14 +42,15 @@ async def test_dispatcher_process_message_valid():
 @pytest.mark.asyncio
 async def test_dispatcher_ignores_other_events():
     use_case = FakeDispatchUseCase()
-    cleanup_mock = AsyncMock()
-    dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
-    )
+    dispatcher = NotificationEventDispatcher(notification_compiler=use_case)
 
     body = {
         "event_type": "some.other.event",
-        "payload": {},
+        "tenant_id": "t1",
+        "payload": {
+            "notification_type": "invoice.paid",
+            "notification_data": {"foo": "bar"},
+        },
     }
 
     await dispatcher.dispatch_raw(body)
@@ -63,15 +58,55 @@ async def test_dispatcher_ignores_other_events():
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_handles_missing_payload():
+async def test_dispatcher_rejects_numeric_top_level_tenant_id():
     use_case = FakeDispatchUseCase()
-    cleanup_mock = AsyncMock()
     dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
+        notification_compiler=use_case,
     )
 
     body = {
-        "event_type": "notification.requested",
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+        "tenant_id": 123,
+        "payload": {
+            "notification_type": "invoice.paid",
+            "notification_data": {"foo": "bar"},
+        },
+    }
+
+    await dispatcher.dispatch_raw(body)
+
+    assert use_case.events == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("notification_type", [123, ["invoice.paid"]])
+async def test_dispatcher_rejects_non_string_notification_type(notification_type):
+    use_case = FakeDispatchUseCase()
+    dispatcher = NotificationEventDispatcher(
+        notification_compiler=use_case,
+    )
+
+    body = {
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+        "tenant_id": "t1",
+        "payload": {
+            "notification_type": notification_type,
+            "notification_data": {"foo": "bar"},
+        },
+    }
+
+    await dispatcher.dispatch_raw(body)
+
+    assert use_case.events == []
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_handles_missing_payload():
+    use_case = FakeDispatchUseCase()
+    dispatcher = NotificationEventDispatcher(notification_compiler=use_case)
+
+    body = {
+        "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
         # no payload
     }
 
@@ -80,16 +115,25 @@ async def test_dispatcher_handles_missing_payload():
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_sweeper_job():
+@pytest.mark.parametrize(
+    "body",
+    [
+        {
+            "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+            "payload": "invalid",
+        },
+        {
+            "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
+            "payload": {"notification_data": "invalid"},
+        },
+    ],
+)
+async def test_dispatcher_rejects_non_dictionary_nested_objects(body):
     use_case = FakeDispatchUseCase()
-    cleanup_mock = AsyncMock()
     dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case, cleanup_job_handler=cleanup_mock
+        notification_compiler=use_case,
     )
 
-    body = {
-        "event_type": "NOTIFICATION_OUTBOX_SWEEPER",
-    }
-
     await dispatcher.dispatch_raw(body)
-    cleanup_mock.execute.assert_called_once()
+
+    assert use_case.events == []

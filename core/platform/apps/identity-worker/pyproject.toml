@@ -8,6 +8,7 @@ dependencies = [
     "database",
     "identity",
     "observability",
+    "pubsub",
     "ucp",
     "ucp_models",
     "aioboto3>=13.1.1",
@@ -25,5 +26,6 @@ build-backend = "hatchling.build"
 database = { workspace = true }
 identity = { workspace = true }
 observability = { workspace = true }
+pubsub = { workspace = true }
 ucp = { workspace = true }
 ucp_models = { workspace = true }

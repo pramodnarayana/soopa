@@ -1,15 +1,14 @@
 from dataclasses import dataclass
-from typing import Literal
 
 from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ToggleUserStatusCommand:
     tenant_id: str
     user_id: str
-    action: Literal["activate", "deactivate"]
+    is_active: bool
 
 
 class ToggleUserStatusUseCase:
@@ -35,7 +34,8 @@ class ToggleUserStatusUseCase:
                 raise ResourceNotFoundError(f"User mapping not found for {command.user_id}")
 
             # 1. Update local domain object state & Register Outbox Event
-            user.change_status(action=command.action, tenant_id=command.tenant_id)
+            action = "activate" if command.is_active else "deactivate"
+            user.change_status(action=action, tenant_id=command.tenant_id)
             await self._uow.user_repo.save(user)
 
             await self._uow.commit()

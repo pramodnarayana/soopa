@@ -23,3 +23,8 @@ class DeploymentEnvironment(StrEnum):
     TEST = "test"
     PRODUCTION = "production"
     STAGING = "staging"
+
+
+class LifecycleStatus(StrEnum):
+    ACTIVE = "active"
+    INACTIVE = "inactive"

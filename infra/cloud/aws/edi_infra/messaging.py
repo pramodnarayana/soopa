@@ -170,7 +170,7 @@ class EdiMessagingStack:
         self.ucp_jobs = _make_fifo_queue_pair("ucp-jobs")
         self.identity_events = _make_fifo_queue_pair("identity-events")
 
-        self.email_delivery = _make_fifo_queue_pair("email-delivery")
+        self.email_channel = _make_fifo_queue_pair("email-channel")
 
         # ── SNS→SQS Subscriptions ─────────────────────────────────────────────
         # UCP events → ucp-events queue

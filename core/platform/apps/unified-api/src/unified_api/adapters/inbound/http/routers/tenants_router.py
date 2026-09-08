@@ -12,13 +12,13 @@ logger = structlog.get_logger(__name__)
 
 from identity.domain.models.authorization import Capability
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
-from ucp.application.dto import SubscribeAppCommand, UnsubscribeAppCommand
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
     ProvisionTenantUseCase,
 )
 from ucp.application.use_cases.subscribe_app_use_case import (
+    SubscribeAppCommand,
     SubscribeAppUseCase,
 )
 from ucp.application.use_cases.toggle_tenant_status_use_case import (
@@ -26,6 +26,7 @@ from ucp.application.use_cases.toggle_tenant_status_use_case import (
     ToggleTenantStatusUseCase,
 )
 from ucp.application.use_cases.unsubscribe_app_use_case import (
+    UnsubscribeAppCommand,
     UnsubscribeAppUseCase,
 )
 from ucp.application.use_cases.update_tenant_name_use_case import (
@@ -173,7 +174,7 @@ async def provision(
             detail="Invalid user identity: creator must be a resolved platform user ID (usr_...)",
         )
 
-    command = ProvisionTenantCommand(name=dto.name, creator_id=creator_id)
+    command = ProvisionTenantCommand(name=dto.name)
     tenant = await use_case.execute(command, idempotency_key)
 
     tenant_rm = await query_service.get_tenant_by_id(tenant.id)
@@ -233,7 +234,9 @@ async def update_status(
     use_case: ToggleTenantStatusUseCase = use_case_factory(uow__session=session)
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
-    command = ToggleTenantStatusCommand(tenant_id=tenant_id, status=LifecycleStatus(dto.status))
+    command = ToggleTenantStatusCommand(
+        tenant_id=tenant_id, is_active=(LifecycleStatus(dto.status) == LifecycleStatus.ACTIVE)
+    )
     await use_case.execute(command, idempotency_key)
 
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
