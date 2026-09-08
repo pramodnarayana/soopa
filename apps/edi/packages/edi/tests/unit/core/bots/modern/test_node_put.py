@@ -76,5 +76,5 @@ def test_node_display() -> None:
     node.append(child)
 
     # We just ensure it doesn't crash when displaying the tree.
-    # No forced mocks to check logger calls.
+    # No forced fakes to check logger calls.
     node.display()

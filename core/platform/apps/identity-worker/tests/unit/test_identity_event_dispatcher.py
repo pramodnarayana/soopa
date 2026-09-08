@@ -60,9 +60,9 @@ class TrackingHandler:
 
 async def test_identity_event_dispatcher_routes_to_correct_handler():
     consumer = IdentityEventDispatcher()
-    mock_handler = TrackingHandler()
+    fake_handler = TrackingHandler()
 
-    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, mock_handler)
+    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, fake_handler)
 
     payload = {
         "id": generate_id("id"),
@@ -72,17 +72,17 @@ async def test_identity_event_dispatcher_routes_to_correct_handler():
     }
     await consumer.dispatch_raw(payload)
 
-    assert len(mock_handler.called_with) == 1
-    called_event = mock_handler.called_with[0]
+    assert len(fake_handler.called_with) == 1
+    called_event = fake_handler.called_with[0]
     assert called_event.event_type == IdentityEventType.TENANT_PROVISIONED
     assert called_event.payload["tenant_id"] == "tenant-123"
 
 
 async def test_handler_failure_propagates_to_prevent_ack():
     consumer = IdentityEventDispatcher()
-    mock_handler = TrackingHandler(failure_msg="Handler Failed")
+    fake_handler = TrackingHandler(failure_msg="Handler Failed")
 
-    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, mock_handler)
+    consumer.subscribe(IdentityEventType.TENANT_PROVISIONED, fake_handler)
 
     payload = {
         "id": generate_id("id"),
@@ -94,4 +94,4 @@ async def test_handler_failure_propagates_to_prevent_ack():
     with pytest.raises(RuntimeError, match="Handler Failed"):
         await consumer.dispatch_raw(payload)
 
-    assert len(mock_handler.called_with) == 1
+    assert len(fake_handler.called_with) == 1

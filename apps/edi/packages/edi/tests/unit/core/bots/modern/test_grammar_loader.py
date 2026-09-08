@@ -23,7 +23,7 @@ from edi.core.bots.domain.grammar.grammar import ERROR_IN_GRAMMAR, Grammar
 from edi.core.bots.domain.grammar.loader import grammarread, init_restofgrammar
 
 
-class MockGrammar(Grammar):
+class FakeGrammar(Grammar):
     def __init__(self, typeofgrammarfile, editype, grammarname):
         self.typeofgrammarfile = typeofgrammarfile
         self.editype = editype
@@ -32,17 +32,17 @@ class MockGrammar(Grammar):
         self.structure = []
         self.syntax = {}
 
-        class MockModule:
+        class FakeModule:
             pass
 
-        self.module = MockModule()
+        self.module = FakeModule()
 
     def _manipulatefieldformat(self, field, recordid):
         pass
 
 
 def test_dorecorddefs_missing_recorddefs():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     del g.recorddefs
     with pytest.raises(GrammarPartMissing) as exc_info:
         loader.do_recorddefs(g)
@@ -50,7 +50,7 @@ def test_dorecorddefs_missing_recorddefs():
 
 
 def test_dorecorddefs_not_dict():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     g.module.recorddefs = []
     with pytest.raises(GrammarPartMissing) as exc_info:
         loader.do_recorddefs(g)
@@ -58,7 +58,7 @@ def test_dorecorddefs_not_dict():
 
 
 def test_dorecorddefs_already_errored():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     g.module.recorddefs = {ERROR_IN_GRAMMAR: True}
     with pytest.raises(GrammarError) as exc_info:
         loader.do_recorddefs(g)
@@ -71,7 +71,7 @@ def test_dorecorddefs_already_errored():
 
 
 def test_checkfield_invalid_id():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = [123, "C", 10, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -79,7 +79,7 @@ def test_checkfield_invalid_id():
 
 
 def test_checkfield_invalid_mandatory_string():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "X", 10, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -87,7 +87,7 @@ def test_checkfield_invalid_mandatory_string():
 
 
 def test_checkfield_invalid_mandatory_tuple():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", ("X", 5), 10, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -95,7 +95,7 @@ def test_checkfield_invalid_mandatory_tuple():
 
 
 def test_checkfield_invalid_mandatory_tuple_type():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", (1, 5), 10, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -103,7 +103,7 @@ def test_checkfield_invalid_mandatory_tuple_type():
 
 
 def test_checkfield_invalid_mandatory_repeats_not_int():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", ("C", "many"), 10, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -111,7 +111,7 @@ def test_checkfield_invalid_mandatory_repeats_not_int():
 
 
 def test_checkfield_mandatory_tuple_correct():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", ("C", 5), 10, "AN"]
     validator.checkfield(g, field, "REC1")
     assert field[MAXREPEAT] == 5
@@ -119,7 +119,7 @@ def test_checkfield_mandatory_tuple_correct():
 
 
 def test_checkfield_invalid_mandatory_type():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", 123, 10, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -127,7 +127,7 @@ def test_checkfield_invalid_mandatory_type():
 
 
 def test_checkfield_invalid_length_tuple():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", ("1", 10), "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -135,7 +135,7 @@ def test_checkfield_invalid_length_tuple():
 
 
 def test_checkfield_invalid_max_length_tuple():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", (1, "10"), "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -143,7 +143,7 @@ def test_checkfield_invalid_max_length_tuple():
 
 
 def test_checkfield_min_gt_max_length():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", (10, 5), "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -151,7 +151,7 @@ def test_checkfield_min_gt_max_length():
 
 
 def test_checkfield_invalid_length_type():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", "10", "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -159,7 +159,7 @@ def test_checkfield_invalid_length_type():
 
 
 def test_checkfield_length_too_small():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", 0, "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -167,7 +167,7 @@ def test_checkfield_length_too_small():
 
 
 def test_checkfield_minlength_negative():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", (-1, 10), "AN"]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -175,7 +175,7 @@ def test_checkfield_minlength_negative():
 
 
 def test_checkfield_invalid_format_type():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", 10, 123]
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
@@ -183,28 +183,28 @@ def test_checkfield_invalid_format_type():
 
 
 def test_checkfield_numeric_float_length():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", 10.5, "R"]
 
-    # _manipulatefieldformat is mocked in this test to not set BFORMAT
+    # _manipulatefieldformat is faked in this test to not set BFORMAT
     # But BFORMAT is used to check float length. We must set it manually.
-    def mock_manipulatefieldformat(f, r):
+    def fake_manipulatefieldformat(f, r):
         f[BFORMAT] = "R"
 
-    g._manipulatefieldformat = mock_manipulatefieldformat
+    g._manipulatefieldformat = fake_manipulatefieldformat
     validator.checkfield(g, field, "REC1")
     assert field[DECIMALS] == 5
     assert field[LENGTH] == 10
 
 
 def test_checkfield_numeric_float_length_invalid():
-    g = MockGrammar("grammars", "mock_edi", "mock_grammar")
+    g = FakeGrammar("grammars", "fake_edi", "fake_grammar")
     field = ["FLD1", "M", 2.3, "R"]
 
-    def mock_manipulatefieldformat(f, r):
+    def fake_manipulatefieldformat(f, r):
         f[BFORMAT] = "R"
 
-    g._manipulatefieldformat = mock_manipulatefieldformat
+    g._manipulatefieldformat = fake_manipulatefieldformat
     with pytest.raises(GrammarError) as exc_info:
         validator.checkfield(g, field, "REC1")
     assert "field length" in str(exc_info.value) and "greater that nr of decimals" in str(
@@ -217,25 +217,25 @@ def test_checkfield_numeric_float_length_invalid():
 # ---------------------------------------------------------
 
 
-class MockGrammarModule:
+class FakeGrammarModule:
     def __init__(self):
-        self.syntax = {"has_structure": False, "envelope": "mock_env"}
+        self.syntax = {"has_structure": False, "envelope": "fake_env"}
         self.recorddefs = {}
         self.structure = []
 
 
-class MockEnvModule:
+class FakeEnvModule:
     def __init__(self):
         self.syntax = {"has_structure": False}
         self.recorddefs = {}
         self.structure = []
 
 
-def mock_botsimport(typeofgrammarfile, editype, grammarname):
-    if grammarname == "mock_grammar":
-        return MockGrammarModule(), grammarname
-    elif grammarname == "mock_env":
-        return MockEnvModule(), grammarname
+def fake_botsimport(typeofgrammarfile, editype, grammarname):
+    if grammarname == "fake_grammar":
+        return FakeGrammarModule(), grammarname
+    elif grammarname == "fake_env":
+        return FakeEnvModule(), grammarname
     elif grammarname == "raise_env":
         raise BotsImportError("test")
     else:
@@ -244,17 +244,17 @@ def mock_botsimport(typeofgrammarfile, editype, grammarname):
 
 def test_grammar_read_envelope(monkeypatch):
 
-    monkeypatch.setattr(botslib, "botsimport", mock_botsimport)
+    monkeypatch.setattr(botslib, "botsimport", fake_botsimport)
 
-    env_grammar = grammarread("test", "mock_grammar", "envelope")
-    assert env_grammar.grammarname == "mock_env"
+    env_grammar = grammarread("test", "fake_grammar", "envelope")
+    assert env_grammar.grammarname == "fake_env"
 
 
 def test_grammar_read_envelope_import_error(monkeypatch):
 
-    def mock_botsimport_err(typeofgrammarfile, editype, grammarname):
-        if grammarname == "mock_grammar":
-            mod = MockGrammarModule()
+    def fake_botsimport_err(typeofgrammarfile, editype, grammarname):
+        if grammarname == "fake_grammar":
+            mod = FakeGrammarModule()
             mod.syntax["envelope"] = "raise_env"
             return mod, grammarname
         elif grammarname == "raise_env":
@@ -262,25 +262,25 @@ def test_grammar_read_envelope_import_error(monkeypatch):
         else:
             raise BotsImportError(f"Unknown {grammarname}")
 
-    monkeypatch.setattr(botslib, "botsimport", mock_botsimport_err)
+    monkeypatch.setattr(botslib, "botsimport", fake_botsimport_err)
 
-    env_grammar = grammarread("test", "mock_grammar", "envelope")
-    assert env_grammar.grammarname == "mock_grammar"
+    env_grammar = grammarread("test", "fake_grammar", "envelope")
+    assert env_grammar.grammarname == "fake_grammar"
 
 
 def test_grammar_read_partners(monkeypatch):
 
-    monkeypatch.setattr(botslib, "botsimport", mock_botsimport)
-    part_grammar = grammarread("test", "mock_grammar", "partners")
-    assert part_grammar.grammarname == "mock_grammar"
+    monkeypatch.setattr(botslib, "botsimport", fake_botsimport)
+    part_grammar = grammarread("test", "fake_grammar", "partners")
+    assert part_grammar.grammarname == "fake_grammar"
     assert part_grammar.syntax is not part_grammar.original_syntaxfromgrammar
 
 
 def test_grammar_read_unknown_type(monkeypatch):
 
-    monkeypatch.setattr(botslib, "botsimport", mock_botsimport)
+    monkeypatch.setattr(botslib, "botsimport", fake_botsimport)
     with pytest.raises(BotsImportError, match="Unknown typeofgrammarfile"):
-        grammarread("test", "mock_grammar", "unknown_type")
+        grammarread("test", "fake_grammar", "unknown_type")
 
 
 def test_init_restofgrammar_nextmessage_logic():

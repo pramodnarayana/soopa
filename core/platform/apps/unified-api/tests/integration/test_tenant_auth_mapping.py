@@ -15,7 +15,7 @@ from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_t
 @pytest.mark.asyncio
 async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> None:
     async with db_session_factory() as session:
-        # 1. Insert a mock tenant into the DB so the middleware can map it.
+        # 1. Insert a fake tenant into the DB so the middleware can map it.
         canonical_id = generate_id("ten")
         idp_id = generate_id("idp")
 
@@ -44,7 +44,7 @@ async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> N
             capabilities={Capability.TENANT_ADMIN.value},
         )
 
-        # 3. Create a fake request and test the guard directly without mocks
+        # 3. Create a fake request and test the guard directly without fakes
         request = Request(scope={"type": "http", "state": {}})
         request.state.identity = raw_identity
 

@@ -163,7 +163,7 @@ class TestAS2MessageReceiving:
         self, as2_client: AsyncClient, sender_keypair: Any, encrypted_as2_payload: bytes
     ) -> None:
         """
-        An encrypted payload where we simulated a decryption failure (since mock returns empty key).
+        An encrypted payload where we simulated a decryption failure (since fake returns empty key).
         """
         headers = _build_as2_headers(
             as2_from=sender_keypair.as2_id,

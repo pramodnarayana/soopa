@@ -20,12 +20,12 @@ class FakeOutboxPublisher(OutboxPublisherPort):
 
     async def publish(self, event: EventEnvelope) -> None:
         if self.fail_on_publish:
-            raise RuntimeError("Mocked publish failure")
+            raise RuntimeError("Faked publish failure")
         self.published_events.append(event)
 
     async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
         if self.fail_on_publish:
-            raise RuntimeError("Mocked batch publish failure")
+            raise RuntimeError("Faked batch publish failure")
         self.published_events.extend(events)
         return [e.id for e in events]
 

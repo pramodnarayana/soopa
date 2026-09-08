@@ -111,7 +111,7 @@ async def test_scheduler_worker_claims_and_dispatches_job(
     container = Container()
     container.session_factory.override(db_session_factory)
 
-    # We dynamically mock the JobDispatcher map inside the provider because SQSJobDispatcher is strict about queue urls
+    # We dynamically fake the JobDispatcher map inside the provider because SQSJobDispatcher is strict about queue urls
     container.job_dispatcher.add_kwargs(
         queue_url_map={queue_name: localstack_container["sqs_queue_url"]}
     )

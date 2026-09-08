@@ -99,7 +99,9 @@ class AppSubscriptionManager:
                     return
 
                 # Upsert the AppSubscription to 'inactive'
-                await uow.tenant_repo.upsert_app_subscription(tenant_id, app.id, "inactive")
+                await uow.tenant_repo.upsert_app_subscription(
+                    tenant_id, app.id, LifecycleStatus.INACTIVE.value
+                )
 
                 await uow.commit()
                 logger.info(

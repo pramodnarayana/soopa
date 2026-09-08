@@ -25,7 +25,7 @@ async def test_sftp_partners_crud(auth_client: httpx.AsyncClient, seeded_api_tok
             "host": "sftp.example.com",
             "port": 22,
             "username": "testuser",
-            "credentials_vault_ref": "mock_vault_ref",
+            "credentials_vault_ref": "fake_vault_ref",
             "inbound_remote_path": "/inbound",
             "outbound_remote_path": "/outbound",
         },

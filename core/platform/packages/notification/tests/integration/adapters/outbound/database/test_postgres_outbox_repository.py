@@ -28,7 +28,7 @@ async def test_outbox_save_and_fetch(db_session_factory):
 
     # Save
     event = EventEnvelope(
-        id="mock_id_123",
+        id="fake_id_123",
         source="notification",
         tenant_id=tenant_id,
         event_type="test.event",
@@ -71,7 +71,7 @@ async def test_outbox_mark_failed_and_sweep(db_session_factory):
 
     repo = SqlAlchemyNotificationOutboxRepository(db_session_factory)
     event = EventEnvelope(
-        id="mock_id_456",
+        id="fake_id_456",
         source="notification",
         tenant_id=tenant_id,
         event_type="test.fail",
@@ -112,7 +112,7 @@ async def test_outbox_mark_failed_and_sweep(db_session_factory):
     # Sweep stuck events test
     # Save a new event
     event_sweep = EventEnvelope(
-        id="mock_id_789",
+        id="fake_id_789",
         source="notification",
         tenant_id=tenant_id,
         event_type="test.sweep",
@@ -154,7 +154,7 @@ async def test_sqlalchemy_notification_outbox_publisher(db_session_factory):
 
         publisher = SqlAlchemyNotificationOutboxPublisher(session)
         event = EventEnvelope(
-            id="mock_id_999",
+            id="fake_id_999",
             source="notification",
             tenant_id=tenant_id,
             event_type="test.publish",

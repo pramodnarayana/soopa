@@ -122,7 +122,7 @@ def test_manual_asn1crypto_decrypt_fallback_logic():
     payload = b"test EDI payload data fallback"
     encrypted_data = encrypt_payload(payload, cert_pem, "AES256")
 
-    # Instead of mocking the cryptography library to fail, we test the pure python
+    # Instead of faking the cryptography library to fail, we test the pure python
     # fallback directly with the encrypted payload.
     decrypted = _manual_asn1crypto_decrypt(encrypted_data, private_key)
 

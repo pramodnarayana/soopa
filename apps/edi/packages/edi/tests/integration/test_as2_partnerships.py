@@ -48,7 +48,7 @@ class FakeAS2Tester:
         self._result = result
 
     async def test_connection(self, **kwargs) -> tuple[bool, str | None, str | None, str | None]:
-        return self._transport_ok, self._result, "mock-sent-payload", "mock-raw-mdn"
+        return self._transport_ok, self._result, "fake-sent-payload", "fake-raw-mdn"
 
 
 class FakeVault:

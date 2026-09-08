@@ -6,7 +6,7 @@ from edi.adapters.outbound.transformer.domain.models import (
 
 
 def test_parsed_edi_payload_instantiation():
-    """Validates pure domain model constraints and typing without mocks."""
+    """Validates pure domain model constraints and typing without fakes."""
     transaction = TransactionSet(
         transaction_type="850", control_number="0001", data={"po_number": "12345"}
     )

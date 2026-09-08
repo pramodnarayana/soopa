@@ -38,7 +38,7 @@ class FakeRepositoryPort:
 async def test_process_inbound_edi_use_case_success():
     """
     Tests the pure orchestration logic of ProcessInboundEdiUseCase
-    without using any mock frameworks, adhering to enterprise zero-mock standards.
+    without using any fake frameworks, adhering to enterprise zero-fake standards.
     """
     raw_edi_fixture = b"ISA*00*..."
     expected_parsed_payload = ParsedEdiPayload(

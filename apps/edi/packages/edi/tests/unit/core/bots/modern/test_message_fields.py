@@ -15,9 +15,9 @@ from edi.core.bots.domain.message import Message
 from edi.core.bots.domain.node import Node
 
 
-class MockGrammar:
+class FakeGrammar:
     def __init__(self):
-        self.grammarname = "mockgrammar"
+        self.grammarname = "fakegrammar"
         self.syntax = {
             "decimaal": ".",
             "charset": "utf-8",
@@ -74,12 +74,12 @@ class MockGrammar:
         self.structure = [create_structure_node({i: v for i, v in enumerate(self.structure[0])})]
 
 
-class MockMessage(Message):
+class FakeMessage(Message):
     def __init__(self, ta_info):
         self.ta_info = ta_info
         self.errorlist = []
-        self.messagetypetxt = "MockMessage "
-        self.defmessage = MockGrammar()
+        self.messagetypetxt = "FakeMessage "
+        self.defmessage = FakeGrammar()
         self.root = Node()
 
 
@@ -90,7 +90,7 @@ def test_message_repeating_field_mandatory_missing():
         "has_structure": True,
         "checkunknownentities": False,
     }
-    msg = MockMessage(ta_info)
+    msg = FakeMessage(ta_info)
 
     # REP_FIELD is mandatory, but not present
     node = Node(record={"BOTSID": "REC1", "REC1": "REC", "REP_COMP": [{"SUB1": "val"}]})
@@ -108,7 +108,7 @@ def test_message_repeating_field_not_list():
         "has_structure": True,
         "checkunknownentities": False,
     }
-    msg = MockMessage(ta_info)
+    msg = FakeMessage(ta_info)
 
     node = Node(record={"BOTSID": "REC1", "REC1": "REC", "REP_FIELD": "not_a_list"})
     msg.root.append(node)
@@ -125,7 +125,7 @@ def test_message_repeating_field_max_repeats():
         "has_structure": True,
         "checkunknownentities": False,
     }
-    msg = MockMessage(ta_info)
+    msg = FakeMessage(ta_info)
 
     # REP_FIELD MAXREPEAT is 2, but we pass 3
     node = Node(
@@ -150,7 +150,7 @@ def test_message_repeating_field_empty_data():
         "has_structure": True,
         "checkunknownentities": False,
     }
-    msg = MockMessage(ta_info)
+    msg = FakeMessage(ta_info)
 
     # REP_FIELD has empty strings, so it's considered empty and should fail mandatory check
     node = Node(
@@ -175,7 +175,7 @@ def test_message_repeating_composite_max_repeats():
         "has_structure": True,
         "checkunknownentities": False,
     }
-    msg = MockMessage(ta_info)
+    msg = FakeMessage(ta_info)
 
     # REP_COMP MAXREPEAT is 2, but we pass 3
     node = Node(
@@ -200,7 +200,7 @@ def test_message_repeating_composite_mandatory_subfield_missing():
         "has_structure": True,
         "checkunknownentities": False,
     }
-    msg = MockMessage(ta_info)
+    msg = FakeMessage(ta_info)
 
     # SUB1 is mandatory, but not passed
     node = Node(

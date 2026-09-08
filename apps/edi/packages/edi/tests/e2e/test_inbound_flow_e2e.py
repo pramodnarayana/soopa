@@ -231,7 +231,7 @@ async def test_inbound_flow_e2e(
         try:
             await translate_svc.execute(trace_id, standard="X12", transaction_type="850")
         except (httpx.RequestError, ConnectionError) as e:
-            # If bots is not running, we use a pure FakeTransformerAdapter instead of a mock
+            # If bots is not running, we use a pure FakeTransformerAdapter instead of a fake
             if "Connection" in str(e) or "connect" in str(e).lower():
                 translate_svc.transformer = FakeTransformerAdapter()
                 await translate_svc.execute(trace_id, standard="X12", transaction_type="850")

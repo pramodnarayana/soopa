@@ -76,7 +76,7 @@ class FakeTransformerAdapter(TransformerPort):
     def __init__(self) -> None:
         self.transform_edi_calls: list[dict[str, object]] = []
         self.transform_json_calls: list[dict[str, object]] = []
-        self.mock_return_transactions: list[TransformedTransaction] | None = None
+        self.fake_return_transactions: list[TransformedTransaction] | None = None
 
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
@@ -84,16 +84,16 @@ class FakeTransformerAdapter(TransformerPort):
         self.transform_edi_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
         )
-        if self.mock_return_transactions is not None:
-            return self.mock_return_transactions
+        if self.fake_return_transactions is not None:
+            return self.fake_return_transactions
         return [
             TransformedTransaction(
                 transaction_type=transaction_type,
-                isa_sender_id="MOCK_ISA_SENDER",
-                isa_receiver_id="MOCK_ISA_RECEIVER",
-                gs_sender_id="MOCK_GS_SENDER",
-                gs_receiver_id="MOCK_GS_RECEIVER",
-                control_number="MOCK_1234",
+                isa_sender_id="FAKE_ISA_SENDER",
+                isa_receiver_id="FAKE_ISA_RECEIVER",
+                gs_sender_id="FAKE_GS_SENDER",
+                gs_receiver_id="FAKE_GS_RECEIVER",
+                control_number="FAKE_1234",
                 payload={"fake": "json", "from": standard, "type": transaction_type},
             )
         ]
@@ -225,7 +225,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
                 uuid.UUID(str(msg.get("trace_id", trace_id)))
                 msg["trace_id"] = str(msg.get("trace_id", trace_id))
             except ValueError:
-                # Safe: Test mock only generates dummy hash
+                # Safe: Test fake only generates dummy hash
                 hashed = hashlib.md5(
                     str(msg.get("trace_id", trace_id)).encode(), usedforsecurity=False
                 ).hexdigest()
@@ -434,7 +434,7 @@ class FakeHttpDeliveryAdapter:
                 "idempotency_key": idempotency_key,
             }
         )
-        return self.status_code, "Mock response body"
+        return self.status_code, "Fake response body"
 
 
 class FakeSftpDeliveryAdapter:
@@ -504,7 +504,7 @@ class FakeAS2DeliveryAdapter:
     ) -> tuple[int, dict[str, str], bytes]:
         self.delivered.append({"url": url, "body": body, "headers": headers})
         if getattr(self, "raise_on_deliver", False):
-            raise RuntimeError("Mock delivery failure")
+            raise RuntimeError("Fake delivery failure")
 
         digest = hashlib.sha256(body).digest()
         mic = base64.b64encode(digest).decode("ascii") + ", sha256"

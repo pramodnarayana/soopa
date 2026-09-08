@@ -6,9 +6,9 @@ from edi.core.bots.domain.models import create_field_definition, create_structur
 from edi.core.bots.domain.node import Node
 
 
-class MockGrammarForMessage:
+class FakeGrammarForMessage:
     def __init__(self):
-        self.grammarname = "mockgrammar"
+        self.grammarname = "fakegrammar"
         self.syntax = {
             "decimaal": ".",
             "charset": "utf-8",
@@ -50,7 +50,7 @@ class MockGrammarForMessage:
         self.structure = [create_structure_node({i: v for i, v in enumerate(self.structure[0])})]
 
 
-class MockMessageForCheck(Message):
+class FakeMessageForCheck(Message):
     def __init__(self, ta_info=None):
         if ta_info is None:
             ta_info = {
@@ -60,8 +60,8 @@ class MockMessageForCheck(Message):
                 "checkunknownentities": False,
             }
         super().__init__(ta_info)
-        self.messagetypetxt = "MockMessage "
-        self.defmessage = MockGrammarForMessage()
+        self.messagetypetxt = "FakeMessage "
+        self.defmessage = FakeGrammarForMessage()
         self.root = Node()
 
 
@@ -79,12 +79,12 @@ def test_display():
 
 
 def test_manipulatemessagetype():
-    msg = MockMessageForCheck()
+    msg = FakeMessageForCheck()
     assert msg._manipulatemessagetype("type", None) == "type"
 
 
 def test_checkonemessage_wrong_root():
-    msg = MockMessageForCheck()
+    msg = FakeMessageForCheck()
     node = Node(record={"BOTSID": "WRONG"})
     msg.root.append(node)
     with pytest.raises(MessageRootError, match="starts with record"):
@@ -92,13 +92,13 @@ def test_checkonemessage_wrong_root():
 
 
 def test_checkonemessage_min_occ():
-    msg = MockMessageForCheck()
+    msg = FakeMessageForCheck()
     msg.checkmessage(msg.root, msg.defmessage)
     assert any("occurs 0 times, min is 1" in err for err in msg.errorlist)
 
 
 def test_checkonemessage_max_occ():
-    msg = MockMessageForCheck()
+    msg = FakeMessageForCheck()
     msg.root.append(Node(record={"BOTSID": "REC1", "REC1": "VAL"}))
     msg.root.append(Node(record={"BOTSID": "REC1", "REC1": "VAL"}))
     msg.root.append(Node(record={"BOTSID": "REC1", "REC1": "VAL"}))
@@ -107,7 +107,7 @@ def test_checkonemessage_max_occ():
 
 
 def test_checkifrecordsingrammar_unknown_children():
-    msg = MockMessageForCheck(
+    msg = FakeMessageForCheck(
         {
             "lengthnumericbare": False,
             "decimaal": ".",

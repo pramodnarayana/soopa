@@ -7,7 +7,7 @@ from edi.core.bots.domain.inmessage import Inmessage
 from edi.core.bots.domain.node import Node
 
 
-class MockDefMessage:
+class FakeDefMessage:
     def __init__(self):
         self.nextmessage = None
         self.nextmessage2 = None
@@ -16,16 +16,16 @@ class MockDefMessage:
 
 def test_nextmessage_with_preprocess_nodes():
     msg = Inmessage(ta_info={"preprocess_nodes": None})
-    msg.defmessage = MockDefMessage()
+    msg.defmessage = FakeDefMessage()
     msg.root = Node()
 
     preprocess_called = False
 
-    def mock_preprocess(thisnode):
+    def fake_preprocess(thisnode):
         nonlocal preprocess_called
         preprocess_called = True
 
-    msg.ta_info["preprocess_nodes"] = mock_preprocess
+    msg.ta_info["preprocess_nodes"] = fake_preprocess
 
     # Run the generator
     list(msg.nextmessage())
@@ -34,7 +34,7 @@ def test_nextmessage_with_preprocess_nodes():
 
 def test_nextmessage_split_by_nextmessage():
     msg = Inmessage(ta_info={"preprocess_nodes": None})
-    msg.defmessage = MockDefMessage()
+    msg.defmessage = FakeDefMessage()
     msg.defmessage.nextmessage = ({"BOTSID": "ST"},)
 
     root = Node()
@@ -54,7 +54,7 @@ def test_nextmessage_split_by_nextmessage():
 
 def test_nextmessage_split_by_nextmessage2():
     msg = Inmessage(ta_info={"preprocess_nodes": None})
-    msg.defmessage = MockDefMessage()
+    msg.defmessage = FakeDefMessage()
     msg.defmessage.nextmessage = ({"BOTSID": "ST"},)
     msg.defmessage.nextmessage2 = ({"BOTSID": "UNH"},)
 
@@ -75,7 +75,7 @@ def test_nextmessage_split_by_nextmessage2():
 
 def test_nextmessage_split_by_nextmessageblock():
     msg = Inmessage(ta_info={"preprocess_nodes": None})
-    msg.defmessage = MockDefMessage()
+    msg.defmessage = FakeDefMessage()
     msg.defmessage.nextmessageblock = {"BOTSID": "ROW", "KEY": None}
 
     root = Node()
@@ -100,7 +100,7 @@ def test_nextmessage_split_by_nextmessageblock():
 
 def test_nextmessage_fallback_pass_all():
     msg = Inmessage(ta_info={"preprocess_nodes": None})
-    msg.defmessage = MockDefMessage()
+    msg.defmessage = FakeDefMessage()
 
     root = Node()
     child1 = Node(record={"BOTSID": "C1"})
@@ -117,7 +117,7 @@ def test_nextmessage_fallback_pass_all():
 
 def test_nextmessage_fallback_children():
     msg = Inmessage(ta_info={"preprocess_nodes": None})
-    msg.defmessage = MockDefMessage()
+    msg.defmessage = FakeDefMessage()
 
     root = Node()
     child1 = Node(record={"BOTSID": "C1"})

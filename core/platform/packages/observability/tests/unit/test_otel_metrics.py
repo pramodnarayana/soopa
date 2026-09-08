@@ -5,7 +5,7 @@ These tests verify that OtelMetrics correctly:
 - Accumulates counter values across multiple increments
 - Records histogram observations and computes sum/count
 
-No mocking is used. The OtelMetrics accepts an optional _metric_reader via DI,
+No faking is used. The OtelMetrics accepts an optional _metric_reader via DI,
 which allows injecting an InMemoryMetricReader for inspection without monkeypatching.
 """
 

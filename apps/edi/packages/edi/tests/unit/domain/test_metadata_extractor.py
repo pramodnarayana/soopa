@@ -2,7 +2,7 @@
 Layer 1 — Pure Domain Unit Tests: MetadataExtractorService.
 
 The extractor uses compiled JSONPath expressions. It is pure Python — no I/O.
-Zero mocks; test all transaction types, missing configs, and edge cases.
+Zero fakes; test all transaction types, missing configs, and edge cases.
 """
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService

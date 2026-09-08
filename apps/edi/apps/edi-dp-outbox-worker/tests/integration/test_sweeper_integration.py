@@ -18,7 +18,7 @@ pytestmark = pytest.mark.integration
 @pytest.mark.integration
 async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPort):
     # 1. Setup Data - stuck events that need sweeping
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         builder = DataPlaneOutboxBuilder(session=test_session)
         # We will create events with default properties that makes them look "stuck".
         event1 = await builder.create(

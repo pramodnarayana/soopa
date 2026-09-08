@@ -81,10 +81,10 @@ async def test_e2e_outbound_edi_json_debezium_realtime_flow(
         debezium_payload = simulate_debezium_unwrap_smt(outbox_event)
 
     # 3. Process via Orchestrator Worker Dispatcher
-    # We use a mock registry to verify routing occurs correctly for the INBOUND event
+    # We use a fake registry to verify routing occurs correctly for the INBOUND event
     processed_events = []
 
-    async def mock_inbound_factory(
+    async def fake_inbound_factory(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
         processed_events.append(e)
@@ -93,7 +93,7 @@ async def test_e2e_outbound_edi_json_debezium_realtime_flow(
     registry.register(
         event_type=PipelineEventType.TRANSFORM_EVENT.value,
         direction="OUTBOUND",
-        factory=mock_inbound_factory,
+        factory=fake_inbound_factory,
     )
 
     async def route_event(event: EdiDataPlaneEventMessage) -> None:
@@ -153,7 +153,7 @@ async def test_e2e_inbound_debezium_realtime_flow(
     # 3. Process via Orchestrator Worker Dispatcher
     processed_events = []
 
-    async def mock_outbound_factory(
+    async def fake_outbound_factory(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
         processed_events.append(e)
@@ -162,7 +162,7 @@ async def test_e2e_inbound_debezium_realtime_flow(
     registry.register(
         event_type=PipelineEventType.TRANSFORM_EVENT.value,
         direction="INBOUND",
-        factory=mock_outbound_factory,
+        factory=fake_outbound_factory,
     )
 
     async def route_event(event: EdiDataPlaneEventMessage) -> None:

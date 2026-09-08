@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import (
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
 
 
-class MockTransformerAdapter(TransformerPort):
+class FakeTransformerAdapter(TransformerPort):
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
     ) -> list[TransformedTransaction]:
@@ -90,7 +90,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     db_session_factory: async_sessionmaker,
 ) -> None:
     # 1. Wire the Use Case Factory
-    transformer = MockTransformerAdapter()
+    transformer = FakeTransformerAdapter()
 
     async def fake_use_case_factory(tenant_id: str):
         @contextlib.asynccontextmanager

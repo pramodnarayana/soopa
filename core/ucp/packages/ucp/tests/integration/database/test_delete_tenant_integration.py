@@ -41,13 +41,13 @@ async def test_delete_tenant_success(db_session):
         await uow.tenant_repo.save(tenant)
         await uow.commit()
 
-    mock_user = User.create(
+    fake_user = User.create(
         id=user_id, idp_user_id="zitadel-user-1", email="test@test.com", name="Test User"
     )
 
     # Save the user (assuming user_repo.save and add_to_tenant work)
     async with uow:
-        await uow.user_repo.save(mock_user)
+        await uow.user_repo.save(fake_user)
         # Assuming we need to add user to tenant using role_repo or similar
         # For this test, we just check if it executes without error or we need to ensure the DB state
         # The use case deletes tenant and its users. The repository cascading should handle this or the use case itself does.

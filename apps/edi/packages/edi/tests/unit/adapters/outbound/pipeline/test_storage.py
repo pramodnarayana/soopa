@@ -12,7 +12,7 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def aws_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Mock AWS Credentials for moto/localstack."""
+    """Fake AWS Credentials for moto/localstack."""
 
 
 @pytest.mark.integration

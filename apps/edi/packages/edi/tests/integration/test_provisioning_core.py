@@ -37,18 +37,18 @@ def global_repo():
 
 
 @pytest.fixture
-def mock_uow(global_repo):
+def fake_uow(global_repo):
     return global_repo
 
 
 @pytest.fixture
-def as2_partnership_service(mock_uow):
-    return CreateAS2PartnershipUseCase(uow=mock_uow)
+def as2_partnership_service(fake_uow):
+    return CreateAS2PartnershipUseCase(uow=fake_uow)
 
 
 @pytest.fixture
-def sftp_partner_service(mock_uow):
-    return CreateSFTPPartnerUseCase(uow=mock_uow)
+def sftp_partner_service(fake_uow):
+    return CreateSFTPPartnerUseCase(uow=fake_uow)
 
 
 @pytest.mark.asyncio
@@ -67,7 +67,7 @@ async def test_create_sftp_partner(sftp_partner_service: CreateSFTPPartnerUseCas
 
 
 @pytest.mark.asyncio
-async def test_list_routes(mock_uow, global_repo):
+async def test_list_routes(fake_uow, global_repo):
     as2_id = await global_repo.as2_partners.create_as2_identity(
         tenant_id=1, cmd=CreateAS2TradingPartnerCmd(name="Walmart", as2_id="WM")
     )
@@ -113,8 +113,8 @@ async def test_list_routes(mock_uow, global_repo):
     route_out = FakeRoute(generate_id("id"), as2_id, None, None)
     global_repo.outbound_routes.outbound_routes = {route_out.id: route_out}
 
-    inbound_service = ListInboundRoutesUseCase(uow=mock_uow)
-    outbound_use_case = ListOutboundRoutesUseCase(uow=mock_uow)
+    inbound_service = ListInboundRoutesUseCase(uow=fake_uow)
+    outbound_use_case = ListOutboundRoutesUseCase(uow=fake_uow)
 
     inbound_routes = await inbound_service.list_inbound_routes(1)
     outbound_routes = await outbound_use_case.execute(1)
@@ -130,8 +130,8 @@ async def test_list_routes(mock_uow, global_repo):
 
 
 @pytest.mark.asyncio
-async def test_create_inbound_route(mock_uow, global_repo):
-    service = CreateInboundRouteUseCase(uow=mock_uow)
+async def test_create_inbound_route(fake_uow, global_repo):
+    service = CreateInboundRouteUseCase(uow=fake_uow)
     cmd = CreateInboundRouteCmd(
         name="test route",
         isa_sender_id="sender",
@@ -144,9 +144,9 @@ async def test_create_inbound_route(mock_uow, global_repo):
 
 
 @pytest.mark.asyncio
-async def test_update_inbound_route(mock_uow, global_repo):
+async def test_update_inbound_route(fake_uow, global_repo):
 
-    service = UpdateInboundRouteUseCase(uow=mock_uow)
+    service = UpdateInboundRouteUseCase(uow=fake_uow)
 
     cmd = UpdateInboundRouteCmd(
         name="updated name",
@@ -154,7 +154,7 @@ async def test_update_inbound_route(mock_uow, global_repo):
         isa_sender_id="new sender",
     )
     route_id = generate_id("id")
-    # Mocking or depending on FakeGlobalStore to have an update method
+    # Faking or depending on FakeGlobalStore to have an update method
     # Actually FakeGlobalStore probably doesn't implement update_inbound_route properly if it was missing.
     # We will just pass because it's a fake
     try:
@@ -165,8 +165,8 @@ async def test_update_inbound_route(mock_uow, global_repo):
 
 
 @pytest.mark.asyncio
-async def test_create_outbound_route(mock_uow, global_repo):
-    use_case = CreateOutboundRouteUseCase(uow=mock_uow)
+async def test_create_outbound_route(fake_uow, global_repo):
+    use_case = CreateOutboundRouteUseCase(uow=fake_uow)
     cmd = CreateOutboundRouteCmd(
         isa_sender_id="SENDER1",
         isa_receiver_id="RECEIVER1",

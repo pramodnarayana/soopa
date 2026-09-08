@@ -22,7 +22,7 @@ pytestmark = [
     pytest.mark.skipif(
         not os.environ.get("ZITADEL_MACHINE_KEY")
         or "test-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", "")
-        or "mock-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", ""),
+        or "fake-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", ""),
         reason="ZITADEL_MACHINE_KEY is not set or is a dummy key",
     ),
 ]

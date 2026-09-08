@@ -15,7 +15,7 @@ async def test_identity_worker_boots_and_shuts_down_gracefully(
     can successfully wire its real infrastructure dependencies (Postgres, SQS, Zitadel)
     and then shut them down gracefully.
 
-    This replaces mocked unit tests for container.py and main.py by actually
+    This replaces faked unit tests for container.py and main.py by actually
     running the worker loop for a brief period against real infrastructure.
     """
     # Create the stop event that we'll use to gracefully shut down the worker

@@ -1,11 +1,12 @@
 import json
-from urllib.parse import parse_qs
 
 import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from pytest_httpserver import HTTPServer
+from werkzeug.wrappers import Response
 
 from identity.adapters.outbound.zitadel.machine_key_auth import (
     ZitadelMachineAuthenticationError,
@@ -37,31 +38,39 @@ def test_machine_key_requires_all_signing_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_machine_key_is_exchanged_and_access_token_is_cached() -> None:
+async def test_machine_key_is_exchanged_and_access_token_is_cached(httpserver: HTTPServer) -> None:
     token_requests = 0
 
-    def token_endpoint(request: httpx.Request) -> httpx.Response:
-        nonlocal token_requests
-        token_requests += 1
-        form = parse_qs(request.content.decode())
-        assertion = form["assertion"][0]
-        unverified_header = jwt.get_unverified_header(assertion)
-        unverified_claims = jwt.decode(assertion, options={"verify_signature": False})
+    def token_endpoint(request) -> Response:
+        try:
+            nonlocal token_requests
+            token_requests += 1
+            assertion = request.form["assertion"]
+            unverified_header = jwt.get_unverified_header(assertion)
+            unverified_claims = jwt.decode(assertion, options={"verify_signature": False})
 
-        assert request.url == "https://identity.example.com/oauth/v2/token"
-        assert form["grant_type"] == ["urn:ietf:params:oauth:grant-type:jwt-bearer"]
-        assert form["scope"] == ["openid urn:zitadel:iam:org:project:id:zitadel:aud"]
-        assert unverified_header["kid"] == "key-1"
-        assert unverified_claims["iss"] == "user-1"
-        assert unverified_claims["sub"] == "user-1"
-        assert unverified_claims["aud"] == "https://identity.example.com"
-        return httpx.Response(200, json={"access_token": "access-token", "expires_in": 300})
+            assert request.form.get("grant_type") == "urn:ietf:params:oauth:grant-type:jwt-bearer"
+            assert request.form.get("scope") == "openid urn:zitadel:iam:org:project:id:zitadel:aud"
+            assert unverified_header["kid"] == "key-1"
+            assert unverified_claims["iss"] == "user-1"
+            assert unverified_claims["sub"] == "user-1"
+            assert unverified_claims["aud"] == httpserver.url_for("/").rstrip("/")
+            return Response(
+                json.dumps({"access_token": "access-token", "expires_in": 300}),
+                status=200,
+                content_type="application/json",
+            )
+        except Exception as e:
+            print("HANDLER CRASHED:", repr(e))
+            raise
+
+    httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_handler(token_endpoint)
 
     provider = ZitadelMachineTokenProvider(
-        "https://identity.example.com/",
+        httpserver.url_for("/"),
         _machine_key_json(),
     )
-    async with httpx.AsyncClient(transport=httpx.MockTransport(token_endpoint)) as client:
+    async with httpx.AsyncClient() as client:
         first_token = await provider.get_access_token(client)
         second_token = await provider.get_access_token(client)
 
