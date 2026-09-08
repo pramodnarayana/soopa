@@ -23,7 +23,7 @@ async def get_identity_context(
         request_url_path=request.url.path,
     )
 
-    identity: IdentityContext | None = getattr(request.state, "identity", None)
+    identity: IdentityContext | None = request.state.identity
     if identity is not None:
         logger.info(
             "[EDI_GUARD] Found identity in request.state: {identity.subject}",
@@ -68,7 +68,7 @@ async def get_current_tenant_id(
     Dependency to get the active Tenant ID.
     The TenantContextMiddleware in the Unified API Shell enforces this before routing.
     """
-    tenant_id = getattr(request.state, "tenant_id", None)
+    tenant_id = request.state.tenant_id
     if not tenant_id:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

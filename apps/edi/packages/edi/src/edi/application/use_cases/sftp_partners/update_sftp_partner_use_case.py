@@ -1,7 +1,9 @@
 import dataclasses
 
 import structlog
+from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import UNSET
+from seedwork.utils import generate_id
 
 from edi.application.dtos.commands import UpdateSFTPPartnerCmd
 from edi.domain.enums import EdiEventType
@@ -37,7 +39,7 @@ class UpdateSFTPPartnerUseCase:
         has_password = (
             bool(cmd.password)
             if cmd.password is not UNSET
-            else bool(getattr(existing, "password_encrypted", None))
+            else bool(existing.password_encrypted)
         )
         has_vault = (
             bool(cmd.credentials_vault_ref)
@@ -69,7 +71,7 @@ class UpdateSFTPPartnerUseCase:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_sftp_partner_updated,
                 resource_id=partner_id,
-                explicit_idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         )
 

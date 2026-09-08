@@ -195,7 +195,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
             TransformRequestedEvent(
                 trace_id="trace-1",
                 tenant_id="ten_001",
-                explicit_idempotency_key="request-1",
+                idempotency_key="request-1",
             )
         )
 

@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dtos.commands import CreateAS2TradingPartnerCmd
 from edi.config.constants import SecretCategory
@@ -172,7 +174,7 @@ class CreateAS2PartnerUseCase:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_as2_partner_created,
                 resource_id=partner_id,
-                explicit_idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
 
             if idempotency_key:

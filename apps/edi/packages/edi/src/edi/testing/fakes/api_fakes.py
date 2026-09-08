@@ -57,12 +57,12 @@ class FakeInboundRouteRepository:
 
     async def get_inbound_routes(self, tenant_id: str) -> list[object]:
         return [
-            r for r in self.inbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+            r for r in self.inbound_routes.values() if r.tenant_id == tenant_id
         ]
 
     async def get_inbound_route(self, tenant_id: str, route_id: str) -> object | None:
         route = self.inbound_routes.get(route_id)
-        return route if route and getattr(route, "tenant_id", None) == tenant_id else None
+        return route if route and route.tenant_id == tenant_id else None
 
     async def get_inbound_route_by_id(self, tenant_id: str, route_id: str) -> object | None:
         return await self.get_inbound_route(tenant_id, route_id)
@@ -105,7 +105,7 @@ class FakeInboundRouteRepository:
 
     async def list_inbound_routes(self, tenant_id: str) -> list[object]:
         return [
-            r for r in self.inbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+            r for r in self.inbound_routes.values() if r.tenant_id == tenant_id
         ]
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
@@ -130,12 +130,11 @@ class FakeInboundRouteRepository:
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
                     tenant_id=str(
-                        getattr(event, "get_routing_tenant_id", lambda: None)()
-                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
                     ),
-                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
-                    idempotency_key=getattr(event, "idempotency_key", None),
+                    idempotency_key=event.idempotency_key,
                 )
             )
         aggregate.clear_domain_events()
@@ -148,7 +147,7 @@ class FakeOutboundRouteRepository:
 
     async def get_outbound_routes(self, tenant_id: str) -> list[object]:
         return [
-            r for r in self.outbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+            r for r in self.outbound_routes.values() if r.tenant_id == tenant_id
         ]
 
     async def get_outbound_route(self, tenant_id: str, route_id: str) -> object | None:
@@ -187,7 +186,7 @@ class FakeOutboundRouteRepository:
 
     async def list_outbound_routes(self, tenant_id: str) -> list[object]:
         return [
-            r for r in self.outbound_routes.values() if getattr(r, "tenant_id", None) == tenant_id
+            r for r in self.outbound_routes.values() if r.tenant_id == tenant_id
         ]
 
     async def save(self, aggregate: AggregateRoot) -> None:
@@ -206,12 +205,11 @@ class FakeOutboundRouteRepository:
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
                     tenant_id=str(
-                        getattr(event, "get_routing_tenant_id", lambda: None)()
-                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
                     ),
-                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
-                    idempotency_key=getattr(event, "idempotency_key", None),
+                    idempotency_key=event.idempotency_key,
                 )
             )
         aggregate.clear_domain_events()
@@ -253,7 +251,8 @@ class FakeAS2PartnerRepository:
     ) -> None:
         if partner_id in self.partners and self.partners[partner_id].tenant_id == tenant_id:
             p = self.partners[partner_id]
-            p.name = getattr(cmd, "name", p.name)
+            if isinstance(cmd.name, str):
+                p.name = cmd.name
 
     async def delete_as2_identity(self, tenant_id: str, partner_id: str) -> None:
         if partner_id in self.partners and self.partners[partner_id].tenant_id == tenant_id:
@@ -261,7 +260,7 @@ class FakeAS2PartnerRepository:
 
     async def get_as2_partner(self, tenant_id: str, partner_id: str) -> object | None:
         p = self.partners.get(partner_id)
-        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
+        return p if p and p.tenant_id == tenant_id else None
 
     async def update_partner_status(self, tenant_id: str, partner_id: str, status: str) -> None:
         if partner_id in self.partners and self.partners[partner_id].tenant_id == tenant_id:
@@ -271,7 +270,7 @@ class FakeAS2PartnerRepository:
         return list(self.partners.values())
 
     async def list_as2_partners(self, tenant_id: str) -> Sequence[object]:
-        return [p for p in self.partners.values() if getattr(p, "tenant_id", None) == tenant_id]
+        return [p for p in self.partners.values() if p.tenant_id == tenant_id]
 
     async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
@@ -314,12 +313,11 @@ class FakeAS2PartnerRepository:
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
                     tenant_id=str(
-                        getattr(event, "get_routing_tenant_id", lambda: None)()
-                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
                     ),
-                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
-                    idempotency_key=getattr(event, "idempotency_key", None),
+                    idempotency_key=event.idempotency_key,
                 )
             )
         aggregate.clear_domain_events()
@@ -372,19 +370,19 @@ class FakeSFTPPartnerRepository:
 
     async def get_sftp_partner(self, tenant_id: str, partner_id: str) -> object | None:
         p = self.sftp_partners.get(partner_id)
-        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
+        return p if p and p.tenant_id == tenant_id else None
 
     async def list_sftp_partners(self, tenant_id: str) -> Sequence[object]:
         return [
-            p for p in self.sftp_partners.values() if getattr(p, "tenant_id", None) == tenant_id
+            p for p in self.sftp_partners.values() if p.tenant_id == tenant_id
         ]
 
     async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
-            id: getattr(self.sftp_partners[id], "name", "unknown")
+            id: self.sftp_partners[id].name
             for id in ids
             if id in self.sftp_partners
-            and getattr(self.sftp_partners[id], "tenant_id", None) == str(tenant_id)
+            and self.sftp_partners[id].tenant_id == str(tenant_id)
         }
 
     async def save(self, aggregate: AggregateRoot) -> None:
@@ -403,12 +401,11 @@ class FakeSFTPPartnerRepository:
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
                     tenant_id=str(
-                        getattr(event, "get_routing_tenant_id", lambda: None)()
-                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
                     ),
-                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
-                    idempotency_key=getattr(event, "idempotency_key", None),
+                    idempotency_key=event.idempotency_key,
                 )
             )
         aggregate.clear_domain_events()
@@ -461,10 +458,10 @@ class FakeAS2PartnershipRepository:
 
     async def get_as2_partnership(self, tenant_id: str, partnership_id: str) -> object | None:
         p = self.partnerships.get(partnership_id)
-        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
+        return p if p and p.tenant_id == tenant_id else None
 
     async def list_as2_partnerships(self, tenant_id: str) -> list[object]:
-        return [p for p in self.partnerships.values() if getattr(p, "tenant_id", None) == tenant_id]
+        return [p for p in self.partnerships.values() if p.tenant_id == tenant_id]
 
     async def list_partnerships(self) -> list[object]:
         return list(self.partnerships.values())
@@ -505,12 +502,11 @@ class FakeAS2PartnershipRepository:
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
                     tenant_id=str(
-                        getattr(event, "get_routing_tenant_id", lambda: None)()
-                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
                     ),
-                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
-                    idempotency_key=getattr(event, "idempotency_key", None),
+                    idempotency_key=event.idempotency_key,
                 )
             )
         aggregate.clear_domain_events()
@@ -522,11 +518,11 @@ class FakeWebhookRepository:
         self.outbox = outbox
 
     async def list_webhooks(self, tenant_id: str) -> Sequence[object]:
-        return [p for p in self.webhooks.values() if getattr(p, "tenant_id", None) == tenant_id]
+        return [p for p in self.webhooks.values() if p.tenant_id == tenant_id]
 
     async def get_webhook(self, tenant_id: str, partner_id: str) -> object | None:
         p = self.webhooks.get(partner_id)
-        return p if p and getattr(p, "tenant_id", None) == tenant_id else None
+        return p if p and p.tenant_id == tenant_id else None
 
     async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
@@ -601,11 +597,11 @@ class FakeOutboundEdiHeaderRepository:
         self.outbox = outbox
 
     async def get_outbound_edi_headers(self, tenant_id: str) -> Sequence[object]:
-        return [h for h in self._edi_headers.values() if getattr(h, "tenant_id", None) == tenant_id]
+        return [h for h in self._edi_headers.values() if h.tenant_id == tenant_id]
 
     async def get_outbound_edi_header(self, tenant_id: str, header_id: str) -> object | None:
         h = self._edi_headers.get(header_id)
-        return h if h and getattr(h, "tenant_id", None) == tenant_id else None
+        return h if h and h.tenant_id == tenant_id else None
 
     async def get_outbound_edi_header_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
@@ -631,12 +627,11 @@ class FakeOutboundEdiHeaderRepository:
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
                     tenant_id=str(
-                        getattr(event, "get_routing_tenant_id", lambda: None)()
-                        or getattr(aggregate, "tenant_id", PLATFORM_TENANT_ID)
+                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
                     ),
-                    event_type=str(getattr(event, "event_name", type(event).__name__)),
+                    event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
-                    idempotency_key=getattr(event, "idempotency_key", None),
+                    idempotency_key=event.idempotency_key,
                 )
             )
         aggregate.clear_domain_events()
@@ -732,7 +727,7 @@ class FakeTenantStore:
 
     async def get_sftp_partners_by_ids(self, ids: list[str]) -> dict[str, str]:
         return {
-            str(p["id"]): str(getattr(p["cmd"], "name", "unknown"))
+            str(p["id"]): str(p["cmd"].name if hasattr(p["cmd"], "name") else p["cmd"])
             for p in self.sftp_partners
             if str(p["id"]) in ids
         }
@@ -742,7 +737,7 @@ class FakeTenantStore:
 
     async def get_webhooks_by_ids(self, ids: list[str]) -> dict[str, str]:
         return {
-            str(p["id"]): str(getattr(p["cmd"], "name", "unknown"))
+            str(p["id"]): str(p["cmd"].name if hasattr(p["cmd"], "name") else p["cmd"])
             for p in self.webhooks
             if str(p["id"]) in ids
         }

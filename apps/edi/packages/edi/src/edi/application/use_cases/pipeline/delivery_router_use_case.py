@@ -103,7 +103,7 @@ class DeliveryRouterUseCase:
             strategy = self.strategies["webhook_id"]
 
         if not partner_id or not strategy:
-            route_id = getattr(route, "route_id", "inbound_route")
+            route_id = route.route_id if isinstance(route, OutboundRouteDTO) else "inbound_route"
             raise ValueError(f"Route {route_id} is not configured with any destination partner.")
 
         try:

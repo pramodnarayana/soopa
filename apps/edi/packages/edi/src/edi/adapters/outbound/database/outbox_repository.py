@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Generic, TypeVar
 
 from outbox.domain.constants import OutboxStatus
@@ -48,7 +49,7 @@ class SqlAlchemyOutboxRepositoryMixin(Generic[T_Session]):
         idempotency_key: str | None = None,
     ) -> str:
         tid_str = tenant_id if tenant_id is not None else None
-        event_type_str = getattr(event_type, "value", str(event_type))
+        event_type_str = event_type.value if isinstance(event_type, Enum) else str(event_type)
         event_id = f"{self.id_prefix}{generate_random_hex(6)}"
         record = self.model_class(
             id=event_id,
@@ -73,7 +74,7 @@ class SqlAlchemyOutboxRepositoryMixin(Generic[T_Session]):
         insert_stmts = []
         for event in events:
             event_type = event["event_type"]
-            event_type_str = getattr(event_type, "value", str(event_type))
+            event_type_str = event_type.value if isinstance(event_type, Enum) else str(event_type)
             event_id = f"{self.id_prefix}{generate_random_hex(6)}"
 
             insert_stmts.append(
@@ -131,12 +132,11 @@ class SqlAlchemyControlPlaneOutboxRepository(
             )
             reservation = result.scalar_one_or_none()
             if reservation is not None:
-                event_type_attr = getattr(event, "event_type", None)
-                event_type_val = getattr(event_type_attr, "value", event_type_attr)
+                event_type_val = event.event_type.value if hasattr(event.event_type, "value") else event.event_type
 
                 # We know reservation is an instance of our outbox model class
                 reservation.event_type = str(event_type_val)
-                current_payload = getattr(reservation, "payload", {})
+                current_payload = reservation.payload or {}
 
                 # Check if current_payload is a dict to satisfy type checking before unpacking
                 if isinstance(current_payload, dict):
@@ -150,9 +150,9 @@ class SqlAlchemyControlPlaneOutboxRepository(
 
         event_id = await self._publish_record(
             tenant_id=event.tenant_id,
-            event_type=str(getattr(event.event_type, "value", event.event_type)),
+            event_type=str(event.event_type.value if hasattr(event.event_type, "value") else event.event_type),
             payload=serialized_event,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
         )
         return event_id
 
@@ -179,7 +179,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
         insert_stmt = insert(self.model_class).values(
             id=f"reservation_{idempotency_key}",
             tenant_id=tenant_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             event_type="RESERVATION",
             payload={"fingerprint": fingerprint},
             status=OutboxStatus.RESERVED,
@@ -219,5 +219,5 @@ class SqlAlchemyDataPlaneOutboxRepository(
             tenant_id=tenant_id,
             event_type=event_type,
             payload=payload,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
         )

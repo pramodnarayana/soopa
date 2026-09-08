@@ -55,7 +55,7 @@ async def require_tenant_member(
         HTTP 403 — if the user is not authorized to access the requested tenant,
                    or if the tenant cannot be resolved at all.
     """
-    identity: IdentityContext | None = getattr(request.state, "identity", None)
+    identity: IdentityContext | None = request.state.identity
     if identity is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -78,7 +78,7 @@ async def require_tenant_member(
 
     # Standard users: the token must carry the correct tenant context.
     if tenant_id in identity.authorized_tenants or identity.tenant_id == tenant_id:
-        canonical_tenant_id = identity.tenant_mapping.get(tenant_id, tenant_id)
+        canonical_tenant_id = str(identity.tenant_mapping.get(tenant_id, tenant_id))
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
         return identity

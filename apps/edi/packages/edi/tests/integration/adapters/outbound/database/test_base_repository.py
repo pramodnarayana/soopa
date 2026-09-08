@@ -29,7 +29,7 @@ async def test_drain_events_prefers_explicit_event_idempotency_key(
             tenant_id="tenant-1",
             event_type=EdiEventType.edi_as2_partner_created,
             resource_id="partner-1",
-            explicit_idempotency_key="request-1",
+            idempotency_key="request-1",
         )
     )
 

@@ -24,6 +24,7 @@ Dependency Inversion is enforced via constructor injection:
 import email
 import functools
 import re
+from collections.abc import Mapping
 from email import policy
 from typing import cast
 
@@ -78,7 +79,7 @@ class ProcessInboundAs2MessageUseCase:
 
     async def process_inbound_message(
         self, command: ProcessInboundAs2Command
-    ) -> tuple[bytes, dict[str, str]]:
+    ) -> tuple[bytes, Mapping[str, str]]:
         """
         Orchestrates the entire inbound AS2 flow:
           1. Parse HTTP Request → domain AS2Message
@@ -157,7 +158,7 @@ class ProcessInboundAs2MessageUseCase:
     # Private helpers
     # -------------------------------------------------------------------------
 
-    def _parse_request(self, headers: dict[str, str], body_bytes: bytes) -> AS2Message:
+    def _parse_request(self, headers: Mapping[str, str], body_bytes: bytes) -> AS2Message:
         try:
             return parse_as2_request(headers, body_bytes)
         except ValueError as e:
@@ -213,7 +214,7 @@ class ProcessInboundAs2MessageUseCase:
     def _unbox_payload(
         self,
         as2_msg: AS2Message,
-        original_headers: dict[str, str],
+        original_headers: Mapping[str, str],
         local_priv_key: bytes | None,
         local_cert: bytes | None,
         remote_cert: bytes | None,
@@ -268,7 +269,7 @@ class ProcessInboundAs2MessageUseCase:
     def _decrypt_entity(
         self,
         current_entity: bytes,
-        original_headers: dict[str, str],
+        original_headers: Mapping[str, str],
         priv_key: bytes,
         cert: bytes | None,
     ) -> bytes:
@@ -299,7 +300,7 @@ class ProcessInboundAs2MessageUseCase:
             logger.exception("as2_decryption_failed_after_fallback")
             raise ValueError(f"Decryption failed: {e}") from e
 
-    def _reconstruct_smime_headers(self, headers: dict[str, str]) -> bytes:
+    def _reconstruct_smime_headers(self, headers: Mapping[str, str]) -> bytes:
         smime_headers = ""
         has_cte = False
         for header_name in ["content-type", "content-transfer-encoding", "content-disposition"]:
@@ -498,7 +499,7 @@ class ProcessInboundAs2MessageUseCase:
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
                 status=MessageStatus.RECEIVED.value,
-                explicit_idempotency_key=str(msg_id),
+                idempotency_key=str(msg_id),
             )
 
             edi_message_aggregate.add_domain_event(outbox_payload)

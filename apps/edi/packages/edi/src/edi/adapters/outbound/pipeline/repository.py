@@ -649,7 +649,7 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
                 signature_algorithm=partnership.signature_algorithm,
                 mdn_type=partnership.mdn_type,
                 mdn_url=partnership.mdn_url,
-                advanced_flags=getattr(partnership, "advanced_flags", None),
+                advanced_flags=partnership.advanced_flags,
             ),
         )
 
@@ -674,6 +674,6 @@ class SqlAlchemyRepositoryAdapter(RepositoryPort):
             public_cert_pem=partner.public_cert_pem,
             public_cert_vault_ref=partner.public_cert_vault_ref,
             private_key_vault_ref=partner.private_key_vault_ref,
-            prev_private_key_vault_ref=getattr(partner, "prev_private_key_vault_ref", None),
-            prev_public_cert_vault_ref=getattr(partner, "prev_public_cert_vault_ref", None),
+            prev_private_key_vault_ref=partner.prev_private_key_vault_ref,
+            prev_public_cert_vault_ref=partner.prev_public_cert_vault_ref,
         )

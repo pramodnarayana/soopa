@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)
 
@@ -64,7 +66,7 @@ class EdiDataPlaneEventDispatcher:
             trace_id=trace_id,
             event_type=event_type,
             payload=payload,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
         )
 
         try:

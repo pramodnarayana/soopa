@@ -1,5 +1,7 @@
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
@@ -136,7 +138,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 local_partner=local_partner_dto,
                 remote_partner=remote_partner_dto,
                 partnership=partnership_dto,
-                idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         except Exception as e:
             await self.uow.repository.update_edi_message_status(trace_id, MessageStatus.FAILED)

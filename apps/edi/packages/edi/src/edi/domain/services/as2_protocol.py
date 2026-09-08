@@ -14,7 +14,7 @@ import base64
 import email
 import hashlib
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 from seedwork import generate_random_hex
 
@@ -45,7 +45,7 @@ def calculate_mic(payload: bytes, mic_alg: str = "sha256") -> str:
     return f"{encoded_mic}, {mic_alg}"
 
 
-def parse_as2_request(headers: dict[str, str], raw_body: bytes) -> AS2Message:
+def parse_as2_request(headers: Mapping[str, str], raw_body: bytes) -> AS2Message:
     """
     Parses raw HTTP headers and body into an AS2Message value object.
     Identifies encryption, signing, and compression flags from Content-Type.
@@ -66,7 +66,7 @@ def parse_as2_request(headers: dict[str, str], raw_body: bytes) -> AS2Message:
         message_id=message_id,
         as2_from=as2_from,
         as2_to=as2_to,
-        headers=headers,
+        headers=dict(headers),
         payload=raw_body,
         is_encrypted=is_encrypted,
         is_signed=is_signed,

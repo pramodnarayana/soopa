@@ -38,7 +38,7 @@ async def get_tenant_session_for_id(
     global_session: AsyncSession,
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yields an AsyncSession bound to the database shard for a given tenant."""
-    db_router = getattr(request.app.state, "db_router", None)
+    db_router = request.app.state.db_router
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 

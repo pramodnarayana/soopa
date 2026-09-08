@@ -31,3 +31,48 @@ rules:
     message: "Enterprise Rule: Performance bottleneck. Do not call get_queue_url dynamically inside a polling loop. Cache it."
     languages: [python]
     severity: ERROR
+  - id: ban-defensive-getattr
+    patterns:
+      - pattern: getattr($OBJ, "...", ...)
+    message: "Enterprise Rule: NEVER use getattr(obj, 'field', fallback) defensively. Use standard dot access to explicitly fail on missing properties."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "core/platform/apps/unified-api/src/**/*.py"
+  - id: ban-any-in-business-logic
+    patterns:
+      - pattern-either:
+          - pattern: Any
+          - pattern: typing.Any
+    message: "Enterprise Rule: No `Any` as a Crutch. Do not use Any in the domain or application layers. Define strict DTOs, Protocols, or use JsonValue/JsonDict if absolutely necessary."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/*.py"
+        - "**/application/**/*.py"
+      exclude:
+        - "**/tests/**/*.py"
+        - "**/*_test.py"
+        - "**/test_*.py"
+  - id: ban-dict-type-in-business-logic
+    patterns:
+      - pattern-either:
+          - pattern: "def $FUNC(..., $ARG: dict, ...): ..."
+          - pattern: "def $FUNC(..., $ARG: typing.Dict, ...): ..."
+          - pattern: "def $FUNC(..., $ARG: Dict, ...): ..."
+          - pattern: "def $FUNC(...) -> dict: ..."
+          - pattern: "def $FUNC(...) -> typing.Dict: ..."
+          - pattern: "def $FUNC(...) -> Dict: ..."
+    message: "Enterprise Rule: Strict Data Structures. Do not pass opaque `dict` objects in the domain or application layers. Use strongly typed dataclasses, Pydantic models, or JsonDict if dynamic data is required."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/*.py"
+        - "**/application/**/*.py"
+      exclude:
+        - "**/tests/**/*.py"
+        - "**/*_test.py"
+        - "**/test_*.py"

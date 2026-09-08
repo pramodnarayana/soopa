@@ -32,12 +32,14 @@ from ucp.bootstrap.container import Container as UcpContainer
 from ucp.bootstrap.dependencies import get_token_verifier
 from ucp.ports.outbound.edi_service_port import EdiServicePort
 
-from unified_api.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
-from unified_api.adapters.inbound.http.routers import (
-    apps_router,
+from unified_api.adapters.inbound.http.identity.routers import (
     auth_router,
-    tenants_router,
     tokens_router,
+)
+from unified_api.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
+from unified_api.adapters.inbound.http.ucp.routers import (
+    apps_router,
+    tenants_router,
     users_router,
     webhooks_router,
 )
@@ -142,16 +144,16 @@ setup_shell_exception_handlers(app)
 # UCP dependency injection (real adapters → router placeholders) is wired here
 # on the Shell app instance, since that is the app that owns the UCP routes.
 # ---------------------------------------------------------------------------
-from unified_api.adapters.inbound.http.routers.in_app_notifications_router import (
+from unified_api.adapters.inbound.http.notifications.routers.in_app_notifications_router import (
     router as in_app_notifications_router,
 )
-from unified_api.adapters.inbound.http.routers.notification_preferences_router import (
+from unified_api.adapters.inbound.http.notifications.routers.notification_preferences_router import (
     router as notification_preferences_router,
 )
-from unified_api.adapters.inbound.http.routers.notification_templates_router import (
+from unified_api.adapters.inbound.http.notifications.routers.notification_templates_router import (
     router as notification_templates_router,
 )
-from unified_api.adapters.inbound.http.routers.notification_user_preferences_router import (
+from unified_api.adapters.inbound.http.notifications.routers.notification_user_preferences_router import (
     router as notification_user_preferences_router,
 )
 

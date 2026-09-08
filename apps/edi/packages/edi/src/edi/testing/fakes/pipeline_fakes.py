@@ -17,7 +17,10 @@ def _from_dict(cls: type[T], data: dict[str, object] | None) -> T | None:
         return None
 
     kwargs = {}
-    fields = getattr(cls, "__dataclass_fields__", {})
+    import typing
+    if not dataclasses.is_dataclass(cls):
+        return None
+    fields = {f.name: f for f in dataclasses.fields(typing.cast(typing.Any, cls))}
     for name in fields:
         if name in data:
             kwargs[name] = data[name]
@@ -442,6 +445,7 @@ class FakeSftpDeliveryAdapter:
 
     def __init__(self) -> None:
         self.delivered: list[dict[str, object]] = []
+        self.raise_on_deliver = False
 
     async def deliver(
         self,
@@ -485,6 +489,7 @@ class FakeAS2DeliveryAdapter:
             "Content-Type": 'multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"'
         }
         self.delivered: list[dict[str, object]] = []
+        self.raise_on_deliver = False
         if body is not None:
             self.body = body
         else:
@@ -503,7 +508,7 @@ class FakeAS2DeliveryAdapter:
         self, url: str, body: bytes, headers: dict[str, str]
     ) -> tuple[int, dict[str, str], bytes]:
         self.delivered.append({"url": url, "body": body, "headers": headers})
-        if getattr(self, "raise_on_deliver", False):
+        if self.raise_on_deliver:
             raise RuntimeError("Fake delivery failure")
 
         digest = hashlib.sha256(body).digest()

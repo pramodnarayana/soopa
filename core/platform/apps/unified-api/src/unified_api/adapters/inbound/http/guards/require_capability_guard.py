@@ -22,7 +22,7 @@ class RequireCapability:
         Extracts the identity context from the request and verifies the capability.
         """
         # Attempt to get the identity context from the request state (set by auth middleware)
-        identity: IdentityContext | None = getattr(request.state, "identity", None)
+        identity: IdentityContext | None = request.state.identity
 
         if not identity:
             logger.warning("authz.denied.unauthenticated", path=request.url.path)

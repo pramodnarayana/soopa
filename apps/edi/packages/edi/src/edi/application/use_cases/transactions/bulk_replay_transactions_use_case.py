@@ -29,7 +29,7 @@ class BulkReplayTransactionsUseCase:
                 trace_id=trace_id,
                 tenant_id=tenant_id,
                 tier=tier,
-                explicit_idempotency_key=f"bulk_replay_{batch_id}_{i}",
+                idempotency_key=f"bulk_replay_{batch_id}_{i}",
             )
 
             edi_message = await self.uow.transactions.get_edi_message(trace_id)

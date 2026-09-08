@@ -30,7 +30,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             active=record.active,
             created_at=record.created_at,
             updated_at=record.updated_at,
-            protocol=getattr(record, "protocol", None),
+            protocol=record.protocol,
             as2_partner_id=record.as2_partner_id,
             sftp_partner_id=record.sftp_partner_id,
         )

@@ -25,7 +25,7 @@ class ReplayTransactionUseCase:
             trace_id=trace_id,
             tenant_id=tenant_id,
             tier=tier,
-            explicit_idempotency_key=f"replay_{trace_id}_{generate_random_hex(6)}",
+            idempotency_key=f"replay_{trace_id}_{generate_random_hex(6)}",
         )
 
         # We assume the result is a EdiTraceDTO which doesn't have domain_events,

@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
-from typing import Any
+from typing import cast
 
 from database.models.identity import ApiToken as ApiTokenORM
 from sqlalchemy import select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.domain.models.api_token import ApiTokenDomainModel
@@ -67,7 +68,7 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
         return self._to_domain(orm_model)
 
     async def update(
-        self, token_id: str, tenant_id: str, **kwargs: Any
+        self, token_id: str, tenant_id: str, **kwargs: object
     ) -> ApiTokenDomainModel | None:
         kwargs.pop("deleted_at", None)
 
@@ -97,7 +98,7 @@ class PostgresApiTokenRepository(ApiTokenRepositoryPort):
             )
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
         )
-        return getattr(result, "rowcount", 0) > 0
+        return cast(CursorResult[tuple[()]], result).rowcount > 0
 
     async def get_by_client_id(self, client_id: str) -> ApiTokenDomainModel | None:
         result = await self.session.execute(

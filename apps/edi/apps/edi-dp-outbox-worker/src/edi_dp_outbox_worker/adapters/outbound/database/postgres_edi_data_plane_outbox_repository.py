@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from database.router import DatabaseRouter
@@ -9,6 +9,7 @@ from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from seedwork.events import EventEnvelope
 from sqlalchemy import and_, case, func, or_, select, text, update
+from sqlalchemy.engine import CursorResult
 
 logger = structlog.get_logger(__name__)
 
@@ -143,7 +144,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                     )
 
                     result = await session.execute(stmt)
-                    swept = int(getattr(result, "rowcount", 0))
+                    swept = int(cast(CursorResult[tuple[()]], result).rowcount)
                     total_swept += swept
                     await session.commit()
                     if swept < 5000:

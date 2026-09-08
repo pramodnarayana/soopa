@@ -13,10 +13,10 @@ logger = structlog.get_logger(__name__)
 _container = Container()
 _container.wire(
     modules=[
-        "unified_api.adapters.inbound.http.routers.in_app_notifications_router",
-        "unified_api.adapters.inbound.http.routers.notification_preferences_router",
-        "unified_api.adapters.inbound.http.routers.notification_templates_router",
-        "unified_api.adapters.inbound.http.routers.notification_user_preferences_router",
+        "unified_api.adapters.inbound.http.notifications.routers.in_app_notifications_router",
+        "unified_api.adapters.inbound.http.notifications.routers.notification_preferences_router",
+        "unified_api.adapters.inbound.http.notifications.routers.notification_templates_router",
+        "unified_api.adapters.inbound.http.notifications.routers.notification_user_preferences_router",
     ]
 )
 

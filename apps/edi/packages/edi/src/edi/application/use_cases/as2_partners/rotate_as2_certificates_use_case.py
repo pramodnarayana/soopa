@@ -1,5 +1,7 @@
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dtos.commands import RotateAS2CertificateCmd
 from edi.config.constants import SecretCategory
@@ -106,7 +108,7 @@ class RotateAS2CertificatesUseCase:
                     tenant_id=tenant_id,
                     event_type=EdiEventType.edi_as2_partner_updated,
                     resource_id=str(partner_id),
-                    explicit_idempotency_key=idempotency_key,
+                    idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
                 )
             )
 

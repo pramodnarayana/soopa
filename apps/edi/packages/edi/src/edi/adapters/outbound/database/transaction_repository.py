@@ -4,6 +4,9 @@ import os
 from collections.abc import Sequence
 from typing import Protocol, cast
 
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
+
 
 class RouteModelProtocol(Protocol):
     gs_sender_id: str | None
@@ -78,7 +81,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tenant_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             event_type=event_type,
             payload=serialized_payload,
             status=OutboxStatus.PENDING,
@@ -130,7 +133,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             outbox_record = DataPlaneOutbox(
                 id=event_id,
                 tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
-                idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
                 event_type=event.event_name,
                 payload=payload_dict,
                 status=OutboxStatus.PENDING,
@@ -180,7 +183,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             outbox_record = DataPlaneOutbox(
                 id=event_id,
                 tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
-                idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
                 event_type=event.event_name,
                 payload=payload_dict,
                 status=OutboxStatus.PENDING,
@@ -241,13 +244,22 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = result.scalars().first()
         if not record:
             return None
-        return InboundRouteDTO(
-            trading_partner_id=record.trading_partner_id,
-            webhook_id=record.webhook_id,
-            as2_partner_id=getattr(record, "as2_partner_id", None),
-            sftp_partner_id=record.sftp_partner_id,
-            processing_mode=record.processing_mode,
-        )
+        if direction == EdiDirection.INBOUND:
+            return InboundRouteDTO(
+                trading_partner_id=record.trading_partner_id,
+                webhook_id=record.webhook_id,
+                as2_partner_id=record.as2_partner_id,
+                sftp_partner_id=record.sftp_partner_id,
+                processing_mode=record.processing_mode,
+            )
+        else:
+            return InboundRouteDTO(
+                trading_partner_id=record.trading_partner_id,
+                webhook_id=None,
+                as2_partner_id=record.as2_partner_id,
+                sftp_partner_id=record.sftp_partner_id,
+                processing_mode=None, # Outbound routes do not have a processing mode
+            )
 
     async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
         stmt = select(Webhook).where(Webhook.id == partner_id)
