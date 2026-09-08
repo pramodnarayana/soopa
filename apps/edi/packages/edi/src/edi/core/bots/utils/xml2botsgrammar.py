@@ -8,16 +8,11 @@ import copy
 import os
 import sys
 from collections import OrderedDict
+from xml.etree import ElementTree as ET
 
 import structlog
 
-try:
-    from xml.etree import ElementTree as ET
-except ImportError:
-    from xml.etree import ElementTree as ET
-
 # bots-modules
-
 from edi.core.bots.config.botsconfig import (
     ID,
     LEVEL,

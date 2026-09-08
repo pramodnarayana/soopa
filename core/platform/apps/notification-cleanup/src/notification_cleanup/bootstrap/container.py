@@ -1,4 +1,5 @@
 import os
+import sys
 
 import structlog
 from database.provider import DatabaseProvider
@@ -41,9 +42,6 @@ class WorkerContainer:
 
         sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
         if not sns_topic_arn:
-            logger.error("SNS_TOPIC_ARN is not set")
-            import sys
-
             sys.exit(1)
         self.sns_topic_arn: str = sns_topic_arn
 

@@ -1,5 +1,6 @@
 import asyncio
 import os
+import uuid
 from typing import Any
 
 from dotenv import load_dotenv
@@ -175,8 +176,6 @@ class FakeVault:
         return await self.retrieve_secret(vault_ref)
 
     async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
-        import uuid
-
         ref = f"vault_ref_{uuid.uuid4().hex[:8]}"
         self.secrets[ref] = (
             private_key_pem.decode("utf-8")

@@ -15,12 +15,12 @@ from edi.core.bots.domain.models import (
 )
 from edi.core.bots.utils.botslib import gettext as _
 
+from . import validator
+
 if TYPE_CHECKING:
     from edi.core.bots.domain.grammar.grammar import Grammar
 
 ERROR_IN_GRAMMAR = "BOTS_error_1$%3@7#!%+_)_+[{]}"
-
-from . import validator
 
 
 def grammarread(editype, grammarname, typeofgrammarfile) -> "Grammar":

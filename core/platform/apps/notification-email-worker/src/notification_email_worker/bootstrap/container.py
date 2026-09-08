@@ -10,6 +10,7 @@ from notification_email_worker.adapters.inbound.workers.email_channel_dispatcher
 
 logger = structlog.get_logger(__name__)
 
+
 class WorkerContainer(containers.DeclarativeContainer):
     """
     IoC container for the Notification Email Worker app.

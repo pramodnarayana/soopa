@@ -8,7 +8,11 @@ At startup, call ObservabilityProvider.configure(...) once.
 Everywhere else, call ObservabilityProvider.tracer(), .metrics(), .logger(name).
 """
 
+import os
+
 from .adapters.outbound.noop import NoOpLogger, NoOpMetrics, NoOpTracer
+from .adapters.outbound.otel_tracer import OtelTracer
+from .adapters.outbound.structlog_logger import StructlogLogger
 from .ports.outbound.logger_port import LoggerPort
 from .ports.outbound.metrics_port import MetricsPort
 from .ports.outbound.tracer_port import TracerPort
@@ -72,11 +76,6 @@ class ObservabilityProvider:
         Automatically reads OTLP_ENDPOINT and LOG_LEVEL from the environment and configures all adapters.
         Use this to prevent duplicating composition root logic across workers and APIs.
         """
-        import os
-
-        from observability.adapters.outbound.otel_tracer import OtelTracer
-        from observability.adapters.outbound.structlog_logger import StructlogLogger
-
         otlp_endpoint = os.getenv("OTLP_ENDPOINT")
         log_level = os.getenv("LOG_LEVEL", "INFO")
 

@@ -1,5 +1,3 @@
-from unittest.mock import AsyncMock
-
 import pytest
 from notification.application.notification_compiler_use_case import CompileNotificationCommand
 from notification.domain.constants import NotificationEventType
@@ -20,9 +18,7 @@ class FakeDispatchUseCase:
 @pytest.mark.asyncio
 async def test_dispatcher_process_message_valid():
     use_case = FakeDispatchUseCase()
-    dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case
-    )
+    dispatcher = NotificationEventDispatcher(notification_compiler=use_case)
 
     body = {
         "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,
@@ -46,9 +42,7 @@ async def test_dispatcher_process_message_valid():
 @pytest.mark.asyncio
 async def test_dispatcher_ignores_other_events():
     use_case = FakeDispatchUseCase()
-    dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case
-    )
+    dispatcher = NotificationEventDispatcher(notification_compiler=use_case)
 
     body = {
         "event_type": "some.other.event",
@@ -109,9 +103,7 @@ async def test_dispatcher_rejects_non_string_notification_type(notification_type
 @pytest.mark.asyncio
 async def test_dispatcher_handles_missing_payload():
     use_case = FakeDispatchUseCase()
-    dispatcher = NotificationEventDispatcher(
-        notification_compiler=use_case
-    )
+    dispatcher = NotificationEventDispatcher(notification_compiler=use_case)
 
     body = {
         "event_type": NotificationEventType.NOTIFICATION_TRIGGERED.value,

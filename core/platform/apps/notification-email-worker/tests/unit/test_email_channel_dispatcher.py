@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from typing import Any
 
 import pytest
 from notification.adapters.outbound.channels import EmailChannelStrategy
@@ -8,9 +8,26 @@ from notification_email_worker.adapters.inbound.workers.email_channel_dispatcher
 )
 
 
+class FakeEmailChannelStrategy(EmailChannelStrategy):
+    def __init__(self) -> None:
+        self.deliveries: list[dict[str, Any]] = []
+
+    async def deliver(
+        self, tenant_id: str, content: str, subject: str | None, data: dict[str, Any]
+    ) -> None:
+        self.deliveries.append(
+            {
+                "tenant_id": tenant_id,
+                "content": content,
+                "subject": subject,
+                "data": data,
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_dispatch_raw_delivers_valid_email_request() -> None:
-    strategy = AsyncMock(spec=EmailChannelStrategy)
+    strategy = FakeEmailChannelStrategy()
     dispatcher = EmailChannelDispatcher(strategy)
 
     await dispatcher.dispatch_raw(
@@ -25,12 +42,13 @@ async def test_dispatch_raw_delivers_valid_email_request() -> None:
         }
     )
 
-    strategy.deliver.assert_awaited_once_with(
-        tenant_id="tenant-1",
-        content="Hello",
-        subject="Welcome",
-        data={"recipient": "user@example.com"},
-    )
+    assert len(strategy.deliveries) == 1
+    assert strategy.deliveries[0] == {
+        "tenant_id": "tenant-1",
+        "content": "Hello",
+        "subject": "Welcome",
+        "data": {"recipient": "user@example.com"},
+    }
 
 
 @pytest.mark.asyncio
@@ -53,7 +71,7 @@ async def test_dispatch_raw_rejects_invalid_delivery_payload(
     subject: object,
     data: object,
 ) -> None:
-    strategy = AsyncMock(spec=EmailChannelStrategy)
+    strategy = FakeEmailChannelStrategy()
     dispatcher = EmailChannelDispatcher(strategy)
 
     await dispatcher.dispatch_raw(
@@ -68,4 +86,4 @@ async def test_dispatch_raw_rejects_invalid_delivery_payload(
         }
     )
 
-    strategy.deliver.assert_not_awaited()
+    assert len(strategy.deliveries) == 0

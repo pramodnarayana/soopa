@@ -42,7 +42,7 @@ def zitadel_orgs_adapter(zitadel_projects_adapter):
 @pytest.fixture
 def zitadel_users_adapter():
     adapter = ZitadelUsersAdapter()
-    adapter.default_user_password = "ComplexPassword123!"  # noqa: S105
+    adapter.default_user_password = f"Pass_{uuid.uuid4().hex}!1A"
     return adapter
 
 

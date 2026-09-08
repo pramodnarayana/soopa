@@ -1,6 +1,7 @@
-from unittest.mock import MagicMock
+from typing import cast
 
 import pytest
+from database.router import DatabaseRouter
 
 from edi_dp_cleanup.adapters.outbound.database.postgres_edi_audit_log_cleanup_repository import (
     SqlAlchemyEdiAuditLogCleanupRepository,
@@ -23,7 +24,7 @@ from edi_dp_cleanup.adapters.outbound.database.postgres_edi_idempotency_cleanup_
     ],
 )
 async def test_repository_concurrency_limit_validation(repo_class):
-    mock_db_router = MagicMock()
+    mock_db_router = cast(DatabaseRouter, object())
     repo = repo_class(db_router=mock_db_router)
 
     with pytest.raises(ValueError, match="concurrency_limit must be strictly positive"):

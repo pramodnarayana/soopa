@@ -8,9 +8,9 @@ from typing import TypeVar, cast
 import structlog
 from dotenv import load_dotenv
 from observability import ObservabilityProvider
-from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 
-from notification_worker.bootstrap.container import WorkerContainer as Container
+from notification_outbox_worker.bootstrap.container import WorkerContainer as Container
 
 logger = structlog.get_logger(__name__)
 
@@ -21,11 +21,14 @@ def _setup_container() -> Container:
         logger.error("DATABASE_URL is not set")
         sys.exit(1)
 
+    sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
+    if not sns_topic_arn:
+        logger.error("SNS_TOPIC_ARN is not set")
+        sys.exit(1)
+
     container = Container()
     container.config.database_url.from_value(database_url)
-    container.config.priority_queue_url.from_env(
-        "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", required=True
-    )
+    container.config.sns_topic_arn.from_value(sns_topic_arn)
     container.config.aws_endpoint_url.from_env("AWS_ENDPOINT_URL")
     container.config.aws_region.from_env("AWS_REGION", default="us-east-1")
     return container
@@ -62,29 +65,17 @@ async def _wait_and_handle_errors(
 
 
 async def _graceful_shutdown(
-    consumer: SqsConsumerManager,
+    outbox_listener: PostgresOutboxRelay,
     container: Container,
 ) -> None:
     logger.info("Stopping workers...")
     cleanup_errors: list[BaseException] = []
 
     try:
-        await consumer.stop()
+        await outbox_listener.stop()
     except BaseException as exc:
         cleanup_errors.append(exc)
-        logger.exception("worker_stop_failed", worker="consumer")
-
-    try:
-        tasks_to_wait = []
-        if consumer.task:
-            tasks_to_wait.append(consumer.task)
-        if tasks_to_wait:
-            await asyncio.wait_for(asyncio.gather(*tasks_to_wait), timeout=5.0)
-    except TimeoutError:
-        logger.warning("Tasks did not shut down gracefully")
-    except BaseException as exc:
-        cleanup_errors.append(exc)
-        logger.exception("worker_task_shutdown_failed")
+        logger.exception("worker_stop_failed", worker="outbox_listener")
 
     try:
         await cast(Awaitable[None], container.shutdown_resources())
@@ -97,7 +88,7 @@ async def _graceful_shutdown(
         raise cleanup_errors[0]
 
 
-async def run_consumer(
+async def run_worker(
     stop_event: asyncio.Event | None = None, container: Container | None = None
 ) -> None:
     dotenv_path = os.path.abspath(
@@ -110,18 +101,17 @@ async def run_consumer(
 
     await cast(Awaitable[None], container.init_resources())
 
-    consumer = await _resolve_dependency(container.consumer_worker())
+    outbox_listener = await _resolve_dependency(container.outbox_listener())
 
     shutdown_event = stop_event or asyncio.Event()
 
     if stop_event is None:
         _setup_signal_handlers(shutdown_event)
 
-    ObservabilityProvider.auto_configure_from_env("notification-worker")
-    logger.info("Starting workers...")
+    ObservabilityProvider.auto_configure_from_env("notification-outbox-worker")
+    logger.info("Starting outbox relay...")
 
-    # 1. Compiler Worker (Stage 2)
-    consumer.start()
+    outbox_listener.start()
 
     async def wait_shutdown() -> None:
         await shutdown_event.wait()
@@ -129,15 +119,13 @@ async def run_consumer(
     shutdown_task = asyncio.create_task(wait_shutdown())
 
     tasks: list[asyncio.Task[None]] = [shutdown_task]
-    if consumer.task:
-        tasks.append(consumer.task)
 
     try:
         await _wait_and_handle_errors(tasks, shutdown_task)
     finally:
         active_exception = sys.exception()
         try:
-            await _graceful_shutdown(consumer, container)
+            await _graceful_shutdown(outbox_listener, container)
         except BaseException:
             if active_exception is None:
                 raise
@@ -145,4 +133,4 @@ async def run_consumer(
 
 
 if __name__ == "__main__":
-    asyncio.run(run_consumer())
+    asyncio.run(run_worker())

@@ -1,5 +1,4 @@
 import asyncio
-from unittest.mock import patch
 
 import pytest
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
@@ -52,7 +51,7 @@ async def test_sweeper_sweeps_stuck_events_before_draining():
 
 
 @pytest.mark.asyncio
-async def test_sweeper_drains_all_pending_events():
+async def test_sweeper_drains_all_pending_events(monkeypatch):
     """Verifies that the sweeper loops until the outbox is empty."""
     repository = FakeOutboxRepository()
     repository.events = [_event("evt-1"), _event("evt-2")]
@@ -78,17 +77,18 @@ async def test_sweeper_drains_all_pending_events():
     publisher = FakeOutboxPublisher()
     sweeper = OutboxSweeperUseCase(repository=drain_repo, publisher=publisher)
 
-    future = asyncio.Future()
-    future.set_result(None)
-    with patch("asyncio.sleep", return_value=future):
-        await sweeper.execute()
+    async def fake_sleep(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    await sweeper.execute()
 
     assert drain_repo.claims_made == 2
     assert len(drain_repo.completed_events) == 2
 
 
 @pytest.mark.asyncio
-async def test_sweeper_marks_failed_events_that_were_not_published():
+async def test_sweeper_marks_failed_events_that_were_not_published(monkeypatch):
     """Verifies partial failures: successful events are completed; failed are marked_failed."""
 
     class PartialFakePublisher(FakeOutboxPublisher):
@@ -117,10 +117,11 @@ async def test_sweeper_marks_failed_events_that_were_not_published():
 
     sweeper = OutboxSweeperUseCase(repository=drain_repo, publisher=publisher)
 
-    future = asyncio.Future()
-    future.set_result(None)
-    with patch("asyncio.sleep", return_value=future):
-        await sweeper.execute()
+    async def fake_sleep(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    await sweeper.execute()
 
     assert len(drain_repo.completed_events) == 1
     assert drain_repo.completed_events[0] == ("evt-1", sweeper.worker_id)
@@ -129,7 +130,7 @@ async def test_sweeper_marks_failed_events_that_were_not_published():
 
 
 @pytest.mark.asyncio
-async def test_sweeper_handles_batch_publisher_exception_gracefully():
+async def test_sweeper_handles_batch_publisher_exception_gracefully(monkeypatch):
     """When publisher.publish_batch raises, all events are marked_failed; sweeper does not crash."""
     repository = FakeOutboxRepository()
     repository.events = [_event("evt-1"), _event("evt-2")]
@@ -154,17 +155,18 @@ async def test_sweeper_handles_batch_publisher_exception_gracefully():
 
     sweeper = OutboxSweeperUseCase(repository=drain_repo, publisher=publisher)
 
-    future = asyncio.Future()
-    future.set_result(None)
-    with patch("asyncio.sleep", return_value=future):
-        await sweeper.execute()  # must not raise
+    async def fake_sleep(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    await sweeper.execute()  # must not raise
 
     assert len(drain_repo.completed_events) == 0
     assert len(drain_repo.failed_events) == 2
 
 
 @pytest.mark.asyncio
-async def test_sweeper_handles_mark_completed_exception_gracefully():
+async def test_sweeper_handles_mark_completed_exception_gracefully(monkeypatch):
     """_safe_mark_completed swallows repository errors to avoid aborting the batch."""
 
     class FailingCompleteRepo(FakeOutboxRepository):
@@ -188,14 +190,15 @@ async def test_sweeper_handles_mark_completed_exception_gracefully():
     publisher = FakeOutboxPublisher()
     sweeper = OutboxSweeperUseCase(repository=repo, publisher=publisher)
 
-    future = asyncio.Future()
-    future.set_result(None)
-    with patch("asyncio.sleep", return_value=future):
-        await sweeper.execute()
+    async def fake_sleep(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    await sweeper.execute()
 
 
 @pytest.mark.asyncio
-async def test_sweeper_handles_mark_failed_exception_gracefully():
+async def test_sweeper_handles_mark_failed_exception_gracefully(monkeypatch):
     """_safe_mark_failed swallows repository errors to avoid aborting the batch."""
 
     class FailingMarkFailedRepo(FakeOutboxRepository):
@@ -223,10 +226,11 @@ async def test_sweeper_handles_mark_failed_exception_gracefully():
 
     sweeper = OutboxSweeperUseCase(repository=repo, publisher=EmptyPublisher())
 
-    future = asyncio.Future()
-    future.set_result(None)
-    with patch("asyncio.sleep", return_value=future):
-        await sweeper.execute()
+    async def fake_sleep(*args, **kwargs):
+        pass
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    await sweeper.execute()
 
 
 @pytest.mark.asyncio

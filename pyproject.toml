@@ -184,6 +184,9 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging".msg = "Use structlog via ILogger port instead of standard logging."
+"unittest.mock".msg = "Enterprise rule: Mocks are strictly forbidden. Use Fake objects and dependency injection."
+"pytest_mock".msg = "Enterprise rule: Mocks are strictly forbidden. Use Fake objects and dependency injection."
+"mock".msg = "Enterprise rule: Mocks are strictly forbidden. Use Fake objects and dependency injection."
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.params.Depends"]

@@ -1,3 +1,5 @@
+import os
+
 from database.provider import DatabaseProvider
 from dependency_injector import providers
 from starlette.routing import Mount
@@ -65,8 +67,6 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             "EDI sub-app not found or is not a FastAPI instance. "
             "Ensure app.mount('/', edi_app) is called before Shell startup."
         )
-
-    import os
 
     db_provider = DatabaseProvider.from_url(os.environ.get("DATABASE_URL", ""))
     app.state.db_provider = db_provider
