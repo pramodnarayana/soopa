@@ -1,5 +1,3 @@
-from typing import cast
-
 import structlog
 from notification.adapters.outbound.channels import EmailChannelStrategy
 from seedwork.domain.types import JsonDict
@@ -43,17 +41,24 @@ class EmailChannelDispatcher:
             return
         payload = raw_payload
 
-        tenant_id = cast(str | None, body.get("tenant_id"))
-        if not tenant_id:
-            logger.error("SQS message payload missing 'tenant_id'")
+        tenant_id = body.get("tenant_id")
+        if not isinstance(tenant_id, str) or not tenant_id:
+            logger.error("SQS message payload must contain a non-empty string 'tenant_id'")
             return
 
-        content = cast(str | None, payload.get("content"))
-        subject = cast(str | None, payload.get("subject"))
-        data = cast(JsonDict, payload.get("data", {}))
+        content = payload.get("content")
+        if not isinstance(content, str) or not content:
+            logger.error("SQS message payload must contain a non-empty string 'content'")
+            return
 
-        if not content:
-            logger.error("SQS message payload missing 'content'")
+        subject = payload.get("subject")
+        if subject is not None and not isinstance(subject, str):
+            logger.error("SQS message payload 'subject' must be a string when present")
+            return
+
+        data = payload.get("data", {})
+        if not isinstance(data, dict):
+            logger.error("SQS message payload 'data' must be a dictionary")
             return
 
         logger.info(

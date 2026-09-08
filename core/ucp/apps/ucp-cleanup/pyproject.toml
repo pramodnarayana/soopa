@@ -10,6 +10,7 @@ dependencies = [
     "outbox",
     "pubsub",
     "seedwork",
+    "observability",
     "aioboto3>=13.1.1",
     "sqlalchemy>=2.0.29",
     "structlog",

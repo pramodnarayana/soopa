@@ -18,11 +18,11 @@ _background_tasks: set[asyncio.Task[None]] = set()
 
 
 async def main() -> None:
-    ObservabilityProvider.auto_configure_from_env("scheduler-worker")
-    logger.info("scheduler_worker_starting")
     # Load .env file from project root
     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../../.env"))
     load_dotenv(dotenv_path)
+    ObservabilityProvider.auto_configure_from_env("scheduler-worker")
+    logger.info("scheduler_worker_starting")
 
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:

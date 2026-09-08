@@ -6,8 +6,8 @@ from collections.abc import Awaitable
 from typing import TypeVar, cast
 
 import structlog
-from observability import ObservabilityProvider
 from dotenv import load_dotenv
+from observability import ObservabilityProvider
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from notification_email_worker.bootstrap.container import WorkerContainer as Container
@@ -23,9 +23,7 @@ def _setup_container() -> Container:
 
     container = Container()
     container.config.database_url.from_value(database_url)
-    container.config.email_delivery_queue_url.from_env(
-        "SQS_EMAIL_CHANNEL_QUEUE_URL", required=True
-    )
+    container.config.email_delivery_queue_url.from_env("SQS_EMAIL_CHANNEL_QUEUE_URL", required=True)
     container.config.aws_endpoint_url.from_env("AWS_ENDPOINT_URL")
     container.config.aws_region.from_env("AWS_REGION", default="us-east-1")
     return container
@@ -100,9 +98,7 @@ async def _graceful_shutdown(
 async def run_worker(
     stop_event: asyncio.Event | None = None, container: Container | None = None
 ) -> None:
-    dotenv_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../../../../../.env")
-    )
+    dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../../.env"))
     load_dotenv(dotenv_path)
 
     if container is None:

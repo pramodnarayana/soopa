@@ -40,6 +40,9 @@ class Container(containers.DeclarativeContainer):
                 "edi-control-plane-jobs.fifo": providers.Callable(
                     os.environ.get, "SQS_CONTROL_PLANE_JOBS_QUEUE_URL", ""
                 ),
+                "notification-jobs.fifo": providers.Callable(
+                    os.environ.get, "SQS_NOTIFICATION_JOBS_QUEUE_URL", ""
+                ),
             }
         ),
         endpoint_url=providers.Callable(os.environ.get, "AWS_ENDPOINT_URL", None),
