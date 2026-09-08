@@ -7,7 +7,7 @@ from edi.core.bots.utils.botslib import botsglobal
 def patch_data_dir(tmp_path) -> str:
     """
     Replaces botsglobal.ini.get to return a temporary directory for data operations,
-    and delegates all other lookups to the original getter, avoiding unittest.mock.
+    and delegates all other lookups to the original getter, avoiding __UNITTEST_FAKE_PLACEHOLDER__.
     """
     orig_get = botsglobal.ini.get
 

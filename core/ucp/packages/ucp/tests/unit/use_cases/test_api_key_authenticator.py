@@ -17,7 +17,7 @@ from ucp.testing.fakes import DummyApiTokenRepository
 
 
 @pytest.fixture
-def mock_token_repo():
+def fake_token_repo():
     class TestApiTokenRepository(DummyApiTokenRepository):
         def __init__(self):
             self.tokens = {}
@@ -36,7 +36,7 @@ def clear_cache():
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_success_and_cache(mock_token_repo):
+async def test_authenticate_api_key_success_and_cache(fake_token_repo):
     client_id = "test_client_id"
     client_key_val = "test_client_secret"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_key_val}"
@@ -45,7 +45,7 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
 
     secret_hash = hashlib.sha256(client_key_val.encode("utf-8")).hexdigest()
 
-    mock_token_repo.tokens[client_id] = ApiTokenDomainModel(
+    fake_token_repo.tokens[client_id] = ApiTokenDomainModel(
         id=token_id,
         tenant_id=tenant_id,
         client_id=client_id,
@@ -59,7 +59,7 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
     )
 
     # First call - DB lookup
-    identity = await authenticate_api_key(token, mock_token_repo)
+    identity = await authenticate_api_key(token, fake_token_repo)
     assert identity.subject == f"machine_{client_id}"
     assert identity.tenant_id == tenant_id
     assert tenant_id in identity.authorized_tenants
@@ -69,8 +69,8 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
     assert client_id in _token_cache
 
     # Second call - Cache hit (prove it hits cache by removing from DB)
-    del mock_token_repo.tokens[client_id]
-    identity2 = await authenticate_api_key(token, mock_token_repo)
+    del fake_token_repo.tokens[client_id]
+    identity2 = await authenticate_api_key(token, fake_token_repo)
     assert identity2.tenant_id == tenant_id
 
     # Invalidate cache
@@ -79,32 +79,32 @@ async def test_authenticate_api_key_success_and_cache(mock_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_invalid_prefix(mock_token_repo):
+async def test_authenticate_api_key_invalid_prefix(fake_token_repo):
     with pytest.raises(AuthenticationError) as exc:
-        await authenticate_api_key("wrong_prefix.client.secret", mock_token_repo)
+        await authenticate_api_key("wrong_prefix.client.secret", fake_token_repo)
 
     assert str(exc.value) == "APIKEY_INVALID_PREFIX"
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_invalid_format(mock_token_repo):
+async def test_authenticate_api_key_invalid_format(fake_token_repo):
     with pytest.raises(AuthenticationError) as exc:
-        await authenticate_api_key(f"{M2M_API_KEY_PREFIX}invalid_format_no_dot", mock_token_repo)
+        await authenticate_api_key(f"{M2M_API_KEY_PREFIX}invalid_format_no_dot", fake_token_repo)
 
     assert str(exc.value) == "APIKEY_INVALID_FORMAT"
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_not_found(mock_token_repo):
+async def test_authenticate_api_key_not_found(fake_token_repo):
     token = f"{M2M_API_KEY_PREFIX}unknown_client.secret"
     with pytest.raises(AuthenticationError) as exc:
-        await authenticate_api_key(token, mock_token_repo)
+        await authenticate_api_key(token, fake_token_repo)
 
     assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_wrong_secret(mock_token_repo):
+async def test_authenticate_api_key_wrong_secret(fake_token_repo):
     client_id = "test_client_id"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.wrong_secret"
     token_id = generate_id(IdentityIdPrefix.TOKEN)
@@ -112,7 +112,7 @@ async def test_authenticate_api_key_wrong_secret(mock_token_repo):
 
     secret_hash = hashlib.sha256(b"correct_secret").hexdigest()
 
-    mock_token_repo.tokens[client_id] = ApiTokenDomainModel(
+    fake_token_repo.tokens[client_id] = ApiTokenDomainModel(
         id=token_id,
         tenant_id=tenant_id,
         client_id=client_id,
@@ -126,6 +126,6 @@ async def test_authenticate_api_key_wrong_secret(mock_token_repo):
     )
 
     with pytest.raises(AuthenticationError) as exc:
-        await authenticate_api_key(token, mock_token_repo)
+        await authenticate_api_key(token, fake_token_repo)
 
     assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"

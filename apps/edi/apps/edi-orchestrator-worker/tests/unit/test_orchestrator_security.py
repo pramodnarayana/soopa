@@ -31,7 +31,7 @@ def resolver_for(addresses: dict[str, str]) -> Callable[..., list[tuple[object, 
 @pytest.fixture(autouse=True)
 def disable_dev_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     """Disable IS_DEV for all security tests to ensure SSRF validation is active."""
-    # Instead of mocking settings, we set the environment variable
+    # Instead of faking settings, we set the environment variable
     monkeypatch.setenv("ENV", "production")
 
 

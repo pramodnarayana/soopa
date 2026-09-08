@@ -19,7 +19,7 @@ class StrictParser(var):
         self.rawinput = text
         self._text_stream = StringIO(text)
         self.ta_info = {
-            "frompartner": "mock",
+            "frompartner": "fake",
             "record_sep": "'",
             "sfield_sep": ":",
             "field_sep": "+",

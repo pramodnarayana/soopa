@@ -1,7 +1,7 @@
 """Unit tests for ucp.domain.services.slug_service.
 
 These tests cover the pure generate_slug() and generate_unique_slug() functions.
-No mocks are needed — pure function, zero external dependencies.
+No fakes are needed — pure function, zero external dependencies.
 """
 
 import pytest

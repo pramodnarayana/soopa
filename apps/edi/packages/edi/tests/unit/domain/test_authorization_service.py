@@ -2,7 +2,7 @@
 Layer 1 — Pure Domain Unit Tests: AuthorizationService.
 
 AuthorizationService is a pure domain service that depends on TenantRepositoryPort.
-We inject a simple in-memory fake — no mocks, no SQLAlchemy.
+We inject a simple in-memory fake — no fakes, no SQLAlchemy.
 """
 
 import pytest

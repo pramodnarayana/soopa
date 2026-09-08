@@ -8,12 +8,12 @@ from edi.core.bots.domain.models import create_field_definition, create_structur
 from edi.core.bots.domain.parsers.base import var
 
 
-class MockParser(var):
+class FakeParser(var):
     def __init__(self, text):
         self.rawinput = text
         self._text_stream = StringIO(text)
         self.ta_info = {
-            "frompartner": "mock",
+            "frompartner": "fake",
             "record_sep": "'",
             "sfield_sep": ":",
             "field_sep": "+",
@@ -29,7 +29,7 @@ class MockParser(var):
         self.lex_records = []
         self.errorlist = []
         self.errorfatal = True
-        self.messagetypetxt = "MockParser "
+        self.messagetypetxt = "FakeParser "
 
     def do_lex(self):
         self._lex()
@@ -37,7 +37,7 @@ class MockParser(var):
 
 def test_parser_lexer_quoted_string():
     """Test the lexer handling quoted strings with spaces and escaped characters."""
-    p = MockParser('SEG+"this is a quote: ""inner"" \\"escaped\\" "+FLDB\'')
+    p = FakeParser('SEG+"this is a quote: ""inner"" \\"escaped\\" "+FLDB\'')
     p.do_lex()
     values = [r[VALUE] for r in p.lex_records[0]]
     assert values == ["SEG", 'this is a quote: "inner" "escaped" ', "FLDB"]
@@ -45,7 +45,7 @@ def test_parser_lexer_quoted_string():
 
 def test_parser_lexer_escape_character_not_in_quote():
     """Test escape characters functioning outside of quoted strings."""
-    p = MockParser("SEG+field\\+with\\'escaped+FLDB'")
+    p = FakeParser("SEG+field\\+with\\'escaped+FLDB'")
     p.do_lex()
     values = [r[VALUE] for r in p.lex_records[0]]
     assert values == ["SEG", "field+with'escaped", "FLDB"]
@@ -53,7 +53,7 @@ def test_parser_lexer_escape_character_not_in_quote():
 
 def test_parser_lexer_multiple_skips():
     """Test that skipped characters (like \\r and \\n) are ignored."""
-    p = MockParser("SEG\r\n+\r\nFLD1\r\n+\r\nFLD2\r\n'")
+    p = FakeParser("SEG\r\n+\r\nFLD1\r\n+\r\nFLD2\r\n'")
     p.do_lex()
     values = [r[VALUE] for r in p.lex_records[0]]
     assert values == ["SEG", "FLD1", "FLD2"]
@@ -61,7 +61,7 @@ def test_parser_lexer_multiple_skips():
 
 def test_parser_lexer_consecutive_separators():
     """Test consecutive subfield and field separators."""
-    p = MockParser("SEG++FLD1::+FLD2'")
+    p = FakeParser("SEG++FLD1::+FLD2'")
     p.do_lex()
     # Expect: 'SEG', '', 'FLD1', '', '', 'FLD2'
     values = [r[VALUE] for r in p.lex_records[0]]
@@ -72,7 +72,7 @@ def test_parser_lexer_consecutive_separators():
 
 def test_parser_lexer_trailing_separators():
     """Test trailing separators without data."""
-    p = MockParser("SEG+FLD1++'")
+    p = FakeParser("SEG+FLD1++'")
     p.do_lex()
     values = [r[VALUE] for r in p.lex_records[0]]
     assert values == ["SEG", "FLD1", "", ""]
@@ -94,7 +94,7 @@ def test_separatorcheck_alfanumeric():
 
 
 def test_parsefields_repeating_element_not_allowed():
-    p = MockParser("SEG+FLD1*FLD2'")
+    p = FakeParser("SEG+FLD1*FLD2'")
     p.do_lex()
 
     struct = create_structure_node(

@@ -40,7 +40,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         ob1_id = f"dp_edi_ob_{os.urandom(12).hex()}"
         ob2_id = f"dp_edi_ob_{os.urandom(12).hex()}"
         ob3_id = f"dp_edi_ob_{os.urandom(12).hex()}"
@@ -85,7 +85,7 @@ async def test_edi_data_plane_outbox_cleanup(db_router: DatabaseRouter) -> None:
     use_case = OutboxCleanerUseCase(repository=repo, retention_days=14)
     await use_case.execute()
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         result = await test_session.execute(select(DataPlaneOutbox.id))
         remaining = {r for (r,) in result.all()}
 
@@ -100,7 +100,7 @@ async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         key1 = f"iam_key_{os.urandom(12).hex()}"
         key2 = f"iam_key_{os.urandom(12).hex()}"
 
@@ -123,7 +123,7 @@ async def test_edi_idempotency_cleanup(db_router: DatabaseRouter) -> None:
     use_case = EdiIdempotencyCleanupUseCase(repository=repo, retention_days=14)
     await use_case.execute()
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         result = await test_session.execute(select(ProcessedEvent.idempotency_key))
         remaining = {r for (r,) in result.all()}
 
@@ -137,7 +137,7 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
     old_date = datetime.now(UTC) - timedelta(days=15)
     recent_date = datetime.now(UTC) - timedelta(days=1)
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         audit_1_id = f"audit_{os.urandom(12).hex()}"
         audit_2_id = f"audit_{os.urandom(12).hex()}"
 
@@ -168,7 +168,7 @@ async def test_edi_audit_log_cleanup(db_router: DatabaseRouter) -> None:
     use_case = EdiAuditLogCleanupUseCase(repository=repo, retention_days=14)
     await use_case.execute()
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         result = await test_session.execute(select(AuditLog.id))
         remaining = {r for (r,) in result.all()}
 
@@ -185,19 +185,19 @@ async def test_bounded_two_shard_cleanup_failure_propagates(
     # Force a failure on shard_1 by patching db_router.get_shard_session
     original_get_shard_session = db_router.get_shard_session
 
-    async def mock_get_all_shards():
-        return [("ucp_shard_1", "mock_dsn_1"), ("ucp_shard_2", "mock_dsn_2")]
+    async def fake_get_all_shards():
+        return [("ucp_shard_1", "fake_dsn_1"), ("ucp_shard_2", "fake_dsn_2")]
 
-    monkeypatch.setattr(db_router, "get_all_shards", mock_get_all_shards)
+    monkeypatch.setattr(db_router, "get_all_shards", fake_get_all_shards)
 
-    async def mock_fail_session(shard_name: str, dsn: str | None = None):
+    async def fake_fail_session(shard_name: str, dsn: str | None = None):
         if shard_name == "ucp_shard_1":
             raise RuntimeError("Database connection lost for shard_1")
         # Yield from original generator
         async for session in original_get_shard_session(shard_name, dsn):
             yield session
 
-    monkeypatch.setattr(db_router, "get_shard_session", mock_fail_session)
+    monkeypatch.setattr(db_router, "get_shard_session", fake_fail_session)
 
     try:
         with pytest.raises(ExceptionGroup) as exc_info:

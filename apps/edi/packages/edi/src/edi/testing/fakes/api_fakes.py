@@ -718,13 +718,13 @@ class FakeTenantStore:
             if p["id"] == partner_id:
                 cmd = p["cmd"]
 
-                class MockPartner:
+                class FakePartner:
                     id = p["id"]
                     tenant_id = "1"
                     name = cmd.name if isinstance(cmd, CreateSFTPPartnerCmd) else str(cmd)
                     active = True
 
-                return MockPartner()
+                return FakePartner()
         return None
 
     async def list_sftp_partners(self) -> Sequence[object]:
@@ -759,23 +759,23 @@ class FakeTenantRepository(TenantRepositoryPort):
         return None
 
 
-class MockResult:
+class FakeResult:
     def __init__(self, items: list[object]) -> None:
         self.items = items
 
-    def scalars(self) -> "MockResult":
+    def scalars(self) -> "FakeResult":
         return self
 
     def all(self) -> list[object]:
         return self.items
 
 
-class MockSession:
+class FakeSession:
     def __init__(self) -> None:
         pass
 
-    async def execute(self, _statement: object, params: dict | None = None) -> MockResult:
-        return MockResult([])
+    async def execute(self, _statement: object, params: dict | None = None) -> FakeResult:
+        return FakeResult([])
 
 
 class FakeControlPlaneUnitOfWork:
@@ -791,7 +791,7 @@ class FakeControlPlaneUnitOfWork:
         self.tenants = FakeTenantRepository()
         self.webhooks = FakeWebhookRepository(outbox)
         self.edi_headers = FakeOutboundEdiHeaderRepository(outbox)
-        self.global_session = MockSession()
+        self.global_session = FakeSession()
 
     async def __aenter__(self) -> "FakeControlPlaneUnitOfWork":
         return self
@@ -817,8 +817,8 @@ class FakeDataPlaneUnitOfWork:
         outbox = FakeOutboxBase()
         self.data_plane_outbox = FakeControlPlaneOutboxRepository(
             outbox
-        )  # Using the same for now to mock publish_outbox_event
-        self.tenant_session = MockSession()
+        )  # Using the same for now to fake publish_outbox_event
+        self.tenant_session = FakeSession()
 
     async def __aenter__(self) -> "FakeDataPlaneUnitOfWork":
         return self

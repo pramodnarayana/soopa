@@ -40,7 +40,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     )
 
     # We must insert an edi_message so the use case can read it
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         await test_session.execute(
             text("""
                 INSERT INTO edi_messages
@@ -59,7 +59,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     # Simple factory representing the actual Orchestrator wiring
     @contextlib.asynccontextmanager
     async def uow_factory():
-        async for session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+        async for session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
             await session.execute(
                 text(f"SELECT set_config('app.current_tenant', '{tenant_id}', true)")
             )
@@ -95,7 +95,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     await dispatcher.handle(sqs_body)
 
     # 4. Verify Database State Machine Outbox Event
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         result = await test_session.execute(
             text("SELECT payload, event_type FROM outbox WHERE payload->>'trace_id' = :trace_id"),
             {"trace_id": trace_id},
@@ -133,7 +133,7 @@ async def test_inbound_webhook_dispatch_transition(
         {"id": tenant_id, "slug": f"orch-web-{generate_random_hex(6)}"},
     )
 
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         # Insert EDI message
         await test_session.execute(
             text("""
@@ -182,12 +182,12 @@ async def test_inbound_webhook_dispatch_transition(
 
     registry = EdiDataPlaneRouteRegistry()
     settings = get_settings()
-    # Use real HTTPX client instead of AsyncMock
+    # Use real HTTPX client instead of AsyncFake
     real_http_delivery = HttpxDeliveryClient(allow_private_ips=True)
 
     @contextlib.asynccontextmanager
     async def uow_factory():
-        async for session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+        async for session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
             await session.execute(
                 text(f"SELECT set_config('app.current_tenant', '{tenant_id}', true)")
             )
@@ -225,7 +225,7 @@ async def test_inbound_webhook_dispatch_transition(
     await dispatcher.handle(sqs_body)
 
     # 4. Verify Delivery Success Outbox Event was written
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         result = await test_session.execute(
             text("SELECT payload, event_type FROM outbox WHERE payload->>'trace_id' = :trace_id"),
             {"trace_id": trace_id},
@@ -246,7 +246,7 @@ async def test_inbound_webhook_dispatch_transition(
     assert req.method == "POST"
 
     # Verify API Gateway Status updated
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "mock_dsn"):
+    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
         result = await test_session.execute(
             text("SELECT status FROM api_gateway WHERE trace_id = :id"), {"id": trace_id}
         )

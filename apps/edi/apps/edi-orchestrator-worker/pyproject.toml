@@ -35,8 +35,6 @@ module = [
     "hvac",
     "hvac.*",
     "asyncpg",
-    "pytest_mock",
-    "pytest_mock.*",
 ]
 ignore_missing_imports = true
 

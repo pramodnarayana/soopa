@@ -24,7 +24,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
             id=generate_id("ten"),
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=f"test-tenant-{generate_random_hex(6)}",
-            idp_tenant_id=generate_id("mock_org"),
+            idp_tenant_id=generate_id("fake_org"),
         )
         db_session.add(tenant)
         # Ensure the 'TenantAdmin' role exists (in case other tests cleared it)

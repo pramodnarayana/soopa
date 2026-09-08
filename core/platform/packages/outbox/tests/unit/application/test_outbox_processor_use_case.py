@@ -28,7 +28,7 @@ async def test_batch_exception_reason_is_preserved_for_retry_transition():
     assert len(repository.failed_events) == 1
     assert repository.failed_events[0][0] == "event-1"
     assert repository.failed_events[0][1] == "worker-1"
-    assert "Mocked batch publish failure" in repository.failed_events[0][2]
+    assert "Faked batch publish failure" in repository.failed_events[0][2]
     assert len(repository.completed_events) == 0
 
 

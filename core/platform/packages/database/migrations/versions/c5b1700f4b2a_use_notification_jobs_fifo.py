@@ -20,7 +20,7 @@ def upgrade() -> None:
         UPDATE scheduling.scheduled_jobs
         SET target_queue = 'notification-jobs.fifo', updated_at = NOW()
         WHERE id = 'job_notif_sweeper'
-          AND target_queue = 'notification-jobs'
+          AND target_queue IN ('notification-jobs', 'edi-priority-notifications')
         """
     )
 
@@ -29,7 +29,7 @@ def downgrade() -> None:
     op.execute(
         """
         UPDATE scheduling.scheduled_jobs
-        SET target_queue = 'notification-jobs', updated_at = NOW()
+        SET target_queue = 'edi-priority-notifications', updated_at = NOW()
         WHERE id = 'job_notif_sweeper'
           AND target_queue = 'notification-jobs.fifo'
         """

@@ -34,7 +34,7 @@ from unified_api.main import app as _app
 from unified_api.main import edi_app
 
 
-def mock_build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
+def fake_build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
     return IdentityContext(
         subject=f"machine_{client_id}",
         tenant_id=tenant_id,
@@ -63,7 +63,7 @@ def mock_build_machine_identity(client_id: str, tenant_id: str) -> IdentityConte
 @pytest.fixture(autouse=True)
 def patch_m2m_identity(monkeypatch):
     monkeypatch.setattr(
-        api_key_authenticator, "_build_machine_identity", mock_build_machine_identity
+        api_key_authenticator, "_build_machine_identity", fake_build_machine_identity
     )
 
 
@@ -319,7 +319,7 @@ async def auth_client(app, seeded_api_token, monkeypatch):
     """
     transport = httpx.ASGITransport(app=app)
 
-    mock_identity = IdentityContext(
+    fake_identity = IdentityContext(
         subject="usr_platform_admin_123",
         tenant_id=seeded_api_token["tenant_id"],
         organization_id=None,
@@ -332,7 +332,7 @@ async def auth_client(app, seeded_api_token, monkeypatch):
     )
 
     async def fake_authenticate_api_key(*args, **kwargs):
-        return mock_identity
+        return fake_identity
 
     monkeypatch.setattr(
         "ucp.application.use_cases.authenticators.api_key_strategy.authenticate_api_key",
@@ -371,7 +371,7 @@ async def simulate_idp_provisioning(db_session_factory):
                 )
             # Mirror what the identity worker does: set the IDP user ID on the
             # domain model, then persist via the repository (not raw SQL).
-            user.set_idp_user_id(f"mock_idp_{user_id}")
+            user.set_idp_user_id(f"fake_idp_{user_id}")
             await repo.save(user)
             await session.commit()
 

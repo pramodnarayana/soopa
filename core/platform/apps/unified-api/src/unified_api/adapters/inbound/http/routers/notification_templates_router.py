@@ -99,7 +99,7 @@ class PreviewTemplateRequest(BaseModel):
 
     subject_template: str | None = None
     body_template: str
-    mock_payload: dict[str, Any] = {}
+    fake_payload: dict[str, Any] = {}
 
     @field_validator("body_template")
     @classmethod
@@ -187,7 +187,7 @@ async def delete_template(
     "/{tenant_id}/templates/preview",
     response_model=PreviewTemplateResponse,
     status_code=status.HTTP_200_OK,
-    summary="Render a draft Jinja2 template against a mock payload (live preview)",
+    summary="Render a draft Jinja2 template against a fake payload (live preview)",
 )
 @inject
 async def preview_template(
@@ -216,11 +216,11 @@ async def preview_template(
             detail=f"Subject template exceeds maximum size of {settings.max_template_size_chars} characters",
         )
 
-    serialized_payload = json.dumps(body.mock_payload)
+    serialized_payload = json.dumps(body.fake_payload)
     if len(serialized_payload) > settings.max_payload_size_chars:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Mock payload exceeds maximum size of {settings.max_payload_size_chars} characters",
+            detail=f"Fake payload exceeds maximum size of {settings.max_payload_size_chars} characters",
         )
 
     try:
@@ -228,13 +228,13 @@ async def preview_template(
         # Use semaphore to limit concurrent renders and prevent thread-pool exhaustion
         async with _RENDER_SEMAPHORE:
             rendered_body = await asyncio.wait_for(
-                asyncio.to_thread(renderer.render, body.body_template, body.mock_payload),
+                asyncio.to_thread(renderer.render, body.body_template, body.fake_payload),
                 timeout=settings.render_timeout_seconds,
             )
             rendered_subject = None
             if body.subject_template:
                 rendered_subject = await asyncio.wait_for(
-                    asyncio.to_thread(renderer.render, body.subject_template, body.mock_payload),
+                    asyncio.to_thread(renderer.render, body.subject_template, body.fake_payload),
                     timeout=settings.render_timeout_seconds,
                 )
     except TimeoutError as exc:

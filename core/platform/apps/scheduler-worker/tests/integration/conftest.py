@@ -2,5 +2,5 @@ import pytest
 
 
 @pytest.fixture(scope="session", autouse=True)
-def mock_aws_credentials() -> None:
-    """Mock AWS Credentials for moto/localstack."""
+def fake_aws_credentials() -> None:
+    """Fake AWS Credentials for moto/localstack."""

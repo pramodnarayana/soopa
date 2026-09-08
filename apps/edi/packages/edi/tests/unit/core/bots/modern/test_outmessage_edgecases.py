@@ -7,9 +7,9 @@ from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.outmessage import Outmessage
 
 
-class MockGrammar:
+class FakeGrammar:
     def __init__(self):
-        self.grammarname = "mockgrammar"
+        self.grammarname = "fakegrammar"
         self.syntax = {
             "decimaal": ".",
             "charset": "utf-8",
@@ -42,12 +42,12 @@ class MockGrammar:
         self.recorddefs = {"REC1": self.structure[0].fields}
 
 
-class MockOutmessage(Outmessage):
+class FakeOutmessage(Outmessage):
     def __init__(self, ta_info=None):
         if ta_info is None:
             ta_info = {
                 "editype": "csv",
-                "messagetype": "mock",
+                "messagetype": "fake",
                 "lengthnumericbare": False,
                 "decimaal": ".",
                 "charset": "utf-8",
@@ -58,10 +58,10 @@ class MockOutmessage(Outmessage):
         self.ta_info = ta_info
         self.errorlist = []
         self.root = Node()
-        self.defmessage = MockGrammar()
+        self.defmessage = FakeGrammar()
         self.ta_info.update(self.defmessage.syntax)
         self.lex_records = []
-        self.messagetypetxt = "Mock: "
+        self.messagetypetxt = "Fake: "
         self.errorfatal = True
 
     def messagegrammarread(self, typeofgrammarfile):
@@ -69,14 +69,14 @@ class MockOutmessage(Outmessage):
 
 
 def test_outmessage_write_empty_root_no_children():
-    out = MockOutmessage()
+    out = FakeOutmessage()
     out.root.record = None
     with pytest.raises(OutMessageError, match="No outgoing message"):
         out.writeall()
 
 
 def test_outmessage_format_default_value_numeric():
-    out = MockOutmessage()
+    out = FakeOutmessage()
     # Test lines 741-762 default numerics
     field_def_N = create_field_definition(["NUM", "M", 5, "N", True, 2, 5, "N", 1])
     assert out._initfield(field_def_N) == "00.00"
@@ -92,7 +92,7 @@ def test_outmessage_format_default_value_numeric():
 
 
 def test_outmessage_record2string_forcequote():
-    out = MockOutmessage()
+    out = FakeOutmessage()
     out.ta_info["forcequote"] = 2  # Quote only strings
     out.ta_info["quote_char"] = '"'
     out.ta_info["field_sep"] = "+"
@@ -115,7 +115,7 @@ def test_outmessage_record2string_forcequote():
 
 
 def test_outmessage_record2string_quote_when_sep_present():
-    out = MockOutmessage()
+    out = FakeOutmessage()
     out.ta_info["forcequote"] = 0  # No force quote
     out.ta_info["quote_char"] = '"'
     out.ta_info["field_sep"] = "+"
@@ -139,7 +139,7 @@ def test_outmessage_record2string_quote_when_sep_present():
 
 def test_outmessage_replacechar():
     # Simulate x12 subclass
-    class x12(MockOutmessage):
+    class x12(FakeOutmessage):
         def _getescapechars(self):
             return (
                 self.ta_info["field_sep"] + self.ta_info["record_sep"] + self.ta_info["sfield_sep"]
@@ -166,7 +166,7 @@ def test_outmessage_replacechar():
 
 
 def test_outmessage_escape_non_x12():
-    class EdifactMock(MockOutmessage):
+    class EdifactFake(FakeOutmessage):
         def _getescapechars(self):
             return (
                 self.ta_info["field_sep"]
@@ -175,7 +175,7 @@ def test_outmessage_escape_non_x12():
                 + self.ta_info["escape"]
             )
 
-    out = EdifactMock()
+    out = EdifactFake()
     out.ta_info["quote_char"] = ""
     out.ta_info["field_sep"] = "+"
     out.ta_info["sfield_sep"] = ":"

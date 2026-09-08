@@ -2,7 +2,7 @@ import pytest
 
 """
 Unit tests for DeliveryUseCase — inbound webhook and outbound SFTP delivery paths.
-All test doubles are imported from fakes.py (DRY). No mock library used.
+All test doubles are imported from fakes.py (DRY). No fake library used.
 """
 
 import contextlib
@@ -110,7 +110,7 @@ async def test_delivery_service_outbound_sftp() -> None:
     # ── Arrange ────────────────────────────────────────────────────────────────
     uow = FakeDataPlaneUnitOfWork()
     sftp_adapter = FakeSftpDeliveryAdapter()
-    vault = FakeVault({"mock_password": "fake_private_key_data"})
+    vault = FakeVault({"fake_password": "fake_private_key_data"})
 
     trace_id = "trace-sftp"
     uow.repository.edi_messages[trace_id] = {
@@ -143,7 +143,7 @@ async def test_delivery_service_outbound_sftp() -> None:
         "outbound_remote_path": "/out",
         "host_key": None,
         "password": None,
-        "credentials_vault_ref": "mock_password",
+        "credentials_vault_ref": "fake_password",
         "active": True,
     }
 

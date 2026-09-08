@@ -16,7 +16,7 @@ from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.outmessage import Outmessage
 
 
-class MockGrammar:
+class FakeGrammar:
     def __init__(self):
         self.syntax = {
             "decimaal": ".",
@@ -108,19 +108,19 @@ class MockGrammar:
         self.structure = [create_structure_node({i: v for i, v in enumerate(self.structure[0])})]
 
 
-class MockOutmessage(Outmessage):
+class FakeOutmessage(Outmessage):
     def __init__(self, ta_info):
         self.ta_info = ta_info
         self.errorlist = []
-        self.messagetypetxt = "MockMessage "
+        self.messagetypetxt = "FakeMessage "
         self.lex_records = []
-        self.defmessage = MockGrammar()
+        self.defmessage = FakeGrammar()
         self.root = Node()
 
 
 def test_outmessage_repeating_field():
     ta_info = {"lengthnumericbare": False, "decimaal": ".", "stripfield_sep": True}
-    msg = MockOutmessage(ta_info)
+    msg = FakeOutmessage(ta_info)
 
     node = Node(record={"REC1": "REC", "REP_FIELD": ["val1", "val2"]})
 
@@ -135,7 +135,7 @@ def test_outmessage_repeating_field():
 
 def test_outmessage_repeating_composite():
     ta_info = {"lengthnumericbare": False, "decimaal": ".", "stripfield_sep": True}
-    msg = MockOutmessage(ta_info)
+    msg = FakeOutmessage(ta_info)
 
     node = Node(
         record={
@@ -160,7 +160,7 @@ def test_outmessage_repeating_composite():
 
 def test_outmessage_format_numeric_left():
     ta_info = {"lengthnumericbare": False, "decimaal": ".", "stripfield_sep": True}
-    msg = MockOutmessage(ta_info)
+    msg = FakeOutmessage(ta_info)
 
     field_def = msg.defmessage.recorddefs["REC1"][3]  # NUM_FLD, NL, MINLENGTH 5, DECIMALS 2
     value = "1.2"
@@ -174,7 +174,7 @@ def test_outmessage_format_numeric_left():
 
 def test_outmessage_format_numeric_right():
     ta_info = {"lengthnumericbare": True, "decimaal": ".", "stripfield_sep": True}
-    msg = MockOutmessage(ta_info)
+    msg = FakeOutmessage(ta_info)
 
     field_def = msg.defmessage.recorddefs["REC1"][4]  # NUM_FLD_NR, NR, MINLENGTH 5, DECIMALS 2
     value = "-1.2"
@@ -194,7 +194,7 @@ def test_outmessage_format_numeric_zfill():
         "json_write_numericals": False,
         "stripfield_sep": True,
     }
-    msg = MockOutmessage(ta_info)
+    msg = FakeOutmessage(ta_info)
 
     field_def = msg.defmessage.recorddefs["REC1"][5]  # NUM_FLD_NZ, R, MINLENGTH 5, DECIMALS 2
     value = "1.2"
@@ -208,7 +208,7 @@ def test_outmessage_format_numeric_zfill():
 
 def test_outmessage_format_numeric_invalid():
     ta_info = {"lengthnumericbare": False, "decimaal": ".", "stripfield_sep": True}
-    msg = MockOutmessage(ta_info)
+    msg = FakeOutmessage(ta_info)
 
     field_def = msg.defmessage.recorddefs["REC1"][3]
     value = "abc"

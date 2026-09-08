@@ -1,11 +1,12 @@
 import json
 
-import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from identity_worker.adapters.outbound.identity_provider.zitadel_client import ZitadelClient
 from identity_worker.bootstrap.config import get_settings
+from pytest_httpserver import HTTPServer
+from werkzeug.wrappers import Response
 
 
 def _machine_key_json() -> str:
@@ -28,21 +29,29 @@ def _machine_key_json() -> str:
 @pytest.mark.asyncio
 async def test_client_authenticates_when_only_machine_key_is_configured(
     monkeypatch: pytest.MonkeyPatch,
+    httpserver: HTTPServer,
 ) -> None:
     monkeypatch.setenv("ZITADEL_MACHINE_KEY", _machine_key_json())
+    monkeypatch.setenv("ZITADEL_API_URL", httpserver.url_for("/"))
     get_settings.cache_clear()
 
-    def zitadel(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/oauth/v2/token":
-            return httpx.Response(
-                200,
-                json={"access_token": "short-lived-token", "expires_in": 300},
-            )
+    def zitadel_token(request) -> Response:
+        return Response(
+            json.dumps({"access_token": "short-lived-token", "expires_in": 300}),
+            status=200,
+            content_type="application/json",
+        )
+
+    def zitadel_search(request) -> Response:
         assert request.headers["Authorization"] == "Bearer short-lived-token"
-        return httpx.Response(200, json={"result": []})
+        return Response(json.dumps({"result": []}), status=200, content_type="application/json")
+
+    httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_handler(zitadel_token)
+    httpserver.expect_request("/management/v1/orgs/_search", method="POST").respond_with_handler(
+        zitadel_search
+    )
 
     client = ZitadelClient()
-    client._client = httpx.AsyncClient(transport=httpx.MockTransport(zitadel))
     try:
         response = await client.fetch_with_auth("/management/v1/orgs/_search", method="POST")
     finally:

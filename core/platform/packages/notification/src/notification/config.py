@@ -24,7 +24,7 @@ class NotificationEngineSettings:
     """Maximum allowed characters for a Jinja2 template body or subject."""
 
     max_payload_size_chars: int = 50_000
-    """Maximum allowed characters for the serialized JSON mock/live payload."""
+    """Maximum allowed characters for the serialized JSON fake/live payload."""
 
     render_timeout_seconds: float = 2.0
     """Per-render timeout (seconds) enforced in the thread-pool executor."""

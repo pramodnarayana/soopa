@@ -97,7 +97,7 @@ async def test_jwt_strategy_resolves_idp_ids(jwt_strategy, db_session):
         )
     )
 
-    identity = await strategy.authenticate("mock_token")
+    identity = await strategy.authenticate("fake_token")
 
     assert identity.subject == canonical_user_id
     assert identity.tenant_id == canonical_tenant_id
@@ -121,7 +121,7 @@ async def test_jwt_strategy_raises_if_tenant_not_provisioned(jwt_strategy, db_se
     )
 
     with pytest.raises(TenantNotProvisionedError):
-        await strategy.authenticate("mock_token")
+        await strategy.authenticate("fake_token")
 
 
 @pytest.mark.asyncio
@@ -140,7 +140,7 @@ async def test_jwt_strategy_raises_if_primary_tenant_is_not_provisioned(jwt_stra
     )
 
     with pytest.raises(TenantNotProvisionedError, match=idp_org_id):
-        await strategy.authenticate("mock_token")
+        await strategy.authenticate("fake_token")
 
 
 @pytest.mark.asyncio
@@ -172,6 +172,6 @@ async def test_jwt_strategy_passes_unmapped_claims(jwt_strategy, db_session):
         )
     )
 
-    identity = await strategy.authenticate("mock_token")
+    identity = await strategy.authenticate("fake_token")
 
     assert identity.tenant_id is None

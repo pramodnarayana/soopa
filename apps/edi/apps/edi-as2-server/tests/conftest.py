@@ -11,7 +11,7 @@ Key fixtures:
   - sender_keypair / receiver_keypair: Real RSA-2048 keys + self-signed X.509 certs
   - signed_as2_payload: A real multipart/signed AS2 body
   - encrypted_as2_payload: A real enveloped PKCS#7 AS2 body
-  - as2_client: FastAPI AsyncClient wired with NoOp observability + mocked DB
+  - as2_client: FastAPI AsyncClient wired with NoOp observability + faked DB
 """
 
 import asyncio
@@ -52,7 +52,7 @@ Key fixtures:
   - sender_keypair / receiver_keypair: Real RSA-2048 keys + self-signed X.509 certs
   - signed_as2_payload: A real multipart/signed AS2 body
   - encrypted_as2_payload: A real enveloped PKCS#7 AS2 body
-  - as2_client: FastAPI AsyncClient wired with NoOp observability + mocked DB
+  - as2_client: FastAPI AsyncClient wired with NoOp observability + faked DB
 """
 
 
@@ -324,7 +324,7 @@ async def as2_client(
     """
     FastAPI AsyncClient pre-configured with:
     - NoOp observability (no infra required)
-    - Mocked database session
+    - Faked database session
     - Sender's public cert available as a known Trading Partner
     - ISA lookup results configurable via isa_lookup_config attribute
     """
@@ -335,8 +335,8 @@ async def as2_client(
         logger=NoOpLogger(),
     )
 
-    # Mock the S3 storage so tests don't try to connect to LocalStack
-    class MockS3Storage:
+    # Fake the S3 storage so tests don't try to connect to LocalStack
+    class FakeS3Storage:
         async def upload(self, tenant_id: int, message_id: str, payload: bytes) -> str:
             return f"s3://test-bucket/tenants/{tenant_id}/{message_id}.bin"
 
@@ -375,7 +375,7 @@ async def as2_client(
     async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
         yield tenant_db_session
 
-    app.state.s3_storage = MockS3Storage()
+    app.state.s3_storage = FakeS3Storage()
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_global_session] = override_get_global_session
 

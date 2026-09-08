@@ -5,7 +5,7 @@ from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkP
 
 """
 Unit tests for InboundTransformUseCase — verifies inbound EDI→JSON transformation.
-All test doubles are imported from fakes.py (DRY). No mock library used.
+All test doubles are imported from fakes.py (DRY). No fake library used.
 """
 
 import pytest

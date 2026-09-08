@@ -7,7 +7,7 @@ Layer 1 — Pure Domain Unit Tests: AS2 Protocol Domain Service.
 
 The functions under test (calculate_mic, parse_as2_request, parse_mdn,
 generate_mdn, build_mdn) are pure Python stdlib — no I/O, no infrastructure.
-Zero mocks required; fakes are not needed at this layer.
+Zero fakes required; fakes are not needed at this layer.
 """
 
 import pytest
