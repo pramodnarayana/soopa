@@ -74,7 +74,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         entities = res.scalars().all()
 
                         for entity in entities:
-                            source_tenant_id = getattr(entity, "tenant_id", None) or tenant_id
+                            if hasattr(entity, "tenant_id"):
+                                source_tenant_id = entity.tenant_id or tenant_id
+                            else:
+                                source_tenant_id = tenant_id
+
                             await self._upsert_entity(
                                 tenant_session, source_tenant_id, entity, spec.tenant_model
                             )
@@ -162,7 +166,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 # 2. Resolve and pre-replicate each declared FK dependency
                 for dep in spec.dependencies:
-                    dep_id: str | None = getattr(entity, dep.fk_attr, None)
+                    dep_id: str | None = getattr(entity, dep.fk_attr)
                     if not dep_id:
                         continue  # Optional FK not set on this instance — skip
 
@@ -188,7 +192,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                             "Sending to DLQ."
                         )
 
-                    dep_tenant_id = getattr(dep_entity, "tenant_id", None) or tenant_id
+                    if hasattr(dep_entity, "tenant_id"):
+                        dep_tenant_id = cast(str | None, dep_entity.tenant_id) or tenant_id
+                    else:
+                        dep_tenant_id = tenant_id
+
                     await self._upsert_entity(
                         tenant_session, dep_tenant_id, cast(DeclarativeBase, dep_entity), dep.tenant_model
                     )
@@ -200,7 +208,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     )
 
                 # 3. Upsert the entity — all FK dependencies are now guaranteed to exist
-                source_tenant_id = getattr(entity, "tenant_id", None) or tenant_id
+                if hasattr(entity, "tenant_id"):
+                    source_tenant_id = entity.tenant_id or tenant_id
+                else:
+                    source_tenant_id = tenant_id
+
                 await self._upsert_entity(
                     tenant_session, source_tenant_id, entity, spec.tenant_model
                 )
