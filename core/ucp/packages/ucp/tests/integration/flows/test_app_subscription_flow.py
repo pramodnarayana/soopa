@@ -50,7 +50,7 @@ async def test_app_subscription_flow(
 
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,
-        publisher=event_bus,  # type: ignore[arg-type]
+        publisher=event_bus,
     )
 
     relay = PostgresOutboxRelay(

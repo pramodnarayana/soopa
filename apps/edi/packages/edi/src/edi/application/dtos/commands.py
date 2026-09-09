@@ -256,6 +256,7 @@ class ProcessApiEdiJsonCommand:
     trading_partner_id: str
     payload: JsonValue
     transaction_type: str | None = None
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)

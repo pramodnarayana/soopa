@@ -108,6 +108,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     tenant_id=tenant_id,
                 )
 
+            except PermanentProvisioningError:
+                await tenant_session.rollback()
+                raise
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(

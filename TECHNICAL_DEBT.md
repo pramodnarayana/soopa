@@ -436,3 +436,12 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: Currently, `pyproject.toml` globally ignores `E402` (module level import not at top of file), which has allowed approximately 63 files (mostly test files) to drift and place imports mid-file (e.g., after `pytestmark`). This violates strict enterprise standards that all imports must be at the top of the file.
 - **Action Item**: Run Ruff's auto-fix (`ruff check --select E402 --fix .`) to automatically hoist the module-level imports to the top in the 63 affected files. Once fixed, remove `"E402"` from the global `ignore` list in `[tool.ruff.lint]` within `pyproject.toml` to enforce this rule monorepo-wide moving forward.
+
+## [Type Safety & Coverage] Track Missing Coverage and Resolve Type Suppressions
+
+- **Date Added**: 2026-09-09
+- **Status**: TO DO
+- **Description**: We have removed `# type: ignore` across `soopa_mono` to enforce strict type checking, which may expose structural type mismatches (such as `import-untyped`, `arg-type`, `assignment`, and `attr-defined`). Additionally, we must track and enforce 80% test coverage across all bounded contexts.
+- **Action Item**:
+  1. Structurally resolve any type errors uncovered by the removal of `# type: ignore` (e.g., install missing stubs like `boto3-stubs`, structurally map types).
+  2. Implement strict per-module coverage reporting to guarantee no bounded context falls below the 80% threshold.

@@ -763,6 +763,42 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         result = await self.session.execute(stmt)
         return set(result.scalars().all())
 
+    async def get_edi_json_by_idempotency_key(
+        self, tenant_id: str, idempotency_key: str
+    ) -> EdiJsonDTO | None:
+        stmt = (
+            select(EdiJson)
+            .where(
+                EdiJson.tenant_id == tenant_id,
+                EdiJson.business_metadata.op("@>")({"_idempotency_key": idempotency_key}),
+            )
+            .limit(1)
+        )
+
+        result = await self.session.execute(stmt)
+        record = result.scalars().first()
+
+        if not record:
+            return None
+
+        return EdiJsonDTO(
+            id=str(record.id),
+            trace_id=str(record.trace_id),
+            tenant_id=record.tenant_id,
+            direction=record.direction,
+            status=record.status,
+            trading_partner_id=record.trading_partner_id,
+            transaction_type=record.transaction_type,
+            sender_id=record.sender_id,
+            receiver_id=record.receiver_id,
+            gs_sender_id=record.gs_sender_id,
+            gs_receiver_id=record.gs_receiver_id,
+            business_metadata=record.business_metadata,
+            payload=record.payload,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
+
 
 def _map_edi_message_to_domain(record: EdiMessage) -> EdiMessageDomainModel:
     """

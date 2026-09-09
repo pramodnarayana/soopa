@@ -143,3 +143,11 @@ class TransactionRepositoryPort(Protocol):
         Takes a list of trace_ids and returns the subset that actually exist in the DB.
         """
         ...
+
+    async def get_edi_json_by_idempotency_key(
+        self, tenant_id: str, idempotency_key: str
+    ) -> EdiJsonDTO | None:
+        """
+        Retrieves an EdiJson record by its idempotency key (stored in business_metadata).
+        """
+        ...

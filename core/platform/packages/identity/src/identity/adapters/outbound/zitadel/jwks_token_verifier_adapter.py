@@ -60,7 +60,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             try:
                 userinfo = await self._get_cached_userinfo(token, jti)
                 payload.update(userinfo)
-            except (httpx.RequestError, ValueError) as e:
+            except (httpx.RequestError, ValueError, TypeError) as e:
                 logger.warning("Failed to fetch userinfo", exc_info=e)
 
         # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID

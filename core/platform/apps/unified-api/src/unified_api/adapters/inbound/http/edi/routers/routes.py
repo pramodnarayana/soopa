@@ -79,6 +79,7 @@ async def create_inbound_route(
         service = CreateInboundRouteUseCase(uow=uow)
 
         cmd = CreateInboundRouteCmd(
+            name=request.name,
             trading_partner_id=request.trading_partner_id,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,

@@ -1,9 +1,9 @@
 import asyncio
 import datetime
+from typing import cast
 
 from database.models.observability import SystemAuditLog
-from sqlalchemy import delete, select
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ucp.ports.outbound.ucp_audit_log_cleanup_repository_port import (
@@ -27,7 +27,7 @@ class SqlAlchemyUcpAuditLogCleanupRepository(UcpAuditLogCleanupRepositoryPort):
                         .limit(5000)
                     )
                 )
-                res_audit: CursorResult[tuple[()]] = await session.execute(stmt_audit)  # type: ignore[assignment]
+                res_audit = cast(CursorResult[tuple[()]], await session.execute(stmt_audit))
                 deleted = res_audit.rowcount
                 audit_deleted += deleted
                 await session.commit()

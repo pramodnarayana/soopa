@@ -119,6 +119,7 @@ rules:
           - pattern: $LOGGER.warning(f"...")
           - pattern: $LOGGER.debug(f"...")
           - pattern: $LOGGER.exception(f"...")
+          - pattern: $LOGGER.critical(f"...")
     message: "Enterprise Rule: Context Injection. Do not use f-strings inside logger calls. Use structured JSON kwargs instead (e.g., logger.info('event', user_id=id))."
     languages: [python]
     severity: ERROR

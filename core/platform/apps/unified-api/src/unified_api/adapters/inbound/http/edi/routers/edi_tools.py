@@ -68,6 +68,12 @@ async def _handle_json_to_edi(
     # Delegate EDI serialization to the common BotsEDIAdapter
     # We assume X12 by default for now, but this could be inferred
     # from the AST (e.g. presence of interchange_UNB)
+    if not isinstance(ast_dict, (dict, list)):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON payload structure. Must be an object or a list of objects.",
+        )
+
     standard = EdiStandard.X12
     if "interchange_UNB" in ast_dict or (
         isinstance(ast_dict, list) and len(ast_dict) > 0 and "interchange_UNB" in ast_dict[0]

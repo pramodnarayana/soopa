@@ -40,8 +40,6 @@ async def test_trace_selects_only_the_newest_edi_message() -> None:
 
     assert await repository.get_edi_trace("tenant-1", "trace-1") is None
 
-    compiled = str(
-        session.statements[0].compile(compile_kwargs={"literal_binds": True})  # type: ignore[attr-defined]
-    )
+    compiled = str(session.statements[0].compile(compile_kwargs={"literal_binds": True}))
     assert "ORDER BY edi_messages.created_at DESC" in compiled
     assert "LIMIT 1" in compiled

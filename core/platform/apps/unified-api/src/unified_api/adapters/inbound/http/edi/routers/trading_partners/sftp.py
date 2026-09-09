@@ -48,6 +48,21 @@ async def _get_client_key_from_vault(vault_ref: str, secret_store_port: SecretSt
     return vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
 
 
+def _validate_sftp_request(
+    request: TestSFTPConnectionRequest, tenant_id: str
+) -> TestConnectionResponse | None:
+    if request.host in ("localhost", "127.0.0.1") or request.host.startswith(("169.254.", "10.")):
+        return TestConnectionResponse(success=False, reason="SSRF blocked: Invalid target host")
+
+    if request.credentials_vault_ref and not request.credentials_vault_ref.startswith(
+        f"{tenant_id}/"
+    ):
+        return TestConnectionResponse(
+            success=False, reason="Tenant isolation violation: Invalid vault reference"
+        )
+    return None
+
+
 @router.post("/sftp/test", response_model=TestConnectionResponse, status_code=status.HTTP_200_OK)
 async def test_sftp_connection(
     request: TestSFTPConnectionRequest,
@@ -60,6 +75,9 @@ async def test_sftp_connection(
         return TestConnectionResponse(
             success=False, reason="Must provide either password or SSH key"
         )
+
+    if validation_err := _validate_sftp_request(request, tenant_id):
+        return validation_err
 
     client_key_string = None
     if request.credentials_vault_ref:
@@ -118,6 +136,9 @@ async def test_existing_sftp_connection(
         return TestConnectionResponse(
             success=False, reason="Must provide either password or SSH key"
         )
+
+    if validation_err := _validate_sftp_request(request, tenant_id):
+        return validation_err
 
     client_key_string = None
     if request.credentials_vault_ref:

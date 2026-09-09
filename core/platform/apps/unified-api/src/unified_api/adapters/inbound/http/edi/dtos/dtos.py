@@ -153,7 +153,7 @@ class UpdateAS2PartnershipRequest(BaseModel):
 class UpdateSFTPPartnerRequest(BaseModel):
     name: str | None = Field(None, max_length=255, description="Name of the SFTP partner")
     host: str | None = Field(None, max_length=255, description="SFTP host/IP")
-    port: int | None = Field(None, description="SFTP port")
+    port: int | None = Field(None, ge=1, le=65535, description="SFTP port")
     username: str | None = Field(None, max_length=255, description="SFTP username")
     inbound_remote_path: str | None = Field(
         None, max_length=1024, description="Inbound path to poll"

@@ -107,6 +107,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     "[REPLICATION] Successfully performed full state sync for tenant={tenant_id}."
                 )
 
+            except PermanentProvisioningError:
+                await tenant_session.rollback()
+                raise
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(

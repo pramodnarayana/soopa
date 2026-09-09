@@ -5,7 +5,7 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from seedwork.domain.types import JsonValue
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
@@ -28,6 +28,7 @@ async def submit_outbound_message(
     request: OutboundMessageRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> OutboundMessageResponse:
     """
     Submits a JSON payload to be translated and transmitted via AS2.
@@ -43,6 +44,7 @@ async def submit_outbound_message(
             trading_partner_id=request.trading_partner_id,
             payload=cast(JsonValue, request.payload),
             transaction_type=request.transaction_type,
+            idempotency_key=idempotency_key,
         )
     )
 

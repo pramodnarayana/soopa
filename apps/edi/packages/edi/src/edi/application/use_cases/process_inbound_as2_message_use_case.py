@@ -352,7 +352,7 @@ class ProcessInboundAs2MessageUseCase:
     def _extract_pure_edi(self, final_payload_bytes: bytes | object) -> bytes:
         if not isinstance(final_payload_bytes, bytes):
             if hasattr(final_payload_bytes, "as_bytes") and callable(final_payload_bytes.as_bytes):
-                final_payload_bytes = final_payload_bytes.as_bytes()  # type: ignore[attr-defined]
+                final_payload_bytes = final_payload_bytes.as_bytes()
             elif isinstance(final_payload_bytes, str):
                 final_payload_bytes = final_payload_bytes.encode("utf-8")
 
