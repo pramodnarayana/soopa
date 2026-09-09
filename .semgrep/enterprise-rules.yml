@@ -114,11 +114,11 @@ rules:
   - id: ban-fstrings-in-structlog
     patterns:
       - pattern-either:
-          - pattern: logger.info(f"...")
-          - pattern: logger.error(f"...")
-          - pattern: logger.warning(f"...")
-          - pattern: logger.debug(f"...")
-          - pattern: logger.exception(f"...")
+          - pattern: $LOGGER.info(f"...")
+          - pattern: $LOGGER.error(f"...")
+          - pattern: $LOGGER.warning(f"...")
+          - pattern: $LOGGER.debug(f"...")
+          - pattern: $LOGGER.exception(f"...")
     message: "Enterprise Rule: Context Injection. Do not use f-strings inside logger calls. Use structured JSON kwargs instead (e.g., logger.info('event', user_id=id))."
     languages: [python]
     severity: ERROR

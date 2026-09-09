@@ -1,11 +1,9 @@
 import datetime
 from typing import cast
 
-from seedwork.domain.types import JsonDict, JsonValue
-
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
-from edi.domain.types import AstNode
+from edi.domain.types import AstNode, JsonDict, JsonValue
 
 X12_GS01_MAPPING = {
     "850": "PO",
@@ -98,9 +96,7 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
                 # Calculate segment count (existing + SE)
                 segment_count = ASTUtils.count_segments(new_txn) + 1
                 st = new_txn.get("ST")
-                se02 = (
-                    cast(dict, st).get("ST02", f"{i:04d}") if isinstance(st, dict) else f"{i:04d}"
-                )
+                se02 = st.get("ST02", f"{i:04d}") if isinstance(st, dict) else f"{i:04d}"
                 new_txn["SE"] = {
                     "SE01": str(segment_count),
                     "SE02": se02,

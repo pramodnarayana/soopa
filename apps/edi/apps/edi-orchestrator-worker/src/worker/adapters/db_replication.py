@@ -204,7 +204,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         dep_tenant_id = tenant_id
 
                     await self._upsert_entity(
-                        tenant_session, dep_tenant_id, cast(DeclarativeBase, dep_entity), dep.tenant_model
+                        tenant_session,
+                        dep_tenant_id,
+                        cast(DeclarativeBase, dep_entity),
+                        dep.tenant_model,
                     )
                     logger.info(
                         "[REPLICATION] Pre-replicated dependency "
@@ -253,8 +256,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stmt = select(spec_model).where(spec_model.id == entity_id)
         if spec.include_shared:
             stmt = stmt.where(
-                (spec_model.tenant_id == tenant_id)
-                | (spec_model.tenant_id == SHARED_TENANT_ID)
+                (spec_model.tenant_id == tenant_id) | (spec_model.tenant_id == SHARED_TENANT_ID)
             )
         else:
             stmt = stmt.where(spec_model.tenant_id == tenant_id)
@@ -447,7 +449,6 @@ def _build_fetch_all_stmt(spec: EntitySpec, tenant_id: str) -> Any:
     spec_model = cast(type[ReplicatedModel], spec.global_model)
     if spec.include_shared:
         return select(spec_model).where(
-            (spec_model.tenant_id == tenant_id)
-            | (spec_model.tenant_id == SHARED_TENANT_ID)
+            (spec_model.tenant_id == tenant_id) | (spec_model.tenant_id == SHARED_TENANT_ID)
         )
     return select(spec_model).where(spec_model.tenant_id == tenant_id)

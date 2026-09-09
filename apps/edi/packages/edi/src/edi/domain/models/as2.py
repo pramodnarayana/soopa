@@ -9,8 +9,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
-from seedwork.domain.types import JsonValue
 from seedwork.models import AggregateRoot
+
+from edi.domain.types import JsonValue
 
 
 class Disposition(StrEnum):

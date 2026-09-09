@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-from seedwork.domain.types import JsonDict
-
 from scheduler.domain.constants import JobStatus
+
+type JsonValue = str | int | float | bool | dict[str, "JsonValue"] | list["JsonValue"] | None
 
 
 @dataclass(frozen=True)
@@ -11,7 +11,7 @@ class ScheduledJob:
     id: str
     name: str
     target_queue: str | None
-    payload: JsonDict
+    payload: dict[str, JsonValue]
     status: JobStatus
     cron_expression: str | None
     interval_seconds: int | None

@@ -426,6 +426,13 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Verification**: `ruff check` passes with zero errors. 951 unit + integration tests pass.
 
 ### Global Naming Taxonomy Drift (Database Adapters)
-- **Issue**: Across the monorepo, developers have historically mixed `SqlAlchemy*` and `Postgres*` prefixes when naming database adapter classes. For example, the `edi` module heavily uses `SqlAlchemy*`, while the `identity` module uses `Postgres*`.
-- **Impact**: This violates our Architectural Consistency (No Dual-Architectures) rule at a global scale. While local bounded context consistency is currently maintained, the global inconsistency is a form of technical debt.
-- **Action Required**: Run a global refactoring sweep to unify the entire monorepo onto a single prefix (e.g., standardizing everything to `Postgres*`) to ensure the monorepo has one single enterprise standard for database adapter taxonomy.
+- **Current Local Conventions**: Adapter prefixes are enforced per package. For example, `apps/edi/packages/edi` uses `SqlAlchemy*`, while other EDI packages and the identity package may use `Postgres*`; each package must remain internally consistent until an intentional migration occurs.
+- **Separate Monorepo Debt**: These valid local conventions still produce a monorepo-wide taxonomy drift, but that broader inconsistency is not a reason to rename an adapter in isolation.
+- **Proposed Migration**: Plan and execute a dedicated monorepo-wide refactoring sweep to adopt one prefix (for example, `Postgres*`), updating all packages and consumers atomically.
+
+## [Code Quality] Enforce E402 (Module level import not at top of file) Globally
+
+- **Date Added**: 2026-09-09
+- **Status**: TO DO
+- **Description**: Currently, `pyproject.toml` globally ignores `E402` (module level import not at top of file), which has allowed approximately 63 files (mostly test files) to drift and place imports mid-file (e.g., after `pytestmark`). This violates strict enterprise standards that all imports must be at the top of the file.
+- **Action Item**: Run Ruff's auto-fix (`ruff check --select E402 --fix .`) to automatically hoist the module-level imports to the top in the 63 affected files. Once fixed, remove `"E402"` from the global `ignore` list in `[tool.ruff.lint]` within `pyproject.toml` to enforce this rule monorepo-wide moving forward.

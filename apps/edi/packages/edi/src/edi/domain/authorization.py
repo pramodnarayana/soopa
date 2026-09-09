@@ -1,5 +1,4 @@
-from seedwork.domain.types import JsonDict, JsonValue
-
+from edi.domain.types import JsonDict, JsonValue
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 
 

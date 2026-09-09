@@ -85,7 +85,9 @@ class ReceiveAS2UseCase:
 
         async with AsyncExitStack() as stack:
             if self.message_repo is None:
-                raise RuntimeError("message_repo not initialized — pass message_repo= to ReceiveAS2UseCase")
+                raise RuntimeError(
+                    "message_repo not initialized — pass message_repo= to ReceiveAS2UseCase"
+                )
             return await self._execute_inner(as2_msg, stack, self.message_repo)
 
     async def _execute_inner(

@@ -149,7 +149,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             userinfo = response.json()
 
         if not isinstance(userinfo, dict):
-            raise ValueError("userinfo response must be a JSON object")
+            raise TypeError("userinfo response must be a JSON object")
 
         # Update cache
         self._userinfo_cache[jti] = (userinfo, now)

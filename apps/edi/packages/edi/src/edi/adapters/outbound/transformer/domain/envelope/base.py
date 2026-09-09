@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
 
-from seedwork.domain.types import JsonDict
-
-from edi.domain.types import AstNode
+from edi.domain.types import AstNode, JsonDict
 
 
 class BaseEnvelopeBuilder(ABC):

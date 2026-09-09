@@ -1,4 +1,3 @@
-from collections.abc import Mapping
 from typing import get_type_hints
 
 from identity.domain.identity_context import (
@@ -48,6 +47,7 @@ def test_token_claims_defaults() -> None:
 
 
 from collections.abc import MutableMapping
+
 
 def test_tenant_mapping_uses_string_mapping_annotation() -> None:
     context_hints = get_type_hints(IdentityContext)

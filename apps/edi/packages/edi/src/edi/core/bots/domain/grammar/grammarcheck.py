@@ -25,6 +25,7 @@ def startmulti(grammardir, editype):
     # logger is set up at module level
 
     search_pattern = os.path.join(grammardir, "*.py") if os.path.isdir(grammardir) else grammardir
+    errors = []
     for filename in glob.iglob(search_pattern):
         filename_basename = os.path.basename(filename)
         if filename_basename in ["__init__.py", "envelope.py"]:
@@ -38,10 +39,16 @@ def startmulti(grammardir, editype):
         filename_noextension = os.path.splitext(filename_basename)[0]
         try:
             grammar.grammarread(editype, filename_noextension, typeofgrammarfile="grammars")
-        except Exception:
-            pass
-        else:
-            pass
+        except Exception as exc:
+            errors.append(exc)
+            logger.exception(
+                "grammar_validation_failed",
+                filename=filename,
+                error=str(exc),
+            )
+
+    if errors:
+        raise SystemExit(1)
 
 
 def start():

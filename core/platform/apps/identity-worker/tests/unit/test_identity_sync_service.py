@@ -204,7 +204,9 @@ async def test_handle_user_created_missing_local_user_has_no_external_side_effec
     assert user_idp.user_roles == {}
 
 
-async def test_handle_user_created_reconciles_existing_idp_user(fakes, db_session_factory, uow_factory, setup_db):
+async def test_handle_user_created_reconciles_existing_idp_user(
+    fakes, db_session_factory, uow_factory, setup_db
+):
     idp, user_idp = fakes
     service = IdentitySyncService(idp, user_idp, uow_factory)
     existing_idp_user_id = "idp_existing"

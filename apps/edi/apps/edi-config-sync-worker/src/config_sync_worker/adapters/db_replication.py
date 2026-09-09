@@ -208,7 +208,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         dep_tenant_id = tenant_id
 
                     await self._upsert_entity(
-                        tenant_session, dep_tenant_id, cast(DeclarativeBase, dep_entity), dep.tenant_model
+                        tenant_session,
+                        dep_tenant_id,
+                        cast(DeclarativeBase, dep_entity),
+                        dep.tenant_model,
                     )
                     logger.info(
                         "[REPLICATION] Pre-replicated dependency to shard.",

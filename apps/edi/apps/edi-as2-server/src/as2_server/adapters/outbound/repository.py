@@ -121,4 +121,3 @@ class EdiMessageRepositoryFactory:
 
     def create_repo(self, tenant_session: Any) -> EdiMessageRepositoryAdapter:
         return EdiMessageRepositoryAdapter(tenant_session)
-

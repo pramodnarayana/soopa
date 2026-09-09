@@ -124,7 +124,6 @@ async def test_app_subscription_flow(
                 continue
 
             raw_event = ackable_msg.payload
-            print(f"DEBUG RAW EVENT: {raw_event}")
 
             if raw_event.get("tenant_id") != tenant.id:
                 await ackable_msg.ack()

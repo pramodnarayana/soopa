@@ -10,11 +10,20 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 # AstNode — for the EDI transformer pipeline's Abstract Syntax Tree nodes.
 # ---------------------------------------------------------------------------
-from typing import TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
-from seedwork.domain.types import JsonValue
+from typing_extensions import TypeAliasType
 
-JsonDict: TypeAlias = dict[str, JsonValue]
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+
+if TYPE_CHECKING:
+    JsonValue: TypeAlias = JsonPrimitive | dict[str, "JsonValue"] | list["JsonValue"]
+    JsonDict: TypeAlias = dict[str, JsonValue]
+else:
+    JsonValue = TypeAliasType(
+        "JsonValue", JsonPrimitive | dict[str, "JsonValue"] | list["JsonValue"]
+    )
+    JsonDict = TypeAliasType("JsonDict", dict[str, JsonValue])
 
 # EDI AST nodes are deeply recursive dicts. We alias it to JsonDict
 # which provides a strict structural type representing valid JSON nodes.

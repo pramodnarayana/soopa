@@ -2,11 +2,9 @@ import datetime
 import uuid
 from typing import cast
 
-from seedwork.domain.types import JsonDict, JsonValue
-
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
-from edi.domain.types import AstNode
+from edi.domain.types import AstNode, JsonDict, JsonValue
 
 
 class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
@@ -60,11 +58,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
             if "UNT" not in new_txn:
                 segment_count = ASTUtils.count_segments(new_txn) + 1
                 unh = new_txn.get("UNH")
-                unt02 = (
-                    cast(dict, unh).get("UNH01", f"{i:04d}")
-                    if isinstance(unh, dict)
-                    else f"{i:04d}"
-                )
+                unt02 = unh.get("UNH01", f"{i:04d}") if isinstance(unh, dict) else f"{i:04d}"
                 new_txn["UNT"] = {
                     "UNT01": str(segment_count),
                     "UNT02": unt02,
