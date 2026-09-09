@@ -75,7 +75,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                         for entity in entities:
                             if hasattr(entity, "tenant_id"):
-                                source_tenant_id = entity.tenant_id or tenant_id
+                                source_tenant_id = cast(str | None, entity.tenant_id)
+                                if not source_tenant_id:
+                                    raise PermanentProvisioningError(
+                                        f"Data integrity violation: {entity.__class__.__name__} "
+                                        f"id={getattr(entity, 'id', 'unknown')} has a null tenant_id in the global DB."
+                                    )
                             else:
                                 source_tenant_id = tenant_id
 
@@ -193,7 +198,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         )
 
                     if hasattr(dep_entity, "tenant_id"):
-                        dep_tenant_id = cast(str | None, dep_entity.tenant_id) or tenant_id
+                        dep_tenant_id = cast(str | None, dep_entity.tenant_id)
+                        if not dep_tenant_id:
+                            raise PermanentProvisioningError(
+                                f"Data integrity violation: {dep_entity.__class__.__name__} "
+                                f"id={getattr(dep_entity, 'id', 'unknown')} has a null tenant_id in the global DB."
+                            )
                     else:
                         dep_tenant_id = tenant_id
 
@@ -209,7 +219,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 # 3. Upsert the entity — all FK dependencies are now guaranteed to exist
                 if hasattr(entity, "tenant_id"):
-                    source_tenant_id = entity.tenant_id or tenant_id
+                    source_tenant_id = cast(str | None, entity.tenant_id)
+                    if not source_tenant_id:
+                        raise PermanentProvisioningError(
+                            f"Data integrity violation: {entity.__class__.__name__} "
+                            f"id={getattr(entity, 'id', 'unknown')} has a null tenant_id in the global DB."
+                        )
                 else:
                     source_tenant_id = tenant_id
 
