@@ -9,6 +9,7 @@ from edi.application.dtos import ProcessApiEdiJsonCommand
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.domain.enums import EdiDirection
 from edi.domain.events import TransformRequestedEvent
+from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -155,8 +156,25 @@ class ProcessApiEdiJsonUseCase:
 
             edi_json_aggregate.add_domain_event(TransformRequestedEvent(**event_kwargs))
 
-            # 5. Save aggregate and let Repository drain events to the outbox automatically
-            await self.uow.transactions.save_json(edi_json_aggregate)
+            # 5. Save aggregate and let Repository drain events to the outbox atomically.
+            # If a concurrent request with the same idempotency key already committed,
+            # the DB unique constraint will raise a conflict which we catch and resolve
+            # by looking up the already-persisted record.
+            try:
+                await self.uow.transactions.save_json(edi_json_aggregate)
+                await self.uow.commit()
+            except IdempotencyConflictError:
+                if command.idempotency_key:
+                    existing = await self.uow.transactions.get_edi_json_by_idempotency_key(
+                        command.tenant_id, command.idempotency_key
+                    )
+                    if existing:
+                        logger.info(
+                            "idempotency_key_conflict_resolved",
+                            trace_id=existing.trace_id,
+                            idempotency_key=command.idempotency_key,
+                        )
+                        return existing.trace_id
+                raise
 
-            await self.uow.commit()
             return trace_id

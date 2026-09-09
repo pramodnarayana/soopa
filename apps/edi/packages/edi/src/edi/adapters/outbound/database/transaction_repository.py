@@ -55,6 +55,7 @@ from edi.application.dtos.transactions import (
 from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.enums import EdiDirection
+from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.storage_port import StoragePort
@@ -175,7 +176,17 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             business_metadata=aggregate.business_metadata,
             payload=aggregate.payload,
         )
-        await self.session.merge(record)
+        try:
+            async with self.session.begin_nested():
+                self.session.add(record)
+                await self.flush()
+        except DuplicateEntityError as exc:
+            # A DB unique constraint on the idempotency key fired — translate to
+            # the domain-level error so the application layer can resolve it without
+            # any infrastructure leaking through.
+            raise IdempotencyConflictError(
+                f"EdiJson with idempotency key already exists: {exc}"
+            ) from exc
 
         for index, event in enumerate(aggregate.domain_events):
             event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"

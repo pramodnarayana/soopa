@@ -1,3 +1,5 @@
+import ipaddress
+import socket
 from typing import Any
 
 from database.exceptions import DuplicateEntityError
@@ -48,10 +50,21 @@ async def _get_client_key_from_vault(vault_ref: str, secret_store_port: SecretSt
     return vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
 
 
+def _is_ssrf_blocked(host: str) -> bool:
+    """Return True if the resolved host is a non-global address (loopback, private, link-local, etc.)."""
+    try:
+        # Resolve the hostname to an IP address — catches DNS rebinding
+        resolved_ip = ipaddress.ip_address(socket.gethostbyname(host))
+        return not resolved_ip.is_global
+    except (socket.gaierror, ValueError):
+        # If resolution fails or the address is invalid, block it
+        return True
+
+
 def _validate_sftp_request(
     request: TestSFTPConnectionRequest, tenant_id: str
 ) -> TestConnectionResponse | None:
-    if request.host in ("localhost", "127.0.0.1") or request.host.startswith(("169.254.", "10.")):
+    if _is_ssrf_blocked(request.host):
         return TestConnectionResponse(success=False, reason="SSRF blocked: Invalid target host")
 
     if request.credentials_vault_ref and not request.credentials_vault_ref.startswith(

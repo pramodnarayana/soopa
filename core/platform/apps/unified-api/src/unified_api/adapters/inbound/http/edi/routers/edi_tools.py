@@ -74,6 +74,12 @@ async def _handle_json_to_edi(
             detail="Invalid JSON payload structure. Must be an object or a list of objects.",
         )
 
+    if isinstance(ast_dict, list) and not all(isinstance(item, dict) for item in ast_dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON payload structure. Every element of the list must be an object.",
+        )
+
     standard = EdiStandard.X12
     if "interchange_UNB" in ast_dict or (
         isinstance(ast_dict, list) and len(ast_dict) > 0 and "interchange_UNB" in ast_dict[0]
