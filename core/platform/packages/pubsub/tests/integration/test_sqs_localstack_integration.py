@@ -27,7 +27,7 @@ def localstack_sqs() -> dict[str, str]:
         endpoint_url=endpoint_url,
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key="test",
     )
 
     queue_name = f"pubsub-test-queue-{generate_random_hex(6)}"
@@ -106,7 +106,7 @@ async def test_sqs_pubsub_integration_via_localstack(
         endpoint_url=endpoint_url,
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key="test",
     )
 
     response = sqs_client.receive_message(

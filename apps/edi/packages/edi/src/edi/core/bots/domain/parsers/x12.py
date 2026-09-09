@@ -12,6 +12,7 @@ in inmessage.py / outmessage.py via READER_REGISTRY / WRITER_REGISTRY.
 # pylint: disable=too-many-statements, attribute-defined-outside-init
 
 import structlog
+from seedwork.domain.types import JsonDict
 
 from edi.core.bots.config.botsconfig import VALUE
 from edi.core.bots.domain.exceptions import InMessageError
@@ -31,7 +32,7 @@ logger = structlog.get_logger(__name__)
 class x12(var):
     """Class for X12 incoming message objects."""
 
-    def _parsefields(self, lex_record, record_definition) -> dict:
+    def _parsefields(self, lex_record, record_definition) -> JsonDict:
         """Parse fields from one variable message-record. ISA gets special no-strip treatment."""
         if record_definition.id != "ISA":
             return super()._parsefields(lex_record, record_definition)

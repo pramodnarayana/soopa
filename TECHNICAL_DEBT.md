@@ -424,3 +424,8 @@ The taxonomy drifted organically as different engineers built different bounded 
   2. **`bots` parser cycle** — `outmessage.py` ↔ `parsers/__init__.py` ↔ `edifact.py`. Fixed by introducing `domain/parser_registry.py` (outside the `parsers` package) as a zero-dependency registry populated by `parsers/__init__.py` after concrete classes load.
   3. **`lifespan.py` ↔ `main.py`** — `lifespan.py` imported `ucp_container` from `main.py` which imports `shell_lifespan` from `lifespan.py`. Fixed by reading `ucp_container` from `app.state` at runtime (already populated by `main.py` before the lifespan context runs).
 - **Verification**: `ruff check` passes with zero errors. 951 unit + integration tests pass.
+
+### Global Naming Taxonomy Drift (Database Adapters)
+- **Issue**: Across the monorepo, developers have historically mixed `SqlAlchemy*` and `Postgres*` prefixes when naming database adapter classes. For example, the `edi` module heavily uses `SqlAlchemy*`, while the `identity` module uses `Postgres*`.
+- **Impact**: This violates our Architectural Consistency (No Dual-Architectures) rule at a global scale. While local bounded context consistency is currently maintained, the global inconsistency is a form of technical debt.
+- **Action Required**: Run a global refactoring sweep to unify the entire monorepo onto a single prefix (e.g., standardizing everything to `Postgres*`) to ensure the monorepo has one single enterprise standard for database adapter taxonomy.

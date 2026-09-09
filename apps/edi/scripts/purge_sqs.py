@@ -1,3 +1,4 @@
+import contextlib
 import os
 
 import boto3
@@ -14,8 +15,5 @@ sqs = boto3.client(
 queues = sqs.list_queues()
 if "QueueUrls" in queues:
     for q in queues["QueueUrls"]:
-        try:
+        with contextlib.suppress(ClientError):
             sqs.purge_queue(QueueUrl=q)
-            print(f"Purged {q}")
-        except ClientError as e:
-            print(f"Failed {q}: {e}")

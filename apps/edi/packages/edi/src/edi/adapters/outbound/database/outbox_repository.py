@@ -132,7 +132,11 @@ class SqlAlchemyControlPlaneOutboxRepository(
             )
             reservation = result.scalar_one_or_none()
             if reservation is not None:
-                event_type_val = event.event_type.value if hasattr(event.event_type, "value") else event.event_type
+                event_type_val = (
+                    event.event_type.value
+                    if hasattr(event.event_type, "value")
+                    else event.event_type
+                )
 
                 # We know reservation is an instance of our outbox model class
                 reservation.event_type = str(event_type_val)
@@ -150,7 +154,9 @@ class SqlAlchemyControlPlaneOutboxRepository(
 
         event_id = await self._publish_record(
             tenant_id=event.tenant_id,
-            event_type=str(event.event_type.value if hasattr(event.event_type, "value") else event.event_type),
+            event_type=str(
+                event.event_type.value if hasattr(event.event_type, "value") else event.event_type
+            ),
             payload=serialized_event,
             idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
         )

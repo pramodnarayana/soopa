@@ -1,7 +1,7 @@
 import datetime
 from typing import cast
 
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict, JsonValue
 
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
@@ -25,7 +25,7 @@ X12_GS01_MAPPING = {
 class X12EnvelopeBuilder(BaseEnvelopeBuilder):
     @classmethod
     def _build_isa_segment(
-        cls, route_config: dict[str, JsonValue], now: datetime.datetime, isa13: str
+        cls, route_config: JsonDict, now: datetime.datetime, isa13: str
     ) -> AstNode:
         isa_sender_qualifier = str(route_config.get("isa_sender_qualifier") or "ZZ")
         isa_sender_id = str(route_config.get("isa_sender_id", "UNKNOWN")).ljust(15)
@@ -56,7 +56,7 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
 
     @classmethod
     def _build_gs_segment(
-        cls, route_config: dict[str, JsonValue], now: datetime.datetime, gs06: str
+        cls, route_config: JsonDict, now: datetime.datetime, gs06: str
     ) -> AstNode:
         transaction_type = str(route_config.get("transaction_type", "XX"))
         gs_sender_id = str(
@@ -85,7 +85,7 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
     ) -> list[AstNode]:
         processed_transactions = []
         for i, txn in enumerate(transactions, start=1):
-            new_txn: dict[str, JsonValue] = {}
+            new_txn: JsonDict = {}
             if "ST" not in txn:
                 new_txn["ST"] = {"ST01": transaction_type, "ST02": f"{i:04d}"}
 
@@ -110,7 +110,7 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
         return processed_transactions
 
     @classmethod
-    def build(cls, route_config: dict[str, JsonValue], payload: AstNode | list[AstNode]) -> AstNode:
+    def build(cls, route_config: JsonDict, payload: AstNode | list[AstNode]) -> AstNode:
         now = datetime.datetime.now(datetime.UTC)
         transactions = payload if isinstance(payload, list) else [payload]
         transaction_type = str(route_config.get("transaction_type", "UNKNOWN"))
@@ -125,8 +125,8 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
         gs_segment = cls._build_gs_segment(route_config, now, gs06)
         processed_transactions = cls._wrap_transactions(transactions, transaction_type)
 
-        ge_segment: dict[str, JsonValue] = {"GE01": str(len(processed_transactions)), "GE02": gs06}
-        iea_segment: dict[str, JsonValue] = {"IEA01": "1", "IEA02": isa13}
+        ge_segment: JsonDict = {"GE01": str(len(processed_transactions)), "GE02": gs06}
+        iea_segment: JsonDict = {"IEA01": "1", "IEA02": isa13}
 
         # Orchestrate the final AST structure
         return {

@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import hashlib
 import os
+import secrets
 import tempfile
 
 import database.provider
@@ -281,7 +282,6 @@ async def seeded_api_token(db_session_factory):
                 )
                 session.add(shard_reg)
                 await session.flush()
-        import secrets
 
         # Create API token
         raw_secret = secrets.token_urlsafe(32)

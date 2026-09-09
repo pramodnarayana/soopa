@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, TypeAlias
 
 from typing_extensions import TypeAliasType
 
@@ -23,4 +23,4 @@ class UnsetType:
         return False
 
 
-UNSET: Any = UnsetType()
+UNSET: UnsetType = UnsetType()

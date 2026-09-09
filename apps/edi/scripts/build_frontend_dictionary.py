@@ -9,7 +9,6 @@ def build_dictionary() -> None:
     output_path = "apps/edi/packages/ui/public/edidescription/x12.json"
 
     if not os.path.exists(xml_path):
-        print(f"Error: Could not find {xml_path}")
         return
 
     # Safe: Build script parsing trusted static local files, no XML attacks possible
@@ -47,10 +46,6 @@ def build_dictionary() -> None:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         json.dump(output, f, indent=2)
-
-    print(
-        f"Successfully wrote {output_path} with {len(segments_dict)} segments and {len(elements_dict)} elements."
-    )
 
 
 if __name__ == "__main__":

@@ -32,9 +32,8 @@ class Grammar:
         For debugging.
         """
         for i in structure:
-            print("Record: ", i.mpath, i)
-            for field in i.fields:
-                print("    Field: ", field)
+            for _field in i.fields:
+                pass
             if i.level:
                 self.display(i.level, level + 1)
 

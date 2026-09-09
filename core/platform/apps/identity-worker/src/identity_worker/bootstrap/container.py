@@ -13,6 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
+from identity_worker.adapters.outbound.database.identity_sync_repository import (
+    PostgresIdentitySyncUnitOfWork,
+)
 from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
     DummyIdentityProviderPort,
 )
@@ -180,7 +183,9 @@ class WorkerContainer:
             idp_users = ZitadelUsersAdapter()
 
         identity_service = IdentitySyncService(
-            identity_provider=idp, user_identity_provider=idp_users, session_factory=session_factory
+            identity_provider=idp,
+            user_identity_provider=idp_users,
+            uow_factory=lambda: PostgresIdentitySyncUnitOfWork(session_factory),
         )
 
         self.events_dispatcher = IdentityEventDispatcher()

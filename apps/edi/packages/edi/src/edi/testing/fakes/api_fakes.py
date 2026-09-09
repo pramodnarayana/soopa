@@ -56,9 +56,7 @@ class FakeInboundRouteRepository:
         self.outbox = outbox
 
     async def get_inbound_routes(self, tenant_id: str) -> list[object]:
-        return [
-            r for r in self.inbound_routes.values() if r.tenant_id == tenant_id
-        ]
+        return [r for r in self.inbound_routes.values() if r.tenant_id == tenant_id]
 
     async def get_inbound_route(self, tenant_id: str, route_id: str) -> object | None:
         route = self.inbound_routes.get(route_id)
@@ -104,9 +102,7 @@ class FakeInboundRouteRepository:
         return False
 
     async def list_inbound_routes(self, tenant_id: str) -> list[object]:
-        return [
-            r for r in self.inbound_routes.values() if r.tenant_id == tenant_id
-        ]
+        return [r for r in self.inbound_routes.values() if r.tenant_id == tenant_id]
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         for r in self.inbound_routes.values():
@@ -129,9 +125,7 @@ class FakeInboundRouteRepository:
             self.outbox.append(
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
-                    tenant_id=str(
-                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
-                    ),
+                    tenant_id=str(event.get_routing_tenant_id() or PLATFORM_TENANT_ID),
                     event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
                     idempotency_key=event.idempotency_key,
@@ -146,9 +140,7 @@ class FakeOutboundRouteRepository:
         self.outbox = outbox
 
     async def get_outbound_routes(self, tenant_id: str) -> list[object]:
-        return [
-            r for r in self.outbound_routes.values() if r.tenant_id == tenant_id
-        ]
+        return [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
 
     async def get_outbound_route(self, tenant_id: str, route_id: str) -> object | None:
         route = self.outbound_routes.get(route_id)
@@ -185,9 +177,7 @@ class FakeOutboundRouteRepository:
         return False
 
     async def list_outbound_routes(self, tenant_id: str) -> list[object]:
-        return [
-            r for r in self.outbound_routes.values() if r.tenant_id == tenant_id
-        ]
+        return [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
 
     async def save(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, OutboundRouteDomainModel):
@@ -204,9 +194,7 @@ class FakeOutboundRouteRepository:
             self.outbox.append(
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
-                    tenant_id=str(
-                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
-                    ),
+                    tenant_id=str(event.get_routing_tenant_id() or PLATFORM_TENANT_ID),
                     event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
                     idempotency_key=event.idempotency_key,
@@ -312,9 +300,7 @@ class FakeAS2PartnerRepository:
             self.outbox.append(
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
-                    tenant_id=str(
-                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
-                    ),
+                    tenant_id=str(event.get_routing_tenant_id() or PLATFORM_TENANT_ID),
                     event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
                     idempotency_key=event.idempotency_key,
@@ -373,16 +359,13 @@ class FakeSFTPPartnerRepository:
         return p if p and p.tenant_id == tenant_id else None
 
     async def list_sftp_partners(self, tenant_id: str) -> Sequence[object]:
-        return [
-            p for p in self.sftp_partners.values() if p.tenant_id == tenant_id
-        ]
+        return [p for p in self.sftp_partners.values() if p.tenant_id == tenant_id]
 
     async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
         return {
             id: self.sftp_partners[id].name
             for id in ids
-            if id in self.sftp_partners
-            and self.sftp_partners[id].tenant_id == str(tenant_id)
+            if id in self.sftp_partners and self.sftp_partners[id].tenant_id == str(tenant_id)
         }
 
     async def save(self, aggregate: AggregateRoot) -> None:
@@ -400,9 +383,7 @@ class FakeSFTPPartnerRepository:
             self.outbox.append(
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
-                    tenant_id=str(
-                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
-                    ),
+                    tenant_id=str(event.get_routing_tenant_id() or PLATFORM_TENANT_ID),
                     event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
                     idempotency_key=event.idempotency_key,
@@ -501,9 +482,7 @@ class FakeAS2PartnershipRepository:
             self.outbox.append(
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
-                    tenant_id=str(
-                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
-                    ),
+                    tenant_id=str(event.get_routing_tenant_id() or PLATFORM_TENANT_ID),
                     event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
                     idempotency_key=event.idempotency_key,
@@ -626,9 +605,7 @@ class FakeOutboundEdiHeaderRepository:
             self.outbox.append(
                 OutboxEvent(
                     id=generate_id(SystemIdPrefix.GENERIC),
-                    tenant_id=str(
-                        event.get_routing_tenant_id() or PLATFORM_TENANT_ID
-                    ),
+                    tenant_id=str(event.get_routing_tenant_id() or PLATFORM_TENANT_ID),
                     event_type=str(event.event_name),
                     payload=serialize_domain_event(event),
                     idempotency_key=event.idempotency_key,

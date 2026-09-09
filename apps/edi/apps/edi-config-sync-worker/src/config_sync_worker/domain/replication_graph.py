@@ -26,13 +26,10 @@ Adding a new entity with FK constraints:
     handle the rest automatically — no other changes required.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
 
-# ModelClass is Any because the actual model types are infrastructure concerns
-# (SQLAlchemy DeclarativeBase subclasses) that must not be imported here.
-# At all call sites in the adapter layer, they are always type[DeclarativeBase].
-ModelClass = Any
+ModelClass = type
 
 
 @dataclass(frozen=True)
@@ -78,7 +75,7 @@ class EntitySpec:
     dependencies: list[EntityDependency] = field(default_factory=list)
 
 
-def topological_layers(graph: dict[str, EntitySpec]) -> list[list[str]]:
+def topological_layers(graph: Mapping[str, EntitySpec]) -> list[list[str]]:
     """
     Compute the topological replication order of entities via Kahn's algorithm.
 
@@ -95,7 +92,7 @@ def topological_layers(graph: dict[str, EntitySpec]) -> list[list[str]]:
         Returns: [["as2_partner", ...], ["as2_partnership", "outbound_route", ...]]
     """
     # Build a reverse lookup: global_model class → entity key
-    model_to_key: dict[Any, str] = {spec.global_model: key for key, spec in graph.items()}
+    model_to_key: dict[type, str] = {spec.global_model: key for key, spec in graph.items()}
 
     # For each entity, compute the set of entity keys it depends on
     deps_by_key: dict[str, set[str]] = {}

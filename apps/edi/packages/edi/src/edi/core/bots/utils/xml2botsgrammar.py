@@ -217,12 +217,11 @@ def grammar2file(botsgrammarfilename, structure, recorddefs, targetNamespace):
 
     with open(botsgrammarfilename, "w", encoding="utf8") as f:
         f.write(result2)
-    print("grammar file is written:", botsgrammarfilename)
 
 
 def start():
     # ********command line arguments**************************
-    usage = """
+    """
     This is "{name}" version {version}, part of Bots open source edi translator (https://bots-edi.org).
     Creates a grammar from an xml file.'
     Usage:
@@ -245,12 +244,10 @@ def start():
         if arg.startswith("-c"):
             configdir = arg[2:]
             if not configdir:
-                print("Error: configuration directory indicated, but no directory name.")
                 sys.exit(1)
         elif arg.startswith("-a"):
             allrecords = True
         elif arg in ["?", "/?", "-h", "--help"] or arg.startswith("-"):
-            print(usage)
             sys.exit(0)
         else:
             if not edifile:
@@ -258,7 +255,6 @@ def start():
             else:
                 botsgrammarfilename = arg
     if not edifile or not botsgrammarfilename:
-        print("Error: both edifile and grammarfile are required.")
         sys.exit(0)
     # ***end handling command line arguments**************************
     # logger is configured at module level

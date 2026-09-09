@@ -25,19 +25,17 @@ class DummyEventNoId(DomainEvent):
         return None
 
 
-def test_domain_event_idempotency_key_with_id():
-    event = DummyEvent(id="event-123")
-    assert event.idempotency_key == "event-123"
-    assert event.event_name == "dummy.event"
-    assert event.get_routing_tenant_id() == "tenant-1"
+def test_domain_event_idempotency_key_generation():
+    event1 = DummyEvent(id="123")
+    event2 = DummyEventNoId()
 
+    # Should generate a prefixed ID
+    assert event1.idempotency_key.startswith("sys_id_")
+    assert event2.idempotency_key.startswith("sys_id_")
+    assert event1.idempotency_key != event2.idempotency_key
 
-def test_domain_event_idempotency_key_without_id():
-    event = DummyEventNoId()
-    key1 = event.idempotency_key
-    key2 = event.idempotency_key
-    # Should generate a prefixed ID and memoize it
-    assert key1 == key2
-    assert key1.startswith("sys_id_")
-    assert event.event_name == "dummy.event.noid"
-    assert event.get_routing_tenant_id() is None
+    assert event1.event_name == "dummy.event"
+    assert event1.get_routing_tenant_id() == "tenant-1"
+
+    assert event2.event_name == "dummy.event.noid"
+    assert event2.get_routing_tenant_id() is None

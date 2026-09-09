@@ -1,3 +1,5 @@
+from collections.abc import Mapping
+
 import structlog
 
 from edi.application.dtos.routes import InboundRouteDTO, OutboundRouteDTO
@@ -16,7 +18,7 @@ class DeliveryRouterUseCase:
     def __init__(
         self,
         uow: DataPlaneUnitOfWorkPort,
-        strategies: dict[str, BaseDeliveryStrategy],
+        strategies: Mapping[str, BaseDeliveryStrategy],
     ) -> None:
         self.uow = uow
         self.strategies = strategies

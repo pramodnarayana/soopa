@@ -5,6 +5,7 @@ Bots node lib
 import decimal
 
 import structlog
+from seedwork.domain.types import JsonDict
 
 from edi.core.bots.domain.exceptions import MappingFormatError, MappingRootError
 
@@ -29,7 +30,10 @@ class Node:
     __slots__ = ("_queries", "children", "is_array", "linpos_info", "record", "structure")
 
     def __init__(
-        self, record: dict | None = None, linpos_info: tuple | None = None, is_array: bool = True
+        self,
+        record: JsonDict | None = None,
+        linpos_info: tuple | None = None,
+        is_array: bool = True,
     ):
         self.record = record
         self.children: list[Node] = []
@@ -48,7 +52,7 @@ class Node:
         """append child to node"""
         self.children.append(childnode)
 
-    def to_dict(self) -> dict[str, object]:
+    def to_dict(self) -> JsonDict:
         """Serialize the Node and its children into a pure Python dictionary."""
         result: dict[str, object] = {}
         seg_id = self.record.get("BOTSID") if self.record else None
@@ -109,7 +113,7 @@ class Node:
 
     @classmethod
     def from_dict(
-        cls, data: dict, fallback_seg_id: str | None = None, is_array: bool = True
+        cls, data: JsonDict, fallback_seg_id: str | None = None, is_array: bool = True
     ) -> "Node":
         """
         Recursively converts a JSON dictionary representation of an EDI AST back into a tree of Bots Node objects.

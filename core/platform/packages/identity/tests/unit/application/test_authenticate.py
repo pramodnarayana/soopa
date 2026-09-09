@@ -39,7 +39,7 @@ async def test_authenticate_bearer_token_valid(fake_verifier: FakeTokenVerifier)
 @pytest.mark.asyncio
 async def test_authenticate_bearer_token_missing_header(fake_verifier: FakeTokenVerifier) -> None:
     command = AuthenticateCommand(authorization_header=None)
-    with pytest.raises(AuthenticationError, match="Missing bearer token."):
+    with pytest.raises(AuthenticationError, match=r"Missing bearer token\."):
         await authenticate_bearer_token(command, fake_verifier)
     assert len(fake_verifier.verified_calls) == 0
 
@@ -47,7 +47,7 @@ async def test_authenticate_bearer_token_missing_header(fake_verifier: FakeToken
 @pytest.mark.asyncio
 async def test_authenticate_bearer_token_empty_token(fake_verifier: FakeTokenVerifier) -> None:
     command = AuthenticateCommand(authorization_header="Bearer ")
-    with pytest.raises(AuthenticationError, match="Empty bearer token."):
+    with pytest.raises(AuthenticationError, match=r"Empty bearer token\."):
         await authenticate_bearer_token(command, fake_verifier)
     assert len(fake_verifier.verified_calls) == 0
 

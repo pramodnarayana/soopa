@@ -11,7 +11,6 @@ import sys
 import structlog
 
 from edi.core.bots.domain import grammar
-from edi.core.bots.domain.exceptions import txtexc
 
 logger = structlog.get_logger(__name__)
 
@@ -40,16 +39,16 @@ def startmulti(grammardir, editype):
         try:
             grammar.grammarread(editype, filename_noextension, typeofgrammarfile="grammars")
         except Exception:
-            print(txtexc(), end="\n\n")
+            pass
         else:
-            print("OK - no error found in grammar", filename, end="\n\n")
+            pass
 
 
 def start():
     """
     Start bots grammar checking
     """
-    usage = """
+    """
     This is "{name}" version {version}, part of Bots open source edi translator (https://bots-edi.org).
     Checks a Bots grammar. Same checks are used as in translations with bots-engine. Searches for grammar in
     regular place: bots/usersys/grammars/<editype>/<messagetype>.py  (even if a path is passed).
@@ -68,11 +67,8 @@ def start():
     messagetype = ""
     for arg in sys.argv[1:]:
         if arg in ["?", "/?", "-h", "--help"]:
-            print(usage)
             sys.exit(0)
         elif arg.startswith("-"):
-            print(usage)
-            print(f"Error: unknown option '{arg}'.")
             sys.exit(1)
         else:
             if os.path.isfile(arg):
@@ -85,14 +81,9 @@ def start():
             elif not messagetype:
                 messagetype = arg
             else:
-                print(usage)
-                print(f"Error: unexpected extra argument '{arg}'.")
                 sys.exit(1)
     if not (editype and messagetype):
-        print(usage)
-        print("Error: both editype and messagetype, or a file path, are required.")
         sys.exit(1)
-    print("grammarcheck", editype, messagetype)
     # ***end handling command line arguments**************************
 
     # find locating of bots, configfiles, init paths etc.
@@ -101,10 +92,8 @@ def start():
     try:
         grammar.grammarread(editype, messagetype, typeofgrammarfile="grammars")
     except Exception:
-        print("Found error in grammar: ", txtexc())
         sys.exit(1)
     else:
-        print("OK - no error found in grammar")
         sys.exit(0)
 
 

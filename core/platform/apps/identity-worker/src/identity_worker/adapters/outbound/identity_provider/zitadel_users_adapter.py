@@ -261,7 +261,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
                 if "Profile not changed" not in err:
                     logger.error("Failed to update user profile: {err}", err=err)
                     raise IdentityProviderPortError(
-                        message=f"Failed to update user profile: {err}", original_error=err
+                        message=f"Failed to update user profile: {err}", original_error=Exception(err)
                     )
         except Exception as e:
             logger.exception(
@@ -317,5 +317,5 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
                 return
 
             raise IdentityProviderPortError(
-                message=f"Failed to {action} user: {response_body}", original_error=response_body
+                message=f"Failed to {action} user: {response_body}", original_error=Exception(response_body)
             )

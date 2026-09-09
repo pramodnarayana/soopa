@@ -175,7 +175,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         tenant_id=tenant_id,
                     )
 
-                    dep_stmt = select(dep.global_model).where(dep.global_model.id == dep_id)
+                    dep_model = cast(type[ReplicatedModel], dep.global_model)
+                    dep_stmt = select(dep_model).where(dep_model.id == dep_id)
                     dep_res = await global_session.execute(dep_stmt)
                     dep_entity = dep_res.scalars().first()
 
@@ -189,7 +190,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                     dep_tenant_id = getattr(dep_entity, "tenant_id", None) or tenant_id
                     await self._upsert_entity(
-                        tenant_session, dep_tenant_id, dep_entity, dep.tenant_model
+                        tenant_session, dep_tenant_id, cast(DeclarativeBase, dep_entity), dep.tenant_model
                     )
                     logger.info(
                         "[REPLICATION] Pre-replicated dependency to shard.",
@@ -228,14 +229,14 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         entity_id: str,
     ) -> DeclarativeBase:
         """Fetches a single entity from the global DB with correct tenant scoping."""
-        stmt = select(spec.global_model).where(spec.global_model.id == entity_id)
+        spec_model = cast(type[ReplicatedModel], spec.global_model)
+        stmt = select(spec_model).where(spec_model.id == entity_id)
         if spec.include_shared:
             stmt = stmt.where(
-                (spec.global_model.tenant_id == tenant_id)
-                | (spec.global_model.tenant_id == SHARED_TENANT_ID)
+                (spec_model.tenant_id == tenant_id) | (spec_model.tenant_id == SHARED_TENANT_ID)
             )
         else:
-            stmt = stmt.where(spec.global_model.tenant_id == tenant_id)
+            stmt = stmt.where(spec_model.tenant_id == tenant_id)
 
         res = await global_session.execute(stmt)
         entity = res.scalars().first()
@@ -428,9 +429,9 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
 def _build_fetch_all_stmt(spec: EntitySpec, tenant_id: str) -> Any:
     """Constructs the SELECT statement for fetching all global entities of a given spec."""
+    spec_model = cast(type[ReplicatedModel], spec.global_model)
     if spec.include_shared:
-        return select(spec.global_model).where(
-            (spec.global_model.tenant_id == tenant_id)
-            | (spec.global_model.tenant_id == SHARED_TENANT_ID)
+        return select(spec_model).where(
+            (spec_model.tenant_id == tenant_id) | (spec_model.tenant_id == SHARED_TENANT_ID)
         )
-    return select(spec.global_model).where(spec.global_model.tenant_id == tenant_id)
+    return select(spec_model).where(spec_model.tenant_id == tenant_id)

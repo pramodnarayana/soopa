@@ -8,7 +8,6 @@ import structlog
 
 from edi.core.bots.config.botsconfig import (
     SFIELD,
-    VALUE,
 )
 from edi.core.bots.domain import grammar, node
 from edi.core.bots.domain.exceptions import (
@@ -80,16 +79,12 @@ class Message:
             counter = 0
             for veld in lex_record:
                 if counter == 0:
-                    print(f"{veld[VALUE]}    (Record-id)")
+                    pass
                 else:
-                    if veld[SFIELD] == 0:
-                        print(f"    {veld[VALUE]}    (field)")
-                    elif veld[SFIELD] == 1:
-                        print(f"        {veld[VALUE]}    (sub)")
-                    elif veld[SFIELD] == 2:
-                        print(f"        {veld[VALUE]}    (rep)")
+                    if veld[SFIELD] == 0 or veld[SFIELD] == 1 or veld[SFIELD] == 2:
+                        pass
                     else:
-                        print(f"    {veld[VALUE]}    (???)")
+                        pass
                 counter += 1
 
     @staticmethod

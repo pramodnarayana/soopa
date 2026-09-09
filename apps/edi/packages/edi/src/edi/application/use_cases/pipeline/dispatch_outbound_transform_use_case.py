@@ -87,9 +87,7 @@ class DispatchOutboundTransformUseCase:
             },
         )
 
-    def _determine_connection_type(
-        self, route_config: JsonDict, outbound_route: JsonDict
-    ) -> str:
+    def _determine_connection_type(self, route_config: JsonDict, outbound_route: JsonDict) -> str:
         connection_type = route_config.get("connection_type", "UNKNOWN")
         if connection_type == "UNKNOWN" and outbound_route:
             if outbound_route.get("as2_partner_id"):

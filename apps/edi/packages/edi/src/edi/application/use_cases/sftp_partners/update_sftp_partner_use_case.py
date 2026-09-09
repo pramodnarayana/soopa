@@ -37,9 +37,7 @@ class UpdateSFTPPartnerUseCase:
             raise ValueError(f"SFTP partner {partner_id} not found")
 
         has_password = (
-            bool(cmd.password)
-            if cmd.password is not UNSET
-            else bool(existing.password_encrypted)
+            bool(cmd.password) if cmd.password is not UNSET else bool(existing.password_encrypted)
         )
         has_vault = (
             bool(cmd.credentials_vault_ref)

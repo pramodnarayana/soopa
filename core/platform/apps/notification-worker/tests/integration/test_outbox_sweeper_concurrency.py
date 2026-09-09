@@ -28,7 +28,7 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
             idempotency_key="idemp-c1",
             payload={"test": "data"},
             status=OutboxStatus.PROCESSING,
-            owner_token="crashed_worker",  # noqa: S106
+            owner_token="crashed_worker",
             updated_at=datetime.now(UTC) - timedelta(minutes=10),  # Expired lease
             lease_expires_at=datetime.now(UTC) - timedelta(minutes=5),
         )
@@ -62,7 +62,7 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
                 .where(NotificationOutbox.id == "msg-stuck-1")
                 .values(
                     status=OutboxStatus.COMPLETED,
-                    owner_token="worker_2",  # noqa: S106
+                    owner_token="worker_2",
                     updated_at=datetime.now(UTC),
                 )
             )
@@ -96,4 +96,4 @@ async def test_outbox_sweeper_concurrency(db_session_factory):
 
         assert final_row is not None
         assert final_row.status == OutboxStatus.COMPLETED
-        assert final_row.owner_token == "worker_2"  # noqa: S105
+        assert final_row.owner_token == "worker_2"

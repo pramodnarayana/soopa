@@ -62,7 +62,7 @@ async def _setup_data(db_session):
 @pytest.mark.asyncio
 async def test_postgres_role_repository_crud_operations(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, test_user_id, platform_tenant_id = await _setup_data(db_session)
+        _test_tenant_id, _test_user_id, platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         # test save (new role)
@@ -111,7 +111,7 @@ async def test_postgres_role_repository_crud_operations(db_session_factory):
 @pytest.mark.asyncio
 async def test_postgres_role_repository_assignments(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
+        test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         role_id = generate_id("role")
@@ -142,7 +142,7 @@ async def test_postgres_role_repository_assignments(db_session_factory):
 @pytest.mark.asyncio
 async def test_duplicate_assignment_raises_idempotency_error(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
+        test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         role_id = generate_id("role")
@@ -166,7 +166,7 @@ async def test_duplicate_assignment_raises_idempotency_error(db_session_factory)
 @pytest.mark.asyncio
 async def test_assign_user_role_missing_role_error(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
+        test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         with pytest.raises(ResourceNotFoundError, match="not found or is inactive"):
@@ -176,7 +176,7 @@ async def test_assign_user_role_missing_role_error(db_session_factory):
 @pytest.mark.asyncio
 async def test_assign_user_role_cross_tenant_error(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
+        test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         other_tenant_id = generate_id("ten")
@@ -211,7 +211,7 @@ async def test_assign_user_role_cross_tenant_error(db_session_factory):
 @pytest.mark.asyncio
 async def test_assign_user_role_global_role_as_platform(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
+        _test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         role_global = DomainRole(
@@ -231,7 +231,7 @@ async def test_assign_user_role_global_role_as_platform(db_session_factory):
 @pytest.mark.asyncio
 async def test_value_errors(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
-        test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
+        _test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
         repo = PostgresRoleRepository(db_session)
 
         with pytest.raises(ValueError):

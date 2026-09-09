@@ -37,7 +37,7 @@ async def test_worker_container_requires_database_url(monkeypatch):
 
     bad_settings = Settings(
         database_url="",
-        zitadel_default_user_password="not-for-production",  # noqa: S106 - test credential
+        zitadel_default_user_password="not-for-production",
     )
     with pytest.raises(ValueError, match="database_url"):
         WorkerContainer(settings=bad_settings)

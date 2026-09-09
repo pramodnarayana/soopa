@@ -61,6 +61,7 @@ The following paradigms define the entire system structure. Any new design or mo
     - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.
     - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.
     - **Strict File Taxonomy Consistency**: Different Bounded Contexts must not drift in their internal folder/file naming taxonomies for identical architectural concepts. If one context uses `database/models/events.py`, another context must use `database/models/events.py` for its events, rather than arbitrary structures. Call out any file path taxonomy drift across domains as a CRITICAL violation.
+- **Strict Database Adapter Naming Consistency**: When creating or modifying infrastructure adapters, strictly adhere to the established naming taxonomy of the local bounded context. Do not mix `Postgres*` and `SqlAlchemy*` prefixes within the same module. If a module heavily uses `Postgres*` (like `identity`), newly created adapters MUST use `Postgres*`. If it heavily uses `SqlAlchemy*` (like `edi`), they MUST use `SqlAlchemy*`.
 
 # Centralized Infrastructure Packages (No Duplicate Infrastructure)
 - NEVER duplicate generic infrastructure patterns (such as Outbox engines, SQS Polling loops, or SNS Publishers) across multiple bounded contexts.

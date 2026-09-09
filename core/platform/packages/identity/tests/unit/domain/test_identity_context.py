@@ -47,12 +47,14 @@ def test_token_claims_defaults() -> None:
     assert claims.iat is None
 
 
+from collections.abc import MutableMapping
+
 def test_tenant_mapping_uses_string_mapping_annotation() -> None:
     context_hints = get_type_hints(IdentityContext)
     factory_hints = get_type_hints(identity_context_from_claims)
 
-    assert context_hints["tenant_mapping"] == Mapping[str, str]
-    assert factory_hints["tenant_mapping"] == Mapping[str, str] | None
+    assert context_hints["tenant_mapping"] == MutableMapping[str, str]
+    assert factory_hints["tenant_mapping"] == MutableMapping[str, str] | None
 
 
 def test_is_platform_admin_with_valid_role() -> None:

@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 
@@ -40,7 +41,7 @@ class StructureNode:
     level: list["StructureNode"] | None = None
     mpath: list[str] = field(default_factory=list)
     fields: list[FieldDefinition] = field(default_factory=list)
-    queries: dict[str, object] | None = None
+    queries: Mapping[str, object] | None = None
     subtranslation: list[object] | None = None
     botsidnr: str | None = None
     fixed_record_length: int | None = None
@@ -66,7 +67,7 @@ def create_field_definition(field_list: list) -> FieldDefinition:
     )
 
 
-def create_structure_node(node_dict: dict) -> StructureNode:
+def create_structure_node(node_dict: Mapping[int, object]) -> StructureNode:
     return StructureNode(
         id=node_dict.get(0, ""),
         min_occ=node_dict.get(1, 0),

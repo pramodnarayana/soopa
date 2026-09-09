@@ -23,13 +23,12 @@ def safe_unicode(value: object) -> str:
                 except Exception:
                     pass
             # should never get here?
-            print("safe_unicode33")
+
             # decode as if it is utf-8, ignore errors.
             return value.decode("utf_8", "ignore")
         # print("safe_unicode11",type(value))
         return str(value)
-    except Exception as exc:
-        print("safe_unicode22", exc)
+    except Exception:
         try:
             return str(repr(value))
         except Exception:
@@ -80,7 +79,6 @@ class BotsError(Exception):
             # this is already unicode
             return self.exc % (self.xxx)
         except Exception:
-            print("XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX11")
             # errors in self.exc; non supported format codes. Don't think this happen...
             return self.exc
 

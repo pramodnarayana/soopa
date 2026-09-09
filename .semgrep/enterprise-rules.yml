@@ -94,3 +94,46 @@ rules:
         - "**/tests/**/*.py"
         - "**/*_test.py"
         - "**/test_*.py"
+  - id: hexagonal-boundary-enforcement
+    patterns:
+      - pattern-either:
+          - pattern: import sqlalchemy
+          - pattern: import fastapi
+          - pattern: import boto3
+          - pattern: from sqlalchemy import $ANY
+          - pattern: from fastapi import $ANY
+          - pattern: from boto3 import $ANY
+    message: "Enterprise Rule: Hexagonal Boundary Enforcement. Do not import infrastructure/framework packages inside pure domain or application logic."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/*.py"
+        - "**/application/**/*.py"
+
+  - id: ban-fstrings-in-structlog
+    patterns:
+      - pattern-either:
+          - pattern: logger.info(f"...")
+          - pattern: logger.error(f"...")
+          - pattern: logger.warning(f"...")
+          - pattern: logger.debug(f"...")
+          - pattern: logger.exception(f"...")
+    message: "Enterprise Rule: Context Injection. Do not use f-strings inside logger calls. Use structured JSON kwargs instead (e.g., logger.info('event', user_id=id))."
+    languages: [python]
+    severity: ERROR
+
+  - id: strict-api-worker-decoupling
+    patterns:
+      - pattern-either:
+          - pattern: SqsConsumerManager(...)
+          - pattern: AwsSqsConsumer(...)
+    message: "Enterprise Rule: Strict API/Worker Decoupling. Do not run background pollers inside the web API container."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/routers/**/*.py"
+        - "**/src/edi/main.py"
+        - "**/src/unified_api/main.py"
+        - "**/src/ucp/main.py"

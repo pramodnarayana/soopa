@@ -263,7 +263,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 webhook_id=None,
                 as2_partner_id=record.as2_partner_id,
                 sftp_partner_id=record.sftp_partner_id,
-                processing_mode=None, # Outbound routes do not have a processing mode
+                processing_mode=None,  # Outbound routes do not have a processing mode
             )
 
     async def get_webhook(self, partner_id: str) -> WebhookDTO | None:

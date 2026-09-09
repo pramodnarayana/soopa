@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .adapters.outbound.repository import (
     AS2TenantRepositoryAdapter,
     EdiMessageRepositoryAdapter,
+    EdiMessageRepositoryFactory,
     TradingPartnerRepositoryAdapter,
 )
 from .adapters.outbound.vault import EnvironmentVaultService
@@ -44,6 +45,7 @@ def get_receive_as2_use_case(
     return ReceiveAS2UseCase(
         tenant_repo=AS2TenantRepositoryAdapter(global_session),
         partner_repo=TradingPartnerRepositoryAdapter(global_session),
+        message_repo_factory=EdiMessageRepositoryFactory(),
         message_repo=EdiMessageRepositoryAdapter(session),
         storage=s3_storage,
         vault=vault,

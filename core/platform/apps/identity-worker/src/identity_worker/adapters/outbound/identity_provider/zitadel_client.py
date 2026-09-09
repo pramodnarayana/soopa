@@ -71,6 +71,6 @@ class ZitadelClient:
         )
         raise IdentityProviderPortError(
             message=f"Failed to {action_context}",
-            original_error=error_text,
+            original_error=Exception(error_text),
             status_code=response.status_code,
         )

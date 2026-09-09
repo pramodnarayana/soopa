@@ -15,6 +15,7 @@ import email
 import hashlib
 import uuid
 from collections.abc import Callable, Mapping
+from email.message import Message
 
 from seedwork import generate_random_hex
 
@@ -75,7 +76,7 @@ def parse_as2_request(headers: Mapping[str, str], raw_body: bytes) -> AS2Message
     )
 
 
-def parse_mdn(headers: dict[str, str], raw_body: bytes) -> AS2MDN:
+def parse_mdn(headers: Mapping[str, str], raw_body: bytes) -> AS2MDN:
     """
     Parses a raw MDN HTTP response (headers and body) into an AS2MDN value object.
     """
@@ -92,7 +93,7 @@ def parse_mdn(headers: dict[str, str], raw_body: bytes) -> AS2MDN:
             payload = part.get_payload()
             if isinstance(payload, list) and payload:
                 disp_msg = payload[0]
-                if isinstance(disp_msg, email.message.Message):
+                if isinstance(disp_msg, Message):
                     disposition = str(disp_msg.get("Disposition", ""))
                     received_mic = str(disp_msg.get("Received-content-MIC", ""))
                     original_message_id = str(disp_msg.get("Original-Message-ID", "")).strip(" <>")
@@ -101,7 +102,7 @@ def parse_mdn(headers: dict[str, str], raw_body: bytes) -> AS2MDN:
     return AS2MDN(
         original_message_id=original_message_id,
         disposition=disposition,
-        headers=headers,
+        headers=dict(headers),
         mic=received_mic,
         is_signed=False,
     )

@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 
 from seedwork.domain.types import JsonDict
@@ -33,7 +33,7 @@ class IdentityContext:
     tenant_id: str | None = None
     organization_id: str | None = None
     authorized_tenants: set[str] = field(default_factory=set)
-    tenant_mapping: Mapping[str, str] = field(default_factory=dict)
+    tenant_mapping: MutableMapping[str, str] = field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
     tenant_roles: Mapping[str, list[str]] = field(default_factory=dict)
@@ -58,7 +58,7 @@ class IdentityContext:
 
 
 def identity_context_from_claims(
-    claims: TokenClaims, tenant_mapping: Mapping[str, str] | None = None
+    claims: TokenClaims, tenant_mapping: MutableMapping[str, str] | None = None
 ) -> IdentityContext:
     """
     Constructs an IdentityContext from validated token claims.
@@ -73,7 +73,7 @@ def identity_context_from_claims(
         tenant_id=claims.tenant_id,
         organization_id=claims.organization_id,
         authorized_tenants=claims.authorized_tenants,
-        tenant_mapping=tenant_mapping or {},
+        tenant_mapping=dict(tenant_mapping) if tenant_mapping else {},
         roles=tuple(claims.roles),
         permissions=tuple(claims.permissions),
         tenant_roles=claims.tenant_roles,

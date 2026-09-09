@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         max_overflow=settings.database.max_overflow,
     )
     app.state.db_router = db_router
-    print("LIFESPAN: DB Router initialized")
+    logger.info("as2_server_db_router_initialized")
 
     logger.info("as2_server_started", env=settings.env)
     yield
