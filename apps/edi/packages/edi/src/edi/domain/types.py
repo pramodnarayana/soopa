@@ -12,8 +12,8 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 from typing import TypeAlias
 
-from seedwork.domain.types import JsonValue
-
+JsonPrimitive: TypeAlias = str | int | float | bool | None
+JsonValue: TypeAlias = JsonPrimitive | dict[str, "JsonValue"] | list["JsonValue"]
 JsonDict: TypeAlias = dict[str, JsonValue]
 
 # EDI AST nodes are deeply recursive dicts. We alias it to JsonDict

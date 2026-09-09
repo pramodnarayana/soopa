@@ -3,8 +3,9 @@ from datetime import datetime
 from enum import StrEnum
 
 from seedwork.constants import SystemIdPrefix
-from seedwork.domain.types import JsonValue
 from seedwork.utils import generate_id
+
+from edi.domain.types import JsonValue
 
 
 class JobStatus(StrEnum):
