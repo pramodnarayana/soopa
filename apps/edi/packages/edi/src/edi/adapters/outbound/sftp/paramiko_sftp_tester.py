@@ -1,5 +1,7 @@
 import asyncio
 import io
+import ipaddress
+import socket
 import typing
 
 import paramiko
@@ -8,6 +10,46 @@ import structlog
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 
 logger = structlog.get_logger(__name__)
+
+
+def _resolve_and_validate_host(host: str, port: int) -> str:
+    """
+    Resolve the host using getaddrinfo (covers both IPv4 and IPv6) and validate
+    that every returned address is globally routable.
+
+    Returns the string representation of the first validated IP address so that
+    Paramiko connects directly to it — preventing DNS rebinding between the
+    validation step and the actual socket open.
+
+    Raises ValueError if any resolved address is non-global or if resolution fails.
+    """
+    try:
+        addr_infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError(f"Failed to resolve host '{host}': {exc}") from exc
+
+    if not addr_infos:
+        raise ValueError(f"No addresses resolved for host '{host}'")
+
+    validated_ip: str | None = None
+    for _family, _type, _proto, _canonname, sockaddr in addr_infos:
+        # sockaddr is (ip, port) for IPv4 or (ip, port, flow, scope) for IPv6
+        ip_str = str(sockaddr[0])
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError as exc:
+            raise ValueError(f"Unparsable IP address '{ip_str}' for host '{host}'") from exc
+
+        if not ip.is_global:
+            raise ValueError(
+                f"SSRF blocked: host '{host}' resolved to non-global address '{ip_str}'"
+            )
+
+        if validated_ip is None:
+            validated_ip = ip_str
+
+    assert validated_ip is not None  # guaranteed by the `if not addr_infos` guard above
+    return validated_ip
 
 
 class ParamikoConnectKwargs(typing.TypedDict, total=False):
@@ -62,11 +104,16 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
         client = None
         sftp = None
         try:
+            # Resolve and validate immediately before opening the socket.
+            # Connecting via the returned IP (not the original hostname) prevents
+            # DNS rebinding between this check and the actual TCP handshake.
+            validated_ip = _resolve_and_validate_host(host, port)
+
             client = paramiko.SSHClient()
             client.set_missing_host_key_policy(DiagnosticHostKeyPolicy())
 
             connect_kwargs: ParamikoConnectKwargs = {
-                "hostname": host,
+                "hostname": validated_ip,
                 "port": port,
                 "username": username,
                 "look_for_keys": False,
@@ -92,6 +139,10 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
             sftp = client.open_sftp()
 
             return True, None
+        except ValueError as e:
+            # SSRF validation failure — surface as a clear failure reason
+            logger.warning("sftp_ssrf_blocked", host=host, port=port, reason=str(e))
+            return False, str(e)
         except (
             paramiko.AuthenticationException,
             paramiko.SSHException,
