@@ -85,7 +85,6 @@ class PlatformIdentitySettings(BaseSettings):
     )
     default_user_password: str = Field(
         validation_alias="ZITADEL_DEFAULT_USER_PASSWORD",
-        default="Password1!",
         description="Default password for seeded/synced users.",
     )
     tenant_role_group: str = Field(validation_alias="ZITADEL_TENANT_ROLE_GROUP", default="Tenant")

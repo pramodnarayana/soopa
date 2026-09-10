@@ -22,26 +22,28 @@ async def main() -> None:
 
     container = WorkerContainer()
     container.config.from_pydantic(settings)
-    await cast(Awaitable[None], container.init_resources())
-
-    email_worker = container.email_worker()
-    if inspect.isawaitable(email_worker):
-        email_worker = await email_worker
-
-    email_worker.start()
-    logger.info("notification_email_worker_started")
-
-    stop_event = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        with contextlib.suppress(NotImplementedError, RuntimeError):
-            loop.add_signal_handler(sig, stop_event.set)
 
     try:
+        await cast(Awaitable[None], container.init_resources())
+
+        email_worker = container.email_worker()
+        if inspect.isawaitable(email_worker):
+            email_worker = await email_worker
+
+        email_worker.start()
+        logger.info("notification_email_worker_started")
+
+        stop_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            with contextlib.suppress(NotImplementedError, RuntimeError):
+                loop.add_signal_handler(sig, stop_event.set)
+
         await stop_event.wait()
     finally:
         logger.info("notification_email_worker_shutting_down")
-        await email_worker.stop()
+        with contextlib.suppress(Exception):
+            await email_worker.stop()
         await cast(Awaitable[None], container.shutdown_resources())
 
 

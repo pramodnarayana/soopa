@@ -140,10 +140,12 @@ async def main() -> None:
 
     try:
         engine = get_async_engine(database_url)
-        async with engine.begin() as conn:
-            await conn.execute(text("TRUNCATE identity.tenants CASCADE"))
-            logger.info("Truncated identity.tenants table.")
-        await engine.dispose()
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("TRUNCATE identity.tenants CASCADE"))
+                logger.info("Truncated identity.tenants table.")
+        finally:
+            await engine.dispose()
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Could not truncate identity.tenants: %s (safe to ignore if DB is already down).",

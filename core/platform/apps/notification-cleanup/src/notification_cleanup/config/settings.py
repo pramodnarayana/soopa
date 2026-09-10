@@ -1,4 +1,3 @@
-import typing
 from functools import lru_cache
 
 from pydantic import Field, computed_field
@@ -11,49 +10,47 @@ from seedwork.infrastructure.config_models import (
 
 
 class NotificationCleanupAwsSettings(PlatformAwsSettings):
-    sns_topic_arn: str = Field(validation_alias="SNS_TOPIC_ARN", default="")
+    sns_topic_arn: str = Field(validation_alias="SNS_TOPIC_ARN")
 
 
 class SqsSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
-    notification_jobs_queue_url: str = Field(
-        validation_alias="SQS_NOTIFICATION_JOBS_QUEUE_URL", default=""
-    )
+    notification_jobs_queue_url: str = Field(validation_alias="SQS_NOTIFICATION_JOBS_QUEUE_URL")
 
 
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
+        default_factory=lambda: PlatformDatabaseSettings.model_validate({})
     )
     aws: NotificationCleanupAwsSettings = Field(
-        default_factory=lambda: typing.cast(NotificationCleanupAwsSettings, {})
+        default_factory=lambda: NotificationCleanupAwsSettings.model_validate({})
     )
-    sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
+    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings.model_validate({}))
 
-    @computed_field
     @property
+    @computed_field
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field
     @property
+    @computed_field
     def sns_topic_arn(self) -> str:
         return self.aws.sns_topic_arn
 
-    @computed_field
     @property
+    @computed_field
     def sqs_notification_jobs_queue_url(self) -> str:
         return self.sqs.notification_jobs_queue_url
 
-    @computed_field
     @property
+    @computed_field
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field
     @property
+    @computed_field
     def aws_region(self) -> str:
         return self.aws.resolved_region
 

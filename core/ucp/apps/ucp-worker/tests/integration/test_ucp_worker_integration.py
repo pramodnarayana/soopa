@@ -76,11 +76,13 @@ async def test_ucp_worker_handles_tenant_deleted_event(
 
     # 2. Setup Worker Container
     settings = get_settings()
-    settings.database_url = str(db_connection.engine.url)
+    # Override the underlying nested model fields directly — the @property accessors
+    # are read-only computed views; we must mutate the source nested models instead.
+    settings.database.global_url = str(db_connection.engine.url)
+    settings.sqs.ucp_identity_sync_queue_url = "http://dummy"
+    settings.sqs.ucp_jobs_queue_url = "http://dummy"
     container = WorkerContainer(settings)
     container.session_factory = db_session_factory
-    container.settings.sqs_ucp_identity_sync_queue_url = "http://dummy"
-    container.settings.sqs_ucp_jobs_queue_url = "http://dummy"
     container.wire()
 
     # 3. Construct Payload

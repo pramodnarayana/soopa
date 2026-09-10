@@ -1,10 +1,18 @@
 rules:
   - id: ban-raw-postgres-url
     patterns:
-      - pattern: "\"postgresql://\""
+      - pattern-regex: "postgresql://[^\"']*"
     message: |
       Enterprise Rule: Do not hardcode raw postgresql URLs or use them in string manipulations.
       Use properly typed configuration (e.g. Settings.async_database_url) instead.
     severity: ERROR
     languages:
       - python
+    metadata:
+      test-cases:
+        positive:
+          - "conn = create_engine('postgresql://user:pass@localhost/db')"
+          - "url = 'postgresql://localhost:5432/mydb'"
+        negative:
+          - "url = settings.database_url"
+          - "conn_str = 'redis://localhost:6379'"

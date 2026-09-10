@@ -36,53 +36,53 @@ class AppSettings(BaseSettings):
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
 
-    @computed_field
     @property
+    @computed_field
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field
     @property
+    @computed_field
     def sns_identity_events_topic_arn(self) -> str:
         return self.aws.sns_identity_events_topic_arn
 
-    @computed_field
     @property
+    @computed_field
     def sqs_identity_sync_queue_url(self) -> str:
         return self.sqs.identity_sync_queue_url
 
-    @computed_field
     @property
+    @computed_field
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field
     @property
+    @computed_field
     def aws_region(self) -> str:
         return self.aws.resolved_region
 
-    @computed_field
     @property
+    @computed_field
     def zitadel_api_url(self) -> str:
         return self.identity.api_url
 
-    @computed_field
     @property
+    @computed_field
     def zitadel_machine_key(self) -> str:
         return self.identity.machine_key
 
-    @computed_field
     @property
+    @computed_field
     def zitadel_ucp_project_id(self) -> str:
         return self.identity.ucp_project_id
 
-    @computed_field
     @property
+    @computed_field
     def zitadel_default_user_password(self) -> str:
         return self.identity.default_user_password
 
-    @computed_field
     @property
+    @computed_field
     def zitadel_tenant_role_group(self) -> str:
         return self.identity.tenant_role_group
 

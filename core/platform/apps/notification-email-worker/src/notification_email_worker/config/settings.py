@@ -24,23 +24,23 @@ class AppSettings(BaseSettings):
     aws: PlatformAwsSettings = Field(default_factory=lambda: typing.cast(PlatformAwsSettings, {}))
     sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
 
-    @computed_field
     @property
+    @computed_field
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field
     @property
+    @computed_field
     def sqs_email_channel_queue_url(self) -> str:
         return self.sqs.email_channel_queue_url
 
-    @computed_field
     @property
+    @computed_field
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field
     @property
+    @computed_field
     def aws_region(self) -> str:
         return self.aws.resolved_region
 

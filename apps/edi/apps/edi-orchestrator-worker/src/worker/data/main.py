@@ -100,27 +100,27 @@ def _setup_registry(
         )
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT,
-        direction=EdiDirection.INBOUND,
+        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        direction=EdiDirection.INBOUND.value,
         factory=run_inbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT,
-        direction=EdiDirection.OUTBOUND,
+        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        direction=EdiDirection.OUTBOUND.value,
         factory=run_outbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_COMPLETED,
+        event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
         direction=None,
         factory=run_transform_lifecycle,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVER_EVENT,
+        event_type=PipelineEventType.DELIVER_EVENT.value,
         direction=None,
         factory=run_deliver,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVERY_COMPLETED,
+        event_type=PipelineEventType.DELIVERY_COMPLETED.value,
         direction=None,
         factory=run_delivery_lifecycle,
     )
@@ -243,18 +243,34 @@ if __name__ == "__main__":
     except Exception as e:
         # Check if it's a Pydantic ValidationError without adding a hard dependency at the top
         if e.__class__.__name__ == "ValidationError":
-            missing_fields = []
-            for err in getattr(e, "errors", list)():
-                loc = ".".join(str(loc_item) for loc_item in err.get("loc", []))
-                msg = err.get("msg", "")
-                missing_fields.append(f"{loc} ({msg})")
+            from pydantic import ValidationError
 
-            logger.exception(
-                "worker_startup_configuration_error",
-                reason="One or more required environment variables are missing from your .env file.",
-                missing_fields=missing_fields,
-                remedy="Please check .env.example and ensure all required variables are set.",
-            )
+            all_errors = e.errors() if isinstance(e, ValidationError) else []
+
+            missing_fields = [
+                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
+                for err in all_errors
+                if err.get("type") in ("missing", "value_error.missing")
+            ]
+            invalid_fields = [
+                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
+                for err in all_errors
+                if err.get("type") not in ("missing", "value_error.missing")
+            ]
+
+            if missing_fields:
+                logger.exception(
+                    "worker_startup_configuration_error",
+                    reason="One or more required environment variables are missing from your .env file.",
+                    missing_fields=missing_fields,
+                    remedy="Please check .env.example and ensure all required variables are set.",
+                )
+            if invalid_fields:
+                logger.exception(
+                    "worker_startup_configuration_error",
+                    reason="One or more environment variables have invalid configured values.",
+                    invalid_fields=invalid_fields,
+                )
         else:
             logger.exception("worker_startup_failed", reason="Startup initialization error")
         raise

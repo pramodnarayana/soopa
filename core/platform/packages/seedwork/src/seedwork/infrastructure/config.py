@@ -19,8 +19,17 @@ def _inject_env_file_to_environ() -> None:
     This guarantees that underlying C libraries (like aioboto3) have access
     to the exact same environment variables as Pydantic, providing true parity
     between local development and production Docker containers.
+
+    In production Docker images there is no .git directory; the function
+    silently skips injection and relies entirely on os.environ in that case.
     """
-    repo_root = find_repo_root(Path(__file__).resolve())
+    try:
+        repo_root = find_repo_root(Path(__file__).resolve())
+    except RuntimeError:
+        # No .git directory found — we are running inside a Docker container.
+        # Settings will be loaded from os.environ injected by the orchestrator.
+        return
+
     env_path = repo_root / ".env"
 
     if not env_path.is_file():
