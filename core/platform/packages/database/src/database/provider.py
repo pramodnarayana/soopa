@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from database.utils import normalize_to_asyncpg
+
 logger = structlog.get_logger(__name__)
 
 
@@ -31,8 +33,7 @@ def get_async_engine(
     Creates and configures an AsyncEngine.
     Auto-converts standard postgresql URLs to asyncpg.
     """
-    if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    url = normalize_to_asyncpg(url)
 
     kwargs: dict[str, Any] = {
         "echo": echo,

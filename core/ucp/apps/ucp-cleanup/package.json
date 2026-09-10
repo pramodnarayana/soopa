@@ -1,13 +1,9 @@
 {
   "name": "@soopa/ucp-cleanup",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "lint": "uv run ruff check .",
-    "format": "uv run ruff format . && uv run ruff check --fix .",
-    "typecheck": "uv run mypy src/ucp_cleanup",
-    "test": "echo 'No tests implemented yet'",
-    "test:integration": "uv run pytest tests/integration",
-    "deadcode:deptry": "uv run deptry .",
-    "cov": "uv run pytest --cov=ucp_cleanup --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+    "start": "uv run python -m ucp_cleanup.main",
+    "dev": "PYTHONPATH=src uv run python -m ucp_cleanup.main"
   }
 }

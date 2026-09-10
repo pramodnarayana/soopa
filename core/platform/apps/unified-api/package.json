@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "dev": "uv run uvicorn unified_api.main:app --port 3000 --reload",
     "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "test:integration": "uv run pytest tests/integration",

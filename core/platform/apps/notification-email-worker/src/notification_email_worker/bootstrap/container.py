@@ -30,7 +30,7 @@ class WorkerContainer(containers.DeclarativeContainer):
 
     email_delivery_consumer = providers.Singleton(
         AwsSqsConsumer,
-        queue_url=config.email_delivery_queue_url,
+        queue_url=config.sqs_email_channel_queue_url,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
     )

@@ -96,6 +96,7 @@ dev = [
     "deptry>=0.25.1",
     "pip-audit>=2.10.1",
     "types-paramiko>=3.3.0",
+    "semgrep>=1.0.0",
 ]
 
 [tool.mypy]
@@ -194,7 +195,7 @@ ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF01
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.params.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**/*.py" = ["T20", "S105", "S106", "S101"]
+"**/tests/**/*.py" = ["S105", "S106", "S101"]
 # FastAPI dependencies use default arguments
 "apps/edi/packages/edi/src/api/main.py" = ["B008", "E402"]
 "apps/edi/packages/edi/src/api/cdc_relay.py" = ["B008", "C901"]

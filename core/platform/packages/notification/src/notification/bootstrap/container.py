@@ -10,6 +10,7 @@ from collections.abc import AsyncGenerator
 
 import structlog
 from database.provider import get_async_engine
+from database.utils import normalize_to_asyncpg
 from dependency_injector import containers, providers
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -43,8 +44,7 @@ logger = structlog.get_logger(__name__)
 
 async def _init_async_engine(database_url: str) -> AsyncGenerator[AsyncEngine]:
     """Resource lifecycle hook: creates and disposes the SQLAlchemy async engine."""
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    database_url = normalize_to_asyncpg(database_url)
     engine = get_async_engine(database_url)
     try:
         yield engine

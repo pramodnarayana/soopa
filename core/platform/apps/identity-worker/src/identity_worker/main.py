@@ -6,13 +6,15 @@ import sys
 import structlog
 from observability import ObservabilityProvider
 
-from identity_worker.bootstrap.config import Settings
 from identity_worker.bootstrap.container import WorkerContainer
+from identity_worker.config.settings import AppSettings
 
 logger = structlog.get_logger(__name__)
 
 
-async def main(stop_event: asyncio.Event | None = None, settings: Settings | None = None) -> None:
+async def main(
+    stop_event: asyncio.Event | None = None, settings: AppSettings | None = None
+) -> None:
     ObservabilityProvider.auto_configure_from_env("identity-worker")
 
     logger.info("identity_worker_starting")
@@ -40,6 +42,7 @@ async def main(stop_event: asyncio.Event | None = None, settings: Settings | Non
             await container.events_consumer.stop()
 
         await container.dispose()
+        logger.info("identity_worker_shutdown_complete")
 
 
 if __name__ == "__main__":

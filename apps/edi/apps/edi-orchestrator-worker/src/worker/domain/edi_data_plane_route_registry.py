@@ -1,22 +1,28 @@
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
 
+from edi.domain.enums import EdiDirection, PipelineEventType
 from seedwork.domain.types import JsonDict
 
 
 class RoutableEvent(Protocol):
     """Structural protocol satisfied by EventEnvelope and EdiDataPlaneEventMessage."""
 
-    event_type: str
+    event_type: PipelineEventType | str
     payload: JsonDict
 
 
 class EdiDataPlaneRouteRegistry:
     def __init__(self) -> None:
-        self._registry: dict[tuple[str, str | None], Callable[..., Awaitable[Any]]] = {}
+        self._registry: dict[
+            tuple[PipelineEventType | str, EdiDirection | str | None], Callable[..., Awaitable[Any]]
+        ] = {}
 
     def register(
-        self, event_type: str, direction: str | None, factory: Callable[..., Awaitable[Any]]
+        self,
+        event_type: PipelineEventType,
+        direction: EdiDirection | None,
+        factory: Callable[..., Awaitable[Any]],
     ) -> None:
         """
         Registers a factory function to be called when an event matching the

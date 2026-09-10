@@ -42,27 +42,23 @@ async def test_machine_key_is_exchanged_and_access_token_is_cached(httpserver: H
     token_requests = 0
 
     def token_endpoint(request) -> Response:
-        try:
-            nonlocal token_requests
-            token_requests += 1
-            assertion = request.form["assertion"]
-            unverified_header = jwt.get_unverified_header(assertion)
-            unverified_claims = jwt.decode(assertion, options={"verify_signature": False})
+        nonlocal token_requests
+        token_requests += 1
+        assertion = request.form["assertion"]
+        unverified_header = jwt.get_unverified_header(assertion)
+        unverified_claims = jwt.decode(assertion, options={"verify_signature": False})
 
-            assert request.form.get("grant_type") == "urn:ietf:params:oauth:grant-type:jwt-bearer"
-            assert request.form.get("scope") == "openid urn:zitadel:iam:org:project:id:zitadel:aud"
-            assert unverified_header["kid"] == "key-1"
-            assert unverified_claims["iss"] == "user-1"
-            assert unverified_claims["sub"] == "user-1"
-            assert unverified_claims["aud"] == httpserver.url_for("/").rstrip("/")
-            return Response(
-                json.dumps({"access_token": "access-token", "expires_in": 300}),
-                status=200,
-                content_type="application/json",
-            )
-        except Exception as e:
-            print("HANDLER CRASHED:", repr(e))
-            raise
+        assert request.form.get("grant_type") == "urn:ietf:params:oauth:grant-type:jwt-bearer"
+        assert request.form.get("scope") == "openid urn:zitadel:iam:org:project:id:zitadel:aud"
+        assert unverified_header["kid"] == "key-1"
+        assert unverified_claims["iss"] == "user-1"
+        assert unverified_claims["sub"] == "user-1"
+        assert unverified_claims["aud"] == httpserver.url_for("/").rstrip("/")
+        return Response(
+            json.dumps({"access_token": "access-token", "expires_in": 300}),
+            status=200,
+            content_type="application/json",
+        )
 
     httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_handler(token_endpoint)
 

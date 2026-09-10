@@ -25,11 +25,12 @@ import os
 import sys
 from typing import Any
 
-import asyncpg
 import httpx
 import structlog
+from database.provider import get_async_engine
 from dotenv import load_dotenv
 from identity.adapters.outbound.zitadel import ZitadelMachineTokenProvider
+from sqlalchemy import text
 
 load_dotenv()
 
@@ -136,17 +137,14 @@ async def main() -> None:
             "DATABASE_URL not set — skipping local identity.tenants truncation. "
             "This is expected if the DB has already been torn down."
         )
-        return
 
-    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     try:
-        conn = await asyncpg.connect(database_url)
-        try:
-            await conn.execute("TRUNCATE identity.tenants CASCADE")
+        engine = get_async_engine(database_url)
+        async with engine.begin() as conn:
+            await conn.execute(text("TRUNCATE identity.tenants CASCADE"))
             logger.info("Truncated identity.tenants table.")
-        finally:
-            await conn.close()
-    except (asyncpg.PostgresError, OSError) as exc:
+        await engine.dispose()
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Could not truncate identity.tenants: %s (safe to ignore if DB is already down).",
             exc,

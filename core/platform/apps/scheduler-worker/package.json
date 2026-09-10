@@ -1,13 +1,9 @@
 {
   "name": "@soopa/scheduler-worker",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "lint": "uv run ruff check .",
-    "format": "uv run ruff format . && uv run ruff check --fix .",
-    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases .",
-    "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
-    "test:integration": "uv run pytest tests/integration",
-    "deadcode:deptry": "uv run deptry .",
-    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+    "start": "uv run python -m scheduler_worker.main",
+    "dev": "PYTHONPATH=src uv run python -m scheduler_worker.main"
   }
 }

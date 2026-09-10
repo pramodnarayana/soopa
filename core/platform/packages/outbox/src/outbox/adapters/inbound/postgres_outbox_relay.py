@@ -4,8 +4,8 @@ from typing import Any
 
 import asyncpg
 import structlog
+from database.utils import normalize_to_standard_postgres
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
-from sqlalchemy.engine import make_url
 
 logger = structlog.get_logger(__name__)
 
@@ -66,10 +66,8 @@ class PostgresOutboxRelay:
         if not self.database_url:
             return
         try:
-            url = make_url(self.database_url).set(drivername="postgresql")
-            asyncpg_url = url.render_as_string(hide_password=False)
-
-            self._connection = await asyncpg.connect(asyncpg_url)
+            self.database_url = normalize_to_standard_postgres(self.database_url)
+            self._connection = await asyncpg.connect(self.database_url)
             await self._connection.add_listener(self.listen_channel, self._on_notify)
             logger.info("outbox_listener_listening", channel=self.listen_channel)
         except Exception:

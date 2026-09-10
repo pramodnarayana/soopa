@@ -32,7 +32,7 @@ from edi.config.settings import AppSettings, get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.enums import PipelineEventType
+from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
@@ -100,27 +100,27 @@ def _setup_registry(
         )
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
-        direction="INBOUND",
+        event_type=PipelineEventType.TRANSFORM_EVENT,
+        direction=EdiDirection.INBOUND,
         factory=run_inbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
-        direction="OUTBOUND",
+        event_type=PipelineEventType.TRANSFORM_EVENT,
+        direction=EdiDirection.OUTBOUND,
         factory=run_outbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+        event_type=PipelineEventType.TRANSFORM_COMPLETED,
         direction=None,
         factory=run_transform_lifecycle,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVER_EVENT.value,
+        event_type=PipelineEventType.DELIVER_EVENT,
         direction=None,
         factory=run_deliver,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVERY_COMPLETED.value,
+        event_type=PipelineEventType.DELIVERY_COMPLETED,
         direction=None,
         factory=run_delivery_lifecycle,
     )
@@ -238,4 +238,23 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        # Check if it's a Pydantic ValidationError without adding a hard dependency at the top
+        if e.__class__.__name__ == "ValidationError":
+            missing_fields = []
+            for err in getattr(e, "errors", list)():
+                loc = ".".join(str(loc_item) for loc_item in err.get("loc", []))
+                msg = err.get("msg", "")
+                missing_fields.append(f"{loc} ({msg})")
+
+            logger.exception(
+                "worker_startup_configuration_error",
+                reason="One or more required environment variables are missing from your .env file.",
+                missing_fields=missing_fields,
+                remedy="Please check .env.example and ensure all required variables are set.",
+            )
+        else:
+            logger.exception("worker_startup_failed", reason="Startup initialization error")
+        raise

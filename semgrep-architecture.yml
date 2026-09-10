@@ -1,0 +1,10 @@
+rules:
+  - id: ban-raw-postgres-url
+    patterns:
+      - pattern: "\"postgresql://\""
+    message: |
+      Enterprise Rule: Do not hardcode raw postgresql URLs or use them in string manipulations.
+      Use properly typed configuration (e.g. Settings.async_database_url) instead.
+    severity: ERROR
+    languages:
+      - python

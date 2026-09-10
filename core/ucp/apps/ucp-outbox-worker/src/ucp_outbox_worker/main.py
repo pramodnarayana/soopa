@@ -5,6 +5,7 @@ from types import FrameType
 
 import structlog
 from observability import ObservabilityProvider
+from ucp.config.settings import get_settings
 
 from ucp_outbox_worker.bootstrap.container import WorkerContainer
 
@@ -12,9 +13,10 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    settings = get_settings()
     ObservabilityProvider.auto_configure_from_env("ucp-outbox-worker")
 
-    container = WorkerContainer()
+    container = WorkerContainer(settings)
     container.wire()
     logger.info("ucp_outbox_worker_starting")
 

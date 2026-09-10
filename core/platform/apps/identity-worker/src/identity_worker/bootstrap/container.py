@@ -4,6 +4,7 @@ from typing import Literal
 
 import structlog
 from database.provider import get_async_engine
+from database.utils import normalize_to_asyncpg
 from identity.domain.constants import IdentityEventType
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
@@ -32,7 +33,7 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
     ZitadelUsersAdapter,
 )
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
-from identity_worker.bootstrap.config import Settings, get_settings
+from identity_worker.config.settings import AppSettings, get_settings
 from identity_worker.ports.inbound.identity_event_consumer_port import IdentityEventMessage
 from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
@@ -81,15 +82,14 @@ class UserDeletedPayload(BaseModel):
 class WorkerContainer:
     """Dependency Injection container for the Identity Worker."""
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: AppSettings | None = None) -> None:
         self.settings = settings or get_settings()
 
         database_url = self.settings.database_url
         if not database_url:
             raise ValueError("database_url is required in Settings")
 
-        if database_url.startswith("postgresql://"):
-            database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        database_url = normalize_to_asyncpg(database_url)
         self.database_url = database_url
 
         self._engine = get_async_engine(self.database_url)

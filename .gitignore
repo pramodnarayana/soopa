@@ -72,3 +72,6 @@ volume/
 
 # Log files
 *.log
+
+# direnv cache — generated locally, never committed
+.direnv/

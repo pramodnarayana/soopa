@@ -4,7 +4,7 @@ import httpx
 import structlog
 from identity.adapters.outbound.zitadel import ZitadelMachineTokenProvider
 
-from identity_worker.bootstrap.config import get_settings
+from identity_worker.config.settings import get_settings
 from identity_worker.domain.exceptions import IdentityProviderPortError
 
 logger = structlog.get_logger(__name__)

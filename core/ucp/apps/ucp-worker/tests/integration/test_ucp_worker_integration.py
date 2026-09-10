@@ -9,6 +9,7 @@ from database.provider import get_async_engine
 from seedwork import generate_random_hex
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from ucp.config.settings import get_settings
 from ucp.domain.constants import UcpEventType
 
 from ucp_worker.bootstrap.container import WorkerContainer
@@ -74,7 +75,9 @@ async def test_ucp_worker_handles_tenant_deleted_event(
     await db_connection.execute(text("SAVEPOINT seed_complete"))
 
     # 2. Setup Worker Container
-    container = WorkerContainer()
+    settings = get_settings()
+    settings.database_url = str(db_connection.engine.url)
+    container = WorkerContainer(settings)
     container.session_factory = db_session_factory
     container.settings.sqs_ucp_identity_sync_queue_url = "http://dummy"
     container.settings.sqs_ucp_jobs_queue_url = "http://dummy"
@@ -104,4 +107,3 @@ async def test_ucp_worker_handles_tenant_deleted_event(
         await container.dispose()
 
     assert deleted_at is not None, "Tenant infrastructure (role) was not soft-deleted by the worker"
-    print("\n\n>>> TEST FINISHED <<<\n\n")

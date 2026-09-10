@@ -5,6 +5,7 @@ import asyncio
 from logging.config import fileConfig  # noqa: TID251
 
 from alembic import context
+from database.utils import normalize_to_asyncpg
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -55,9 +56,8 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     configuration = config.get_section(config.config_ini_section, {})
     # Ensure we are using the asyncpg driver
-    configuration["sqlalchemy.url"] = TENANT_DB_URL.replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )
+    normalized_url = normalize_to_asyncpg(TENANT_DB_URL)
+    configuration["sqlalchemy.url"] = normalized_url or TENANT_DB_URL
 
     connectable = async_engine_from_config(
         configuration,
