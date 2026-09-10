@@ -123,7 +123,10 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
                 pkey = paramiko.RSAKey.from_private_key(key_io)
             except (paramiko.SSHException, ValueError):
                 key_io.seek(0)
-                pkey = paramiko.Ed25519Key.from_private_key(key_io)
+                try:
+                    pkey = paramiko.Ed25519Key.from_private_key(key_io)
+                except (paramiko.SSHException, ValueError) as e:
+                    return False, f"Malformed or unsupported SSH key: {e}"
         elif not password:
             return False, "Must provide either a password or a client key."
 
@@ -173,8 +176,10 @@ class ParamikoSftpTesterAdapter(SftpTesterPort):
                 if client:
                     client.close()
 
-        # All candidates exhausted — log once at exception level and return the last error.
-        logger.exception(
+        # All candidates exhausted — log once and return the last error.
+        # logger.error (not logger.exception) is correct here: we are outside any active
+        # except block, so logger.exception would capture a spurious 'NoneType: None' traceback.
+        logger.error(
             "sftp_diagnostic_connection_failed",
             host=host,
             port=port,
