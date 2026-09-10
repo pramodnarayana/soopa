@@ -1,10 +1,11 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
 
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
+
+from edi.domain.types import JsonValue
 
 
 class JobStatus(StrEnum):
@@ -42,7 +43,7 @@ class Timezone(StrEnum):
 @dataclass
 class Job:
     name: str
-    payload: dict[str, Any]
+    payload: dict[str, JsonValue]
     status: JobStatus = JobStatus.PENDING
     target_queue: str | None = None
     app_namespace: str | None = None

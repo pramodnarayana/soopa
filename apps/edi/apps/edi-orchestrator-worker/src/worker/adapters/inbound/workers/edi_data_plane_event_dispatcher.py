@@ -15,7 +15,7 @@ class EdiDataPlaneEventMessage:
     trace_id: str
     event_type: str
     payload: dict[str, Any]
-    idempotency_key: str | None
+    idempotency_key: str
 
 
 class EdiDataPlaneEventDispatcher:
@@ -54,6 +54,16 @@ class EdiDataPlaneEventDispatcher:
                 event_type=event_type,
             )
             return
+
+        if not isinstance(idempotency_key, str) or not idempotency_key:
+            logger.error(
+                "data_plane_events_sqs_consumer.missing_required_fields",
+                trace_id=trace_id,
+                tenant_id=tenant_id,
+                event_type=event_type,
+                idempotency_key=idempotency_key,
+            )
+            raise ValueError("idempotency_key is required")
 
         # Explicit observability context binding for the entire downstream execution
         bound_logger = logger.bind(trace_id=trace_id, tenant_id=tenant_id, event_type=event_type)

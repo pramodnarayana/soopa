@@ -1,5 +1,7 @@
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
-from typing import Any
+
+from seedwork.domain.types import JsonDict
 
 
 @dataclass(frozen=True)
@@ -14,8 +16,8 @@ class TokenClaims:
     authorized_tenants: set[str] = field(default_factory=set)
     roles: list[str] = field(default_factory=list)
     permissions: list[str] = field(default_factory=list)
-    tenant_roles: dict[str, list[str]] = field(default_factory=dict)
-    raw_claims: dict[str, Any] = field(default_factory=dict)
+    tenant_roles: Mapping[str, list[str]] = field(default_factory=dict)
+    raw_claims: JsonDict = field(default_factory=dict)
 
 
 # The canonical tenant ID used to represent the global platform administrator scope.
@@ -27,14 +29,14 @@ M2M_API_KEY_PREFIX = "sp_api_"
 @dataclass(frozen=True)
 class IdentityContext:
     subject: str
-    claims: dict[str, Any]
+    claims: JsonDict
     tenant_id: str | None = None
     organization_id: str | None = None
     authorized_tenants: set[str] = field(default_factory=set)
-    tenant_mapping: dict[str, str] = field(default_factory=dict)
+    tenant_mapping: MutableMapping[str, str] = field(default_factory=dict)
     roles: tuple[str, ...] = ()
     permissions: tuple[str, ...] = ()
-    tenant_roles: dict[str, list[str]] = field(default_factory=dict)
+    tenant_roles: Mapping[str, list[str]] = field(default_factory=dict)
     capabilities: set[str] = field(default_factory=set)
 
     @property
@@ -56,7 +58,7 @@ class IdentityContext:
 
 
 def identity_context_from_claims(
-    claims: TokenClaims, tenant_mapping: dict[str, str] | None = None
+    claims: TokenClaims, tenant_mapping: MutableMapping[str, str] | None = None
 ) -> IdentityContext:
     """
     Constructs an IdentityContext from validated token claims.
@@ -71,7 +73,7 @@ def identity_context_from_claims(
         tenant_id=claims.tenant_id,
         organization_id=claims.organization_id,
         authorized_tenants=claims.authorized_tenants,
-        tenant_mapping=tenant_mapping or {},
+        tenant_mapping=dict(tenant_mapping) if tenant_mapping else {},
         roles=tuple(claims.roles),
         permissions=tuple(claims.permissions),
         tenant_roles=claims.tenant_roles,

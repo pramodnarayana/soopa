@@ -1,4 +1,4 @@
-from unified_api.adapters.inbound.http.dtos.tenant_dtos import ProvisionTenantRequest
+from unified_api.adapters.inbound.http.ucp.dtos.tenant_dtos import ProvisionTenantRequest
 
 
 def test_provision_tenant_request_requires_only_name() -> None:

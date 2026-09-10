@@ -27,7 +27,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Retrieve the IdentityContext populated by AuthenticationMiddleware
-        identity: IdentityContext | None = getattr(request.state, "identity", None)
+        identity: IdentityContext | None = request.state.identity
         if not identity:
             # If no identity exists, either it failed authentication (and was ignored to let a guard catch it),
             # or it's a completely unauthenticated route. We don't enforce tenant context here if there's no identity.

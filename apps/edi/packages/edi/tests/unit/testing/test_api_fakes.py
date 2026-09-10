@@ -77,7 +77,7 @@ async def test_save_serializes_and_clears_aggregate_domain_events():
             tenant_id="tenant-1",
             event_type=EdiEventType.edi_as2_partner_updated,
             resource_id=partner.id,
-            explicit_idempotency_key="request-1",
+            idempotency_key="request-1",
         )
     )
 
@@ -90,7 +90,7 @@ async def test_save_serializes_and_clears_aggregate_domain_events():
     assert event.event_type == "edi.as2_partner.updated"
     assert event.idempotency_key == "request-1"
     assert event.payload == {
-        "explicit_idempotency_key": "request-1",
+        "idempotency_key": "request-1",
         "tenant_id": "tenant-1",
         "event_type": "edi.as2_partner.updated",
         "resource_id": "local-id",

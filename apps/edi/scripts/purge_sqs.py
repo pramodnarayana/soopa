@@ -12,10 +12,14 @@ sqs = boto3.client(
     aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
 )
 queues = sqs.list_queues()
+failed_purges: list[tuple[str, str]] = []
 if "QueueUrls" in queues:
     for q in queues["QueueUrls"]:
         try:
             sqs.purge_queue(QueueUrl=q)
-            print(f"Purged {q}")
-        except ClientError as e:
-            print(f"Failed {q}: {e}")
+        except ClientError as exc:
+            failed_purges.append((q, str(exc)))
+
+if failed_purges:
+    failure_details = "; ".join(f"{queue}: {error}" for queue, error in failed_purges)
+    raise SystemExit(f"Failed to purge {len(failed_purges)} SQS queue(s): {failure_details}")

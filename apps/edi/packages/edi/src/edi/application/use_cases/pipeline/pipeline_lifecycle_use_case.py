@@ -1,7 +1,7 @@
 import uuid
 
 import structlog
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict
 
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
@@ -21,7 +21,7 @@ class PipelineLifecycleUseCase:
     def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
 
-    async def handle_transform_completed(self, payload: dict[str, JsonValue]) -> None:
+    async def handle_transform_completed(self, payload: JsonDict) -> None:
         """
         Triggered when a TransformUseCase finishes transforming a payload.
         """
@@ -92,7 +92,7 @@ class PipelineLifecycleUseCase:
 
         logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
-    async def handle_delivery_completed(self, payload: dict[str, JsonValue]) -> None:
+    async def handle_delivery_completed(self, payload: JsonDict) -> None:
         """
         Triggered when a DeliveryUseCase completes its delivery attempt.
         """

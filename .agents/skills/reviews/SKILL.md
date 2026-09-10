@@ -19,6 +19,7 @@ You are a meticulous Code Reviewer. Your job is to catch anti-patterns, enforce 
    - **Frontend**: Mixing UI component libraries (e.g., Radix UI vs Base UI), state management paradigms, or API clients (Axios vs native fetch).
    - **Backend**: Mixing database access patterns (ORM models vs raw SQL `text()` queries for standard CRUD), mixing event dispatching methods (e.g., manually calling `register_event(...)` vs DDD `add_domain_event()`), or mixing API clients.
    - **General**: If there is an established enterprise standard for a pattern, any deviation from that standard in a new or refactored flow must be rejected.
+   - **Strict Database Adapter Naming Consistency**: When creating or modifying infrastructure adapters, strictly adhere to the established naming taxonomy of the local package. Do not mix `Postgres*` and `SqlAlchemy*` prefixes within the same package. For example, new database adapters in `apps/edi/packages/edi` MUST use its established `SqlAlchemy*` prefix; other EDI packages and apps enforce their own local taxonomy independently.
 - **DTO-First (Strictly Enforced)**: REJECT any PR that introduces a new module, Port, or adapter without first defining DTOs in `application/dto.py`. Specifically REJECT:
    - Port methods that return `dict[str, Any]`, `dict`, or `Sequence[Any]` — demand typed DTOs.
    - DTOs implemented AFTER the Port or adapter instead of before it.

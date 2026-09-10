@@ -1,5 +1,4 @@
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from edi.domain.constants import ProvisioningEventType
 from edi.domain.enums import EdiEventType, WebhookEventType
@@ -51,7 +50,9 @@ class ProvisioningWorkerService:
             EdiEventType.edi_header_deleted: self.replication_port.delete_outbound_edi_header,
         }
 
-    async def _broadcast_or_replicate(self, tenant_id: str, replicate_fn: Any, *args: Any) -> None:
+    async def _broadcast_or_replicate(
+        self, tenant_id: str, replicate_fn: Callable[..., Awaitable[None]], *args: object
+    ) -> None:
         if tenant_id == PLATFORM_TENANT_ID:
             all_tenants = await self.tenant_port.get_all_tenant_ids()
             transient_errors = []

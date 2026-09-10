@@ -24,7 +24,7 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from unified_api.adapters.inbound.http.routers.edi import (
+from unified_api.adapters.inbound.http.edi.routers import (
     edi_headers,
     edi_json,
     edi_tools,
@@ -33,11 +33,11 @@ from unified_api.adapters.inbound.http.routers.edi import (
     trading_partners,
     transactions,
 )
-from unified_api.adapters.inbound.http.routers.edi import (
+from unified_api.adapters.inbound.http.edi.routers import (
     platform as platform_admin,
 )
-from unified_api.adapters.inbound.http.routers.edi.tenant import dashboard
-from unified_api.adapters.inbound.http.routers.edi.trading_partners import as2_receive, platform
+from unified_api.adapters.inbound.http.edi.routers.tenant import dashboard
+from unified_api.adapters.inbound.http.edi.routers.trading_partners import as2_receive, platform
 
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import edi_lifespan
@@ -81,7 +81,7 @@ def create_edi_app() -> FastAPI:
             sanitized_errors.append(error_dict)
 
         logger.error(
-            "422 Error at {request.url.path}: {sanitized_errors}",
+            "request_validation_failed",
             request_url_path=request.url.path,
             sanitized_errors=sanitized_errors,
         )
@@ -95,9 +95,9 @@ def create_edi_app() -> FastAPI:
         request: Request, exc: OrchestrationError
     ) -> JSONResponse:
         logger.error(
-            "OrchestrationError at {request.url.path}: {exc}",
+            "orchestration_error",
             request_url_path=request.url.path,
-            exc=exc,
+            exc=str(exc),
         )
         return JSONResponse(
             status_code=500,
@@ -107,7 +107,9 @@ def create_edi_app() -> FastAPI:
     @app.exception_handler(VaultError)
     async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
         logger.error(
-            "VaultError at {request.url.path}: {exc}", request_url_path=request.url.path, exc=exc
+            "vault_error",
+            request_url_path=request.url.path,
+            exc=str(exc),
         )
         return JSONResponse(
             status_code=500,

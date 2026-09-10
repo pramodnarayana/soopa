@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
-from seedwork.domain.types import JsonValue
 from seedwork.models import AggregateRoot
 
 from edi.domain.models.base import EdiRecordBase
+from edi.domain.types import JsonValue
 
 
 @dataclass(kw_only=True)

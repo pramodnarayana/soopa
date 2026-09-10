@@ -424,3 +424,24 @@ The taxonomy drifted organically as different engineers built different bounded 
   2. **`bots` parser cycle** — `outmessage.py` ↔ `parsers/__init__.py` ↔ `edifact.py`. Fixed by introducing `domain/parser_registry.py` (outside the `parsers` package) as a zero-dependency registry populated by `parsers/__init__.py` after concrete classes load.
   3. **`lifespan.py` ↔ `main.py`** — `lifespan.py` imported `ucp_container` from `main.py` which imports `shell_lifespan` from `lifespan.py`. Fixed by reading `ucp_container` from `app.state` at runtime (already populated by `main.py` before the lifespan context runs).
 - **Verification**: `ruff check` passes with zero errors. 951 unit + integration tests pass.
+
+### Global Naming Taxonomy Drift (Database Adapters)
+- **Current Local Conventions**: Adapter prefixes are enforced per package. For example, `apps/edi/packages/edi` uses `SqlAlchemy*`, while other EDI packages and the identity package may use `Postgres*`; each package must remain internally consistent until an intentional migration occurs.
+- **Separate Monorepo Debt**: These valid local conventions still produce a monorepo-wide taxonomy drift, but that broader inconsistency is not a reason to rename an adapter in isolation.
+- **Proposed Migration**: Plan and execute a dedicated monorepo-wide refactoring sweep to adopt one prefix (for example, `Postgres*`), updating all packages and consumers atomically.
+
+## [Code Quality] Enforce E402 (Module level import not at top of file) Globally
+
+- **Date Added**: 2026-09-09
+- **Status**: TO DO
+- **Description**: Currently, `pyproject.toml` globally ignores `E402` (module level import not at top of file), which has allowed approximately 63 files (mostly test files) to drift and place imports mid-file (e.g., after `pytestmark`). This violates strict enterprise standards that all imports must be at the top of the file.
+- **Action Item**: Run Ruff's auto-fix (`ruff check --select E402 --fix .`) to automatically hoist the module-level imports to the top in the 63 affected files. Once fixed, remove `"E402"` from the global `ignore` list in `[tool.ruff.lint]` within `pyproject.toml` to enforce this rule monorepo-wide moving forward.
+
+## [Type Safety & Coverage] Track Missing Coverage and Resolve Type Suppressions
+
+- **Date Added**: 2026-09-09
+- **Status**: TO DO
+- **Description**: We have removed `# type: ignore` across `soopa_mono` to enforce strict type checking, which may expose structural type mismatches (such as `import-untyped`, `arg-type`, `assignment`, and `attr-defined`). Additionally, we must track and enforce 80% test coverage across all bounded contexts.
+- **Action Item**:
+  1. Structurally resolve any type errors uncovered by the removal of `# type: ignore` (e.g., install missing stubs like `boto3-stubs`, structurally map types).
+  2. Implement strict per-module coverage reporting to guarantee no bounded context falls below the 80% threshold.

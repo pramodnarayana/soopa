@@ -1,5 +1,7 @@
 import uuid
+from typing import Any
 
+from database.models.identity import Tenant
 from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
 from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalTradingPartner
 from edi.adapters.outbound.database.repository import EdiMessageRepository as DbEdiMessageRepository
@@ -8,6 +10,7 @@ from edi.adapters.outbound.database.repository import (
 )
 from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.sharding import DatabaseShard
 
 from as2_server.ports.outbound.repository_port import PartnerEntity
 
@@ -62,6 +65,14 @@ class AS2TenantRepositoryAdapter:
             return str(tenant_rows[0][0])
         return None
 
+    async def get_tenant_shard_info(self, tenant_id: str) -> tuple[str, str, str] | None:
+        stmt = sql_select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == tenant_id)
+        row = (await self.session.execute(stmt)).first()
+        if not row:
+            return None
+        tenant, shard = row
+        return str(tenant.id), str(shard.shard_key), str(shard.connection_url)
+
 
 class TradingPartnerRepositoryAdapter:
     def __init__(self, session: AsyncSession) -> None:
@@ -103,3 +114,10 @@ class EdiMessageRepositoryAdapter:
             status=status,
             message_id=as2_message_id,
         )
+
+
+class EdiMessageRepositoryFactory:
+    """Implements EdiMessageRepositoryFactoryPort to create tenant-scoped repo instances."""
+
+    def create_repo(self, tenant_session: Any) -> EdiMessageRepositoryAdapter:
+        return EdiMessageRepositoryAdapter(tenant_session)

@@ -2,6 +2,8 @@ import json
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.domain.enums import MessageStatus
@@ -64,7 +66,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 url=partner.url,
                 payload=raw_payload,
                 auth_token=auth_token,
-                idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         except Exception as e:
             await self.uow.repository.update_api_payload_status(

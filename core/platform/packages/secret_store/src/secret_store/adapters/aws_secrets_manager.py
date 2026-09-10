@@ -4,9 +4,9 @@ import sys
 import time
 from typing import Any
 
-import boto3  # type: ignore[import-untyped]
+import boto3
 import structlog
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 

@@ -19,7 +19,9 @@ async def get_global_session(request: Request) -> AsyncGenerator[AsyncSession, N
     Yields a shared Global database session for the entire HTTP request lifecycle.
     This acts as the single source of truth for global DB connections across all bounded contexts.
     """
-    db_router = getattr(request.app.state, "db_router", None)
+    if not hasattr(request.app.state, "db_router") or not request.app.state.db_router:
+        raise RuntimeError("DatabaseRouter not initialized in app state")
+    db_router = request.app.state.db_router
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
@@ -41,7 +43,9 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     Yields a database session per request for AS2 Server (which currently defaults to tenant 0).
     For the API service, you should use `identity.dependencies.get_tenant_session` instead.
     """
-    db_router = getattr(request.app.state, "db_router", None)
+    if not hasattr(request.app.state, "db_router") or not request.app.state.db_router:
+        raise RuntimeError("DatabaseRouter not initialized in app state")
+    db_router = request.app.state.db_router
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 

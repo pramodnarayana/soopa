@@ -2,24 +2,22 @@ import datetime
 import uuid
 from typing import cast
 
-from seedwork.domain.types import JsonValue
-
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
-from edi.domain.types import AstNode
+from edi.domain.types import AstNode, JsonDict, JsonValue
 
 
 class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
     @classmethod
     def _build_unb_segment(
-        cls, route_config: dict[str, JsonValue], now: datetime.datetime, unb05: str
+        cls, route_config: JsonDict, now: datetime.datetime, unb05: str
     ) -> AstNode:
         unb_sender_id = str(route_config.get("isa_sender_id", "UNKNOWN"))
         unb_receiver_id = str(route_config.get("isa_receiver_id", "UNKNOWN"))
         version = str(route_config.get("default_version", "4"))
         environment = "1" if str(route_config.get("environment", "")) == "T" else ""
 
-        unb: dict[str, JsonValue] = {
+        unb: JsonDict = {
             "S001.01": "UNOA",
             "S001.02": version,
             "S002.01": unb_sender_id,
@@ -41,7 +39,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
     ) -> list[AstNode]:
         processed_transactions = []
         for i, txn in enumerate(transactions, start=1):
-            new_txn: dict[str, JsonValue] = {}
+            new_txn: JsonDict = {}
             if "UNH" not in txn:
                 new_txn["UNH"] = {
                     "UNH01": f"{i:04d}",
@@ -60,11 +58,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
             if "UNT" not in new_txn:
                 segment_count = ASTUtils.count_segments(new_txn) + 1
                 unh = new_txn.get("UNH")
-                unt02 = (
-                    cast(dict, unh).get("UNH01", f"{i:04d}")
-                    if isinstance(unh, dict)
-                    else f"{i:04d}"
-                )
+                unt02 = unh.get("UNH01", f"{i:04d}") if isinstance(unh, dict) else f"{i:04d}"
                 new_txn["UNT"] = {
                     "UNT01": str(segment_count),
                     "UNT02": unt02,
@@ -74,7 +68,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
         return processed_transactions
 
     @classmethod
-    def build(cls, route_config: dict[str, JsonValue], payload: AstNode | list[AstNode]) -> AstNode:
+    def build(cls, route_config: JsonDict, payload: AstNode | list[AstNode]) -> AstNode:
         now = datetime.datetime.now(datetime.UTC)
         transactions = payload if isinstance(payload, list) else [payload]
         transaction_type = str(route_config.get("transaction_type", "UNKNOWN"))
@@ -86,7 +80,7 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
         unb_segment = cls._build_unb_segment(route_config, now, unb05)
         processed_transactions = cls._wrap_transactions(transactions, transaction_type)
 
-        unz_segment: dict[str, JsonValue] = {
+        unz_segment: JsonDict = {
             "UNZ01": str(len(processed_transactions)),
             "UNZ02": unb05,
         }

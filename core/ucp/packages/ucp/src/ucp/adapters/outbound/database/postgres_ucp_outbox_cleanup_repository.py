@@ -1,10 +1,10 @@
 import asyncio
 import datetime
+from typing import cast
 
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
-from sqlalchemy import delete, select
-from sqlalchemy.engine import CursorResult
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp_models.events import UcpOutbox
 
@@ -28,7 +28,7 @@ class SqlAlchemyUcpOutboxCleanupRepository(OutboxCleanupRepositoryPort):
                         .limit(5000)
                     )
                 )
-                res_outbox: CursorResult[tuple[()]] = await session.execute(stmt_outbox)  # type: ignore[assignment]
+                res_outbox = cast(CursorResult[tuple[()]], await session.execute(stmt_outbox))
                 deleted = res_outbox.rowcount
                 outbox_deleted += deleted
                 await session.commit()

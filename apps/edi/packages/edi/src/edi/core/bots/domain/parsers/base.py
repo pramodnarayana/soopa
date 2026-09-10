@@ -10,6 +10,7 @@ Extracted from the monolithic inmessage.py.
 # pylint: disable=broad-exception-caught
 
 import structlog
+from seedwork.domain.types import JsonDict
 
 from edi.core.bots.config.botsconfig import (
     LIN,
@@ -209,7 +210,7 @@ class var(Inmessage):
                     {"leftover": leftover},
                 )
 
-    def _parsefields(self, lex_record, record_definition) -> dict:
+    def _parsefields(self, lex_record, record_definition) -> JsonDict:
         """
         Identify the fields in inmessage-record using the record_definition from the grammar.
         Build a record (dictionary; field-IDs are unique within record) and return this.

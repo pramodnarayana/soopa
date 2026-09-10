@@ -1,5 +1,8 @@
+from typing import get_type_hints
+
 from identity.domain.identity_context import (
     PLATFORM_TENANT_ID,
+    IdentityContext,
     TokenClaims,
     identity_context_from_claims,
 )
@@ -41,6 +44,17 @@ def test_token_claims_defaults() -> None:
     assert claims.permissions == []
     assert claims.organization_id is None
     assert claims.iat is None
+
+
+from collections.abc import MutableMapping
+
+
+def test_tenant_mapping_uses_string_mapping_annotation() -> None:
+    context_hints = get_type_hints(IdentityContext)
+    factory_hints = get_type_hints(identity_context_from_claims)
+
+    assert context_hints["tenant_mapping"] == MutableMapping[str, str]
+    assert factory_hints["tenant_mapping"] == MutableMapping[str, str] | None
 
 
 def test_is_platform_admin_with_valid_role() -> None:

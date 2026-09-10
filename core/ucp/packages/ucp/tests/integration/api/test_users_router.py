@@ -58,7 +58,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
 
     # 3. Assert: Verify the DI container resolved and the endpoint succeeded
     if response.status_code != 200:
-        print(f"DEBUG RESPONSE: {response.json()}")
+        pass
     assert response.status_code == 200
     data = response.json()
     assert "userId" in data

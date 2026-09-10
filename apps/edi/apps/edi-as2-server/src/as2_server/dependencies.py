@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .adapters.outbound.repository import (
     AS2TenantRepositoryAdapter,
     EdiMessageRepositoryAdapter,
+    EdiMessageRepositoryFactory,
     TradingPartnerRepositoryAdapter,
 )
 from .adapters.outbound.vault import EnvironmentVaultService
@@ -33,15 +34,18 @@ def get_receive_as2_use_case(
     Dependency injection for the ReceiveAS2UseCase.
     Wiring the ports to their adapters.
     """
-    s3_storage = getattr(request.app.state, "s3_storage", None)
-    if not s3_storage:
+    if not hasattr(request.app.state, "s3_storage") or not request.app.state.s3_storage:
         raise HTTPException(status_code=503, detail="S3 Storage not initialized")
+    s3_storage = request.app.state.s3_storage
 
-    db_router = getattr(request.app.state, "db_router", None)
+    if not hasattr(request.app.state, "db_router") or not request.app.state.db_router:
+        raise HTTPException(status_code=503, detail="Database router not initialized")
+    db_router = request.app.state.db_router
 
     return ReceiveAS2UseCase(
         tenant_repo=AS2TenantRepositoryAdapter(global_session),
         partner_repo=TradingPartnerRepositoryAdapter(global_session),
+        message_repo_factory=EdiMessageRepositoryFactory(),
         message_repo=EdiMessageRepositoryAdapter(session),
         storage=s3_storage,
         vault=vault,

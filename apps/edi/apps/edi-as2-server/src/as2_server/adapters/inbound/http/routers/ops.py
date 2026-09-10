@@ -13,9 +13,9 @@ async def health() -> Any:
 
 @router.get("/ready")
 async def ready(request: Request) -> Any:
-    if getattr(request.app.state, "db_router", None) is None:
+    if not hasattr(request.app.state, "db_router") or request.app.state.db_router is None:
         raise HTTPException(status_code=503, detail="Database router not initialized")
-    if getattr(request.app.state, "s3_storage", None) is None:
+    if not hasattr(request.app.state, "s3_storage") or request.app.state.s3_storage is None:
         raise HTTPException(status_code=503, detail="S3 Storage not initialized")
     return {"status": "ready"}
 

@@ -50,7 +50,7 @@ async def test_app_subscription_flow(
 
     outbox_processor = OutboxProcessorUseCase(
         repository=outbox_repo,
-        publisher=event_bus,  # type: ignore[arg-type]
+        publisher=event_bus,
     )
 
     relay = PostgresOutboxRelay(
@@ -124,7 +124,6 @@ async def test_app_subscription_flow(
                 continue
 
             raw_event = ackable_msg.payload
-            print(f"DEBUG RAW EVENT: {raw_event}")
 
             if raw_event.get("tenant_id") != tenant.id:
                 await ackable_msg.ack()

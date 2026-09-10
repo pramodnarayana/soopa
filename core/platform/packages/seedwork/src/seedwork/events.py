@@ -30,7 +30,9 @@ class DomainEvent(ABC):
     shared domain-event serializer.
     """
 
-    explicit_idempotency_key: str | None = field(default=None, kw_only=True)
+    idempotency_key: str = field(
+        default_factory=lambda: generate_id(SystemIdPrefix.GENERIC), kw_only=True
+    )
 
     @property
     @abstractmethod
@@ -45,18 +47,3 @@ class DomainEvent(ABC):
         If the event is platform-wide and has no tenant context, return None.
         """
         raise NotImplementedError
-
-    @property
-    def idempotency_key(self) -> str:
-        """
-        Returns the idempotency key for this event.
-        Uses explicit_idempotency_key if provided.
-        Defaults to the event id if present, else a newly generated UUID.
-        """
-        if self.explicit_idempotency_key is not None:
-            return self.explicit_idempotency_key
-        if hasattr(self, "id"):
-            return str(self.id)
-        if "_idempotency_key" not in self.__dict__:
-            self.__dict__["_idempotency_key"] = generate_id(SystemIdPrefix.GENERIC)
-        return str(self.__dict__["_idempotency_key"])

@@ -4,12 +4,9 @@ import typing
 from typing import Literal
 
 import structlog
-from database.models.identity import Tenant as DbTenant
-from database.models.identity import User as DbUser
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
+from identity_worker.ports.outbound.identity_sync_repository_port import IdentitySyncUnitOfWorkPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
@@ -42,26 +39,26 @@ class IdentitySyncService:
         self,
         identity_provider: IdentityProviderPort,
         user_identity_provider: UserIdentityProviderPort,
-        session_factory: typing.Callable[[], contextlib.AbstractAsyncContextManager[AsyncSession]]
+        uow_factory: typing.Callable[
+            [], contextlib.AbstractAsyncContextManager[IdentitySyncUnitOfWorkPort]
+        ]
         | None = None,
     ):
         self.identity_provider = identity_provider
         self.user_identity_provider = user_identity_provider
-        self.session_factory = session_factory
+        self.uow_factory = uow_factory
 
     async def _resolve_idp_tenant_id(self, tenant_id: str) -> str:
         """
         Resolves the IDP tenant ID for the given platform tenant ID.
         Raises StateConflictError if the tenant is not provisioned.
         """
-        if self.session_factory is None:
-            raise ValueError("session_factory is required to resolve tenant IDs")
+        if self.uow_factory is None:
+            raise ValueError("uow_factory is required to resolve tenant IDs")
 
-        assert self.session_factory is not None
-        async with self.session_factory() as session:
-            stmt = select(DbTenant).where(DbTenant.id == tenant_id)
-            result = await session.execute(stmt)
-            tenant = result.scalar_one_or_none()
+        assert self.uow_factory is not None
+        async with self.uow_factory() as uow:
+            tenant = await uow.repo.get_tenant(tenant_id)
             if not tenant or not tenant.idp_tenant_id:
                 raise StateConflictError(
                     f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
@@ -70,12 +67,11 @@ class IdentitySyncService:
 
     async def _resolve_idp_user_id(self, user_id: str) -> str:
         """Resolve a platform user ID to its provisioned IDP user ID."""
-        if self.session_factory is None:
-            raise ValueError("session_factory is required to resolve user IDs")
+        if self.uow_factory is None:
+            raise ValueError("uow_factory is required to resolve user IDs")
 
-        async with self.session_factory() as session:
-            result = await session.execute(select(DbUser).where(DbUser.id == user_id))
-            user = result.scalar_one_or_none()
+        async with self.uow_factory() as uow:
+            user = await uow.repo.get_user(user_id)
             if not user or not user.idp_user_id:
                 raise StateConflictError(
                     f"User {user_id} is not fully provisioned in Identity Provider yet"
@@ -105,22 +101,16 @@ class IdentitySyncService:
         bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, role=role)
         bound_logger.info("syncing_new_user_to_identity_provider", action="create")
         try:
-            if self.session_factory is None:
-                raise ValueError("session_factory is required to synchronize users")
+            if self.uow_factory is None:
+                raise ValueError("uow_factory is required to synchronize users")
 
-            async with self.session_factory() as session:
-                user_result = await session.execute(
-                    select(DbUser).where(DbUser.id == user_id).with_for_update()
-                )
-                local_user = user_result.scalar_one_or_none()
+            async with self.uow_factory() as uow:
+                local_user = await uow.repo.get_user_for_update(user_id)
                 if not local_user:
                     bound_logger.warning("identity_sync_local_user_not_found_for_update")
                     return
 
-                tenant_result = await session.execute(
-                    select(DbTenant).where(DbTenant.id == tenant_id)
-                )
-                tenant = tenant_result.scalar_one_or_none()
+                tenant = await uow.repo.get_tenant(tenant_id)
                 if not tenant or not tenant.idp_tenant_id:
                     raise StateConflictError(
                         f"Tenant {tenant_id} is not fully provisioned in Identity Provider yet"
@@ -148,8 +138,7 @@ class IdentitySyncService:
                         last_name=last_name,
                     )
                     bound_logger.info(
-                        "identity_sync_create_user_successful",
-                        idp_user_id=created_idp_user_id,
+                        "identity_sync_user_created_in_idp", idp_user_id=created_idp_user_id
                     )
 
                     await self.user_identity_provider.assign_tenant_role(
@@ -163,14 +152,15 @@ class IdentitySyncService:
                         role=role,
                     )
 
-                    local_user.idp_user_id = created_idp_user_id
-                    await session.commit()
+                    await uow.repo.update_user_idp_mapping(user_id, created_idp_user_id)
+                    await uow.commit()
                     bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
+
                 except BaseException:
                     try:
-                        await _complete_cleanup(session.rollback())
+                        await _complete_cleanup(uow.rollback())
                     except Exception:
-                        bound_logger.exception("identity_sync_session_rollback_failed")
+                        bound_logger.exception("identity_sync_uow_rollback_failed")
                     if created_idp_user_id:
                         try:
                             await _complete_cleanup(

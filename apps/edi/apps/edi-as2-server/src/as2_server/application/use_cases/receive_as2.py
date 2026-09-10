@@ -2,9 +2,8 @@ import time
 import uuid
 from contextlib import AsyncExitStack, aclosing
 from dataclasses import dataclass
-from typing import Any
 
-from database.models.identity import Tenant
+from database.router import DatabaseRouter
 from edi.adapters.outbound.security import decrypt_payload, verify_signature
 from edi.domain.models.as2 import (
     AS2MDN,
@@ -13,19 +12,18 @@ from edi.domain.models.as2 import (
 )
 from edi.domain.services.as2_protocol import generate_mdn
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from observability import ObservabilityProvider
-from sqlalchemy import select
-from ucp_models.sharding import DatabaseShard
+from observability import LoggerPort, ObservabilityProvider
 
 from as2_server.ports.outbound.repository_port import (
     AS2TenantRepositoryPort,
+    DbSessionPort,
+    EdiMessageRepositoryFactoryPort,
     EdiMessageRepositoryPort,
+    PartnerEntity,
     TradingPartnerRepositoryPort,
 )
 from as2_server.ports.outbound.storage_port import PayloadStoragePort
 from as2_server.ports.outbound.vault_port import VaultServicePort
-
-from ...adapters.outbound.repository import EdiMessageRepositoryAdapter
 
 
 @dataclass(frozen=True)
@@ -33,7 +31,7 @@ class _RouteResult:
     failed: bool
     tenant_id: str | None = None
     message_repo: EdiMessageRepositoryPort | None = None
-    session: Any = None
+    session: DbSessionPort | None = None
 
 
 class ReceiveAS2UseCase:
@@ -41,14 +39,16 @@ class ReceiveAS2UseCase:
         self,
         tenant_repo: AS2TenantRepositoryPort,
         partner_repo: TradingPartnerRepositoryPort,
-        message_repo: EdiMessageRepositoryPort,
+        message_repo_factory: EdiMessageRepositoryFactoryPort,
         storage: PayloadStoragePort,
         vault: VaultServicePort,
-        db_router: Any = None,
-        global_session: Any = None,
+        db_router: DatabaseRouter | None = None,
+        global_session: DbSessionPort | None = None,
+        message_repo: EdiMessageRepositoryPort | None = None,
     ) -> None:
         self.tenant_repo = tenant_repo
         self.partner_repo = partner_repo
+        self.message_repo_factory = message_repo_factory
         self.message_repo = message_repo
         self.storage = storage
         self.secret_store = vault
@@ -84,12 +84,16 @@ class ReceiveAS2UseCase:
     async def execute(self, as2_msg: AS2Message) -> AS2MDN:
 
         async with AsyncExitStack() as stack:
+            if self.message_repo is None:
+                raise RuntimeError(
+                    "message_repo not initialized — pass message_repo= to ReceiveAS2UseCase"
+                )
             return await self._execute_inner(as2_msg, stack, self.message_repo)
 
     async def _execute_inner(
         self,
         as2_msg: AS2Message,
-        async_exit_stack: Any,
+        async_exit_stack: AsyncExitStack,
         message_repo: EdiMessageRepositoryPort,
     ) -> AS2MDN:
         start_time = time.perf_counter()
@@ -166,7 +170,9 @@ class ReceiveAS2UseCase:
             self.metrics.increment("as2_verify_errors_total", labels={"tenant_id": "unknown"})
             return None
 
-    def _record_message_received(self, tenant_id: str, as2_msg: AS2Message, logger: Any) -> None:
+    def _record_message_received(
+        self, tenant_id: str, as2_msg: AS2Message, logger: LoggerPort
+    ) -> None:
         self.metrics.increment(
             "as2_messages_received_total",
             labels={
@@ -180,7 +186,7 @@ class ReceiveAS2UseCase:
         )
 
     def _decrypt_payload(
-        self, as2_msg: AS2Message, tenant_id: str, logger: Any
+        self, as2_msg: AS2Message, tenant_id: str, logger: LoggerPort
     ) -> tuple[bytes, Disposition]:
         with self.tracer.start_span("as2.decrypt") as span:
             try:
@@ -202,7 +208,12 @@ class ReceiveAS2UseCase:
                 return as2_msg.payload, Disposition.DECRYPTION_FAILED
 
     def _verify_signature(
-        self, as2_msg: AS2Message, partner: Any, payload: bytes, tenant_id: str, logger: Any
+        self,
+        as2_msg: AS2Message,
+        partner: PartnerEntity,
+        payload: bytes,
+        tenant_id: str,
+        logger: LoggerPort,
     ) -> tuple[bytes, Disposition]:
         with self.tracer.start_span("as2.verify_signature") as span:
             if not partner.public_cert_pem:
@@ -235,8 +246,8 @@ class ReceiveAS2UseCase:
         as2_msg: AS2Message,
         payload: bytes,
         tenant_id: str,
-        async_exit_stack: Any,
-        logger: Any,
+        async_exit_stack: AsyncExitStack,
+        logger: LoggerPort,
     ) -> _RouteResult:
         with self.tracer.start_span("as2.isa_routing"):
             isa_headers = self._extract_isa_headers(payload)
@@ -264,35 +275,25 @@ class ReceiveAS2UseCase:
                     )
                     return _RouteResult(failed=True)
 
-                stmt = (
-                    select(Tenant, DatabaseShard)
-                    .join(DatabaseShard)
-                    .where(Tenant.id == true_tenant_id)
-                )
-                row = (await self.global_session.execute(stmt)).first()
-
-                if not row:
+                shard_info = await self.tenant_repo.get_tenant_shard_info(true_tenant_id)
+                if not shard_info:
                     logger.error(
                         "as2_isa_routing_failed_no_shard_row", true_tenant_id=true_tenant_id
                     )
                     return _RouteResult(failed=True)
 
-                tenant_obj, shard_obj = row
+                _, shard_key, shard_url = shard_info
                 tenant_session_gen = self.db_router.get_tenant_session(
-                    tenant_id=tenant_obj.id,
-                    shard_key=str(shard_obj.name),
-                    shard_url=str(shard_obj.dsn),
+                    tenant_id=true_tenant_id, shard_key=shard_key, shard_url=shard_url
                 )
-
                 await async_exit_stack.enter_async_context(aclosing(tenant_session_gen))
-
                 try:
                     tenant_session = await tenant_session_gen.__anext__()
                 except StopAsyncIteration:
                     logger.exception("as2_isa_routing_failed_session_empty")
                     return _RouteResult(failed=True)
 
-                new_repo = EdiMessageRepositoryAdapter(tenant_session)
+                new_repo = self.message_repo_factory.create_repo(tenant_session)
 
                 partner = await self.partner_repo.find_by_as2_id(true_tenant_id, as2_msg.as2_from)
                 if not partner or not partner.active:
@@ -327,8 +328,8 @@ class ReceiveAS2UseCase:
         as2_msg: AS2Message,
         disposition: Disposition,
         storage_uri: str,
-        message_repo: Any,
-        routed_tenant_session: Any,
+        message_repo: EdiMessageRepositoryPort,
+        routed_tenant_session: DbSessionPort | None,
     ) -> None:
         with self.tracer.start_span("as2.db_persist"):
             status = "ERROR" if "failed" in disposition.value else "RECEIVED"
@@ -353,7 +354,11 @@ class ReceiveAS2UseCase:
                 raise
 
     def _record_metrics(
-        self, tenant_id: str, disposition: Disposition, start_time: float, logger: Any
+        self,
+        tenant_id: str,
+        disposition: Disposition,
+        start_time: float,
+        logger: LoggerPort,
     ) -> None:
         duration = time.perf_counter() - start_time
         self.metrics.observe(

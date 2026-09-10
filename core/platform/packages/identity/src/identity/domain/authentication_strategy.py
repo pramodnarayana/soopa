@@ -15,7 +15,6 @@ class AuthenticationStrategyPort(ABC):
         """
         Evaluates whether this strategy can process the given token string.
         """
-        pass
 
     @abstractmethod
     async def authenticate(self, token: str) -> IdentityContext:
@@ -23,4 +22,3 @@ class AuthenticationStrategyPort(ABC):
         Validates the token and returns the normalized IdentityContext.
         Raises AuthenticationError or HTTPException on failure.
         """
-        pass

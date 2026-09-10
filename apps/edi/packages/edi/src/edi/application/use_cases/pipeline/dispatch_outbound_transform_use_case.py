@@ -3,7 +3,7 @@ import uuid
 from typing import cast
 
 import structlog
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict
 
 from edi.application.dtos.routes import OutboundEdiHeaderDTO, OutboundRouteDTO
 from edi.config.settings import AppSettings
@@ -68,7 +68,7 @@ class DispatchOutboundTransformUseCase:
         trace_id: str,
         standard: str,
         transaction_type: str,
-        route_config: dict[str, JsonValue],
+        route_config: JsonDict,
     ) -> None:
         logger.info(
             "outbound_transform.offloaded_to_compute_queue",
@@ -87,9 +87,7 @@ class DispatchOutboundTransformUseCase:
             },
         )
 
-    def _determine_connection_type(
-        self, route_config: dict[str, JsonValue], outbound_route: dict[str, JsonValue]
-    ) -> str:
+    def _determine_connection_type(self, route_config: JsonDict, outbound_route: JsonDict) -> str:
         connection_type = route_config.get("connection_type", "UNKNOWN")
         if connection_type == "UNKNOWN" and outbound_route:
             if outbound_route.get("as2_partner_id"):

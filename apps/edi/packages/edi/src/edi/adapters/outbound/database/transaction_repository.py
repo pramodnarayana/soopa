@@ -4,11 +4,19 @@ import os
 from collections.abc import Sequence
 from typing import Protocol, cast
 
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
+
 
 class RouteModelProtocol(Protocol):
     gs_sender_id: str | None
     gs_receiver_id: str | None
     trading_partner_id: str | None
+
+
+def _event_idempotency_key(idempotency_key: str | None, *, index: int, event_count: int) -> str:
+    base_key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
+    return f"{base_key}_{index}" if event_count > 1 else base_key
 
 
 from outbox.domain.constants import OutboxStatus
@@ -47,6 +55,7 @@ from edi.application.dtos.transactions import (
 from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.enums import EdiDirection
+from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.storage_port import StoragePort
@@ -78,7 +87,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tenant_id,
-            idempotency_key=idempotency_key,
+            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             event_type=event_type,
             payload=serialized_payload,
             status=OutboxStatus.PENDING,
@@ -121,10 +130,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         for index, event in enumerate(aggregate.domain_events):
             event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
-            idempotency_key = (
-                f"{event.idempotency_key}_{index}"
-                if len(aggregate.domain_events) > 1
-                else event.idempotency_key
+            idempotency_key = _event_idempotency_key(
+                event.idempotency_key,
+                index=index,
+                event_count=len(aggregate.domain_events),
             )
             payload_dict = serialize_domain_event(event)
             outbox_record = DataPlaneOutbox(
@@ -167,14 +176,24 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             business_metadata=aggregate.business_metadata,
             payload=aggregate.payload,
         )
-        await self.session.merge(record)
+        try:
+            async with self.session.begin_nested():
+                self.session.add(record)
+                await self.flush()
+        except DuplicateEntityError as exc:
+            # A DB unique constraint on the idempotency key fired — translate to
+            # the domain-level error so the application layer can resolve it without
+            # any infrastructure leaking through.
+            raise IdempotencyConflictError(
+                f"EdiJson with idempotency key already exists: {exc}"
+            ) from exc
 
         for index, event in enumerate(aggregate.domain_events):
             event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
-            idempotency_key = (
-                f"{event.idempotency_key}_{index}"
-                if len(aggregate.domain_events) > 1
-                else event.idempotency_key
+            idempotency_key = _event_idempotency_key(
+                event.idempotency_key,
+                index=index,
+                event_count=len(aggregate.domain_events),
             )
             payload_dict = serialize_domain_event(event)
             outbox_record = DataPlaneOutbox(
@@ -241,13 +260,22 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = result.scalars().first()
         if not record:
             return None
-        return InboundRouteDTO(
-            trading_partner_id=record.trading_partner_id,
-            webhook_id=record.webhook_id,
-            as2_partner_id=getattr(record, "as2_partner_id", None),
-            sftp_partner_id=record.sftp_partner_id,
-            processing_mode=record.processing_mode,
-        )
+        if direction == EdiDirection.INBOUND:
+            return InboundRouteDTO(
+                trading_partner_id=record.trading_partner_id,
+                webhook_id=record.webhook_id,
+                as2_partner_id=record.as2_partner_id,
+                sftp_partner_id=record.sftp_partner_id,
+                processing_mode=record.processing_mode,
+            )
+        else:
+            return InboundRouteDTO(
+                trading_partner_id=record.trading_partner_id,
+                webhook_id=None,
+                as2_partner_id=record.as2_partner_id,
+                sftp_partner_id=record.sftp_partner_id,
+                processing_mode=None,  # Outbound routes do not have a processing mode
+            )
 
     async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
         stmt = select(Webhook).where(Webhook.id == partner_id)
@@ -745,6 +773,42 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         result = await self.session.execute(stmt)
         return set(result.scalars().all())
+
+    async def get_edi_json_by_idempotency_key(
+        self, tenant_id: str, idempotency_key: str
+    ) -> EdiJsonDTO | None:
+        stmt = (
+            select(EdiJson)
+            .where(
+                EdiJson.tenant_id == tenant_id,
+                EdiJson.business_metadata.op("@>")({"_idempotency_key": idempotency_key}),
+            )
+            .limit(1)
+        )
+
+        result = await self.session.execute(stmt)
+        record = result.scalars().first()
+
+        if not record:
+            return None
+
+        return EdiJsonDTO(
+            id=str(record.id),
+            trace_id=str(record.trace_id),
+            tenant_id=record.tenant_id,
+            direction=record.direction,
+            status=record.status,
+            trading_partner_id=record.trading_partner_id,
+            transaction_type=record.transaction_type,
+            sender_id=record.sender_id,
+            receiver_id=record.receiver_id,
+            gs_sender_id=record.gs_sender_id,
+            gs_receiver_id=record.gs_receiver_id,
+            business_metadata=record.business_metadata,
+            payload=record.payload,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+        )
 
 
 def _map_edi_message_to_domain(record: EdiMessage) -> EdiMessageDomainModel:

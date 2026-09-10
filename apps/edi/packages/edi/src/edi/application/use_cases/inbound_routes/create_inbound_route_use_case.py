@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 
 import structlog
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.dtos.commands import CreateInboundRouteCmd
 from edi.domain.enums import EdiEventType
@@ -50,7 +52,7 @@ class CreateInboundRouteUseCase:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_inbound_route_created,
                 resource_id=route_id,
-                explicit_idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         )
 

@@ -44,8 +44,6 @@ def build_registry() -> None:
             f.write(f'    "{key}": "{registry[key]}",\n')
         f.write("}\n")
 
-    print(f"Registry built with {len(registry)} entries.")
-
 
 if __name__ == "__main__":
     build_registry()

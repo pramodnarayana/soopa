@@ -137,7 +137,7 @@ async def test_scheduler_worker_claims_and_dispatches_job(
         endpoint_url=localstack_container["endpoint_url"],
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key="test",
     )
 
     response = sqs_client.receive_message(

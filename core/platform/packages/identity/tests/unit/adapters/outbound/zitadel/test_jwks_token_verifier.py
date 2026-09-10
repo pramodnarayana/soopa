@@ -150,7 +150,7 @@ async def test_get_cached_userinfo_rejects_non_object_json(
 
     monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
 
-    with pytest.raises(ValueError, match="userinfo response must be a JSON object"):
+    with pytest.raises(TypeError, match="userinfo response must be a JSON object"):
         await verifier._get_cached_userinfo("token", "jti")
 
     assert "jti" not in verifier._userinfo_cache

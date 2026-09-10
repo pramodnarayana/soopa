@@ -33,7 +33,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         # Format: {jti: (userinfo_dict, timestamp)}
         self._userinfo_cache: dict[str, tuple[JsonDict, float]] = {}
 
-    async def verify(self, token: str) -> TokenClaims:
+    async def verify(self, token: str) -> TokenClaims:  # noqa: C901
         try:
             signing_key = await self._get_signing_key(token)
             payload = jwt.decode(
@@ -45,10 +45,10 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             )
             raw_claims = dict(payload)
         except jwt.PyJWTError as e:
-            logger.error("JWT decode failed", exc_info=e)
+            logger.exception("JWT decode failed", exc_info=e)
             raise TokenValidationError(str(e)) from e
         except Exception as e:
-            logger.error("Failed to get signing key or decode JWT", exc_info=e)
+            logger.exception("Failed to get signing key or decode JWT", exc_info=e)
             raise TokenValidationError(str(e)) from e
 
         # Fallback to /userinfo if roles are missing (with enterprise caching)
@@ -60,7 +60,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             try:
                 userinfo = await self._get_cached_userinfo(token, jti)
                 payload.update(userinfo)
-            except (httpx.RequestError, ValueError) as e:
+            except (httpx.RequestError, ValueError, TypeError) as e:
                 logger.warning("Failed to fetch userinfo", exc_info=e)
 
         # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
@@ -122,7 +122,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             filtered_payload["raw_claims"] = raw_claims
             return TokenClaims(**filtered_payload)
         except Exception as e:
-            logger.error("Token claims validation failed", exc_info=e)
+            logger.exception("Token claims validation failed", exc_info=e)
             raise TokenValidationError(f"Invalid token claims: {e}") from e
 
     async def _get_signing_key(self, token: str) -> PyJWK:
@@ -149,7 +149,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             userinfo = response.json()
 
         if not isinstance(userinfo, dict):
-            raise ValueError("userinfo response must be a JSON object")
+            raise TypeError("userinfo response must be a JSON object")
 
         # Update cache
         self._userinfo_cache[jti] = (userinfo, now)

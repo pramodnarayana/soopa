@@ -52,6 +52,6 @@ async def authenticate_bearer_token(
         claims = await token_verifier.verify(token)
     except TokenValidationError as e:
         logger.warning("authentication_failed", reason="invalid_token", error=str(e))
-        raise AuthenticationError(f"Authentication failed: {str(e)}") from e
+        raise AuthenticationError(f"Authentication failed: {e!s}") from e
 
     return identity_context_from_claims(claims)

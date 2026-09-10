@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from seedwork.domain.types import JsonValue
+from edi.domain.types import JsonValue
 
 
 @dataclass(frozen=True)

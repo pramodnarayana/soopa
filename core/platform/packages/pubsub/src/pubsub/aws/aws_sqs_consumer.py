@@ -5,7 +5,7 @@ from typing import Any
 
 import aioboto3
 import structlog
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError
 from pubsub.message import AckableMessage
 
 logger = structlog.get_logger(__name__)

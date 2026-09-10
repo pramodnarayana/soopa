@@ -31,3 +31,110 @@ rules:
     message: "Enterprise Rule: Performance bottleneck. Do not call get_queue_url dynamically inside a polling loop. Cache it."
     languages: [python]
     severity: ERROR
+  - id: ban-defensive-getattr
+    patterns:
+      - pattern: getattr($OBJ, $ATTR, ...)
+    message: "Enterprise Rule: NEVER use getattr(obj, 'field', fallback) defensively. Use standard dot access to explicitly fail on missing properties."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "core/platform/apps/unified-api/src/**/*.py"
+  - id: ban-any-in-business-logic
+    patterns:
+      - pattern-either:
+          - pattern: Any
+          - pattern: typing.Any
+    message: "Enterprise Rule: No `Any` as a Crutch. Do not use Any in the domain or application layers. Define strict DTOs, Protocols, or use JsonValue/JsonDict if absolutely necessary."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/*.py"
+        - "**/application/**/*.py"
+      exclude:
+        - "**/tests/**/*.py"
+        - "**/*_test.py"
+        - "**/test_*.py"
+  - id: ban-dict-type-in-business-logic
+    patterns:
+      - pattern-either:
+          - pattern: "def $FUNC(..., $ARG: dict, ...): ..."
+          - pattern: "def $FUNC(..., $ARG: typing.Dict, ...): ..."
+          - pattern: "def $FUNC(..., $ARG: Dict, ...): ..."
+          - pattern: "def $FUNC(..., $ARG: dict[$KEY, $VALUE], ...): ..."
+          - pattern: "def $FUNC(..., $ARG: typing.Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "def $FUNC(..., $ARG: Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "def $FUNC(...) -> dict: ..."
+          - pattern: "def $FUNC(...) -> typing.Dict: ..."
+          - pattern: "def $FUNC(...) -> Dict: ..."
+          - pattern: "def $FUNC(...) -> dict[$KEY, $VALUE]: ..."
+          - pattern: "def $FUNC(...) -> typing.Dict[$KEY, $VALUE]: ..."
+          - pattern: "def $FUNC(...) -> Dict[$KEY, $VALUE]: ..."
+          - pattern: "async def $FUNC(..., $ARG: dict, ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: typing.Dict, ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: Dict, ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: dict[$KEY, $VALUE], ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: typing.Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "async def $FUNC(..., $ARG: Dict[$KEY, $VALUE], ...): ..."
+          - pattern: "async def $FUNC(...) -> dict: ..."
+          - pattern: "async def $FUNC(...) -> typing.Dict: ..."
+          - pattern: "async def $FUNC(...) -> Dict: ..."
+          - pattern: "async def $FUNC(...) -> dict[$KEY, $VALUE]: ..."
+          - pattern: "async def $FUNC(...) -> typing.Dict[$KEY, $VALUE]: ..."
+          - pattern: "async def $FUNC(...) -> Dict[$KEY, $VALUE]: ..."
+    message: "Enterprise Rule: Strict Data Structures. Do not pass opaque `dict` objects in the domain or application layers. Use strongly typed dataclasses, Pydantic models, or JsonDict if dynamic data is required."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/*.py"
+        - "**/application/**/*.py"
+      exclude:
+        - "**/tests/**/*.py"
+        - "**/*_test.py"
+        - "**/test_*.py"
+  - id: hexagonal-boundary-enforcement
+    patterns:
+      - pattern-either:
+          - pattern: import sqlalchemy
+          - pattern: import fastapi
+          - pattern: import boto3
+          - pattern: from sqlalchemy import $ANY
+          - pattern: from fastapi import $ANY
+          - pattern: from boto3 import $ANY
+    message: "Enterprise Rule: Hexagonal Boundary Enforcement. Do not import infrastructure/framework packages inside pure domain or application logic."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/domain/**/*.py"
+        - "**/application/**/*.py"
+
+  - id: ban-fstrings-in-structlog
+    patterns:
+      - pattern-either:
+          - pattern: $LOGGER.info(f"...")
+          - pattern: $LOGGER.error(f"...")
+          - pattern: $LOGGER.warning(f"...")
+          - pattern: $LOGGER.debug(f"...")
+          - pattern: $LOGGER.exception(f"...")
+          - pattern: $LOGGER.critical(f"...")
+    message: "Enterprise Rule: Context Injection. Do not use f-strings inside logger calls. Use structured JSON kwargs instead (e.g., logger.info('event', user_id=id))."
+    languages: [python]
+    severity: ERROR
+
+  - id: strict-api-worker-decoupling
+    patterns:
+      - pattern-either:
+          - pattern: SqsConsumerManager(...)
+          - pattern: AwsSqsConsumer(...)
+    message: "Enterprise Rule: Strict API/Worker Decoupling. Do not run background pollers inside the web API container."
+    languages: [python]
+    severity: ERROR
+    paths:
+      include:
+        - "**/routers/**/*.py"
+        - "**/src/edi/main.py"
+        - "**/src/unified_api/main.py"
+        - "**/src/ucp/main.py"

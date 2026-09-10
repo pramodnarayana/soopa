@@ -1,4 +1,6 @@
 import structlog
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
@@ -23,7 +25,7 @@ class DeleteInboundRouteUseCase:
                 tenant_id=tenant_id,
                 event_type=EdiEventType.edi_inbound_route_deleted,
                 resource_id=route_id,
-                explicit_idempotency_key=idempotency_key,
+                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         )
         await self.uow.inbound_routes.delete(aggregate)

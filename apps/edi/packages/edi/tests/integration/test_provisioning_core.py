@@ -61,8 +61,7 @@ async def test_create_sftp_partner(sftp_partner_service: CreateSFTPPartnerUseCas
     )
     partner = await sftp_partner_service.create_sftp_partner(tenant_id="1", cmd=cmd)
 
-    assert getattr(partner, "type", "SFTP") == "SFTP"
-    assert getattr(partner, "status", "INACTIVE") == "INACTIVE"
+    assert partner.active is False
     assert len(global_repo.sftp_partners.sftp_partners) == 1
 
 

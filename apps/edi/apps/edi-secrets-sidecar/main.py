@@ -3,7 +3,7 @@ import os
 from contextlib import suppress
 from typing import Any, Protocol, cast
 
-import boto3  # type: ignore[import-untyped]
+import boto3
 import structlog
 from edi.config.constants import SecretCategory
 from edi.config.settings import get_settings

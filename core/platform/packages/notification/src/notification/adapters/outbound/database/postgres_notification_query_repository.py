@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import cast
 
 from database.models.notifications import NotificationRecord
 from sqlalchemy import CursorResult, select, update
@@ -53,5 +54,5 @@ class SqlAlchemyNotificationQueryRepository(NotificationQueryPort):
                 )
                 .values(is_read=True)
             )
-            result: CursorResult[tuple[()]] = await session.execute(stmt)  # type: ignore[assignment]
+            result = cast(CursorResult[tuple[()]], await session.execute(stmt))
             return result.rowcount > 0

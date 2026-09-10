@@ -22,7 +22,7 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
         endpoint_url="http://localhost:4566",
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key="test",
     )
 
     sqs.create_queue(
@@ -57,7 +57,7 @@ async def test_notification_worker_boots_and_shuts_down_gracefully() -> None:
     try:
         # We set these in environ as well for any internal boto3 clients that might rely on them
         os.environ["AWS_ACCESS_KEY_ID"] = "test"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "test"  # noqa: S105
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "test"
 
         # Start the worker in the background
         worker_task = asyncio.create_task(run_consumer(stop_event=stop_event, container=container))

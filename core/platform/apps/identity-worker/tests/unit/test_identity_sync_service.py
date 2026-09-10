@@ -5,6 +5,9 @@ import pytest
 from database.models.identity import Tenant as DbTenant
 from database.models.identity import User as DbUser
 from identity.domain.constants import UserStatus
+from identity_worker.adapters.outbound.database.identity_sync_repository import (
+    PostgresIdentitySyncUnitOfWork,
+)
 from identity_worker.application.use_cases.identity_sync_service import (
     IdentitySyncService,
     StateConflictError,
@@ -86,6 +89,12 @@ async def fakes():
 
 
 @pytest.fixture
+async def uow_factory(db_session_factory):
+    """Wraps the raw session factory in the UoW adapter — mirrors production container wiring."""
+    return lambda: PostgresIdentitySyncUnitOfWork(db_session_factory)
+
+
+@pytest.fixture
 async def setup_db(db_session_factory):
     async with db_session_factory() as session:
         # Create a fully provisioned tenant
@@ -118,9 +127,9 @@ async def setup_db(db_session_factory):
     }
 
 
-async def test_handle_tenant_provisioned(fakes, db_session_factory, setup_db):
+async def test_handle_tenant_provisioned(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     tenant_id = setup_db["tenant_id"]
     await service.handle_tenant_provisioned(tenant_id)
@@ -128,9 +137,9 @@ async def test_handle_tenant_provisioned(fakes, db_session_factory, setup_db):
     assert tenant_id in idp.synced_tenants
 
 
-async def test_handle_user_created(fakes, db_session_factory, setup_db):
+async def test_handle_user_created(fakes, db_session_factory, uow_factory, setup_db):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     user_id = setup_db["user_id"]
     tenant_id = setup_db["tenant_id"]
@@ -158,9 +167,9 @@ async def test_handle_user_created(fakes, db_session_factory, setup_db):
         assert db_user.idp_user_id == created_idp_user_id
 
 
-async def test_handle_user_created_unprovisioned_tenant(fakes, db_session_factory, setup_db):
+async def test_handle_user_created_unprovisioned_tenant(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     user_id = setup_db["user_id"]
     unprovisioned_tenant_id = setup_db["unprovisioned_tenant_id"]
@@ -177,10 +186,10 @@ async def test_handle_user_created_unprovisioned_tenant(fakes, db_session_factor
 
 
 async def test_handle_user_created_missing_local_user_has_no_external_side_effects(
-    fakes, db_session_factory, setup_db
+    fakes, uow_factory, setup_db
 ):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     await service.handle_user_created(
         user_id=generate_id("id"),
@@ -196,10 +205,10 @@ async def test_handle_user_created_missing_local_user_has_no_external_side_effec
 
 
 async def test_handle_user_created_reconciles_existing_idp_user(
-    fakes, db_session_factory, setup_db
+    fakes, db_session_factory, uow_factory, setup_db
 ):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
     existing_idp_user_id = "idp_existing"
 
     async with db_session_factory() as session:
@@ -221,11 +230,11 @@ async def test_handle_user_created_reconciles_existing_idp_user(
 
 
 async def test_handle_user_created_compensates_failed_role_assignment(
-    fakes, db_session_factory, setup_db
+    fakes, db_session_factory, uow_factory, setup_db
 ):
     idp, user_idp = fakes
     user_idp.fail_role_assignment = True
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     with pytest.raises(RuntimeError, match="role assignment failed"):
         await service.handle_user_created(
@@ -243,9 +252,9 @@ async def test_handle_user_created_compensates_failed_role_assignment(
         assert user.idp_user_id is None
 
 
-async def test_handle_user_updated(fakes, db_session_factory, setup_db):
+async def test_handle_user_updated(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     # Pre-populate fake user
     idp_user_id = await user_idp.create_user(
@@ -264,9 +273,9 @@ async def test_handle_user_updated(fakes, db_session_factory, setup_db):
     assert user_idp.user_roles[idp_user_id] == "member"
 
 
-async def test_handle_user_status_toggled(fakes, db_session_factory, setup_db):
+async def test_handle_user_status_toggled(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     idp_user_id = await user_idp.create_user(setup_db["idp_tenant_id"], "test@test.com", "F", "L")
     assert user_idp.user_status[idp_user_id] == "active"
@@ -278,9 +287,9 @@ async def test_handle_user_status_toggled(fakes, db_session_factory, setup_db):
     assert user_idp.user_status[idp_user_id] == "deactivate"
 
 
-async def test_handle_user_deleted(fakes, db_session_factory, setup_db):
+async def test_handle_user_deleted(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, db_session_factory)
+    service = IdentitySyncService(idp, user_idp, uow_factory)
 
     idp_user_id = await user_idp.create_user(setup_db["idp_tenant_id"], "test@test.com", "F", "L")
     assert idp_user_id in user_idp.users

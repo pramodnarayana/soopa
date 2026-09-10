@@ -43,7 +43,8 @@ class Container(containers.DeclarativeContainer):
 
     wiring_config = containers.WiringConfiguration(
         packages=[
-            "unified_api.adapters.inbound.http.routers",
+            "unified_api.adapters.inbound.http.ucp.routers",
+            "unified_api.adapters.inbound.http.identity.routers",
             "unified_api.adapters.inbound.http.guards",
         ]
     )

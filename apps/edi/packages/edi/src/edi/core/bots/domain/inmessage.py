@@ -1,3 +1,5 @@
+from seedwork.domain.types import JsonDict
+
 from edi.core.bots.domain.parser_registry import READER_REGISTRY
 
 """Reading/lexing/parsing/splitting an edifile."""
@@ -386,7 +388,7 @@ class Inmessage(message.Message):
     def _lex(self):
         """edi file->self.lex_records."""
 
-    def _parsefields(self, lex_record, record_definition) -> dict:
+    def _parsefields(self, lex_record, record_definition) -> JsonDict:
         """Parse fields from one fixed message-record and check length of the fixed record."""
         raise NotImplementedError()
 

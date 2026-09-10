@@ -81,6 +81,7 @@ class NotificationDispatch(AggregateRoot):
                 content=body,
                 data=data,
                 id=idempotency_key,
+                idempotency_key=idempotency_key,
             )
         )
         return dispatch

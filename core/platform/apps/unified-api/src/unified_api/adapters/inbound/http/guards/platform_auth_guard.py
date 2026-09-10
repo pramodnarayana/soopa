@@ -35,7 +35,7 @@ async def require_platform_admin(
         HTTP 401 — if the request was not authenticated (no valid Bearer token).
         HTTP 403 — if the token is valid but the user is not a platform admin.
     """
-    identity: IdentityContext | None = getattr(request.state, "identity", None)
+    identity: IdentityContext | None = request.state.identity
     if identity is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

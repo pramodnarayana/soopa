@@ -47,3 +47,18 @@ class AS2TenantRepositoryPort(Protocol):
         Raises ValueError if multiple active routes match (ambiguous resolution).
         """
         ...
+
+    async def get_tenant_shard_info(self, tenant_id: str) -> tuple[str, str, str] | None:
+        """
+        Returns (tenant_id, shard_key, shard_connection_url) for a given tenant.
+        """
+        ...
+
+
+class DbSessionPort(Protocol):
+    async def commit(self) -> None: ...
+    async def rollback(self) -> None: ...
+
+
+class EdiMessageRepositoryFactoryPort(Protocol):
+    def create_repo(self, tenant_session: DbSessionPort) -> EdiMessageRepositoryPort: ...

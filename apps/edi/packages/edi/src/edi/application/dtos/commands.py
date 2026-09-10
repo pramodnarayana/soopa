@@ -89,14 +89,14 @@ class CreateAS2PartnershipCmd:
 
 @dataclass(frozen=True)
 class UpdateAS2PartnershipCmd:
-    name: str | UnsetType = UNSET
+    name: str | UnsetType | None = UNSET
     credentials_vault_ref: str | UnsetType | None = UNSET
-    mdn_type: MDNType | UnsetType = UNSET
+    mdn_type: MDNType | UnsetType | None = UNSET
     mdn_url: str | UnsetType | None = UNSET
-    encryption_algorithm: EncryptionAlgorithm | UnsetType = UNSET
-    signature_algorithm: SignatureAlgorithm | UnsetType = UNSET
+    encryption_algorithm: EncryptionAlgorithm | UnsetType | None = UNSET
+    signature_algorithm: SignatureAlgorithm | UnsetType | None = UNSET
     advanced_flags: dict[str, JsonValue] | UnsetType | None = UNSET
-    active: bool | UnsetType = UNSET
+    active: bool | UnsetType | None = UNSET
 
 
 # ---------------------------------------------------------------------------
@@ -256,6 +256,7 @@ class ProcessApiEdiJsonCommand:
     trading_partner_id: str
     payload: JsonValue
     transaction_type: str | None = None
+    idempotency_key: str | None = None
 
 
 @dataclass(frozen=True)

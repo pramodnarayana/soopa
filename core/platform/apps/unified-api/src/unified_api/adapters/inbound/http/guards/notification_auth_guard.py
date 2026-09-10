@@ -9,17 +9,17 @@ def assert_tenant_authorized(request: Request, tenant_id: str) -> None:
     Raises HTTP 403 if the authenticated identity is not authorized to access
     the requested tenant. Guards all tenant-scoped endpoints against IDOR.
     """
-    identity = getattr(request.state, "identity", None)
+    identity = request.state.identity
     if identity is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
-    authorized: set[str] = getattr(identity, "authorized_tenants", set()) or set()
+    authorized: set[str] = identity.authorized_tenants
     if tenant_id not in authorized:
         logger.warning(
             "authz.denied.tenant_idor",
             path=request.url.path,
             requested_tenant=tenant_id,
-            subject=getattr(identity, "subject", "unknown"),
+            subject=identity.subject,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -31,16 +31,16 @@ def assert_user_matches_identity(request: Request, user_id: str) -> None:
     """
     Raises HTTP 403 if the authenticated identity does not match the requested user_id.
     """
-    identity = getattr(request.state, "identity", None)
+    identity = request.state.identity
     if identity is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
-    if getattr(identity, "subject", None) != user_id:
+    if identity.subject != user_id:
         logger.warning(
             "authz.denied.user_idor",
             path=request.url.path,
             requested_user=user_id,
-            subject=getattr(identity, "subject", "unknown"),
+            subject=identity.subject,
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -322,7 +322,6 @@ def do_structure(grammar_obj):
             {"grammar": grammar_obj.grammarname},
         )
     if len(grammar_obj.structure) != 1:
-        print("DEBUG STRUCTURE FAILED LENGTH:", grammar_obj.structure)
         raise GrammarPartMissing(
             _('Grammar "%(grammar)s", in structure: structure must have exactlty one root record.'),
             {"grammar": grammar_obj.grammarname},

@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import cast
 
 import structlog
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
@@ -123,8 +123,8 @@ class ComputeTransformUseCase:
                     receiver_id=edi_msg.receiver_id,
                     gs_sender_id=gs_sender,
                     gs_receiver_id=gs_receiver,
-                    business_metadata=cast("dict[str, JsonValue]", business_metadata),
-                    payload=cast("dict[str, JsonValue]", json_dict),
+                    business_metadata=cast(JsonDict, business_metadata),
+                    payload=cast(JsonDict, json_dict),
                     status=MessageStatus.PARSED.value,
                     tenant_id=edi_msg.tenant_id,
                 )
@@ -166,7 +166,7 @@ class ComputeTransformUseCase:
                 receiver_id=edi_msg.receiver_id,
                 trading_partner_id=trading_partner_id,
                 format_standard=standard,
-                transactions=cast(list[dict[str, JsonValue]], json_payloads),
+                transactions=cast(list[JsonDict], json_payloads),
             )
 
             # Save ApiGateway to DB as a single webhook delivery

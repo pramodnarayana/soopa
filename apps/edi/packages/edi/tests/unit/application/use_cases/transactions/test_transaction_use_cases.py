@@ -92,12 +92,9 @@ class FakeEdiMessageRepository:
 
     async def save(self, model: Any) -> None:
         for e in model.domain_events:
-            event_type = getattr(e, "event_type", "edi.transaction.replay_requested")
-            if dataclasses.is_dataclass(e):
-                payload = dataclasses.asdict(e)
-            else:
-                payload = getattr(e, "model_dump", lambda ev=e: vars(ev))()
-            key = getattr(e, "explicit_idempotency_key", None)
+            event_type = getattr(e, "event_name", getattr(e, "event_type", "unknown"))
+            payload = dataclasses.asdict(e) if dataclasses.is_dataclass(e) else vars(e)
+            key = e.idempotency_key
             self.outbox_events.append(
                 {
                     "tenant_id": model.tenant_id,

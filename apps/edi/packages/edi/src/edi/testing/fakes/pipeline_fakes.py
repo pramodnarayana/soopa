@@ -1,6 +1,7 @@
 import base64
 import dataclasses
 import hashlib
+import typing
 import uuid
 from datetime import UTC, datetime
 from typing import TypeVar
@@ -17,7 +18,9 @@ def _from_dict(cls: type[T], data: dict[str, object] | None) -> T | None:
         return None
 
     kwargs = {}
-    fields = getattr(cls, "__dataclass_fields__", {})
+    if not dataclasses.is_dataclass(cls):
+        return None
+    fields = {f.name: f for f in dataclasses.fields(typing.cast(typing.Any, cls))}
     for name in fields:
         if name in data:
             kwargs[name] = data[name]
@@ -114,7 +117,7 @@ class FakeTransformerAdapter(TransformerPort):
 class InMemoryRepositoryAdapter(RepositoryPort):
     def __init__(self) -> None:
         self.edi_messages: dict[str, dict[str, object]] = {}
-        self.api_gateway: dict[str, dict[str, object]] = {}
+        self.api_gateway: dict[str, dict[str, JsonValue]] = {}
         self.edi_json: dict[str, dict[str, object]] = {}
         self.outbound_routes: dict[str, dict[str, object]] = {}
         self.outbound_edi_headers: dict[str, dict[str, object]] = {}
@@ -278,7 +281,7 @@ class InMemoryRepositoryAdapter(RepositoryPort):
 
     async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None:
         raw = self.api_gateway.get(trace_id)
-        return raw  # type: ignore
+        return raw
 
     async def update_api_payload_status(
         self,
@@ -442,6 +445,7 @@ class FakeSftpDeliveryAdapter:
 
     def __init__(self) -> None:
         self.delivered: list[dict[str, object]] = []
+        self.raise_on_deliver = False
 
     async def deliver(
         self,
@@ -485,6 +489,7 @@ class FakeAS2DeliveryAdapter:
             "Content-Type": 'multipart/report; report-type=disposition-notification; boundary="----=_MDNBoundary"'
         }
         self.delivered: list[dict[str, object]] = []
+        self.raise_on_deliver = False
         if body is not None:
             self.body = body
         else:
@@ -503,7 +508,7 @@ class FakeAS2DeliveryAdapter:
         self, url: str, body: bytes, headers: dict[str, str]
     ) -> tuple[int, dict[str, str], bytes]:
         self.delivered.append({"url": url, "body": body, "headers": headers})
-        if getattr(self, "raise_on_deliver", False):
+        if self.raise_on_deliver:
             raise RuntimeError("Fake delivery failure")
 
         digest = hashlib.sha256(body).digest()

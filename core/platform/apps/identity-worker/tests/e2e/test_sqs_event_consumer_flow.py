@@ -37,7 +37,7 @@ def localstack_sqs() -> dict[str, str]:
         endpoint_url=endpoint_url,
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key="test",
     )
 
     queue_name = f"identity-events-{generate_random_hex(6)}.fifo"
@@ -77,7 +77,7 @@ async def test_manager_dispatches_message_to_subscribed_handler(
         endpoint_url=endpoint_url,
         region_name="us-east-1",
         aws_access_key_id="test",
-        aws_secret_access_key="test",  # noqa: S106
+        aws_secret_access_key="test",
     )
 
     test_payload = (

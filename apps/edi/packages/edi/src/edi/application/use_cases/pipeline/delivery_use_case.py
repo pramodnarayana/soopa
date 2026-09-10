@@ -2,6 +2,8 @@ import contextlib
 from collections.abc import Callable
 
 import structlog
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
@@ -42,7 +44,7 @@ class DeliveryUseCase:
                 if not owner_token:
                     logger.info(
                         "delivery.skipped_already_claimed",
-                        idempotency_key=idempotency_key,
+                        idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
                     )
                     return
                 await uow.commit()

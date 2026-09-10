@@ -3,6 +3,8 @@ import uuid
 import pytest
 import pytest_asyncio
 from outbox.domain.constants import OutboxStatus
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -37,7 +39,7 @@ async def test_publish_finalizes_existing_idempotency_reservation(global_session
     reservation_id = f"res-{uuid.uuid4()}"
     reserved_outbox = ControlPlaneOutbox(
         id=reservation_id,
-        idempotency_key=idempotency_key,
+        idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
         tenant_id=tenant_id,
         event_type="RESERVATION",
         payload={"fingerprint": "fingerprint-1"},
@@ -53,7 +55,7 @@ async def test_publish_finalizes_existing_idempotency_reservation(global_session
             event_type=EdiEventType.edi_as2_partner_created,
             resource_id="partner-1",
         ),
-        idempotency_key=idempotency_key,
+        idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
     )
 
     # Repository should return the existing ID
