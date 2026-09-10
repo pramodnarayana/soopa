@@ -22,6 +22,12 @@ async def main() -> None:
 
     container = Container()
     container.config.from_pydantic(settings)
+    container.config.database_url.from_value(settings.database_url)
+    container.config.sqs_priority_notifications_queue_url.from_value(
+        settings.sqs_priority_notifications_queue_url
+    )
+    container.config.aws_region.from_value(settings.aws_region)
+    container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
 
     try:
         await cast(Awaitable[None], container.init_resources())

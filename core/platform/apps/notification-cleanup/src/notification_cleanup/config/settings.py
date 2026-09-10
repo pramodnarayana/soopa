@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field, computed_field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from seedwork.infrastructure.config import load_settings_safely
 from seedwork.infrastructure.config_models import (
@@ -22,35 +22,30 @@ class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: PlatformDatabaseSettings.model_validate({})
+        default_factory=lambda: PlatformDatabaseSettings(global_url="")
     )
     aws: NotificationCleanupAwsSettings = Field(
-        default_factory=lambda: NotificationCleanupAwsSettings.model_validate({})
+        default_factory=lambda: NotificationCleanupAwsSettings(sns_topic_arn="")
     )
-    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings.model_validate({}))
+    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings(notification_jobs_queue_url=""))
 
     @property
-    @computed_field
     def database_url(self) -> str:
         return self.database.global_url
 
     @property
-    @computed_field
     def sns_topic_arn(self) -> str:
         return self.aws.sns_topic_arn
 
     @property
-    @computed_field
     def sqs_notification_jobs_queue_url(self) -> str:
         return self.sqs.notification_jobs_queue_url
 
     @property
-    @computed_field
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
     @property
-    @computed_field
     def aws_region(self) -> str:
         return self.aws.resolved_region
 

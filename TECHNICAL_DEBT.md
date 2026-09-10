@@ -453,3 +453,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Description**: After the monorepo-wide cleanup of type suppressions, we have identified one remaining `# type: ignore` instance that was deliberately kept because it intercepts Pydantic configuration failures which type checkers cannot statically evaluate.
   - `core/platform/packages/seedwork/src/seedwork/infrastructure/config.py`: `except ValidationError as e: # type: ignore`
 - **Action Item**: Determine if Pydantic's `ValidationError` can be typed explicitly or if the exception block needs to be restructured so that `mypy` natively accepts it without the suppression.ld.
+
+## [Coverage] Compute Worker Missing Test Coverage
+
+- **Date Added**: 2026-09-10
+- **Status**: TO DO
+- **Description**: The `ci:verify` script fails because `@soopa/compute-worker` is currently sitting at ~35% test coverage, dropping below the enforced 80% threshold. This is likely due to untested logic introduced in recent code additions (e.g. from CodeRabbit automated reviews).
+- **Action Item**: Write missing unit/integration tests for the `compute-worker` module (specifically covering `src/compute_worker/main.py` and `compute_dispatcher.py`) to raise coverage back above 80% so the global `ci:verify` pipeline can pass fully.
