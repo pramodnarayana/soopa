@@ -46,6 +46,8 @@ ENV/
 # Pytest / Coverage
 .pytest_cache/
 .coverage
+coverage.xml
+coverage.json
 htmlcov/
 .tox/
 .nox/

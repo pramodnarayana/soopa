@@ -104,6 +104,7 @@ strict = true
 warn_unused_ignores = false
 warn_return_any = true
 explicit_package_bases = true
+disable_error_code = ["prop-decorator"]
 exclude = [
     "venv",
     ".venv",

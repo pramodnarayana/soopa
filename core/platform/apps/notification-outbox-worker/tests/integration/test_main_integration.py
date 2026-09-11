@@ -17,6 +17,7 @@ async def test_main_execution():
 
     # Let it boot and run the listener for a second
     await asyncio.sleep(1)
+    assert not worker_task.done(), "Worker task should still be running"
 
     # Cancel the worker to trigger the finally block and shutdown sequence
     worker_task.cancel()

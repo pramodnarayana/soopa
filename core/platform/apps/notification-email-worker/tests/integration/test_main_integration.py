@@ -3,13 +3,13 @@ import contextlib
 
 import pytest
 
-from notification_cleanup.main import main
+from notification_email_worker.main import main
 
 
 @pytest.mark.asyncio
 async def test_main_execution() -> None:
     """
-    Validates that the notification-cleanup worker can boot its dependency injection container,
+    Validates that the notification-email-worker can boot its dependency injection container,
     wire its dependencies properly, and handle a graceful shutdown via task cancellation.
     This provides ~100% coverage over the bootstrap sequence without using any mocks.
     """

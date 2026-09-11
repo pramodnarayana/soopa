@@ -3,7 +3,7 @@ import contextlib
 import inspect
 import signal
 from collections.abc import Awaitable
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from observability import ObservabilityProvider
@@ -39,7 +39,23 @@ async def main() -> None:
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(sig, stop_event.set)
 
-        await stop_event.wait()
+        stop_task = asyncio.create_task(stop_event.wait())
+        wait_tasks: list[asyncio.Task[Any]] = [stop_task]
+        if email_worker.task is not None:
+            wait_tasks.append(email_worker.task)
+
+        done, pending = await asyncio.wait(
+            wait_tasks,
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in pending:
+            task.cancel()
+
+        if email_worker.task is not None and email_worker.task in done:
+            exc = email_worker.task.exception()
+            if exc is not None:
+                raise exc
     finally:
         logger.info("notification_email_worker_shutting_down")
         with contextlib.suppress(Exception):

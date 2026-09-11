@@ -35,6 +35,7 @@ build-backend = "hatchling.build"
 packages = ["src/unified_api"]
 [tool.mypy]
 strict = true
+disable_error_code = ["prop-decorator"]
 
 [tool.uv.sources]
 ucp = { workspace = true }

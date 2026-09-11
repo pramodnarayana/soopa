@@ -39,38 +39,38 @@ class AppSettings(BaseSettings):
     aws: PlatformAwsSettings = Field(default_factory=lambda: typing.cast(PlatformAwsSettings, {}))
     sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
 
-    @property
     @computed_field
+    @property
     def database_url(self) -> str:
         return self.database.global_url
 
-    @property
     @computed_field
+    @property
     def async_database_url(self) -> str:
         return self.database.global_url
 
-    @property
     @computed_field
+    @property
     def sqs_data_plane_jobs_queue_url(self) -> str:
         return self.sqs.data_plane_jobs_queue_url
 
-    @property
     @computed_field
+    @property
     def sqs_control_plane_jobs_queue_url(self) -> str:
         return self.sqs.control_plane_jobs_queue_url
 
-    @property
     @computed_field
+    @property
     def sqs_notification_jobs_queue_url(self) -> str:
         return self.sqs.notification_jobs_queue_url
 
-    @property
     @computed_field
+    @property
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @property
     @computed_field
+    @property
     def aws_region(self) -> str:
         return self.aws.resolved_region
 

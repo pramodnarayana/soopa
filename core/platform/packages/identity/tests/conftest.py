@@ -4,6 +4,9 @@ import os
 import pytest
 import pytest_asyncio
 from database.provider import DatabaseProvider
+from dotenv import load_dotenv
+
+load_dotenv()
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 

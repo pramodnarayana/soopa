@@ -12,7 +12,7 @@ from seedwork.infrastructure.config_models import (
 class SqsSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     priority_notifications_queue_url: str = Field(
-        validation_alias="SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", default=""
+        validation_alias="SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", min_length=1
     )
 
 
@@ -23,7 +23,9 @@ class AppSettings(BaseSettings):
         default_factory=lambda: PlatformDatabaseSettings(global_url="")
     )
     aws: PlatformAwsSettings = Field(default_factory=lambda: PlatformAwsSettings())
-    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
+    sqs: SqsSettings = Field(
+        default_factory=lambda: SqsSettings(priority_notifications_queue_url="dummy")
+    )
 
     @property
     def database_url(self) -> str:

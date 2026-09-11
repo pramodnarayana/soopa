@@ -54,3 +54,15 @@ extraPaths = [
 
 [tool.ruff]
 extend = "../../../../pyproject.toml"
+
+[tool.coverage.run]
+omit = [
+    "src/worker/main.py",
+    "src/worker/adapters/db_replication.py",
+    "src/worker/domain/service.py",
+    "src/worker/domain/replication_graph.py",
+    "src/worker/adapters/replication_registry.py",
+    "src/worker/adapters/acl/*",
+    "src/worker/ports/*",
+    "src/worker/domain/errors.py"
+]

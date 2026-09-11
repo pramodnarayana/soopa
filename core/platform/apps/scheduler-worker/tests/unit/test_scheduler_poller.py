@@ -65,15 +65,16 @@ async def test_scheduler_poller_continues_on_exception() -> None:
     # To prevent an infinite loop, we run start() as a task, let it run briefly, then stop it.
     task = asyncio.create_task(poller.start())
 
-    # Yield control to the event loop so start() can do at least one iteration
-    await asyncio.sleep(0.01)
+    # Yield control to the event loop until the sweeper has been called at least twice
+    while sweeper.call_count < 2:
+        await asyncio.sleep(0.01)
 
     # Now stop the poller
     await poller.stop()
     await task
 
-    # Sweeper should have been called at least once
-    assert sweeper.call_count >= 1
+    # Sweeper should have been called at least twice
+    assert sweeper.call_count >= 2
     # Claimer is never called because sweeper raises an error first
     assert claimer.call_count == 0
     assert poller.is_running is False
