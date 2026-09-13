@@ -6,7 +6,7 @@ import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
     BulkReplayTransactionsUseCase,
 )

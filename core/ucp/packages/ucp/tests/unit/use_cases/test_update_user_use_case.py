@@ -66,7 +66,7 @@ async def test_update_user_success(fake_uow, update_user_use_case):
         user_id="iam_usr_123",
         first_name="New",
         last_name="Name",
-        role="admin",
+        role="iam_rol_abc",
     )
 
     await update_user_use_case.execute(command)
@@ -98,7 +98,7 @@ async def test_update_user_tenant_not_found(update_user_use_case):
         user_id="iam_usr_123",
         first_name="New",
         last_name="Name",
-        role="admin",
+        role="rol_123",
     )
 
     with pytest.raises(ResourceNotFoundError) as exc:
@@ -124,7 +124,7 @@ async def test_update_user_user_not_found(fake_uow, update_user_use_case):
         user_id="iam_usr_unknown",
         first_name="New",
         last_name="Name",
-        role="admin",
+        role="rol_123",
     )
 
     with pytest.raises(ResourceNotFoundError) as exc:

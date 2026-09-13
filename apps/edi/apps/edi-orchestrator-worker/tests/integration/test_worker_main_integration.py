@@ -18,6 +18,7 @@ async def test_worker_main_boot_and_shutdown() -> None:
 
     await asyncio.sleep(1.5)
 
+    assert not task.done(), "Worker task should not exit prematurely"
     # Cancel the main task (which in turn cancels the data_task inside it)
     task.cancel()
 

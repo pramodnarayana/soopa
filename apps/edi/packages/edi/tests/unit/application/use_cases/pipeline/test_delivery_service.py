@@ -81,8 +81,8 @@ async def test_delivery_service_inbound_webhook() -> None:
     }
     uow.repository.routes.append(
         {
-            "route_id": "r1",
             "tenant_id": "1",
+            "route_id": "r1",
             "direction": EdiDirection.INBOUND,
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
@@ -127,8 +127,8 @@ async def test_delivery_service_outbound_sftp() -> None:
     }
     uow.repository.routes.append(
         {
-            "route_id": "r2",
             "tenant_id": "1",
+            "route_id": "r2",
             "direction": EdiDirection.OUTBOUND,
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",
@@ -202,8 +202,8 @@ async def test_delivery_service_http_failure_sets_failed_status() -> None:
     }
     uow.repository.routes.append(
         {
-            "route_id": "r1",
             "tenant_id": "1",
+            "route_id": "r1",
             "direction": EdiDirection.INBOUND,
             "isa_sender_id": "SENDER1",
             "isa_receiver_id": "RECV1",

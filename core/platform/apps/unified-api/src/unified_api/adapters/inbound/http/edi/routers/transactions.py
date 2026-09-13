@@ -22,9 +22,7 @@ from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
 from edi.domain.exceptions import TransactionNotFoundError
-from edi.ports.outbound.uow import (
-    DataPlaneUnitOfWorkPort as DataPlaneUnitOfWorkPort,
-)
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession

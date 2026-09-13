@@ -192,6 +192,13 @@ class EdiMessagingStack:
             "identity-ucp-events-subscription",
             topic=self.ucp_events_topic,
             queue_pair=self.identity_events,
+            filter_policy={
+                "event_type": [
+                    "tenant.provisioned",
+                    "app.subscribed",
+                    "app.unsubscribed",
+                ]
+            },
         )
 
         # EDI events → transform queue (transform events only)
@@ -250,11 +257,12 @@ class EdiMessagingStack:
             },
         )
 
-        # UCP events → config-sync queue (all webhook and tenant provisioning events)
+        # UCP events → config-sync queue (all webhook events)
         _subscribe_queue(
             "edi-ucp-config-sync-subscription",
             topic=self.ucp_events_topic,
             queue_pair=self.edi_config_sync,
+            filter_policy={"event_type": [{"prefix": "webhook."}]},
         )
 
         # EDI events → priority notifications queue

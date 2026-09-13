@@ -472,7 +472,7 @@ function TenantUsersPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {roles.map((role: { id: string; name: string }) => (
-                      <SelectItem key={role.id} value={role.name}>
+                      <SelectItem key={role.id} value={role.id}>
                         {role.name}
                       </SelectItem>
                     ))}

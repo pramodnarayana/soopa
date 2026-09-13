@@ -8,10 +8,10 @@ from seedwork.utils import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
-from edi.adapters.outbound.database.outbox_repository import (
+from edi.adapters.outbound.database.control_plane.outbox_repository import (
     SqlAlchemyControlPlaneOutboxRepository,
 )
+from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 

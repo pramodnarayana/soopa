@@ -1,3 +1,4 @@
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
@@ -13,9 +14,6 @@ Each module handles a specific transport protocol:
 
 from typing import Any
 
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
-)
 from fastapi import APIRouter, Depends
 
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
@@ -31,10 +29,11 @@ _PREFIX = "/api/v1/tenants/{tenant_id}/edi/trading-partners"
 
 router = APIRouter(prefix=_PREFIX)
 
+
 @router.get("", response_model=list[PartnerResponse])
 async def list_trading_partners(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> Any:
     """Lists all tenant trading partners (AS2 and SFTP)."""
     async with uow:
@@ -83,6 +82,7 @@ async def list_trading_partners(
             )
 
         return partners
+
 
 router.include_router(as2.router)
 router.include_router(sftp.router)

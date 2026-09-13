@@ -127,6 +127,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     ) -> AsyncIterator[tuple[AsyncSession, AsyncSession]]:
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
+        except (TimeoutError, ConnectionError) as e:
+            raise TransientProvisioningError(
+                f"Tenant {tenant_id} shard resolution timed out or connection failed: {e}"
+            ) from e
         except Exception as e:
             raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 
@@ -142,6 +146,10 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     async def _get_tenant_session(self, tenant_id: str) -> AsyncIterator[AsyncSession]:
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
+        except (TimeoutError, ConnectionError) as e:
+            raise TransientProvisioningError(
+                f"Tenant {tenant_id} shard resolution timed out or connection failed: {e}"
+            ) from e
         except Exception as e:
             raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 

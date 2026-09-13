@@ -116,7 +116,7 @@ export function UserDetailPanel({
               </SelectTrigger>
               <SelectContent>
                 {roles.map((r: { id: string; name: string }) => (
-                  <SelectItem key={r.id} value={r.name}>
+                  <SelectItem key={r.id} value={r.id}>
                     {r.name}
                   </SelectItem>
                 ))}

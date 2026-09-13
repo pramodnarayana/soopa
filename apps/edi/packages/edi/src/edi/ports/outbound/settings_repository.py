@@ -3,7 +3,7 @@ import abc
 from seedwork.domain.types import JsonValue
 
 
-class PlatformSettingsRepositoryPort(abc.ABC):
+class SettingsRepositoryPort(abc.ABC):
     @abc.abstractmethod
     async def get_config(self, key: str) -> JsonValue | None:
         pass

@@ -3,10 +3,8 @@ from collections.abc import AsyncGenerator, Callable
 from typing import cast
 
 from database.router import DatabaseRouter
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork,
-)
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
 from edi.config.settings import AppSettings
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort

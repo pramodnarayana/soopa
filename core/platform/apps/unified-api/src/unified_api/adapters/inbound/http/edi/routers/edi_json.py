@@ -4,9 +4,7 @@ from edi.application.use_cases.process_api_edi_json_use_case import (
     ProcessApiEdiJsonCommand,
     ProcessApiEdiJsonUseCase,
 )
-from edi.ports.outbound.uow import (
-    DataPlaneUnitOfWorkPort as DataPlaneUnitOfWorkPort,
-)
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, status
 from seedwork.domain.types import JsonValue
 

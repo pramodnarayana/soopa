@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter

@@ -71,6 +71,7 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
 
     uow.repository.routes.append(
         {
+            "tenant_id": "tenant1",
             "direction": "OUTBOUND",
             "as2_partner_id": "tp1",
         }
@@ -169,6 +170,7 @@ async def test_outbound_transform_heavy_compute_offload() -> None:
 
     uow.repository.routes.append(
         {
+            "tenant_id": "tenant1",
             "direction": "OUTBOUND",
             "sftp_partner_id": "tp2",
         }
@@ -235,6 +237,7 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
 
     uow.repository.routes.append(
         {
+            "tenant_id": "tenant1",
             "direction": "OUTBOUND",
             "as2_partner_id": "tp-meta",
         }

@@ -52,7 +52,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="admin",
+        role=role_id,
     )
 
     user_id = await create_user_use_case.execute(command)
@@ -81,7 +81,7 @@ async def test_create_user_tenant_not_found(create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="admin",
+        role="rol_123",
     )
 
     with pytest.raises(ResourceNotFoundError) as exc:
@@ -109,7 +109,7 @@ async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="admin",
+        role="rol_123",
     )
 
     with pytest.raises(StateConflictError) as exc:

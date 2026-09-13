@@ -2,9 +2,7 @@ import pytest
 from httpx import AsyncClient
 from seedwork import generate_id
 
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-)
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.domain.enums import ConnectionType, EdiDirection, MessageStatus
 from edi.ports.outbound.transaction_repository import (
     CreateApiGatewayCommand,
@@ -85,7 +83,7 @@ async def test_edi_message_explorer_and_detail(
     msg_id_val = f"MSG_{generate_id('id')[:6]}"
 
     # 1. Insert records using the fixture session (SAVEPOINT-safe — no physical commit).
-    uow = DataPlaneUnitOfWorkPort(
+    uow = SqlAlchemyDataPlaneUnitOfWork(
         tenant_session=tenant_db_session, storage=InMemoryStorageAdapter()
     )
     async with uow:

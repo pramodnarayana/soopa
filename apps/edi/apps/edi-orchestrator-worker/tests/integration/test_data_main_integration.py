@@ -19,6 +19,7 @@ async def test_data_main_boot_and_shutdown() -> None:
     # Let the worker boot up and initialize all SqsConsumerManagers
     await asyncio.sleep(1.5)
 
+    assert not task.done(), "Worker task should not exit prematurely"
     # Cancel the task to trigger the finally block (graceful shutdown)
     task.cancel()
 

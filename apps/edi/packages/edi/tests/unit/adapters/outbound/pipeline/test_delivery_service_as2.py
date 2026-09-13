@@ -115,6 +115,7 @@ def _seed_as2_route(
     }
     repo.routes.append(
         {
+            "tenant_id": "1",
             "route_id": f"r-{trace_id}",
             "direction": "OUTBOUND",
             "isa_sender_id": "SENDER",
@@ -191,6 +192,7 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     }
     uow.repository.routes.append(
         {
+            "tenant_id": "1",
             "route_id": "r-fail",
             "direction": "OUTBOUND",
             "isa_sender_id": "S1",
@@ -288,6 +290,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
     }
     uow.repository.routes.append(
         {
+            "tenant_id": "1",
             "route_id": "r-idem",
             "direction": "OUTBOUND",
             "isa_sender_id": "A",
@@ -335,6 +338,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     }
     uow.repository.routes.append(
         {
+            "tenant_id": "1",
             "route_id": "r-nolocal",
             "direction": "OUTBOUND",
             "isa_sender_id": "X",

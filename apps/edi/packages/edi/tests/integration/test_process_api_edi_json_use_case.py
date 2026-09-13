@@ -7,7 +7,7 @@ from seedwork.utils import generate_id
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.process_api_edi_json_use_case import (
     ProcessApiEdiJsonCommand,
     ProcessApiEdiJsonUseCase,

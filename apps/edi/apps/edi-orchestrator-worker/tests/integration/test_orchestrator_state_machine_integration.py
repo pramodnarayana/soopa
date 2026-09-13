@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 from database.testing import TransactionalTestRouter
-from edi.adapters.outbound.database.data_plane_unit_of_work import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
@@ -63,9 +63,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
             await session.execute(
                 text(f"SELECT set_config('app.current_tenant', '{tenant_id}', true)")
             )
-            yield SqlAlchemyDataPlaneUnitOfWork(
-                session=session, settings=settings, storage=transformer
-            )
+            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session, storage=transformer)
             break
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
@@ -181,7 +179,6 @@ async def test_inbound_webhook_dispatch_transition(
     httpserver.expect_request("/webhook", method="POST").respond_with_json({"status": "ok"})
 
     registry = EdiDataPlaneRouteRegistry()
-    settings = get_settings()
     # Use real HTTPX client instead of AsyncFake
     real_http_delivery = HttpxDeliveryClient(allow_private_ips=True)
 
@@ -194,7 +191,7 @@ async def test_inbound_webhook_dispatch_transition(
             # We don't have a fake storage, use the real Transformer adapter
             # or just leave it empty if not used by WebhookDeliveryStrategy
             yield SqlAlchemyDataPlaneUnitOfWork(
-                session=session, settings=settings, storage=BotsTransformerAdapter()
+                tenant_session=session, storage=BotsTransformerAdapter()
             )
             break
 

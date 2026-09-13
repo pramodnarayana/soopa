@@ -40,21 +40,21 @@ class UpdateUserUseCase:
                     f"User {command.user_id} not found or missing IDP mapping in tenant {command.tenant_id}"
                 )
 
-            # 1. Update Local User Domain Object & Register Outbox Event
-            user.update_profile(
-                first_name=command.first_name,
-                last_name=command.last_name,
-                tenant_id=command.tenant_id,
-                role=command.role,
-            )
-            await self._uow.user_repo.save(user)
-
-            # 2. Update Tenant Membership Role using PBAC
-            pbac_role = await self._uow.role_repo.get_global_role_by_name(command.role)
+            # 1. Fetch PBAC Role by ID
+            pbac_role = await self._uow.role_repo.get_by_id(command.role)
             if not pbac_role:
                 raise ResourceNotFoundError(
                     f"Global PBAC Role '{command.role}' is not seeded in the database."
                 )
+
+            # 2. Update Local User Domain Object & Register Outbox Event
+            user.update_profile(
+                first_name=command.first_name,
+                last_name=command.last_name,
+                tenant_id=command.tenant_id,
+                role=pbac_role.name,
+            )
+            await self._uow.user_repo.save(user)
 
             # Remove existing role mappings for the user in this tenant
             await self._uow.role_repo.remove_user_roles(tenant_id=tenant.id, user_id=user.id)

@@ -1,0 +1,2 @@
+class ReadOnlyDataPlaneRepositoryError(Exception):
+    pass

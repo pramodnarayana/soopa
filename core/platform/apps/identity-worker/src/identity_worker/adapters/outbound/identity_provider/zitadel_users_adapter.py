@@ -44,7 +44,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         email: str,
         first_name: str,
         last_name: str,
-    ) -> str:
+    ) -> tuple[str, bool]:
         logger.info(
             "creating_user_in_zitadel",
             email=self._mask_email(email),

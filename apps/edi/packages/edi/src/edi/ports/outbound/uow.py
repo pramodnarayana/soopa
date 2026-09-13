@@ -10,7 +10,7 @@ from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutbox
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
-from edi.ports.outbound.platform_settings_repository import PlatformSettingsRepositoryPort
+from edi.ports.outbound.settings_repository import SettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from edi.ports.outbound.trace_repository import TraceRepositoryPort
@@ -31,7 +31,7 @@ class ControlPlaneUnitOfWorkPort(Protocol):
     sftp_partners: SFTPPartnerRepositoryPort
     tenants: TenantRepositoryPort
     edi_headers: EdiHeaderRepositoryPort
-    platform_settings: PlatformSettingsRepositoryPort
+    settings: SettingsRepositoryPort
     control_plane_outbox: ControlPlaneOutboxRepositoryPort
     webhooks: WebhookRepositoryPort
 

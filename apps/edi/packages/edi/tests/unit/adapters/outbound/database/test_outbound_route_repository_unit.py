@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 
-from edi.adapters.outbound.database.models.control_plane import OutboundRoute
-from edi.adapters.outbound.database.outbound_route_repository import (
+from edi.adapters.outbound.database.control_plane.outbound_route_repository import (
     SqlAlchemyOutboundRouteRepository,
 )
+from edi.adapters.outbound.database.models.control_plane import OutboundRoute
 
 
 def test_domain_mapping_uses_defaults_for_presentation_only_fields() -> None:

@@ -8,7 +8,7 @@ from ucp_models.subscriptions import App
 
 from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.base_repository import GlobalSession
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort

@@ -41,7 +41,7 @@ async def test_create_user(
             "email": "integration_test@example.com",
             "firstName": "Integration",
             "lastName": "Test",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert response.status_code in (200, 201), response.text
@@ -68,7 +68,7 @@ async def test_create_user(
         event = outbox_events[0]
         assert event.event_type == "UserInvited"
         assert event.payload["email"] == "integration_test@example.com"
-        assert event.payload["role"] == "admin"
+        assert event.payload["role"] == "TenantAdmin"
 
 
 @pytest.mark.asyncio
@@ -90,7 +90,7 @@ async def test_update_user(
             "email": "update_test@example.com",
             "firstName": "First",
             "lastName": "Last",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert res.status_code in (200, 201), res.text
@@ -102,7 +102,7 @@ async def test_update_user(
     # 3. Update the user — requires idp_user_id to be set
     response = await auth_client.patch(
         f"/api/v1/tenants/{tenant_id}/users/{user_id}",
-        json={"firstName": "Updated", "lastName": "Name", "role": "admin"},
+        json={"firstName": "Updated", "lastName": "Name", "role": "rol_a62f2225bf70bfac"},
     )
     assert response.status_code == 200, response.text
 
@@ -124,7 +124,7 @@ async def test_toggle_user_status(
             "email": "toggle_test@example.com",
             "firstName": "First",
             "lastName": "Last",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert res.status_code in (200, 201), res.text
@@ -156,7 +156,7 @@ async def test_delete_user(
             "email": "delete_test@example.com",
             "firstName": "First",
             "lastName": "Last",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert res.status_code in (200, 201), res.text

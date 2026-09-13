@@ -37,9 +37,8 @@ class UpdateWebhookUseCase:
             bound_logger.debug(
                 "ucp_webhook_aggregate_updated",
                 new_name=name,
-                new_url_host=f"{_parsed_url.scheme}://{_parsed_url.netloc}"
-                if _parsed_url
-                else None,
+                new_url_scheme=_parsed_url.scheme if _parsed_url else None,
+                new_url_netloc=_parsed_url.netloc if _parsed_url else None,
                 new_active=active,
                 domain_events_queued=len(webhook.domain_events),
             )

@@ -2,6 +2,7 @@ import asyncio
 import signal
 
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
 
 load_dotenv()
 
@@ -12,7 +13,6 @@ import structlog
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyControlPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings

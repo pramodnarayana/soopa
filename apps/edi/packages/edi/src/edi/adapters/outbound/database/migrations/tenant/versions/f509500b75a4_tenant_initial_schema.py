@@ -385,7 +385,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "processed_events",
-        sa.Column("idempotency_key", sa.String(length=128), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "tenant_id",

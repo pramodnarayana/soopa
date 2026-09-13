@@ -1,9 +1,7 @@
 from typing import Literal
 
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-)
 from edi.application.dtos import EdiJsonDTO, EdiMessageDTO
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, field_validator
 from seedwork.domain.types import JsonDict, JsonValue

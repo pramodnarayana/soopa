@@ -1,6 +1,3 @@
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
-)
 from edi.application.use_cases.edi_headers.create_outbound_edi_header_use_case import (
     CreateOutboundEdiHeaderCmd,
     CreateOutboundEdiHeaderUseCase,
@@ -15,6 +12,7 @@ from edi.application.use_cases.edi_headers.update_outbound_edi_header_use_case i
     UpdateOutboundEdiHeaderCmd,
     UpdateOutboundEdiHeaderUseCase,
 )
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict
 
@@ -50,7 +48,7 @@ class OutboundEdiHeaderItem(BaseModel):
 @router.get("", response_model=list[OutboundEdiHeaderItem], status_code=status.HTTP_200_OK)
 async def list_edi_headers(
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[OutboundEdiHeaderItem]:
     """
     List all Outbound EDI Headers for the current Tenant.
@@ -65,7 +63,7 @@ async def list_edi_headers(
 async def create_edi_header(
     request: CreateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
     """
     Creates a new Outbound EDI Header in the Tenant Data Plane.
@@ -101,7 +99,7 @@ async def update_edi_header(
     header_id: str,
     request: UpdateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
     """
     Updates an Outbound EDI Header for the current Tenant.
@@ -125,7 +123,7 @@ async def update_edi_header(
 async def delete_edi_header(
     header_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
     """
     Deletes an Outbound EDI Header for the current Tenant.

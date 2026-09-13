@@ -9,7 +9,7 @@ from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.ports.outbound.field_encryption import FieldEncryptionPort
-from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -28,7 +28,9 @@ class UpdateSFTPPartnerCmd:
 
 
 class UpdateSFTPPartnerUseCase:
-    def __init__(self, uow: ControlPlaneUnitOfWork, field_encryption: FieldEncryptionPort) -> None:
+    def __init__(
+        self, uow: ControlPlaneUnitOfWorkPort, field_encryption: FieldEncryptionPort
+    ) -> None:
         self.uow = uow
         self.field_encryption = field_encryption
 

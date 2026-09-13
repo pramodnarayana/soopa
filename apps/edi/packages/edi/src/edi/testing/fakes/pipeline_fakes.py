@@ -383,12 +383,13 @@ class InMemoryRepositoryAdapter:
         return _from_dict(OutboundRouteDTO, data)
 
     async def get_outbound_route_by_trading_partner_id(
-        self, trading_partner_id: str, tenant_id: str | None = None
+        self, tenant_id: str, trading_partner_id: str
     ) -> OutboundRouteDomainModel | None:
         candidates = [
             r
             for r in self.routes
             if r.get("direction") == "OUTBOUND"
+            and r.get("tenant_id") == tenant_id
             and (
                 r.get("sftp_partner_id") == trading_partner_id
                 or r.get("as2_partner_id") == trading_partner_id
