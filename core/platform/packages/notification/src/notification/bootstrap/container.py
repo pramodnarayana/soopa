@@ -122,10 +122,12 @@ class Container(containers.DeclarativeContainer):
 
     template_repository = providers.Factory(
         SqlAlchemyTemplateRepository,
+        session=session_factory.provided.call(),
     )
 
     route_repository = providers.Factory(
         SqlAlchemyNotificationRouteRepository,
+        session=session_factory.provided.call(),
     )
 
     # -----------------------------------------------------------------------

@@ -78,7 +78,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
                 raise ValueError("User ID not returned from Zitadel")
 
             logger.info("successfully_created_user_in_zitadel", user_id=user_id, org_id=org_id)
-            return user_id
+            return user_id, True
 
         except ZitadelHttpConflictError:
             logger.info(
@@ -91,14 +91,15 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             for attempt in range(5):
                 existing_user_id = await self.get_user_by_email(org_id=org_id, email=email)
                 if existing_user_id:
-                    return existing_user_id
+                    return existing_user_id, False
                 logger.info(
                     "user_not_in_projection_yet_retrying",
                     attempt=attempt,
                     email=self._mask_email(email),
                 )
                 # Exponential backoff: 0.5s, 1.0s, 2.0s, 4.0s, 8.0s
-                await asyncio.sleep(0.5 * (2**attempt))
+                if attempt < 4:
+                    await asyncio.sleep(0.5 * (2**attempt))
 
             raise IdentityProviderPortError(
                 "User supposedly exists in IDP but could not be found by email even after retries"

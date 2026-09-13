@@ -52,6 +52,11 @@ class FakeTenantRepository(TenantRepositoryPort):
             self.subscriptions = {}
         self.subscriptions[(tenant_id, app_id)] = status
 
+    async def update_shard_status(self, tenant_id: str, app_id: str, status: str) -> None:
+        if not hasattr(self, "shard_statuses"):
+            self.shard_statuses = {}
+        self.shard_statuses[(tenant_id, app_id)] = status
+
 
 class FakeUserRepository(UserRepositoryPort):
     def __init__(self) -> None:

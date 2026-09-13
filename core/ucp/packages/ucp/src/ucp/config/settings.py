@@ -13,7 +13,7 @@ from seedwork.infrastructure.config_models import (
 
 class UcpAwsSettings(PlatformAwsSettings):
     sns_tenant_events_topic_arn: str = Field(
-        validation_alias="SNS_TENANT_EVENTS_TOPIC_ARN", default=""
+        validation_alias="SNS_UCP_EVENTS_TOPIC_ARN", default=""
     )
 
 

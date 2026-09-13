@@ -117,7 +117,7 @@ class TenantRepository(TenantRepositoryPort):
 
         # 2. Save Subscriptions (Child Entities)
         for sub in tenant.subscriptions:
-            await self.upsert_app_subscription(tenant.id, sub.app_id, sub.status)
+            await self.upsert_app_subscription(tenant.id, sub.app_id, sub.status.value)
 
         # 3. Process Outbox Events (Domain Events)
         self._flush_events(tenant, idempotency_key)
@@ -210,11 +210,18 @@ class TenantRepository(TenantRepositoryPort):
         )
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
-
-        stmt = insert(ShardRegistry).values(tenant_id=tenant_id, app_id=app_id, shard_id=shard_id)
+        stmt = insert(ShardRegistry).values(
+            tenant_id=tenant_id,
+            app_id=app_id,
+            shard_id=shard_id,
+            status=LifecycleStatus.ACTIVE.value,
+        )
         stmt = stmt.on_conflict_do_update(
             index_elements=[ShardRegistry.tenant_id, ShardRegistry.app_id],
-            set_={ShardRegistry.shard_id: shard_id},
+            set_={
+                ShardRegistry.shard_id: shard_id,
+                ShardRegistry.status: LifecycleStatus.ACTIVE.value,
+            },
         )
         await self.session.execute(stmt)
 
@@ -226,6 +233,17 @@ class TenantRepository(TenantRepositoryPort):
         stmt = stmt.on_conflict_do_update(
             index_elements=[AppSubscription.tenant_id, AppSubscription.app_id],
             set_={AppSubscription.status: status},
+        )
+        await self.session.execute(stmt)
+
+    async def update_shard_status(self, tenant_id: str, app_id: str, status: str) -> None:
+        stmt = (
+            update(ShardRegistry)
+            .where(
+                ShardRegistry.tenant_id == tenant_id,
+                ShardRegistry.app_id == app_id,
+            )
+            .values(status=status)
         )
         await self.session.execute(stmt)
 

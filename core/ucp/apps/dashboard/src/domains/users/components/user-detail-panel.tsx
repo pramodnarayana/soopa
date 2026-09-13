@@ -18,11 +18,11 @@ const normalizeRole = (role?: string) => (role === 'Unknown' ? '' : role || '');
 export function UserDetailPanel({
   user,
   tenantId,
-  tenantRoles,
+  roles,
 }: {
   user: TenantUser;
   tenantId: string;
-  tenantRoles: { key: string; displayName: string }[];
+  roles: { id: string; name: string }[];
 }) {
   const [editFirst, setEditFirst] = useState(user.firstName || '');
   const [editLast, setEditLast] = useState(user.lastName || '');
@@ -115,9 +115,9 @@ export function UserDetailPanel({
                 <SelectValue placeholder="Select a role" />
               </SelectTrigger>
               <SelectContent>
-                {tenantRoles.map((r: { key: string; displayName: string }) => (
-                  <SelectItem key={r.key} value={r.key}>
-                    {r.displayName}
+                {roles.map((r: { id: string; name: string }) => (
+                  <SelectItem key={r.id} value={r.name}>
+                    {r.name}
                   </SelectItem>
                 ))}
               </SelectContent>

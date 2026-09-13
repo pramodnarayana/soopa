@@ -199,8 +199,10 @@ class WorkerContainer:
             idp: IdentityProviderPort = DummyIdentityProviderPort()
             idp_users: UserIdentityProviderPort = DummyIdentityProviderPort()
         else:
-            project_provider = ZitadelProjectsAdapter()
-            org_provider = ZitadelOrganizationsAdapter(project_provider=project_provider)
+            project_provider = ZitadelProjectsAdapter(settings=self.settings)
+            org_provider = ZitadelOrganizationsAdapter(
+                project_provider=project_provider, settings=self.settings
+            )
 
             idp = ZitadelIdentityProviderPort(
                 org_provider=org_provider, session_factory=session_factory

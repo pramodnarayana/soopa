@@ -15,6 +15,7 @@ class PlatformDatabaseSettings(BaseSettings):
         validation_alias="DATABASE_URL",
         serialization_alias="DATABASE_URL",
         description="Async PostgreSQL connection string for the Global Control Plane.",
+        default="",
     )
     pool_size: int = Field(validation_alias="DB_POOL_SIZE", default=10)
     max_overflow: int = Field(validation_alias="DB_MAX_OVERFLOW", default=20)

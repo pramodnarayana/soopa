@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from database.provider import get_async_engine
 from database.types import GlobalSession, TenantSession
+from database.utils import shard_connect_args
 
 logger = structlog.get_logger(__name__)
 
@@ -74,6 +75,23 @@ class DatabaseRouter(DatabaseRouterPort):
             echo=False,
         )
 
+    def _create_shard_engine(self, url: str) -> AsyncEngine:
+        """Creates an engine for a dedicated tenant shard database.
+
+        Explicitly enforces search_path=public so PostgreSQL never resolves
+        tables via the implicit "$user" schema (e.g., the "edi" schema when
+        connected as the "edi" user). Enterprise-grade: the code dictates the
+        schema, never the database default.
+        """
+        return get_async_engine(
+            url,
+            pool_size=self._pool_size,
+            max_overflow=self._max_overflow,
+            pool_pre_ping=True,
+            echo=False,
+            server_settings=shard_connect_args()["server_settings"],
+        )
+
     async def get_engine(self, db_key: str, url: str | None = None) -> AsyncEngine:
         """
         Retrieves or creates an AsyncEngine for a specific database shard.
@@ -83,7 +101,7 @@ class DatabaseRouter(DatabaseRouterPort):
                 if db_key not in self._engines:
                     if not url:
                         raise ValueError(f"Engine for {db_key} not found and no URL provided.")
-                    self._engines[db_key] = self._create_engine(url)
+                    self._engines[db_key] = self._create_shard_engine(url)
                     logger.info(
                         "Created new connection pool for database shard: {db_key}", db_key=db_key
                     )

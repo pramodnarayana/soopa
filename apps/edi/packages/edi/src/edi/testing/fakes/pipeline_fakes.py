@@ -237,6 +237,7 @@ class InMemoryRepositoryAdapter:
             "tenant_id": command.tenant_id,
             "direction": command.direction,
             "status": command.status,
+            "standard": command.standard,
             "trading_partner_id": command.trading_partner_id,
             "business_metadata": command.business_metadata,
             "transaction_type": command.transaction_type,
@@ -366,7 +367,9 @@ class InMemoryRepositoryAdapter:
             for r in self.routes
             if r.get("isa_sender_id") == isa_sender_id
             and r.get("isa_receiver_id") == isa_receiver_id
+            and r.get("tenant_id") == tenant_id
             and r.get("transaction_type") in (transaction_type, "*")
+            and r.get("active", True) is True
         ]
         exact_match = next(
             (r for r in candidates if r.get("transaction_type") == transaction_type), None

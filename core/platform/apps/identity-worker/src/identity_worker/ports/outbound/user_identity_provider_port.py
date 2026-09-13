@@ -8,8 +8,8 @@ class UserIdentityProviderPort(Protocol):
         email: str,
         first_name: str,
         last_name: str,
-    ) -> str:
-        """Creates a user in the IDP and returns their IDP user ID."""
+    ) -> tuple[str, bool]:
+        """Creates a user in the IDP and returns their IDP user ID and a boolean indicating if it was created."""
         ...
 
     async def get_user_by_email(self, org_id: str, email: str) -> str | None:

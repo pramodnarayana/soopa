@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from typing import Annotated
 
+import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from identity.domain.constants import UserStatus
@@ -42,6 +43,7 @@ from unified_api.adapters.inbound.http.ucp.dtos.user_dtos import (
 )
 
 router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["Users"])
+logger = structlog.get_logger(__name__)
 
 
 class UsersListResponse(BaseModel):
@@ -71,6 +73,7 @@ async def get_users(
     canonical_tenant_id = request.state.ucp_tenant_id
     tenant = await tenant_repo.find_by_id(canonical_tenant_id)
     if not tenant:
+        logger.warning("get_users.tenant_not_found", tenant_id=canonical_tenant_id)
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     users = await user_repo.find_users_by_tenant(canonical_tenant_id)
@@ -125,8 +128,10 @@ async def create_user(
         user_id = await use_case.execute(command)
         return {"userId": user_id}
     except ResourceNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        logger.exception("create_user.failed", reason="resource_not_found")
+        raise HTTPException(status_code=422, detail=str(e))
     except ValueError as e:
+        logger.exception("create_user.failed", reason="value_error")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -157,8 +162,10 @@ async def update_user(
         await use_case.execute(command)
         return {"success": True}
     except ResourceNotFoundError as e:
+        logger.exception("update_user.failed", reason="resource_not_found")
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
+        logger.exception("update_user.failed", reason="value_error")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -189,8 +196,10 @@ async def toggle_status(
         await use_case.execute(command)
         return {"success": True}
     except ResourceNotFoundError as e:
+        logger.exception("toggle_status.failed", reason="resource_not_found")
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
+        logger.exception("toggle_status.failed", reason="value_error")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -217,4 +226,5 @@ async def delete_user(
         await use_case.execute(command)
         return {"success": True}
     except ResourceNotFoundError as e:
+        logger.exception("delete_user.failed", reason="resource_not_found")
         raise HTTPException(status_code=404, detail=str(e))

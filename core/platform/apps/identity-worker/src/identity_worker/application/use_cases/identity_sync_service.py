@@ -200,17 +200,18 @@ class IdentitySyncService:
         bound_logger: structlog.stdlib.BoundLogger,
     ) -> None:
         created_idp_user_id: str | None = None
+        did_create = False
         try:
             bound_logger.info(
-                "identity_sync_before_idp_create_user", email=email, org_id=idp_tenant_id
+                "identity_sync_before_idp_create_user", org_id=idp_tenant_id
             )
-            created_idp_user_id = await self.user_identity_provider.create_user(
+            created_idp_user_id, did_create = await self.user_identity_provider.create_user(
                 org_id=idp_tenant_id,
                 email=email,
                 first_name=first_name,
                 last_name=last_name,
             )
-            bound_logger.info("identity_sync_user_created_in_idp", idp_user_id=created_idp_user_id)
+            bound_logger.info("identity_sync_user_created_in_idp", idp_user_id=created_idp_user_id, did_create=did_create)
 
             bound_logger.info(
                 "identity_sync_before_assign_tenant_role",
@@ -241,13 +242,14 @@ class IdentitySyncService:
             bound_logger.exception(
                 "identity_sync_transaction_crashed_initiating_rollback_and_compensation"
             )
-            await self._compensate_failed_sync(uow, created_idp_user_id, bound_logger)
+            await self._compensate_failed_sync(uow, created_idp_user_id, did_create, bound_logger)
             raise
 
     async def _compensate_failed_sync(
         self,
         uow: IdentitySyncUnitOfWorkPort,
         created_idp_user_id: str | None,
+        did_create: bool,
         bound_logger: structlog.stdlib.BoundLogger,
     ) -> None:
         try:
@@ -255,7 +257,7 @@ class IdentitySyncService:
         except Exception:
             bound_logger.exception("identity_sync_uow_rollback_failed")
 
-        if created_idp_user_id:
+        if created_idp_user_id and did_create:
             bound_logger.warning(
                 "identity_sync_compensating_by_deleting_user_from_idp",
                 idp_user_id=created_idp_user_id,

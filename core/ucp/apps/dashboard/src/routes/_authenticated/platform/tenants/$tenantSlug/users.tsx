@@ -66,6 +66,13 @@ const USER_STATUS_THEME = {
   },
 };
 
+const ROLE_COLORS: Record<string, string> = {
+  TenantAdmin: 'bg-violet-50 text-violet-700 ring-violet-600/20',
+  TenantUser: 'bg-sky-50 text-sky-700 ring-sky-600/20',
+  PlatformAdmin: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+  Default: 'bg-slate-50 text-slate-700 ring-slate-600/20',
+};
+
 const columnHelper = createColumnHelper<TenantUser>();
 
 const availableFields: FieldDef[] = [
@@ -255,8 +262,6 @@ function TenantUsersPage() {
     setSelectedRole('');
   };
 
-  const tenantRoles = roles;
-
   const columns = React.useMemo(
     () => [
       columnHelper.display({
@@ -319,12 +324,12 @@ function TenantUsersPage() {
               </span>
             );
           }
-          const roleData = roles.find((r: { key: string; displayName: string }) => r.key === role);
-          const label = roleData ? roleData.displayName : role;
-          const isTenantAdmin = role === 'TenantAdmin';
+          const roleData = roles.find((r: { id: string; name: string }) => r.id === role);
+          const label = roleData ? roleData.name : role;
+          const colorClass = ROLE_COLORS[label] || ROLE_COLORS.Default;
           return (
             <span
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${isTenantAdmin ? 'bg-violet-50 text-violet-700 ring-violet-600/20' : 'bg-sky-50 text-sky-700 ring-sky-600/20'}`}
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset ${colorClass}`}
             >
               {label}
             </span>
@@ -466,9 +471,9 @@ function TenantUsersPage() {
                     <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    {tenantRoles.map((role: { key: string; displayName: string }) => (
-                      <SelectItem key={role.key} value={role.key}>
-                        {role.displayName}
+                    {roles.map((role: { id: string; name: string }) => (
+                      <SelectItem key={role.id} value={role.name}>
+                        {role.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -537,7 +542,7 @@ function TenantUsersPage() {
             emptyTitle="No Users Yet"
             emptyDescription="Create the first user for this tenant to get started."
             renderExpandedRow={(row) => (
-              <UserDetailPanel user={row.original} tenantId={tenantId} tenantRoles={tenantRoles} />
+              <UserDetailPanel user={row.original} tenantId={tenantId} roles={roles} />
             )}
           />
         </div>

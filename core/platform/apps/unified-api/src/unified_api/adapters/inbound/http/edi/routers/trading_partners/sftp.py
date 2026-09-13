@@ -7,24 +7,22 @@ from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.dtos import (
-    UNSET,
-    CreateSFTPPartnerCmd,
-    UpdateSFTPPartnerCmd,
-)
 from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
+    CreateSFTPPartnerCmd,
     CreateSFTPPartnerUseCase,
 )
 from edi.application.use_cases.sftp_partners.delete_sftp_partner_use_case import (
     DeleteSFTPPartnerUseCase,
 )
 from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
+    UpdateSFTPPartnerCmd,
     UpdateSFTPPartnerUseCase,
 )
 from edi.domain.exceptions import OrchestrationError, VaultError
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from fastapi import APIRouter, Depends, HTTPException, status
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow

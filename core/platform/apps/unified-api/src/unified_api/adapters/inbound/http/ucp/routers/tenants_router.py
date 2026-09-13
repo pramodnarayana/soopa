@@ -170,10 +170,15 @@ async def provision(
     identity: IdentityContext = request.state.identity
     creator_id = identity.subject
 
-    if not creator_id or not creator_id.startswith("usr_"):
+    if not creator_id:
+        logger.warning(
+            "tenant_creation_failed",
+            reason="missing_creator_id",
+            error="creator ID missing from context",
+        )
         raise HTTPException(
             status_code=400,
-            detail="Invalid user identity: creator must be a resolved platform user ID (usr_...)",
+            detail="Invalid user identity: creator ID missing from context",
         )
 
     command = ProvisionTenantCommand(name=dto.name)

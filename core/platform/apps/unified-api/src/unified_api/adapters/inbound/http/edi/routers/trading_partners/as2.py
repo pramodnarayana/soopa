@@ -29,7 +29,7 @@ router = APIRouter(tags=["Partners — AS2"])
 
 
 # Import shared rotation helper
-from unified_api.adapters.inbound.http.edi.routers.trading_partners.platform.as2_partners import (
+from unified_api.adapters.inbound.http.edi.routers.as2_partners import (
     _rotate_as2_certificates,
 )
 

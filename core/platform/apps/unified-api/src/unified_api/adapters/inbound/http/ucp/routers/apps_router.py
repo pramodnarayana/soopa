@@ -15,7 +15,7 @@ class AppResponse(BaseModel):
     id: str
     name: str
     slug: str
-    description: str
+    description: str | None = None
 
 
 @router.get("", response_model=list[AppResponse])

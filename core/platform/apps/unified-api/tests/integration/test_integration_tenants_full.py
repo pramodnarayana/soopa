@@ -1,5 +1,6 @@
 import httpx
 import pytest
+from identity.domain.identity_context import IdentityContext
 
 
 @pytest.mark.asyncio
@@ -79,3 +80,40 @@ async def test_tenants_full_crud(auth_client: httpx.AsyncClient, seeded_api_toke
     # 12. Confirm deletion
     res = await auth_client.get(f"/api/v1/tenants/{tenant_id}")
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_provision_tenant_missing_identity_subject(
+    auth_client: httpx.AsyncClient, monkeypatch
+):
+    """
+    Negative test case: Ensure a 400 is returned (with observability logs in the router)
+    if the IdentityContext lacks a subject ID.
+    """
+
+    fake_identity = IdentityContext(
+        subject="",  # Missing subject
+        tenant_id="some-tenant",
+        organization_id=None,
+        authorized_tenants={"some-tenant", "ten_000000000000000000000000"},
+        tenant_roles={"ten_000000000000000000000000": ["admin"]},
+        roles=("platform_admin",),
+        permissions=(),
+        claims={"is_m2m": True},
+        capabilities={"*"},
+    )
+
+    async def fake_authenticate_api_key(*args, **kwargs):
+        return fake_identity
+
+    monkeypatch.setattr(
+        "ucp.application.use_cases.authenticators.api_key_strategy.authenticate_api_key",
+        fake_authenticate_api_key,
+    )
+
+    res = await auth_client.post(
+        "/api/v1/tenants",
+        json={"name": "Negative Test Tenant"},
+    )
+    assert res.status_code == 400
+    assert "creator ID missing" in res.json()["detail"]

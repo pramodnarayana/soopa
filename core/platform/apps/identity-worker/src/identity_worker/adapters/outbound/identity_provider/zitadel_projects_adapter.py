@@ -10,7 +10,7 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_dtos import (
     ZitadelRolesResponse,
 )
 from identity_worker.application.dto import IdpRole, IdpUser
-from identity_worker.config.settings import get_settings
+from identity_worker.config.settings import IdentityWorkerSettings, get_settings
 from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.project_provider_port import ProjectProviderPort
 
@@ -18,8 +18,7 @@ logger = structlog.get_logger(__name__)
 
 
 class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
-    def __init__(self) -> None:
-        settings = get_settings()
+    def __init__(self, settings: IdentityWorkerSettings) -> None:
         super().__init__(
             api_url=settings.zitadel_api_url,
             machine_key=settings.zitadel_machine_key,

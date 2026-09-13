@@ -103,6 +103,11 @@ class AppSubscriptionManager:
                     tenant_id, app.id, LifecycleStatus.INACTIVE.value
                 )
 
+                # Set ShardRegistry allocation to 'inactive'
+                await uow.tenant_repo.update_shard_status(
+                    tenant_id, app.id, LifecycleStatus.INACTIVE.value
+                )
+
                 await uow.commit()
                 logger.info(
                     "app_unsubscribed_deactivated",

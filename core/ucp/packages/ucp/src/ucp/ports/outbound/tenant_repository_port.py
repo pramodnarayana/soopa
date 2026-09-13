@@ -35,3 +35,7 @@ class TenantRepositoryPort(Protocol):
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
         """Upserts an application subscription status for a tenant"""
         ...
+
+    async def update_shard_status(self, tenant_id: str, app_id: str, status: str) -> None:
+        """Updates the status of a database shard allocation"""
+        ...

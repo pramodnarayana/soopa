@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import structlog
 
 from ucp.application.use_cases._tenant_helpers import resolve_tenant_or_raise
+from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
@@ -25,7 +26,11 @@ class UnsubscribeAppUseCase:
         async with self.uow as uow:
             tenant = await resolve_tenant_or_raise(uow, command.tenant_id)
 
-            tenant.unsubscribe_from_app(command.app_id)
+            app = await uow.app_repo.find_by_id(command.app_id)
+            if not app:
+                raise ResourceNotFoundError(f"App {command.app_id} not found.")
+
+            tenant.unsubscribe_from_app(command.app_id, app.idp_project_id)
 
             await uow.tenant_repo.save(tenant, idempotency_key)
             await uow.commit()

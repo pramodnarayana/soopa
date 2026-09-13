@@ -20,8 +20,8 @@ output "ucp_api_client_id" {
   sensitive = true
 }
 
-output "ucp_backend_machine_key" {
-  value     = zitadel_machine_key.ucp_backend_machine_key.key_details
+output "iam_manager_sa_key" {
+  value     = zitadel_machine_key.iam_manager_sa_key.key_details
   sensitive = true
 }
 

@@ -3,7 +3,7 @@ from identity.adapters.outbound.zitadel.client import ZitadelClient
 from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpError
 from pydantic import BaseModel, Field
 
-from identity_worker.config.settings import get_settings
+from identity_worker.config.settings import IdentityWorkerSettings, get_settings
 from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.organization_provider_port import OrganizationProviderPort
 from identity_worker.ports.outbound.project_provider_port import ProjectProviderPort
@@ -18,8 +18,9 @@ class CreateOrgResponse(BaseModel):
 
 
 class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
-    def __init__(self, project_provider: ProjectProviderPort) -> None:
-        settings = get_settings()
+    def __init__(
+        self, project_provider: ProjectProviderPort, settings: IdentityWorkerSettings
+    ) -> None:
         super().__init__(
             api_url=settings.zitadel_api_url,
             machine_key=settings.zitadel_machine_key,

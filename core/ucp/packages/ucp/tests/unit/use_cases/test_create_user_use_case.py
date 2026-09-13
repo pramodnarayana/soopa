@@ -68,9 +68,9 @@ async def test_create_user_success(fake_uow, create_user_use_case):
     assert any(r[0] == tenant_id and r[1] == user_id and r[2] == role_id for r in role_memberships)
 
     events = saved_user.domain_events
-    assert len(events) == 2
-    assert events[1].__class__.__name__ == "UserCreatedEvent"
-    assert events[1].email == "test@example.com"
+    assert len(events) == 1
+    assert events[0].__class__.__name__ == "UserCreatedEvent"
+    assert events[0].email == "test@example.com"
 
 
 @pytest.mark.asyncio

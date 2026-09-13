@@ -65,9 +65,9 @@ class CreateUserUseCase:
                 )
 
             # Emit the domain event for external sync
-            new_user.assign_role(
-                role_id=pbac_role.id, role_name=pbac_role.name, tenant_id=tenant.id
-            )
+            # Note: We do NOT call `new_user.assign_role(...)` here because it emits
+            # a `UserRoleAssignedEvent` which races with the `UserCreatedEvent`.
+            # The role is already included in `UserCreatedEvent` and handled by the worker.
 
             # Re-save the user to persist PBAC role event outbox flush
             await self._uow.user_repo.save(new_user)

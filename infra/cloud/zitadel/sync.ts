@@ -25,7 +25,7 @@ try {
     ZITADEL_UCP_WEB_CLIENT_ID: tfOutput.ucp_web_client_id?.value,
     ZITADEL_UCP_API_CLIENT_ID: tfOutput.ucp_api_client_id?.value,
     ZITADEL_EDI_API_CLIENT_ID: tfOutput.edi_api_client_id?.value,
-    ZITADEL_MACHINE_KEY: tfOutput.ucp_backend_machine_key?.value,
+    ZITADEL_MACHINE_KEY: tfOutput.iam_manager_sa_key?.value,
     ZITADEL_PLATFORM_ADMIN_ID: tfOutput.platform_admin_id?.value,
   };
 

@@ -61,6 +61,31 @@ async def list_all_orgs(
     return cast(list[dict[str, Any]], response.json().get("result", []))
 
 
+async def rename_org_in_zitadel(
+    client: httpx.AsyncClient,
+    zitadel_url: str,
+    access_token: str,
+    org_id: str,
+    new_name: str,
+) -> None:
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "x-zitadel-orgid": org_id,
+    }
+    response = await client.put(
+        f"{zitadel_url}/management/v1/orgs/me",
+        headers=headers,
+        json={"name": new_name},
+        timeout=15,
+    )
+    if response.status_code >= 400:
+        logger.warning("Failed to rename org '%s' to '%s': %s", org_id, new_name, response.text)
+        # We don't raise here, we still want to try to delete it
+    else:
+        logger.info("Successfully renamed org '%s' to '%s' to release name lock", org_id, new_name)
+
+
 async def delete_org_from_zitadel(
     client: httpx.AsyncClient,
     zitadel_url: str,
@@ -122,12 +147,22 @@ async def main() -> None:
             logger.info("Found %d tenant org(s) to delete from Zitadel.", len(tenant_orgs))
             for org in tenant_orgs:
                 with contextlib.suppress(RuntimeError):
+                    org_id = org["id"]
+                    org_name = org.get("name", "unknown")
+                    # Rename to release the unique name constraint before soft-deleting
+                    await rename_org_in_zitadel(
+                        client=http_client,
+                        zitadel_url=zitadel_url,
+                        access_token=access_token,
+                        org_id=org_id,
+                        new_name=f"DELETED-{org_id}",
+                    )
                     await delete_org_from_zitadel(
                         client=http_client,
                         zitadel_url=zitadel_url,
                         access_token=access_token,
-                        org_id=org["id"],
-                        org_name=org.get("name", "unknown"),
+                        org_id=org_id,
+                        org_name=org_name,
                     )
 
     # --- Step 2: Truncate the local tenants table (if the DB is still up) ---
