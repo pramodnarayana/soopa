@@ -16,17 +16,20 @@ class RoleRepositoryPort(abc.ABC):
         """
 
     @abc.abstractmethod
-    @abc.abstractmethod
     async def get_by_id(self, role_id: str) -> Role | None:
         """Fetch a role by its ID."""
 
     @abc.abstractmethod
-    async def get_global_role_by_name(self, name: str) -> Role | None:
-        """Fetch a global role (tenant_id is NULL) by its name."""
+    async def get_platform_role_by_id(self, role_id: str) -> Role | None:
+        """Fetch a platform role (tenant_id is PLATFORM_TENANT_ID) by its ID."""
 
     @abc.abstractmethod
-    async def get_global_roles(self) -> list[Role]:
-        """Fetch all global tenant roles available for assignment."""
+    async def get_platform_role_by_name(self, name: str) -> Role | None:
+        """Fetch a platform role (tenant_id is PLATFORM_TENANT_ID) by its name."""
+
+    @abc.abstractmethod
+    async def get_platform_roles(self) -> list[Role]:
+        """Fetch all platform tenant roles available for assignment."""
 
     @abc.abstractmethod
     async def save(self, role: Role) -> None:

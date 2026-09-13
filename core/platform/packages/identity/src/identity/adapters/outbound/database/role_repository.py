@@ -42,7 +42,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
             capabilities=list(row.capabilities) if row.capabilities else [],
         )
 
-    async def get_global_role_by_name(self, name: str) -> DomainRole | None:
+    async def get_platform_role_by_name(self, name: str) -> DomainRole | None:
         stmt = select(OrmRole).where(
             OrmRole.name == name,
             OrmRole.tenant_id == PLATFORM_TENANT_ID,
@@ -60,9 +60,27 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
             capabilities=list(row.capabilities) if row.capabilities else [],
         )
 
-    async def get_global_roles(self) -> list[DomainRole]:
+    async def get_platform_role_by_id(self, role_id: str) -> DomainRole | None:
+        stmt = select(OrmRole).where(
+            OrmRole.id == role_id,
+            OrmRole.tenant_id == PLATFORM_TENANT_ID,
+            OrmRole.deleted_at.is_(None),
+        )
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if not row:
+            return None
+        return DomainRole(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            name=row.name,
+            description=row.description,
+            capabilities=list(row.capabilities) if row.capabilities else [],
+        )
+
+    async def get_platform_roles(self) -> list[DomainRole]:
         bound_logger = logger.bind()
-        bound_logger.debug("role_repo.get_global_roles.started")
+        bound_logger.debug("role_repo.get_platform_roles.started")
 
         stmt = select(OrmRole).where(
             OrmRole.tenant_id == PLATFORM_TENANT_ID, OrmRole.deleted_at.is_(None)
@@ -70,7 +88,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
 
-        bound_logger.debug("role_repo.get_global_roles.completed", roles_found=len(rows))
+        bound_logger.debug("role_repo.get_platform_roles.completed", roles_found=len(rows))
 
         return [
             DomainRole(

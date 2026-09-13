@@ -2,8 +2,8 @@ from collections.abc import Sequence
 
 from sqlalchemy import select
 
+from database.models.webhooks import Webhook
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.models.data_plane import Webhook
 from edi.domain.models.webhooks import WebhookDomainModel
 from edi.ports.outbound.webhook_repository import WebhookRepositoryPort
 

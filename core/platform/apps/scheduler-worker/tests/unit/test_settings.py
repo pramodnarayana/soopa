@@ -1,14 +1,13 @@
-import os
-
+import pytest
 from database.utils import normalize_to_asyncpg
 
 from scheduler_worker.config.settings import AppSettings
 
 
-def test_settings_load_nested_env_vars() -> None:
-    os.environ["DATABASE_URL"] = "postgres://global"
-    os.environ["AWS_REGION"] = "us-west-2"
-    os.environ["SQS_DATA_PLANE_JOBS_QUEUE_URL"] = "http://sqs.data"
+def test_settings_load_nested_env_vars(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgres://global")
+    monkeypatch.setenv("AWS_REGION", "us-west-2")
+    monkeypatch.setenv("SQS_DATA_PLANE_JOBS_QUEUE_URL", "http://sqs.data")
 
     settings = AppSettings(_env_file=None)
 

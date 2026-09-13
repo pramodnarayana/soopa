@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any, Self
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.api_token import ApiTokenDomainModel
 from identity.domain.models.authorization import Role
 from identity.domain.models.user import User
@@ -107,11 +108,18 @@ class FakeRoleRepository(RoleRepositoryPort):
     async def get_by_id(self, role_id: str) -> Role | None:
         return next((r for r in self.roles if r.id == role_id), None)
 
-    async def get_global_role_by_name(self, name: str) -> Role | None:
-        return next((r for r in self.roles if r.name == name and r.tenant_id is None), None)
+    async def get_platform_role_by_id(self, role_id: str) -> Role | None:
+        return next(
+            (r for r in self.roles if r.id == role_id and r.tenant_id == PLATFORM_TENANT_ID), None
+        )
 
-    async def get_global_roles(self) -> list[Role]:
-        return [r for r in self.roles if r.tenant_id is None]
+    async def get_platform_role_by_name(self, name: str) -> Role | None:
+        return next(
+            (r for r in self.roles if r.tenant_id == PLATFORM_TENANT_ID and r.name == name), None
+        )
+
+    async def get_platform_roles(self) -> list[Role]:
+        return [r for r in self.roles if r.tenant_id == PLATFORM_TENANT_ID]
 
     async def save(self, role: Role) -> None:
         self.roles = [r for r in self.roles if r.id != role.id]

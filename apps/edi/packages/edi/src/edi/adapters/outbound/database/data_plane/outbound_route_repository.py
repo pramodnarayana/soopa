@@ -45,6 +45,7 @@ class SqlAlchemyDataPlaneOutboundRouteRepository(OutboundRouteRepositoryPort):
         stmt = (
             select(OutboundRoute)
             .where(OutboundRoute.tenant_id == tenant_id)
+            .order_by(OutboundRoute.id)
             .limit(limit)
             .offset(offset)
         )

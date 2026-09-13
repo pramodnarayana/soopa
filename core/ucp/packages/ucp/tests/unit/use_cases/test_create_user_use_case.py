@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 from identity.domain.constants import IdentityIdPrefix
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role
 from seedwork.utils import generate_id
 
@@ -43,7 +44,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
         name="admin",
         description="Admin role",
         capabilities=["read", "write"],
-        tenant_id=None,
+        tenant_id=PLATFORM_TENANT_ID,
     )
     await fake_uow.role_repo.save(role)
 

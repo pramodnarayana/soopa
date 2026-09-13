@@ -106,7 +106,7 @@ async def get_roles(
     ),
 ) -> list[RoleResponse]:
     role_repository: RoleRepositoryPort = role_repo_factory(session=session)
-    roles = await role_repository.get_global_roles()
+    roles = await role_repository.get_platform_roles()
     return [
         RoleResponse(
             id=role.id, name=role.name, description=role.description, capabilities=role.capabilities

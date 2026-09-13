@@ -58,7 +58,7 @@ class CreateUserUseCase:
             await self._uow.user_repo.save(new_user)
 
             # 2. Assign PBAC Role
-            pbac_role = await self._uow.role_repo.get_by_id(command.role)
+            pbac_role = await self._uow.role_repo.get_platform_role_by_id(command.role)
             if not pbac_role:
                 raise ResourceNotFoundError(
                     f"Global PBAC Role '{command.role}' is not found in the database."

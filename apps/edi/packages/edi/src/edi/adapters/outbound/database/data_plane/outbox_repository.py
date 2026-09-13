@@ -62,7 +62,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 WITH cte AS (
                     SELECT id FROM edi.data_plane_outbox
                     WHERE status = :processing_status
-                      AND updated_at <= NOW() - interval '1 millisecond' * :lock_lease_ms
+                      AND lease_expires_at < NOW()
                     LIMIT 5000
                     FOR UPDATE SKIP LOCKED
                 )
@@ -73,7 +73,6 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
             result = await self._session.execute(
                 query,
                 {
-                    "lock_lease_ms": lock_lease_ms,
                     "processing_status": OutboxStatus.PROCESSING.value,
                     "pending_status": OutboxStatus.PENDING.value,
                 },

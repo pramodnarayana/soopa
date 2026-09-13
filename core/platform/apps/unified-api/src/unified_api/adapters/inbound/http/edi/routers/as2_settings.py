@@ -35,6 +35,5 @@ async def get_platform_settings() -> Any:
         supported_as2_signature_algorithms=[
             SupportedAlgorithm(value="SHA256", label="SHA-256"),
             SupportedAlgorithm(value="SHA1", label="SHA-1 (Legacy)"),
-            SupportedAlgorithm(value="MD5", label="MD5 (Legacy)"),
         ],
     )

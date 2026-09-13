@@ -107,9 +107,20 @@ export function InboundRouteDetails({
       payload.processing_mode = formData.processing_mode;
 
     if (targetId !== initialTargetId) {
-      payload.webhook_id = targetId;
-      payload.as2_partner_id = null;
-      payload.sftp_partner_id = null;
+      const partner = destinations?.find((p) => p.id === targetId);
+      if (partner?.type === 'AS2') {
+        payload.as2_partner_id = targetId;
+        payload.webhook_id = null;
+        payload.sftp_partner_id = null;
+      } else if (partner?.type === 'SFTP') {
+        payload.sftp_partner_id = targetId;
+        payload.webhook_id = null;
+        payload.as2_partner_id = null;
+      } else if (partner?.type === 'WEBHOOK') {
+        payload.webhook_id = targetId;
+        payload.as2_partner_id = null;
+        payload.sftp_partner_id = null;
+      }
     }
 
     updateRoute.mutate(

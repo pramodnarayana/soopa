@@ -62,12 +62,14 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         destinations = [
             d
             for d in (webhook_id, as2_id, sftp_id)
-            if d is not None and not isinstance(d, UnsetType)
+            if d is not None and d != "" and not isinstance(d, UnsetType)
         ]
         if len(destinations) != 1:
             raise ValueError("Exactly one destination (webhook, as2, or sftp) must be provided")
 
-        if webhook_id:
+        if webhook_id is not None and not isinstance(webhook_id, UnsetType):
+            if not webhook_id:
+                raise ValueError("Webhook identifier cannot be empty")
             result = await self.session.execute(
                 select(Webhook.id).where(
                     Webhook.id == webhook_id,
@@ -80,7 +82,9 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     f"Webhook partner {webhook_id} not found or does not belong to this tenant"
                 )
 
-        if as2_id:
+        if as2_id is not None and not isinstance(as2_id, UnsetType):
+            if not as2_id:
+                raise ValueError("AS2 identifier cannot be empty")
             result = await self.session.execute(
                 select(AS2Partner.id).where(
                     AS2Partner.id == as2_id,
@@ -93,7 +97,9 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     f"AS2 partner {as2_id} not found or does not belong to this tenant"
                 )
 
-        if sftp_id:
+        if sftp_id is not None and not isinstance(sftp_id, UnsetType):
+            if not sftp_id:
+                raise ValueError("SFTP identifier cannot be empty")
             result = await self.session.execute(
                 select(SFTPPartner.id).where(
                     SFTPPartner.id == sftp_id,
