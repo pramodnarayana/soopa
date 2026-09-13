@@ -10,6 +10,15 @@ from edi.adapters.outbound.database.as2_partnership_repository import (
     SqlAlchemyAS2PartnershipRepository,
 )
 from edi.adapters.outbound.database.base_repository import GlobalSession, TenantSession
+from edi.adapters.outbound.database.data_plane_config_repositories import (
+    SqlAlchemyDataPlaneAS2PartnerRepository,
+    SqlAlchemyDataPlaneAS2PartnershipRepository,
+    SqlAlchemyDataPlaneEdiHeaderRepository,
+    SqlAlchemyDataPlaneInboundRouteRepository,
+    SqlAlchemyDataPlaneOutboundRouteRepository,
+    SqlAlchemyDataPlaneSFTPPartnerRepository,
+    SqlAlchemyDataPlaneWebhookRepository,
+)
 from edi.adapters.outbound.database.edi_header_repository import SqlAlchemyEdiHeaderRepository
 from edi.adapters.outbound.database.inbound_route_repository import SqlAlchemyInboundRouteRepository
 from edi.adapters.outbound.database.outbound_route_repository import (
@@ -24,6 +33,7 @@ from edi.adapters.outbound.database.platform_settings_repository import (
 from edi.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from edi.adapters.outbound.database.trace_repository import SqlAlchemyTraceRepository
 from edi.adapters.outbound.database.transaction_repository import SqlAlchemyTransactionRepository
+from edi.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
 from edi.adapters.outbound.sftp.sftp_repository import SqlAlchemySFTPPartnerRepository
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
@@ -39,6 +49,7 @@ from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from edi.ports.outbound.trace_repository import TraceRepositoryPort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
+from edi.ports.outbound.webhook_repository import WebhookRepositoryPort
 
 
 class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
@@ -56,6 +67,7 @@ class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     edi_headers: EdiHeaderRepositoryPort
     control_plane_outbox: ControlPlaneOutboxRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
+    webhooks: WebhookRepositoryPort
 
     def __init__(self, global_session: AsyncSession) -> None:
         super().__init__(global_session)
@@ -72,6 +84,7 @@ class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
         self.edi_headers = SqlAlchemyEdiHeaderRepository(gs)
         self.control_plane_outbox = SqlAlchemyControlPlaneOutboxRepository(gs)
         self.platform_settings = SqlAlchemyPlatformSettingsRepository(gs)
+        self.webhooks = SqlAlchemyWebhookRepository(gs)
 
 
 class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
@@ -82,6 +95,13 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
 
     transactions: TransactionRepositoryPort
     traces: TraceRepositoryPort
+    inbound_routes: InboundRouteRepositoryPort
+    outbound_routes: OutboundRouteRepositoryPort
+    sftp_partners: SFTPPartnerRepositoryPort
+    as2_partners: AS2TradingPartnerRepositoryPort
+    as2_partnerships: AS2PartnershipRepositoryPort
+    webhooks: WebhookRepositoryPort
+    edi_headers: EdiHeaderRepositoryPort
 
     def __init__(self, tenant_session: AsyncSession, storage: StoragePort) -> None:
         super().__init__(tenant_session)
@@ -91,3 +111,11 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
 
         self.transactions = SqlAlchemyTransactionRepository(ts, storage)
         self.traces = SqlAlchemyTraceRepository(ts, storage)
+
+        self.inbound_routes = SqlAlchemyDataPlaneInboundRouteRepository(ts)
+        self.outbound_routes = SqlAlchemyDataPlaneOutboundRouteRepository(ts)
+        self.sftp_partners = SqlAlchemyDataPlaneSFTPPartnerRepository(ts)
+        self.as2_partners = SqlAlchemyDataPlaneAS2PartnerRepository(ts)
+        self.as2_partnerships = SqlAlchemyDataPlaneAS2PartnershipRepository(ts)
+        self.webhooks = SqlAlchemyDataPlaneWebhookRepository(ts)
+        self.edi_headers = SqlAlchemyDataPlaneEdiHeaderRepository(ts)

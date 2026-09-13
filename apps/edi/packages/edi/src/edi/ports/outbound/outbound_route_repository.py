@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Protocol
 
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
@@ -12,4 +13,6 @@ class OutboundRouteRepositoryPort(Protocol):
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
     ) -> OutboundRouteDomainModel | None: ...
-    async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteDomainModel]: ...
+    async def list_outbound_routes(
+        self, tenant_id: str, limit: int = 100, offset: int = 0
+    ) -> Sequence[OutboundRouteDomainModel]: ...

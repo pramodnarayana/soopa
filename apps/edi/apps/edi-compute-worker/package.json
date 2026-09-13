@@ -9,6 +9,6 @@
     "test:integration": "uv run pytest tests/integration",
     "deadcode:deptry": "uv run deptry .",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
-    "dev": "uv run python -m compute_worker.main"
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m compute_worker.main"
   }
 }

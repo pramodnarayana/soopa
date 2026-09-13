@@ -6,7 +6,7 @@ from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 

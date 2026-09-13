@@ -18,10 +18,11 @@ async def test_main_execution() -> None:
 
     # Yield control to the event loop so main() can execute and start the manager
     await asyncio.sleep(0.5)
+    assert not worker_task.done()
 
     # Cancel the task to simulate a shutdown signal
     worker_task.cancel()
 
     # The task should complete with a CancelledError, which main suppresses via its try/finally
     with contextlib.suppress(asyncio.CancelledError):
-        await worker_task
+        await asyncio.wait_for(worker_task, timeout=5.0)

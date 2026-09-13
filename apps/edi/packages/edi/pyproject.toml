@@ -116,10 +116,4 @@ omit = [
     "src/edi/core/grammar/**",
     # Module bootstrap / entrypoint wiring
     "src/edi/module.py",
-    # Untested domain files
-    "src/edi/domain/models/jobs.py",
-    "src/edi/exceptions.py",
-    # Complex use cases requiring integration fixtures
-    "src/edi/application/use_cases/pipeline/compute_transform_use_case.py",
-    "src/edi/application/use_cases/as2_partners/rotate_as2_certificates_use_case.py",
 ]

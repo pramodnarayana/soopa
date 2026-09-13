@@ -1,13 +1,35 @@
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
+from seedwork.domain.types import JsonValue
 
-from edi.application.dtos.commands import CreateAS2PartnershipCmd
-from edi.domain.enums import EdiEventType
+from edi.domain.enums import (
+    EdiEventType,
+    EncryptionAlgorithm,
+    MDNType,
+    SignatureAlgorithm,
+)
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.as2 import AS2PartnershipDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+
+
+@dataclass(frozen=True)
+class CreateAS2PartnershipCmd:
+    name: str
+    local_partner_id: str
+    remote_partner_id: str
+    local_url: str | None = None
+    remote_url: str | None = None
+    credentials_vault_ref: str | None = None
+    mdn_type: MDNType = MDNType.SYNC
+    mdn_url: str | None = None
+    encryption_algorithm: EncryptionAlgorithm = EncryptionAlgorithm.AES256
+    signature_algorithm: SignatureAlgorithm = SignatureAlgorithm.SHA256
+    advanced_flags: dict[str, JsonValue] | None = None
+
 
 logger = structlog.get_logger(__name__)
 
@@ -61,6 +83,17 @@ class CreateAS2PartnershipUseCase:
                 event_type=EdiEventType.edi_as2_partnership_created,
                 resource_id=partner_id,
             )
+        )
+
+        logger.debug(
+            "edi_as2_partnership_aggregate_created",
+            partnership_id=partner_id,
+            local_partner_id=cmd.local_partner_id,
+            remote_partner_id=cmd.remote_partner_id,
+            encryption_algorithm=cmd.encryption_algorithm,
+            signature_algorithm=cmd.signature_algorithm,
+            mdn_type=cmd.mdn_type,
+            tenant_id=tenant_id,
         )
 
         await self.uow.as2_partnerships.save(aggregate)

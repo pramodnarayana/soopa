@@ -3,13 +3,13 @@ from datetime import datetime
 
 from seedwork.models import AggregateRoot
 
-from edi.domain.enums import EdiDirection
+from edi.domain.enums import EdiConnectionType, EdiDirection
 from edi.domain.models.base import ProcessingMode
 
 
 @dataclass(kw_only=True)
 class InboundRouteDomainModel(AggregateRoot):
-    ID_PREFIX = "in"
+    ID_PREFIX = "edi_ib_rt"
 
     id: str
     tenant_id: str
@@ -27,5 +27,6 @@ class InboundRouteDomainModel(AggregateRoot):
     webhook_id: str | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
+    connection_type: EdiConnectionType | None = None
     direction: EdiDirection = EdiDirection.INBOUND
     destination_name: str | None = None

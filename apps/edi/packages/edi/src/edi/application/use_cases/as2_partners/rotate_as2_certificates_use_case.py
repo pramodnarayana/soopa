@@ -1,9 +1,10 @@
+from dataclasses import dataclass
+
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import RotateAS2CertificateCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.enums import EdiEventType
@@ -18,6 +19,15 @@ from edi.domain.models.as2 import AS2PartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class RotateAS2CertificateCmd:
+    action: str | None = None
+    public_cert_pem: str | None = None
+    private_key_pem: str | None = None
+    public_cert_vault_ref: str | None = None
+    private_key_vault_ref: str | None = None
 
 
 class RotateAS2CertificatesUseCase:

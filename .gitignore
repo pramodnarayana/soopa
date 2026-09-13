@@ -77,3 +77,10 @@ volume/
 
 # direnv cache — generated locally, never committed
 .direnv/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+terraform-admin-key.json

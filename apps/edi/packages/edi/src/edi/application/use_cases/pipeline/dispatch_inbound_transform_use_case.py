@@ -4,8 +4,8 @@ import structlog
 
 from edi.config.settings import AppSettings
 from edi.domain.enums import EdiDirection, PipelineEventType
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.transformer_port import TransformerPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -30,7 +30,7 @@ class DispatchInboundTransformUseCase:
         logger.info("inbound_transform.started", trace_id=trace_id)
 
         async with self.uow:
-            edi_msg = await self.uow.repository.get_edi_message(trace_id)
+            edi_msg = await self.uow.transactions.get_edi_message(trace_id)
             if not edi_msg:
                 raise ValueError(f"No EDI message found for trace_id={trace_id}")
 

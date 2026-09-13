@@ -21,7 +21,7 @@ def _event_idempotency_key(idempotency_key: str | None, *, index: int, event_cou
 
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonValue
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import CursorResult, Select, and_, or_, select, update
 from sqlalchemy.orm import Mapped
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -33,33 +33,33 @@ from edi.adapters.outbound.database.constants import (
     DATA_PLANE_OUTBOX_EVENT_PREFIX,
     EDI_JSON_ID_PREFIX,
 )
-from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
 from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
     DataPlaneOutbox,
     EdiJson,
     EdiMessage,
-    InboundRoute,
-    OutboundRoute,
-    Webhook,
 )
 from edi.adapters.outbound.database.payload_hydration import (
     hydrate_edi_data,
     hydrate_json_payload,
 )
-from edi.application.dtos.routes import InboundRouteDTO
 from edi.application.dtos.transactions import (
     EdiJsonDTO,
     EdiMessageDTO,
 )
-from edi.application.dtos.webhooks import WebhookDTO
 from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
-from edi.domain.enums import EdiDirection
+from edi.domain.enums import MessageStatus
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 from edi.ports.outbound.storage_port import StoragePort
-from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
+from edi.ports.outbound.transaction_repository import (
+    CreateApiGatewayCommand,
+    CreateEdiJsonCommand,
+    CreateEdiMessageCommand,
+    TransactionRepositoryPort,
+    UpdateEdiJsonCommand,
+)
 
 
 class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchemyRepository):
@@ -67,14 +67,128 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         TenantSqlAlchemyRepository.__init__(self, session)
         self.storage = storage
 
-    async def create_edi_message(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
-        payload_copy = dict(payload)
-        if "id" not in payload_copy:
-            payload_copy["id"] = f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}"
-        msg = EdiMessage(tenant_id=tenant_id, **payload_copy)
+    async def claim_edi_message(self, trace_id: str) -> bool:
+        stmt = (
+            update(EdiMessage)
+            .where(
+                EdiMessage.trace_id == str(trace_id),
+                EdiMessage.status == MessageStatus.PENDING_DELIVERY.value,
+            )
+            .values(status=MessageStatus.PROCESSING.value)
+        )
+        result = await self.session.execute(stmt)
+        return cast(CursorResult, result).rowcount > 0
+
+    async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
+        msg = EdiMessage(
+            id=command.id or f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}",
+            trace_id=command.trace_id,
+            tenant_id=command.tenant_id,
+            direction=command.direction,
+            connection_type=command.connection_type,
+            sender_id=command.sender_id,
+            receiver_id=command.receiver_id,
+            as2_sender_id=command.as2_sender_id,
+            as2_receiver_id=command.as2_receiver_id,
+            gs_sender_id=command.gs_sender_id,
+            gs_receiver_id=command.gs_receiver_id,
+            message_id=command.message_id,
+            mdn_id=command.mdn_id,
+            mdn_mode=command.mdn_mode,
+            mdn_response=command.mdn_response,
+            file_name=command.file_name,
+            content_type=command.content_type,
+            signature_algorithm=command.signature_algorithm,
+            encryption_algorithm=command.encryption_algorithm,
+            trading_partner_id=command.trading_partner_id,
+            status=command.status,
+            edi_data=command.edi_data,
+            interchange_control_no=command.interchange_control_no,
+            transaction_type=command.transaction_type,
+            format_standard=command.format_standard,
+            storage_uri=command.storage_uri,
+            file_size_bytes=command.file_size_bytes,
+            msg_headers=json.dumps(command.msg_headers) if command.msg_headers else None,
+            state=command.state,
+            status_message=command.status_message,
+            is_resend=command.is_resend,
+            parent_trace_id=command.parent_trace_id,
+        )
         self.session.add(msg)
         await self.flush()
         return str(msg.id)
+
+    async def update_edi_message_metadata(
+        self,
+        trace_id: str,
+        gs_sender_id: str | None,
+        gs_receiver_id: str | None,
+        transaction_type: str | None,
+    ) -> None:
+        stmt = (
+            update(EdiMessage)
+            .where(EdiMessage.trace_id == str(trace_id))
+            .values(
+                gs_sender_id=gs_sender_id,
+                gs_receiver_id=gs_receiver_id,
+                transaction_type=transaction_type,
+            )
+        )
+        await self.session.execute(stmt)
+
+    async def update_edi_message_status(self, trace_id: str, status: str) -> None:
+        stmt = update(EdiMessage).where(EdiMessage.trace_id == str(trace_id)).values(status=status)
+        await self.session.execute(stmt)
+
+    async def update_edi_json(self, command: UpdateEdiJsonCommand) -> None:
+        values: dict[str, str] = {
+            field: getattr(command, field)
+            for field in (
+                "trading_partner_id",
+                "standard",
+                "sender_id",
+                "receiver_id",
+                "gs_sender_id",
+                "gs_receiver_id",
+            )
+            if getattr(command, field) is not None
+        }
+        if not values:
+            return
+        stmt = update(EdiJson).where(EdiJson.trace_id == str(command.trace_id)).values(**values)
+        await self.session.execute(stmt)
+
+    async def update_edi_json_status(self, trace_id: str, status: str) -> None:
+        stmt = update(EdiJson).where(EdiJson.trace_id == str(trace_id)).values(status=status)
+        await self.session.execute(stmt)
+
+    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None:
+        stmt = select(ApiGateway).where(ApiGateway.trace_id == str(trace_id)).limit(1)
+        result = await self.session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if not record:
+            return None
+        return {
+            "payload": record.payload,
+            "status": record.status,
+            "webhook_url": record.webhook_url,
+        }
+
+    async def claim_api_payload(self, trace_id: str) -> bool:
+        stmt = (
+            update(ApiGateway)
+            .where(
+                ApiGateway.trace_id == str(trace_id),
+                ApiGateway.status == MessageStatus.PENDING_DELIVERY.value,
+            )
+            .values(status=MessageStatus.PROCESSING.value)
+        )
+        result = await self.session.execute(stmt)
+        return cast(CursorResult, result).rowcount > 0
+
+    async def update_api_payload_status(self, trace_id: str, status: str) -> None:
+        stmt = update(ApiGateway).where(ApiGateway.trace_id == str(trace_id)).values(status=status)
+        await self.session.execute(stmt)
 
     async def publish_outbox_event(
         self, tenant_id: str, event_type: str, payload: JsonValue, idempotency_key: str | None
@@ -226,161 +340,91 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             return None
         return _map_edi_message_to_domain(record)
 
-    async def get_route(
-        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
-    ) -> InboundRouteDTO | None:
-        stmt: Select[tuple[InboundRoute]] | Select[tuple[OutboundRoute]] | None = None
-        if direction == EdiDirection.INBOUND:
-            stmt = select(InboundRoute).where(
-                InboundRoute.isa_sender_id == sender_id,
-                InboundRoute.isa_receiver_id == receiver_id,
-                or_(
-                    InboundRoute.transaction_type == transaction_type,
-                    InboundRoute.transaction_type.is_(None),
-                ),
-            )
-        else:
-            stmt = (
-                select(OutboundRoute)
-                .join(
-                    OutboundEdiHeader,
-                    OutboundRoute.trading_partner_id == OutboundEdiHeader.trading_partner_id,
-                )
-                .where(
-                    OutboundEdiHeader.isa_sender_id == sender_id,
-                    OutboundEdiHeader.isa_receiver_id == receiver_id,
-                    or_(
-                        OutboundEdiHeader.transaction_type == transaction_type,
-                        OutboundEdiHeader.transaction_type.is_(None),
-                    ),
-                )
-            )
-
-        result = await self.session.execute(stmt)
-        record = result.scalars().first()
-        if not record:
-            return None
-        if direction == EdiDirection.INBOUND:
-            return InboundRouteDTO(
-                trading_partner_id=record.trading_partner_id,
-                webhook_id=record.webhook_id,
-                as2_partner_id=record.as2_partner_id,
-                sftp_partner_id=record.sftp_partner_id,
-                processing_mode=record.processing_mode,
-            )
-        else:
-            return InboundRouteDTO(
-                trading_partner_id=record.trading_partner_id,
-                webhook_id=None,
-                as2_partner_id=record.as2_partner_id,
-                sftp_partner_id=record.sftp_partner_id,
-                processing_mode=None,  # Outbound routes do not have a processing mode
-            )
-
-    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
-        stmt = select(Webhook).where(Webhook.id == partner_id)
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
+        stmt = (
+            select(EdiJson)
+            .where(EdiJson.trace_id == str(trace_id))
+            .order_by(EdiJson.created_at.desc())
+            .limit(1)
+        )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
         if not record:
             return None
-        return WebhookDTO(
+
+        payload = await hydrate_json_payload(self.storage, record.storage_uri, record.payload)
+
+        return EdiJsonDomainModel(
             id=str(record.id),
-            url=str(record.url),
-            name=str(record.name),
-            active=bool(record.active),
-            auth_header_vault_ref=record.auth_header_vault_ref,
-        )
-
-    async def save_api_payload(
-        self,
-        trace_id: str,
-        direction: str,
-        payload: dict[str, JsonValue],
-        status: str,
-        transaction_type: str | None = None,
-        webhook_url: str | None = None,
-        tenant_id: str | None = None,
-    ) -> None:
-        record_id = f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}"
-        record = ApiGateway(
-            id=record_id,
-            tenant_id=tenant_id,
-            trace_id=trace_id,
-            direction=direction,
+            trace_id=str(record.trace_id),
+            tenant_id=record.tenant_id,
+            direction=Direction(record.direction) if record.direction else Direction.OUTBOUND,
+            status=MessageStatus(record.status) if record.status else MessageStatus.PENDING,
+            trading_partner_id=record.trading_partner_id,
+            transaction_type=record.transaction_type,
+            standard=record.standard,
+            sender_id=record.sender_id,
+            receiver_id=record.receiver_id,
+            gs_sender_id=record.gs_sender_id,
+            gs_receiver_id=record.gs_receiver_id,
+            business_metadata=record.business_metadata,
             payload=payload,
-            status=status,
-            transaction_type=transaction_type,
-            webhook_url=webhook_url,
+            parent_trace_id=record.parent_trace_id,
         )
-        self.session.add(record)
-        await self.flush()
 
-    async def save_edi_json(
-        self,
-        trace_id: str,
-        direction: str,
-        partnership_id: str | None,
-        transaction_type: str | None,
-        standard: str | None,
-        sender_id: str | None,
-        receiver_id: str | None,
-        gs_sender_id: str | None,
-        gs_receiver_id: str | None,
-        business_metadata: dict[str, JsonValue],
-        payload: dict[str, JsonValue],
-        status: str,
-        tenant_id: str | None = None,
-    ) -> str:
-        # Idempotency check
-        stmt = (
-            select(EdiJson.id)
-            .where(
-                EdiJson.trace_id == str(trace_id),
-                EdiJson.direction == direction,
-                EdiJson.transaction_type == transaction_type,
+    async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
+        # Idempotency: if a record already exists for this trace_id + direction + transaction_type
+        # return the existing ID without inserting a duplicate.
+        if command.trace_id and command.direction and command.transaction_type:
+            stmt = (
+                select(EdiJson.id)
+                .where(
+                    EdiJson.trace_id == command.trace_id,
+                    EdiJson.direction == command.direction,
+                    EdiJson.transaction_type == command.transaction_type,
+                )
+                .limit(1)
             )
-            .limit(1)
-        )
-        result = await self.session.execute(stmt)
-        existing_id = result.scalar_one_or_none()
-        if existing_id:
-            return str(existing_id)
+            result = await self.session.execute(stmt)
+            existing_id = result.scalar_one_or_none()
+            if existing_id:
+                return str(existing_id)
 
-        record_id = f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
-        record = EdiJson(
-            id=record_id,
-            trace_id=str(trace_id),
-            tenant_id=tenant_id,
-            direction=direction,
-            trading_partner_id=partnership_id,
-            transaction_type=transaction_type,
-            standard=standard,
-            sender_id=sender_id,
-            receiver_id=receiver_id,
-            gs_sender_id=gs_sender_id,
-            gs_receiver_id=gs_receiver_id,
-            business_metadata=business_metadata,
-            payload=payload,
-            status=status,
+        msg = EdiJson(
+            id=command.id or f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}",
+            trace_id=command.trace_id,
+            tenant_id=command.tenant_id,
+            direction=command.direction,
+            status=command.status,
+            trading_partner_id=command.trading_partner_id,
+            standard=command.standard,
+            business_metadata=command.business_metadata,
+            transaction_type=command.transaction_type,
+            sender_id=command.sender_id,
+            receiver_id=command.receiver_id,
+            gs_sender_id=command.gs_sender_id,
+            gs_receiver_id=command.gs_receiver_id,
+            payload=command.payload,
+            parent_trace_id=command.parent_trace_id,
         )
-        self.session.add(record)
-        await self.flush()
-        return record_id
-
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
-        payload_copy = dict(payload)
-        if "id" not in payload_copy:
-            payload_copy["id"] = f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
-        msg = EdiJson(tenant_id=tenant_id, **payload_copy)
         self.session.add(msg)
         await self.flush()
         return str(msg.id)
 
-    async def create_api_gateway(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
-        payload_copy = dict(payload)
-        if "id" not in payload_copy:
-            payload_copy["id"] = f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}"
-        log = ApiGateway(tenant_id=tenant_id, **payload_copy)
+    async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
+        log = ApiGateway(
+            id=command.id or f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}",
+            tenant_id=command.tenant_id,
+            trace_id=command.trace_id,
+            direction=command.direction,
+            status=command.status,
+            transaction_type=command.transaction_type,
+            webhook_url=command.webhook_url,
+            http_status_code=command.http_status_code,
+            payload=command.payload,
+            response=command.response,
+            parent_trace_id=command.parent_trace_id,
+        )
         self.session.add(log)
         await self.flush()
         return str(log.id)

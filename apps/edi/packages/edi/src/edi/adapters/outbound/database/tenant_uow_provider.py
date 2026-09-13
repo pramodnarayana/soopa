@@ -1,5 +1,6 @@
 import contextlib
 from collections.abc import AsyncGenerator, Callable
+from typing import cast
 
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
@@ -46,9 +47,10 @@ class TenantUowProvider:
                 self._db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
             ) as session_gen:
                 async for session in session_gen:
-                    yield SqlAlchemyDataPlaneUnitOfWork(
+                    uow = SqlAlchemyDataPlaneUnitOfWork(
                         tenant_session=session, storage=self._storage
                     )
+                    yield cast(DataPlaneUnitOfWorkPort, uow)
                     break
 
         return uow_factory

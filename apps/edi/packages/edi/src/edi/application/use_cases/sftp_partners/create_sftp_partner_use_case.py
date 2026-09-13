@@ -1,17 +1,29 @@
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import CreateSFTPPartnerCmd
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class CreateSFTPPartnerCmd:
+    name: str
+    host: str
+    username: str
+    credentials_vault_ref: str | None = None
+    password: str | None = None
+    port: int = 22
+    inbound_remote_path: str | None = None
+    outbound_remote_path: str | None = None
 
 
 class CreateSFTPPartnerUseCase:
@@ -22,7 +34,7 @@ class CreateSFTPPartnerUseCase:
         self, tenant_id: str, cmd: CreateSFTPPartnerCmd, idempotency_key: str | None = None
     ) -> SFTPPartnerDomainModel:
         logger.info(
-            "Creating SFTP partner {cmd_name} for tenant {tenant_id}",
+            "sftp_partner_creation_started",
             cmd_name=cmd.name,
             tenant_id=tenant_id,
         )

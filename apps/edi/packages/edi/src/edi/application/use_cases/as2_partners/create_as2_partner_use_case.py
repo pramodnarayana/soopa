@@ -1,6 +1,7 @@
 import hashlib
 import json
 import os
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
@@ -8,7 +9,6 @@ from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import CreateAS2TradingPartnerCmd
 from edi.config.constants import SecretCategory
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.enums import EdiEventType
@@ -18,6 +18,18 @@ from edi.domain.models.as2 import AS2PartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class CreateAS2TradingPartnerCmd:
+    name: str
+    as2_id: str
+    is_local: bool = False
+    url: str | None = None
+    public_cert_pem: str | None = None
+    private_key_pem: str | None = None
+    public_cert_vault_ref: str | None = None
+    private_key_vault_ref: str | None = None
 
 
 class CreateAS2PartnerUseCase:
@@ -177,10 +189,7 @@ class CreateAS2PartnerUseCase:
                 idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
 
-            if idempotency_key:
-                await self.uow.control_plane_outbox.publish_outbox_event(event, idempotency_key)
-            else:
-                aggregate.add_domain_event(event)
+            aggregate.add_domain_event(event)
 
             await self.uow.as2_partners.save(aggregate)
 

@@ -29,7 +29,8 @@ from unified_api.adapters.inbound.http.edi.routers import (
     edi_json,
     edi_tools,
     explorer,
-    routes,
+    inbound_routes,
+    outbound_routes,
     trading_partners,
     transactions,
 )
@@ -119,7 +120,8 @@ def create_edi_app() -> FastAPI:
     app.include_router(trading_partners.router)
     app.include_router(platform.router)
     app.include_router(platform_admin.router)
-    app.include_router(routes.router)
+    app.include_router(inbound_routes.router)
+    app.include_router(outbound_routes.router)
     app.include_router(edi_headers.router)
     app.include_router(edi_tools.router, prefix="/api/v1")
     app.include_router(as2_receive.router, prefix="/api/v1")

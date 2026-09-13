@@ -93,14 +93,25 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
         self._drain_events(aggregate)
         await self.session.flush()
 
-    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
+    async def get_sftp_partners_by_ids(
+        self, tenant_id: str, ids: list[str]
+    ) -> list[SFTPPartnerDomainModel]:
         if not ids:
-            return {}
+            return []
         result = await self.session.execute(
-            select(SFTPPartner.id, SFTPPartner.name).where(
+            select(SFTPPartner).where(
                 SFTPPartner.id.in_(ids),
                 SFTPPartner.tenant_id == tenant_id,
                 SFTPPartner.deleted_at.is_(None),
             )
         )
-        return {row.id: row.name for row in result.all()}
+        return [
+            SFTPPartnerDomainModel(
+                **{
+                    k: v
+                    for k, v in r.__dict__.items()
+                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
+                }
+            )
+            for r in result.scalars().all()
+        ]

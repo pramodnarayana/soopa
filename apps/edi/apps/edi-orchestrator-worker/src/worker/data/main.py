@@ -34,10 +34,10 @@ from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.transformer_port import TransformerPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter

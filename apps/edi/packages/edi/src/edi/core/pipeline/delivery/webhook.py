@@ -8,8 +8,8 @@ from seedwork.utils import generate_id
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.domain.enums import MessageStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -31,18 +31,18 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         edi_msg: EdiMessageDomainModel,
         idempotency_key: str | None = None,
     ) -> None:
-        if not await self.uow.repository.claim_api_payload(trace_id):
+        if not await self.uow.transactions.claim_api_payload(trace_id):
             logger.warning(
                 "Could not claim trace_id={trace_id} (already claimed or terminal).",
                 trace_id=trace_id,
             )
             return
 
-        api_payload = await self.uow.repository.get_api_payload(trace_id)
+        api_payload = await self.uow.transactions.get_api_payload(trace_id)
         if not api_payload:
             raise ValueError(f"No API Payload found for webhook delivery of trace_id={trace_id}")
 
-        partner = await self.uow.repository.get_webhook(partner_id)
+        partner = await self.uow.webhooks.get_webhook(edi_msg.tenant_id, partner_id)
         if not partner:
             raise ValueError(f"Webhook partner {partner_id} not found.")
 
@@ -69,22 +69,14 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         except Exception as e:
-            await self.uow.repository.update_api_payload_status(
-                trace_id, MessageStatus.FAILED, webhook_url=partner.url, response=str(e)
-            )
+            await self.uow.transactions.update_api_payload_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             await self.uow.commit()
             logger.exception("Webhook delivery failed for trace_id={trace_id}", trace_id=trace_id)
             raise RuntimeError(f"Webhook delivery failed: {e}") from e
 
         if 200 <= status_code < 300:
-            await self.uow.repository.update_api_payload_status(
-                trace_id,
-                MessageStatus.DELIVERED,
-                webhook_url=partner.url,
-                http_status_code=status_code,
-                response=response_text,
-            )
+            await self.uow.transactions.update_api_payload_status(trace_id, MessageStatus.DELIVERED)
             await self._emit_delivery_completed(
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
@@ -94,13 +86,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 partner_url=partner.url,
             )
         else:
-            await self.uow.repository.update_api_payload_status(
-                trace_id,
-                MessageStatus.FAILED,
-                webhook_url=partner.url,
-                http_status_code=status_code,
-                response=response_text,
-            )
+            await self.uow.transactions.update_api_payload_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             await self.uow.commit()
             logger.error(

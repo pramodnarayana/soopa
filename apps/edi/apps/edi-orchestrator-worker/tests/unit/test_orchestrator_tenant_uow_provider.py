@@ -42,7 +42,7 @@ async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort) -> Non
         shard = DatabaseShard(
             id=generate_id("ucp_shard"),
             name=shard_name,
-            dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+            dsn=db_router.shard_url,
         )
         session.add(shard)
         await session.flush()

@@ -2,6 +2,13 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
+## [Architecture] Centralized Resilient HTTP Client
+
+- **Date Added**: 2026-09-12
+- **Status**: TO DO
+- **Description**: Currently, external API integrations (e.g., Zitadel IDP) use custom-built HTTP clients (`ZitadelClient`) that handle their own status code checks and exceptions. As we integrate with more external systems (ERP, CRM), duplicating HTTP request error handling, retries, circuit breaking, and exception mapping per client violates DRY and Enterprise Architecture standards.
+- **Action Item**: Extract a generic, resilient HTTP capability into its own platform package (e.g., `core/platform/packages/http_client`). This package should provide a `ResilientHttpClient` base class that natively handles generic HTTP Exceptions (`BaseHttpError`, `HttpConflictError`), Auto-Retries for 429s/503s, Circuit Breaking, and OpenTelemetry tracing injection. All specific provider clients (like `ZitadelClient`) should inherit from this generic base and only override authentication and vendor-specific domain parsing.
+
 ## [OPEN] [Testing Architecture] Enforce Strict Per-Module 80% Test Coverage
 
 - **Date Added**: 2026-08-30

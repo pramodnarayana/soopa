@@ -24,16 +24,19 @@ class ListOutboundRoutesUseCase:
             if out_r.sftp_partner_id:
                 sftp_ids.add(out_r.sftp_partner_id)
 
-        as2_names = (
+        as2_partners = (
             await self.uow.as2_partners.get_as2_partners_by_ids(tenant_id, list(as2_ids))
             if as2_ids
-            else {}
+            else []
         )
-        sftp_names = (
+        as2_names = {p.id: p.name for p in as2_partners}
+
+        sftp_partners = (
             await self.uow.sftp_partners.get_sftp_partners_by_ids(tenant_id, list(sftp_ids))
             if sftp_ids
-            else {}
+            else []
         )
+        sftp_names = {p.id: p.name for p in sftp_partners}
 
         results: list[OutboundRouteDomainModel] = []
 

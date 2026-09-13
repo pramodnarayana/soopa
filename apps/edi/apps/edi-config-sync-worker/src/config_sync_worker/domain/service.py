@@ -1,5 +1,6 @@
 from collections.abc import Awaitable, Callable
 
+import structlog
 from edi.domain.constants import ProvisioningEventType
 from edi.domain.enums import EdiEventType, WebhookEventType
 from edi.domain.events import ProvisioningEvent
@@ -8,6 +9,8 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
+
+logger = structlog.get_logger(__name__)
 
 
 class ProvisioningWorkerService:
@@ -54,38 +57,64 @@ class ProvisioningWorkerService:
         self, tenant_id: str, replicate_fn: Callable[..., Awaitable[None]], *args: object
     ) -> None:
         if tenant_id == PLATFORM_TENANT_ID:
+            logger.info("broadcasting_event_to_all_tenants", event_args=args)
             all_tenants = await self.tenant_port.get_all_tenant_ids()
+            if not all_tenants:
+                logger.info("broadcast_skipped_no_tenants", event_args=args)
+                return
+
             transient_errors = []
             permanent_errors = []
             for t_id in all_tenants:
                 try:
                     await replicate_fn(t_id, *args)
                 except PermanentProvisioningError as e:
+                    logger.exception("broadcast_permanent_failure", tenant_id=t_id, error=str(e))
                     permanent_errors.append(f"Tenant {t_id}: {e}")
                 except (TransientProvisioningError, TimeoutError, ConnectionError) as e:
+                    logger.warning("broadcast_transient_failure", tenant_id=t_id, error=str(e))
                     transient_errors.append(f"Tenant {t_id}: {e}")
             if transient_errors:
+                logger.error(
+                    "broadcast_completed_with_transient_errors", failed_count=len(transient_errors)
+                )
                 raise TransientProvisioningError(
                     f"Broadcast failed transiently for some tenants: {transient_errors}"
                 )
             if permanent_errors:
+                logger.error(
+                    "broadcast_completed_with_permanent_errors", failed_count=len(permanent_errors)
+                )
                 raise PermanentProvisioningError(
                     f"Broadcast failed permanently for some tenants: {permanent_errors}"
                 )
+            logger.info("broadcast_event_completed", success_count=len(all_tenants))
         else:
+            logger.info("replicating_event_to_tenant", tenant_id=tenant_id, event_args=args)
             await replicate_fn(tenant_id, *args)
+            logger.info("replicated_event_to_tenant", tenant_id=tenant_id, event_args=args)
 
     async def process_event(self, parsed_event: ProvisioningEvent) -> None:
         """Processes a strongly-typed domain event."""
+        bound_logger = logger.bind(
+            event_type=parsed_event.event_type,
+            resource_id=parsed_event.resource_id,
+            tenant_id=parsed_event.tenant_id,
+        )
         try:
+            bound_logger.info("processing_event_started")
             handler = self._handlers.get(parsed_event.event_type)
             if not handler:
+                bound_logger.error("unhandled_event_type")
                 raise PermanentProvisioningError(f"Unhandled event type: {parsed_event.event_type}")
 
             await self._broadcast_or_replicate(
                 parsed_event.tenant_id, handler, parsed_event.resource_id
             )
-        except (PermanentProvisioningError, TransientProvisioningError):
+            bound_logger.info("processing_event_completed")
+        except (PermanentProvisioningError, TransientProvisioningError) as e:
+            bound_logger.exception("processing_event_failed", reason=str(e))
             raise
         except Exception as e:
+            bound_logger.exception("processing_event_failed_unexpected", reason=str(e))
             raise PermanentProvisioningError(f"Failed to process event: {e}") from e

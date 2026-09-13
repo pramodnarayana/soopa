@@ -42,7 +42,7 @@ class EdiAwsSettings(PlatformAwsSettings):
     Extends the base PlatformAwsSettings to include EDI-specific topics.
     """
 
-    sns_topic_arn: str = Field(validation_alias="AWS_SNS_TOPIC_ARN", default="")
+    sns_topic_arn: str = Field(validation_alias="SNS_EDI_EVENTS_TOPIC_ARN", default="")
 
 
 class SqsSettings(BaseSettings):

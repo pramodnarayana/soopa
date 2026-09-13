@@ -2,10 +2,9 @@ import dataclasses
 
 import structlog
 from seedwork.constants import SystemIdPrefix
-from seedwork.domain.types import UNSET
+from seedwork.domain.types import UNSET, UnsetType
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import UpdateSFTPPartnerCmd
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.sftp import SFTPPartnerDomainModel
@@ -15,12 +14,25 @@ from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUni
 logger = structlog.get_logger(__name__)
 
 
+@dataclasses.dataclass(frozen=True)
+class UpdateSFTPPartnerCmd:
+    name: str | UnsetType = UNSET
+    host: str | UnsetType = UNSET
+    username: str | UnsetType = UNSET
+    password: str | UnsetType | None = UNSET
+    credentials_vault_ref: str | UnsetType = UNSET
+    port: int | UnsetType = UNSET
+    inbound_remote_path: str | UnsetType | None = UNSET
+    outbound_remote_path: str | UnsetType | None = UNSET
+    active: bool | UnsetType = UNSET
+
+
 class UpdateSFTPPartnerUseCase:
     def __init__(self, uow: ControlPlaneUnitOfWork, field_encryption: FieldEncryptionPort) -> None:
         self.uow = uow
         self.field_encryption = field_encryption
 
-    async def update_sftp_partner(
+    async def update_sftp_partner(  # noqa: C901
         self,
         tenant_id: str,
         partner_id: str,
@@ -28,7 +40,7 @@ class UpdateSFTPPartnerUseCase:
         idempotency_key: str | None = None,
     ) -> SFTPPartnerDomainModel:
         logger.info(
-            "Updating SFTP partner {partner_id} for tenant {tenant_id}",
+            "sftp_partner_update_started",
             partner_id=partner_id,
             tenant_id=tenant_id,
         )
@@ -51,18 +63,26 @@ class UpdateSFTPPartnerUseCase:
         if has_password and has_vault:
             raise ValueError("SFTP partner cannot have both a password and a credentials_vault_ref")
 
-        persisted_fields = {field.name for field in dataclasses.fields(SFTPPartnerDomainModel)}
-        for field in dataclasses.fields(cmd):
-            value = getattr(cmd, field.name)
-            if value is not UNSET:
-                if field.name == "password":
-                    existing.password_encrypted = (
-                        self.field_encryption.encrypt(value) if value else None
-                    )
-                elif field.name in persisted_fields:
-                    setattr(existing, field.name, value)
-                else:
-                    raise ValueError(f"Unsupported SFTP partner field: {field.name}")
+        if not isinstance(cmd.name, UnsetType):
+            existing.name = cmd.name
+        if not isinstance(cmd.host, UnsetType):
+            existing.host = cmd.host
+        if not isinstance(cmd.username, UnsetType):
+            existing.username = cmd.username
+        if not isinstance(cmd.password, UnsetType):
+            existing.password_encrypted = (
+                self.field_encryption.encrypt(cmd.password) if cmd.password else None
+            )
+        if not isinstance(cmd.credentials_vault_ref, UnsetType):
+            existing.credentials_vault_ref = cmd.credentials_vault_ref
+        if not isinstance(cmd.port, UnsetType):
+            existing.port = cmd.port
+        if not isinstance(cmd.inbound_remote_path, UnsetType):
+            existing.inbound_remote_path = cmd.inbound_remote_path
+        if not isinstance(cmd.outbound_remote_path, UnsetType):
+            existing.outbound_remote_path = cmd.outbound_remote_path
+        if not isinstance(cmd.active, UnsetType):
+            existing.active = cmd.active
 
         existing.add_domain_event(
             ProvisioningEvent(

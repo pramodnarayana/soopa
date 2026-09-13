@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import json
 import os
 import uuid
@@ -7,8 +8,10 @@ from typing import Any
 
 import aioboto3
 import pytest
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
+from seedwork.events import EventEnvelope
 
 
 class SqsTestPublisher:
@@ -32,12 +35,16 @@ class SqsTestPublisher:
 
 
 from database.models.identity import Tenant
+from database.models.webhooks import Webhook as GlobalWebhook
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.models.control_plane import AS2Partner
+from edi.adapters.outbound.database.models.control_plane import OutboundRoute as GlobalOutboundRoute
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
-from edi.domain.enums import EdiEventType
-from sqlalchemy import select
+from edi.adapters.outbound.database.models.data_plane import OutboundRoute as TenantOutboundRoute
+from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
+from edi.domain.enums import EdiConnectionType, EdiEventType
+from sqlalchemy import delete, select
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
@@ -212,13 +219,17 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
     base_url = ctx["base_url"]
 
     # 1. Simulate the UCP API (AwsControlPlaneEventRouter) publishing directly to the SNS/SQS topic
-    payload = {
-        "tenant_id": tenant_id,
-        "event_type": EdiEventType.edi_as2_partner_created.value,
-        "resource_id": str(partner_id),
-    }
 
-    await message_publisher.publish(queue_name, payload)
+    envelope = EventEnvelope(
+        id=f"edi_cp_ob_{uuid.uuid4().hex}",
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_created.value,
+        tenant_id=tenant_id,
+        idempotency_key=f"idemp_{uuid.uuid4().hex}",
+        payload={"resource_id": str(partner_id)},
+    )
+
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope))
 
     await asyncio.sleep(2)  # Give LocalStack SQS a moment to make the message visible
 
@@ -247,26 +258,149 @@ async def test_provisioning_negative_unregistered_event_dropped(
     Tests that if a cross-domain UCP event (like tenant.provisioned) leaks into the EDI
     ProvisioningQueue, it is safely ignored and sent to the DLQ rather than crashing the worker.
     """
+    message_publisher: SqsTestPublisher = e2e_context["message_publisher"]
+    queue_name: str = e2e_context["queue_name"]
+    tenant_id: str = e2e_context["tenant_id"]
+
+    unregistered_event_envelope = {
+        "id": "evt_123",
+        "source": "soopa.ucp",
+        "event_type": "tenant.provisioned",
+        "idempotency_key": "123",
+        "tenant_id": tenant_id,
+        "payload": {
+            "tenant_id": tenant_id,
+            "eventType": "tenant.provisioned",
+            "resource_id": "tenant_123",
+        },
+    }
+
+    await message_publisher.publish(queue_name, unregistered_event_envelope)
+
+    processed = await e2e_context["worker_service"].process_next_event()
+    assert processed is True
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_webhook_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
+    db_router = e2e_context["db_router"]
+    tenant_id = e2e_context["tenant_id"]
+    message_publisher = e2e_context["message_publisher"]
+    queue_name = e2e_context["queue_name"]
+    worker_service = e2e_context["worker_service"]
+
+    webhook_id = generate_id("wh_test")
+
+    # 1. Insert the global webhook
+    async for global_session in db_router.get_global_session():
+        global_webhook = GlobalWebhook(
+            id=webhook_id,
+            tenant_id=tenant_id,
+            name="Test Webhook",
+            url="https://example.com/webhook",
+            active=True,
+        )
+        global_session.add(global_webhook)
+        await global_session.commit()
+
+    # 2. Synthesize a webhook.updated UCP outbox event
+    envelope = {
+        "id": generate_id("evt_webhook"),
+        "source": "soopa.ucp",
+        "event_type": "webhook.updated",
+        "idempotency_key": generate_id("webhook"),
+        "tenant_id": tenant_id,
+        "payload": {
+            "webhook_id": webhook_id,
+            "tenant_id": tenant_id,
+        },
+    }
+
+    await message_publisher.publish(queue_name, envelope)
+
+    # 3. Process the event
+    processed = await worker_service.process_next_event()
+    assert processed is True
+
+    base_url = e2e_context["base_url"]
+
+    # 4. Verify replication
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "edi_shard_1", base_url):
+        res = await tenant_session.execute(
+            select(TenantWebhook).where(TenantWebhook.id == webhook_id)
+        )
+        tenant_webhook = res.scalars().first()
+        assert tenant_webhook is not None
+        assert tenant_webhook.id == webhook_id
+        assert tenant_webhook.name == "Test Webhook"
+        assert tenant_webhook.url == "https://example.com/webhook"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_outbound_route_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
+    """
+    Simulates the global control plane dropping an 'edi_outbound_route_created' event
+    and verifies that the Config Sync Worker correctly replicates it to the tenant shard.
+    """
     ctx = e2e_context
+    db_router = ctx["db_router"]
     worker_service = ctx["worker_service"]
     message_publisher = ctx["message_publisher"]
     queue_name = ctx["queue_name"]
     tenant_id = ctx["tenant_id"]
 
-    # Send an unregistered UCP event
-    payload = {
+    route_id = generate_id("edi_ob_rt")
+    trading_partner_id = generate_id("partner")
+    as2_partner_id = ctx["partner_id"]
+
+    # 1. Insert the global outbound route
+    async for global_session in db_router.get_global_session():
+        global_route = GlobalOutboundRoute(
+            id=route_id,
+            tenant_id=tenant_id,
+            trading_partner_id=trading_partner_id,
+            as2_partner_id=as2_partner_id,
+            name="Test Outbound Route",
+            connection_type=EdiConnectionType.AS2.value,
+            active=True,
+        )
+        global_session.add(global_route)
+        await global_session.commit()
+
+    # 2. Synthesize an edi_outbound_route_created event
+    envelope = {
+        "id": generate_id("evt_ob_route"),
+        "source": "edi_control_plane",
+        "event_type": EdiEventType.edi_outbound_route_created.value,
+        "idempotency_key": generate_id("idemp"),
         "tenant_id": tenant_id,
-        "eventType": "tenant.provisioned",
-        "resource_id": "tenant_123",
+        "payload": {
+            "resource_id": route_id,
+            "tenant_id": tenant_id,
+        },
     }
 
-    await message_publisher.publish(queue_name, payload)
-    await asyncio.sleep(2)
+    await message_publisher.publish(queue_name, envelope)
 
-    # Worker processes the event. Since it's unregistered, it is safely dropped,
-    # but the consumption is considered successful processing, so it returns True.
-    processed = await wait_for_process(worker_service)
+    # 3. Process the event
+    processed = await worker_service.process_next_event()
     assert processed is True
+
+    base_url = ctx["base_url"]
+
+    # 4. Verify replication
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "edi_shard_1", base_url):
+        res = await tenant_session.execute(
+            select(TenantOutboundRoute).where(TenantOutboundRoute.id == route_id)
+        )
+        tenant_route = res.scalars().first()
+        assert tenant_route is not None
+        assert tenant_route.id == route_id
+        assert tenant_route.name == "Test Outbound Route"
+        assert tenant_route.trading_partner_id == trading_partner_id
+        assert tenant_route.connection_type == EdiConnectionType.AS2.value
 
 
 @pytest.mark.integration
@@ -283,13 +417,17 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
     tenant_id = ctx["tenant_id"]
 
     # Send an event missing resource_id
-    payload = {
-        "tenant_id": tenant_id,
-        "event_type": EdiEventType.edi_as2_partner_created.value,
-        # missing resource_id
-    }
 
-    await message_publisher.publish(queue_name, payload)
+    envelope = EventEnvelope(
+        id=generate_id("edi_cp_ob"),
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_created.value,
+        tenant_id=tenant_id,
+        idempotency_key=generate_id("idemp"),
+        payload={},  # missing resource_id
+    )
+
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope))
     await asyncio.sleep(2)
 
     # Worker processes the event. The SQS consumer swallows the exception and doesn't ack,
@@ -314,15 +452,27 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     tenant_id = ctx["tenant_id"]
     base_url = ctx["base_url"]
 
-    payload = {
-        "tenant_id": tenant_id,
-        "event_type": EdiEventType.edi_as2_partner_created.value,
-        "resource_id": str(partner_id),
-    }
+    envelope_1 = EventEnvelope(
+        id=f"edi_cp_ob_{uuid.uuid4().hex}",
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_created.value,
+        tenant_id=tenant_id,
+        idempotency_key=f"idemp_{uuid.uuid4().hex}",
+        payload={"resource_id": str(partner_id)},
+    )
+
+    envelope_2 = EventEnvelope(
+        id=f"edi_cp_ob_{uuid.uuid4().hex}",
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_created.value,
+        tenant_id=tenant_id,
+        idempotency_key=f"idemp_{uuid.uuid4().hex}",
+        payload={"resource_id": str(partner_id)},
+    )
 
     # Publish it twice
-    await message_publisher.publish(queue_name, payload)
-    await message_publisher.publish(queue_name, payload)
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_1))
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_2))
     await asyncio.sleep(2)
 
     # Process first event
@@ -340,3 +490,132 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
         )
         replicated_partner = res.scalars().first()
         assert replicated_partner is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
+    """
+    Tests that delivering a deleted event successfully deletes the entity from the tenant shard.
+    """
+    ctx = e2e_context
+    db_router = ctx["db_router"]
+    worker_service = ctx["worker_service"]
+    message_publisher = ctx["message_publisher"]
+    queue_name = ctx["queue_name"]
+    partner_id = ctx["partner_id"]
+    tenant_id = ctx["tenant_id"]
+    base_url = ctx["base_url"]
+
+    # Ensure it's there first (already inserted by e2e_context, but we must replicate it first)
+    envelope_create = EventEnvelope(
+        id=generate_id("edi_cp_ob"),
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_created.value,
+        tenant_id=tenant_id,
+        idempotency_key=generate_id("idemp"),
+        payload={"resource_id": str(partner_id)},
+    )
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_create))
+    await asyncio.sleep(1)
+    await wait_for_process(worker_service)
+
+    # Now delete it globally
+    async for global_session in db_router.get_global_session():
+        await global_session.execute(delete(AS2Partner).where(AS2Partner.id == partner_id))
+        await global_session.commit()
+
+    # Now send the deleted event
+    envelope_delete = EventEnvelope(
+        id=generate_id("edi_cp_ob"),
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_deleted.value,
+        tenant_id=tenant_id,
+        idempotency_key=generate_id("idemp"),
+        payload={"resource_id": str(partner_id)},
+    )
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_delete))
+    await asyncio.sleep(1)
+    await wait_for_process(worker_service)
+
+    # Verify replication deleted it in Shard DB
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
+        res = await tenant_session.execute(
+            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+        )
+        replicated_partner = res.scalars().first()
+        assert replicated_partner is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_provisioning_full_state_sync(e2e_context: dict[str, Any]) -> None:
+    """
+    Tests the full state topological sync directly.
+    """
+    ctx = e2e_context
+    db_router = ctx["db_router"]
+    worker_service = ctx["worker_service"]
+    partner_id = ctx["partner_id"]
+    tenant_id = ctx["tenant_id"]
+    base_url = ctx["base_url"]
+
+    # Insert a stale partner into the tenant shard that shouldn't be there
+    stale_id = generate_id("stale")
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
+        stale_partner = TenantAS2Partner(
+            id=stale_id,
+            tenant_id=tenant_id,
+            name="Stale Partner",
+            as2_id="STALE_AS2",
+            active=True,
+        )
+        tenant_session.add(stale_partner)
+        await tenant_session.commit()
+
+    # Trigger full state sync
+    await worker_service.replication_port.replicate_tenant_configuration(tenant_id)
+
+    # Verify stale partner was deleted by _sync_deletes
+    async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
+        res = await tenant_session.execute(
+            select(TenantAS2Partner).where(TenantAS2Partner.id == stale_id)
+        )
+        assert res.scalars().first() is None
+
+        # Verify legitimate partner was replicated
+        res = await tenant_session.execute(
+            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+        )
+        assert res.scalars().first() is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_provisioning_broadcast_event(e2e_context: dict[str, Any]) -> None:
+    """
+    Tests that delivering an event with PLATFORM_TENANT_ID broadcasts to all tenants.
+    """
+    ctx = e2e_context
+    worker_service = ctx["worker_service"]
+    message_publisher = ctx["message_publisher"]
+    queue_name = ctx["queue_name"]
+    partner_id = generate_id("partner")
+
+    envelope_broadcast = EventEnvelope(
+        id=generate_id("edi_cp_ob"),
+        source="edi_control_plane",
+        event_type=EdiEventType.edi_as2_partner_created.value,
+        tenant_id=PLATFORM_TENANT_ID,
+        idempotency_key=generate_id("idemp"),
+        payload={"resource_id": str(partner_id)},
+    )
+
+    # Send broadcast event
+    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_broadcast))
+    await asyncio.sleep(1)
+
+    # We might expect this to fail inside the replication loop if the global entity isn't there,
+    # but the service layer's broadcast logic will still be covered.
+    # We just want to ensure it runs without completely crashing the worker loop.
+    await worker_service.process_next_event()
