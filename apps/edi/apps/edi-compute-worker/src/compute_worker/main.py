@@ -5,13 +5,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import contextlib
+from collections.abc import AsyncGenerator
+
 import structlog
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
+from edi.adapters.outbound.database.uow_adapter import SqlAlchemyControlPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
@@ -30,6 +35,14 @@ async def main() -> None:
     s3_bucket = settings.s3.bucket
 
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+
+    @contextlib.asynccontextmanager
+    async def global_uow_factory() -> AsyncGenerator[ControlPlaneUnitOfWorkPort, None]:
+        async with contextlib.aclosing(db_router.get_global_session()) as session_gen:
+            async for session in session_gen:
+                yield SqlAlchemyControlPlaneUnitOfWork(global_session=session)
+                break
+
     resolver = TenantResolver(db_router)
 
     transformer = BotsTransformerAdapter()
@@ -44,7 +57,10 @@ async def main() -> None:
 
     async def use_case_factory(tenant_id: str) -> ComputeTransformUseCase:
         uow_factory = await uow_provider.get_uow_factory(tenant_id)
-        return ComputeTransformUseCase(uow_factory=uow_factory, transformer=transformer)
+        return ComputeTransformUseCase(
+            uow_factory=uow_factory,
+            transformer=transformer,
+        )
 
     dispatcher = EdiComputeDispatcher(
         use_case_factory=use_case_factory,

@@ -1,136 +1,68 @@
 import asyncio
-import os
+import contextlib
+import inspect
 import signal
-import sys
 from collections.abc import Awaitable
-from typing import TypeVar, cast
+from typing import Any, cast
 
 import structlog
-from dotenv import load_dotenv
 from observability import ObservabilityProvider
-from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 
 from notification_outbox_worker.bootstrap.container import WorkerContainer as Container
+from notification_outbox_worker.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 
-def _setup_container() -> Container:
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        logger.error("DATABASE_URL is not set")
-        sys.exit(1)
-
-    sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
-    if not sns_topic_arn:
-        logger.error("SNS_TOPIC_ARN is not set")
-        sys.exit(1)
-
-    container = Container()
-    container.config.database_url.from_value(database_url)
-    container.config.sns_topic_arn.from_value(sns_topic_arn)
-    container.config.aws_endpoint_url.from_env("AWS_ENDPOINT_URL")
-    container.config.aws_region.from_env("AWS_REGION", default="us-east-1")
-    return container
-
-
-T = TypeVar("T")
-
-
-async def _resolve_dependency(dep: T | Awaitable[T]) -> T:
-    if asyncio.isfuture(dep) or asyncio.iscoroutine(dep):
-        return await cast(Awaitable[T], dep)
-    return cast(T, dep)
-
-
-def _setup_signal_handlers(shutdown_event: asyncio.Event) -> None:
-    def handle_signal() -> None:
-        logger.info("Received termination signal, shutting down workers...")
-        shutdown_event.set()
-
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, handle_signal)
-
-
-async def _wait_and_handle_errors(
-    tasks: list[asyncio.Task[None]], shutdown_task: asyncio.Task[None]
-) -> None:
-    done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-    for task in done:
-        if task is not shutdown_task:
-            exc = task.exception()
-            if exc:
-                raise exc
-
-
-async def _graceful_shutdown(
-    outbox_listener: PostgresOutboxRelay,
-    container: Container,
-) -> None:
-    logger.info("Stopping workers...")
-    cleanup_errors: list[BaseException] = []
-
-    try:
-        await outbox_listener.stop()
-    except BaseException as exc:
-        cleanup_errors.append(exc)
-        logger.exception("worker_stop_failed", worker="outbox_listener")
-
-    try:
-        await cast(Awaitable[None], container.shutdown_resources())
-        logger.info("Container resources shut down successfully.")
-    except BaseException as exc:
-        cleanup_errors.append(exc)
-        logger.exception("container_resource_shutdown_failed")
-
-    if cleanup_errors:
-        raise cleanup_errors[0]
-
-
-async def run_worker(
-    stop_event: asyncio.Event | None = None, container: Container | None = None
-) -> None:
-    dotenv_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../../../../../.env")
-    )
-    load_dotenv(dotenv_path)
-
-    if container is None:
-        container = _setup_container()
-
-    await cast(Awaitable[None], container.init_resources())
-
-    outbox_listener = await _resolve_dependency(container.outbox_listener())
-
-    shutdown_event = stop_event or asyncio.Event()
-
-    if stop_event is None:
-        _setup_signal_handlers(shutdown_event)
+async def main() -> None:
+    settings = get_settings()
 
     ObservabilityProvider.auto_configure_from_env("notification-outbox-worker")
-    logger.info("Starting outbox relay...")
+    logger.info("notification_outbox_worker_starting")
 
-    outbox_listener.start()
-
-    async def wait_shutdown() -> None:
-        await shutdown_event.wait()
-
-    shutdown_task = asyncio.create_task(wait_shutdown())
-
-    tasks: list[asyncio.Task[None]] = [shutdown_task]
+    container = Container()
+    container.config.from_pydantic(settings)
+    container.config.database_url.from_value(settings.database_url)
+    container.config.sns_topic_arn.from_value(settings.sns_topic_arn)
+    container.config.aws_region.from_value(settings.aws_region)
+    container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
 
     try:
-        await _wait_and_handle_errors(tasks, shutdown_task)
+        await cast(Awaitable[None], container.init_resources())
+
+        outbox_listener = container.outbox_listener()
+        if inspect.isawaitable(outbox_listener):
+            outbox_listener = await outbox_listener
+
+        outbox_listener.start()
+        logger.info("notification_outbox_worker_relay_started")
+
+        stop_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            with contextlib.suppress(NotImplementedError, RuntimeError):
+                loop.add_signal_handler(sig, stop_event.set)
+
+        # Supervise the relay task alongside the stop event so relay failures are propagated.
+        relay_task: asyncio.Task[Any] | None = getattr(outbox_listener, "_task", None)
+        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
+        if relay_task is not None:
+            tasks_to_wait.append(relay_task)
+
+        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            stop_task = tasks_to_wait[0]
+            if task is not stop_task and not task.cancelled() and task.exception():
+                exc = task.exception()
+                logger.error("notification_outbox_relay_failed", exc_info=exc)
+                if exc:
+                    raise exc
     finally:
-        active_exception = sys.exception()
-        try:
-            await _graceful_shutdown(outbox_listener, container)
-        except BaseException:
-            if active_exception is None:
-                raise
-            logger.exception("graceful_shutdown_failed_after_worker_error")
+        logger.info("notification_outbox_worker_shutting_down")
+        with contextlib.suppress(Exception):
+            await outbox_listener.stop()
+        await cast(Awaitable[None], container.shutdown_resources())
 
 
 if __name__ == "__main__":
-    asyncio.run(run_worker())
+    asyncio.run(main())

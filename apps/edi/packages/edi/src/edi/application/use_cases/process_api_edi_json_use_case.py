@@ -1,11 +1,21 @@
 from collections.abc import Mapping
+from dataclasses import dataclass
 
 import structlog
 from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
 from seedwork.utils import generate_id
 
-from edi.application.dtos import ProcessApiEdiJsonCommand
+
+@dataclass(frozen=True)
+class ProcessApiEdiJsonCommand:
+    tenant_id: str
+    trading_partner_id: str
+    payload: JsonValue
+    transaction_type: str | None = None
+    idempotency_key: str | None = None
+
+
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.domain.enums import EdiDirection
 from edi.domain.events import TransformRequestedEvent

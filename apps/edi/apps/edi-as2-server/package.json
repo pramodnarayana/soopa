@@ -7,6 +7,7 @@
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases .",
     "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
     "deadcode:deptry": "uv run deptry .",
-    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
+    "dev": "uv run uvicorn as2_server.main:app --reload --host 0.0.0.0 --port 8000"
   }
 }

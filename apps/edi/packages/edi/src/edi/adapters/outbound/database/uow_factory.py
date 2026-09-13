@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import cast
 
 from sqlalchemy import select
 from ucp_models.sharding import DatabaseShard, ShardRegistry
@@ -49,6 +50,6 @@ class SqlAlchemyDataPlaneUnitOfWorkFactory(DataPlaneUnitOfWorkFactoryPort):
         uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, self.storage)
         try:
             async with uow:
-                yield uow
+                yield cast(DataPlaneUnitOfWorkPort, uow)
         finally:
             await async_gen_tenant.aclose()

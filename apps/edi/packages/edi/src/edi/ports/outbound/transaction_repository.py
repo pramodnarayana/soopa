@@ -1,12 +1,112 @@
+from __future__ import annotations
+
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from seedwork.domain.types import JsonValue
 
-from edi.application.dtos.routes import InboundRouteDTO
 from edi.application.dtos.transactions import EdiJsonDTO, EdiMessageDTO
-from edi.application.dtos.webhooks import WebhookDTO
+from edi.domain.enums import (
+    ConnectionType,
+    EdiDirection,
+    EdiStandard,
+    EncryptionAlgorithm,
+    MDNType,
+    MessageStatus,
+    SignatureAlgorithm,
+)
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
+
+# ---------------------------------------------------------------------------
+# Data-Plane Port Commands
+# These are the typed contract of the TransactionRepositoryPort — each
+# command describes exactly what the port accepts. They live here so that
+# every caller can depend on the port package alone (hexagonal architecture).
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateEdiMessageCommand:
+    trace_id: str
+    tenant_id: str
+    id: str | None = None
+    direction: EdiDirection | None = None
+    connection_type: ConnectionType | None = None
+    sender_id: str | None = None
+    receiver_id: str | None = None
+    as2_sender_id: str | None = None
+    as2_receiver_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    message_id: str | None = None
+    mdn_id: str | None = None
+    mdn_mode: MDNType | None = None
+    mdn_response: str | None = None
+    file_name: str | None = None
+    content_type: str | None = None
+    signature_algorithm: SignatureAlgorithm | None = None
+    encryption_algorithm: EncryptionAlgorithm | None = None
+    trading_partner_id: str | None = None
+    status: MessageStatus | None = None
+    edi_data: str | None = None
+    interchange_control_no: str | None = None
+    transaction_type: str | None = None
+    format_standard: EdiStandard | str | None = None
+    storage_uri: str | None = None
+    file_size_bytes: int | None = None
+    msg_headers: dict[str, JsonValue] | None = None
+    state: str | None = None
+    status_message: str | None = None
+    is_resend: bool | None = None
+    parent_trace_id: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateEdiJsonCommand:
+    trace_id: str
+    tenant_id: str
+    id: str | None = None
+    direction: EdiDirection | None = None
+    status: MessageStatus | None = None
+    trading_partner_id: str | None = None
+    standard: str | None = None
+    business_metadata: dict[str, JsonValue] | None = None
+    transaction_type: str | None = None
+    sender_id: str | None = None
+    receiver_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    payload: JsonValue | None = None
+    parent_trace_id: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CreateApiGatewayCommand:
+    trace_id: str
+    tenant_id: str
+    id: str | None = None
+    direction: EdiDirection | None = None
+    status: MessageStatus | None = None
+    transaction_type: str | None = None
+    webhook_url: str | None = None
+    http_status_code: int | None = None
+    payload: JsonValue | None = None
+    response: str | None = None
+    parent_trace_id: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class UpdateEdiJsonCommand:
+    """Typed command for partial updates to an existing EdiJson record."""
+
+    trace_id: str
+    trading_partner_id: str | None = None
+    standard: str | None = None
+    sender_id: str | None = None
+    receiver_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
 
 
 class TransactionRepositoryPort(Protocol):
@@ -20,36 +120,25 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def get_route(
-        self, direction: str, sender_id: str, receiver_id: str, transaction_type: str
-    ) -> InboundRouteDTO | None:
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         """
-        Fetches a route config for the Data Plane and returns a typed DTO.
+        Fetches an EDI JSON record by trace_id and maps it to the domain model.
         """
         ...
 
-    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
+    async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
         """
-        Fetches Webhook partner config and returns a typed DTO.
-        """
-        ...
-
-    async def save_api_payload(
-        self,
-        trace_id: str,
-        direction: str,
-        payload: dict[str, JsonValue],
-        status: str,
-        transaction_type: str | None = None,
-        webhook_url: str | None = None,
-        tenant_id: str | None = None,
-    ) -> None:
-        """
-        Saves API payload.
+        Saves a new ApiGateway record to the Data Plane.
         """
         ...
 
-    async def create_edi_message(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
+    async def claim_api_payload(self, trace_id: str) -> bool: ...
+
+    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None: ...
+
+    async def claim_edi_message(self, trace_id: str) -> bool: ...
+
+    async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         """
         Saves a new EdiMessage record to the Data Plane.
         """
@@ -69,36 +158,52 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def create_edi_json(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
+    async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
         """
         Saves a new EdiJson record to the Data Plane.
         """
         ...
 
-    async def save_edi_json(
+    async def update_edi_message_metadata(
         self,
         trace_id: str,
-        direction: str,
-        partnership_id: str | None,
-        transaction_type: str | None,
-        standard: str | None,
-        sender_id: str | None,
-        receiver_id: str | None,
         gs_sender_id: str | None,
         gs_receiver_id: str | None,
-        business_metadata: dict[str, JsonValue],
-        payload: dict[str, JsonValue],
-        status: str,
-        tenant_id: str | None = None,
-    ) -> str:
+        transaction_type: str | None,
+    ) -> None:
         """
-        Upserts an EdiJson record.
+        Updates metadata fields on an existing EdiMessage.
         """
         ...
 
-    async def create_api_gateway(self, tenant_id: str, payload: dict[str, JsonValue]) -> str:
+    async def update_edi_message_status(self, trace_id: str, status: str) -> None:
         """
-        Saves a new ApiGateway record to the Data Plane.
+        Updates the status of an existing EdiMessage.
+        """
+        ...
+
+    async def update_edi_json(self, command: UpdateEdiJsonCommand) -> None:
+        """
+        Applies a partial update to an existing EdiJson record using a typed command.
+        """
+        ...
+
+    async def update_edi_json_status(self, trace_id: str, status: str) -> None:
+        """
+        Updates the status of an existing EdiJson record.
+        """
+        ...
+
+    async def update_api_payload_status(
+        self,
+        trace_id: str,
+        status: str,
+        webhook_url: str | None = None,
+        http_status_code: int | None = None,
+        response: str | None = None,
+    ) -> None:
+        """
+        Updates the status of an existing ApiGateway payload.
         """
         ...
 

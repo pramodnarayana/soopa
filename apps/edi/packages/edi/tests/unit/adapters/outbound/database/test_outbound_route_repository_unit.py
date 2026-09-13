@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
+from edi.adapters.outbound.database.models.control_plane import OutboundRoute
 from edi.adapters.outbound.database.outbound_route_repository import (
     SqlAlchemyOutboundRouteRepository,
 )
@@ -8,7 +8,7 @@ from edi.adapters.outbound.database.outbound_route_repository import (
 
 def test_domain_mapping_uses_defaults_for_presentation_only_fields() -> None:
     timestamp = datetime.now(UTC)
-    record = SimpleNamespace(
+    record = OutboundRoute(
         id="route-1",
         tenant_id="tenant-1",
         trading_partner_id="partner-1",
@@ -16,7 +16,7 @@ def test_domain_mapping_uses_defaults_for_presentation_only_fields() -> None:
         active=True,
         created_at=timestamp,
         updated_at=timestamp,
-        protocol="AS2",
+        connection_type="AS2",
         as2_partner_id="as2-1",
         sftp_partner_id=None,
     )

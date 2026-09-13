@@ -3,12 +3,12 @@ from datetime import datetime
 
 from seedwork.models import AggregateRoot
 
-from edi.domain.enums import EdiDirection
+from edi.domain.enums import EdiConnectionType, EdiDirection
 
 
 @dataclass(kw_only=True)
 class OutboundRouteDomainModel(AggregateRoot):
-    ID_PREFIX = "out"
+    ID_PREFIX = "edi_ob_rt"
 
     id: str
     tenant_id: str
@@ -17,7 +17,7 @@ class OutboundRouteDomainModel(AggregateRoot):
     active: bool
     created_at: datetime
     updated_at: datetime
-    protocol: str | None = None
+    connection_type: EdiConnectionType | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
     direction: EdiDirection = EdiDirection.OUTBOUND

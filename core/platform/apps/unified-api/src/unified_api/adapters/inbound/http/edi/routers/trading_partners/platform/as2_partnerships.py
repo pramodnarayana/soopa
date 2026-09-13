@@ -7,19 +7,19 @@ from edi.adapters.outbound.database.uow_adapter import (
 )
 from edi.application.dtos import (
     UNSET,
-    CreateAS2PartnershipCmd,
     EncryptionAlgorithm,
     MDNType,
     SignatureAlgorithm,
-    UpdateAS2PartnershipCmd,
 )
 from edi.application.use_cases.as2_partnerships.create_as2_partnership_use_case import (
+    CreateAS2PartnershipCmd,
     CreateAS2PartnershipUseCase,
 )
 from edi.application.use_cases.as2_partnerships.delete_as2_partnership_use_case import (
     DeleteAS2PartnershipUseCase,
 )
 from edi.application.use_cases.as2_partnerships.update_as2_partnership_use_case import (
+    UpdateAS2PartnershipCmd,
     UpdateAS2PartnershipUseCase,
 )
 from edi.domain.exceptions import OrchestrationError
@@ -44,7 +44,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
 
 logger = structlog.get_logger(__name__)
 
-router = APIRouter(tags=["Platform Partners - AS2 Partnerships"])
+router = APIRouter(tags=["Partners - AS2 Partnerships"])
 
 
 @router.post(
@@ -152,7 +152,7 @@ async def test_as2_partnership_connection(  # noqa: C901
 
 
 @router.post("/as2/partnerships", response_model=Any, status_code=status.HTTP_201_CREATED)
-async def create_platform_as2_partnership(
+async def create_as2_partnership(
     request: CreateAS2PartnershipRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
@@ -208,7 +208,7 @@ async def create_platform_as2_partnership(
 
 
 @router.put("/as2/partnerships/{partnership_id}", response_model=AS2PartnershipResponse)
-async def update_platform_as2_partnership(
+async def update_as2_partnership(
     partnership_id: str,
     request: UpdateAS2PartnershipRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -302,7 +302,7 @@ async def update_platform_as2_partnership(
     status_code=status.HTTP_204_NO_CONTENT,
     response_class=Response,
 )
-async def delete_platform_as2_partnership(
+async def delete_as2_partnership(
     partnership_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> None:
@@ -319,7 +319,7 @@ async def delete_platform_as2_partnership(
 
 
 @router.get("/as2/partnerships", response_model=list[AS2PartnershipResponse])
-async def list_platform_as2_partnerships(
+async def list_as2_partnerships(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """

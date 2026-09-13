@@ -1,13 +1,31 @@
 import dataclasses
+from dataclasses import dataclass
 
 import structlog
-from seedwork.domain.types import UNSET
+from seedwork.domain.types import UNSET, JsonValue, UnsetType
 
-from edi.application.dtos.commands import UpdateAS2PartnershipCmd
-from edi.domain.enums import EdiEventType
+from edi.domain.enums import (
+    EdiEventType,
+    EncryptionAlgorithm,
+    MDNType,
+    SignatureAlgorithm,
+)
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.as2 import AS2PartnershipDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+
+
+@dataclass(frozen=True)
+class UpdateAS2PartnershipCmd:
+    name: str | UnsetType | None = UNSET
+    credentials_vault_ref: str | UnsetType | None = UNSET
+    mdn_type: MDNType | UnsetType | None = UNSET
+    mdn_url: str | UnsetType | None = UNSET
+    encryption_algorithm: EncryptionAlgorithm | UnsetType | None = UNSET
+    signature_algorithm: SignatureAlgorithm | UnsetType | None = UNSET
+    advanced_flags: dict[str, JsonValue] | UnsetType | None = UNSET
+    active: bool | UnsetType | None = UNSET
+
 
 logger = structlog.get_logger(__name__)
 

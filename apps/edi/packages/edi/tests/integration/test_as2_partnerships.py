@@ -15,7 +15,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.services import (
 """
 Tests for the AS2 Partnership connection test endpoint.
 
-POST /api/v1/platform/trading-partners/as2/partnerships/{id}/test
+POST /api/v1/trading-partners/as2/partnerships/{id}/test
 
 All infrastructure is injected via FakeControlPlaneUnitOfWork, a fixture-controlled FakeAS2Tester,
 and FakeVault — zero real network connections or Vault required.
@@ -137,7 +137,7 @@ def _create_partnership(
     Returns (local_id, remote_id, partnership_id).
     """
     local_resp = client.post(
-        "/api/v1/platform/trading-partners/as2/trading-partners",
+        "/api/v1/trading-partners/as2/trading-partners",
         json={
             "name": "Our Company",
             "as2_id": "OURCO",
@@ -152,7 +152,7 @@ def _create_partnership(
     local_id = local_resp.json()["id"]
 
     remote_resp = client.post(
-        "/api/v1/platform/trading-partners/as2/trading-partners",
+        "/api/v1/trading-partners/as2/trading-partners",
         json={
             "name": "Mendelson",
             "as2_id": "MENDELSON",
@@ -167,7 +167,7 @@ def _create_partnership(
     remote_id = remote_resp.json()["id"]
 
     partnership_resp = client.post(
-        "/api/v1/platform/trading-partners/as2/partnerships",
+        "/api/v1/trading-partners/as2/partnerships",
         json={
             "name": "OURCO <> Mendelson",
             "local_partner_id": local_id,
@@ -199,9 +199,7 @@ def test_test_as2_partnership_success(client_factory, fake_uow):
     )
     _, _, partnership_id = _create_partnership(client, fake_uow)
 
-    response = client.post(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{partnership_id}/test"
-    )
+    response = client.post(f"/api/v1/trading-partners/as2/partnerships/{partnership_id}/test")
 
     assert response.status_code == 200
     data = response.json()
@@ -221,9 +219,7 @@ def test_test_as2_partnership_failure_mdn_auth(client_factory, fake_uow):
     )
     _, _, partnership_id = _create_partnership(client, fake_uow)
 
-    response = client.post(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{partnership_id}/test"
-    )
+    response = client.post(f"/api/v1/trading-partners/as2/partnerships/{partnership_id}/test")
 
     assert response.status_code == 200
     data = response.json()
@@ -242,9 +238,7 @@ def test_test_as2_partnership_connection_refused(client_factory, fake_uow):
     )
     _, _, partnership_id = _create_partnership(client, fake_uow)
 
-    response = client.post(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{partnership_id}/test"
-    )
+    response = client.post(f"/api/v1/trading-partners/as2/partnerships/{partnership_id}/test")
 
     assert response.status_code == 200
     data = response.json()
@@ -256,8 +250,6 @@ def test_test_as2_partnership_not_found(client_factory):
     """Returns 404 when the partnership ID does not exist in the database."""
     client = client_factory()
 
-    response = client.post(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{uuid.uuid4()!s}/test"
-    )
+    response = client.post(f"/api/v1/trading-partners/as2/partnerships/{uuid.uuid4()!s}/test")
 
     assert response.status_code == 404

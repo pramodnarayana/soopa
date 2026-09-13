@@ -18,14 +18,14 @@ async def get_identity_context(
     """
     logger = structlog.get_logger(__name__)
 
-    logger.info(
+    logger.debug(
         "[EDI_GUARD] get_identity_context executing for {request.url.path}",
         request_url_path=request.url.path,
     )
 
     identity: IdentityContext | None = request.state.identity
     if identity is not None:
-        logger.info(
+        logger.debug(
             "[EDI_GUARD] Found identity in request.state: {identity.subject}",
             identity_subject=identity.subject,
         )
@@ -34,7 +34,7 @@ async def get_identity_context(
         logger.warning("[EDI_GUARD] Identity NOT found in request.state. Checking scope...")
         identity = request.scope.get("identity")
         if identity is not None:
-            logger.info(
+            logger.debug(
                 "[EDI_GUARD] Found identity in request.scope: {identity.subject}",
                 identity_subject=identity.subject,
             )

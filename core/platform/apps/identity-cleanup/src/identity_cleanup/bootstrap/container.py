@@ -1,5 +1,3 @@
-import os
-
 import structlog
 from database.provider import DatabaseProvider
 from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
@@ -15,6 +13,7 @@ from seedwork.domain.types import JsonDict
 from identity_cleanup.adapters.inbound.jobs.identity_outbox_cleanup_job import (
     IdentityOutboxCleanupJobHandler,
 )
+from identity_cleanup.config.settings import AppSettings
 
 logger = structlog.get_logger(__name__)
 
@@ -22,14 +21,13 @@ logger = structlog.get_logger(__name__)
 class WorkerContainer:
     """Dependency Injection container for the Identity Cleanup Worker."""
 
-    def __init__(self) -> None:
-        database_url = os.environ.get("DATABASE_URL", "")
-        self.db_provider = DatabaseProvider.from_url(database_url)
+    def __init__(self, settings: AppSettings) -> None:
+        self.db_provider = DatabaseProvider.from_url(settings.database_url)
         self.session_factory = self.db_provider.session_factory
 
-        self.sqs_jobs_queue_url = os.environ.get("SQS_IDENTITY_JOBS_QUEUE_URL", "")
-        self.aws_region = os.environ.get("AWS_REGION", "us-east-1")
-        self.aws_endpoint_url: str | None = os.environ.get("AWS_ENDPOINT_URL")
+        self.sqs_jobs_queue_url = settings.sqs_identity_jobs_queue_url
+        self.aws_region = settings.aws_region
+        self.aws_endpoint_url: str | None = settings.aws_endpoint_url
 
         self.jobs_consumer: SqsConsumerManager | None = None
         self.outbox_cleanup_job_handler: IdentityOutboxCleanupJobHandler | None = None

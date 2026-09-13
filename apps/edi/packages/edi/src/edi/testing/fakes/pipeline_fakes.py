@@ -39,18 +39,24 @@ def _from_dict(cls: type[T], data: dict[str, object] | None) -> T | None:
 
 
 from edi.application.dtos.partners import (
-    AS2PartnershipDTO,
     LocalAS2PartnerDTO,
-    RemoteAS2PartnerDTO,
-    SFTPPartnerDTO,
 )
-from edi.application.dtos.routes import InboundRouteDTO, OutboundEdiHeaderDTO, OutboundRouteDTO
-from edi.application.dtos.webhooks import WebhookDTO
-from edi.domain.enums import EdiDirection as MessageDirection
+from edi.application.dtos.routes import OutboundEdiHeaderDTO, OutboundRouteDTO
 from edi.domain.enums import MessageStatus
+from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
+from edi.domain.models.headers import OutboundEdiHeaderDomainModel
+from edi.domain.models.inbound_routes import InboundRouteDomainModel
+from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.domain.models.sftp import SFTPPartnerDomainModel
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
-from edi.ports.outbound.edi_message_port import RepositoryPort
+from edi.domain.models.webhooks import WebhookDomainModel
 from edi.ports.outbound.storage_port import StoragePort
+from edi.ports.outbound.transaction_repository import (
+    CreateApiGatewayCommand,
+    CreateEdiJsonCommand,
+    CreateEdiMessageCommand,
+    UpdateEdiJsonCommand,
+)
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
 
@@ -114,7 +120,7 @@ class FakeTransformerAdapter(TransformerPort):
         return b"FAKE*EDI*DATA~"
 
 
-class InMemoryRepositoryAdapter(RepositoryPort):
+class InMemoryRepositoryAdapter:
     def __init__(self) -> None:
         self.edi_messages: dict[str, dict[str, object]] = {}
         self.api_gateway: dict[str, dict[str, JsonValue]] = {}
@@ -149,9 +155,27 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         data = self.outbound_edi_headers.get(trading_partner_id)
         return _from_dict(OutboundEdiHeaderDTO, data)
 
-    async def update_edi_json(self, trace_id: str, **kwargs: object) -> None:
-        if trace_id in self.edi_json:
-            self.edi_json[trace_id].update(kwargs)
+    async def get_outbound_edi_header_by_trading_partner_id(
+        self,
+        trading_partner_id: str,
+        tenant_id: str | None = None,
+    ) -> OutboundEdiHeaderDomainModel | None:
+        data = self.outbound_edi_headers.get(trading_partner_id)
+        return _from_dict(OutboundEdiHeaderDomainModel, data)
+
+    async def update_edi_json(self, command: UpdateEdiJsonCommand) -> None:
+        if command.trace_id in self.edi_json:
+            for field in (
+                "trading_partner_id",
+                "standard",
+                "sender_id",
+                "receiver_id",
+                "gs_sender_id",
+                "gs_receiver_id",
+            ):
+                value = getattr(command, field)
+                if value is not None:
+                    self.edi_json[command.trace_id][field] = value
 
     async def update_edi_json_status(self, trace_id: str, status: str) -> None:
         if trace_id in self.edi_json:
@@ -169,38 +193,77 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             self.edi_messages[trace_id]["gs_receiver_id"] = gs_receiver_id
             self.edi_messages[trace_id]["transaction_type"] = transaction_type
 
-    async def save_edi_message(
-        self,
-        trace_id: str,
-        direction: str,
-        edi_data: str,
-        format_standard: str,
-        transaction_type: str,
-        status: str,
-        connection_type: str | None = None,
-        sender_id: str | None = None,
-        receiver_id: str | None = None,
-        gs_sender_id: str | None = None,
-        gs_receiver_id: str | None = None,
-        trading_partner_id: str | None = None,
-        tenant_id: str | None = None,
-    ) -> None:
-        kwargs = {
+    async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
+        trace_id = command.trace_id or str(uuid.uuid4())
+        self.edi_messages[trace_id] = {
             "trace_id": trace_id,
-            "direction": direction,
-            "edi_data": edi_data,
-            "format_standard": format_standard,
-            "transaction_type": transaction_type,
-            "status": status,
-            "connection_type": connection_type,
-            "sender_id": sender_id,
-            "receiver_id": receiver_id,
-            "gs_sender_id": gs_sender_id,
-            "gs_receiver_id": gs_receiver_id,
-            "trading_partner_id": trading_partner_id,
-            "tenant_id": tenant_id,
+            "tenant_id": command.tenant_id,
+            "direction": command.direction,
+            "connection_type": command.connection_type,
+            "sender_id": command.sender_id,
+            "receiver_id": command.receiver_id,
+            "as2_sender_id": command.as2_sender_id,
+            "as2_receiver_id": command.as2_receiver_id,
+            "gs_sender_id": command.gs_sender_id,
+            "gs_receiver_id": command.gs_receiver_id,
+            "message_id": command.message_id,
+            "mdn_id": command.mdn_id,
+            "mdn_mode": command.mdn_mode,
+            "mdn_response": command.mdn_response,
+            "file_name": command.file_name,
+            "content_type": command.content_type,
+            "signature_algorithm": command.signature_algorithm,
+            "encryption_algorithm": command.encryption_algorithm,
+            "trading_partner_id": command.trading_partner_id,
+            "status": command.status,
+            "edi_data": command.edi_data,
+            "interchange_control_no": command.interchange_control_no,
+            "transaction_type": command.transaction_type,
+            "format_standard": command.format_standard,
+            "storage_uri": command.storage_uri,
+            "file_size_bytes": command.file_size_bytes,
+            "msg_headers": command.msg_headers,
+            "state": command.state,
+            "status_message": command.status_message,
+            "is_resend": command.is_resend,
+            "parent_trace_id": command.parent_trace_id,
         }
-        self.edi_messages[trace_id] = {k: v for k, v in kwargs.items()}
+        return trace_id
+
+    async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
+        trace_id = command.trace_id or str(uuid.uuid4())
+        self.edi_json[trace_id] = {
+            "trace_id": trace_id,
+            "tenant_id": command.tenant_id,
+            "direction": command.direction,
+            "status": command.status,
+            "trading_partner_id": command.trading_partner_id,
+            "business_metadata": command.business_metadata,
+            "transaction_type": command.transaction_type,
+            "sender_id": command.sender_id,
+            "receiver_id": command.receiver_id,
+            "gs_sender_id": command.gs_sender_id,
+            "gs_receiver_id": command.gs_receiver_id,
+            "payload": command.payload,
+            "parent_trace_id": command.parent_trace_id,
+        }
+        return trace_id
+
+    async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
+        trace_id = command.trace_id or str(uuid.uuid4())
+        self.api_gateway[trace_id] = {
+            "trace_id": trace_id,
+            "tenant_id": command.tenant_id,
+            "direction": command.direction,
+            "status": command.status,
+            "transaction_type": command.transaction_type,
+            "webhook_url": command.webhook_url,
+            "http_status_code": command.http_status_code,
+            "payload": command.payload,
+            "response": command.response,
+            "parent_trace_id": command.parent_trace_id,
+        }
+        return trace_id
 
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         raw = self.edi_messages.get(trace_id)
@@ -220,8 +283,8 @@ class InMemoryRepositoryAdapter(RepositoryPort):
                 msg["updated_at"] = datetime.now(UTC)
             if "status" not in msg:
                 msg["status"] = MessageStatus.RECEIVED
-            if "direction" not in msg:
-                msg["direction"] = MessageDirection.INBOUND
+            if not msg.get("direction"):
+                msg["direction"] = "INBOUND"
 
             # Convert non-UUID trace_id to a valid UUID string (deterministic hash)
             try:
@@ -247,22 +310,6 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             msg["status"] = MessageStatus.PROCESSING
             return True
         return False
-
-    async def save_api_payload(
-        self,
-        trace_id: str,
-        direction: str,
-        payload: dict[str, JsonValue],
-        status: str,
-        transaction_type: str | None = None,
-        webhook_url: str | None = None,
-    ) -> None:
-        self.api_gateway[trace_id] = {
-            "direction": direction,
-            "payload": payload,
-            "status": status,
-            "transaction_type": transaction_type,
-        }
 
     async def publish_outbox_event(
         self, idempotency_key: str, event_type: str, payload: dict[str, JsonValue]
@@ -307,21 +354,18 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             return True
         return False
 
-    async def get_route(
+    async def get_inbound_route(
         self,
-        direction: str,
-        sender_id: str,
-        receiver_id: str,
-        transaction_type: str,
-        gs_sender_id: str | None = None,
-        gs_receiver_id: str | None = None,
-    ) -> InboundRouteDTO | None:
+        isa_sender_id: str,
+        isa_receiver_id: str,
+        tenant_id: str,
+        transaction_type: str | None = None,
+    ) -> InboundRouteDomainModel | None:
         candidates = [
             r
             for r in self.routes
-            if r.get("direction") == direction
-            and r.get("isa_sender_id") == sender_id
-            and r.get("isa_receiver_id") == receiver_id
+            if r.get("isa_sender_id") == isa_sender_id
+            and r.get("isa_receiver_id") == isa_receiver_id
             and r.get("transaction_type") in (transaction_type, "*")
         ]
         exact_match = next(
@@ -329,39 +373,15 @@ class InMemoryRepositoryAdapter(RepositoryPort):
         )
         wildcard_match = next((r for r in candidates if r.get("transaction_type") == "*"), None)
         data = exact_match or wildcard_match
-        return _from_dict(InboundRouteDTO, data)
+        return _from_dict(InboundRouteDomainModel, data)
 
     async def get_outbound_route(self, route_id: str) -> OutboundRouteDTO | None:
         data = self.outbound_routes.get(route_id)
         return _from_dict(OutboundRouteDTO, data)
 
-    async def save_edi_json(
-        self,
-        trace_id: str,
-        direction: str,
-        partnership_id: str | None,
-        transaction_type: str | None,
-        standard: str | None,
-        sender_id: str | None,
-        receiver_id: str | None,
-        gs_sender_id: str | None,
-        gs_receiver_id: str | None,
-        business_metadata: dict[str, JsonValue],
-        payload: dict[str, JsonValue],
-        status: str,
-        tenant_id: str | None = None,
-    ) -> str:
-        self.edi_json[trace_id] = {
-            "direction": direction,
-            "edi_json": payload,
-            "status": status,
-            "transaction_type": transaction_type,
-        }
-        return trace_id
-
     async def get_outbound_route_by_trading_partner_id(
         self, trading_partner_id: str, tenant_id: str | None = None
-    ) -> OutboundRouteDTO | None:
+    ) -> OutboundRouteDomainModel | None:
         candidates = [
             r
             for r in self.routes
@@ -373,36 +393,43 @@ class InMemoryRepositoryAdapter(RepositoryPort):
             )
         ]
         if candidates:
-            return _from_dict(OutboundRouteDTO, candidates[0])
+            return _from_dict(OutboundRouteDomainModel, candidates[0])
         return None
 
-    async def get_sftp_partner(self, partner_id: str) -> SFTPPartnerDTO | None:
+    async def get_sftp_partner(
+        self, tenant_id: str, partner_id: str
+    ) -> SFTPPartnerDomainModel | None:
         data = self.sftp_partners.get(partner_id)
-        return _from_dict(SFTPPartnerDTO, data)
+        return _from_dict(SFTPPartnerDomainModel, data)
 
-    async def get_webhook(self, partner_id: str) -> WebhookDTO | None:
+    async def get_webhook(self, tenant_id: str, partner_id: str) -> WebhookDomainModel | None:
         data = self.webhooks.get(partner_id)
-        return _from_dict(WebhookDTO, data)
+        return _from_dict(WebhookDomainModel, data)
 
     async def get_as2_partner(
-        self, partner_id: str
-    ) -> tuple[RemoteAS2PartnerDTO, AS2PartnershipDTO] | None:
+        self, tenant_id: str, partner_id: str
+    ) -> AS2PartnerDomainModel | None:
         data = self.as2_partners.get(partner_id)
         if data:
             remote_data = data.get("remote") or data
-            partnership_data = data.get("partnership") or data
-            remote_dto = (
-                _from_dict(RemoteAS2PartnerDTO, remote_data)
+            return (
+                _from_dict(AS2PartnerDomainModel, remote_data)
                 if isinstance(remote_data, dict)
                 else None
             )
-            partnership_dto = (
-                _from_dict(AS2PartnershipDTO, partnership_data)
+        return None
+
+    async def get_as2_partnership(
+        self, tenant_id: str, partnership_id: str
+    ) -> AS2PartnershipDomainModel | None:
+        data = self.as2_partners.get(partnership_id)
+        if data:
+            partnership_data = data.get("partnership") or data
+            return (
+                _from_dict(AS2PartnershipDomainModel, partnership_data)
                 if isinstance(partnership_data, dict)
                 else None
             )
-            if remote_dto and partnership_dto:
-                return remote_dto, partnership_dto
         return None
 
     async def get_local_as2_partner(self, partner_id: str) -> LocalAS2PartnerDTO | None:
@@ -603,6 +630,15 @@ class FakeDataPlaneUnitOfWork:
         outbox: FakeDataPlaneOutboxRepository | None = None,
     ) -> None:
         self.repository = repository or InMemoryRepositoryAdapter()
+        self.transactions = self.repository
+        self.traces = self.repository
+        self.outbound_routes = self.repository
+        self.inbound_routes = self.repository
+        self.edi_headers = self.repository
+        self.as2_partners = self.repository
+        self.as2_partnerships = self.repository
+        self.sftp_partners = self.repository
+        self.webhooks = self.repository
         self.outbox = outbox or FakeDataPlaneOutboxRepository()
         self.committed = False
         self.rolled_back = False
@@ -624,3 +660,26 @@ class FakeDataPlaneUnitOfWork:
 
     async def rollback(self) -> None:
         self.rolled_back = True
+
+
+class FakeControlPlaneUnitOfWork:
+    def __init__(self, repository: InMemoryRepositoryAdapter) -> None:
+        self.repository = repository
+        self.inbound_routes = repository
+        self.outbound_routes = repository
+        self.edi_headers = repository
+        self.webhooks = repository
+        self.as2_partners = repository
+        self.sftp_partners = repository
+        self.as2_partnerships = repository
+
+    async def __aenter__(self) -> "FakeControlPlaneUnitOfWork":
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        _exc_val: BaseException | None,
+        _exc_tb: object | None,
+    ) -> None:
+        pass

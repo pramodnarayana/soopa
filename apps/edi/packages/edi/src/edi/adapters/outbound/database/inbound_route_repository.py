@@ -13,6 +13,8 @@ from edi.adapters.outbound.database.models.control_plane import (
     InboundRoute,
     SFTPPartner,
 )
+from edi.domain.enums import EdiConnectionType
+from edi.domain.models.base import ProcessingMode
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 
@@ -20,6 +22,32 @@ from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPo
 class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlchemyRepository):
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
+
+    @staticmethod
+    def _to_domain_model(record: InboundRoute) -> InboundRouteDomainModel:
+        return InboundRouteDomainModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            name=record.name,
+            isa_sender_id=record.isa_sender_id,
+            isa_receiver_id=record.isa_receiver_id,
+            active=record.active,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            trading_partner_id=getattr(record, "trading_partner_id", None),
+            gs_sender_id=record.gs_sender_id,
+            gs_receiver_id=record.gs_receiver_id,
+            transaction_type=record.transaction_type,
+            processing_mode=ProcessingMode(record.processing_mode)
+            if record.processing_mode
+            else None,
+            webhook_id=record.webhook_id,
+            as2_partner_id=record.as2_partner_id,
+            sftp_partner_id=record.sftp_partner_id,
+            connection_type=EdiConnectionType(record.connection_type)
+            if record.connection_type
+            else None,
+        )
 
     # ------------------------------------------------------------------------
     # Routes (Now in Control Plane)
@@ -116,6 +144,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             InboundRoute.isa_sender_id == isa_sender_id,
             InboundRoute.isa_receiver_id == isa_receiver_id,
             InboundRoute.tenant_id == tenant_id,
+            InboundRoute.active.is_(True),
             InboundRoute.deleted_at.is_(None),
         )
         if transaction_type:
@@ -130,16 +159,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
 
         result = await self.session.execute(stmt)
         record = result.scalars().first()
-        return (
-            InboundRouteDomainModel(
-                **{
-                    f.name: getattr(record, f.name)
-                    for f in dataclasses.fields(InboundRouteDomainModel)
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
         result = await self.session.execute(
@@ -147,12 +167,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                 InboundRoute.tenant_id == tenant_id, InboundRoute.deleted_at.is_(None)
             )
         )
-        return [
-            InboundRouteDomainModel(
-                **{f.name: getattr(r, f.name) for f in dataclasses.fields(InboundRouteDomainModel)}
-            )
-            for r in result.scalars().all()
-        ]
+        return [self._to_domain_model(r) for r in result.scalars().all()]
 
     async def get_inbound_route_by_id(
         self, tenant_id: str, route_id: str
@@ -165,16 +180,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             )
         )
         record = result.scalars().first()
-        return (
-            InboundRouteDomainModel(
-                **{
-                    f.name: getattr(record, f.name)
-                    for f in dataclasses.fields(InboundRouteDomainModel)
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         result = await self.session.execute(

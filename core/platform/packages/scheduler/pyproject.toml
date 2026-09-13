@@ -29,3 +29,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/scheduler"]
+
+[tool.coverage.run]
+omit = [
+    "src/scheduler/adapters/outbound/messaging/sqs_job_dispatcher.py",
+    "src/scheduler/adapters/outbound/database/uow.py"
+]

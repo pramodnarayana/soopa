@@ -1,6 +1,6 @@
-import os
 from datetime import UTC, datetime
 
+from seedwork import generate_id
 from seedwork.domain.types import JsonValue
 from sqlalchemy import (
     Boolean,
@@ -19,14 +19,14 @@ class TimestampMixin:
 
     @declared_attr
     def created_at(cls) -> Mapped[datetime]:
-        return mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+        return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     @declared_attr
     def updated_at(cls) -> Mapped[datetime]:
         return mapped_column(
-            DateTime,
-            default=lambda: datetime.now(UTC).replace(tzinfo=None),
-            onupdate=lambda: datetime.now(UTC).replace(tzinfo=None),
+            DateTime(timezone=True),
+            default=lambda: datetime.now(UTC),
+            onupdate=lambda: datetime.now(UTC),
         )
 
 
@@ -38,7 +38,7 @@ class AS2PartnerMixin(TimestampMixin):
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -89,12 +89,12 @@ class AS2PartnerMixin(TimestampMixin):
 class AS2PartnershipMixin(TimestampMixin):
     """Shared columns for AS2Partnership across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_as2p"
+    ID_PREFIX = "edi_as2ps"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -133,12 +133,12 @@ class AS2PartnershipMixin(TimestampMixin):
 class SFTPPartnerMixin(TimestampMixin):
     """Shared columns for SFTPPartner across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_sftp"
+    ID_PREFIX = "sftp"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -185,12 +185,12 @@ class SFTPPartnerMixin(TimestampMixin):
 class WebhookMixin(TimestampMixin):
     """Shared columns for Webhook across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_dp_wh"
+    ID_PREFIX = "wh"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -213,12 +213,12 @@ class WebhookMixin(TimestampMixin):
 class InboundRouteMixin(TimestampMixin):
     """Shared columns for InboundRoute across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_inbrt"
+    ID_PREFIX = "edi_ib_rt"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -254,6 +254,10 @@ class InboundRouteMixin(TimestampMixin):
         return mapped_column(String(50), nullable=False, server_default="TRANSFORM")
 
     @declared_attr
+    def connection_type(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, server_default="API")
+
+    @declared_attr
     def active(cls) -> Mapped[bool]:
         return mapped_column(Boolean, default=False, server_default=text("false"))
 
@@ -261,12 +265,12 @@ class InboundRouteMixin(TimestampMixin):
 class OutboundEdiHeaderMixin(TimestampMixin):
     """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
 
-    ID_PREFIX = "edi_outhdr"
+    ID_PREFIX = "edi_ob_hd"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -317,12 +321,12 @@ class OutboundEdiHeaderMixin(TimestampMixin):
 class OutboundRouteMixin(TimestampMixin):
     """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_outrt"
+    ID_PREFIX = "edi_ob_rt"
 
     @declared_attr
     def id(cls) -> Mapped[str]:
         return mapped_column(
-            String(128), primary_key=True, default=lambda: f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
         )
 
     @declared_attr
@@ -334,7 +338,7 @@ class OutboundRouteMixin(TimestampMixin):
         return mapped_column(String(255), nullable=False)
 
     @declared_attr
-    def protocol(cls) -> Mapped[str]:
+    def connection_type(cls) -> Mapped[str]:
         return mapped_column(String(50), nullable=False, server_default="AS2")
 
     @declared_attr

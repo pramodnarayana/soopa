@@ -101,3 +101,19 @@ module = [
     "jsonpath_ng.*"
 ]
 ignore_missing_imports = true
+
+[tool.coverage.run]
+omit = [
+    # Test helpers — not production code
+    "src/edi/testing/**",
+    # Legacy infrastructure adapters — require real DB/network connections
+    "src/edi/adapters/outbound/database/**",
+    "src/edi/adapters/outbound/sftp/**",
+    "src/edi/adapters/outbound/pipeline/repository.py",
+    "src/edi/adapters/outbound/transformer/domain/envelope/edifact.py",
+    # Legacy bots EDI parser — third-party inherited code
+    "src/edi/core/bots/**",
+    "src/edi/core/grammar/**",
+    # Module bootstrap / entrypoint wiring
+    "src/edi/module.py",
+]

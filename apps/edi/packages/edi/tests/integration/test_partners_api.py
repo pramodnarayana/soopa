@@ -53,7 +53,7 @@ async def test_create_and_get_as2_partner(platform_client: AsyncClient):
     }
 
     response = await platform_client.post(
-        "/api/v1/platform/trading-partners/as2/trading-partners", json=payload
+        "/api/v1/trading-partners/as2/trading-partners", json=payload
     )
     assert response.status_code == 201, f"Failed to create AS2 partner: {response.text}"
     data = response.json()
@@ -61,21 +61,21 @@ async def test_create_and_get_as2_partner(platform_client: AsyncClient):
     assert data["as2_id"] == payload["as2_id"]
 
     # Get all AS2 partners
-    list_res = await platform_client.get("/api/v1/platform/trading-partners/as2/trading-partners")
+    list_res = await platform_client.get("/api/v1/trading-partners/as2/trading-partners")
     assert list_res.status_code == 200
     partners = list_res.json()
     assert any(p["id"] == data["id"] for p in partners)
 
     # Test rotate certificates
     rotate_res = await platform_client.put(
-        f"/api/v1/platform/trading-partners/as2/certificates/{data['id']}/rotate",
+        f"/api/v1/trading-partners/as2/certificates/{data['id']}/rotate",
         json={"action": "generate"},
     )
     assert rotate_res.status_code == 200
 
     # Test export certificates
     export_res = await platform_client.get(
-        f"/api/v1/platform/trading-partners/as2/certificates/{data['id']}/export"
+        f"/api/v1/trading-partners/as2/certificates/{data['id']}/export"
     )
     assert export_res.status_code == 200
     export_data = export_res.json()

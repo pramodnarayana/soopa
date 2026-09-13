@@ -14,8 +14,8 @@ class ProjectProviderPort(Protocol):
         """Removes a project grant from an organization"""
         ...
 
-    async def get_roles(self) -> list[IdpRole]:
-        """Gets all roles for the UCP project"""
+    async def get_roles(self, project_id: str | None = None) -> list[IdpRole]:
+        """Gets all roles for the specified project (defaults to UCP project)"""
         ...
 
     async def get_users(self, org_id: str) -> list[IdpUser]:

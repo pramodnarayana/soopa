@@ -16,6 +16,7 @@ from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import EdiDirection, MessageStatus
+from edi.domain.exceptions import RouteNotFoundError
 from edi.testing.fakes.pipeline_fakes import (
     FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,
@@ -42,7 +43,7 @@ def make_use_case(
     async def uow_factory():
         yield u
 
-    def router_factory(u_ref):
+    def router_factory(u_ref: FakeDataPlaneUnitOfWork) -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(
             u_ref,
             {
@@ -173,7 +174,7 @@ async def test_delivery_service_no_route_raises() -> None:
     }
 
     use_case = make_use_case(uow=uow)
-    with pytest.raises(ValueError, match="No route found for"):
+    with pytest.raises(RouteNotFoundError, match="No route found for"):
         await use_case.execute(trace_id)
 
 

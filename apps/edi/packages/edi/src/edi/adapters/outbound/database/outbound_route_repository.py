@@ -1,4 +1,5 @@
 import dataclasses
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from edi.adapters.outbound.database.models.control_plane import (
     OutboundRoute,
     SFTPPartner,
 )
+from edi.domain.enums import EdiConnectionType
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 
@@ -30,7 +32,9 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             active=record.active,
             created_at=record.created_at,
             updated_at=record.updated_at,
-            protocol=record.protocol,
+            connection_type=EdiConnectionType(record.connection_type)
+            if record.connection_type
+            else None,
             as2_partner_id=record.as2_partner_id,
             sftp_partner_id=record.sftp_partner_id,
         )
@@ -136,10 +140,17 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         self._drain_events(aggregate)
         await self.session.flush()
 
-    async def list_outbound_routes(self, tenant_id: str) -> list[OutboundRouteDomainModel]:
-        outbound_result = await self.session.execute(
-            select(OutboundRoute).where(
-                OutboundRoute.tenant_id == tenant_id, OutboundRoute.deleted_at.is_(None)
+    async def list_outbound_routes(
+        self, tenant_id: str, limit: int = 100, offset: int = 0
+    ) -> Sequence[OutboundRouteDomainModel]:
+        stmt = (
+            select(OutboundRoute)
+            .where(
+                OutboundRoute.tenant_id == tenant_id,
+                OutboundRoute.deleted_at.is_(None),
             )
+            .limit(limit)
+            .offset(offset)
         )
+        outbound_result = await self.session.execute(stmt)
         return [self._to_domain_model(record) for record in outbound_result.scalars().all()]

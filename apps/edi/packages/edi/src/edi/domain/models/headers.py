@@ -6,7 +6,7 @@ from seedwork.models import AggregateRoot
 
 @dataclass(kw_only=True)
 class OutboundEdiHeaderDomainModel(AggregateRoot):
-    ID_PREFIX = "hdr"
+    ID_PREFIX = "edi_ob_hd"
 
     id: str
     tenant_id: str

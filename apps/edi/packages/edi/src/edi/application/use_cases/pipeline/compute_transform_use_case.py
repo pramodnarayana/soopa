@@ -10,6 +10,7 @@ from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.models import EdiWebhookPayload
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.domain.events import TransformCompleted
+from edi.ports.outbound.transaction_repository import CreateApiGatewayCommand, CreateEdiJsonCommand
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -24,11 +25,11 @@ class ComputeTransformUseCase:
 
     def __init__(
         self,
-        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
+        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
     ) -> None:
-        self.uow_factory = uow_factory
         self.transformer = transformer
+        self.uow_factory = uow_factory
 
     async def execute(self, trace_id: str, standard: str, transaction_type: str) -> None:
         """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORM_COMPLETED."""
@@ -82,10 +83,10 @@ class ComputeTransformUseCase:
                 else edi_msg.transaction_type
             )
             route = (
-                await uow.transactions.get_route(
-                    EdiDirection.INBOUND,
+                await uow.inbound_routes.get_inbound_route(
                     str(edi_msg.sender_id),
                     str(edi_msg.receiver_id),
+                    str(edi_msg.tenant_id),
                     str(transaction_type_global) if transaction_type_global else "",
                 )
                 if edi_msg.sender_id and edi_msg.receiver_id
@@ -113,20 +114,22 @@ class ComputeTransformUseCase:
                     json_dict["transaction_type"] = txn_type
                 business_metadata = extractor.extract(txn_type, json_dict)
 
-                await uow.transactions.save_edi_json(
-                    trace_id=trace_id,
-                    direction=EdiDirection.INBOUND.value,
-                    partnership_id=partnership_id_str,
-                    transaction_type=txn_type,
-                    standard=standard,
-                    sender_id=edi_msg.sender_id,
-                    receiver_id=edi_msg.receiver_id,
-                    gs_sender_id=gs_sender,
-                    gs_receiver_id=gs_receiver,
-                    business_metadata=cast(JsonDict, business_metadata),
-                    payload=cast(JsonDict, json_dict),
-                    status=MessageStatus.PARSED.value,
-                    tenant_id=edi_msg.tenant_id,
+                await uow.transactions.create_edi_json(
+                    command=CreateEdiJsonCommand(
+                        trace_id=trace_id,
+                        tenant_id=edi_msg.tenant_id,
+                        direction=EdiDirection.INBOUND,
+                        trading_partner_id=partnership_id_str,
+                        transaction_type=txn_type,
+                        standard=standard,
+                        sender_id=edi_msg.sender_id,
+                        receiver_id=edi_msg.receiver_id,
+                        gs_sender_id=gs_sender,
+                        gs_receiver_id=gs_receiver,
+                        business_metadata=cast(JsonDict, business_metadata),
+                        payload=cast(JsonDict, json_dict),
+                        status=MessageStatus.PARSED,
+                    )
                 )
                 logger.info(
                     "compute_transform.edi_json_saved",
@@ -143,7 +146,7 @@ class ComputeTransformUseCase:
 
             webhook_url = None
             if route and route.webhook_id:
-                partner = await uow.transactions.get_webhook(str(route.webhook_id))
+                partner = await uow.webhooks.get_webhook(edi_msg.tenant_id, str(route.webhook_id))
                 if partner:
                     webhook_url = partner.url
                     logger.info(
@@ -170,14 +173,16 @@ class ComputeTransformUseCase:
             )
 
             # Save ApiGateway to DB as a single webhook delivery
-            await uow.transactions.save_api_payload(
-                trace_id=trace_id,
-                tenant_id=edi_msg.tenant_id,
-                direction=EdiDirection.OUTBOUND.value,
-                payload=envelope.model_dump(),
-                status=MessageStatus.PENDING_DELIVERY.value,
-                transaction_type=standard,
-                webhook_url=webhook_url,
+            await uow.transactions.create_api_gateway(
+                command=CreateApiGatewayCommand(
+                    trace_id=trace_id,
+                    tenant_id=edi_msg.tenant_id,
+                    direction=EdiDirection.OUTBOUND,
+                    payload=envelope.model_dump(),
+                    status=MessageStatus.PENDING_DELIVERY,
+                    transaction_type=standard,
+                    webhook_url=webhook_url,
+                )
             )
             logger.info("compute_transform.api_payload_saved", trace_id=trace_id)
 

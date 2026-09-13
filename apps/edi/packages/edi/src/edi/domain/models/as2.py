@@ -81,7 +81,7 @@ class MDNResponse:
 
 @dataclass(kw_only=True)
 class AS2PartnerDomainModel(AggregateRoot):
-    ID_PREFIX = "as2"
+    ID_PREFIX = "edi_as2"
 
     id: str
     as2_id: str
@@ -102,7 +102,7 @@ class AS2PartnerDomainModel(AggregateRoot):
 
 @dataclass(kw_only=True)
 class AS2PartnershipDomainModel(AggregateRoot):
-    ID_PREFIX = "pship"
+    ID_PREFIX = "edi_as2_pship"
 
     id: str
     name: str

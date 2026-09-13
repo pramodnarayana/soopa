@@ -15,7 +15,7 @@ from unified_api.adapters.inbound.http.edi.routers.trading_partners.platform imp
     settings,
 )
 
-_PREFIX = "/api/v1/platform/trading-partners"
+_PREFIX = "/api/v1/trading-partners"
 
 # Enforce require_platform_admin on all routes in this router
 router = APIRouter(

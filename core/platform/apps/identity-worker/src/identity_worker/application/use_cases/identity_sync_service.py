@@ -91,6 +91,46 @@ class IdentitySyncService:
             bound_logger.exception("identity_sync_tenant_failed", tenant_id=tenant_id)
             raise
 
+    async def handle_app_subscribed(self, tenant_id: str, idp_project_id: str | None) -> None:
+        """
+        Grants the specified Identity Project to the tenant's organization.
+        """
+        if not idp_project_id:
+            logger.info("no_idp_project_id_provided_skipping_grant", tenant_id=tenant_id)
+            return
+
+        bound_logger = logger.bind(tenant_id=tenant_id, idp_project_id=idp_project_id)
+        bound_logger.info("syncing_app_subscription_to_identity_provider")
+        try:
+            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
+            await self.identity_provider.grant_project_to_organization(
+                idp_tenant_id, idp_project_id
+            )
+            bound_logger.info("identity_sync_app_subscribed_successful")
+        except Exception:
+            bound_logger.exception("identity_sync_app_subscribed_failed")
+            raise
+
+    async def handle_app_unsubscribed(self, tenant_id: str, idp_project_id: str | None) -> None:
+        """
+        Revokes the specified Identity Project from the tenant's organization.
+        """
+        if not idp_project_id:
+            logger.info("no_idp_project_id_provided_skipping_revoke", tenant_id=tenant_id)
+            return
+
+        bound_logger = logger.bind(tenant_id=tenant_id, idp_project_id=idp_project_id)
+        bound_logger.info("syncing_app_unsubscription_to_identity_provider")
+        try:
+            idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
+            await self.identity_provider.revoke_project_from_organization(
+                idp_tenant_id, idp_project_id
+            )
+            bound_logger.info("identity_sync_app_unsubscribed_successful")
+        except Exception:
+            bound_logger.exception("identity_sync_app_unsubscribed_failed")
+            raise
+
     async def handle_user_created(
         self, user_id: str, tenant_id: str, email: str, first_name: str, last_name: str, role: str
     ) -> None:
@@ -118,64 +158,117 @@ class IdentitySyncService:
 
                 idp_tenant_id = tenant.idp_tenant_id
                 if local_user.idp_user_id:
-                    await self.user_identity_provider.assign_tenant_role(
-                        user_id=local_user.idp_user_id,
-                        org_id=idp_tenant_id,
-                        role=role,
-                    )
-                    bound_logger.info(
-                        "identity_sync_existing_user_reconciled",
-                        idp_user_id=local_user.idp_user_id,
+                    await self._reconcile_existing_user(
+                        local_user.idp_user_id, idp_tenant_id, role, bound_logger
                     )
                     return
 
-                created_idp_user_id: str | None = None
-                try:
-                    created_idp_user_id = await self.user_identity_provider.create_user(
-                        org_id=idp_tenant_id,
-                        email=email,
-                        first_name=first_name,
-                        last_name=last_name,
-                    )
-                    bound_logger.info(
-                        "identity_sync_user_created_in_idp", idp_user_id=created_idp_user_id
-                    )
-
-                    await self.user_identity_provider.assign_tenant_role(
-                        user_id=created_idp_user_id,
-                        org_id=idp_tenant_id,
-                        role=role,
-                    )
-                    bound_logger.info(
-                        "identity_sync_assign_role_successful",
-                        idp_user_id=created_idp_user_id,
-                        role=role,
-                    )
-
-                    await uow.repo.update_user_idp_mapping(user_id, created_idp_user_id)
-                    await uow.commit()
-                    bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
-
-                except BaseException:
-                    try:
-                        await _complete_cleanup(uow.rollback())
-                    except Exception:
-                        bound_logger.exception("identity_sync_uow_rollback_failed")
-                    if created_idp_user_id:
-                        try:
-                            await _complete_cleanup(
-                                self.user_identity_provider.delete_user(created_idp_user_id)
-                            )
-                        except Exception:
-                            bound_logger.exception(
-                                "identity_sync_create_user_compensation_failed",
-                                idp_user_id=created_idp_user_id,
-                            )
-                    raise
+                await self._execute_sync_with_compensation(
+                    uow, user_id, idp_tenant_id, email, first_name, last_name, role, bound_logger
+                )
 
         except Exception:
             bound_logger.exception("identity_sync_new_user_failed")
             raise
+
+    async def _reconcile_existing_user(
+        self,
+        idp_user_id: str,
+        idp_tenant_id: str,
+        role: str,
+        bound_logger: structlog.stdlib.BoundLogger,
+    ) -> None:
+        await self.user_identity_provider.assign_tenant_role(
+            user_id=idp_user_id,
+            org_id=idp_tenant_id,
+            role=role,
+        )
+        bound_logger.info(
+            "identity_sync_existing_user_reconciled",
+            idp_user_id=idp_user_id,
+        )
+
+    async def _execute_sync_with_compensation(
+        self,
+        uow: IdentitySyncUnitOfWorkPort,
+        local_user_id: str,
+        idp_tenant_id: str,
+        email: str,
+        first_name: str,
+        last_name: str,
+        role: str,
+        bound_logger: structlog.stdlib.BoundLogger,
+    ) -> None:
+        created_idp_user_id: str | None = None
+        try:
+            bound_logger.info(
+                "identity_sync_before_idp_create_user", email=email, org_id=idp_tenant_id
+            )
+            created_idp_user_id = await self.user_identity_provider.create_user(
+                org_id=idp_tenant_id,
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+            )
+            bound_logger.info("identity_sync_user_created_in_idp", idp_user_id=created_idp_user_id)
+
+            bound_logger.info(
+                "identity_sync_before_assign_tenant_role",
+                idp_user_id=created_idp_user_id,
+                role=role,
+            )
+            await self.user_identity_provider.assign_tenant_role(
+                user_id=created_idp_user_id,
+                org_id=idp_tenant_id,
+                role=role,
+            )
+            bound_logger.info(
+                "identity_sync_assign_role_successful",
+                idp_user_id=created_idp_user_id,
+                role=role,
+            )
+
+            bound_logger.info(
+                "identity_sync_before_local_idp_mapping_update",
+                local_user_id=local_user_id,
+                idp_user_id=created_idp_user_id,
+            )
+            await uow.repo.update_user_idp_mapping(local_user_id, created_idp_user_id)
+            await uow.commit()
+            bound_logger.info("identity_sync_updated_local_idp_user_id_successful")
+
+        except BaseException:
+            bound_logger.exception(
+                "identity_sync_transaction_crashed_initiating_rollback_and_compensation"
+            )
+            await self._compensate_failed_sync(uow, created_idp_user_id, bound_logger)
+            raise
+
+    async def _compensate_failed_sync(
+        self,
+        uow: IdentitySyncUnitOfWorkPort,
+        created_idp_user_id: str | None,
+        bound_logger: structlog.stdlib.BoundLogger,
+    ) -> None:
+        try:
+            await _complete_cleanup(uow.rollback())
+        except Exception:
+            bound_logger.exception("identity_sync_uow_rollback_failed")
+
+        if created_idp_user_id:
+            bound_logger.warning(
+                "identity_sync_compensating_by_deleting_user_from_idp",
+                idp_user_id=created_idp_user_id,
+            )
+            try:
+                await _complete_cleanup(
+                    self.user_identity_provider.delete_user(created_idp_user_id)
+                )
+            except Exception:
+                bound_logger.exception(
+                    "identity_sync_create_user_compensation_failed",
+                    idp_user_id=created_idp_user_id,
+                )
 
     async def handle_user_role_assigned(
         self,

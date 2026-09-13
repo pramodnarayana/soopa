@@ -18,7 +18,7 @@ from ucp.adapters.outbound.database.postgres_ucp_outbox_cleanup_repository impor
 )
 from ucp.application.use_cases.ucp_audit_log_cleanup_use_case import UcpAuditLogCleanupUseCase
 from ucp.application.use_cases.ucp_idempotency_cleanup_use_case import UcpIdempotencyCleanupUseCase
-from ucp.bootstrap.config import get_settings
+from ucp.config.settings import get_settings
 
 from ucp_cleanup.adapters.inbound.jobs.ucp_audit_log_cleanup_job import UcpAuditLogCleanupJobHandler
 from ucp_cleanup.adapters.inbound.jobs.ucp_idempotency_cleanup_job import (

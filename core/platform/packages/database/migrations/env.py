@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import database.models  # noqa: F401
 from database.models.core import GlobalRegistry
+from database.utils import normalize_to_asyncpg
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
 
@@ -27,8 +28,8 @@ target_metadata = GlobalRegistry.metadata
 
 # Set database URL dynamically from DATABASE_URL
 database_url = os.environ.get("DATABASE_URL")
-if database_url and database_url.startswith("postgresql://"):
-    database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+if database_url:
+    database_url = normalize_to_asyncpg(database_url)
 config.set_main_option("sqlalchemy.url", database_url or "")
 
 # other values from the config, defined by the needs of env.py,

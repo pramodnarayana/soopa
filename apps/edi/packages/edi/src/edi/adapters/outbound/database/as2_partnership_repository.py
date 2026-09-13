@@ -1,12 +1,20 @@
 import dataclasses
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
+from sqlalchemy.orm import aliased
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.models.control_plane import AS2Partnership
-from edi.adapters.outbound.database.repository import PartnershipRepository
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, AS2Partnership
+from edi.domain.exceptions import DomainError
 from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
+
+
+class PartnershipAlreadyExistsError(DomainError):
+    def __init__(self, tenant_id: str, local_partner_id: str, remote_partner_id: str):
+        super().__init__(
+            f"An active partnership already exists between '{local_partner_id}' and '{remote_partner_id}' for tenant '{tenant_id}'."
+        )
 
 
 class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSqlAlchemyRepository):
@@ -31,12 +39,28 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
 
-        repo = PartnershipRepository(self.session)
-        result = await repo.get_partnership_by_as2_ids(as2_from, as2_to)
-        if not result:
+        LocalPartner = aliased(AS2Partner)
+        RemotePartner = aliased(AS2Partner)
+
+        stmt = (
+            select(AS2Partnership, LocalPartner, RemotePartner)
+            .join(LocalPartner, AS2Partnership.local_partner_id == LocalPartner.id)
+            .join(RemotePartner, AS2Partnership.remote_partner_id == RemotePartner.id)
+            .where(
+                func.lower(LocalPartner.as2_id) == as2_to.lower(),
+                func.lower(RemotePartner.as2_id) == as2_from.lower(),
+                AS2Partnership.active.is_(True),
+                LocalPartner.active.is_(True),
+                RemotePartner.active.is_(True),
+            )
+        )
+
+        result = await self.session.execute(stmt)
+        row = result.first()
+        if not row:
             return None
 
-        partnership_orm, local_partner_orm, remote_partner_orm = result
+        partnership_orm, local_partner_orm, remote_partner_orm = row
 
         return (
             AS2PartnershipDomainModel(
@@ -61,6 +85,24 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
 
     async def save(self, aggregate: AS2PartnershipDomainModel) -> None:
         tid_str = aggregate.tenant_id
+
+        if aggregate.active:
+            existing_active = await self.session.execute(
+                select(AS2Partnership).where(
+                    AS2Partnership.tenant_id == tid_str,
+                    AS2Partnership.local_partner_id == aggregate.local_partner_id,
+                    AS2Partnership.remote_partner_id == aggregate.remote_partner_id,
+                    AS2Partnership.active.is_(True),
+                    AS2Partnership.id != aggregate.id,
+                )
+            )
+            if existing_active.first():
+                raise PartnershipAlreadyExistsError(
+                    tenant_id=tid_str or "PLATFORM",
+                    local_partner_id=aggregate.local_partner_id,
+                    remote_partner_id=aggregate.remote_partner_id,
+                )
+
         result = await self.session.execute(
             select(AS2Partnership).where(
                 AS2Partnership.id == aggregate.id,

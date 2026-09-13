@@ -16,7 +16,10 @@ class EdiDataPlaneRouteRegistry:
         self._registry: dict[tuple[str, str | None], Callable[..., Awaitable[Any]]] = {}
 
     def register(
-        self, event_type: str, direction: str | None, factory: Callable[..., Awaitable[Any]]
+        self,
+        event_type: str,
+        direction: str | None,
+        factory: Callable[..., Awaitable[Any]],
     ) -> None:
         """
         Registers a factory function to be called when an event matching the

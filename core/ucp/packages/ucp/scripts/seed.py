@@ -16,6 +16,7 @@ import structlog
 
 # Need to import our mapped models to use them
 from database.models.identity import Tenant, User, UserRole
+from database.utils import normalize_to_asyncpg
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -34,8 +35,8 @@ async def main() -> None:
         sys.exit(1)
 
     # SQLAlchemy expects asyncpg connection string
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
+    if database_url:
+        database_url = normalize_to_asyncpg(database_url)
 
     platform_org_id = os.environ.get("ZITADEL_PLATFORM_ORG_ID", "")
     platform_admin_id = os.environ.get("ZITADEL_PLATFORM_ADMIN_ID", "")

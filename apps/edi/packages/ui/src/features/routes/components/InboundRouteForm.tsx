@@ -11,7 +11,7 @@ import {
 } from '@soopa/ui/components/ui/select';
 import { useState } from 'react';
 import { useToast } from '../../../hooks/use-toast';
-import { useCreateInboundRouteMutation } from '../api/routeHooks';
+import { useCreateInboundRouteMutation } from '../api/inboundRouteHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { DestinationType, Direction, ProcessingMode } from '../types';
 

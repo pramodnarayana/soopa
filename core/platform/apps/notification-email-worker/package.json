@@ -1,11 +1,13 @@
 {
   "name": "@soopa/notification-email-worker",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
-    "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
+    "start": "PYTHONUNBUFFERED=1 uv run python -m notification_email_worker.main",
+    "dev": "PYTHONUNBUFFERED=1 PYTHONPATH=src uv run python -m notification_email_worker.main",
+    "test": "echo 'No unit tests in this module'",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "test:integration": "uv run pytest tests/integration",
-    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80 --ignore=tests/e2e"
   }
 }

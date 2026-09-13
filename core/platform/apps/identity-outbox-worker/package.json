@@ -4,7 +4,7 @@
   "private": true,
   "description": "Worker service for handling Identity outbox relay and sweeping",
   "scripts": {
-    "start": "uv run python -m identity_outbox_worker.main",
-    "dev": "uv run python -m identity_outbox_worker.main"
+    "start": "PYTHONUNBUFFERED=1 uv run python -m identity_outbox_worker.main",
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m identity_outbox_worker.main"
   }
 }

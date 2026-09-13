@@ -1,16 +1,28 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import CreateOutboundRouteCmd
-from edi.domain.enums import EdiEventType
+from edi.domain.enums import EdiConnectionType, EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class CreateOutboundRouteCmd:
+    isa_sender_id: str
+    isa_receiver_id: str
+    transaction_type: str
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
+    name: str | None = None
+    connection_type: EdiConnectionType | None = None
+    trading_partner_id: str | None = None
 
 
 class CreateOutboundRouteUseCase:
@@ -21,8 +33,8 @@ class CreateOutboundRouteUseCase:
         self, tenant_id: str, cmd: CreateOutboundRouteCmd, idempotency_key: str | None = None
     ) -> OutboundRouteDomainModel:
         logger.info(
-            "Creating Outbound Route for partner {cmd_trading_partner_id} in tenant {tenant_id}",
-            cmd_trading_partner_id=cmd.trading_partner_id,
+            "creating_outbound_route",
+            trading_partner_id=cmd.trading_partner_id,
             tenant_id=tenant_id,
         )
         route_id = OutboundRouteDomainModel.new_id()
@@ -37,6 +49,7 @@ class CreateOutboundRouteUseCase:
             updated_at=datetime.now(UTC).replace(tzinfo=None),
             as2_partner_id=str(cmd.as2_partner_id) if cmd.as2_partner_id else None,
             sftp_partner_id=str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None,
+            connection_type=cmd.connection_type,
         )
 
         aggregate.add_domain_event(

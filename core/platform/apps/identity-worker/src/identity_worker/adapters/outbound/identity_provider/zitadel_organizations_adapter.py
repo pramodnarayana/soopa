@@ -1,7 +1,9 @@
 import structlog
+from identity.adapters.outbound.zitadel.client import ZitadelClient
+from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpError
 from pydantic import BaseModel, Field
 
-from identity_worker.adapters.outbound.identity_provider.zitadel_client import ZitadelClient
+from identity_worker.config.settings import get_settings
 from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.organization_provider_port import OrganizationProviderPort
 from identity_worker.ports.outbound.project_provider_port import ProjectProviderPort
@@ -17,8 +19,15 @@ class CreateOrgResponse(BaseModel):
 
 class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
     def __init__(self, project_provider: ProjectProviderPort) -> None:
-        super().__init__()
+        settings = get_settings()
+        super().__init__(
+            api_url=settings.zitadel_api_url,
+            machine_key=settings.zitadel_machine_key,
+            ucp_project_id=settings.zitadel_ucp_project_id,
+            default_user_password=settings.zitadel_default_user_password,
+        )
         self.project_provider = project_provider
+        self.settings = settings
 
     async def create_organization(self, name: str) -> tuple[str, bool]:
         logger.info("provisioning_organization_in_zitadel", org_name=name)
@@ -27,9 +36,6 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
             response = await self.fetch_with_auth(
                 endpoint="/management/v1/orgs", method="POST", json={"name": name}
             )
-
-            if response.status_code >= 400:
-                await self.handle_response_error(response, "create org")
 
             data = response.json()
             parsed_data = CreateOrgResponse.model_validate(data)
@@ -59,27 +65,50 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
                     )
 
             return org_id, grant_succeeded
+        except IdentityProviderPortError:
+            raise
         except Exception as e:
             logger.exception("error_creating_organization_in_zitadel", org_name=name)
             raise IdentityProviderPortError("Failed to create organization") from e
+
+    async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
+        logger.info("granting_project_to_organization", org_id=org_id, project_id=project_id)
+        tenant_group = self.settings.zitadel_tenant_role_group
+        all_roles = await self.project_provider.get_roles(project_id)
+        tenant_role_keys = [role.key for role in all_roles if role.group == tenant_group]
+
+        try:
+            await self.project_provider.create_project_grant(org_id, project_id, tenant_role_keys)
+            logger.info("project_granted_to_organization", org_id=org_id, project_id=project_id)
+        except Exception as e:
+            logger.exception(
+                "error_granting_project_to_organization", org_id=org_id, project_id=project_id
+            )
+            raise IdentityProviderPortError("Failed to grant project to organization") from e
+
+    async def revoke_project_from_organization(self, org_id: str, project_id: str) -> None:
+        logger.info("revoking_project_from_organization", org_id=org_id, project_id=project_id)
+        try:
+            await self.project_provider.delete_project_grant(org_id, project_id)
+            logger.info("project_revoked_from_organization", org_id=org_id, project_id=project_id)
+        except Exception as e:
+            logger.exception(
+                "error_revoking_project_from_organization", org_id=org_id, project_id=project_id
+            )
+            raise IdentityProviderPortError("Failed to revoke project from organization") from e
 
     async def delete_organization(self, org_id: str) -> None:
         logger.info("deleting_organization_in_zitadel", org_id=org_id)
 
         try:
             # First try admin v1 delete (which works cross-org)
-            response = await self.fetch_with_auth(
-                endpoint=f"/admin/v1/orgs/{org_id}", method="DELETE"
-            )
-
-            if response.status_code >= 400:
+            try:
+                await self.fetch_with_auth(endpoint=f"/admin/v1/orgs/{org_id}", method="DELETE")
+            except ZitadelHttpError:
                 # Fallback to management v1 if admin fails
-                response = await self.fetch_with_auth(
+                await self.fetch_with_auth(
                     endpoint=f"/management/v1/orgs/{org_id}", method="DELETE"
                 )
-
-            if response.status_code >= 400:
-                await self.handle_response_error(response, "delete org")
 
             logger.info("successfully_deleted_organization_from_zitadel", org_id=org_id)
         except Exception as e:
@@ -90,15 +119,12 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
         logger.info("updating_organization_name_in_zitadel", org_id=org_id, org_name=name)
 
         try:
-            response = await self.fetch_with_auth(
+            await self.fetch_with_auth(
                 endpoint="/management/v1/orgs/me",
                 method="PUT",
                 headers={"x-zitadel-orgid": org_id},
                 json={"name": name},
             )
-
-            if response.status_code >= 400:
-                await self.handle_response_error(response, "update org name")
 
             logger.info("successfully_updated_organization_name_in_zitadel", org_id=org_id)
         except Exception as e:
@@ -110,15 +136,12 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
 
         try:
             endpoint = f"/management/v1/orgs/me/_{'reactivate' if active else 'deactivate'}"
-            response = await self.fetch_with_auth(
+            await self.fetch_with_auth(
                 endpoint=endpoint,
                 method="POST",
                 headers={"x-zitadel-orgid": org_id},
                 json={},
             )
-
-            if response.status_code >= 400:
-                await self.handle_response_error(response, "toggle org status")
 
             logger.info(
                 "successfully_toggled_organization_status_in_zitadel", org_id=org_id, active=active

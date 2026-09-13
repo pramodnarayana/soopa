@@ -29,4 +29,11 @@ class DeleteInboundRouteUseCase:
             )
         )
         await self.uow.inbound_routes.delete(aggregate)
+
+        logger.info(
+            "inbound_route_deleted",
+            tenant_id=tenant_id,
+            route_id=route_id,
+            action="delete",
+        )
         return True

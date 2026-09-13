@@ -104,7 +104,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 await tenant_session.commit()
                 logger.info(
-                    "[REPLICATION] Successfully performed full state sync.",
+                    "replication_full_state_sync_completed",
                     tenant_id=tenant_id,
                 )
 
@@ -128,7 +128,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
         except Exception as e:
-            raise PermanentProvisioningError("Tenant {tenant_id} unresolvable: {e}") from e
+            raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 
         global_gen = self.db_router.get_global_session()
         tenant_gen = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
@@ -143,7 +143,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
         except Exception as e:
-            raise PermanentProvisioningError("Tenant {tenant_id} unresolvable: {e}") from e
+            raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 
         tenant_gen = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         async with aclosing(tenant_gen) as tenant_ctx:
@@ -154,7 +154,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     # Generic Granular Replication Driver  (dependency-aware, one entity)
     # -----------------------------------------------------------------------
 
-    async def _replicate_with_dependencies(
+    async def _replicate_with_dependencies(  # noqa: C901
         self, tenant_id: str, entity_id: str, entity_key: str
     ) -> None:
         """
@@ -174,12 +174,19 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 # 2. Resolve and pre-replicate each declared FK dependency
                 for dep in spec.dependencies:
-                    dep_id: str | None = getattr(entity, dep.fk_attr)
+                    try:
+                        dep_id: str | None = entity.__dict__[dep.fk_attr]
+                    except KeyError:
+                        raise PermanentProvisioningError(
+                            f"Replication registry misconfiguration: "
+                            f"{spec.global_model.__name__} has no attribute '{dep.fk_attr}' "
+                            f"declared in its FK dependencies. Fix replication_registry.py."
+                        )
                     if not dep_id:
                         continue  # Optional FK not set on this instance — skip
 
                     logger.info(
-                        "[REPLICATION] Pre-replicating dependency to shard.",
+                        "replication_dependency_pre_replication_started",
                         entity_type=spec.global_model.__name__,
                         entity_id=entity_id,
                         dependency_type=dep.global_model.__name__,
@@ -194,8 +201,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                     if not dep_entity:
                         raise PermanentProvisioningError(
-                            "FK dependency {dep.global_model.__name__} id={dep_id} "
-                            "(required by {spec.global_model.__name__} id={entity_id}) "
+                            f"FK dependency {dep.global_model.__name__} id={dep_id} "
+                            f"(required by {spec.global_model.__name__} id={entity_id}) "
                             "not found in global DB. The row may have been deleted. "
                             "Sending to DLQ."
                         )
@@ -205,7 +212,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         if not dep_tenant_id:
                             raise PermanentProvisioningError(
                                 f"Data integrity violation: {dep_entity.__class__.__name__} "
-                                f"id={getattr(dep_entity, 'id', 'unknown')} has a null tenant_id in the global DB."
+                                f"id={dep_entity.id} has a null tenant_id in the global DB."
                             )
                     else:
                         dep_tenant_id = tenant_id
@@ -217,7 +224,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         dep.tenant_model,
                     )
                     logger.info(
-                        "[REPLICATION] Pre-replicated dependency to shard.",
+                        "replication_dependency_pre_replication_completed",
                         dependency_type=dep.global_model.__name__,
                         dependency_id=dep_id,
                         tenant_id=dep_tenant_id,
@@ -229,7 +236,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     if not source_tenant_id:
                         raise PermanentProvisioningError(
                             f"Data integrity violation: {entity.__class__.__name__} "
-                            f"id={getattr(entity, 'id', 'unknown')} has a null tenant_id in the global DB."
+                            f"id={entity_id} has a null tenant_id in the global DB."
                         )
                 else:
                     source_tenant_id = tenant_id
@@ -239,7 +246,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 )
                 await tenant_session.commit()
                 logger.info(
-                    "[REPLICATION] Replicated entity to shard.",
+                    "replication_entity_replicated",
                     entity_type=spec.global_model.__name__,
                     entity_id=entity_id,
                     tenant_id=tenant_id,
@@ -251,7 +258,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
-                    "Failed to replicate {spec.global_model.__name__} id={entity_id}: {e}"
+                    f"Failed to replicate {spec.global_model.__name__} id={entity_id}: {e}"
                 ) from e
 
     async def _fetch_global_entity(
@@ -276,8 +283,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
         if not entity:
             raise PermanentProvisioningError(
-                "{spec.global_model.__name__} id={entity_id} not found "
-                "in global DB for tenant={tenant_id}."
+                f"{spec.global_model.__name__} id={entity_id} not found "
+                f"in global DB for tenant={tenant_id}."
             )
         return cast(DeclarativeBase, entity)
 
@@ -369,12 +376,21 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         if data.get("tenant_id") is None:
             data["tenant_id"] = tenant_id
 
-        stmt = insert(tenant_model).values(**data)
         update_cols = {k: v for k, v in data.items() if k != "id"}
+
+        logger.info(
+            "upsert_entity_started",
+            tenant_id=tenant_id,
+            model=tenant_model.__name__,
+            update_cols=list(update_cols),
+            global_entity_id=getattr(global_entity, "id", None),
+        )
+
+        stmt = insert(tenant_model).values(**data)
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
 
         logger.debug(
-            "[REPLICATION] Upserting entity into shard.",
+            "replication_entity_upsert_started",
             entity_type=tenant_model.__name__,
             entity_id=data.get("id"),
             tenant_id=tenant_id,
@@ -398,7 +414,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 )
                 await tenant_session.commit()
                 logger.info(
-                    "[REPLICATION] Deleted entity from shard.",
+                    "replication_entity_deleted",
                     entity_type=tenant_model.__name__,
                     entity_id=entity_id,
                     tenant_id=tenant_id,
@@ -406,7 +422,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             except Exception as e:
                 await tenant_session.rollback()
                 raise TransientProvisioningError(
-                    "Failed to delete {tenant_model.__name__} id={entity_id}: {e}"
+                    f"Failed to delete {tenant_model.__name__} id={entity_id}: {e}"
                 ) from e
 
     async def _sync_deletes(
@@ -445,7 +461,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         stale_ids = tenant_ids - global_ids
         if stale_ids:
             logger.info(
-                "[REPLICATION] Removing stale records from shard.",
+                "replication_stale_records_removed",
                 stale_count=len(stale_ids),
                 entity_table=tenant_model.__tablename__,
                 tenant_id=tenant_id,

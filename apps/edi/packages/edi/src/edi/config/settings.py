@@ -1,5 +1,20 @@
 import ipaddress
+import typing
+from functools import lru_cache
+from typing import Literal
 from urllib.parse import urlparse
+
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from seedwork.infrastructure.config import load_settings_safely
+from seedwork.infrastructure.config_models import (
+    PlatformAwsSettings,
+    PlatformDatabaseSettings,
+    PlatformIdentitySettings,
+    PlatformOtelSettings,
+)
+
+from edi.config.constants import SECRETS_MOUNT_PATH
 
 """
 Shared application settings for all EDI AS2 services.
@@ -7,162 +22,115 @@ All settings are loaded from environment variables and validated by Pydantic.
 Each service can use the full AppSettings or cherry-pick specific groups.
 """
 
-import typing
-from functools import lru_cache
-from typing import Literal
-
-from pydantic import Field, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class DatabaseSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="DB_", env_file=".env", extra="ignore")
-
-    global_url: str = Field(
-        validation_alias="DATABASE_URL",
-        serialization_alias="DATABASE_URL",
-        description="Async PostgreSQL connection string for the Global Control Plane.",
-    )
-    pool_size: int = Field(default=10)
-    max_overflow: int = Field(default=20)
-
-    @model_validator(mode="after")
-    def force_asyncpg(self) -> "DatabaseSettings":
-        if self.global_url and self.global_url.startswith("postgresql://"):
-            self.global_url = self.global_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-        return self
-
 
 class S3Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="S3_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
-    bucket: str = Field(default="edi-as2-payloads")
+    bucket: str = Field(validation_alias="S3_BUCKET", default="edi-as2-payloads")
     endpoint_url: str | None = Field(
+        validation_alias="S3_ENDPOINT_URL",
         default=None,
         description="Override for MinIO or other S3-compatible stores. Leave empty for AWS S3.",
     )
-    region: str = Field(default="us-east-1")
-    access_key_id: str | None = Field(default=None)
-    secret_access_key: str | None = Field(default=None)
+    region: str = Field(validation_alias="S3_REGION", default="us-east-1")
+    access_key_id: str | None = Field(validation_alias="S3_ACCESS_KEY_ID", default=None)
+    secret_access_key: str | None = Field(validation_alias="S3_SECRET_ACCESS_KEY", default=None)
 
 
-class AwsSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="AWS_", env_file=".env", extra="ignore")
+class EdiAwsSettings(PlatformAwsSettings):
+    """
+    Extends the base PlatformAwsSettings to include EDI-specific topics.
+    """
 
-    endpoint_url: str | None = Field(default=None)
-    region: str | None = Field(default=None)
-    default_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
-    access_key_id: str | None = Field(default=None)
-    secret_access_key: str | None = Field(default=None)
-    sns_topic_arn: str = Field(default="")
-
-    @property
-    def resolved_region(self) -> str:
-        return self.region or self.default_region
+    sns_topic_arn: str = Field(validation_alias="SNS_EDI_EVENTS_TOPIC_ARN", default="")
 
 
 class SqsSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SQS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
-    provisioning_queue_url: str = Field(default="")
-    transform_queue_url: str = Field(default="")
-    lifecycle_queue_url: str = Field(default="")
-    deliver_queue_url: str = Field(default="")
-    data_plane_jobs_queue_url: str = Field(default="")
-    control_plane_jobs_queue_url: str = Field(default="")
-
-
-class OtelSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="OTEL_", env_file=".env", extra="ignore")
-
-    service_name: str = Field(default="edi-as2-server")
-    exporter_otlp_endpoint: str = Field(
-        description="OTLP gRPC endpoint of the OpenTelemetry Collector.",
+    provisioning_queue_url: str = Field(
+        validation_alias="SQS_PROVISIONING_QUEUE_URL",
+        description="The SQS queue URL for EDI Config Sync/Provisioning",
     )
-    enabled: bool = Field(default=True)
-
-
-class IdentitySettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="IDENTITY_", env_file=".env", extra="ignore")
-
-    oauth_client_id: str = Field(
-        default="api-gateway",
-        description="The ZITADEL Client ID for the API Gateway Swagger UI",
+    transform_queue_url: str = Field(
+        validation_alias="SQS_TRANSFORM_QUEUE_URL",
+        description="The SQS queue URL for EDI Transform",
     )
-    authorization_url: str = Field(
-        description="The OAuth2 authorization endpoint URL",
+    lifecycle_queue_url: str = Field(
+        validation_alias="SQS_LIFECYCLE_QUEUE_URL",
+        description="The SQS queue URL for EDI Lifecycle",
     )
-    token_url: str = Field(
-        description="The OAuth2 token endpoint URL",
+    deliver_queue_url: str = Field(
+        validation_alias="SQS_DELIVER_QUEUE_URL", description="The SQS queue URL for EDI Deliver"
     )
-    issuer: str = Field(
-        description="The OIDC Issuer URL",
+    data_plane_jobs_queue_url: str = Field(
+        validation_alias="SQS_DATA_PLANE_JOBS_QUEUE_URL",
+        description="The SQS queue URL for EDI Data Plane Jobs",
     )
-    jwks_url: str = Field(
-        description="The OIDC JWKS URL for verifying signatures",
+    control_plane_jobs_queue_url: str = Field(
+        validation_alias="SQS_CONTROL_PLANE_JOBS_QUEUE_URL",
+        description="The SQS queue URL for EDI Control Plane Jobs",
     )
-    userinfo_url: str = Field(
-        description="The OIDC UserInfo endpoint for remote token introspection",
-    )
-    audience: str | list[str] = Field(
-        default="api-gateway",
-        description="The expected audience for the JWT. Can be a single string or a comma-separated list of strings.",
-    )
-
-    @model_validator(mode="before")
-    @classmethod
-    def parse_audience(cls, data: typing.Any) -> typing.Any:
-        if isinstance(data, dict) and "audience" in data:
-            aud = data["audience"]
-            if isinstance(aud, str) and "," in aud:
-                data["audience"] = [a.strip() for a in aud.split(",") if a.strip()]
-        return data
 
 
 class PublicSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="PUBLIC_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
     base_url: str = Field(
+        validation_alias="PUBLIC_BASE_URL",
         description="The external base URL of the EDI platform",
     )
 
 
-from edi.config.constants import SECRETS_MOUNT_PATH
-
-
 class SecretsSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="SECRETS_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
-    mount_path: str = Field(default=SECRETS_MOUNT_PATH)
-    sync_interval_seconds: int = Field(default=300)
+    mount_path: str = Field(validation_alias="SECRETS_MOUNT_PATH", default=SECRETS_MOUNT_PATH)
+    sync_interval_seconds: int = Field(
+        validation_alias="SECRETS_SYNC_INTERVAL_SECONDS", default=300
+    )
 
 
 class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore")
 
-    env: Literal["development", "staging", "production"] = Field(default="development")
+    env: Literal["development", "staging", "production"] = Field(
+        validation_alias="ENV", default="development"
+    )
     enable_heavy_compute_queue: bool = Field(
+        validation_alias="ENABLE_HEAVY_COMPUTE_QUEUE",
         default=False,
         description="Feature flag to route heavy EDI parsing to a dedicated compute queue.",
     )
     edi_environment: Literal["P", "T", "I"] = Field(
-        default="P", description="EDI Environment flag (Production, Test, Information)"
+        validation_alias="EDI_ENVIRONMENT",
+        default="P",
+        description="EDI Environment flag (Production, Test, Information)",
     )
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
-    storage_backend: Literal["postgres", "s3"] = Field(default="postgres")
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
+        validation_alias="LOG_LEVEL", default="INFO"
+    )
+    storage_backend: Literal["postgres", "s3"] = Field(
+        validation_alias="STORAGE_BACKEND", default="postgres"
+    )
 
-    database: DatabaseSettings = Field(default_factory=lambda: typing.cast(DatabaseSettings, {}))
+    database: PlatformDatabaseSettings = Field(
+        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
+    )
     s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
-    aws: AwsSettings = Field(default_factory=lambda: typing.cast(AwsSettings, {}))
+    aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
-    otel: OtelSettings = Field(default_factory=lambda: typing.cast(OtelSettings, {}))
-    identity: IdentitySettings = Field(default_factory=lambda: typing.cast(IdentitySettings, {}))
+    otel: PlatformOtelSettings = Field(
+        default_factory=lambda: typing.cast(PlatformOtelSettings, {})
+    )
+    identity: PlatformIdentitySettings = Field(
+        default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
+    )
     public: PublicSettings = Field(default_factory=lambda: typing.cast(PublicSettings, {}))
     secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
 
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
-
         if self.env != "development":
             if "://" not in self.public.base_url:
                 raise ValueError("base_url must include a scheme (e.g. https://)")
@@ -193,4 +161,5 @@ def get_settings() -> AppSettings:
     Returns the cached application settings singleton.
     Decorated with @lru_cache so settings are only parsed once per process.
     """
-    return AppSettings()
+
+    return load_settings_safely(AppSettings)

@@ -78,7 +78,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
             else None
         )
 
-    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
+    async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str) -> bool:
         stmt = select(AS2Partner).where(
             or_(
                 AS2Partner.private_key_vault_ref == vault_ref,
@@ -115,23 +115,23 @@ class SqlAlchemyAS2TradingPartnerRepository(
             conds.append(AS2Partner.tenant_id == tid_str)
 
         try:
-            async with self.session.begin_nested(), intercept_db_errors():
+            async with intercept_db_errors():
                 await self.session.execute(delete(AS2Partner).where(*conds))
-
                 self._drain_events(aggregate)
-
-                await self.session.flush()
+                await self.flush()
         except ForeignKeyViolationError as e:
             raise PartnerInUseError(
                 partner_id=str(aggregate.id), tenant_id=aggregate.tenant_id or PLATFORM_TENANT_ID
             ) from e
 
-    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
+    async def get_as2_partners_by_ids(
+        self, tenant_id: str, ids: list[str]
+    ) -> list[AS2PartnerDomainModel]:
         if not ids:
-            return {}
+            return []
         tid_str = tenant_id
         result = await self.session.execute(
-            select(AS2Partner.id, AS2Partner.name).where(
+            select(AS2Partner).where(
                 AS2Partner.id.in_(ids),
                 or_(
                     AS2Partner.tenant_id == tid_str,
@@ -140,4 +140,9 @@ class SqlAlchemyAS2TradingPartnerRepository(
                 ),
             )
         )
-        return {row.id: row.name for row in result.all()}
+        return [
+            AS2PartnerDomainModel(
+                **{f.name: getattr(r, f.name) for f in dataclasses.fields(AS2PartnerDomainModel)}
+            )
+            for r in result.scalars().all()
+        ]

@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
 )
@@ -32,12 +33,12 @@ from edi.config.settings import AppSettings, get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.enums import PipelineEventType
+from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.transformer_port import TransformerPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
@@ -67,7 +68,7 @@ def _setup_registry(
     def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
         strategies = {
             "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
-            "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault),
+            "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault, db_encryption),
             "as2_partner_id": As2DeliveryStrategy(uow, as2_delivery, vault),
         }
         return DeliveryRouterUseCase(uow=uow, strategies=strategies)
@@ -101,12 +102,12 @@ def _setup_registry(
 
     registry.register(
         event_type=PipelineEventType.TRANSFORM_EVENT.value,
-        direction="INBOUND",
+        direction=EdiDirection.INBOUND.value,
         factory=run_inbound,
     )
     registry.register(
         event_type=PipelineEventType.TRANSFORM_EVENT.value,
-        direction="OUTBOUND",
+        direction=EdiDirection.OUTBOUND.value,
         factory=run_outbound,
     )
     registry.register(
@@ -238,4 +239,39 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except Exception as e:
+        # Check if it's a Pydantic ValidationError without adding a hard dependency at the top
+        if e.__class__.__name__ == "ValidationError":
+            from pydantic import ValidationError
+
+            all_errors = e.errors() if isinstance(e, ValidationError) else []
+
+            missing_fields = [
+                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
+                for err in all_errors
+                if err.get("type") in ("missing", "value_error.missing")
+            ]
+            invalid_fields = [
+                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
+                for err in all_errors
+                if err.get("type") not in ("missing", "value_error.missing")
+            ]
+
+            if missing_fields:
+                logger.exception(
+                    "worker_startup_configuration_error",
+                    reason="One or more required environment variables are missing from your .env file.",
+                    missing_fields=missing_fields,
+                    remedy="Please check .env.example and ensure all required variables are set.",
+                )
+            if invalid_fields:
+                logger.exception(
+                    "worker_startup_configuration_error",
+                    reason="One or more environment variables have invalid configured values.",
+                    invalid_fields=invalid_fields,
+                )
+        else:
+            logger.exception("worker_startup_failed", reason="Startup initialization error")
+        raise

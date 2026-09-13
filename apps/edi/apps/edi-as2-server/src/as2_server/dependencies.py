@@ -4,12 +4,12 @@ from edi.adapters.outbound.database.session import get_global_session, get_sessi
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .adapters.outbound.repository import (
-    AS2TenantRepositoryAdapter,
+from .adapters.outbound.database.edi_message_repository import (
     EdiMessageRepositoryAdapter,
     EdiMessageRepositoryFactory,
-    TradingPartnerRepositoryAdapter,
 )
+from .adapters.outbound.database.tenant_routing_repository import AS2TenantRepositoryAdapter
+from .adapters.outbound.database.trading_partner_repository import TradingPartnerRepositoryAdapter
 from .adapters.outbound.vault import EnvironmentVaultService
 from .application.use_cases.receive_as2 import ReceiveAS2UseCase
 

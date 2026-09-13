@@ -23,7 +23,7 @@ from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher 
 from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
     PostgresEdiControlPlaneOutboxRepository,
 )
-from config_sync_worker.domain.service import ProvisioningWorkerService
+from config_sync_worker.application.service import ProvisioningWorkerService
 
 load_dotenv()
 

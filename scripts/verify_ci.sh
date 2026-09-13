@@ -26,6 +26,9 @@ if [ -f .env.example ]; then
   ENV_INJECTED=1
 fi
 
+echo "✅ Running Architectural Semgrep Checks..."
+uv run semgrep --config=semgrep-architecture.yml --error apps core
+
 echo "✅ Running Typechecks..."
 pnpm run typecheck
 
@@ -34,8 +37,9 @@ echo "✅ Running Ruff lint across full EDI surface (including e2e, workers, and
 # including e2e tests and worker entrypoints that pnpm test excludes from execution.
 uv run ruff check apps/edi
 
-echo "✅ Running Tests (Node + Python)..."
-pnpm test
+echo "✅ Running Tests (Node + Python Coverage)..."
+pnpm test:node
+pnpm cov:python
 
 echo "✅ Running Integration Tests..."
 pnpm test:integration

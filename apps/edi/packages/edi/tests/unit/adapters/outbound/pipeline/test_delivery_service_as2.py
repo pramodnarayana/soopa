@@ -79,8 +79,7 @@ def make_use_case(
     async def uow_factory():
         yield u
 
-    def router_factory(u_ref):
-
+    def router_factory(u_ref: FakeDataPlaneUnitOfWork) -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(
             u_ref,
             {
@@ -124,10 +123,14 @@ def _seed_as2_route(
             "as2_partner_id": partner_id,
         }
     )
-    repo.as2_partners[partner_id] = _REMOTE_PARTNER
-    repo.local_as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
-        _LOCAL_PARTNER
-    )
+    partner_copy = dict(_REMOTE_PARTNER)
+    partner_copy["remote"] = dict(partner_copy["remote"])
+    partner_copy["remote"]["id"] = partner_id
+    partner_copy["partnership"] = dict(partner_copy["partnership"])
+    partner_copy["partnership"]["remote_partner_id"] = partner_id
+
+    repo.as2_partners[partner_id] = partner_copy
+    repo.as2_partners[str(partner_copy["partnership"]["local_partner_id"])] = _LOCAL_PARTNER
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
@@ -198,8 +201,10 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
     )
     remote = copy.deepcopy(_REMOTE_PARTNER)
     remote["remote"]["url"] = "https://fail.example.com/as2"
+    remote["remote"]["id"] = "p-fail"
+    remote["partnership"]["remote_partner_id"] = "p-fail"
     uow.repository.as2_partners["p-fail"] = remote
-    uow.repository.local_as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
+    uow.repository.as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
         _LOCAL_PARTNER
     )
 

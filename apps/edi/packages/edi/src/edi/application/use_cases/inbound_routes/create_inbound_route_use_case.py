@@ -1,17 +1,33 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import CreateInboundRouteCmd
-from edi.domain.enums import EdiEventType
+from edi.domain.enums import EdiConnectionType, EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.base import ProcessingMode
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class CreateInboundRouteCmd:
+    isa_sender_id: str
+    isa_receiver_id: str
+    transaction_type: str
+    webhook_id: str | None = None
+    as2_partner_id: str | None = None
+    sftp_partner_id: str | None = None
+    connection_type: EdiConnectionType | None = None
+    name: str | None = None
+    trading_partner_id: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    processing_mode: str | None = None
 
 
 class CreateInboundRouteUseCase:
@@ -22,8 +38,8 @@ class CreateInboundRouteUseCase:
         self, tenant_id: str, cmd: CreateInboundRouteCmd, idempotency_key: str | None = None
     ) -> InboundRouteDomainModel:
         logger.info(
-            "Creating Inbound Route for sender {cmd_isa_sender_id} in tenant {tenant_id}",
-            cmd_isa_sender_id=cmd.isa_sender_id,
+            "creating_inbound_route",
+            isa_sender_id=cmd.isa_sender_id,
             tenant_id=tenant_id,
         )
         route_id = InboundRouteDomainModel.new_id()
@@ -44,6 +60,7 @@ class CreateInboundRouteUseCase:
             webhook_id=str(cmd.webhook_id) if cmd.webhook_id else None,
             as2_partner_id=str(cmd.as2_partner_id) if cmd.as2_partner_id else None,
             sftp_partner_id=str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None,
+            connection_type=cmd.connection_type,
             processing_mode=ProcessingMode(cmd.processing_mode) if cmd.processing_mode else None,
         )
 

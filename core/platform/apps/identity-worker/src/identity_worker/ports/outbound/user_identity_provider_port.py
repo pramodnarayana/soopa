@@ -12,6 +12,10 @@ class UserIdentityProviderPort(Protocol):
         """Creates a user in the IDP and returns their IDP user ID."""
         ...
 
+    async def get_user_by_email(self, org_id: str, email: str) -> str | None:
+        """Retrieves a user's IDP user ID by email."""
+        ...
+
     async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
         """Assigns a role to a user within a specific tenant (org)."""
         ...
