@@ -6,6 +6,7 @@ from edi.ports.outbound.as2_partnership_repository import AS2PartnershipReposito
 from edi.ports.outbound.control_plane_outbox_repository_port import (
     ControlPlaneOutboxRepositoryPort,
 )
+from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
@@ -14,6 +15,7 @@ from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from edi.ports.outbound.trace_repository import TraceRepositoryPort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
+from edi.ports.outbound.webhook_repository import WebhookRepositoryPort
 
 
 class ControlPlaneUnitOfWorkPort(Protocol):
@@ -31,6 +33,7 @@ class ControlPlaneUnitOfWorkPort(Protocol):
     edi_headers: EdiHeaderRepositoryPort
     platform_settings: PlatformSettingsRepositoryPort
     control_plane_outbox: ControlPlaneOutboxRepositoryPort
+    webhooks: WebhookRepositoryPort
 
     async def __aenter__(self) -> "ControlPlaneUnitOfWorkPort": ...
 
@@ -54,6 +57,14 @@ class DataPlaneUnitOfWorkPort(Protocol):
 
     transactions: TransactionRepositoryPort
     traces: TraceRepositoryPort
+    outbox: DataPlaneOutboxRepositoryPort
+    inbound_routes: InboundRouteRepositoryPort
+    outbound_routes: OutboundRouteRepositoryPort
+    sftp_partners: SFTPPartnerRepositoryPort
+    as2_partners: AS2TradingPartnerRepositoryPort
+    as2_partnerships: AS2PartnershipRepositoryPort
+    webhooks: WebhookRepositoryPort
+    edi_headers: EdiHeaderRepositoryPort
 
     async def __aenter__(self) -> "DataPlaneUnitOfWorkPort": ...
 

@@ -69,14 +69,25 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
         except Exception as e:
-            await self.uow.transactions.update_api_payload_status(trace_id, MessageStatus.FAILED)
+            # We couldn't even make the request, or some other exception happened
+            await self.uow.transactions.update_api_payload_status(
+                trace_id=trace_id,
+                status=MessageStatus.FAILED,
+                webhook_url=partner.url,
+            )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             await self.uow.commit()
             logger.exception("Webhook delivery failed for trace_id={trace_id}", trace_id=trace_id)
             raise RuntimeError(f"Webhook delivery failed: {e}") from e
 
         if 200 <= status_code < 300:
-            await self.uow.transactions.update_api_payload_status(trace_id, MessageStatus.DELIVERED)
+            await self.uow.transactions.update_api_payload_status(
+                trace_id=trace_id,
+                status=MessageStatus.DELIVERED,
+                webhook_url=partner.url,
+                http_status_code=status_code,
+                response=response_text[:4000] if response_text else None, # Cap response size
+            )
             await self._emit_delivery_completed(
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED
             )
@@ -86,7 +97,13 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 partner_url=partner.url,
             )
         else:
-            await self.uow.transactions.update_api_payload_status(trace_id, MessageStatus.FAILED)
+            await self.uow.transactions.update_api_payload_status(
+                trace_id=trace_id,
+                status=MessageStatus.FAILED,
+                webhook_url=partner.url,
+                http_status_code=status_code,
+                response=response_text[:4000] if response_text else None,
+            )
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             await self.uow.commit()
             logger.error(

@@ -5,8 +5,8 @@ from edi.domain.events import ProvisioningEvent
 from pydantic import TypeAdapter, ValidationError
 from seedwork.events import EventEnvelope
 
+from config_sync_worker.application.service import ProvisioningWorkerService
 from config_sync_worker.domain.errors import PermanentProvisioningError
-from config_sync_worker.domain.service import ProvisioningWorkerService
 from config_sync_worker.ports.outbound.event_translator_port import EventTranslatorPort
 
 logger = structlog.get_logger(__name__)

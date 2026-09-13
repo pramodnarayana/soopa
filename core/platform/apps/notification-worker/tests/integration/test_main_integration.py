@@ -25,4 +25,4 @@ async def test_main_execution() -> None:
 
     # The task should complete with a CancelledError, which main suppresses via its try/finally
     with contextlib.suppress(asyncio.CancelledError):
-        await worker_task
+        await asyncio.wait_for(worker_task, timeout=5.0)

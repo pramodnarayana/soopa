@@ -131,9 +131,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             .values(
                 gs_sender_id=gs_sender_id,
                 gs_receiver_id=gs_receiver_id,
-                transaction_type=transaction_type,
             )
         )
+        if transaction_type is not None:
+            stmt = stmt.values(transaction_type=transaction_type)
+
         await self.session.execute(stmt)
 
     async def update_edi_message_status(self, trace_id: str, status: str) -> None:
@@ -186,8 +188,26 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         result = await self.session.execute(stmt)
         return cast(CursorResult, result).rowcount > 0
 
-    async def update_api_payload_status(self, trace_id: str, status: str) -> None:
-        stmt = update(ApiGateway).where(ApiGateway.trace_id == str(trace_id)).values(status=status)
+    async def update_api_payload_status(
+        self,
+        trace_id: str,
+        status: str,
+        webhook_url: str | None = None,
+        http_status_code: int | None = None,
+        response: str | None = None,
+    ) -> None:
+        stmt = (
+            update(ApiGateway)
+            .where(ApiGateway.trace_id == str(trace_id))
+            .values(status=status)
+        )
+        if webhook_url is not None:
+            stmt = stmt.values(webhook_url=webhook_url)
+        if http_status_code is not None:
+            stmt = stmt.values(http_status_code=http_status_code)
+        if response is not None:
+            stmt = stmt.values(response=response)
+
         await self.session.execute(stmt)
 
     async def publish_outbox_event(
@@ -338,7 +358,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         record = result.scalar_one_or_none()
         if not record:
             return None
-        return _map_edi_message_to_domain(record)
+
+        hydrated_payload = await hydrate_edi_data(self.storage, record.storage_uri, record.edi_data)
+        return _map_edi_message_to_domain(record, hydrated_payload)
 
     async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         stmt = (
@@ -379,6 +401,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             stmt = (
                 select(EdiJson.id)
                 .where(
+                    EdiJson.tenant_id == command.tenant_id,
                     EdiJson.trace_id == command.trace_id,
                     EdiJson.direction == command.direction,
                     EdiJson.transaction_type == command.transaction_type,
@@ -855,7 +878,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
 
 
-def _map_edi_message_to_domain(record: EdiMessage) -> EdiMessageDomainModel:
+def _map_edi_message_to_domain(
+    record: EdiMessage, hydrated_edi_data: str | None = None
+) -> EdiMessageDomainModel:
     """
     Explicit ORM → Domain mapper for EdiMessage.
     Any structural mismatch between the ORM model and domain model is a clear
@@ -877,7 +902,8 @@ def _map_edi_message_to_domain(record: EdiMessage) -> EdiMessageDomainModel:
         receiver_id=record.receiver_id,
         gs_sender_id=record.gs_sender_id,
         gs_receiver_id=record.gs_receiver_id,
-        edi_data=record.edi_data,
+        edi_data=hydrated_edi_data if hydrated_edi_data is not None else record.edi_data,
         trading_partner_id=record.trading_partner_id,
         storage_uri=record.storage_uri,
+        parent_trace_id=record.parent_trace_id,
     )

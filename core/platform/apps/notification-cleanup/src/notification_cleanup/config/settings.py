@@ -10,7 +10,7 @@ from seedwork.infrastructure.config_models import (
 
 
 class NotificationCleanupAwsSettings(PlatformAwsSettings):
-    sns_topic_arn: str = Field(validation_alias="SNS_TOPIC_ARN")
+    sns_topic_arn: str = Field(validation_alias="SNS_NOTIFICATION_EVENTS_TOPIC_ARN")
 
 
 class SqsSettings(BaseSettings):

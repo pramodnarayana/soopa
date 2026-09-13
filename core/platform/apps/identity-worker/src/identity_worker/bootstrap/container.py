@@ -45,6 +45,17 @@ class TenantProvisionedPayload(BaseModel):
     tenant_id: str
 
 
+class AppSubscribedPayload(BaseModel):
+    tenant_id: str
+    idp_project_id: str | None = None
+
+
+class AppUnsubscribedPayload(BaseModel):
+    tenant_id: str
+    app_id: str
+    idp_project_id: str | None = None
+
+
 class UserCreatedPayload(BaseModel):
     user_id: str
     tenant_id: str
@@ -109,6 +120,18 @@ class WorkerContainer:
             payload = TenantProvisionedPayload.model_validate(event.payload)
             await identity_service.handle_tenant_provisioned(payload.tenant_id)
 
+        async def identity_app_subscribed_handler(event: IdentityEventMessage) -> None:
+            payload = AppSubscribedPayload.model_validate(event.payload)
+            await identity_service.handle_app_subscribed(
+                tenant_id=payload.tenant_id, idp_project_id=payload.idp_project_id
+            )
+
+        async def identity_app_unsubscribed_handler(event: IdentityEventMessage) -> None:
+            payload = AppUnsubscribedPayload.model_validate(event.payload)
+            await identity_service.handle_app_unsubscribed(
+                tenant_id=payload.tenant_id, idp_project_id=payload.idp_project_id
+            )
+
         async def identity_user_created_handler(event: IdentityEventMessage) -> None:
             payload = UserCreatedPayload.model_validate(event.payload)
             await identity_service.handle_user_created(
@@ -154,6 +177,8 @@ class WorkerContainer:
         consumer.subscribe(
             IdentityEventType.TENANT_PROVISIONED, identity_tenant_provisioned_handler
         )
+        consumer.subscribe(IdentityEventType.APP_SUBSCRIBED, identity_app_subscribed_handler)
+        consumer.subscribe(IdentityEventType.APP_UNSUBSCRIBED, identity_app_unsubscribed_handler)
         consumer.subscribe(IdentityEventType.USER_INVITED, identity_user_created_handler)
         consumer.subscribe(IdentityEventType.USER_UPDATED, identity_user_updated_handler)
         consumer.subscribe(

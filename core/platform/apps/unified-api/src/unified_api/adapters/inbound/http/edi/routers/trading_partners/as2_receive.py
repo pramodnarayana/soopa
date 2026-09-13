@@ -1,6 +1,6 @@
 import structlog
-from edi.application.dtos import ProcessInboundAs2Command
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
+    ProcessInboundAs2Command,
     ProcessInboundAs2MessageUseCase,
 )
 from edi.domain.exceptions import OrchestrationError

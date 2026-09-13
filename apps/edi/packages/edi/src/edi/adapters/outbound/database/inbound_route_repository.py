@@ -144,6 +144,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             InboundRoute.isa_sender_id == isa_sender_id,
             InboundRoute.isa_receiver_id == isa_receiver_id,
             InboundRoute.tenant_id == tenant_id,
+            InboundRoute.active.is_(True),
             InboundRoute.deleted_at.is_(None),
         )
         if transaction_type:

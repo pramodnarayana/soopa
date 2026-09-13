@@ -8,6 +8,7 @@ from typing import Any
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
 )
@@ -67,7 +68,7 @@ def _setup_registry(
     def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
         strategies = {
             "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
-            "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault),
+            "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault, db_encryption),
             "as2_partner_id": As2DeliveryStrategy(uow, as2_delivery, vault),
         }
         return DeliveryRouterUseCase(uow=uow, strategies=strategies)

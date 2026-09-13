@@ -75,6 +75,8 @@ class CreateAS2PartnershipUseCase:
             tenant_id=tenant_id,
             active=True,
             mdn_url=cmd.mdn_url,
+            credentials_vault_ref=cmd.credentials_vault_ref,
+            advanced_flags=cmd.advanced_flags,
         )
 
         aggregate.add_domain_event(

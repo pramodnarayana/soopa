@@ -3,17 +3,20 @@ from typing import Any
 from edi.adapters.outbound.database.uow_adapter import (
     SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
 )
-from edi.application.dtos import (
-    UNSET,
-    CreateAS2TradingPartnerCmd,
-    RotateAS2CertificateCmd,
-    UpdateAS2TradingPartnerCmd,
-)
 from edi.application.use_cases.as2_partners import (
     CreateAS2PartnerUseCase,
     DeleteAS2PartnerUseCase,
     RotateAS2CertificatesUseCase,
     UpdateAS2PartnerUseCase,
+)
+from edi.application.use_cases.as2_partners.create_as2_partner_use_case import (
+    CreateAS2TradingPartnerCmd,
+)
+from edi.application.use_cases.as2_partners.rotate_as2_certificates_use_case import (
+    RotateAS2CertificateCmd,
+)
+from edi.application.use_cases.as2_partners.update_as2_partner_use_case import (
+    UpdateAS2TradingPartnerCmd,
 )
 from edi.config.constants import SecretCategory
 from edi.config.settings import get_settings
@@ -27,6 +30,7 @@ from edi.domain.exceptions import (
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
@@ -41,7 +45,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     UpdateAS2TradingPartnerRequest,
 )
 
-router = APIRouter(tags=["Platform Partners - AS2"])
+router = APIRouter(tags=["Partners - AS2"])
 
 
 @router.post(
@@ -133,7 +137,7 @@ async def _rotate_as2_certificates(
     "/as2/certificates/{partner_id}/rotate",
     response_model=AS2TradingPartnerResponse,
 )
-async def rotate_platform_as2_certificates(
+async def rotate_as2_certificates(
     partner_id: str,
     request: RotateCertificateRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
@@ -158,7 +162,7 @@ async def rotate_platform_as2_certificates(
     "/as2/certificates/{partner_id}/export",
     response_model=CertificateExportResponse,
 )
-async def export_platform_as2_certificates(
+async def export_as2_certificates(
     partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
@@ -221,7 +225,7 @@ async def delete_certificate_secret(
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
     async with uow:
-        in_use = await uow.as2_partners.is_vault_ref_in_use(vault_ref)
+        in_use = await uow.as2_partners.is_vault_ref_in_use(PLATFORM_TENANT_ID, vault_ref)
         if in_use:
             raise HTTPException(
                 status_code=400, detail="Cannot delete a private key that is currently in use."
@@ -235,7 +239,7 @@ async def delete_certificate_secret(
     response_model=AS2TradingPartnerResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_platform_as2_partner(
+async def create_as2_partner(
     request: CreateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
@@ -247,7 +251,7 @@ async def create_platform_as2_partner(
     If is_local is True, automatically generates a self-signed cert and stores private key in Vault.
     """
     logger.info(
-        "create_platform_as2_partner_request_received",
+        "create_as2_partner_request_received",
         name=request.name if request.name is not None else UNSET,
         as2_id=request.as2_id if request.as2_id is not None else UNSET,
         is_local=request.is_local if request.is_local is not None else UNSET,
@@ -306,7 +310,7 @@ async def create_platform_as2_partner(
 
 
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])
-async def list_platform_as2_partners(
+async def list_as2_partners(
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
 ) -> Any:
     """
@@ -328,22 +332,22 @@ async def list_platform_as2_partners(
 
 
 @router.put("/as2/trading-partners/{partner_id}", response_model=AS2TradingPartnerResponse)
-async def update_platform_as2_partner(
+async def update_as2_partner(
     partner_id: str,
     request: UpdateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
 ) -> Any:
     """Updates a global AS2 partner."""
+    logger.info(
+        "api_update_as2_partner_request_received",
+        partner_id=partner_id,
+        raw_payload=request.model_dump(exclude_unset=True),
+        fields_set=list(request.model_fields_set),
+    )
     async with uow:
         use_case = UpdateAS2PartnerUseCase(uow=uow)
-        cmd = UpdateAS2TradingPartnerCmd(
-            name=request.name if request.name is not None else UNSET,
-            as2_id=request.as2_id if request.as2_id is not None else UNSET,
-            is_local=request.is_local if request.is_local is not None else UNSET,
-            url=str(request.url) if request.url else None,
-            active=request.active if request.active is not None else UNSET,
-        )
+        cmd = UpdateAS2TradingPartnerCmd(**request.model_dump(mode="json", exclude_unset=True))
         try:
             await use_case.execute(
                 tenant_id=PLATFORM_TENANT_ID,
@@ -377,7 +381,7 @@ async def update_platform_as2_partner(
 
 
 @router.delete("/as2/trading-partners/{partner_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_platform_as2_partner(
+async def delete_as2_partner(
     partner_id: str,
     uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),

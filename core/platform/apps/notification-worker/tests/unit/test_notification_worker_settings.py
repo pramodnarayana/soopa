@@ -9,20 +9,29 @@ This is a regression guard for the cast({}) anti-pattern that caused nested
 settings to silently fail to load environment variables during construction.
 """
 
+import os
+from collections.abc import Generator
+
 import pytest
+from database.utils import normalize_to_asyncpg
 
 from notification_worker.config.settings import get_settings
 
 
 @pytest.fixture(autouse=True)
-def notification_worker_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def notification_worker_env() -> Generator[None, None, None]:
     """Inject the minimum required environment variables for AppSettings construction."""
-    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pass@localhost:5432/testdb")
-    monkeypatch.setenv(
-        "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", "http://sqs.localhost/000/priority.fifo"
-    )
-    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    os.environ["DATABASE_URL"] = "postgres://global"
+    os.environ["SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL"] = "http://sqs.localhost/000/priority.fifo"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     get_settings.cache_clear()
+
+    try:
+        yield
+    finally:
+        os.environ.pop("DATABASE_URL", None)
+        os.environ.pop("SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", None)
+        os.environ.pop("AWS_DEFAULT_REGION", None)
 
 
 def test_app_settings_database_nested_model_loads_from_env() -> None:
@@ -30,7 +39,7 @@ def test_app_settings_database_nested_model_loads_from_env() -> None:
     settings = get_settings()
 
     assert settings.database.global_url is not None
-    assert "localhost" in settings.database.global_url
+    assert settings.database.global_url == normalize_to_asyncpg("postgres://global")
     # Ensure the property proxy works correctly
     assert settings.database_url == settings.database.global_url
 

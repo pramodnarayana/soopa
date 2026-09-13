@@ -4,6 +4,7 @@ from secret_store.ports.secret_store_port import SecretStorePort
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
 from edi.domain.enums import MessageStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.ports.outbound.field_encryption import FieldEncryptionPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -16,9 +17,11 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         uow: DataPlaneUnitOfWorkPort,
         sftp_delivery: SftpDeliveryPort,
         vault: SecretStorePort | None = None,
+        field_encryption: FieldEncryptionPort | None = None,
     ) -> None:
         super().__init__(uow, vault)
         self.sftp_delivery = sftp_delivery
+        self.field_encryption = field_encryption
 
     async def deliver(
         self,
@@ -45,6 +48,9 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
 
             password: str | None = None
             client_key: str | None = None
+
+            if partner.password_encrypted and self.field_encryption:
+                password = self.field_encryption.decrypt(partner.password_encrypted)
 
             if not password and partner.credentials_vault_ref and self.secret_store:
                 vault_secret = await self.secret_store.get_secret(partner.credentials_vault_ref)

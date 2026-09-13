@@ -39,7 +39,6 @@ packages = ["src/notification_email_worker"]
 
 [tool.mypy]
 strict = true
-disable_error_code = ["prop-decorator"]
 
 [[tool.mypy.overrides]]
 module = [

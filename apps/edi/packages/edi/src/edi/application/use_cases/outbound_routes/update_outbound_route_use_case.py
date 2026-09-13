@@ -51,7 +51,7 @@ class UpdateOutboundRouteUseCase:
         if not isinstance(cmd.trading_partner_id, UnsetType):
             aggregate.trading_partner_id = cmd.trading_partner_id
 
-        aggregate.updated_at = datetime.now(UTC).replace(tzinfo=None)
+        aggregate.updated_at = datetime.now(UTC)
 
         aggregate.add_domain_event(
             ProvisioningEvent(

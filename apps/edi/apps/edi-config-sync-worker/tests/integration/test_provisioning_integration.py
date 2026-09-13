@@ -54,7 +54,7 @@ from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
     EdiConfigSyncSqsDispatcher,
 )
-from config_sync_worker.domain.service import ProvisioningWorkerService
+from config_sync_worker.application.service import ProvisioningWorkerService
 
 load_dotenv()
 

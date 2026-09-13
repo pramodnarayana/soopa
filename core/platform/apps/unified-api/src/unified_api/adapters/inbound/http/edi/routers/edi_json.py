@@ -1,10 +1,12 @@
 from typing import cast
 
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
+from edi.application.use_cases.process_api_edi_json_use_case import (
+    ProcessApiEdiJsonCommand,
+    ProcessApiEdiJsonUseCase,
 )
-from edi.application.dtos import ProcessApiEdiJsonCommand
-from edi.application.use_cases.process_api_edi_json_use_case import ProcessApiEdiJsonUseCase
+from edi.ports.outbound.uow import (
+    DataPlaneUnitOfWorkPort as DataPlaneUnitOfWorkPort,
+)
 from fastapi import APIRouter, Depends, Header, status
 from seedwork.domain.types import JsonValue
 

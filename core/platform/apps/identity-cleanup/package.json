@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "uv run python -m identity_cleanup.main",
-    "dev": "PYTHONPATH=src uv run python -m identity_cleanup.main"
+    "start": "PYTHONUNBUFFERED=1 uv run python -m identity_cleanup.main",
+    "dev": "PYTHONUNBUFFERED=1 PYTHONPATH=src uv run python -m identity_cleanup.main"
   }
 }

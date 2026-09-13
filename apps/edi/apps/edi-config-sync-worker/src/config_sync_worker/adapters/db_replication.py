@@ -382,7 +382,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             "upsert_entity_started",
             tenant_id=tenant_id,
             model=tenant_model.__name__,
-            update_cols=str(update_cols),
+            update_cols=list(update_cols),
             global_entity_id=getattr(global_entity, "id", None),
         )
 

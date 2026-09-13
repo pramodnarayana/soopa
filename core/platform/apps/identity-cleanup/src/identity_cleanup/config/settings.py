@@ -1,4 +1,3 @@
-import typing
 from functools import lru_cache
 
 from pydantic import Field, computed_field
@@ -20,28 +19,26 @@ class SqsSettings(BaseSettings):
 class AppSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
-    )
-    aws: PlatformAwsSettings = Field(default_factory=lambda: typing.cast(PlatformAwsSettings, {}))
-    sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
+    database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
+    aws: PlatformAwsSettings = Field(default_factory=lambda: PlatformAwsSettings())
+    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def sqs_identity_jobs_queue_url(self) -> str:
         return self.sqs.identity_jobs_queue_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def aws_region(self) -> str:
         return self.aws.resolved_region

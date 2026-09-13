@@ -1,4 +1,3 @@
-import typing
 from functools import lru_cache
 
 from pydantic import Field, computed_field
@@ -33,11 +32,9 @@ class AppSettings(BaseSettings):
         validation_alias="SCHEDULER_MAX_CONCURRENT_JOBS", default=10, gt=0
     )
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
-    )
-    aws: PlatformAwsSettings = Field(default_factory=lambda: typing.cast(PlatformAwsSettings, {}))
-    sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
+    database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
+    aws: PlatformAwsSettings = Field(default_factory=PlatformAwsSettings)
+    sqs: SqsSettings = Field(default_factory=SqsSettings)
 
     @computed_field
     @property

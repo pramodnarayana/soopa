@@ -10,7 +10,7 @@ from seedwork.infrastructure.config_models import (
 
 
 class NotificationOutboxAwsSettings(PlatformAwsSettings):
-    sns_topic_arn: str = Field(validation_alias="SNS_TOPIC_ARN")
+    sns_topic_arn: str = Field(validation_alias="SNS_NOTIFICATION_EVENTS_TOPIC_ARN")
 
 
 class AppSettings(BaseSettings):

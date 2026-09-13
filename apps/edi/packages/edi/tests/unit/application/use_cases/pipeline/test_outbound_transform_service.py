@@ -1,9 +1,10 @@
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 """
 Unit tests for the OutboundTransformUseCase.
 Uses Fake Data Plane Unit Of Work and Fake Transformer.
 """
+
 
 import pytest
 
@@ -12,7 +13,11 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
 )
 from edi.config.settings import AppSettings
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
-from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork, FakeTransformerAdapter
+from edi.ports.outbound.transaction_repository import CreateEdiJsonCommand
+from edi.testing.fakes.pipeline_fakes import (
+    FakeDataPlaneUnitOfWork,
+    FakeTransformerAdapter,
+)
 
 pytestmark = pytest.mark.asyncio
 
@@ -40,7 +45,12 @@ def make_use_case(
     t = transformer or FakeTransformerAdapter()
     s = settings or FakeSettings.create()
     s_casted = typing.cast(AppSettings, s)
-    return DispatchOutboundTransformUseCase(uow=uow_casted, transformer=t, settings=s_casted)
+
+    return DispatchOutboundTransformUseCase(
+        uow=uow_casted,
+        transformer=t,
+        settings=s_casted,
+    )
 
 
 @pytest.mark.parametrize("payload", [{"data": "test"}, [{"data": "test"}]])
@@ -117,19 +127,22 @@ async def test_pipeline_fake_preserves_saved_edi_json_payload() -> None:
     repository = FakeDataPlaneUnitOfWork().repository
     payload = {"data": "saved"}
 
-    await repository.save_edi_json(
-        trace_id="trace-saved",
-        direction="OUTBOUND",
-        partnership_id=None,
-        transaction_type="850",
-        standard="X12",
-        sender_id=None,
-        receiver_id=None,
-        gs_sender_id=None,
-        gs_receiver_id=None,
-        business_metadata={},
-        payload=payload,
-        status="RECEIVED",
+    await repository.create_edi_json(
+        command=CreateEdiJsonCommand(
+            trace_id="trace-saved",
+            tenant_id="test-tenant",
+            direction=EdiDirection.OUTBOUND,
+            trading_partner_id=None,
+            transaction_type="850",
+            standard="X12",
+            sender_id=None,
+            receiver_id=None,
+            gs_sender_id=None,
+            gs_receiver_id=None,
+            business_metadata={},
+            payload=payload,
+            status=MessageStatus.RECEIVED,
+        )
     )
 
     saved = await repository.get_edi_json("trace-saved")

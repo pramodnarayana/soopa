@@ -18,7 +18,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
         "url": "http://local.example.com/as2",
     }
     res_local = await platform_client.post(
-        "/api/v1/platform/trading-partners/as2/trading-partners", json=local_payload
+        "/api/v1/trading-partners/as2/trading-partners", json=local_payload
     )
     assert res_local.status_code == 201, f"Failed to create local AS2 partner: {res_local.text}"
     local_partner = res_local.json()
@@ -32,7 +32,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
         "url": "http://remote.partner.com/as2",
     }
     res_remote = await platform_client.post(
-        "/api/v1/platform/trading-partners/as2/trading-partners", json=remote_payload
+        "/api/v1/trading-partners/as2/trading-partners", json=remote_payload
     )
     assert res_remote.status_code == 201, f"Failed to create remote AS2 partner: {res_remote.text}"
     remote_partner = res_remote.json()
@@ -48,7 +48,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
         "signature_algorithm": "SHA256",
     }
     res_partnership = await platform_client.post(
-        "/api/v1/platform/trading-partners/as2/partnerships", json=partnership_payload
+        "/api/v1/trading-partners/as2/partnerships", json=partnership_payload
     )
     assert res_partnership.status_code == 201, (
         f"Failed to create AS2 partnership: {res_partnership.text}"
@@ -61,7 +61,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
     partnership_id = partnership["id"]
 
     # 4. List AS2 Partnerships and verify creation
-    res_list = await platform_client.get("/api/v1/platform/trading-partners/as2/partnerships")
+    res_list = await platform_client.get("/api/v1/trading-partners/as2/partnerships")
     assert res_list.status_code == 200
     partnerships_list = res_list.json()
     assert any(p["id"] == partnership_id for p in partnerships_list)
@@ -73,7 +73,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
         "mdn_url": "http://mdn.example.com/receiver",
     }
     res_put = await platform_client.put(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{partnership_id}",
+        f"/api/v1/trading-partners/as2/partnerships/{partnership_id}",
         json=update_payload,
     )
     assert res_put.status_code == 200, f"Failed to update AS2 partnership: {res_put.text}"
@@ -83,12 +83,12 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
 
     # 6. Delete AS2 Partnership (DELETE)
     res_del = await platform_client.delete(
-        f"/api/v1/platform/trading-partners/as2/partnerships/{partnership_id}"
+        f"/api/v1/trading-partners/as2/partnerships/{partnership_id}"
     )
     assert res_del.status_code == 204, f"Failed to delete AS2 partnership: {res_del.text}"
 
     # 7. List again and verify deletion
-    res_list_after = await platform_client.get("/api/v1/platform/trading-partners/as2/partnerships")
+    res_list_after = await platform_client.get("/api/v1/trading-partners/as2/partnerships")
     assert res_list_after.status_code == 200
     assert not any(p["id"] == partnership_id for p in res_list_after.json())
 
@@ -106,7 +106,7 @@ async def test_as2_partnership_validation_error(platform_client: AsyncClient):
         "mdn_type": "SYNC",
     }
     response = await platform_client.post(
-        "/api/v1/platform/trading-partners/as2/partnerships", json=bad_payload
+        "/api/v1/trading-partners/as2/partnerships", json=bad_payload
     )
     assert response.status_code in (
         400,

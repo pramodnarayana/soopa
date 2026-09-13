@@ -114,6 +114,7 @@ async def tenant_db_session(tenant_db_connection):
         bind=tenant_db_connection,
         expire_on_commit=False,
         class_=AsyncSession,
+        info={"session_type": "tenant"},
         join_transaction_mode="create_savepoint",
     )
 

@@ -13,6 +13,7 @@ from edi.application.use_cases.transactions.bulk_replay_transactions_use_case im
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
+from edi.ports.outbound.transaction_repository import CreateEdiMessageCommand
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
@@ -37,13 +38,13 @@ async def test_replay_queues_validated_transaction(tenant_session):
 
     # Pre-seed the DB with an EdiMessage
     await uow.transactions.create_edi_message(
-        tenant_id,
-        {
-            "trace_id": trace_id,
-            "direction": "INBOUND",
-            "status": "RECEIVED",
-            "edi_data": "raw data",
-        },
+        command=CreateEdiMessageCommand(
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            direction="INBOUND",
+            status="RECEIVED",
+            edi_data="raw data",
+        )
     )
 
     service = ReplayTransactionUseCase(uow)
@@ -75,22 +76,22 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
 
     # Pre-seed the DB
     await uow.transactions.create_edi_message(
-        tenant_id,
-        {
-            "trace_id": trace_id_1,
-            "direction": "INBOUND",
-            "status": "RECEIVED",
-            "edi_data": "raw data",
-        },
+        command=CreateEdiMessageCommand(
+            tenant_id=tenant_id,
+            trace_id=trace_id_1,
+            direction="INBOUND",
+            status="RECEIVED",
+            edi_data="raw data",
+        )
     )
     await uow.transactions.create_edi_message(
-        tenant_id,
-        {
-            "trace_id": trace_id_2,
-            "direction": "INBOUND",
-            "status": "RECEIVED",
-            "edi_data": "raw data",
-        },
+        command=CreateEdiMessageCommand(
+            tenant_id=tenant_id,
+            trace_id=trace_id_2,
+            direction="INBOUND",
+            status="RECEIVED",
+            edi_data="raw data",
+        )
     )
 
     service = BulkReplayTransactionsUseCase(uow)

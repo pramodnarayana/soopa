@@ -1,4 +1,3 @@
-import typing
 from functools import lru_cache
 
 from pydantic import Field, computed_field
@@ -27,61 +26,57 @@ class AppSettings(BaseSettings):
 
     app_env: str = Field(validation_alias="ENV", default="production")
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
-    )
-    aws: IdentityAwsSettings = Field(default_factory=lambda: typing.cast(IdentityAwsSettings, {}))
-    sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
-    identity: PlatformIdentitySettings = Field(
-        default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
-    )
+    database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
+    aws: IdentityAwsSettings = Field(default_factory=lambda: IdentityAwsSettings())
+    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
+    identity: PlatformIdentitySettings = Field(default_factory=lambda: PlatformIdentitySettings())
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def sns_identity_events_topic_arn(self) -> str:
         return self.aws.sns_identity_events_topic_arn
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def sqs_identity_sync_queue_url(self) -> str:
         return self.sqs.identity_sync_queue_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def aws_region(self) -> str:
         return self.aws.resolved_region
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def zitadel_api_url(self) -> str:
         return self.identity.api_url
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def zitadel_machine_key(self) -> str:
         return self.identity.machine_key
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def zitadel_ucp_project_id(self) -> str:
         return self.identity.ucp_project_id
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def zitadel_default_user_password(self) -> str:
         return self.identity.default_user_password
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def zitadel_tenant_role_group(self) -> str:
         return self.identity.tenant_role_group

@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "uv run python -m notification_cleanup.main",
-    "dev": "PYTHONPATH=src uv run python -m notification_cleanup.main",
+    "start": "PYTHONUNBUFFERED=1 uv run python -m notification_cleanup.main",
+    "dev": "PYTHONUNBUFFERED=1 PYTHONPATH=src uv run python -m notification_cleanup.main",
     "test": "echo 'No unit tests in this module'",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "test:integration": "uv run pytest tests/integration",
