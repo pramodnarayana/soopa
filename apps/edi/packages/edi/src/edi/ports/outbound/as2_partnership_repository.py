@@ -13,3 +13,9 @@ class AS2PartnershipRepositoryPort(Protocol):
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None: ...
+    async def get_as2_partnership_by_identifiers(
+        self, tenant_id: str, local_partner_id: str, remote_partner_id: str
+    ) -> AS2PartnershipDomainModel | None: ...
+    async def get_as2_partnerships_by_remote_partner_id(
+        self, tenant_id: str, remote_partner_id: str
+    ) -> list[AS2PartnershipDomainModel]: ...

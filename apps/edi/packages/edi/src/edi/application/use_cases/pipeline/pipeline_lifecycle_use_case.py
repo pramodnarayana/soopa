@@ -66,14 +66,6 @@ class PipelineLifecycleUseCase:
                     update_kwargs["trading_partner_id"] = trading_partner_id
                 if "standard" in payload and payload["standard"] is not None:
                     update_kwargs["standard"] = str(payload["standard"])
-                if "isa_sender_id" in payload and payload["isa_sender_id"] is not None:
-                    update_kwargs["sender_id"] = str(payload["isa_sender_id"])
-                if "isa_receiver_id" in payload and payload["isa_receiver_id"] is not None:
-                    update_kwargs["receiver_id"] = str(payload["isa_receiver_id"])
-                if "gs_sender_id" in payload and payload["gs_sender_id"] is not None:
-                    update_kwargs["gs_sender_id"] = str(payload["gs_sender_id"])
-                if "gs_receiver_id" in payload and payload["gs_receiver_id"] is not None:
-                    update_kwargs["gs_receiver_id"] = str(payload["gs_receiver_id"])
 
                 if update_kwargs:
                     await self.uow.transactions.update_edi_json(
@@ -81,10 +73,6 @@ class PipelineLifecycleUseCase:
                             trace_id=trace_id,
                             trading_partner_id=update_kwargs.get("trading_partner_id"),
                             standard=update_kwargs.get("standard"),
-                            sender_id=update_kwargs.get("sender_id"),
-                            receiver_id=update_kwargs.get("receiver_id"),
-                            gs_sender_id=update_kwargs.get("gs_sender_id"),
-                            gs_receiver_id=update_kwargs.get("gs_receiver_id"),
                         )
                     )
 

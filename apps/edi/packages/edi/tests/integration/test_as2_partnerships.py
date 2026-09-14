@@ -145,6 +145,7 @@ def _create_partnership(
             "url": None,
             "public_cert_pem": None,
             "public_cert_vault_ref": None,
+            "private_key_pem": "FAKE_PRIVATE_KEY",
             "private_key_vault_ref": None,
         },
     )

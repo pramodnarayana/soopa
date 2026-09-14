@@ -28,15 +28,20 @@ pytestmark = [
 ]
 
 
+from identity_worker.config.settings import get_settings
+
+
 @pytest.fixture
 def zitadel_projects_adapter():
     # Will automatically pick up env vars via config.py
-    return ZitadelProjectsAdapter()
+    return ZitadelProjectsAdapter(settings=get_settings())
 
 
 @pytest.fixture
 def zitadel_orgs_adapter(zitadel_projects_adapter):
-    return ZitadelOrganizationsAdapter(project_provider=zitadel_projects_adapter)
+    return ZitadelOrganizationsAdapter(
+        project_provider=zitadel_projects_adapter, settings=get_settings()
+    )
 
 
 @pytest.fixture
@@ -85,7 +90,7 @@ async def test_full_zitadel_lifecycle(
 
         # 3. Test Create User
         test_email = f"testuser_{uuid.uuid4()}@example.com"
-        user_id = await zitadel_users_adapter.create_user(
+        user_id, _ = await zitadel_users_adapter.create_user(
             org_id=org_id,
             email=test_email,
             first_name="Integration",

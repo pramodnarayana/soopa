@@ -1,7 +1,9 @@
+import base64
 import contextlib
 import email
 import io
 import re
+import uuid
 import warnings
 from collections.abc import Callable
 from email import policy
@@ -19,6 +21,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.serialization import pkcs7
 from cryptography.utils import CryptographyDeprecationWarning
 
+import edi.core.patches.cryptography  # noqa: F401 - applies legacy 3DES patch
 from edi.domain.enums import As2EncryptionAlgorithm, As2SignatureAlgorithm
 
 
@@ -213,14 +216,16 @@ def sign_payload(
 ) -> bytes:
     """
     Signs a payload for AS2 transmission (S/MIME multipart/signed).
-    Uses native cryptography.hazmat to keep private keys in memory.
+    Uses native cryptography.hazmat to generate a detached signature (DER), and manually
+    constructs the S/MIME wrapper using strict CRLF boundaries to bypass JavaMail truncation
+    bugs in older OpenAS2/BouncyCastle verifiers.
     """
+
     private_key = serialization.load_pem_private_key(private_key_pem, password=None)
     cert = x509.load_pem_x509_certificate(public_cert_pem)
 
     alg_map = {
         # AS2 structurally mandates SHA1 for backward compatibility.
-        # Ignored S303 inline because Ruff per-file-ignores fails to match in this monorepo context.
         As2SignatureAlgorithm.SHA1: hashes.SHA1(),  # noqa: S303
         As2SignatureAlgorithm.SHA256: hashes.SHA256(),
         As2SignatureAlgorithm.SHA384: hashes.SHA384(),
@@ -233,17 +238,55 @@ def sign_payload(
         raise ValueError(f"Unsupported signature algorithm: {algorithm}")
     hash_alg = alg_map[algorithm]
 
-    builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
-
-    # Assert structural type for mypy using the expected RSA private key
-    # We also cast hash_alg to SHA256 because cryptography's type stub artificially
-    # blocks SHA1 (which is required by legacy AS2 partners).
+    # Typecasting to satisfy mypy
     rsa_key = cast(rsa.RSAPrivateKey, private_key)
+
+    # 1. Generate the raw detached CMS signature bag in DER format.
+    # This mathematically guarantees the exact `payload` bytes are hashed and signed.
+    builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
     hash_type = cast(hashes.SHA256, hash_alg)
     builder = builder.add_signer(cert, rsa_key, hash_algorithm=hash_type)
 
-    # AS2 requires S/MIME encoding for the signed payload
-    return builder.sign(serialization.Encoding.SMIME, options=[])
+    try:
+        der_sig = builder.sign(
+            serialization.Encoding.DER, options=[pkcs7.PKCS7Options.DetachedSignature]
+        )
+    except Exception as e:
+        raise ValueError(f"Native Signature Generation Error: {e}") from e
+
+    # 2. Base64 encode the CMS bag and chunk it to 76 characters per line (MIME standard)
+    b64_sig = base64.b64encode(der_sig).decode("ascii")
+    chunked_sig = "\r\n".join(b64_sig[i : i + 76] for i in range(0, len(b64_sig), 76))
+
+    boundary = f"----=_Part_{uuid.uuid4().hex}"
+
+    # We must format micalg correctly for older AS2 systems (sha-1 vs sha1)
+    micalg = "sha-1" if algorithm == As2SignatureAlgorithm.SHA1 else algorithm.value
+
+    # 3. Construct the strictly canonicalized multipart/signed S/MIME byte stream.
+    # We guarantee that the exact `payload` is what is sent, and the CRLF boundaries
+    # strictly conform to RFC 2046, avoiding native email generator `\n` canonicalization.
+    smime_headers = (
+        f"MIME-Version: 1.0\r\n"
+        f'Content-Type: multipart/signed; protocol="application/x-pkcs7-signature"; micalg="{micalg}"; boundary="{boundary}"\r\n'
+        f"\r\n"
+    )
+
+    smime_body = (
+        (f"--{boundary}\r\n").encode("ascii")
+        + payload
+        + (
+            f"\r\n--{boundary}\r\n"
+            f'Content-Type: application/x-pkcs7-signature; name="smime.p7s"\r\n'
+            f"Content-Transfer-Encoding: base64\r\n"
+            f'Content-Disposition: attachment; filename="smime.p7s"\r\n'
+            f"\r\n"
+            f"{chunked_sig}\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("ascii")
+    )
+
+    return smime_headers.encode("ascii") + smime_body
 
 
 def encrypt_payload(

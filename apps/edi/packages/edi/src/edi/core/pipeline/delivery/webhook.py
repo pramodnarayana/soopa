@@ -86,7 +86,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 status=MessageStatus.DELIVERED,
                 webhook_url=partner.url,
                 http_status_code=status_code,
-                response=response_text[:4000] if response_text else None, # Cap response size
+                response=response_text[:4000] if response_text else None,  # Cap response size
             )
             await self._emit_delivery_completed(
                 trace_id, edi_msg.direction, MessageStatus.DELIVERED

@@ -51,8 +51,8 @@ class EdiJsonListResponse(BaseModel):
 
 class EdiTraceResponse(BaseModel):
     edi_message: EdiMessageDTO
-    edi_jsons: list[EdiJsonDTO]
-    api_gateways: list[ApiGatewayDTO]
+    edi_json: list[EdiJsonDTO]
+    api_gateway: list[ApiGatewayDTO]
     trading_partner_name: str | None = None
 
 
@@ -140,8 +140,8 @@ async def get_edi_trace(
 
             return EdiTraceResponse(
                 edi_message=result.edi_message,
-                edi_jsons=result.edi_jsons,
-                api_gateways=result.api_gateways,
+                edi_json=result.edi_jsons,
+                api_gateway=result.api_gateways,
                 trading_partner_name=trading_partner_name,
             )
         except TransactionNotFoundError as e:

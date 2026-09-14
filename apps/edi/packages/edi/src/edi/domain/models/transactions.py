@@ -11,10 +11,6 @@ class EdiJsonDomainModel(EdiRecordBase):
     trading_partner_id: str | None = None
     transaction_type: str | None = None
     standard: str | None = None
-    sender_id: str | None = None
-    receiver_id: str | None = None
-    gs_sender_id: str | None = None
-    gs_receiver_id: str | None = None
     business_metadata: dict[str, JsonValue] | None = None
     payload: JsonValue | None = None
     storage_uri: str | None = None

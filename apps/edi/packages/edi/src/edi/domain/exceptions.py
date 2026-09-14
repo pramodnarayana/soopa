@@ -88,3 +88,36 @@ class TransactionNotFoundError(DomainError):
     def __init__(self, trace_id: str):
         super().__init__(f"Transaction trace '{trace_id}' not found.")
         self.trace_id = trace_id
+
+
+class OutboundRouteNotFoundError(DomainError):
+    """Raised when the outbound EDI header or route config cannot be resolved for a trading partner."""
+
+    def __init__(self, trading_partner_id: str, tenant_id: str):
+        super().__init__(
+            f"No outbound route/header found for trading_partner_id='{trading_partner_id}' "
+            f"and tenant_id='{tenant_id}'."
+        )
+        self.trading_partner_id = trading_partner_id
+        self.tenant_id = tenant_id
+
+
+class UnresolvableTransactionTypeError(DomainError):
+    """
+    Raised when the outbound transform pipeline cannot determine the EDI
+    transaction type for a given trace.
+
+    This occurs when all three resolution strategies fail:
+      1. No explicit type on the route config (or it is a wildcard '*').
+      2. No transaction_type stored on the EdiJson record.
+      3. The payload structure does not match any known extraction pattern.
+    """
+
+    def __init__(self, trace_id: str):
+        super().__init__(
+            f"Cannot determine transaction_type for trace_id='{trace_id}'. "
+            "Provide it explicitly in the API request body (transaction_type field) "
+            "or configure a concrete transaction_type on the outbound route "
+            "(the wildcard '*' requires the payload to encode the type internally)."
+        )
+        self.trace_id = trace_id

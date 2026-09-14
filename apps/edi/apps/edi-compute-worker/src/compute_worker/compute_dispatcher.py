@@ -2,7 +2,16 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
+from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
+    ComputeOutboundTransformCommand,
+    ComputeOutboundTransformUseCase,
+)
+from edi.application.use_cases.pipeline.compute_transform_use_case import (
+    ComputeTransformCommand,
+    ComputeTransformUseCase,
+)
+from edi.domain.enums import EdiDirection, EdiStandard
+from pubsub.aws.debezium_parser import DebeziumPayloadParser
 
 logger = structlog.get_logger(__name__)
 
@@ -19,32 +28,54 @@ class EdiComputeDispatcher:
     def __init__(
         self,
         use_case_factory: Callable[[str], Awaitable[ComputeTransformUseCase]],
+        outbound_use_case_factory: Callable[[str], Awaitable[ComputeOutboundTransformUseCase]],
     ):
         self.use_case_factory = use_case_factory
+        self.outbound_use_case_factory = outbound_use_case_factory
 
     async def dispatch_raw(self, body_json: dict[str, Any]) -> None:
         """Parses the SQS payload and invokes the pure Domain logic."""
         try:
-            if isinstance(body_json, dict):
-                payload = body_json.get("payload", body_json)
-            else:
-                payload = body_json
-            if not isinstance(payload, dict):
-                raise InvalidMessageError("Message payload must be a dictionary")
+            payload = DebeziumPayloadParser.extract_payload(body_json)
+            if not payload:
+                raise InvalidMessageError("Message payload must be a valid JSON dictionary")
 
-            # Extract and validate required fields
-            trace_id = payload.get("trace_id")
-            standard = payload.get("standard", "X12")
-            transaction_type = payload.get("transaction_type", "UNKNOWN")
-            tenant_id = payload.get("tenant_id")
+            try:
+                direction_val = payload.get("direction")
+                direction = str(direction_val if direction_val else EdiDirection.INBOUND.value)
 
-            if not trace_id or not isinstance(trace_id, str) or not trace_id.strip():
-                raise InvalidMessageError("Required field 'trace_id' is missing or empty")
+                base_kwargs = {
+                    "trace_id": str(payload.get("trace_id", "")),
+                    "tenant_id": str(payload.get("tenant_id", "")),
+                    "standard": str(payload.get("standard", EdiStandard.X12.name)),
+                }
 
-            if not tenant_id:
-                raise InvalidMessageError("Required field 'tenant_id' is missing")
+                command: ComputeTransformCommand | ComputeOutboundTransformCommand
+                if direction == EdiDirection.INBOUND.value:
+                    # Inbound: transaction_type is extracted from the EDI file itself
+                    # at transform time — it is NOT required in the SQS event payload.
+                    command = ComputeTransformCommand(**base_kwargs)
 
-            trace_id = str(trace_id).strip()
+                elif direction == EdiDirection.OUTBOUND.value:
+                    # Outbound: transaction_type MUST be present in the event payload.
+                    # It was resolved and embedded by DispatchOutboundTransformUseCase
+                    # before the compute event was enqueued.
+                    raw_transaction_type = payload.get("transaction_type")
+                    if not raw_transaction_type or not str(raw_transaction_type).strip():
+                        raise InvalidMessageError(
+                            f"Missing or empty transaction_type in outbound compute event "
+                            f"for trace_id={payload.get('trace_id', 'unknown')}"
+                        )
+                    command = ComputeOutboundTransformCommand(
+                        **base_kwargs,
+                        transaction_type=str(raw_transaction_type).strip(),
+                        route_config=payload.get("route_config", {}),
+                    )
+
+                else:
+                    raise InvalidMessageError(f"Invalid direction: {direction}")
+            except ValueError as e:
+                raise InvalidMessageError(str(e))
 
         except InvalidMessageError as e:
             logger.warning("edi_message_validation_failed", error=str(e))
@@ -56,16 +87,17 @@ class EdiComputeDispatcher:
             return
 
         try:
-            logger.info("sqs_message_received", trace_id=trace_id)
+            logger.info("sqs_message_received", trace_id=command.trace_id)
 
             # Execute Hexagonal Use Case dynamically instantiated for the correct Tenant
-            use_case = await self.use_case_factory(tenant_id)
+            if isinstance(command, ComputeTransformCommand):
+                inbound_use_case = await self.use_case_factory(command.tenant_id)
+                await inbound_use_case.execute(command)
+            else:
+                outbound_use_case = await self.outbound_use_case_factory(command.tenant_id)
+                await outbound_use_case.execute(command)
 
-            await use_case.execute(
-                trace_id=trace_id, standard=standard, transaction_type=transaction_type
-            )
-
-            logger.info("edi_transformed_successfully", trace_id=trace_id)
+            logger.info("edi_transformed_successfully", trace_id=command.trace_id)
 
         except Exception:
             logger.exception("edi_message_processing_failed")

@@ -241,10 +241,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    gs_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    gs_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     business_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
@@ -256,7 +252,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
-        Index("ix_edi_json_sender_recv", "sender_id", "receiver_id", "created_at"),
         CheckConstraint(
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_edi_json_data_or_uri",

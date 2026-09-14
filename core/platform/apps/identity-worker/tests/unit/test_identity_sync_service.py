@@ -40,7 +40,7 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
         email: str,
         first_name: str,
         last_name: str,
-    ) -> str:
+    ) -> tuple[str, bool]:
         user_id = f"idp_{uuid.uuid4()}"
         self.users[user_id] = {
             "org_id": org_id,
@@ -49,7 +49,7 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
             "last_name": last_name,
         }
         self.user_status[user_id] = "active"
-        return user_id
+        return user_id, True
 
     async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
         if self.fail_role_assignment:
@@ -257,7 +257,7 @@ async def test_handle_user_updated(fakes, uow_factory, setup_db):
     service = IdentitySyncService(idp, user_idp, uow_factory)
 
     # Pre-populate fake user
-    idp_user_id = await user_idp.create_user(
+    idp_user_id, _ = await user_idp.create_user(
         setup_db["idp_tenant_id"], "old@test.com", "Old", "Name"
     )
 
@@ -277,7 +277,9 @@ async def test_handle_user_status_toggled(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
     service = IdentitySyncService(idp, user_idp, uow_factory)
 
-    idp_user_id = await user_idp.create_user(setup_db["idp_tenant_id"], "test@test.com", "F", "L")
+    idp_user_id, _ = await user_idp.create_user(
+        setup_db["idp_tenant_id"], "test@test.com", "F", "L"
+    )
     assert user_idp.user_status[idp_user_id] == "active"
 
     await service.handle_user_status_toggled(
@@ -291,7 +293,9 @@ async def test_handle_user_deleted(fakes, uow_factory, setup_db):
     idp, user_idp = fakes
     service = IdentitySyncService(idp, user_idp, uow_factory)
 
-    idp_user_id = await user_idp.create_user(setup_db["idp_tenant_id"], "test@test.com", "F", "L")
+    idp_user_id, _ = await user_idp.create_user(
+        setup_db["idp_tenant_id"], "test@test.com", "F", "L"
+    )
     assert idp_user_id in user_idp.users
 
     await service.handle_user_deleted(idp_user_id=idp_user_id)

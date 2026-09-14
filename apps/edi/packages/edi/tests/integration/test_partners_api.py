@@ -50,11 +50,10 @@ async def test_create_and_get_as2_partner(platform_client: AsyncClient):
         "as2_id": "AS2_TEST_" + generate_id("id")[:8],
         "is_local": True,
         "url": "http://example.com/as2",
+        "private_key_pem": "FAKE_PRIVATE_KEY",
     }
 
-    response = await platform_client.post(
-        "/api/v1/as2/trading-partners", json=payload
-    )
+    response = await platform_client.post("/api/v1/as2/trading-partners", json=payload)
     assert response.status_code == 201, f"Failed to create AS2 partner: {response.text}"
     data = response.json()
     assert data["name"] == payload["name"]
@@ -74,9 +73,7 @@ async def test_create_and_get_as2_partner(platform_client: AsyncClient):
     assert rotate_res.status_code == 200
 
     # Test export certificates
-    export_res = await platform_client.get(
-        f"/api/v1/as2/certificates/{data['id']}/export"
-    )
+    export_res = await platform_client.get(f"/api/v1/as2/certificates/{data['id']}/export")
     assert export_res.status_code == 200
     export_data = export_res.json()
     assert "public_cert_pem" in export_data

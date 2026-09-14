@@ -71,38 +71,38 @@ awslocal sns subscribe --topic-arn "$IDENTITY_EVENTS_TOPIC_ARN" --protocol sqs -
 
 # Identity worker needs to listen to UCP events to provision tenants
 awslocal sns subscribe --topic-arn "$UCP_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$IDENTITY_EVENTS_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"tenant.provisioned\", \"app.subscribed\", \"app.unsubscribed\"]}", "FilterPolicyScope": "MessageBody", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"tenant.provisioned\", \"app.subscribed\", \"app.unsubscribed\"]}", "RawMessageDelivery": "true"}'
 
 # Setup Data Plane SNS to SQS Subscriptions with Payload Filtering
 awslocal sns subscribe \
     --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
     --protocol sqs \
     --notification-endpoint "$EDI_TRANSFORM_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORM_EVENT\", \"COMPUTE_TRANSFORM_EVENT\"]}", "FilterPolicyScope": "MessageBody", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORM_EVENT\", \"COMPUTE_TRANSFORM_EVENT\"]}", "RawMessageDelivery": "true"}'
 
 awslocal sns subscribe \
     --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
     --protocol sqs \
     --notification-endpoint "$EDI_LIFECYCLE_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORM_COMPLETED\", \"DELIVERY_COMPLETED\"]}", "FilterPolicyScope": "MessageBody", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORM_COMPLETED\", \"DELIVERY_COMPLETED\"]}", "RawMessageDelivery": "true"}'
 
 awslocal sns subscribe \
     --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
     --protocol sqs \
     --notification-endpoint "$EDI_DELIVER_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"DELIVER_EVENT\"]}", "FilterPolicyScope": "MessageBody", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"DELIVER_EVENT\"]}", "RawMessageDelivery": "true"}'
 
 # Everything else goes to config sync (provisioning)
 awslocal sns subscribe \
     --topic-arn "$UCP_EVENTS_TOPIC_ARN" \
     --protocol sqs \
     --notification-endpoint "$EDI_CONFIG_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"webhook.\"}]}", "FilterPolicyScope": "MessageBody", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"webhook.\"}]}", "RawMessageDelivery": "true"}'
 
 awslocal sns subscribe \
     --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
     --protocol sqs \
     --notification-endpoint "$EDI_CONFIG_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"anything-but\": [\"TRANSFORM_EVENT\", \"COMPUTE_TRANSFORM_EVENT\", \"TRANSFORM_COMPLETED\", \"DELIVERY_COMPLETED\", \"DELIVER_EVENT\", \"notification.triggered\"]}]}", "FilterPolicyScope": "MessageBody", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [{\"anything-but\": [\"TRANSFORM_EVENT\", \"COMPUTE_TRANSFORM_EVENT\", \"TRANSFORM_COMPLETED\", \"DELIVERY_COMPLETED\", \"DELIVER_EVENT\", \"notification.triggered\"]}]}", "RawMessageDelivery": "true"}'
 
 echo "LocalStack SQS queues and SNS topics created successfully."

@@ -3,7 +3,7 @@ import json
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from identity_worker.adapters.outbound.identity_provider.zitadel_client import ZitadelClient
+from identity.adapters.outbound.zitadel.client import ZitadelClient
 from identity_worker.config.settings import get_settings
 from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Response
@@ -51,7 +51,10 @@ async def test_client_authenticates_when_only_machine_key_is_configured(
         zitadel_search
     )
 
-    client = ZitadelClient()
+    settings = get_settings()
+    client = ZitadelClient(
+        api_url=settings.zitadel_api_url, machine_key=settings.zitadel_machine_key
+    )
     try:
         response = await client.fetch_with_auth("/management/v1/orgs/_search", method="POST")
     finally:

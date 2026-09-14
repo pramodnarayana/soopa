@@ -6,6 +6,13 @@ Non-enumeration constants for the EDI bounded context.
 All StrEnum definitions live in ``edi.domain.enums``.
 """
 
+from typing import Final
+
+# ── Route configuration sentinels ────────────────────────────────────────────
+# Used in OutboundEdiHeader.transaction_type to mean "accept any transaction
+# type and resolve it from the payload at transform-time".
+WILDCARD_TRANSACTION_TYPE: Final[str] = "*"
+
 # ── ID prefixes ──────────────────────────────────────────────────────────────
 # Kept here because EdiIdPrefix drives repository ID generation and is referenced
 # in many adapters — it is not a business-status enum, it is a naming convention.

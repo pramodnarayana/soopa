@@ -30,12 +30,8 @@ export interface TransactionDetailResponse {
   };
   edi_json: {
     id: string;
-    transaction_type: string | null;
-    sender_id?: string | null;
-    receiver_id?: string | null;
-    gs_sender_id?: string | null;
-    gs_receiver_id?: string | null;
-    business_metadata: Record<string, unknown> | null;
+    transaction_type: string;
+    business_metadata: Record<string, any> | null;
     payload: Record<string, unknown> | null;
     status: string;
     created_at: string;

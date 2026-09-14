@@ -98,6 +98,11 @@ class SqsConsumerManager:
                     # Dispatch to the pure callback handler.
                     # A raised exception here means we skip the ack(),
                     # and it will be visible again in SQS after visibility timeout.
+                    logger.info(
+                        "sqs_consumer_manager_received_message",
+                        queue=self.queue_name,
+                        payload_keys=list(ackable_msg.payload.keys()),
+                    )
                     await self.handler(ackable_msg.payload)
                     await ackable_msg.ack()
             except asyncio.CancelledError:

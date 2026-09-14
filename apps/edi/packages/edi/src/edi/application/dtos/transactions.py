@@ -53,10 +53,6 @@ class EdiJsonDTO:
     trading_partner_id: str | None = None
     business_metadata: dict[str, JsonValue] | None = None
     transaction_type: str | None = None
-    sender_id: str | None = None
-    receiver_id: str | None = None
-    gs_sender_id: str | None = None
-    gs_receiver_id: str | None = None
     payload: JsonValue | None = None
     parent_trace_id: str | None = None
     created_at: datetime

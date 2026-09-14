@@ -7,6 +7,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork import generate_id
 from sqlalchemy import select
 
@@ -80,7 +81,7 @@ async def test_inbound_as2_crypto_integration(
 
     # Using db_session for Control Plane partnerships
     local_partner = AS2Partner(
-        tenant_id=tenant_id,
+        tenant_id=PLATFORM_TENANT_ID,
         name="Local",
         as2_id="RECEIVER",
         is_local=True,
@@ -89,7 +90,7 @@ async def test_inbound_as2_crypto_integration(
         public_cert_vault_ref="fake/tenant/local_cert",
     )
     remote_partner = AS2Partner(
-        tenant_id=tenant_id,
+        tenant_id=PLATFORM_TENANT_ID,
         name="Remote",
         as2_id="SENDER",
         is_local=False,
@@ -100,7 +101,7 @@ async def test_inbound_as2_crypto_integration(
     await db_session.flush()
 
     partnership = AS2Partnership(
-        tenant_id=tenant_id,
+        tenant_id=PLATFORM_TENANT_ID,
         name="Test Partnership",
         local_partner_id=local_partner.id,
         remote_partner_id=remote_partner.id,

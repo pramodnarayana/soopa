@@ -17,9 +17,6 @@ from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
 from identity_worker.adapters.outbound.database.identity_sync_repository import (
     PostgresIdentitySyncUnitOfWork,
 )
-from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
-    DummyIdentityProviderPort,
-)
 from identity_worker.adapters.outbound.identity_provider.zitadel_identity_provider import (
     ZitadelIdentityProviderPort,
 )
@@ -35,8 +32,6 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
 from identity_worker.config.settings import AppSettings, get_settings
 from identity_worker.ports.inbound.identity_event_consumer_port import IdentityEventMessage
-from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
-from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
 
@@ -195,19 +190,15 @@ class WorkerContainer:
             async with self.session_factory() as session:
                 yield session
 
-        if self.settings.app_env in ("local", "test"):
-            idp: IdentityProviderPort = DummyIdentityProviderPort()
-            idp_users: UserIdentityProviderPort = DummyIdentityProviderPort()
-        else:
-            project_provider = ZitadelProjectsAdapter(settings=self.settings)
-            org_provider = ZitadelOrganizationsAdapter(
-                project_provider=project_provider, settings=self.settings
-            )
+        project_provider = ZitadelProjectsAdapter(settings=self.settings)
+        org_provider = ZitadelOrganizationsAdapter(
+            project_provider=project_provider, settings=self.settings
+        )
 
-            idp = ZitadelIdentityProviderPort(
-                org_provider=org_provider, session_factory=session_factory
-            )
-            idp_users = ZitadelUsersAdapter()
+        idp = ZitadelIdentityProviderPort(
+            org_provider=org_provider, session_factory=session_factory
+        )
+        idp_users = ZitadelUsersAdapter()
 
         identity_service = IdentitySyncService(
             identity_provider=idp,

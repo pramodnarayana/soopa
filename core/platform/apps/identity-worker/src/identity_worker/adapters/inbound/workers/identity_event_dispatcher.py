@@ -30,8 +30,10 @@ class IdentityEventDispatcher:
 
     async def dispatch_raw(self, payload: JsonDict) -> None:
         """Entrypoint called by the SqsConsumerManager."""
+        logger.info("identity_event_dispatcher_received_raw_payload", payload=payload)
         event_type = str(payload.get("eventType") or payload.get("event_type") or "")
         if not event_type:
+            logger.error("identity_event_dispatcher_missing_event_type", payload=payload)
             raise ValueError("Malformed message: missing event type")
 
         event = IdentityEventMessage(

@@ -423,8 +423,6 @@ class ProcessInboundAs2MessageUseCase:
         true_tenant_id: str | None = await self.control_plane_uow.inbound_routes.get_tenant_by_isa(
             isa_sender, isa_receiver
         )
-        if not true_tenant_id and partnership.tenant_id is not None:
-            true_tenant_id = str(partnership.tenant_id)
 
         if not true_tenant_id or true_tenant_id == PLATFORM_TENANT_ID:
             logger.error(
@@ -543,6 +541,7 @@ class ProcessInboundAs2MessageUseCase:
                 edi_message_id=str(msg_id),
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
+                direction=EdiDirection.INBOUND.value,
                 status=MessageStatus.RECEIVED.value,
                 idempotency_key=str(msg_id),
             )

@@ -107,8 +107,6 @@ async def test_edi_message_explorer_and_detail(
                 trace_id=trace_id,
                 tenant_id=tenant_id,
                 direction=EdiDirection.INBOUND,
-                sender_id=sender_id,
-                receiver_id=receiver_id,
                 transaction_type="850",
                 payload={"po_number": "PO-999"},
                 status=MessageStatus.TRANSFORMED,
@@ -141,12 +139,12 @@ async def test_edi_message_explorer_and_detail(
     detail = res_detail.json()
     assert detail["edi_message"]["trace_id"] == str(trace_id)
     assert detail["edi_message"]["sender_id"] == sender_id
-    assert len(detail["edi_jsons"]) == 1
-    assert detail["edi_jsons"][0]["transaction_type"] == "850"
-    assert detail["edi_jsons"][0]["status"] == MessageStatus.TRANSFORMED
-    assert len(detail["api_gateways"]) == 1
-    assert detail["api_gateways"][0]["http_status_code"] == 200
-    assert detail["api_gateways"][0]["status"] == MessageStatus.SUCCESS
+    assert len(detail["edi_json"]) == 1
+    assert detail["edi_json"][0]["transaction_type"] == "850"
+    assert detail["edi_json"][0]["status"] == MessageStatus.TRANSFORMED
+    assert len(detail["api_gateway"]) == 1
+    assert detail["api_gateway"][0]["http_status_code"] == 200
+    assert detail["api_gateway"][0]["status"] == MessageStatus.SUCCESS
 
     # 4. Explore EDI messages via POST /api/v1/explorer/edi-messages
     explore_payload = {

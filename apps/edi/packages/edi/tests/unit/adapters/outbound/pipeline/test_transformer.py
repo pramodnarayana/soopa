@@ -7,7 +7,9 @@ pytestmark = pytest.mark.asyncio
 
 
 class FakeBotsEDIAdapter:
-    async def transform(self, payload: bytes) -> ParsedEdiPayload:
+    async def transform(
+        self, payload: bytes, editype: str | None = None, messagetype: str | None = None
+    ) -> ParsedEdiPayload:
         return ParsedEdiPayload(
             sender_id="A",
             receiver_id="B",

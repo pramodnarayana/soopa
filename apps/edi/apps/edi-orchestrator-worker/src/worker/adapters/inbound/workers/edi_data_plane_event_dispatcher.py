@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
+from pubsub.aws.debezium_parser import DebeziumPayloadParser
 
 logger = structlog.get_logger(__name__)
 
@@ -17,6 +18,18 @@ class EdiDataPlaneEventMessage:
     payload: dict[str, Any]
     idempotency_key: str
 
+    def __post_init__(self) -> None:
+        if not self.tenant_id or not self.tenant_id.strip():
+            raise ValueError("Required field 'tenant_id' is missing or empty")
+        if not self.trace_id or not self.trace_id.strip():
+            raise ValueError("Required field 'trace_id' is missing or empty")
+        if not self.event_type or not self.event_type.strip():
+            raise ValueError("Required field 'event_type' is missing or empty")
+        if not self.idempotency_key or not self.idempotency_key.strip():
+            raise ValueError("Required field 'idempotency_key' is missing or empty")
+        if not isinstance(self.payload, dict):
+            raise TypeError("Required field 'payload' must be a valid dictionary")
+
 
 class EdiDataPlaneEventDispatcher:
     """
@@ -30,52 +43,29 @@ class EdiDataPlaneEventDispatcher:
 
     async def handle(self, body: dict[str, Any]) -> None:
         """Entry point invoked by the SQS poll loop for each received message."""
-        payload = body.get("payload")
-        event_type = body.get("event_type")
+        payload = DebeziumPayloadParser.extract_payload(body)
 
-        # Validate envelope structure before accessing fields
-        if not isinstance(payload, dict) or not event_type or not isinstance(event_type, str):
-            logger.error(
-                "data_plane_events_sqs_consumer.missing_required_fields",
-                payload=payload,
-                event_type=event_type,
+        try:
+            event = EdiDataPlaneEventMessage(
+                tenant_id=str(body.get("tenant_id", "")),
+                trace_id=str(payload.get("trace_id", "") if isinstance(payload, dict) else ""),
+                event_type=str(body.get("event_type", "")),
+                payload=payload if payload is not None else {},
+                idempotency_key=str(body.get("idempotency_key", "")),
+            )
+        except (ValueError, TypeError) as e:
+            logger.exception(
+                "data_plane_events_sqs_consumer.validation_failed",
+                error=str(e),
+                body=body,
             )
             return
-
-        trace_id = payload.get("trace_id")
-        tenant_id = body.get("tenant_id")
-        idempotency_key = body.get("idempotency_key")
-
-        if not trace_id or not tenant_id:
-            logger.error(
-                "data_plane_events_sqs_consumer.missing_required_fields",
-                trace_id=trace_id,
-                tenant_id=tenant_id,
-                event_type=event_type,
-            )
-            return
-
-        if not isinstance(idempotency_key, str) or not idempotency_key:
-            logger.error(
-                "data_plane_events_sqs_consumer.missing_required_fields",
-                trace_id=trace_id,
-                tenant_id=tenant_id,
-                event_type=event_type,
-                idempotency_key=idempotency_key,
-            )
-            raise ValueError("idempotency_key is required")
 
         # Explicit observability context binding for the entire downstream execution
-        bound_logger = logger.bind(trace_id=trace_id, tenant_id=tenant_id, event_type=event_type)
-        bound_logger.debug("data_plane_events_sqs_consumer.message_received")
-
-        event = EdiDataPlaneEventMessage(
-            tenant_id=tenant_id,
-            trace_id=trace_id,
-            event_type=event_type,
-            payload=payload,
-            idempotency_key=idempotency_key,
+        bound_logger = logger.bind(
+            trace_id=event.trace_id, tenant_id=event.tenant_id, event_type=event.event_type
         )
+        bound_logger.debug("data_plane_events_sqs_consumer.message_received")
 
         try:
             await self._callback(event)

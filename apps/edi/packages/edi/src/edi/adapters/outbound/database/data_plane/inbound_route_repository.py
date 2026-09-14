@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.data_plane.exceptions import ReadOnlyDataPlaneRepositoryError
 from edi.adapters.outbound.database.models.data_plane import InboundRoute
+from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
 from edi.domain.enums import EdiConnectionType
 from edi.domain.models.base import ProcessingMode
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
@@ -35,8 +36,8 @@ class SqlAlchemyDataPlaneInboundRouteRepository(InboundRouteRepositoryPort):
         if transaction_type:
             stmt = stmt.where(
                 (InboundRoute.transaction_type == transaction_type)
-                | (InboundRoute.transaction_type.is_(None))
-            ).order_by(InboundRoute.transaction_type.isnot(None).desc())
+                | (InboundRoute.transaction_type == WILDCARD_TRANSACTION_TYPE)
+            ).order_by((InboundRoute.transaction_type == transaction_type).desc())
         else:
             stmt = stmt.where(InboundRoute.transaction_type.is_(None))
 

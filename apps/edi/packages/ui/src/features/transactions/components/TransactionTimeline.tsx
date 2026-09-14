@@ -45,7 +45,9 @@ function IsaGsFieldsGrid({
 }
 
 export function TransactionTimeline({ transaction }: Props) {
-  const { edi_message: msg, edi_json: jsons, api_gateway: gateways } = transaction;
+  const msg = transaction.edi_message || {};
+  const jsons = transaction.edi_json || [];
+  const gateways = transaction.api_gateway || [];
 
   const isOutbound = msg.direction === 'OUTBOUND';
   const primaryStatus = isOutbound ? jsons[0]?.status || msg.status : msg.status;
@@ -180,14 +182,6 @@ export function TransactionTimeline({ transaction }: Props) {
                 </Badge>
                 {renderBadge(json.status)}
               </div>
-
-              <IsaGsFieldsGrid
-                senderId={json.sender_id}
-                receiverId={json.receiver_id}
-                gsSenderId={json.gs_sender_id}
-                gsReceiverId={json.gs_receiver_id}
-                className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-4"
-              />
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>

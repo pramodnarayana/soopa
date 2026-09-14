@@ -222,7 +222,12 @@ async def delete_certificate_secret(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
-    if SecretCategory.AS2_KEY.value not in vault_ref:
+    parts = vault_ref.replace("vault://", "").split("/")
+    if (
+        not vault_ref.startswith("vault://")
+        or len(parts) < 1
+        or parts[0] != SecretCategory.AS2_KEY.value
+    ):
         raise HTTPException(status_code=400, detail="Invalid vault reference category.")
 
     async with uow:
@@ -270,6 +275,7 @@ async def create_as2_partner(
         is_local=request.is_local if request.is_local is not None else UNSET,
         url=url,
         public_cert_pem=request.public_cert_pem,
+        private_key_pem=request.private_key_pem,
         public_cert_vault_ref=request.public_cert_vault_ref,
         private_key_vault_ref=request.private_key_vault_ref,
     )

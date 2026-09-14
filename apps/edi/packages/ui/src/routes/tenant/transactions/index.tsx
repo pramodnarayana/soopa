@@ -132,10 +132,10 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
       </div>
       <FieldGrid
         items={[
-          { label: 'ISA Sender', value: item.sender_id },
-          { label: 'ISA Receiver', value: item.receiver_id },
-          { label: 'GS Sender', value: item.gs_sender_id },
-          { label: 'GS Receiver', value: item.gs_receiver_id },
+          { label: 'Trading Partner ID', value: item.trading_partner_id },
+          { label: 'Direction', value: item.direction },
+          { label: 'Transaction Type', value: item.transaction_type },
+          { label: 'Status', value: item.status },
         ]}
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -166,7 +166,21 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
 
 // ─── Column definitions ───────────────────────────────────────────────────────
 
-const SHARED_COLUMNS = [
+function formatTimeAgo(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+const MESSAGE_COLUMNS = [
   { key: 'direction', label: 'Direction', className: 'w-[14%]' },
   { key: 'transaction_type', label: 'Type', className: 'w-[10%]' },
   { key: 'sender_id', label: 'Sender ID', className: 'w-[20%]' },
@@ -178,9 +192,31 @@ const SHARED_COLUMNS = [
     className: 'w-[20%]',
     render: (item: { created_at?: string | null }) =>
       item.created_at ? (
-        <span className="text-slate-600 text-xs">{new Date(item.created_at).toLocaleString()}</span>
+        <span title={new Date(item.created_at).toLocaleString()}>
+          {formatTimeAgo(item.created_at)}
+        </span>
       ) : (
-        <span className="text-slate-400">—</span>
+        '-'
+      ),
+  },
+];
+
+const JSON_COLUMNS = [
+  { key: 'direction', label: 'Direction', className: 'w-[14%]' },
+  { key: 'transaction_type', label: 'Type', className: 'w-[10%]' },
+  { key: 'trading_partner_id', label: 'Partner ID', className: 'w-[20%]' },
+  { key: 'status', label: 'Status', className: 'w-[16%]' },
+  {
+    key: 'created_at',
+    label: 'Created At',
+    className: 'w-[20%]',
+    render: (item: { created_at?: string | null }) =>
+      item.created_at ? (
+        <span title={new Date(item.created_at).toLocaleString()}>
+          {formatTimeAgo(item.created_at)}
+        </span>
+      ) : (
+        '-'
       ),
   },
 ];
@@ -235,10 +271,12 @@ const messageFields: FieldDef[] = [
 const jsonFields: FieldDef[] = [
   sharedFieldDefs.direction,
   sharedFieldDefs.transaction_type,
-  sharedFieldDefs.sender_id,
-  sharedFieldDefs.receiver_id,
-  { id: 'gs_sender_id', label: 'GS Sender', type: 'text', operators: ['eq', 'contains'] },
-  { id: 'gs_receiver_id', label: 'GS Receiver', type: 'text', operators: ['eq', 'contains'] },
+  {
+    id: 'trading_partner_id',
+    label: 'Trading Partner ID',
+    type: 'text',
+    operators: ['eq', 'contains'],
+  },
   {
     id: 'business_metadata.shipment_id',
     label: 'Shipment ID',
@@ -441,7 +479,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               />
             </div>
             <TransactionsTable<ExplorerEdiMessage>
-              columns={SHARED_COLUMNS}
+              columns={MESSAGE_COLUMNS}
               data={accumulatedMessages}
               isLoading={messagesLoading && messagesOffset === 0}
               renderExpanded={(item) => <EdiMessageExpandedRow item={item} />}
@@ -495,7 +533,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               />
             </div>
             <TransactionsTable<ExplorerEdiJson>
-              columns={SHARED_COLUMNS}
+              columns={JSON_COLUMNS}
               data={accumulatedJson}
               isLoading={jsonLoading && jsonOffset === 0}
               renderExpanded={(item) => <EdiJsonExpandedRow item={item} />}

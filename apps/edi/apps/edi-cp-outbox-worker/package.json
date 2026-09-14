@@ -6,6 +6,7 @@
     "test": "echo 'No unit tests in this module'",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "test:integration": "uv run pytest tests/integration",
-    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m edi_cp_outbox_worker.main"
   }
 }

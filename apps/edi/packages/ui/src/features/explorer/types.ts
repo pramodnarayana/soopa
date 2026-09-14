@@ -41,10 +41,7 @@ export interface ExplorerEdiJson {
   trace_id: string;
   direction: string;
   transaction_type: string | null;
-  sender_id: string | null;
-  receiver_id: string | null;
-  gs_sender_id: string | null;
-  gs_receiver_id: string | null;
+  trading_partner_id: string | null;
   status: string;
   created_at: string | null;
   business_metadata: Record<string, unknown> | null;

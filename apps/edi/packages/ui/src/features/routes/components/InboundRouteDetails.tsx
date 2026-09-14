@@ -108,18 +108,33 @@ export function InboundRouteDetails({
 
     if (targetId !== initialTargetId) {
       const partner = destinations?.find((p) => p.id === targetId);
-      if (partner?.type === 'AS2') {
+      if (!partner) {
+        toast({
+          title: 'Error',
+          description: 'Selected destination is invalid or unavailable.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      if (partner.type === 'AS2') {
         payload.as2_partner_id = targetId;
         payload.webhook_id = null;
         payload.sftp_partner_id = null;
-      } else if (partner?.type === 'SFTP') {
+      } else if (partner.type === 'SFTP') {
         payload.sftp_partner_id = targetId;
         payload.webhook_id = null;
         payload.as2_partner_id = null;
-      } else if (partner?.type === 'WEBHOOK') {
+      } else if (partner.type === 'WEBHOOK') {
         payload.webhook_id = targetId;
         payload.as2_partner_id = null;
         payload.sftp_partner_id = null;
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Unsupported destination type.',
+          variant: 'destructive',
+        });
+        return;
       }
     }
 

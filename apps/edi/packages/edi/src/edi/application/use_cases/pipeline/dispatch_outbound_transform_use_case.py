@@ -6,12 +6,19 @@ import structlog
 from seedwork.domain.types import JsonDict
 
 from edi.config.settings import AppSettings
+from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
+from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
 from edi.domain.enums import (
     ConnectionType,
     EdiDirection,
     EdiStandard,
     MessageStatus,
     PipelineEventType,
+)
+from edi.domain.exceptions import (
+    OutboundRouteNotFoundError,
+    TransactionNotFoundError,
+    UnresolvableTransactionTypeError,
 )
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
@@ -52,12 +59,10 @@ class DispatchOutboundTransformUseCase:
             trading_partner_id = str(tp_id) if tp_id else None
 
         if not trading_partner_id:
-            raise ValueError(
-                f"Missing payload/routing metadata (trading_partner_id) for trace_id={trace_id}"
-            )
+            raise TransactionNotFoundError(trace_id)
 
         if tenant_id is None:
-            raise ValueError(f"Missing tenant_id for trace_id={trace_id}")
+            raise TransactionNotFoundError(trace_id)
 
         route_config = await self.uow.edi_headers.get_outbound_edi_header_by_trading_partner_id(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
@@ -67,13 +72,17 @@ class DispatchOutboundTransformUseCase:
         )
 
         if not route_config or not outbound_route:
-            raise ValueError(f"Unsuccessful route/header lookup for trace_id={trace_id}")
+            raise OutboundRouteNotFoundError(
+                trading_partner_id=trading_partner_id,
+                tenant_id=tenant_id,
+            )
 
         return trading_partner_id, route_config, outbound_route
 
     async def _offload_to_compute_queue(
         self,
         trace_id: str,
+        tenant_id: str,
         standard: str,
         transaction_type: str,
         route_config: JsonDict,
@@ -88,12 +97,15 @@ class DispatchOutboundTransformUseCase:
             event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
             payload={
                 "trace_id": trace_id,
+                "tenant_id": tenant_id,
                 "direction": EdiDirection.OUTBOUND.value,
                 "standard": standard,
                 "transaction_type": transaction_type,
                 "route_config": route_config,
             },
         )
+
+    # Extraction logic lives exclusively in TransactionTypeResolver (DRY).
 
     def _determine_connection_type(self, route_config: JsonDict, outbound_route: JsonDict) -> str:
         connection_type = route_config.get("connection_type", "UNKNOWN")
@@ -111,7 +123,7 @@ class DispatchOutboundTransformUseCase:
         async with self.uow:
             edi_json = await self.uow.transactions.get_edi_json(trace_id)
             if not edi_json:
-                raise ValueError(f"No EdiJson record found for trace_id={trace_id}")
+                raise TransactionNotFoundError(trace_id)
 
             json_payload = edi_json.payload
             if not json_payload or not (
@@ -121,7 +133,7 @@ class DispatchOutboundTransformUseCase:
                     and all(isinstance(node, dict) for node in json_payload)
                 )
             ):
-                raise ValueError(f"Payload is missing for trace_id={trace_id}")
+                raise TransactionNotFoundError(trace_id)
 
             (
                 trading_partner_id,
@@ -144,10 +156,33 @@ class DispatchOutboundTransformUseCase:
             gs_receiver_id_raw = route_config.get("gs_receiver_id")
             gs_receiver_id = str(gs_receiver_id_raw) if gs_receiver_id_raw is not None else None
             route_txn_type = route_config.get("transaction_type")
-            if route_txn_type == "*":
+            if route_txn_type == WILDCARD_TRANSACTION_TYPE:
                 route_txn_type = None
 
-            transaction_type = route_txn_type or edi_json.transaction_type or "UNKNOWN"
+            # Resolve transaction_type via a strict, ordered fallback chain:
+            #   Tier 1 — Route config value (explicit, non-wildcard)
+            #   Tier 2 — Stored transaction_type on the EdiJson record
+            #   Tier 3 — Dynamic extraction from raw payload (shared domain service)
+            # A hard domain error is raised if all tiers are exhausted — UNKNOWN is
+            # never a valid fallback because it causes grammar engine import failures.
+            transaction_type = TransactionTypeResolver.resolve(
+                explicit_type=route_txn_type or edi_json.transaction_type,
+                payload=edi_json.payload,
+            )
+
+            if not transaction_type:
+                raise UnresolvableTransactionTypeError(trace_id)
+
+            # Structured observability: emit a warning when we had to fall back to
+            # dynamic payload extraction so ops teams can identify under-configured routes.
+            if not route_txn_type and not edi_json.transaction_type:
+                logger.warning(
+                    "outbound_transform.transaction_type_inferred_from_payload",
+                    trace_id=trace_id,
+                    resolved_type=transaction_type,
+                    trading_partner_id=trading_partner_id,
+                )
+
             route_config["transaction_type"] = transaction_type
 
             if "environment" not in route_config:
@@ -155,7 +190,7 @@ class DispatchOutboundTransformUseCase:
 
             if self._settings.enable_heavy_compute_queue:
                 await self._offload_to_compute_queue(
-                    trace_id, standard, transaction_type, route_config
+                    trace_id, edi_json.tenant_id or "", standard, transaction_type, route_config
                 )
                 await self.uow.commit()
                 return

@@ -148,10 +148,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             for field in (
                 "trading_partner_id",
                 "standard",
-                "sender_id",
-                "receiver_id",
-                "gs_sender_id",
-                "gs_receiver_id",
             )
             if getattr(command, field) is not None
         }
@@ -196,11 +192,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         http_status_code: int | None = None,
         response: str | None = None,
     ) -> None:
-        stmt = (
-            update(ApiGateway)
-            .where(ApiGateway.trace_id == str(trace_id))
-            .values(status=status)
-        )
+        stmt = update(ApiGateway).where(ApiGateway.trace_id == str(trace_id)).values(status=status)
         if webhook_url is not None:
             stmt = stmt.values(webhook_url=webhook_url)
         if http_status_code is not None:
@@ -303,10 +295,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             trading_partner_id=aggregate.trading_partner_id,
             transaction_type=aggregate.transaction_type,
             standard=aggregate.standard,
-            sender_id=aggregate.sender_id,
-            receiver_id=aggregate.receiver_id,
-            gs_sender_id=aggregate.gs_sender_id,
-            gs_receiver_id=aggregate.gs_receiver_id,
             business_metadata=aggregate.business_metadata,
             payload=aggregate.payload,
         )
@@ -385,10 +373,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             trading_partner_id=record.trading_partner_id,
             transaction_type=record.transaction_type,
             standard=record.standard,
-            sender_id=record.sender_id,
-            receiver_id=record.receiver_id,
-            gs_sender_id=record.gs_sender_id,
-            gs_receiver_id=record.gs_receiver_id,
             business_metadata=record.business_metadata,
             payload=payload,
             parent_trace_id=record.parent_trace_id,
@@ -423,10 +407,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             standard=command.standard,
             business_metadata=command.business_metadata,
             transaction_type=command.transaction_type,
-            sender_id=command.sender_id,
-            receiver_id=command.receiver_id,
-            gs_sender_id=command.gs_sender_id,
-            gs_receiver_id=command.gs_receiver_id,
             payload=command.payload,
             parent_trace_id=command.parent_trace_id,
         )
@@ -573,28 +553,33 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             if field not in self._ALLOWED_FIELDS or operator not in self._ALLOWED_OPERATORS:
                 continue
 
+            # EdiJson no longer has ISA/GS fields; ignore these filters
+            if issubclass(model, EdiJson) and field in (
+                "sender_id",
+                "receiver_id",
+                "gs_sender_id",
+                "gs_receiver_id",
+            ):
+                continue
+
             if field == "trading_partner_id":
-                if operator == "eq":
-                    conds = [
-                        model.sender_id == str(value),
-                        model.receiver_id == str(value),
-                        model.gs_sender_id == str(value),
-                        model.gs_receiver_id == str(value),
-                        model.trading_partner_id == str(value),
+                if issubclass(model, EdiMessage):
+                    cond_cols = [
+                        model.sender_id,
+                        model.receiver_id,
+                        model.gs_sender_id,
+                        model.gs_receiver_id,
+                        model.trading_partner_id,
                     ]
+                else:
+                    cond_cols = [model.trading_partner_id]
+
+                if operator == "eq":
+                    conds = [col == str(value) for col in cond_cols]
                     stmt = stmt.where(or_(*conds))
 
                 elif operator == "neq":
-                    conds = [
-                        or_(model.sender_id.is_(None), model.sender_id != str(value)),
-                        or_(model.receiver_id.is_(None), model.receiver_id != str(value)),
-                        or_(model.gs_sender_id.is_(None), model.gs_sender_id != str(value)),
-                        or_(model.gs_receiver_id.is_(None), model.gs_receiver_id != str(value)),
-                        or_(
-                            model.trading_partner_id.is_(None),
-                            model.trading_partner_id != str(value),
-                        ),
-                    ]
+                    conds = [or_(col.is_(None), col != str(value)) for col in cond_cols]
                     stmt = stmt.where(and_(*conds))
 
                 elif operator == "contains":
@@ -602,23 +587,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                         str(value).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
                     )
                     pattern = f"%{escaped_value}%"
-                    conds = [
-                        model.sender_id.ilike(pattern, escape="\\"),
-                        model.receiver_id.ilike(pattern, escape="\\"),
-                        model.gs_sender_id.ilike(pattern, escape="\\"),
-                        model.gs_receiver_id.ilike(pattern, escape="\\"),
-                        model.trading_partner_id.ilike(pattern, escape="\\"),
-                    ]
+                    conds = [col.ilike(pattern, escape="\\") for col in cond_cols]
                     stmt = stmt.where(or_(*conds))
 
                 elif operator == "in" and isinstance(value, list):
-                    conds = [
-                        model.sender_id.in_(value),
-                        model.receiver_id.in_(value),
-                        model.gs_sender_id.in_(value),
-                        model.gs_receiver_id.in_(value),
-                        model.trading_partner_id.in_(value),
-                    ]
+                    conds = [col.in_(value) for col in cond_cols]
                     stmt = stmt.where(or_(*conds))
                 continue
 
@@ -662,13 +635,13 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 attr = model.status
             elif field == "transaction_type":
                 attr = model.transaction_type
-            elif field == "sender_id":
+            elif field == "sender_id" and issubclass(model, EdiMessage):
                 attr = model.sender_id
-            elif field == "receiver_id":
+            elif field == "receiver_id" and issubclass(model, EdiMessage):
                 attr = model.receiver_id
-            elif field == "gs_sender_id":
+            elif field == "gs_sender_id" and issubclass(model, EdiMessage):
                 attr = model.gs_sender_id
-            elif field == "gs_receiver_id":
+            elif field == "gs_receiver_id" and issubclass(model, EdiMessage):
                 attr = model.gs_receiver_id
             elif field == "format_standard" and issubclass(model, EdiMessage):
                 attr = model.format_standard
@@ -772,14 +745,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 id=str(j.id),
                 trace_id=str(j.trace_id),
                 tenant_id=j.tenant_id,
+                direction=j.direction,
                 status=j.status,
                 trading_partner_id=j.trading_partner_id,
                 business_metadata=j.business_metadata,
                 transaction_type=j.transaction_type,
-                sender_id=j.sender_id,
-                receiver_id=j.receiver_id,
-                gs_sender_id=j.gs_sender_id,
-                gs_receiver_id=j.gs_receiver_id,
                 payload=payload,
                 parent_trace_id=j.parent_trace_id,
                 created_at=j.created_at,
@@ -812,14 +782,11 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 id=str(r.id),
                 trace_id=str(r.trace_id),
                 tenant_id=r.tenant_id,
+                direction=r.direction,
                 status=r.status,
                 trading_partner_id=r.trading_partner_id,
                 business_metadata=r.business_metadata,
                 transaction_type=r.transaction_type,
-                sender_id=r.sender_id,
-                receiver_id=r.receiver_id,
-                gs_sender_id=r.gs_sender_id,
-                gs_receiver_id=r.gs_receiver_id,
                 payload=payload,
                 parent_trace_id=r.parent_trace_id,
                 created_at=r.created_at,
@@ -867,10 +834,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             status=record.status,
             trading_partner_id=record.trading_partner_id,
             transaction_type=record.transaction_type,
-            sender_id=record.sender_id,
-            receiver_id=record.receiver_id,
-            gs_sender_id=record.gs_sender_id,
-            gs_receiver_id=record.gs_receiver_id,
             business_metadata=record.business_metadata,
             payload=record.payload,
             created_at=record.created_at,

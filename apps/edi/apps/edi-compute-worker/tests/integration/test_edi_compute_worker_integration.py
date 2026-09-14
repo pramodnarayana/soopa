@@ -7,6 +7,9 @@ from typing import Any
 import pytest
 import pytest_asyncio
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
+    ComputeOutboundTransformUseCase,
+)
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
@@ -101,7 +104,22 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
 
         return ComputeTransformUseCase(uow_factory=fake_uow_factory, transformer=transformer)
 
-    dispatcher = EdiComputeDispatcher(use_case_factory=fake_use_case_factory)
+    async def fake_outbound_use_case_factory(tenant_id: str):
+        @contextlib.asynccontextmanager
+        async def fake_uow_factory():
+            yield SqlAlchemyDataPlaneUnitOfWork(
+                tenant_session=db_session_factory(), storage=InMemoryStorageAdapter()
+            )
+
+        # Technically we won't hit this for the inbound test, but we must provide it to the dispatcher.
+        return ComputeOutboundTransformUseCase(
+            uow_factory=fake_uow_factory, transformer=transformer
+        )
+
+    dispatcher = EdiComputeDispatcher(
+        use_case_factory=fake_use_case_factory,
+        outbound_use_case_factory=fake_outbound_use_case_factory,
+    )
 
     # 2. Seed test data completely outside the pytest connection boundary
     #    to avoid asyncpg constraint race conditions. We use an autonomous engine connection.
@@ -144,7 +162,13 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     # 3. Run the compute worker.
     try:
         await dispatcher.dispatch_raw(
-            body_json={"trace_id": trace_id, "tenant_id": tenant_id, "step": "COMPUTE_TRANSFORM"}
+            body_json={
+                "payload": {
+                    "trace_id": trace_id,
+                    "tenant_id": tenant_id,
+                    "step": "COMPUTE_TRANSFORM",
+                }
+            }
         )
 
         # 4. Verify outcomes.

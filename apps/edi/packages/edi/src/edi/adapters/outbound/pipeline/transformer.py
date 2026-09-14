@@ -9,7 +9,7 @@ from edi.adapters.outbound.transformer.domain.envelope.edifact import (
 from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
 from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
-from edi.domain.enums import EdiStandard
+from edi.domain.enums import EdiStandard, EdiTransactionType
 from edi.domain.types import AstNode
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 
@@ -28,12 +28,21 @@ class BotsTransformerAdapter(TransformerPort):
         """
         Transforms EDI to JSON using the wrapped BOTS facade.
         """
-        parsed_payload = await self._adapter.transform(payload)
+        # If transaction_type is UNKNOWN, we tell the engine to parse it as 'envelope'.
+        # This prevents grammar import failures, but allows us to extract the real transaction types inside.
+        messagetype = (
+            EdiTransactionType.ENVELOPE.value
+            if transaction_type == EdiTransactionType.UNKNOWN.value
+            else transaction_type
+        )
+        parsed_payload = await self._adapter.transform(
+            payload, editype=standard.lower(), messagetype=messagetype
+        )
         transactions = []
         for txn in parsed_payload.transactions:
             if (
                 not transaction_type
-                or transaction_type == "UNKNOWN"
+                or transaction_type == EdiTransactionType.UNKNOWN.value
                 or txn.transaction_type == transaction_type
             ):
                 transactions.append(
