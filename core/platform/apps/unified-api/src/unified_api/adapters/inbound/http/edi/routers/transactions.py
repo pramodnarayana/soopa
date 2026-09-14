@@ -4,9 +4,6 @@ import structlog
 from edi.adapters.outbound.database.routing_resolver_repository import (
     SqlAlchemyRoutingResolverRepository,
 )
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-)
 from edi.application.dtos.transactions import ApiGatewayDTO, EdiJsonDTO, EdiMessageDTO
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
 from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
@@ -25,6 +22,7 @@ from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
 from edi.domain.exceptions import TransactionNotFoundError
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +31,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_
 from unified_api.adapters.inbound.http.dependencies.edi.database import (
     get_data_plane_uow,
     get_global_session,
+    get_tenant_session,
 )
 
 logger = structlog.get_logger(__name__)
@@ -120,11 +119,12 @@ async def get_edi_trace(
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     global_session: AsyncSession = Depends(get_global_session),
+    tenant_session: AsyncSession = Depends(get_tenant_session),
 ) -> EdiTraceResponse:
     """
     Get the full deep-dive trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
     """
-    resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, uow.tenant_session)
+    resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, tenant_session)
     resolver = RoutingResolutionUseCase(resolver_repo)
 
     async with uow:

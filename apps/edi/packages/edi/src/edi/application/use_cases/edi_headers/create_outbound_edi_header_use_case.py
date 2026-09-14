@@ -1,12 +1,34 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
 
-from edi.application.dtos.commands import CreateOutboundEdiHeaderCmd
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+
+
+@dataclass(frozen=True)
+class CreateOutboundEdiHeaderCmd:
+    trading_partner_id: str
+    isa_sender_id: str
+    isa_receiver_id: str
+    name: str | None = None
+    isa_sender_qualifier: str | None = None
+    isa_receiver_qualifier: str | None = None
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    transaction_type: str | None = None
+    default_standard: str | None = None
+    default_version: str | None = None
+    isa_control_version: str | None = None
+    isa_usage_indicator: str | None = None
+    gs_version: str | None = None
+    segment_terminator: str | None = None
+    element_separator: str | None = None
+    subelement_separator: str | None = None
+
 
 logger = structlog.get_logger(__name__)
 

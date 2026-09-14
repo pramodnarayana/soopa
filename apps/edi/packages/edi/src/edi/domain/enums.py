@@ -52,6 +52,7 @@ class EdiConnectionType(StrEnum):
     AS2 = "AS2"
     API = "API"
     SFTP = "SFTP"
+    WEBHOOK = "Webhook"
 
 
 class EdiStandard(StrEnum):
@@ -75,6 +76,7 @@ class As2EncryptionAlgorithm(StrEnum):
 
     AES128 = "aes128"
     AES256 = "aes256"
+    DES3 = "3des"
 
 
 class EdiTransactionType(StrEnum):
@@ -194,3 +196,29 @@ class EdiOutboxSource(StrEnum):
 
     EDI_DATA_PLANE = "edi_data_plane"
     EDI_CONTROL_PLANE = "edi_control_plane"
+
+
+class EncryptionAlgorithm(StrEnum):
+    """Symmetric encryption algorithm used for AS2 message encryption."""
+
+    AES128 = "AES128"
+    AES256 = "AES256"
+    RC2 = "RC2"
+    DES3 = "3DES"
+
+
+class SignatureAlgorithm(StrEnum):
+    """Digest/hash algorithm used for AS2 message signing."""
+
+    SHA1 = "SHA1"
+    SHA256 = "SHA256"
+    SHA384 = "SHA384"
+    SHA512 = "SHA512"
+    MD5 = "MD5"
+
+
+class MDNType(StrEnum):
+    """AS2 MDN (Message Disposition Notification) delivery mode."""
+
+    SYNC = "SYNC"
+    ASYNC = "ASYNC"

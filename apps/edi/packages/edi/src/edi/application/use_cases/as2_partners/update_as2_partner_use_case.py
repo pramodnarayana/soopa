@@ -1,11 +1,11 @@
 import dataclasses
+from typing import Any
 
 import structlog
 from seedwork.constants import SystemIdPrefix
-from seedwork.domain.types import UNSET
+from seedwork.domain.types import UNSET, UnsetType
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import UpdateAS2TradingPartnerCmd
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import PartnerNotFoundError
@@ -13,6 +13,18 @@ from edi.domain.models.as2 import AS2PartnerDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclasses.dataclass(frozen=True)
+class UpdateAS2TradingPartnerCmd:
+    name: str | UnsetType = UNSET
+    as2_id: str | UnsetType = UNSET
+    is_local: bool | UnsetType = UNSET
+    url: str | UnsetType | None = UNSET
+    public_cert_pem: str | UnsetType | None = UNSET
+    public_cert_vault_ref: str | UnsetType | None = UNSET
+    private_key_vault_ref: str | UnsetType | None = UNSET
+    active: bool | UnsetType = UNSET
 
 
 class UpdateAS2PartnerUseCase:
@@ -34,18 +46,46 @@ class UpdateAS2PartnerUseCase:
             "update_as2_partner_started",
             id=partner_id,
             tenant_id=tenant_id,
+            cmd_fields=dataclasses.asdict(cmd),
         )
         aggregate = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not aggregate:
             raise PartnerNotFoundError(partner_id, tenant_id)
 
-        persisted_fields = {field.name for field in dataclasses.fields(AS2PartnerDomainModel)}
-        for field in dataclasses.fields(cmd):
-            value = getattr(cmd, field.name)
-            if value is not UNSET:
-                if field.name not in persisted_fields:
-                    raise ValueError(f"Unsupported AS2 partner field: {field.name}")
-                setattr(aggregate, field.name, value)
+        updated_fields: dict[str, Any] = {}
+
+        if not isinstance(cmd.name, UnsetType):
+            aggregate.name = cmd.name
+            updated_fields["name"] = cmd.name
+        if not isinstance(cmd.as2_id, UnsetType):
+            aggregate.as2_id = cmd.as2_id
+            updated_fields["as2_id"] = cmd.as2_id
+        if not isinstance(cmd.is_local, UnsetType):
+            aggregate.is_local = cmd.is_local
+            updated_fields["is_local"] = cmd.is_local
+        if not isinstance(cmd.url, UnsetType):
+            aggregate.url = cmd.url
+            updated_fields["url"] = cmd.url
+        if not isinstance(cmd.public_cert_pem, UnsetType):
+            aggregate.public_cert_pem = cmd.public_cert_pem
+            updated_fields["public_cert_pem"] = cmd.public_cert_pem
+        if not isinstance(cmd.public_cert_vault_ref, UnsetType):
+            aggregate.public_cert_vault_ref = cmd.public_cert_vault_ref
+            updated_fields["public_cert_vault_ref"] = cmd.public_cert_vault_ref
+        if not isinstance(cmd.private_key_vault_ref, UnsetType):
+            aggregate.private_key_vault_ref = cmd.private_key_vault_ref
+            updated_fields["private_key_vault_ref"] = cmd.private_key_vault_ref
+        if not isinstance(cmd.active, UnsetType):
+            aggregate.active = cmd.active
+            updated_fields["active"] = cmd.active
+
+        logger.info(
+            "update_as2_partner_fields_resolved",
+            id=partner_id,
+            tenant_id=tenant_id,
+            updated_fields=updated_fields,
+            final_active_status=aggregate.active,
+        )
 
         aggregate.add_domain_event(
             ProvisioningEvent(

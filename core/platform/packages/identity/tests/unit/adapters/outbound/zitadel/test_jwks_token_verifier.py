@@ -5,7 +5,6 @@ from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 
-import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -125,30 +124,16 @@ async def test_verify_expired_token(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("userinfo", [None, 42, [], "invalid"])
-async def test_get_cached_userinfo_rejects_non_object_json(
-    monkeypatch, verifier: ZitadelTokenVerifierPort, userinfo: object
-) -> None:
-    class FakeResponse:
-        def raise_for_status(self) -> None:
-            return None
+async def test_get_cached_userinfo_rejects_non_object_json(httpserver, userinfo: object) -> None:
+    # Configure httpserver to return the invalid JSON object
+    httpserver.expect_request("/oidc/v1/userinfo").respond_with_data(
+        json.dumps(userinfo), status=200, content_type="application/json"
+    )
 
-        def json(self) -> object:
-            return userinfo
-
-    class FakeAsyncClient:
-        def __init__(self, timeout: float) -> None:
-            self.timeout = timeout
-
-        async def __aenter__(self) -> "FakeAsyncClient":
-            return self
-
-        async def __aexit__(self, *args: object) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict[str, str]) -> FakeResponse:
-            return FakeResponse()
-
-    monkeypatch.setattr(httpx, "AsyncClient", FakeAsyncClient)
+    options = ZitadelTokenVerifierPortOptions(
+        issuer=httpserver.url_for("/").rstrip("/"), audience="my-api"
+    )
+    verifier = ZitadelTokenVerifierPort(options)
 
     with pytest.raises(TypeError, match="userinfo response must be a JSON object"):
         await verifier._get_cached_userinfo("token", "jti")

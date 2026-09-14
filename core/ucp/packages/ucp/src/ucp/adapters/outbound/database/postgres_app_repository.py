@@ -26,6 +26,7 @@ class PostgresAppRepository(AppRepositoryPort):
                 slug=row.slug,
                 name=row.name,
                 description=row.description or "",
+                idp_project_id=row.idp_project_id,
             )
             for row in rows
         ]
@@ -43,4 +44,5 @@ class PostgresAppRepository(AppRepositoryPort):
             slug=row.slug,
             name=row.name,
             description=row.description or "",
+            idp_project_id=row.idp_project_id,
         )

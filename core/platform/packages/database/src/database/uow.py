@@ -16,10 +16,14 @@ class BaseSqlAlchemyUnitOfWork:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self._owns_transaction: bool = False
 
     async def __aenter__(self) -> Self:
         if not self.session.in_transaction():
             await self.session.begin()
+            self._owns_transaction = True
+        else:
+            self._owns_transaction = False
         return self
 
     async def __aexit__(
@@ -28,7 +32,7 @@ class BaseSqlAlchemyUnitOfWork:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        if exc_type is not None:
+        if exc_type is not None and self._owns_transaction:
             await self.rollback()
 
     async def commit(self) -> None:

@@ -1,6 +1,7 @@
 import os
 from datetime import UTC, datetime
 
+from seedwork import generate_id
 from seedwork.domain.types import JsonValue
 from sqlalchemy import (
     BigInteger,
@@ -181,7 +182,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_messages"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128), primary_key=True, default=lambda: generate_id("edi_msg")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -231,7 +232,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_json"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128), primary_key=True, default=lambda: generate_id("edi_json")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -267,7 +268,7 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "api_gateway"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128), primary_key=True, default=lambda: generate_id("edi_api_gw")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -297,7 +298,7 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "jobs"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128), primary_key=True, default=lambda: generate_id("edi_job")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # TRANSFORM, DELIVER
@@ -338,7 +339,7 @@ class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "audit_log"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128), primary_key=True, default=lambda: generate_id("edi_audit")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     step: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -352,7 +353,7 @@ class AckReceipt(TenantBase, TenantAwareMixin):
     __tablename__ = "ack_receipts"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, server_default=text("gen_random_uuid()::text")
+        String(128), primary_key=True, default=lambda: generate_id("edi_ack")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # MDN, 997, CONTRL

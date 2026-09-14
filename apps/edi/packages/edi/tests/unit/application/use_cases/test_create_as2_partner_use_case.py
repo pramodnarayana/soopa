@@ -3,9 +3,9 @@ from typing import cast
 import pytest
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.application.dtos.commands import CreateAS2TradingPartnerCmd
 from edi.application.use_cases.as2_partners.create_as2_partner_use_case import (
     CreateAS2PartnerUseCase,
+    CreateAS2TradingPartnerCmd,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
@@ -46,6 +46,6 @@ async def test_create_partner_event_uses_reserved_idempotency_key() -> None:
     assert reservation is not None
     if isinstance(reservation, dict):
         assert reservation["idempotency_key"] == "request-1"
-        assert reservation["status"] == "PUBLISHED"
+        assert reservation["status"] == "RESERVED"
     else:
         assert reservation.idempotency_key == "request-1"

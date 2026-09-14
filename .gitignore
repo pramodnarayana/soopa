@@ -46,6 +46,8 @@ ENV/
 # Pytest / Coverage
 .pytest_cache/
 .coverage
+coverage.xml
+coverage.json
 htmlcov/
 .tox/
 .nox/
@@ -72,3 +74,13 @@ volume/
 
 # Log files
 *.log
+
+# direnv cache — generated locally, never committed
+.direnv/
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+terraform-admin-key.json

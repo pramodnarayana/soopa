@@ -1,10 +1,8 @@
 from typing import Any
 
 import structlog
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
-)
 from edi.domain.exceptions import OrchestrationError
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from secret_store.ports.secret_store_port import SecretStorePort
@@ -29,7 +27,7 @@ router = APIRouter(tags=["Partners — AS2"])
 
 
 # Import shared rotation helper
-from unified_api.adapters.inbound.http.edi.routers.trading_partners.platform.as2_partners import (
+from unified_api.adapters.inbound.http.edi.routers.as2_partners import (
     _rotate_as2_certificates,
 )
 
@@ -41,7 +39,7 @@ from unified_api.adapters.inbound.http.edi.routers.trading_partners.platform.as2
 async def export_as2_certificates(
     partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     token_payload: dict[str, Any] = Depends(get_raw_jwt),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     secret_store: SecretStorePort = Depends(get_secret_store),
@@ -97,7 +95,7 @@ async def rotate_as2_certificates(
     partner_id: str,
     request: RotateCertificateRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
     profile: dict[str, Any] = Depends(get_current_user_profile),
     secret_store: SecretStorePort = Depends(get_secret_store),

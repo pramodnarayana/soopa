@@ -14,7 +14,7 @@ async def test_create_and_get_inbound_route(client: AsyncClient):
         "active": True,
     }
 
-    response = await client.post("/api/v1/tenants/1/edi/routes/inbound", json=payload)
+    response = await client.post("/api/v1/tenants/1/edi/inbound-routes", json=payload)
     # FK constraint error should return 400 or 422 (client error), not 500
     assert response.status_code in (400, 422), (
         f"Expected FK constraint error, got {response.status_code}: {response.text}"
@@ -29,7 +29,7 @@ async def test_create_and_get_outbound_route(client: AsyncClient):
         "active": True,
     }
 
-    response = await client.post("/api/v1/tenants/1/edi/routes/outbound", json=payload)
+    response = await client.post("/api/v1/tenants/1/edi/outbound-routes", json=payload)
     # FK constraint error should return 400 or 422 (client error), not 500
     assert response.status_code in (400, 422), (
         f"Expected FK constraint error, got {response.status_code}: {response.text}"

@@ -4,27 +4,23 @@ from typing import Any
 
 from database.exceptions import DuplicateEntityError
 from edi.adapters.outbound.database.encryption import db_encryption
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyControlPlaneUnitOfWork as ControlPlaneUnitOfWork,
-)
-from edi.application.dtos import (
-    UNSET,
-    CreateSFTPPartnerCmd,
-    UpdateSFTPPartnerCmd,
-)
 from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
+    CreateSFTPPartnerCmd,
     CreateSFTPPartnerUseCase,
 )
 from edi.application.use_cases.sftp_partners.delete_sftp_partner_use_case import (
     DeleteSFTPPartnerUseCase,
 )
 from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
+    UpdateSFTPPartnerCmd,
     UpdateSFTPPartnerUseCase,
 )
 from edi.domain.exceptions import OrchestrationError, VaultError
 from edi.ports.outbound.sftp_tester import SftpTesterPort
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
@@ -124,7 +120,7 @@ async def test_existing_sftp_connection(
     partner_id: str,
     request: TestSFTPConnectionRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
     vault_port: SecretStorePort = Depends(get_secret_store),
 ) -> Any:
@@ -176,7 +172,7 @@ async def create_sftp_partner(
     request: CreateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> Any:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
 
@@ -238,7 +234,7 @@ async def update_sftp_partner(
     request: UpdateSFTPPartnerRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> Any:
     """Updates an SFTP Partner in the Tenant Data Plane."""
 
@@ -283,7 +279,7 @@ async def delete_sftp_partner(
     partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    uow: ControlPlaneUnitOfWork = Depends(get_control_plane_uow),
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an SFTP partner."""
     async with uow:

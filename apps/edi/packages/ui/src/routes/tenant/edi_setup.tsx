@@ -4,45 +4,43 @@ import { useMemo, useState } from 'react';
 import { useEdiHeaders } from '../../features/edi_headers/api/ediHeadersApi';
 import { CreateEdiHeaderModal } from '../../features/edi_headers/components/CreateEdiHeaderModal';
 import { EdiHeadersTable } from '../../features/edi_headers/components/EdiHeadersTable';
+import { useInboundRoutesQuery } from '../../features/routes/api/inboundRouteHooks';
+import { useOutboundRoutesQuery } from '../../features/routes/api/outboundRouteHooks';
 import { CreateInboundRouteModal } from '../../features/routes/components/CreateInboundRouteModal';
 import { CreateOutboundRouteModal } from '../../features/routes/components/CreateOutboundRouteModal';
-import { RoutesTable } from '../../features/routes/components/RoutesTable';
-import { RoutesProvider, useRoutes } from '../../features/routes/context/RoutesContext';
-import type { RouteItem } from '../../features/routes/types';
+import { InboundRoutesTable } from '../../features/routes/components/InboundRoutesTable';
+import { OutboundRoutesTable } from '../../features/routes/components/OutboundRoutesTable';
 import { Route as appRoute } from '../tenant';
 
 export const Route = createRoute({
   getParentRoute: () => appRoute,
   path: '/edi_setup',
-  component: EdiSetupPageWrapper,
+  component: EdiSetupPage,
 });
-
-export function EdiSetupPageWrapper() {
-  return (
-    <RoutesProvider>
-      <EdiSetupPage />
-    </RoutesProvider>
-  );
-}
 
 export const globalFields: FieldDef[] = [
   { id: 'trading_partner_id', label: 'Trading Partner', type: 'text' },
 ];
 
 export function EdiSetupPage() {
-  const { routes, isLoading: isRoutesLoading } = useRoutes();
+  const { data: inboundRoutes = [], isLoading: isInboundLoading } = useInboundRoutesQuery();
+  const { data: outboundRoutes = [], isLoading: isOutboundLoading } = useOutboundRoutesQuery();
   const { data: ediHeaders, isLoading: isHeadersLoading } = useEdiHeaders();
 
   const [filters, setFilters] = useState<FilterRule[]>([]);
 
-  const filteredRoutes = useMemo(() => applyFilters(routes, filters), [routes, filters]);
+  const filteredInbound = useMemo(
+    () => applyFilters(inboundRoutes, filters),
+    [inboundRoutes, filters],
+  );
+  const filteredOutbound = useMemo(
+    () => applyFilters(outboundRoutes, filters),
+    [outboundRoutes, filters],
+  );
   const filteredHeaders = useMemo(
     () => applyFilters(ediHeaders || [], filters),
     [ediHeaders, filters],
   );
-
-  const inboundRoutes = filteredRoutes.filter((r: RouteItem) => r.direction === 'INBOUND');
-  const outboundRoutes = filteredRoutes.filter((r: RouteItem) => r.direction === 'OUTBOUND');
 
   return (
     <div className="flex flex-col gap-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
@@ -79,7 +77,7 @@ export function EdiSetupPage() {
               <span className="w-2 h-2 rounded-full bg-sky-500"></span>
               Inbound Routes
             </h3>
-            <RoutesTable data={inboundRoutes} isLoading={isRoutesLoading} />
+            <InboundRoutesTable data={filteredInbound} isLoading={isInboundLoading} />
           </div>
         </section>
 
@@ -111,7 +109,7 @@ export function EdiSetupPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                 Outbound Routes
               </h3>
-              <RoutesTable data={outboundRoutes} isLoading={isRoutesLoading} />
+              <OutboundRoutesTable data={filteredOutbound} isLoading={isOutboundLoading} />
             </div>
           </div>
         </section>

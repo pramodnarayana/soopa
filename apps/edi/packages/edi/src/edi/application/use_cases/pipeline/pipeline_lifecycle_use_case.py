@@ -4,7 +4,8 @@ import structlog
 from seedwork.domain.types import JsonDict
 
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.transaction_repository import UpdateEdiJsonCommand
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -44,13 +45,13 @@ class PipelineLifecycleUseCase:
                 transaction_type = str(txn_val) if txn_val else None
 
                 if gs_sender_id and gs_receiver_id:
-                    await self.uow.repository.update_edi_message_metadata(
+                    await self.uow.transactions.update_edi_message_metadata(
                         trace_id=trace_id,
                         gs_sender_id=gs_sender_id,
                         gs_receiver_id=gs_receiver_id,
                         transaction_type=transaction_type,
                     )
-                await self.uow.repository.update_edi_message_status(
+                await self.uow.transactions.update_edi_message_status(
                     trace_id, str(MessageStatus.TRANSFORMED)
                 )
             else:
@@ -75,9 +76,19 @@ class PipelineLifecycleUseCase:
                     update_kwargs["gs_receiver_id"] = str(payload["gs_receiver_id"])
 
                 if update_kwargs:
-                    await self.uow.repository.update_edi_json(trace_id=trace_id, **update_kwargs)
+                    await self.uow.transactions.update_edi_json(
+                        command=UpdateEdiJsonCommand(
+                            trace_id=trace_id,
+                            trading_partner_id=update_kwargs.get("trading_partner_id"),
+                            standard=update_kwargs.get("standard"),
+                            sender_id=update_kwargs.get("sender_id"),
+                            receiver_id=update_kwargs.get("receiver_id"),
+                            gs_sender_id=update_kwargs.get("gs_sender_id"),
+                            gs_receiver_id=update_kwargs.get("gs_receiver_id"),
+                        )
+                    )
 
-                await self.uow.repository.update_edi_json_status(
+                await self.uow.transactions.update_edi_json_status(
                     trace_id, str(MessageStatus.TRANSFORMED)
                 )
 
@@ -120,7 +131,7 @@ class PipelineLifecycleUseCase:
 
         async with self.uow:
             if direction == EdiDirection.INBOUND.value:
-                await self.uow.repository.update_api_payload_status(trace_id, str(status))
+                await self.uow.transactions.update_api_payload_status(trace_id, str(status))
             else:
-                await self.uow.repository.update_edi_message_status(trace_id, str(status))
+                await self.uow.transactions.update_edi_message_status(trace_id, str(status))
             await self.uow.commit()

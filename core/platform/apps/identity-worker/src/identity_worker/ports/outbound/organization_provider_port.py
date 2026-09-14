@@ -17,3 +17,11 @@ class OrganizationProviderPort(Protocol):
     async def toggle_organization_status(self, org_id: str, active: bool) -> None:
         """Activates or deactivates an organization in the IDP"""
         ...
+
+    async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
+        """Grants a project and its tenant roles to an organization"""
+        ...
+
+    async def revoke_project_from_organization(self, org_id: str, project_id: str) -> None:
+        """Revokes a project from an organization"""
+        ...

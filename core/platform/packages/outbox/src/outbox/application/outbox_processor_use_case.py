@@ -51,7 +51,7 @@ class OutboxProcessorUseCase:
         if not events:
             return False
 
-        logger.debug("outbox_relay_events_claimed", worker_id=self.worker_id, count=len(events))
+        logger.info("outbox_relay_events_claimed", worker_id=self.worker_id, count=len(events))
 
         batch_failure_reason: str | None = None
         try:
@@ -67,7 +67,7 @@ class OutboxProcessorUseCase:
         tasks = []
         for event in events:
             if event.id in successful_ids:
-                logger.debug(
+                logger.info(
                     "outbox_event_published", event_id=event.id, event_type=event.event_type
                 )
                 tasks.append(self.repository.mark_completed(event.id, self.worker_id))

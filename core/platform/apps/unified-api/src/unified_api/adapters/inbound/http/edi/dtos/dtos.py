@@ -128,6 +128,7 @@ class TestAS2ConnectionResponse(BaseModel):
 
 
 class UpdateAS2TradingPartnerRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(None, max_length=255, description="Name of the trading partner")
     as2_id: str | None = Field(None, max_length=255, description="AS2 ID (local or remote)")
     is_local: bool | None = Field(
@@ -138,6 +139,7 @@ class UpdateAS2TradingPartnerRequest(BaseModel):
 
 
 class UpdateAS2PartnershipRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(None, max_length=255)
     local_partner_id: ConstrainedId | None = None
     remote_partner_id: ConstrainedId | None = None
@@ -268,6 +270,7 @@ class UpdateOutboundEdiHeaderRequest(BaseModel):
 
 
 class UpdateRouteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     active: bool | None = None
     name: str | None = Field(None, max_length=255, description="Name of the route")
     trading_partner_id: ConstrainedId | None = Field(None, description="Trading Partner ID")
@@ -406,7 +409,6 @@ class BaseRouteItem(BaseModel):
 
 
 class InboundRouteItem(BaseRouteItem):
-    direction: Literal["INBOUND"]
     isa_sender_id: str
     isa_sender_qualifier: str | None = None
     isa_receiver_id: str
@@ -420,13 +422,10 @@ class InboundRouteItem(BaseRouteItem):
 
 
 class OutboundRouteItem(BaseRouteItem):
-    direction: Literal["OUTBOUND"]
     transaction_type: str = "*"
 
 
-RouteItemResponse = Annotated[
-    InboundRouteItem | OutboundRouteItem, Field(discriminator="direction")
-]
+RouteItemResponse = InboundRouteItem | OutboundRouteItem
 
 
 class OutboundMessageRequest(BaseModel):

@@ -4,7 +4,7 @@ from typing import Any
 import pytest
 from outbox.domain.constants import OutboxStatus
 
-from edi.adapters.outbound.database.postgres_data_plane_outbox_repository import (
+from edi.adapters.outbound.database.data_plane.outbox_repository import (
     SqlAlchemyDataPlaneOutboxRepository,
 )
 

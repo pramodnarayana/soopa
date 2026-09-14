@@ -4,7 +4,7 @@ import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
 import { useState } from 'react';
 import { useToast } from '../../../hooks/use-toast';
-import { useCreateOutboundRouteMutation } from '../api/routeHooks';
+import { useCreateOutboundRouteMutation } from '../api/outboundRouteHooks';
 import { useTenantDestinations } from '../hooks/useTenantDestinations';
 import { Direction } from '../types';
 

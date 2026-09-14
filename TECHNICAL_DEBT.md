@@ -2,12 +2,20 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
+## [Architecture] Centralized Resilient HTTP Client
+
+- **Date Added**: 2026-09-12
+- **Status**: TO DO
+- **Description**: Currently, external API integrations (e.g., Zitadel IDP) use custom-built HTTP clients (`ZitadelClient`) that handle their own status code checks and exceptions. As we integrate with more external systems (ERP, CRM), duplicating HTTP request error handling, retries, circuit breaking, and exception mapping per client violates DRY and Enterprise Architecture standards.
+- **Action Item**: Extract a generic, resilient HTTP capability into its own platform package (e.g., `core/platform/packages/http_client`). This package should provide a `ResilientHttpClient` base class that natively handles generic HTTP Exceptions (`BaseHttpError`, `HttpConflictError`), Auto-Retries for 429s/503s, Circuit Breaking, and OpenTelemetry tracing injection. All specific provider clients (like `ZitadelClient`) should inherit from this generic base and only override authentication and vendor-specific domain parsing.
+
 ## [OPEN] [Testing Architecture] Enforce Strict Per-Module 80% Test Coverage
 
 - **Date Added**: 2026-08-30
-- **Status**: 🔴 OPEN
+- **Status**: ✅ RESOLVED
 - **Description**: The CI test suite currently relies on a global `pytest-cov` threshold of 80%. This allows individual bounded contexts (e.g., UCP, EDI, Scheduler) to fall below 80% coverage and "hide" behind the aggregate total of the monorepo, which violates the strict isolation principles of our Enterprise-Grade Hexagonal Architecture.
 - **Action Item**: Implement a custom Python script or update the GitHub Actions CI matrix to strictly parse the coverage report and enforce the 80% minimum on a *per-module* basis. Every bounded context must independently prove 80% coverage to pass the pipeline.
+- **Solution**: We explicitly replaced `pnpm test` with `pnpm cov:python` in both `.github/workflows/ci.yml` and `scripts/verify_ci.sh`. Any module that dips below 80% (which was the case for `ucp-worker` at 63%) will now immediately fail the pipeline. We backfilled tests for `ucp-worker` to get it up to 97%.
 
 
 
@@ -443,5 +451,19 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: We have removed `# type: ignore` across `soopa_mono` to enforce strict type checking, which may expose structural type mismatches (such as `import-untyped`, `arg-type`, `assignment`, and `attr-defined`). Additionally, we must track and enforce 80% test coverage across all bounded contexts.
 - **Action Item**:
-  1. Structurally resolve any type errors uncovered by the removal of `# type: ignore` (e.g., install missing stubs like `boto3-stubs`, structurally map types).
   2. Implement strict per-module coverage reporting to guarantee no bounded context falls below the 80% threshold.
+
+## [Strict Typing] Remaining `# type: ignore` Instances
+
+- **Date Added**: 2026-09-10
+- **Status**: TO DO
+- **Description**: After the monorepo-wide cleanup of type suppressions, we have identified one remaining `# type: ignore` instance that was deliberately kept because it intercepts Pydantic configuration failures which type checkers cannot statically evaluate.
+  - `core/platform/packages/seedwork/src/seedwork/infrastructure/config.py`: `except ValidationError as e: # type: ignore`
+- **Action Item**: Determine if Pydantic's `ValidationError` can be typed explicitly or if the exception block needs to be restructured so that `mypy` natively accepts it without the suppression.ld.
+
+## [Coverage] Compute Worker Missing Test Coverage
+
+- **Date Added**: 2026-09-10
+- **Status**: TO DO
+- **Description**: The `ci:verify` script fails because `@soopa/compute-worker` is currently sitting at ~35% test coverage, dropping below the enforced 80% threshold. This is likely due to untested logic introduced in recent code additions (e.g. from CodeRabbit automated reviews).
+- **Action Item**: Write missing unit/integration tests for the `compute-worker` module (specifically covering `src/compute_worker/main.py` and `compute_dispatcher.py`) to raise coverage back above 80% so the global `ci:verify` pipeline can pass fully.

@@ -1,6 +1,3 @@
-import os
-import sys
-
 import structlog
 from database.provider import DatabaseProvider
 from notification.adapters.outbound.database.postgres_outbox_repository import (
@@ -24,6 +21,7 @@ from notification_cleanup.adapters.inbound.jobs.notification_outbox_sweeper_job 
 from notification_cleanup.adapters.outbound.database.postgres_notification_outbox_cleanup_repository import (
     SqlAlchemyNotificationOutboxCleanupRepository,
 )
+from notification_cleanup.config.settings import AppSettings
 
 logger = structlog.get_logger(__name__)
 
@@ -31,19 +29,14 @@ logger = structlog.get_logger(__name__)
 class WorkerContainer:
     """Dependency Injection container for the Notification Cleanup Worker."""
 
-    def __init__(self) -> None:
-        database_url = os.environ.get("DATABASE_URL", "")
-        self.db_provider = DatabaseProvider.from_url(database_url)
+    def __init__(self, settings: AppSettings) -> None:
+        self.db_provider = DatabaseProvider.from_url(settings.database_url)
         self.session_factory = self.db_provider.session_factory
 
-        self.sqs_jobs_queue_url = os.environ.get("SQS_NOTIFICATION_JOBS_QUEUE_URL", "")
-        self.aws_region = os.environ.get("AWS_REGION", "us-east-1")
-        self.aws_endpoint_url: str | None = os.environ.get("AWS_ENDPOINT_URL")
-
-        sns_topic_arn = os.environ.get("SNS_TOPIC_ARN")
-        if not sns_topic_arn:
-            sys.exit(1)
-        self.sns_topic_arn: str = sns_topic_arn
+        self.sqs_jobs_queue_url = settings.sqs_notification_jobs_queue_url
+        self.aws_region = settings.aws_region
+        self.aws_endpoint_url: str | None = settings.aws_endpoint_url
+        self.sns_topic_arn: str = settings.sns_topic_arn
 
         self.jobs_consumer: SqsConsumerManager | None = None
         self.outbox_cleanup_job_handler: NotificationOutboxCleanupJobHandler | None = None

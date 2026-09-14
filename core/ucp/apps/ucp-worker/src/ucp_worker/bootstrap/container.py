@@ -1,4 +1,3 @@
-import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -10,7 +9,7 @@ from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.app_subscription_manager import AppSubscriptionManager
 from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDeletedEventHandler
-from ucp.bootstrap.config import get_settings
+from ucp.config.settings import AppSettings
 from ucp.domain.constants import UcpEventType
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
@@ -21,9 +20,9 @@ logger = structlog.get_logger(__name__)
 class WorkerContainer:
     """Dependency Injection container for the UCP Worker."""
 
-    def __init__(self) -> None:
-        self.settings = get_settings()
-        self.database_url = os.environ.get("DATABASE_URL", "")
+    def __init__(self, settings: AppSettings) -> None:
+        self.settings = settings
+        self.database_url = settings.database_url
         self.db_provider = DatabaseProvider.from_url(self.database_url)
         self.session_factory = self.db_provider.session_factory
 

@@ -3,15 +3,23 @@ from datetime import UTC, datetime
 
 import pytest
 
-from edi.application.dtos.commands import (
+from edi.application.use_cases.inbound_routes.create_inbound_route_use_case import (
     CreateInboundRouteCmd,
-    CreateOutboundRouteCmd,
-    CreateSFTPPartnerCmd,
+)
+from edi.application.use_cases.inbound_routes.update_inbound_route_use_case import (
     UpdateInboundRouteCmd,
+)
+from edi.application.use_cases.outbound_routes.create_outbound_route_use_case import (
+    CreateOutboundRouteCmd,
+)
+from edi.application.use_cases.outbound_routes.update_outbound_route_use_case import (
     UpdateOutboundRouteCmd,
-    UpdateSFTPPartnerCmd,
+)
+from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
+    CreateSFTPPartnerCmd,
 )
 from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
+    UpdateSFTPPartnerCmd,
     UpdateSFTPPartnerUseCase,
 )
 from edi.domain.enums import EdiEventType
@@ -154,6 +162,11 @@ async def test_get_partnership_by_as2_ids_rejects_cross_tenant_partners():
 class FakeFieldEncryption:
     def encrypt(self, data: str) -> str:
         return f"encrypted:{data}"
+
+    def decrypt(self, token: str) -> str:
+        if token.startswith("encrypted:"):
+            return token[10:]
+        return token
 
 
 @pytest.mark.asyncio

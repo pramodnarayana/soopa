@@ -8,4 +8,5 @@ class App:
     id: str
     slug: str
     name: str
-    description: str
+    description: str | None = None
+    idp_project_id: str | None = None

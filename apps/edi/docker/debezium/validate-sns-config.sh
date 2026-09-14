@@ -2,12 +2,12 @@
 set -eu
 
 : "${AWS_REGION:?AWS_REGION is required}"
-: "${AWS_SNS_TOPIC_ARN:?AWS_SNS_TOPIC_ARN is required}"
+: "${SNS_EDI_EVENTS_TOPIC_ARN:?SNS_EDI_EVENTS_TOPIC_ARN is required}"
 
-case "$AWS_SNS_TOPIC_ARN" in
+case "$SNS_EDI_EVENTS_TOPIC_ARN" in
     arn:*:sns:"$AWS_REGION":*:*) ;;
     *)
-        echo "AWS_SNS_TOPIC_ARN region must match AWS_REGION" >&2
+        echo "SNS_EDI_EVENTS_TOPIC_ARN region must match AWS_REGION" >&2
         exit 1
         ;;
 esac

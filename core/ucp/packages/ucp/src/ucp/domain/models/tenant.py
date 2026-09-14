@@ -100,7 +100,7 @@ class Tenant(AggregateRoot):
         self.idp_tenant_id = idp_tenant_id
         self.updated_at = datetime.now(UTC)
 
-    def subscribe(self, app_id: str) -> None:
+    def subscribe(self, app_id: str, idp_project_id: str | None = None) -> None:
         if self.status != LifecycleStatus.ACTIVE:
             raise AppSubscriptionError("Cannot subscribe an inactive tenant to an app.")
 
@@ -115,16 +115,20 @@ class Tenant(AggregateRoot):
             )
 
         self.updated_at = datetime.now(UTC)
-        self.add_domain_event(AppSubscribedEvent(tenant_id=self.id, app_id=app_id))
+        self.add_domain_event(
+            AppSubscribedEvent(tenant_id=self.id, app_id=app_id, idp_project_id=idp_project_id)
+        )
 
-    def unsubscribe_from_app(self, app_id: str) -> None:
+    def unsubscribe_from_app(self, app_id: str, idp_project_id: str | None = None) -> None:
         sub = next((s for s in self.subscriptions if s.app_id == app_id), None)
         if not sub or sub.status == LifecycleStatus.INACTIVE:
             raise AppSubscriptionError(f"Tenant is not subscribed to '{app_id}'.")
 
         sub.status = LifecycleStatus.INACTIVE
         self.updated_at = datetime.now(UTC)
-        self.add_domain_event(AppUnsubscribedEvent(tenant_id=self.id, app_id=app_id))
+        self.add_domain_event(
+            AppUnsubscribedEvent(tenant_id=self.id, app_id=app_id, idp_project_id=idp_project_id)
+        )
 
     def change_status(self, new_status: LifecycleStatus) -> None:
         if self.status != new_status:

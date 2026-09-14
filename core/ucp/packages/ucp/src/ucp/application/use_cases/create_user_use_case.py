@@ -58,16 +58,16 @@ class CreateUserUseCase:
             await self._uow.user_repo.save(new_user)
 
             # 2. Assign PBAC Role
-            pbac_role = await self._uow.role_repo.get_global_role_by_name(command.role)
+            pbac_role = await self._uow.role_repo.get_platform_role_by_id(command.role)
             if not pbac_role:
                 raise ResourceNotFoundError(
                     f"Global PBAC Role '{command.role}' is not found in the database."
                 )
 
             # Emit the domain event for external sync
-            new_user.assign_role(
-                role_id=pbac_role.id, role_name=pbac_role.name, tenant_id=tenant.id
-            )
+            # Note: We do NOT call `new_user.assign_role(...)` here because it emits
+            # a `UserRoleAssignedEvent` which races with the `UserCreatedEvent`.
+            # The role is already included in `UserCreatedEvent` and handled by the worker.
 
             # Re-save the user to persist PBAC role event outbox flush
             await self._uow.user_repo.save(new_user)
@@ -85,7 +85,7 @@ class CreateUserUseCase:
                     email=command.email,
                     first_name=command.first_name,
                     last_name=command.last_name,
-                    role=command.role,
+                    role=pbac_role.name,
                 )
             )
             # Re-save the user to persist PBAC role and flush the event outbox

@@ -9,6 +9,7 @@ from ucp.application.use_cases.unsubscribe_app_use_case import (
     UnsubscribeAppUseCase,
 )
 from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
+from ucp.domain.models.app import App
 from ucp.domain.models.tenant import Tenant, TenantSubscription
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
@@ -38,6 +39,16 @@ def fake_uow(tenant_id: str, app_id: str) -> FakeUcpUnitOfWork:
         subscriptions=[TenantSubscription(app_id=app_id, status=LifecycleStatus.ACTIVE)],
     )
     uow.tenant_repo.tenants.append(tenant)
+
+    app = App(
+        id=app_id,
+        slug="test-app",
+        name="Test App",
+        description=None,
+        idp_project_id="test_project_id",
+    )
+    uow.app_repo.apps.append(app)
+
     return uow
 
 

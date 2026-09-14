@@ -4,6 +4,7 @@ import signal
 
 import structlog
 from observability import ObservabilityProvider
+from ucp.config.settings import get_settings
 
 from ucp_worker.bootstrap.container import WorkerContainer
 
@@ -12,10 +13,11 @@ logger = structlog.get_logger(__name__)
 
 async def main() -> None:
     ObservabilityProvider.auto_configure_from_env("ucp-worker")
+    settings = get_settings()
 
     logger.info("ucp_worker_starting")
 
-    container = WorkerContainer()
+    container = WorkerContainer(settings)
     container.wire()
 
     if container.events_consumer:
@@ -32,12 +34,13 @@ async def main() -> None:
     try:
         await stop_event.wait()
     finally:
-        logger.info("Shutting down UCP worker tasks gracefully...")
+        logger.info("ucp_worker_shutting_down_tasks")
 
         if container.events_consumer:
             await container.events_consumer.stop()
 
         await container.dispose()
+        logger.info("ucp_worker_shutdown_complete")
 
 
 if __name__ == "__main__":

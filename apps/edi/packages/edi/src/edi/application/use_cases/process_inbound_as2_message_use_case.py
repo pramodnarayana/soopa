@@ -25,6 +25,7 @@ import email
 import functools
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from email import policy
 from typing import cast
 
@@ -33,8 +34,24 @@ from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.constants import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import ProcessInboundAs2Command
-from edi.domain.enums import EdiConnectionType, EdiDirection, MessageStatus
+from edi.domain.enums import (
+    ConnectionType,
+    EdiConnectionType,
+    EdiDirection,
+    EncryptionAlgorithm,
+    MDNType,
+    MessageStatus,
+    SignatureAlgorithm,
+)
+from edi.ports.outbound.transaction_repository import CreateEdiMessageCommand
+
+
+@dataclass(frozen=True)
+class ProcessInboundAs2Command:
+    headers: dict[str, str]
+    body_bytes: bytes
+
+
 from edi.domain.models.as2 import (
     AS2Message,
     AS2PartnerDomainModel,
@@ -473,23 +490,51 @@ class ProcessInboundAs2MessageUseCase:
             )
 
             msg_id = await dp_uow.transactions.create_edi_message(
-                tenant_id=true_tenant_id,
-                payload={
-                    "id": edi_message_aggregate.id,
-                    "trace_id": edi_message_aggregate.trace_id,
-                    "direction": edi_message_aggregate.direction,
-                    "connection_type": edi_message_aggregate.connection_type,
-                    "sender_id": edi_message_aggregate.sender_id,
-                    "receiver_id": edi_message_aggregate.receiver_id,
-                    "as2_sender_id": edi_message_aggregate.as2_sender_id,
-                    "as2_receiver_id": edi_message_aggregate.as2_receiver_id,
-                    "message_id": edi_message_aggregate.message_id,
-                    "mdn_mode": edi_message_aggregate.mdn_mode,
-                    "signature_algorithm": edi_message_aggregate.signature_algorithm,
-                    "encryption_algorithm": edi_message_aggregate.encryption_algorithm,
-                    "edi_data": edi_message_aggregate.edi_data,
-                    "status": edi_message_aggregate.status,
-                },
+                command=CreateEdiMessageCommand(
+                    id=edi_message_aggregate.id,
+                    trace_id=str(edi_message_aggregate.trace_id),
+                    tenant_id=true_tenant_id,
+                    direction=EdiDirection(str(edi_message_aggregate.direction))
+                    if edi_message_aggregate.direction
+                    else None,
+                    connection_type=ConnectionType(str(edi_message_aggregate.connection_type))
+                    if edi_message_aggregate.connection_type
+                    else None,
+                    sender_id=str(edi_message_aggregate.sender_id)
+                    if edi_message_aggregate.sender_id
+                    else None,
+                    receiver_id=str(edi_message_aggregate.receiver_id)
+                    if edi_message_aggregate.receiver_id
+                    else None,
+                    as2_sender_id=str(edi_message_aggregate.as2_sender_id)
+                    if edi_message_aggregate.as2_sender_id
+                    else None,
+                    as2_receiver_id=str(edi_message_aggregate.as2_receiver_id)
+                    if edi_message_aggregate.as2_receiver_id
+                    else None,
+                    message_id=str(edi_message_aggregate.message_id)
+                    if edi_message_aggregate.message_id
+                    else None,
+                    mdn_mode=MDNType(str(edi_message_aggregate.mdn_mode))
+                    if edi_message_aggregate.mdn_mode
+                    else None,
+                    signature_algorithm=SignatureAlgorithm(
+                        str(edi_message_aggregate.signature_algorithm)
+                    )
+                    if edi_message_aggregate.signature_algorithm
+                    else None,
+                    encryption_algorithm=EncryptionAlgorithm(
+                        str(edi_message_aggregate.encryption_algorithm)
+                    )
+                    if edi_message_aggregate.encryption_algorithm
+                    else None,
+                    edi_data=str(edi_message_aggregate.edi_data)
+                    if edi_message_aggregate.edi_data
+                    else "",
+                    status=MessageStatus(str(edi_message_aggregate.status))
+                    if edi_message_aggregate.status
+                    else None,
+                )
             )
 
             outbox_payload = TransformRequestedEvent(

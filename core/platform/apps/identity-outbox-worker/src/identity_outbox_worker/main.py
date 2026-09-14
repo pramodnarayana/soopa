@@ -7,14 +7,17 @@ import structlog
 from observability import ObservabilityProvider
 
 from identity_outbox_worker.bootstrap.container import WorkerContainer
+from identity_outbox_worker.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    settings = get_settings()
+
     ObservabilityProvider.auto_configure_from_env("identity-outbox-worker")
 
-    container = WorkerContainer()
+    container = WorkerContainer(settings)
     container.wire()
     logger.info("identity_outbox_worker_starting")
 

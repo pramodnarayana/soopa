@@ -14,19 +14,14 @@ from edi.adapters.outbound.security.smime import (
     sign_payload,
     verify_signature,
 )
-from edi.application.dtos.commands import EncryptionAlgorithm
-from edi.domain.enums import As2EncryptionAlgorithm
+from edi.domain.enums import As2EncryptionAlgorithm, EncryptionAlgorithm
 
 
 def test_encryption_enums_reject_unsupported_algorithms() -> None:
     with pytest.raises(ValueError):
         As2EncryptionAlgorithm("aes192")
     with pytest.raises(ValueError):
-        As2EncryptionAlgorithm("3des")
-    with pytest.raises(ValueError):
         EncryptionAlgorithm("AES192")
-    with pytest.raises(ValueError):
-        EncryptionAlgorithm("3DES")
 
 
 def test_encrypt_decrypt_smime():

@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.inbound.as2.builder import build_outbound_message
-from edi.adapters.outbound.database.data_plane_unit_of_work import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
@@ -39,7 +39,6 @@ from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-from edi.config.settings import AppSettings
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.testing.fakes.pipeline_fakes import FakeTransformerAdapter
 
@@ -218,9 +217,10 @@ async def test_inbound_flow_e2e(
         # To avoid running full worker pipeline in a unit test, we will instantiate the services directly
 
         # 1. Manually run ComputeTransformUseCase
-        settings = AppSettings()
 
-        uow = SqlAlchemyDataPlaneUnitOfWork(session, settings, S3StorageClient("test", None))
+        uow = SqlAlchemyDataPlaneUnitOfWork(
+            tenant_session=session, storage=S3StorageClient("test", None)
+        )
         translate_svc = ComputeTransformUseCase(uow, BotsTransformerAdapter())
 
         # Get trace_id from DB

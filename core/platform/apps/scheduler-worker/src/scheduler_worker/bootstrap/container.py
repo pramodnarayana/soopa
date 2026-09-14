@@ -1,4 +1,3 @@
-import os
 from typing import Any
 
 from dependency_injector import containers, providers
@@ -10,17 +9,12 @@ from scheduler.application.job_sweeper_use_case import JobSweeperUseCase
 from scheduler_worker.adapters.inbound.workers.scheduler_poller import SchedulerPoller
 
 
-def _validate_positive_int(value: int, name: str) -> int:
-    if value <= 0:
-        raise ValueError(f"{name} must be positive, got {value}")
-    return value
-
-
 class Container(containers.DeclarativeContainer):
     """
     Declarative IoC container for the Scheduler Engine.
     """
 
+    config = providers.Configuration()
     session_factory: providers.Dependency[Any] = providers.Dependency()
 
     uow_factory = providers.Factory(
@@ -34,19 +28,13 @@ class Container(containers.DeclarativeContainer):
         SQSJobDispatcher,
         queue_url_map=providers.Dict(
             {
-                "edi-data-plane-jobs.fifo": providers.Callable(
-                    os.environ.get, "SQS_DATA_PLANE_JOBS_QUEUE_URL", ""
-                ),
-                "edi-control-plane-jobs.fifo": providers.Callable(
-                    os.environ.get, "SQS_CONTROL_PLANE_JOBS_QUEUE_URL", ""
-                ),
-                "notification-jobs.fifo": providers.Callable(
-                    os.environ.get, "SQS_NOTIFICATION_JOBS_QUEUE_URL", ""
-                ),
+                "edi-data-plane-jobs.fifo": config.sqs_data_plane_jobs_queue_url,
+                "edi-control-plane-jobs.fifo": config.sqs_control_plane_jobs_queue_url,
+                "notification-jobs.fifo": config.sqs_notification_jobs_queue_url,
             }
         ),
-        endpoint_url=providers.Callable(os.environ.get, "AWS_ENDPOINT_URL", None),
-        region=providers.Callable(os.environ.get, "AWS_REGION", "us-east-1"),
+        endpoint_url=config.aws_endpoint_url,
+        region=config.aws_region,
     )
 
     sweep_use_case = providers.Factory(
@@ -64,18 +52,6 @@ class Container(containers.DeclarativeContainer):
         SchedulerPoller,
         sweep_use_case=sweep_use_case,
         claim_use_case=claim_use_case,
-        poll_interval_seconds=providers.Callable(
-            _validate_positive_int,
-            providers.Callable(
-                int, providers.Callable(os.environ.get, "SCHEDULER_POLL_INTERVAL_SECONDS", "5")
-            ),
-            "poll_interval_seconds",
-        ),
-        max_concurrent_jobs=providers.Callable(
-            _validate_positive_int,
-            providers.Callable(
-                int, providers.Callable(os.environ.get, "SCHEDULER_MAX_CONCURRENT_JOBS", "10")
-            ),
-            "max_concurrent_jobs",
-        ),
+        poll_interval_seconds=config.scheduler_poll_interval_seconds,
+        max_concurrent_jobs=config.scheduler_max_concurrent_jobs,
     )

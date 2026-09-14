@@ -64,6 +64,24 @@ class MissingCertificateError(DomainError):
     """Raised when required certificates are missing."""
 
 
+class MissingRoutingInformationError(DomainError):
+    """Raised when an EDI message is missing sender/receiver IDs for routing."""
+
+    def __init__(self, trace_id: str):
+        super().__init__(f"EDI Message {trace_id} is missing sender/receiver IDs for routing.")
+        self.trace_id = trace_id
+
+
+class RouteNotFoundError(DomainError):
+    """Raised when an inbound or outbound route cannot be resolved."""
+
+    def __init__(self, direction: str, sender_id: str, receiver_id: str):
+        super().__init__(f"No route found for {direction} {sender_id}->{receiver_id}")
+        self.direction = direction
+        self.sender_id = sender_id
+        self.receiver_id = receiver_id
+
+
 class TransactionNotFoundError(DomainError):
     """Raised when an EDI Transaction trace is not found."""
 

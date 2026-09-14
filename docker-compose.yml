@@ -12,6 +12,9 @@ x-monolith-base: &monolith-base
   image: platform:local
   env_file: .env
   environment:
+    DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
+    GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
+    EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
     AWS_ENDPOINT_URL: http://localstack:4566
     AWS_REGION: us-east-1
     SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/000000000000/edi-config-sync-queue.fifo

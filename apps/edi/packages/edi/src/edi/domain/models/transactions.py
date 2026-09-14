@@ -18,6 +18,7 @@ class EdiJsonDomainModel(EdiRecordBase):
     business_metadata: dict[str, JsonValue] | None = None
     payload: JsonValue | None = None
     storage_uri: str | None = None
+    parent_trace_id: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -40,6 +41,7 @@ class EdiMessageDomainModel(EdiRecordBase):
     response: str | None = None
     headers: dict[str, JsonValue] | None = None
     storage_uri: str | None = None
+    parent_trace_id: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -50,6 +52,7 @@ class ApiGatewayReceiptDomainModel(EdiRecordBase):
     target_format: str | None = None
     payload: JsonValue | None = None
     storage_uri: str | None = None
+    parent_trace_id: str | None = None
     response: str | None = None
     headers: dict[str, JsonValue] | None = None
 

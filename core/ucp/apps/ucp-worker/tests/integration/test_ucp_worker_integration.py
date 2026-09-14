@@ -9,6 +9,7 @@ from database.provider import get_async_engine
 from seedwork import generate_random_hex
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from ucp.config.settings import get_settings
 from ucp.domain.constants import UcpEventType
 
 from ucp_worker.bootstrap.container import WorkerContainer
@@ -74,34 +75,49 @@ async def test_ucp_worker_handles_tenant_deleted_event(
     await db_connection.execute(text("SAVEPOINT seed_complete"))
 
     # 2. Setup Worker Container
-    container = WorkerContainer()
-    container.session_factory = db_session_factory
-    container.settings.sqs_ucp_identity_sync_queue_url = "http://dummy"
-    container.settings.sqs_ucp_jobs_queue_url = "http://dummy"
-    container.wire()
+    settings = get_settings()
+    # Override the underlying nested model fields directly — the @property accessors
+    # are read-only computed views; we must mutate the source nested models instead.
+    orig_db_url = settings.database.global_url
+    orig_sync_queue = settings.sqs.ucp_identity_sync_queue_url
+    orig_jobs_queue = settings.sqs.ucp_jobs_queue_url
 
-    # 3. Construct Payload
-    payload = {
-        "id": f"evt_{generate_random_hex(6)}",
-        "event_type": UcpEventType.TENANT_DELETED.value,
-        "tenant_id": tenant_id,
-        "payload": {"tenant_id": tenant_id},
-        "idempotency_key": f"test_idemp_{generate_random_hex(6)}",
-    }
+    settings.database.global_url = str(db_connection.engine.url)
+    settings.sqs.ucp_identity_sync_queue_url = "http://dummy"
+    settings.sqs.ucp_jobs_queue_url = "http://dummy"
 
-    # 4. Dispatch directly to bypass SQS connection polling and threading issues in tests
     try:
-        await container.events_dispatcher.dispatch(payload)
+        container = WorkerContainer(settings)
+        container.session_factory = db_session_factory
+        container.wire()
 
-        # 5. Verify Soft Deletion
-        async with db_session_factory() as session:
-            res = await session.execute(
-                text("SELECT deleted_at FROM identity.roles WHERE id = :role_id"),
-                {"role_id": role_id},
-            )
-            deleted_at = res.scalar_one_or_none()
+        # 3. Construct Payload
+        payload = {
+            "id": f"evt_{generate_random_hex(6)}",
+            "event_type": UcpEventType.TENANT_DELETED.value,
+            "tenant_id": tenant_id,
+            "payload": {"tenant_id": tenant_id},
+            "idempotency_key": f"test_idemp_{generate_random_hex(6)}",
+        }
+
+        # 4. Dispatch directly to bypass SQS connection polling and threading issues in tests
+        try:
+            await container.events_dispatcher.dispatch(payload)
+
+            # 5. Verify Soft Deletion
+            async with db_session_factory() as session:
+                res = await session.execute(
+                    text("SELECT deleted_at FROM identity.roles WHERE id = :role_id"),
+                    {"role_id": role_id},
+                )
+                deleted_at = res.scalar_one_or_none()
+        finally:
+            await container.dispose()
+
+        assert deleted_at is not None, (
+            "Tenant infrastructure (role) was not soft-deleted by the worker"
+        )
     finally:
-        await container.dispose()
-
-    assert deleted_at is not None, "Tenant infrastructure (role) was not soft-deleted by the worker"
-    print("\n\n>>> TEST FINISHED <<<\n\n")
+        settings.database.global_url = orig_db_url
+        settings.sqs.ucp_identity_sync_queue_url = orig_sync_queue
+        settings.sqs.ucp_jobs_queue_url = orig_jobs_queue

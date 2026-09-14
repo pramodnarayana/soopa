@@ -59,6 +59,7 @@ class TenantProvisionedEvent(DomainEvent):
 class AppSubscribedEvent(DomainEvent):
     tenant_id: str
     app_id: str
+    idp_project_id: str | None = None
 
     @property
     def event_name(self) -> str:
@@ -72,6 +73,7 @@ class AppSubscribedEvent(DomainEvent):
 class AppUnsubscribedEvent(DomainEvent):
     tenant_id: str
     app_id: str
+    idp_project_id: str | None = None
 
     @property
     def event_name(self) -> str:

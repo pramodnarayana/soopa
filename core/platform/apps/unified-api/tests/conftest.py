@@ -263,7 +263,7 @@ async def seeded_api_token(db_session_factory):
                 shard = UcpDatabaseShard(
                     id="edi_shard_1",
                     name="EDI Primary Shard",
-                    dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                    dsn=os.environ["TEST_SHARD_DB_URL"],
                     status=DatabaseShardStatus.ACTIVE,
                 )
                 session.add(shard)

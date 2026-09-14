@@ -206,6 +206,7 @@ def upgrade() -> None:
         sa.Column("slug", sa.String(length=255), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.String(length=1024), nullable=True),
+        sa.Column("idp_project_id", sa.String(length=255), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
@@ -593,17 +594,7 @@ def upgrade() -> None:
             updated_at = NOW();
         """
     )
-    op.execute(
-        """
-        INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at)
-        VALUES ('edi_shard_1', 'EDI Primary Shard', 'postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1', 'active', NOW(), NOW())
-        ON CONFLICT (id) DO UPDATE SET
-            name = EXCLUDED.name,
-            dsn = EXCLUDED.dsn,
-            status = EXCLUDED.status,
-            updated_at = NOW();
-        """
-    )
+
     op.execute(
         """
         INSERT INTO scheduling.scheduled_jobs (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, retry_count, payload, status, created_at, updated_at)

@@ -9,7 +9,7 @@ from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.bootstrap.config import get_settings
+from ucp.config.settings import get_settings
 
 
 async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]:

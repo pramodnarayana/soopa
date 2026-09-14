@@ -17,14 +17,20 @@ class DummyIdentityProviderPort(IdentityProviderPort):
     async def sync_tenant(self, tenant_id: str) -> None:
         logger.info("dummy_idp_sync_tenant", tenant_id=tenant_id)
 
+    async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
+        logger.info("dummy_idp_grant_project", org_id=org_id, project_id=project_id)
+
+    async def revoke_project_from_organization(self, org_id: str, project_id: str) -> None:
+        logger.info("dummy_idp_revoke_project", org_id=org_id, project_id=project_id)
+
     async def create_user(
         self,
         org_id: str,
         email: str,
         first_name: str,
         last_name: str,
-    ) -> str:
-        return f"dummy_user_{uuid4()}"
+    ) -> tuple[str, bool]:
+        return f"dummy_user_{uuid4()}", True
 
     async def assign_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
         pass

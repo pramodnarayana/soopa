@@ -1,11 +1,11 @@
 from dependency_injector import containers, providers
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 
-from edi.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyControlPlaneUnitOfWork,
-    SqlAlchemyDataPlaneUnitOfWork,
+from edi.adapters.outbound.database.control_plane.tenant_repository import (
+    SqlAlchemyTenantRepository,
 )
+from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.adapters.outbound.pipeline.storage import S3StorageClient

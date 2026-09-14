@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 import pytest
 from identity.domain.constants import IdentityIdPrefix
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role
 from seedwork.utils import generate_id
 
@@ -43,7 +44,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
         name="admin",
         description="Admin role",
         capabilities=["read", "write"],
-        tenant_id=None,
+        tenant_id=PLATFORM_TENANT_ID,
     )
     await fake_uow.role_repo.save(role)
 
@@ -52,7 +53,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="admin",
+        role=role_id,
     )
 
     user_id = await create_user_use_case.execute(command)
@@ -68,9 +69,9 @@ async def test_create_user_success(fake_uow, create_user_use_case):
     assert any(r[0] == tenant_id and r[1] == user_id and r[2] == role_id for r in role_memberships)
 
     events = saved_user.domain_events
-    assert len(events) == 2
-    assert events[1].__class__.__name__ == "UserCreatedEvent"
-    assert events[1].email == "test@example.com"
+    assert len(events) == 1
+    assert events[0].__class__.__name__ == "UserCreatedEvent"
+    assert events[0].email == "test@example.com"
 
 
 @pytest.mark.asyncio
@@ -81,7 +82,7 @@ async def test_create_user_tenant_not_found(create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="admin",
+        role="rol_123",
     )
 
     with pytest.raises(ResourceNotFoundError) as exc:
@@ -109,7 +110,7 @@ async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="admin",
+        role="rol_123",
     )
 
     with pytest.raises(StateConflictError) as exc:

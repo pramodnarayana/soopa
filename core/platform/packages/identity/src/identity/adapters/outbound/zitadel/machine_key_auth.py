@@ -24,7 +24,7 @@ class ZitadelMachineKey:
             raw: object = json.loads(value)
         except json.JSONDecodeError as exc:
             raise ZitadelMachineAuthenticationError(
-                "ZITADEL_MACHINE_KEY must be valid JSON"
+                f"ZITADEL_MACHINE_KEY must be valid JSON, failed to parse: {exc}"
             ) from exc
 
         if not isinstance(raw, dict):

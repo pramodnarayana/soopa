@@ -1,11 +1,9 @@
 import pytest
 from database.models.identity import Tenant
 from database.router import DatabaseRouterPort
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork,
-)
 from edi.config.settings import get_settings
 from seedwork import generate_id
 from sqlalchemy import select, text
@@ -42,7 +40,7 @@ async def test_tenant_uow_provider_success(test_db_router: DatabaseRouterPort) -
         shard = DatabaseShard(
             id=generate_id("ucp_shard"),
             name=shard_name,
-            dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+            dsn=test_db_router.shard_url,
         )
         session.add(shard)
         await session.flush()

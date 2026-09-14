@@ -13,6 +13,8 @@ class IdentityIdPrefix(StrEnum):
 
 class IdentityEventType(StrEnum):
     TENANT_PROVISIONED = "tenant.provisioned"
+    APP_SUBSCRIBED = "app.subscribed"
+    APP_UNSUBSCRIBED = "app.unsubscribed"
     USER_INVITED = "UserInvited"
     USER_UPDATED = "UserUpdated"
     USER_ROLE_ASSIGNED = "user_role_assigned"

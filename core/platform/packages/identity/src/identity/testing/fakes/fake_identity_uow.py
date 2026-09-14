@@ -68,11 +68,18 @@ class FakeRoleRepository(RoleRepositoryPort):
     async def get_by_id(self, role_id: str) -> Role | None:
         return next((r for r in self.roles if r.id == role_id), None)
 
-    async def get_global_role_by_name(self, name: str) -> Role | None:
-        return next((r for r in self.roles if r.tenant_id is None and r.name == name), None)
+    async def get_platform_role_by_id(self, role_id: str) -> Role | None:
+        return next(
+            (r for r in self.roles if r.id == role_id and r.tenant_id == PLATFORM_TENANT_ID), None
+        )
 
-    async def get_global_roles(self) -> list[Role]:
-        return [r for r in self.roles if r.tenant_id is None]
+    async def get_platform_role_by_name(self, name: str) -> Role | None:
+        return next(
+            (r for r in self.roles if r.tenant_id == PLATFORM_TENANT_ID and r.name == name), None
+        )
+
+    async def get_platform_roles(self) -> list[Role]:
+        return [r for r in self.roles if r.tenant_id == PLATFORM_TENANT_ID]
 
     async def save(self, role: Role) -> None:
         existing = await self.get_by_id(role.id)

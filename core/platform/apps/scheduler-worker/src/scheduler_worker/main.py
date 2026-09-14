@@ -1,7 +1,6 @@
 import asyncio
 import os
 import signal
-import sys
 
 import structlog
 from database.provider import get_async_engine
@@ -10,6 +9,7 @@ from observability import ObservabilityProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scheduler_worker.bootstrap.container import Container
+from scheduler_worker.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -22,21 +22,16 @@ async def main() -> None:
     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../../../../.env"))
     load_dotenv(dotenv_path)
     ObservabilityProvider.auto_configure_from_env("scheduler-worker")
+
+    settings = get_settings()
+
     logger.info("scheduler_worker_starting")
 
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        logger.error("DATABASE_URL is not set")
-        sys.exit(1)
-
-    # Convert to asyncpg
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
-
-    engine = get_async_engine(database_url)
+    engine = get_async_engine(settings.async_database_url)
     session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     container = Container(session_factory=session_factory)
+    container.config.from_pydantic(settings)
     worker = container.worker()
 
     loop = asyncio.get_running_loop()

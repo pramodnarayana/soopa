@@ -5,6 +5,8 @@ from typing import Any
 
 from dotenv import load_dotenv
 
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+
 load_dotenv()
 
 from contextlib import asynccontextmanager
@@ -32,10 +34,6 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
 )
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-)
 from edi.module import create_edi_app
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
@@ -114,6 +112,7 @@ async def tenant_db_session(tenant_db_connection):
         bind=tenant_db_connection,
         expire_on_commit=False,
         class_=AsyncSession,
+        info={"session_type": "tenant"},
         join_transaction_mode="create_savepoint",
     )
 
@@ -227,7 +226,7 @@ async def client(
         await gs_gen.__anext__()
         ts = await ts_gen.__anext__()
         try:
-            yield DataPlaneUnitOfWorkPort(tenant_session=ts, storage=InMemoryStorageAdapter())
+            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=ts, storage=InMemoryStorageAdapter())
         finally:
             await gs_gen.aclose()
             await ts_gen.aclose()

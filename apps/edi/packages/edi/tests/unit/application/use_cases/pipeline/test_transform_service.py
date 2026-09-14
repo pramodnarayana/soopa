@@ -1,7 +1,7 @@
 import typing
 
 from edi.config.settings import AppSettings
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 """
 Unit tests for InboundTransformUseCase — verifies inbound EDI→JSON transformation.

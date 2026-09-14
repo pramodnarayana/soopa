@@ -2,9 +2,10 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 
 export interface Role {
-  key: string;
-  displayName: string;
-  group: string;
+  id: string;
+  name: string;
+  description: string | null;
+  capabilities: string[];
 }
 
 export const useGetRoles = () => {

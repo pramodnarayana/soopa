@@ -5,13 +5,21 @@ from typing import cast
 import structlog
 from seedwork.domain.types import JsonDict
 
-from edi.application.dtos.routes import OutboundEdiHeaderDTO, OutboundRouteDTO
 from edi.config.settings import AppSettings
-from edi.domain.enums import EdiDirection, EdiStandard, MessageStatus, PipelineEventType
+from edi.domain.enums import (
+    ConnectionType,
+    EdiDirection,
+    EdiStandard,
+    MessageStatus,
+    PipelineEventType,
+)
+from edi.domain.models.headers import OutboundEdiHeaderDomainModel
+from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.domain.types import AstNode
-from edi.ports.outbound.data_plane_unit_of_work_port import DataPlaneUnitOfWorkPort
+from edi.ports.outbound.transaction_repository import CreateEdiMessageCommand
 from edi.ports.outbound.transformer_port import TransformerPort
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -33,7 +41,7 @@ class DispatchOutboundTransformUseCase:
 
     async def _resolve_route_config(
         self, edi_json: EdiJsonDomainModel, trace_id: str
-    ) -> tuple[str, OutboundEdiHeaderDTO, OutboundRouteDTO]:
+    ) -> tuple[str, OutboundEdiHeaderDomainModel, OutboundRouteDomainModel]:
         trading_partner_id = edi_json.trading_partner_id
         tenant_id = edi_json.tenant_id
 
@@ -51,10 +59,10 @@ class DispatchOutboundTransformUseCase:
         if tenant_id is None:
             raise ValueError(f"Missing tenant_id for trace_id={trace_id}")
 
-        route_config = await self.uow.repository.get_outbound_edi_header_by_route_or_partner(
+        route_config = await self.uow.edi_headers.get_outbound_edi_header_by_trading_partner_id(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
         )
-        outbound_route = await self.uow.repository.get_outbound_route_by_trading_partner_id(
+        outbound_route = await self.uow.outbound_routes.get_outbound_route_by_trading_partner_id(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
         )
 
@@ -101,7 +109,7 @@ class DispatchOutboundTransformUseCase:
         logger.info("outbound_transform.started", trace_id=trace_id)
 
         async with self.uow:
-            edi_json = await self.uow.repository.get_edi_json(trace_id)
+            edi_json = await self.uow.transactions.get_edi_json(trace_id)
             if not edi_json:
                 raise ValueError(f"No EdiJson record found for trace_id={trace_id}")
 
@@ -162,20 +170,22 @@ class DispatchOutboundTransformUseCase:
             edi_str = raw_edi_bytes.decode("utf-8")
             connection_type = self._determine_connection_type(route_config, outbound_route)
 
-            await self.uow.repository.save_edi_message(
-                trace_id=trace_id,
-                direction=EdiDirection.OUTBOUND.value,
-                edi_data=edi_str,
-                format_standard=standard,
-                transaction_type=transaction_type,
-                status=MessageStatus.PENDING_DELIVERY.value,
-                connection_type=connection_type,
-                sender_id=isa_sender_id,
-                receiver_id=isa_receiver_id,
-                gs_sender_id=gs_sender_id,
-                gs_receiver_id=gs_receiver_id,
-                trading_partner_id=trading_partner_id,
-                tenant_id=edi_json.tenant_id,
+            await self.uow.transactions.create_edi_message(
+                command=CreateEdiMessageCommand(
+                    trace_id=trace_id,
+                    tenant_id=edi_json.tenant_id or "",
+                    direction=EdiDirection.OUTBOUND,
+                    edi_data=edi_str,
+                    format_standard=standard,
+                    transaction_type=transaction_type,
+                    status=MessageStatus.PENDING_DELIVERY,
+                    connection_type=ConnectionType(connection_type),
+                    sender_id=isa_sender_id,
+                    receiver_id=isa_receiver_id,
+                    gs_sender_id=gs_sender_id,
+                    gs_receiver_id=gs_receiver_id,
+                    trading_partner_id=trading_partner_id,
+                )
             )
 
             transform_completed_key = str(

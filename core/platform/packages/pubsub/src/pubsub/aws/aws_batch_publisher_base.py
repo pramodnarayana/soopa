@@ -61,6 +61,12 @@ class AwsBatchPublisherBase(OutboxPublisherPort):
     def _build_entry(self, event: EventEnvelope, entry_id: str, *, batch: bool) -> dict[str, Any]:
         entry: dict[str, Any] = {
             self.message_parameter: json.dumps(serialize_domain_event(event)),
+            "MessageAttributes": {
+                "event_type": {
+                    "DataType": "String",
+                    "StringValue": event.event_type,
+                }
+            },
         }
         if batch:
             entry["Id"] = entry_id
@@ -75,7 +81,7 @@ class AwsBatchPublisherBase(OutboxPublisherPort):
             **self._build_entry(event, "0", batch=False),
         }
         await getattr(client, self.single_method)(**params)
-        logger.debug(
+        logger.info(
             "aws_event_published",
             service=self.service_name,
             destination=self.destination,
@@ -134,6 +140,14 @@ class AwsBatchPublisherBase(OutboxPublisherPort):
 
             for success in response.get("Successful", []):
                 successful_ids.append(entry_id_to_event_id[success["Id"]])
+
+            if response.get("Successful"):
+                logger.info(
+                    "aws_batch_chunk_published",
+                    service=self.service_name,
+                    destination=self.destination,
+                    count=len(response.get("Successful", [])),
+                )
 
             failed_entries = response.get("Failed", [])
             for failed in failed_entries:

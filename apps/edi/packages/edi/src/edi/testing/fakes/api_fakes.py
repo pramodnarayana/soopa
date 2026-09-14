@@ -6,21 +6,38 @@ from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.constants import SystemIdPrefix
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import UNSET, JsonValue
 from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 
-from edi.application.dtos.commands import (
-    UNSET,
-    CreateAS2PartnershipCmd,
+from edi.application.use_cases.as2_partners.create_as2_partner_use_case import (
     CreateAS2TradingPartnerCmd,
-    CreateInboundRouteCmd,
-    CreateOutboundRouteCmd,
-    CreateSFTPPartnerCmd,
-    UpdateAS2PartnershipCmd,
+)
+from edi.application.use_cases.as2_partners.update_as2_partner_use_case import (
     UpdateAS2TradingPartnerCmd,
+)
+from edi.application.use_cases.as2_partnerships.create_as2_partnership_use_case import (
+    CreateAS2PartnershipCmd,
+)
+from edi.application.use_cases.as2_partnerships.update_as2_partnership_use_case import (
+    UpdateAS2PartnershipCmd,
+)
+from edi.application.use_cases.inbound_routes.create_inbound_route_use_case import (
+    CreateInboundRouteCmd,
+)
+from edi.application.use_cases.inbound_routes.update_inbound_route_use_case import (
     UpdateInboundRouteCmd,
+)
+from edi.application.use_cases.outbound_routes.create_outbound_route_use_case import (
+    CreateOutboundRouteCmd,
+)
+from edi.application.use_cases.outbound_routes.update_outbound_route_use_case import (
     UpdateOutboundRouteCmd,
+)
+from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
+    CreateSFTPPartnerCmd,
+)
+from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import (
     UpdateSFTPPartnerCmd,
 )
 from edi.domain.events import ProvisioningEvent
@@ -155,7 +172,6 @@ class FakeOutboundRouteRepository:
             name=cmd.name,
             active=True,
             trading_partner_id=cmd.trading_partner_id,
-            protocol=cmd.protocol,
             as2_partner_id=cmd.as2_partner_id,
             sftp_partner_id=cmd.sftp_partner_id,
             created_at=now,
@@ -176,8 +192,11 @@ class FakeOutboundRouteRepository:
             return True
         return False
 
-    async def list_outbound_routes(self, tenant_id: str) -> list[object]:
-        return [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
+    async def list_outbound_routes(
+        self, tenant_id: str, limit: int = 100, offset: int = 0
+    ) -> Sequence[OutboundRouteDomainModel]:
+        results = [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
+        return results[offset : offset + limit]
 
     async def save(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, OutboundRouteDomainModel):
@@ -260,12 +279,14 @@ class FakeAS2PartnerRepository:
     async def list_as2_partners(self, tenant_id: str) -> Sequence[object]:
         return [p for p in self.partners.values() if p.tenant_id == tenant_id]
 
-    async def get_as2_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
-        return {
-            id: self.partners[id].name
+    async def get_as2_partners_by_ids(
+        self, tenant_id: str, ids: list[str]
+    ) -> list[AS2PartnerDomainModel]:
+        return [
+            self.partners[id]
             for id in ids
             if id in self.partners and self.partners[id].tenant_id == str(tenant_id)
-        }
+        ]
 
     async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
         for p in self.partners.values():
@@ -361,12 +382,14 @@ class FakeSFTPPartnerRepository:
     async def list_sftp_partners(self, tenant_id: str) -> Sequence[object]:
         return [p for p in self.sftp_partners.values() if p.tenant_id == tenant_id]
 
-    async def get_sftp_partners_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
-        return {
-            id: self.sftp_partners[id].name
+    async def get_sftp_partners_by_ids(
+        self, tenant_id: str, ids: list[str]
+    ) -> list[SFTPPartnerDomainModel]:
+        return [
+            self.sftp_partners[id]
             for id in ids
             if id in self.sftp_partners and self.sftp_partners[id].tenant_id == str(tenant_id)
-        }
+        ]
 
     async def save(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, SFTPPartnerDomainModel):
@@ -634,7 +657,7 @@ class FakeRoute:
             self.transaction_type = cmd.transaction_type
             self.direction = "INBOUND"
             self.trading_partner_id = None
-            self.protocol = None
+            self.connection_type = None
         else:
             self.webhook_id = None
             self.processing_mode = "TRANSFORM"
@@ -645,7 +668,7 @@ class FakeRoute:
             self.transaction_type = "*"
             self.trading_partner_id = cmd.trading_partner_id
             self.direction = "OUTBOUND"
-            self.protocol = cmd.protocol
+            self.connection_type = cmd.connection_type
 
         self.created_at = None
         self.updated_at = None

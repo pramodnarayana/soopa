@@ -25,11 +25,12 @@ import os
 import sys
 from typing import Any
 
-import asyncpg
 import httpx
 import structlog
+from database.provider import get_async_engine
 from dotenv import load_dotenv
 from identity.adapters.outbound.zitadel import ZitadelMachineTokenProvider
+from sqlalchemy import text
 
 load_dotenv()
 
@@ -58,6 +59,31 @@ async def list_all_orgs(
     response.raise_for_status()
 
     return cast(list[dict[str, Any]], response.json().get("result", []))
+
+
+async def rename_org_in_zitadel(
+    client: httpx.AsyncClient,
+    zitadel_url: str,
+    access_token: str,
+    org_id: str,
+    new_name: str,
+) -> None:
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "x-zitadel-orgid": org_id,
+    }
+    response = await client.put(
+        f"{zitadel_url}/management/v1/orgs/me",
+        headers=headers,
+        json={"name": new_name},
+        timeout=15,
+    )
+    if response.status_code >= 400:
+        logger.warning("Failed to rename org '%s' to '%s': %s", org_id, new_name, response.text)
+        # We don't raise here, we still want to try to delete it
+    else:
+        logger.info("Successfully renamed org '%s' to '%s' to release name lock", org_id, new_name)
 
 
 async def delete_org_from_zitadel(
@@ -121,12 +147,22 @@ async def main() -> None:
             logger.info("Found %d tenant org(s) to delete from Zitadel.", len(tenant_orgs))
             for org in tenant_orgs:
                 with contextlib.suppress(RuntimeError):
+                    org_id = org["id"]
+                    org_name = org.get("name", "unknown")
+                    # Rename to release the unique name constraint before soft-deleting
+                    await rename_org_in_zitadel(
+                        client=http_client,
+                        zitadel_url=zitadel_url,
+                        access_token=access_token,
+                        org_id=org_id,
+                        new_name=f"DELETED-{org_id}",
+                    )
                     await delete_org_from_zitadel(
                         client=http_client,
                         zitadel_url=zitadel_url,
                         access_token=access_token,
-                        org_id=org["id"],
-                        org_name=org.get("name", "unknown"),
+                        org_id=org_id,
+                        org_name=org_name,
                     )
 
     # --- Step 2: Truncate the local tenants table (if the DB is still up) ---
@@ -136,17 +172,16 @@ async def main() -> None:
             "DATABASE_URL not set — skipping local identity.tenants truncation. "
             "This is expected if the DB has already been torn down."
         )
-        return
 
-    database_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     try:
-        conn = await asyncpg.connect(database_url)
+        engine = get_async_engine(database_url)
         try:
-            await conn.execute("TRUNCATE identity.tenants CASCADE")
-            logger.info("Truncated identity.tenants table.")
+            async with engine.begin() as conn:
+                await conn.execute(text("TRUNCATE identity.tenants CASCADE"))
+                logger.info("Truncated identity.tenants table.")
         finally:
-            await conn.close()
-    except (asyncpg.PostgresError, OSError) as exc:
+            await engine.dispose()
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Could not truncate identity.tenants: %s (safe to ignore if DB is already down).",
             exc,

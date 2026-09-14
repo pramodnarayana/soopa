@@ -4,7 +4,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from identity_worker.adapters.outbound.identity_provider.zitadel_client import ZitadelClient
-from identity_worker.bootstrap.config import get_settings
+from identity_worker.config.settings import get_settings
 from pytest_httpserver import HTTPServer
 from werkzeug.wrappers import Response
 

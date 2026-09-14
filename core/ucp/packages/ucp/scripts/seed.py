@@ -16,10 +16,14 @@ import structlog
 
 # Need to import our mapped models to use them
 from database.models.identity import Tenant, User, UserRole
+from database.utils import normalize_to_asyncpg
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from sqlalchemy import update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
+from ucp_models.sharding import DatabaseShard
+from ucp_models.subscriptions import App
 
 load_dotenv()
 
@@ -34,13 +38,23 @@ async def main() -> None:
         sys.exit(1)
 
     # SQLAlchemy expects asyncpg connection string
-    if database_url.startswith("postgresql://"):
-        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://")
+    if database_url:
+        database_url = normalize_to_asyncpg(database_url)
 
     platform_org_id = os.environ.get("ZITADEL_PLATFORM_ORG_ID", "")
     platform_admin_id = os.environ.get("ZITADEL_PLATFORM_ADMIN_ID", "")
     if not platform_admin_id:
         logger.error("ZITADEL_PLATFORM_ADMIN_ID environment variable is not set.")
+        sys.exit(1)
+
+    shard_db_url = os.environ.get("TEST_SHARD_DB_URL", "")
+    if not shard_db_url:
+        logger.error("TEST_SHARD_DB_URL environment variable is not set.")
+        sys.exit(1)
+
+    edi_project_id = os.environ.get("ZITADEL_EDI_PROJECT_ID", "")
+    if not edi_project_id:
+        logger.error("ZITADEL_EDI_PROJECT_ID environment variable is not set.")
         sys.exit(1)
 
     engine = create_async_engine(database_url)
@@ -126,6 +140,38 @@ async def main() -> None:
             )
             await conn.execute(stmt_user_role)
             logger.info("Successfully seeded platform admin user and mapped to tenant roles.")
+
+            # Seed the EDI primary shard using the environment-provided DSN.
+            # This belongs here (not in the migration) because the DSN is
+            # environment-specific — it differs between local, CI, and production.
+            stmt_shard = (
+                pg_insert(DatabaseShard)
+                .values(
+                    id="edi_shard_1",
+                    name="EDI Primary Shard",
+                    dsn=shard_db_url,
+                    status="active",
+                )
+                .on_conflict_do_update(
+                    index_elements=[DatabaseShard.id],
+                    set_={
+                        "name": "EDI Primary Shard",
+                        "dsn": shard_db_url,
+                        "status": "active",
+                    },
+                )
+            )
+            await conn.execute(stmt_shard)
+            logger.info("Successfully seeded EDI primary shard.", shard_dsn=shard_db_url)
+
+            # Update the EDI app with the Zitadel Project ID from the environment
+            stmt_app = (
+                update(App).where(App.id == "app_edi_core").values(idp_project_id=edi_project_id)
+            )
+            await conn.execute(stmt_app)
+            logger.info(
+                "Successfully seeded EDI app IDP project ID.", idp_project_id=edi_project_id
+            )
 
     except Exception:
         logger.exception("Failed to seed platform tenant.")

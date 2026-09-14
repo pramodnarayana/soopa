@@ -34,7 +34,6 @@ export interface BaseRouteItem {
 }
 
 export interface InboundRouteItem extends BaseRouteItem {
-  direction: typeof Direction.INBOUND;
   isa_sender_id: string;
   isa_sender_qualifier?: string;
   isa_receiver_id: string;
@@ -48,11 +47,8 @@ export interface InboundRouteItem extends BaseRouteItem {
 }
 
 export interface OutboundRouteItem extends BaseRouteItem {
-  direction: typeof Direction.OUTBOUND;
   transaction_type: string;
 }
-
-export type RouteItem = InboundRouteItem | OutboundRouteItem;
 
 export interface CreateInboundRoutePayload {
   name: string;

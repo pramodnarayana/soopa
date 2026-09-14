@@ -67,3 +67,8 @@ extraPaths = [
 
 [tool.uv.sources]
 seedwork = { workspace = true }
+
+[dependency-groups]
+test = [
+    "python-dotenv>=1.2.2",
+]

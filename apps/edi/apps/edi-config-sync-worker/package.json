@@ -8,6 +8,7 @@
     "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
     "deadcode:deptry": "uv run deptry .",
     "test:integration": "uv run pytest tests/integration",
-    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m config_sync_worker.provision.main"
   }
 }

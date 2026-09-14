@@ -878,7 +878,7 @@ class EdiComputeStack:
         ).apply(
             lambda a: [
                 {"name": AppEnvKeys.S3_BUCKET, "value": a[0]},
-                {"name": AppEnvKeys.AWS_SNS_TOPIC_ARN, "value": a[1]},
+                {"name": AppEnvKeys.SNS_EDI_EVENTS_TOPIC_ARN, "value": a[1]},
                 {"name": AppEnvKeys.SQS_TRANSFORM_QUEUE_URL, "value": a[2]},
                 {"name": AppEnvKeys.SQS_DELIVER_QUEUE_URL, "value": a[3]},
                 {"name": AppEnvKeys.SQS_LIFECYCLE_QUEUE_URL, "value": a[4]},

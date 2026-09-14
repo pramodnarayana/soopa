@@ -19,7 +19,7 @@ class DeleteWebhookUseCase:
         idempotency_key: str | None = None,
     ) -> None:
         bound_logger = logger.bind(tenant_id=tenant_id, webhook_id=webhook_id)
-        bound_logger.info("delete_webhook.started", idempotency_key=idempotency_key)
+        bound_logger.info("ucp_webhook_deletion_started", idempotency_key=idempotency_key)
 
         async with self.uow:
             if idempotency_key:
@@ -27,12 +27,12 @@ class DeleteWebhookUseCase:
                     tenant_id, idempotency_key
                 )
                 if is_completed:
-                    bound_logger.info("delete_webhook.idempotent_result_returned")
+                    bound_logger.info("ucp_webhook_deletion_idempotent_result_returned")
                     return
 
             webhook = await self.uow.webhook_repo.find_by_id(tenant_id, webhook_id)
             if not webhook:
-                bound_logger.error("delete_webhook.not_found")
+                bound_logger.error("ucp_webhook_deletion_not_found")
                 raise ResourceNotFoundError(
                     f"Webhook {webhook_id} not found for tenant {tenant_id}"
                 )
@@ -52,9 +52,13 @@ class DeleteWebhookUseCase:
                 )
 
             # Pass the loaded aggregate to delete_webhook so it can flush events
+            bound_logger.debug(
+                "ucp_webhook_deletion_flushing_events",
+                domain_events_queued=len(webhook.domain_events),
+            )
             await self.uow.webhook_repo.delete_webhook(
                 webhook=webhook, deleted_by=deleted_by, idempotency_key=idempotency_key
             )
             await self.uow.commit()
 
-            bound_logger.info("delete_webhook.completed")
+            bound_logger.info("ucp_webhook_deleted")

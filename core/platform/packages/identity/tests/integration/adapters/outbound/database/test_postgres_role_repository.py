@@ -95,16 +95,16 @@ async def test_postgres_role_repository_crud_operations(db_session_factory):
         assert fetched_updated.name == "Updated Name"
         assert set(fetched_updated.capabilities) == {"cap3"}
 
-        # test get_global_role_by_name
-        fetched_global = await repo.get_global_role_by_name("Updated Name")
+        # test get_platform_role_by_name
+        fetched_global = await repo.get_platform_role_by_name("Updated Name")
         assert fetched_global is not None
         assert fetched_global.id == role_id
 
-        # test get_global_role_by_name missing
-        assert await repo.get_global_role_by_name("Nonexistent") is None
+        # test get_platform_role_by_name missing
+        assert await repo.get_platform_role_by_name("Nonexistent") is None
 
-        # test get_global_roles
-        roles = await repo.get_global_roles()
+        # test get_platform_roles
+        roles = await repo.get_platform_roles()
         assert role_id in {r.id for r in roles}
 
 

@@ -2,8 +2,8 @@ import pytest
 from identity_worker.adapters.outbound.identity_provider.dummy_identity_provider import (
     DummyIdentityProviderPort,
 )
-from identity_worker.bootstrap.config import Settings, get_settings
 from identity_worker.bootstrap.container import UserRoleAssignedPayload, WorkerContainer
+from identity_worker.config.settings import AppSettings, get_settings
 from pydantic import ValidationError
 
 pytestmark = pytest.mark.asyncio
@@ -30,12 +30,12 @@ async def test_zitadel_default_password_is_required(monkeypatch):
     monkeypatch.delenv("ZITADEL_DEFAULT_USER_PASSWORD", raising=False)
 
     with pytest.raises(ValidationError, match="zitadel_default_user_password"):
-        Settings(_env_file=None)
+        AppSettings(_env_file=None)
 
 
 async def test_worker_container_requires_database_url(monkeypatch):
 
-    bad_settings = Settings(
+    bad_settings = AppSettings(
         database_url="",
         zitadel_default_user_password="not-for-production",
     )

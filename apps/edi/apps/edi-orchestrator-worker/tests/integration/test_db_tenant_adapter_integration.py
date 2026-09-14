@@ -34,7 +34,7 @@ async def test_get_all_tenant_ids(db_router: TransactionalTestRouter) -> None:
         text(
             "INSERT INTO ucp.database_shards (id, name, dsn, status, created_at, updated_at) VALUES (:id, :name, :dsn, 'active', NOW(), NOW())"
         ),
-        {"id": shard_id, "name": "test_edi_shard_1", "dsn": "postgres://..."},
+        {"id": shard_id, "name": "test_edi_shard_1", "dsn": db_router.shard_url},
     )
     # Seed ShardRegistry
     await db_router.global_conn.execute(

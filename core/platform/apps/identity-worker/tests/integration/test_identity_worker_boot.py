@@ -2,7 +2,7 @@ import asyncio
 import os
 
 import pytest
-from identity_worker.bootstrap.config import Settings
+from identity_worker.config.settings import AppSettings as Settings
 from identity_worker.main import main
 
 

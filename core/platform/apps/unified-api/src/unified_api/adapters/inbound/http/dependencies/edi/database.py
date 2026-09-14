@@ -5,17 +5,14 @@ from typing import Annotated, Any, cast
 import structlog
 from database.models.identity import Tenant
 from dependency_injector.wiring import Provide, inject
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort, DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
 from database.types import GlobalSession
 from edi.adapters.outbound.database.session import get_global_session
-from edi.adapters.outbound.database.uow_adapter import (
-    SqlAlchemyDataPlaneUnitOfWork as DataPlaneUnitOfWorkPort,
-)
 from edi.bootstrap.container import Container
 from edi.exceptions import TenantNotSubscribedException
-from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

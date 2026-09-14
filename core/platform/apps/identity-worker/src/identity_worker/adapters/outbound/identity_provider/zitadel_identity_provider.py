@@ -36,7 +36,8 @@ class ZitadelIdentityProviderPort(IdentityProviderPort):
                 return
 
             try:
-                org_id, grant_succeeded = await self.org_provider.create_organization(tenant.name)
+                org_name = tenant.name
+                org_id, grant_succeeded = await self.org_provider.create_organization(org_name)
             except IdentityProviderPortError as e:
                 if e.status_code == 409:
                     logger.warning(
@@ -53,3 +54,9 @@ class ZitadelIdentityProviderPort(IdentityProviderPort):
             tenant.idp_tenant_id = org_id
             await session.commit()
             logger.info("tenant_synced_to_idp_successfully", tenant_id=tenant_id, org_id=org_id)
+
+    async def grant_project_to_organization(self, org_id: str, project_id: str) -> None:
+        await self.org_provider.grant_project_to_organization(org_id, project_id)
+
+    async def revoke_project_from_organization(self, org_id: str, project_id: str) -> None:
+        await self.org_provider.revoke_project_from_organization(org_id, project_id)

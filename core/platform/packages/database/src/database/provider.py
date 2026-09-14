@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from database.utils import normalize_to_asyncpg
+
 logger = structlog.get_logger(__name__)
 
 
@@ -26,13 +28,19 @@ def get_async_engine(
     max_overflow: int = 20,
     pool_pre_ping: bool = True,
     echo: bool = False,
+    server_settings: dict[str, str] | None = None,
 ) -> AsyncEngine:
     """
     Creates and configures an AsyncEngine.
     Auto-converts standard postgresql URLs to asyncpg.
+
+    Args:
+        server_settings: Optional asyncpg server_settings passed as connect_args.
+                         Use this to explicitly enforce settings like search_path
+                         instead of relying on implicit PostgreSQL defaults.
+                         Example: {"search_path": "public"}
     """
-    if url.startswith("postgresql://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    url = normalize_to_asyncpg(url)
 
     kwargs: dict[str, Any] = {
         "echo": echo,
@@ -41,6 +49,9 @@ def get_async_engine(
     if not url.startswith("sqlite"):
         kwargs["pool_size"] = pool_size
         kwargs["max_overflow"] = max_overflow
+
+    if server_settings:
+        kwargs["connect_args"] = {"server_settings": server_settings}
 
     engine = create_async_engine(url, **kwargs)
 

@@ -24,6 +24,10 @@ from ucp.application.use_cases.subscribe_app_use_case import (
     SubscribeAppCommand,
     SubscribeAppUseCase,
 )
+from ucp.application.use_cases.unsubscribe_app_use_case import (
+    UnsubscribeAppCommand,
+    UnsubscribeAppUseCase,
+)
 from ucp.domain.constants import LifecycleStatus, UcpEventType
 
 pytestmark = pytest.mark.integration
@@ -98,15 +102,6 @@ async def test_app_subscription_flow(
     await subscribe_use_case.execute(subscribe_command)
 
     # 3. Process Outbox
-    # First manually clear out any previous test events or claims if they leaked
-    async with db_session.begin():
-        await db_session.execute(
-            text(
-                "UPDATE ucp.outbox SET status = 'PENDING', owner_token = NULL, "
-                "lease_expires_at = NULL WHERE tenant_id = :tenant_id"
-            ),
-            {"tenant_id": tenant.id},
-        )
 
     # Fetch pending and publish
     await relay.processor.process_pending()
@@ -156,7 +151,48 @@ async def test_app_subscription_flow(
     assert shard is not None
     assert shard.shard_id == "edi_shard_1"
 
-    # Verify App Subscription status
+    # 6. Simulate UI passing an App ID to the UnsubscribeAppUseCase
+    unsubscribe_use_case = UnsubscribeAppUseCase(uow=uow)
+    unsubscribe_command = UnsubscribeAppCommand(tenant_id=tenant.id, app_id=edi_app_id)
+    await unsubscribe_use_case.execute(unsubscribe_command)
+
+    # 7. Process Outbox again
+    await relay.processor.process_pending()
+    await asyncio.sleep(0.5)
+
+    # 8. Execute Dispatcher for app.unsubscribed
+    found_app_unsubscribed = False
+    for _ in range(5):
+        async with event_bus.poll_raw_message() as ackable_msg:
+            if not ackable_msg:
+                continue
+
+            raw_event = ackable_msg.payload
+
+            if raw_event.get("tenant_id") != tenant.id:
+                await ackable_msg.ack()
+                continue
+
+            event = EventEnvelope(
+                id=raw_event.get("id", ""),
+                source=raw_event.get("source", ""),
+                tenant_id=raw_event.get("tenant_id", ""),
+                event_type=raw_event.get("event_type", ""),
+                idempotency_key=raw_event.get("idempotency_key"),
+                payload=raw_event.get("payload", {}),
+            )
+
+            # NOTE: We didn't register an AppSubscriptionManager handler for unsubscribe
+            # because in UCP it only handles subscriptions right now, but the event should still be dispatched
+            # and routed to IdentityWorker in a real E2E environment.
+            await dispatcher.dispatch(raw_event)
+            await ackable_msg.ack()
+            if event.event_type == UcpEventType.APP_UNSUBSCRIBED.value:
+                found_app_unsubscribed = True
+
+    assert found_app_unsubscribed, "app.unsubscribed event was never received from SQS"
+
+    # 9. Verify App Subscription status is INACTIVE
     res = await db_session.execute(
         text(
             "SELECT * FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = :app_id"
@@ -165,5 +201,4 @@ async def test_app_subscription_flow(
     )
     app_sub = res.fetchone()
     assert app_sub is not None
-
-    assert app_sub.status == LifecycleStatus.ACTIVE
+    assert app_sub.status == LifecycleStatus.INACTIVE

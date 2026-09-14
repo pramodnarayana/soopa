@@ -24,20 +24,22 @@ from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from unified_api.adapters.inbound.http.dependencies.edi.auth import require_platform_admin
 from unified_api.adapters.inbound.http.edi.routers import (
+    as2_partners,
+    as2_partnerships,
+    as2_settings,
     edi_headers,
     edi_json,
     edi_tools,
     explorer,
-    routes,
+    inbound_routes,
+    outbound_routes,
     trading_partners,
     transactions,
 )
-from unified_api.adapters.inbound.http.edi.routers import (
-    platform as platform_admin,
-)
 from unified_api.adapters.inbound.http.edi.routers.tenant import dashboard
-from unified_api.adapters.inbound.http.edi.routers.trading_partners import as2_receive, platform
+from unified_api.adapters.inbound.http.edi.routers.trading_partners import as2_receive
 
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import edi_lifespan
@@ -117,9 +119,23 @@ def create_edi_app() -> FastAPI:
         )
 
     app.include_router(trading_partners.router)
-    app.include_router(platform.router)
-    app.include_router(platform_admin.router)
-    app.include_router(routes.router)
+    app.include_router(
+        as2_partners.router,
+        prefix="/api/v1",
+        dependencies=[fastapi.Depends(require_platform_admin)],
+    )
+    app.include_router(
+        as2_partnerships.router,
+        prefix="/api/v1",
+        dependencies=[fastapi.Depends(require_platform_admin)],
+    )
+    app.include_router(
+        as2_settings.router,
+        prefix="/api/v1",
+        dependencies=[fastapi.Depends(require_platform_admin)],
+    )
+    app.include_router(inbound_routes.router)
+    app.include_router(outbound_routes.router)
     app.include_router(edi_headers.router)
     app.include_router(edi_tools.router, prefix="/api/v1")
     app.include_router(as2_receive.router, prefix="/api/v1")

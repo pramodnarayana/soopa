@@ -23,7 +23,7 @@ class OutboundRouteDTO:
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
     webhook_id: str | None = None
-    protocol: str | None = None
+    connection_type: str | None = None
 
 
 @dataclass(frozen=True)

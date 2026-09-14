@@ -5,7 +5,7 @@ export { TradingPartnersPage } from './routes/platform/partners';
 export { SchedulerPage } from './routes/platform/scheduler';
 export { Dashboard as EdiDashboardPage } from './routes/tenant/dashboard';
 export { DevelopersPage } from './routes/tenant/developers';
-export { EdiSetupPage, EdiSetupPageWrapper } from './routes/tenant/edi_setup';
+export { EdiSetupPage } from './routes/tenant/edi_setup';
 export { EdiToolPage } from './routes/tenant/edi_tool';
 export { TransactionDetailPage } from './routes/tenant/explorer/$traceId';
 export { ExplorerPage } from './routes/tenant/explorer/index';

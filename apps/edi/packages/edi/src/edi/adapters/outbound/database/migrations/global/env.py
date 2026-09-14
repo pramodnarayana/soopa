@@ -10,10 +10,9 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 # Import database models to ensure they are registered with GlobalRegistry
-from edi.adapters.outbound.database.models import platform_settings
+from edi.adapters.outbound.database.models import edi_settings
 
-# Register models with SQLAlchemy metadata
-_ = platform_settings
+_ = edi_settings
 from edi.adapters.outbound.database.models.base import EdiGlobalBase
 from edi.config.settings import get_settings
 

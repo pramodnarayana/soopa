@@ -17,6 +17,8 @@ from collections.abc import Callable, Coroutine
 
 import httpx
 import pytest
+from database.models.identity import IdentityOutbox, User
+from sqlalchemy import select
 
 
 @pytest.mark.asyncio
@@ -27,7 +29,11 @@ async def test_get_users(auth_client: httpx.AsyncClient, seeded_api_token: dict)
 
 
 @pytest.mark.asyncio
-async def test_create_user(auth_client: httpx.AsyncClient, seeded_api_token: dict):
+async def test_create_user(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict,
+    db_session_factory: Callable,
+):
     tenant_id = seeded_api_token["tenant_id"]
     response = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/users",
@@ -35,11 +41,34 @@ async def test_create_user(auth_client: httpx.AsyncClient, seeded_api_token: dic
             "email": "integration_test@example.com",
             "firstName": "Integration",
             "lastName": "Test",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert response.status_code in (200, 201), response.text
-    assert "userId" in response.json()
+    response_data = response.json()
+    assert "userId" in response_data
+    user_id = response_data["userId"]
+
+    # Enterprise Standard: Assert database and outbox states via Narrow Integration Test
+    async with db_session_factory() as session:
+        # 1. Assert user was physically created in the DB
+        db_user = await session.get(User, user_id)
+        assert db_user is not None
+        assert db_user.email == "integration_test@example.com"
+
+        # 2. Assert exactly ONE Outbox event was emitted (to prevent race conditions with redundant events)
+        outbox_stmt = select(IdentityOutbox).where(
+            IdentityOutbox.payload["user_id"].astext == user_id,
+        )
+        outbox_events = (await session.scalars(outbox_stmt)).all()
+        assert len(outbox_events) == 1, (
+            f"Expected exactly 1 event, but got {len(outbox_events)}: {[e.event_type for e in outbox_events]}"
+        )
+
+        event = outbox_events[0]
+        assert event.event_type == "UserInvited"
+        assert event.payload["email"] == "integration_test@example.com"
+        assert event.payload["role"] == "TenantAdmin"
 
 
 @pytest.mark.asyncio
@@ -61,7 +90,7 @@ async def test_update_user(
             "email": "update_test@example.com",
             "firstName": "First",
             "lastName": "Last",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert res.status_code in (200, 201), res.text
@@ -73,7 +102,7 @@ async def test_update_user(
     # 3. Update the user — requires idp_user_id to be set
     response = await auth_client.patch(
         f"/api/v1/tenants/{tenant_id}/users/{user_id}",
-        json={"firstName": "Updated", "lastName": "Name", "role": "admin"},
+        json={"firstName": "Updated", "lastName": "Name", "role": "rol_a62f2225bf70bfac"},
     )
     assert response.status_code == 200, response.text
 
@@ -95,7 +124,7 @@ async def test_toggle_user_status(
             "email": "toggle_test@example.com",
             "firstName": "First",
             "lastName": "Last",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert res.status_code in (200, 201), res.text
@@ -127,7 +156,7 @@ async def test_delete_user(
             "email": "delete_test@example.com",
             "firstName": "First",
             "lastName": "Last",
-            "role": "admin",
+            "role": "rol_a62f2225bf70bfac",
         },
     )
     assert res.status_code in (200, 201), res.text

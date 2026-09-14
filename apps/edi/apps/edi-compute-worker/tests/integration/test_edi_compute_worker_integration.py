@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from edi.adapters.outbound.database.uow_adapter import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
@@ -107,10 +107,10 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     #    to avoid asyncpg constraint race conditions. We use an autonomous engine connection.
     trace_id = f"trace_{generate_random_hex(6)}"
     tenant_id = f"tenant_{generate_random_hex(6)}"
-    partner_id = f"tp_{generate_random_hex(6)}"
+    partner_id = f"edi_as2_{generate_random_hex(6)}"
     webhook_id = f"wh_{generate_random_hex(6)}"
-    route_id = f"route_{generate_random_hex(6)}"
-    msg_id = f"msg_{generate_random_hex(6)}"
+    route_id = f"edi_ib_rt_{generate_random_hex(6)}"
+    msg_id = f"edi_msg_{generate_random_hex(6)}"
 
     # We manually assign the ID to bypass the default UUID/hex generator for predictable assertions
     # Seed data autonomously to prevent test isolation bugs

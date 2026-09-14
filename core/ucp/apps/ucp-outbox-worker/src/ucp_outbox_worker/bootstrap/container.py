@@ -1,5 +1,3 @@
-import os
-
 import structlog
 from database.provider import DatabaseProvider
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
@@ -11,7 +9,7 @@ from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from seedwork.domain.types import JsonDict
 from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
-from ucp.bootstrap.config import get_settings
+from ucp.config.settings import AppSettings
 from ucp.domain.constants import UcpJobName
 
 from ucp_outbox_worker.adapters.inbound.jobs.ucp_outbox_sweeper_job import (
@@ -24,10 +22,9 @@ logger = structlog.get_logger(__name__)
 class WorkerContainer:
     """Dependency Injection container for the UCP Outbox Worker."""
 
-    def __init__(self) -> None:
-        self.settings = get_settings()
-        self.database_url = os.environ.get("DATABASE_URL", "")
-        self.db_provider = DatabaseProvider.from_url(self.database_url)
+    def __init__(self, settings: AppSettings) -> None:
+        self.settings = settings
+        self.db_provider = DatabaseProvider.from_url(self.settings.database_url)
         self.session_factory = self.db_provider.session_factory
 
         self.outbox_relay: PostgresOutboxRelay | None = None
@@ -59,7 +56,7 @@ class WorkerContainer:
         )
         self.outbox_relay = PostgresOutboxRelay(
             processor=outbox_processor,
-            database_url=self.database_url,
+            database_url=self.settings.database_url,
             listen_channel="ucp_outbox_wakeup",
         )
 

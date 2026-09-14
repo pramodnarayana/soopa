@@ -6,15 +6,18 @@ import structlog
 from observability import ObservabilityProvider
 
 from identity_cleanup.bootstrap.container import WorkerContainer
+from identity_cleanup.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
+    settings = get_settings()
+
     ObservabilityProvider.auto_configure_from_env("identity-cleanup")
     logger.info("identity_cleanup_worker_starting")
 
-    container = WorkerContainer()
+    container = WorkerContainer(settings)
     container.wire()
 
     if container.jobs_consumer:

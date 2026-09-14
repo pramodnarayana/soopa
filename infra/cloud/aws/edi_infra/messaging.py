@@ -187,13 +187,27 @@ class EdiMessagingStack:
             queue_pair=self.identity_events,
         )
 
+        # UCP events → identity-events queue (for tenant provisioned, etc.)
+        _subscribe_queue(
+            "identity-ucp-events-subscription",
+            topic=self.ucp_events_topic,
+            queue_pair=self.identity_events,
+            filter_policy={
+                "event_type": [
+                    "tenant.provisioned",
+                    "app.subscribed",
+                    "app.unsubscribed",
+                ]
+            },
+        )
+
         # EDI events → transform queue (transform events only)
         _subscribe_queue(
             "edi-transform-subscription",
             topic=self.edi_events_topic,
             queue_pair=self.edi_transform,
             filter_policy={
-                "eventType": [
+                "event_type": [
                     PipelineEventType.TRANSFORM_EVENT,
                     PipelineEventType.COMPUTE_TRANSFORM_EVENT,
                 ]
@@ -206,7 +220,7 @@ class EdiMessagingStack:
             topic=self.edi_events_topic,
             queue_pair=self.edi_lifecycle,
             filter_policy={
-                "eventType": [
+                "event_type": [
                     PipelineEventType.TRANSFORM_COMPLETED,
                     PipelineEventType.DELIVERY_COMPLETED,
                 ]
@@ -218,7 +232,7 @@ class EdiMessagingStack:
             "edi-deliver-subscription",
             topic=self.edi_events_topic,
             queue_pair=self.edi_deliver,
-            filter_policy={"eventType": [PipelineEventType.DELIVER_EVENT]},
+            filter_policy={"event_type": [PipelineEventType.DELIVER_EVENT]},
         )
 
         # EDI events → config-sync queue (all provisioning events — everything
@@ -228,7 +242,7 @@ class EdiMessagingStack:
             topic=self.edi_events_topic,
             queue_pair=self.edi_config_sync,
             filter_policy={
-                "eventType": [
+                "event_type": [
                     {
                         "anything-but": [
                             PipelineEventType.TRANSFORM_EVENT,
@@ -243,10 +257,18 @@ class EdiMessagingStack:
             },
         )
 
+        # UCP events → config-sync queue (all webhook events)
+        _subscribe_queue(
+            "edi-ucp-config-sync-subscription",
+            topic=self.ucp_events_topic,
+            queue_pair=self.edi_config_sync,
+            filter_policy={"event_type": [{"prefix": "webhook."}]},
+        )
+
         # EDI events → priority notifications queue
         _subscribe_queue(
             "edi-priority-notifications-subscription",
             topic=self.edi_events_topic,
             queue_pair=self.edi_priority_notifications,
-            filter_policy={"eventType": [NotificationEventType.NOTIFICATION_TRIGGERED]},
+            filter_policy={"event_type": [NotificationEventType.NOTIFICATION_TRIGGERED]},
         )

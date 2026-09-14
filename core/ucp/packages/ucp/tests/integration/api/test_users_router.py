@@ -47,7 +47,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
         "email": f"integration_{generate_random_hex(6)}@test.com",
         "firstName": "Integration",
         "lastName": "Test",
-        "role": "TenantAdmin",
+        "role": "rol_a62f2225bf70bfac",
     }
 
     # 2. Act: Call the endpoint

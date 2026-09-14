@@ -17,7 +17,7 @@ class DeleteSFTPPartnerUseCase:
         self, tenant_id: str, partner_id: str, idempotency_key: str | None = None
     ) -> None:
         logger.info(
-            "Deleting SFTP partner {partner_id} for tenant {tenant_id}",
+            "sftp_partner_deletion_started",
             partner_id=partner_id,
             tenant_id=tenant_id,
         )

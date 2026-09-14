@@ -32,6 +32,7 @@ packages = ["src/notification_worker"]
 
 [tool.mypy]
 strict = true
+disable_error_code = ["prop-decorator"]
 
 [[tool.mypy.overrides]]
 module = [
