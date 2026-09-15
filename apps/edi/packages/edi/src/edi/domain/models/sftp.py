@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
-
-from edi.domain.constants import EdiIdPrefix
 
 
 @dataclass(kw_only=True)
 class SFTPPartnerDomainModel(AggregateRoot):
-    ID_PREFIX = EdiIdPrefix.SFTP_PARTNER.value
+    ID_PREFIX = DomainIdPrefix.EDI_SFTP_PARTNER.value
 
     id: str
     tenant_id: str

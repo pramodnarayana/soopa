@@ -2,8 +2,8 @@ from enum import Enum
 from typing import Generic, TypeVar
 
 from outbox.domain.constants import OutboxStatus
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 from seedwork.utils import generate_id, generate_random_hex
 from sqlalchemy import insert, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -19,7 +19,6 @@ from edi.adapters.outbound.database.base_repository import (
 )
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from edi.domain.constants import EdiIdPrefix
 from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.outbox_event import OutboxEvent
@@ -210,7 +209,7 @@ class SqlAlchemyDataPlaneOutboxRepository(
 
         super().__init__(session)
         self.model_class = DataPlaneOutbox
-        self.id_prefix = EdiIdPrefix.DP_OUTBOX
+        self.id_prefix = DomainIdPrefix.EDI_DP_OUTBOX
 
     async def publish_outbox_event(
         self,

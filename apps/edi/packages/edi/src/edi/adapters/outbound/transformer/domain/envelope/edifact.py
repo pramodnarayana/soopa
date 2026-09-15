@@ -13,8 +13,8 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
     def _build_unb_segment(
         cls, route_config: JsonDict, now: datetime.datetime, unb05: str
     ) -> AstNode:
-        unb_sender_id = str(route_config.get("isa_sender_id") or "")
-        unb_receiver_id = str(route_config.get("isa_receiver_id") or "")
+        unb_sender_id = str(route_config.get("isa_sender_id") or "").strip()
+        unb_receiver_id = str(route_config.get("isa_receiver_id") or "").strip()
         if not unb_sender_id or not unb_receiver_id:
             raise InvalidMessageFormatError(
                 "Route config missing required UNB sender or receiver ID"

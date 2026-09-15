@@ -3,10 +3,10 @@ from typing import Any
 
 import pytest
 from fastapi import Request
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import IdentityContext
 from identity.domain.models.authorization import Capability
 from seedwork import generate_id, generate_random_hex
+from seedwork.id_registry import DomainIdPrefix
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
 from ucp.domain.models.tenant import LifecycleStatus, Tenant
 
@@ -17,7 +17,7 @@ from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_t
 async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> None:
     async with db_session_factory() as session:
         # 1. Insert a fake tenant into the DB so the middleware can map it.
-        canonical_id = generate_id(IdentityIdPrefix.TENANT.value)
+        canonical_id = generate_id(DomainIdPrefix.TENANT.value)
         idp_id = generate_id("idp")
 
         repo = TenantRepository(session)
@@ -37,7 +37,7 @@ async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> N
 
         # 2. We create an IdentityContext exactly like Zitadel gives us natively.
         raw_identity = IdentityContext(
-            subject=generate_id(IdentityIdPrefix.USER.value),
+            subject=generate_id(DomainIdPrefix.USER.value),
             tenant_id=None,
             authorized_tenants={idp_id},
             tenant_mapping={idp_id: canonical_id},

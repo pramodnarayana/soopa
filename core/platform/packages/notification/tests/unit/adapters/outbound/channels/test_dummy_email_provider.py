@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
@@ -9,7 +9,7 @@ from notification.adapters.outbound.channels.dummy_email_provider import DummyEm
 @pytest.mark.asyncio
 async def test_dummy_email_provider():
     provider = DummyEmailProvider()
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     with capture_logs() as cap_logs:
         await provider.send_email(
             tenant_id=tenant_id,

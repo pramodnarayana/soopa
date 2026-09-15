@@ -1,6 +1,6 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
 
 from notification.adapters.outbound.database.postgres_user_preference_repository import (
@@ -21,9 +21,9 @@ async def test_save_and_get_preference(
 ):
     # Arrange
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
 
-    user_id = generate_id(IdentityIdPrefix.USER)
+    user_id = generate_id(DomainIdPrefix.USER)
     event_type = "invoice.payment_failed"
     channel = "EMAIL"
 

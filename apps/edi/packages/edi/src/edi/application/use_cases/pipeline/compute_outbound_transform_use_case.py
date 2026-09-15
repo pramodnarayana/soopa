@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 import structlog
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
 from edi.domain.enums import (

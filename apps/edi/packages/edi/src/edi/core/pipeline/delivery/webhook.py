@@ -2,7 +2,7 @@ import json
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy

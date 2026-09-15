@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from seedwork import generate_id
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -19,7 +20,6 @@ from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
 from database.models.common import OutboxMixin, TimestampMixin
-from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import MessageStatus
 
 from .replicated_mixins import (
@@ -232,7 +232,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_json"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: generate_id(EdiIdPrefix.EDI_JSON.value)
+        String(128), primary_key=True, default=lambda: generate_id(DomainIdPrefix.EDI_JSON.value)
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -312,7 +312,7 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
             postgresql_where=text("status = 'PENDING'"),
         ),
     )
-    ID_PREFIX = EdiIdPrefix.DP_OUTBOX.value
+    ID_PREFIX = DomainIdPrefix.EDI_DP_OUTBOX.value
 
     id: Mapped[str] = mapped_column(
         String(128),

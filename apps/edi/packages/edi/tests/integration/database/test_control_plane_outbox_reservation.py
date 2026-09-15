@@ -3,7 +3,7 @@ import uuid
 import pytest
 import pytest_asyncio
 from outbox.domain.constants import OutboxStatus
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker

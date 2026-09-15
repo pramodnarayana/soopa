@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.domain.types import JsonValue

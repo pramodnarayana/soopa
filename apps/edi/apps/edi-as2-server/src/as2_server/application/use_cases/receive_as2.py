@@ -13,7 +13,7 @@ from edi.domain.services.as2_protocol import generate_mdn
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import LoggerPort, ObservabilityProvider
 from seedwork import generate_id
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 
 from as2_server.ports.outbound.repository_port import (
     AS2TenantRepositoryPort,

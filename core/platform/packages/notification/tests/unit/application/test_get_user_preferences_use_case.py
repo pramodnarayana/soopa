@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from notification.application.get_user_preferences_use_case import (
@@ -21,8 +21,8 @@ async def test_get_user_preferences_use_case():
     )
     use_case = GetUserPreferencesUseCase(uow=fake_uow)
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    user_id = generate_id(IdentityIdPrefix.USER)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    user_id = generate_id(DomainIdPrefix.USER)
 
     # 1. Initially empty
     result = await use_case.execute(tenant_id, user_id)
@@ -49,7 +49,7 @@ async def test_get_user_preferences_use_case():
     pref3 = UserNotificationPreference(
         id="pref_3",
         tenant_id=tenant_id,
-        user_id=generate_id(IdentityIdPrefix.USER),
+        user_id=generate_id(DomainIdPrefix.USER),
         event_type="test.event",
         channel=Channel.EMAIL,
         is_enabled=True,

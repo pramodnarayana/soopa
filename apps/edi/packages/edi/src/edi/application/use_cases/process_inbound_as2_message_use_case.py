@@ -30,9 +30,8 @@ from typing import cast
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork import generate_id
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 
-from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import (
     ConnectionType,
     EdiConnectionType,
@@ -457,7 +456,7 @@ class ProcessInboundAs2MessageUseCase:
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
             edi_message_aggregate = EdiMessageDomainModel(
-                id=generate_id(EdiIdPrefix.EDI_MESSAGE),
+                id=generate_id(DomainIdPrefix.EDI_MESSAGE),
                 tenant_id=true_tenant_id,
                 trace_id=str(edi_record["trace_id"]),
                 direction=Direction(str(edi_record["direction"])),

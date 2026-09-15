@@ -3,12 +3,12 @@ from database.models.identity import Tenant
 from database.models.notifications import NotificationTemplate
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork import generate_id, generate_random_hex
+from seedwork.id_registry import DomainIdPrefix
 from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_template_repository import (
     SqlAlchemyTemplateRepository,
 )
-from notification.domain.constants import NotificationIdPrefix
 from notification.domain.models import Channel
 
 
@@ -160,7 +160,7 @@ async def test_get_template_fallback_to_platform(db_session_factory):
 
         # Add template to PLATFORM tenant
         template = NotificationTemplate(
-            id=generate_id(NotificationIdPrefix.TEMPLATE.value),
+            id=generate_id(DomainIdPrefix.NOTIFICATION_TEMPLATE.value),
             tenant_id=PLATFORM_TENANT_ID,
             name="Platform Default",
             event_type=event_type,

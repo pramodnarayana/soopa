@@ -2,8 +2,8 @@ import dataclasses
 from typing import cast
 
 import structlog
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
 from edi.config.settings import AppSettings

@@ -1,10 +1,10 @@
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 from database.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
-from edi.domain.constants import EdiIdPrefix
 
 from .base import EdiGlobalBase
 from .replicated_mixins import (
@@ -138,7 +138,7 @@ class OutboundEdiHeader(EdiGlobalBase, OutboundEdiHeaderMixin, TimestampMixin, S
 
 class ControlPlaneOutbox(EdiGlobalBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = EdiIdPrefix.CP_OUTBOX.value
+    ID_PREFIX = DomainIdPrefix.EDI_CP_OUTBOX.value
 
     id: Mapped[str] = mapped_column(
         String(128),

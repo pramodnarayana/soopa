@@ -1,15 +1,15 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
-from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import EdiConnectionType, EdiDirection
 
 
 @dataclass(kw_only=True)
 class OutboundRouteDomainModel(AggregateRoot):
-    ID_PREFIX = EdiIdPrefix.OUTBOUND_ROUTE.value
+    ID_PREFIX = DomainIdPrefix.EDI_OUTBOUND_ROUTE.value
 
     id: str
     tenant_id: str

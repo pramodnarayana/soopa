@@ -3,10 +3,10 @@ import datetime
 import pytest
 from database.models.identity import Tenant as OrmTenant
 from seedwork import generate_id, generate_random_hex
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.api_token import ApiTokenDomainModel
 
 pytestmark = pytest.mark.integration
@@ -14,7 +14,7 @@ pytestmark = pytest.mark.integration
 
 @pytest.fixture
 def dummy_tenant_data():
-    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
     return {
         "id": tenant_id,
         "name": f"Api Token Test Tenant {generate_random_hex(6)}",
@@ -29,7 +29,7 @@ def dummy_tenant_data():
 @pytest.fixture
 def dummy_token_data(dummy_tenant_data: dict) -> dict:
     return {
-        "id": generate_id(IdentityIdPrefix.TOKEN.value),
+        "id": generate_id(DomainIdPrefix.TOKEN.value),
         "tenant_id": dummy_tenant_data["id"],
         "name": "Test Token",
         "client_id": generate_id("client"),

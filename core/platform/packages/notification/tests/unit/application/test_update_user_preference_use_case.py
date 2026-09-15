@@ -1,6 +1,6 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
 from notification.domain.models import Channel, UserNotificationPreference
@@ -29,8 +29,8 @@ async def test_execute_upserts_and_returns(
     use_case: UpdateUserPreferenceUseCase, fake_repo: FakeUserPrefRepo
 ):
     # Arrange
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    user_id = generate_id(IdentityIdPrefix.USER)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    user_id = generate_id(DomainIdPrefix.USER)
     event_type = "invoice.payment_failed"
     channel = "EMAIL"
     is_enabled = False

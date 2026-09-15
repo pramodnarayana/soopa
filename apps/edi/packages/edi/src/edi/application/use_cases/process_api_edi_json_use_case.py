@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
 import structlog
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService

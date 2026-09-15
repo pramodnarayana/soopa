@@ -4,13 +4,13 @@ import pytest
 from database.models.identity import IdentityOutbox as OrmIdentityOutbox
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
     PostgresIdentityOutboxRepository,
 )
-from identity.domain.constants import IdentityIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -31,14 +31,14 @@ async def create_dummy_outbox_event(db_session_factory):
         lease_expires_at: datetime.datetime | None = None,
         updated_at: datetime.datetime | None = None,
     ) -> str:
-        event_id = generate_id(IdentityIdPrefix.OUTBOX)
+        event_id = generate_id(DomainIdPrefix.IDENTITY_OUTBOX)
         now = updated_at or datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
 
         async with db_session_factory() as session:
             stmt = pg_insert(OrmIdentityOutbox).values(
                 id=event_id,
                 idempotency_key=f"idemp_{event_id}",
-                tenant_id=generate_id(IdentityIdPrefix.TENANT),
+                tenant_id=generate_id(DomainIdPrefix.TENANT),
                 event_type="TestEvent",
                 payload={"test": "data"},
                 status=status,

@@ -1,8 +1,8 @@
 import os
 
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import Boolean, String, text
 from sqlalchemy.orm import Mapped, mapped_column
-from ucp.domain.constants import UcpIdPrefix
 
 from database.models.common import SoftDeleteMixin, TimestampMixin
 from database.models.core import UcpBase
@@ -10,7 +10,7 @@ from database.models.core import UcpBase
 
 class Webhook(UcpBase, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "webhooks"
-    ID_PREFIX = UcpIdPrefix.WEBHOOK.value
+    ID_PREFIX = DomainIdPrefix.UCP_WEBHOOK.value
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     id: Mapped[str] = mapped_column(

@@ -1,7 +1,6 @@
 import asyncio
 import signal
 
-import edi.core.patches.paramiko  # noqa: F401 - applies legacy ssh-rsa patch on import
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
 

@@ -6,8 +6,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TypeVar
 
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 T = TypeVar("T")

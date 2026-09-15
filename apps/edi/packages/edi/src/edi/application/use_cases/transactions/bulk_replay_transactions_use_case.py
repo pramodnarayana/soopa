@@ -1,5 +1,5 @@
 from seedwork import generate_id
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 
 from edi.domain.events import TransactionReplayRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
@@ -19,7 +19,9 @@ class BulkReplayTransactionsUseCase:
         Trigger an asynchronous replay of multiple transactions at the specified tier.
         """
         processed_count = 0
-        batch_id = command_key or generate_id(SystemIdPrefix.IDEMPOTENCY).replace(SystemIdPrefix.IDEMPOTENCY.value, "")
+        batch_id = command_key or generate_id(SystemIdPrefix.IDEMPOTENCY).replace(
+            SystemIdPrefix.IDEMPOTENCY.value, ""
+        )
 
         for i, trace_id in enumerate(trace_ids):
             result = await self.uow.traces.get_edi_trace(tenant_id, trace_id)

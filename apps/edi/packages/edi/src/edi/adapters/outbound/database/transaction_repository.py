@@ -3,7 +3,7 @@ import json
 from collections.abc import Sequence
 from typing import Protocol, cast
 
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 
@@ -20,6 +20,7 @@ def _event_idempotency_key(idempotency_key: str | None, *, index: int, event_cou
 
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import CursorResult, Select, and_, or_, select, update
 from sqlalchemy.orm import Mapped
 from sqlalchemy.sql.elements import ColumnElement
@@ -41,7 +42,6 @@ from edi.application.dtos.transactions import (
     EdiJsonDTO,
     EdiMessageDTO,
 )
-from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import MessageStatus
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
@@ -75,7 +75,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         msg = EdiMessage(
-            id=command.id or generate_id(EdiIdPrefix.EDI_MESSAGE.value),
+            id=command.id or generate_id(DomainIdPrefix.EDI_MESSAGE.value),
             trace_id=command.trace_id,
             tenant_id=command.tenant_id,
             direction=command.direction,
@@ -203,7 +203,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             serialize_domain_event(payload) if not isinstance(payload, dict) else payload
         )
 
-        event_id = generate_id(EdiIdPrefix.DP_OUTBOX.value)
+        event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tenant_id,
@@ -226,7 +226,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         the same open transaction. This is the DDD-compliant publishing mechanism.
         """
         # Save aggregate state
-        record_id = aggregate.id if aggregate.id else generate_id(EdiIdPrefix.EDI_MESSAGE.value)
+        record_id = aggregate.id if aggregate.id else generate_id(DomainIdPrefix.EDI_MESSAGE.value)
         record = EdiMessage(
             id=record_id,
             trace_id=aggregate.trace_id,
@@ -247,7 +247,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.session.merge(record)
 
         for index, event in enumerate(aggregate.domain_events):
-            event_id = generate_id(EdiIdPrefix.DP_OUTBOX.value)
+            event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
             idempotency_key = _event_idempotency_key(
                 event.idempotency_key,
                 index=index,
@@ -277,7 +277,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         the same open transaction.
         """
         # Save aggregate state
-        record_id = aggregate.id if aggregate.id else generate_id(EdiIdPrefix.EDI_JSON.value)
+        record_id = aggregate.id if aggregate.id else generate_id(DomainIdPrefix.EDI_JSON.value)
         record = EdiJson(
             id=record_id,
             trace_id=aggregate.trace_id,
@@ -303,7 +303,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             ) from exc
 
         for index, event in enumerate(aggregate.domain_events):
-            event_id = generate_id(EdiIdPrefix.DP_OUTBOX.value)
+            event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
             idempotency_key = _event_idempotency_key(
                 event.idempotency_key,
                 index=index,
@@ -390,7 +390,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 return str(existing_id)
 
         msg = EdiJson(
-            id=command.id or generate_id(EdiIdPrefix.EDI_JSON.value),
+            id=command.id or generate_id(DomainIdPrefix.EDI_JSON.value),
             trace_id=command.trace_id,
             tenant_id=command.tenant_id,
             direction=command.direction,
@@ -408,7 +408,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
         log = ApiGateway(
-            id=command.id or generate_id(EdiIdPrefix.API_GATEWAY.value),
+            id=command.id or generate_id(DomainIdPrefix.EDI_API_GATEWAY.value),
             tenant_id=command.tenant_id,
             trace_id=command.trace_id,
             direction=command.direction,

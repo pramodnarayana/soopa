@@ -1,8 +1,8 @@
 import dataclasses
 
 import structlog
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import UNSET, UnsetType
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.domain.enums import EdiEventType

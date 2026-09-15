@@ -1,6 +1,6 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
@@ -33,7 +33,7 @@ async def test_email_channel_strategy_delivers():
     provider = FakeEmailProvider()
     strategy = EmailChannelStrategy(email_provider=provider)
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     with capture_logs() as cap_logs:
         await strategy.deliver(
             tenant_id=tenant_id,
@@ -53,7 +53,7 @@ async def test_email_channel_strategy_delivers():
 async def test_email_channel_strategy_fails_without_provider():
     strategy = EmailChannelStrategy(email_provider=None)
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     with pytest.raises(DeliveryError, match="Email provider not configured"):
         await strategy.deliver(
             tenant_id=tenant_id,

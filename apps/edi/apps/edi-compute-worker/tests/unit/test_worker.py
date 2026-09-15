@@ -96,7 +96,7 @@ async def test_dispatcher_process_outbound_message_success():
             "tenant_id": "1",
             "direction": "OUTBOUND",
             "transaction_type": "850",
-            "route_config": {"as2_partner_id": "p-1"},
+            "route_config": {"as2_partner_id": "p-1", "connection_type": "AS2"},
         }
     }
 

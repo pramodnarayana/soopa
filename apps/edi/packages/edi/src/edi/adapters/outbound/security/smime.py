@@ -241,9 +241,12 @@ def sign_payload(
     # Typecasting to satisfy mypy
     rsa_key = cast(rsa.RSAPrivateKey, private_key)
 
-    # 1. Generate the raw detached CMS signature bag in DER format.
-    # This mathematically guarantees the exact `payload` bytes are hashed and signed.
-    builder = pkcs7.PKCS7SignatureBuilder().set_data(payload)
+    # 1. The payload already contains the canonical MIME headers (from builder)
+    canonical_first_part = payload
+
+    # 2. Generate the raw detached CMS signature bag in DER format.
+    # This mathematically guarantees the exact bytes of the MIME part are hashed and signed.
+    builder = pkcs7.PKCS7SignatureBuilder().set_data(canonical_first_part)
     hash_type = cast(hashes.SHA256, hash_alg)
     builder = builder.add_signer(cert, rsa_key, hash_algorithm=hash_type)
 
@@ -254,7 +257,7 @@ def sign_payload(
     except Exception as e:
         raise ValueError(f"Native Signature Generation Error: {e}") from e
 
-    # 2. Base64 encode the CMS bag and chunk it to 76 characters per line (MIME standard)
+    # 3. Base64 encode the CMS bag and chunk it to 76 characters per line (MIME standard)
     b64_sig = base64.b64encode(der_sig).decode("ascii")
     chunked_sig = "\r\n".join(b64_sig[i : i + 76] for i in range(0, len(b64_sig), 76))
 
@@ -271,8 +274,8 @@ def sign_payload(
     if micalg not in ("sha-1", "sha-256", "sha-384", "sha-512"):
         raise ValueError(f"Unsupported micalg resolution for algorithm: {algorithm}")
 
-    # 3. Construct the strictly canonicalized multipart/signed S/MIME byte stream.
-    # We guarantee that the exact `payload` is what is sent, and the CRLF boundaries
+    # 4. Construct the strictly canonicalized multipart/signed S/MIME byte stream.
+    # We guarantee that the exact `canonical_first_part` is what is sent, and the CRLF boundaries
     # strictly conform to RFC 2046, avoiding native email generator `\n` canonicalization.
     smime_headers = (
         f"MIME-Version: 1.0\r\n"
@@ -282,7 +285,7 @@ def sign_payload(
 
     smime_body = (
         (f"--{boundary}\r\n").encode("ascii")
-        + payload
+        + canonical_first_part
         + (
             f"\r\n--{boundary}\r\n"
             f'Content-Type: application/x-pkcs7-signature; name="smime.p7s"\r\n'

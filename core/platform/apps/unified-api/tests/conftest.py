@@ -17,10 +17,10 @@ from database.models.identity import Tenant as TenantORM
 from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator
@@ -214,7 +214,7 @@ async def seeded_api_token(db_session_factory):
             )
             session.add(admin_role)
 
-        tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+        tenant_id = generate_id(DomainIdPrefix.TENANT.value)
         tenant = await session.get(TenantORM, tenant_id)
         if not tenant:
             tenant = TenantORM(
@@ -290,7 +290,7 @@ async def seeded_api_token(db_session_factory):
 
         client_id = "client_test_123"
         token = ApiTokenORM(
-            id=generate_id(IdentityIdPrefix.TOKEN.value),
+            id=generate_id(DomainIdPrefix.TOKEN.value),
             tenant_id=tenant_id,
             name="Integration Test Token",
             client_id=client_id,

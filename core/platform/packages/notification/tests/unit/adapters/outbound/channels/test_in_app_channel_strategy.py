@@ -1,5 +1,5 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from structlog.testing import capture_logs
 
@@ -12,7 +12,7 @@ from notification.adapters.outbound.channels.in_app_channel_strategy import (
 async def test_in_app_channel_strategy():
     strategy = InAppChannelStrategy()
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     with capture_logs() as cap_logs:
         await strategy.deliver(
             tenant_id=tenant_id,

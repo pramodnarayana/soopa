@@ -27,16 +27,16 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
         cls, route_config: JsonDict, now: datetime.datetime, isa13: str
     ) -> AstNode:
         isa_sender_qualifier = str(route_config.get("isa_sender_qualifier") or "ZZ")
-        isa_sender_id_raw = route_config.get("isa_sender_id")
-        isa_receiver_id_raw = route_config.get("isa_receiver_id")
+        isa_sender_id_raw = str(route_config.get("isa_sender_id") or "").strip()
+        isa_receiver_id_raw = str(route_config.get("isa_receiver_id") or "").strip()
         if not isa_sender_id_raw or not isa_receiver_id_raw:
             raise InvalidMessageFormatError(
                 "Route config missing required ISA sender or receiver ID"
             )
 
-        isa_sender_id = str(isa_sender_id_raw).ljust(15)
+        isa_sender_id = isa_sender_id_raw.ljust(15)
         isa_receiver_qualifier = str(route_config.get("isa_receiver_qualifier") or "ZZ")
-        isa_receiver_id = str(isa_receiver_id_raw).ljust(15)
+        isa_receiver_id = isa_receiver_id_raw.ljust(15)
 
         version = str(route_config.get("default_version", "004010"))
         isa_version = version[:5] if len(version) >= 5 else "00401"

@@ -1,8 +1,9 @@
 from datetime import UTC, datetime
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
-from identity.domain.constants import IdentityIdPrefix, UserStatus
+from identity.domain.constants import UserStatus
 from identity.domain.events import (
     UserDeletedEvent,
     UserMembershipRemovedEvent,
@@ -13,7 +14,7 @@ from identity.domain.events import (
 
 
 class User(AggregateRoot):
-    ID_PREFIX = IdentityIdPrefix.USER.value
+    ID_PREFIX = DomainIdPrefix.USER.value
 
     def __init__(
         self,

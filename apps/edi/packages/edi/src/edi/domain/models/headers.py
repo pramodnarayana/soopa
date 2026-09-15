@@ -1,14 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
-
-from edi.domain.constants import EdiIdPrefix
 
 
 @dataclass(kw_only=True)
 class OutboundEdiHeaderDomainModel(AggregateRoot):
-    ID_PREFIX = EdiIdPrefix.OUTBOUND_HEADER.value
+    ID_PREFIX = DomainIdPrefix.EDI_OUTBOUND_HEADER.value
 
     id: str
     tenant_id: str

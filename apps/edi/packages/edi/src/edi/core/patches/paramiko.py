@@ -66,6 +66,4 @@ def apply_legacy_algorithm_support() -> None:
     logger.debug("paramiko: legacy ssh-rsa algorithm support enabled")
 
 
-# Apply automatically on import so callers can simply do:
-#   import edi.core.patches.paramiko
-apply_legacy_algorithm_support()
+# Do not apply automatically; caller must invoke apply_legacy_algorithm_support() when needed.

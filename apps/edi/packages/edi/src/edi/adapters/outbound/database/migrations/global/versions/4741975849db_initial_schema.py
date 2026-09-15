@@ -34,7 +34,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "as2_partners",
-        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("as2_id", sa.String(length=255), nullable=False),
@@ -178,7 +178,7 @@ def upgrade() -> None:
     )
     op.create_table(
         "as2_partnerships",
-        sa.Column("tenant_id", sa.String(length=128), nullable=True),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("local_partner_id", sa.String(length=128), nullable=False),
         sa.Column("remote_partner_id", sa.String(length=128), nullable=False),
         sa.Column("id", sa.String(length=128), nullable=False),

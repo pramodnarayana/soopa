@@ -1,5 +1,5 @@
 from seedwork import generate_id
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 
 from edi.domain.events import TransactionReplayRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError

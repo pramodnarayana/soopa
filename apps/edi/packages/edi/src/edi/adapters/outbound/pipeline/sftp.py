@@ -75,6 +75,19 @@ def get_ssh_client(
         "timeout": timeout,
     }
 
+    if host_key_string and host_key_string.startswith("ssh-rsa"):
+        # Apply legacy algorithms only to this specific transport instance
+        def legacy_transport_factory(*args, **kwargs):
+            t = paramiko.Transport(*args, **kwargs)
+            if "ssh-rsa" not in t._preferred_pubkeys:
+                t._preferred_pubkeys = (*t._preferred_pubkeys, "ssh-rsa")
+            if "ssh-rsa" not in t._key_info:
+                t._key_info = dict(t._key_info)
+                t._key_info["ssh-rsa"] = paramiko.RSAKey
+            return t
+
+        connect_kwargs["transport_factory"] = legacy_transport_factory
+
     if client_key_string:
         connect_kwargs["pkey"] = _parse_client_key(client_key_string)
     elif password:
