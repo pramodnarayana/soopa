@@ -1,6 +1,6 @@
-import uuid
-
 import structlog
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_deterministic_id
 
 from edi.config.settings import AppSettings
 from edi.domain.enums import EdiDirection, PipelineEventType
@@ -37,10 +37,12 @@ class DispatchInboundTransformUseCase:
             if not edi_msg.edi_data:
                 raise ValueError(f"No EDI data found for trace_id={trace_id}")
             standard = edi_msg.format_standard or "X12"
-            transaction_type = edi_msg.transaction_type or "UNKNOWN"
+            transaction_type = edi_msg.transaction_type
 
             # 2. Dispatch to Compute Worker
-            compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
+            compute_key = generate_deterministic_id(
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "COMPUTE_TRANSFORM_EVENT"
+            )
             await self.uow.outbox.append_event(
                 idempotency_key=compute_key,
                 event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,

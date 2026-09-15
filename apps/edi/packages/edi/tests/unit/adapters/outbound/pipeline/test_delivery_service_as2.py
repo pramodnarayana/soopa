@@ -47,6 +47,7 @@ _REMOTE_PARTNER = {
         "name": "Walmart Partnership",
         "local_partner_id": "local-p1",
         "remote_partner_id": "remote-1",
+        "active": True,
         "credentials_vault_ref": None,
         "encryption_algorithm": "AES256",
         "signature_algorithm": "SHA256",

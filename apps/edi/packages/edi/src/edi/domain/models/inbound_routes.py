@@ -3,13 +3,14 @@ from datetime import datetime
 
 from seedwork.models import AggregateRoot
 
+from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import EdiConnectionType, EdiDirection
 from edi.domain.models.base import ProcessingMode
 
 
 @dataclass(kw_only=True)
 class InboundRouteDomainModel(AggregateRoot):
-    ID_PREFIX = "edi_ib_rt"
+    ID_PREFIX = EdiIdPrefix.INBOUND_ROUTE.value
 
     id: str
     tenant_id: str

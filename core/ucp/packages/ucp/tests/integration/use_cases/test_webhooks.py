@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +25,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     Uses the real PostgreSQL database and actual Repositories to test the full CRUD lifecycle
     and verifies that outbox events are properly committed to the database.
     """
-    tenant_id = generate_id("ten")
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     # Create Use Cases
     uow = SqlAlchemyUcpUnitOfWork(db_session)
@@ -44,7 +45,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
         auth_header_vault_ref=None,
     )
 
-    assert created_webhook.id.startswith("web_")
+    assert created_webhook.id.startswith("ucp_wh_")
     assert created_webhook.name == "Test Webhook"
     assert created_webhook.url == "https://example.com/hook"
     assert created_webhook.active is True

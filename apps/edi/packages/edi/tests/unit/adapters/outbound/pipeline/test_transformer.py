@@ -51,5 +51,7 @@ async def test_bots_transformer_json_to_edi_success() -> None:
     fake_adapter = FakeBotsEDIAdapter()
     adapter = BotsTransformerAdapter(adapter=fake_adapter)
 
-    result = await adapter.transform_json_to_edi({"foo": "bar"}, "X12", "850", {})
+    result = await adapter.transform_json_to_edi(
+        {"foo": "bar"}, "X12", "850", {"isa_sender_id": "SENDER", "isa_receiver_id": "RECEIVER"}
+    )
     assert result == b"ISA*...~"

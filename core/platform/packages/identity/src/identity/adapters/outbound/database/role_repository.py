@@ -1,5 +1,3 @@
-import os
-
 import structlog
 from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
 from database.models import Role as OrmRole
@@ -264,7 +262,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
 
     def _flush_events(self, role: DomainRole, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(role.domain_events):
-            outbox_id = f"{IdentityOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = generate_id(IdentityOutbox.ID_PREFIX)
             event_name = event.event_name
 
             payload_dict = serialize_domain_event(event)

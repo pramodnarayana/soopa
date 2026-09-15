@@ -5,6 +5,7 @@ from contextlib import AbstractAsyncContextManager
 from functools import partial
 from typing import Any
 
+import edi.core.patches.paramiko  # noqa: F401 - applies legacy ssh-rsa patch on import
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv

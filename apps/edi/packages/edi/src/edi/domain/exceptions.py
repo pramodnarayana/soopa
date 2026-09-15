@@ -21,6 +21,15 @@ class DomainError(Exception):
     """Base class for domain-specific errors."""
 
 
+class InvalidMessageError(DomainError):
+    """Raised when an inbound queue message is permanently malformed or unprocessable.
+
+    Unlike transient infrastructure errors (which should be retried via NACK),
+    this exception signals a message that is structurally invalid and should be
+    dead-lettered immediately without retry.
+    """
+
+
 class PartnerNotFoundError(DomainError):
     """Raised when an AS2 Trading Partner is not found."""
 
@@ -88,6 +97,20 @@ class TransactionNotFoundError(DomainError):
     def __init__(self, trace_id: str):
         super().__init__(f"Transaction trace '{trace_id}' not found.")
         self.trace_id = trace_id
+
+
+class InvalidMessageFormatError(DomainError):
+    """Raised when an EDI payload or envelope is structurally invalid or missing required metadata."""
+
+    def __init__(self, message: str):
+        super().__init__(message)
+
+
+class UnresolvableConnectionTypeError(DomainError):
+    """Raised when the connection type (e.g., AS2, SFTP) cannot be resolved from the route configuration."""
+
+    def __init__(self, message: str = "Unresolvable connection type from route configuration."):
+        super().__init__(message)
 
 
 class OutboundRouteNotFoundError(DomainError):

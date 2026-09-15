@@ -17,5 +17,5 @@ class AS2PartnershipRepositoryPort(Protocol):
         self, tenant_id: str, local_partner_id: str, remote_partner_id: str
     ) -> AS2PartnershipDomainModel | None: ...
     async def get_as2_partnerships_by_remote_partner_id(
-        self, tenant_id: str, remote_partner_id: str
+        self, tenant_id: str, remote_partner_id: str, active: bool | None = None
     ) -> list[AS2PartnershipDomainModel]: ...

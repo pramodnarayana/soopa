@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
+from edi.domain.exceptions import InvalidMessageError
 from pubsub.aws.debezium_parser import DebeziumPayloadParser
 
 logger = structlog.get_logger(__name__)
@@ -20,15 +21,15 @@ class EdiDataPlaneEventMessage:
 
     def __post_init__(self) -> None:
         if not self.tenant_id or not self.tenant_id.strip():
-            raise ValueError("Required field 'tenant_id' is missing or empty")
+            raise InvalidMessageError("Required field 'tenant_id' is missing or empty")
         if not self.trace_id or not self.trace_id.strip():
-            raise ValueError("Required field 'trace_id' is missing or empty")
+            raise InvalidMessageError("Required field 'trace_id' is missing or empty")
         if not self.event_type or not self.event_type.strip():
-            raise ValueError("Required field 'event_type' is missing or empty")
+            raise InvalidMessageError("Required field 'event_type' is missing or empty")
         if not self.idempotency_key or not self.idempotency_key.strip():
-            raise ValueError("Required field 'idempotency_key' is missing or empty")
+            raise InvalidMessageError("Required field 'idempotency_key' is missing or empty")
         if not isinstance(self.payload, dict):
-            raise TypeError("Required field 'payload' must be a valid dictionary")
+            raise InvalidMessageError("Required field 'payload' must be a valid dictionary")
 
 
 class EdiDataPlaneEventDispatcher:
@@ -46,18 +47,33 @@ class EdiDataPlaneEventDispatcher:
         payload = DebeziumPayloadParser.extract_payload(body)
 
         try:
+            tenant_id = body.get("tenant_id")
+            trace_id = payload.get("trace_id") if isinstance(payload, dict) else None
+            event_type = body.get("event_type")
+            idempotency_key = body.get("idempotency_key")
+
+            if not tenant_id or not str(tenant_id).strip():
+                raise InvalidMessageError("Required field 'tenant_id' is missing or empty")
+            if not trace_id or not str(trace_id).strip():
+                raise InvalidMessageError("Required field 'trace_id' is missing or empty")
+            if not event_type or not str(event_type).strip():
+                raise InvalidMessageError("Required field 'event_type' is missing or empty")
+            if not idempotency_key or not str(idempotency_key).strip():
+                raise InvalidMessageError("Required field 'idempotency_key' is missing or empty")
+
             event = EdiDataPlaneEventMessage(
-                tenant_id=str(body.get("tenant_id", "")),
-                trace_id=str(payload.get("trace_id", "") if isinstance(payload, dict) else ""),
-                event_type=str(body.get("event_type", "")),
+                tenant_id=str(tenant_id),
+                trace_id=str(trace_id),
+                event_type=str(event_type),
                 payload=payload if payload is not None else {},
-                idempotency_key=str(body.get("idempotency_key", "")),
+                idempotency_key=str(idempotency_key),
             )
-        except (ValueError, TypeError) as e:
+        except InvalidMessageError as e:
             logger.exception(
                 "data_plane_events_sqs_consumer.validation_failed",
                 error=str(e),
-                body=body,
+                event_type=body.get("event_type"),
+                tenant_id=body.get("tenant_id"),
             )
             return
 

@@ -25,7 +25,7 @@ def test_new_id_uses_aggregate_prefix_and_12_random_bytes():
     prefix, random_hex = aggregate_id.split("_", maxsplit=1)
 
     assert prefix == "dummy"
-    assert len(random_hex) == 24
+    assert len(random_hex) == 32
     assert int(random_hex, 16) >= 0
 
 

@@ -418,18 +418,16 @@ class InMemoryRepositoryAdapter:
     async def get_as2_partnership(
         self, tenant_id: str, partnership_id: str
     ) -> AS2PartnershipDomainModel | None:
-        data = self.as2_partners.get(partnership_id)
-        if data:
-            partnership_data = data.get("partnership") or data
-            return (
-                _from_dict(AS2PartnershipDomainModel, partnership_data)
-                if isinstance(partnership_data, dict)
-                else None
-            )
+        for data in self.as2_partners.values():
+            if not isinstance(data, dict):
+                continue
+            partnership_data = data.get("partnership")
+            if isinstance(partnership_data, dict) and partnership_data.get("id") == partnership_id:
+                return _from_dict(AS2PartnershipDomainModel, partnership_data)
         return None
 
     async def get_as2_partnerships_by_remote_partner_id(
-        self, tenant_id: str, remote_partner_id: str
+        self, tenant_id: str, remote_partner_id: str, active: bool | None = None
     ) -> list[AS2PartnershipDomainModel]:
         results = []
         for data in self.as2_partners.values():
@@ -440,6 +438,8 @@ class InMemoryRepositoryAdapter:
                 isinstance(partnership_data, dict)
                 and partnership_data.get("remote_partner_id") == remote_partner_id
             ):
+                if active is not None and partnership_data.get("active") != active:
+                    continue
                 model = _from_dict(AS2PartnershipDomainModel, partnership_data)
                 if model:
                     results.append(model)

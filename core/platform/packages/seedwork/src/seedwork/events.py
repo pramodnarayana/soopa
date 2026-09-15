@@ -31,7 +31,7 @@ class DomainEvent(ABC):
     """
 
     idempotency_key: str = field(
-        default_factory=lambda: generate_id(SystemIdPrefix.GENERIC), kw_only=True
+        default_factory=lambda: generate_id(SystemIdPrefix.IDEMPOTENCY), kw_only=True
     )
 
     @property

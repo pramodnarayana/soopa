@@ -3,6 +3,7 @@ from typing import cast
 
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
+from edi.domain.exceptions import InvalidMessageFormatError
 from edi.domain.types import AstNode, JsonDict, JsonValue
 
 X12_GS01_MAPPING = {
@@ -26,9 +27,16 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
         cls, route_config: JsonDict, now: datetime.datetime, isa13: str
     ) -> AstNode:
         isa_sender_qualifier = str(route_config.get("isa_sender_qualifier") or "ZZ")
-        isa_sender_id = str(route_config.get("isa_sender_id", "UNKNOWN")).ljust(15)
+        isa_sender_id_raw = route_config.get("isa_sender_id")
+        isa_receiver_id_raw = route_config.get("isa_receiver_id")
+        if not isa_sender_id_raw or not isa_receiver_id_raw:
+            raise InvalidMessageFormatError(
+                "Route config missing required ISA sender or receiver ID"
+            )
+
+        isa_sender_id = str(isa_sender_id_raw).ljust(15)
         isa_receiver_qualifier = str(route_config.get("isa_receiver_qualifier") or "ZZ")
-        isa_receiver_id = str(route_config.get("isa_receiver_id", "UNKNOWN")).ljust(15)
+        isa_receiver_id = str(isa_receiver_id_raw).ljust(15)
 
         version = str(route_config.get("default_version", "004010"))
         isa_version = version[:5] if len(version) >= 5 else "00401"
@@ -57,12 +65,12 @@ class X12EnvelopeBuilder(BaseEnvelopeBuilder):
         cls, route_config: JsonDict, now: datetime.datetime, gs06: str
     ) -> AstNode:
         transaction_type = str(route_config.get("transaction_type", "XX"))
-        gs_sender_id = str(
-            route_config.get("gs_sender_id") or route_config.get("isa_sender_id", "UNKNOWN")
-        )
-        gs_receiver_id = str(
-            route_config.get("gs_receiver_id") or route_config.get("isa_receiver_id", "UNKNOWN")
-        )
+
+        isa_sender_id = str(route_config.get("isa_sender_id") or "")
+        isa_receiver_id = str(route_config.get("isa_receiver_id") or "")
+        gs_sender_id = str(route_config.get("gs_sender_id") or isa_sender_id)
+        gs_receiver_id = str(route_config.get("gs_receiver_id") or isa_receiver_id)
+
         version = str(route_config.get("default_version", "004010"))
         gs01 = str(X12_GS01_MAPPING.get(transaction_type, "XX"))
 

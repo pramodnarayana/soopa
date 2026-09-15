@@ -1,4 +1,3 @@
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -39,7 +38,7 @@ class CreateSFTPPartnerUseCase:
             tenant_id=tenant_id,
         )
 
-        partner_id = f"{SFTPPartnerDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+        partner_id = generate_id(SFTPPartnerDomainModel.ID_PREFIX)
 
         aggregate = SFTPPartnerDomainModel(
             id=partner_id,

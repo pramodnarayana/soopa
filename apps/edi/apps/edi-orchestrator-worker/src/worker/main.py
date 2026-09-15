@@ -1,6 +1,7 @@
 import asyncio
 import signal
 
+import edi.core.patches.paramiko  # noqa: F401 - applies legacy ssh-rsa patch on import
 import structlog
 from observability import ObservabilityProvider
 

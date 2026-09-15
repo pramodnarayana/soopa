@@ -1,5 +1,4 @@
 import asyncio
-import os
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -8,6 +7,7 @@ import structlog
 from database.models.notifications import NotificationOutbox
 from outbox.domain.constants import OutboxStatus
 from seedwork.events import EventEnvelope
+from seedwork.utils import generate_id
 from sqlalchemy import case, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +25,7 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
 
         async with self.session_factory() as session, session.begin():
             orm_msg = NotificationOutbox(
-                id=message.id or f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+                id=message.id or generate_id(NotificationOutbox.ID_PREFIX),
                 tenant_id=message.tenant_id,
                 event_type=message.event_type,
                 idempotency_key=message.idempotency_key,
@@ -168,7 +168,7 @@ class SqlAlchemyNotificationOutboxPublisher:
     async def save(self, message: EventEnvelope) -> None:
 
         orm_msg = NotificationOutbox(
-            id=message.id or f"{NotificationOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+            id=message.id or generate_id(NotificationOutbox.ID_PREFIX),
             tenant_id=message.tenant_id,
             event_type=message.event_type,
             idempotency_key=message.idempotency_key,

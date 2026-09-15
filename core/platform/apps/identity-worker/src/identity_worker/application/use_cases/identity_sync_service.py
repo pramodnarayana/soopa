@@ -202,16 +202,18 @@ class IdentitySyncService:
         created_idp_user_id: str | None = None
         did_create = False
         try:
-            bound_logger.info(
-                "identity_sync_before_idp_create_user", org_id=idp_tenant_id
-            )
+            bound_logger.info("identity_sync_before_idp_create_user", org_id=idp_tenant_id)
             created_idp_user_id, did_create = await self.user_identity_provider.create_user(
                 org_id=idp_tenant_id,
                 email=email,
                 first_name=first_name,
                 last_name=last_name,
             )
-            bound_logger.info("identity_sync_user_created_in_idp", idp_user_id=created_idp_user_id, did_create=did_create)
+            bound_logger.info(
+                "identity_sync_user_created_in_idp",
+                idp_user_id=created_idp_user_id,
+                did_create=did_create,
+            )
 
             bound_logger.info(
                 "identity_sync_before_assign_tenant_role",

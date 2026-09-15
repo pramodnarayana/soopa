@@ -1,5 +1,6 @@
 from typing import Any
 
+from notification.domain.constants import NotificationIdPrefix
 from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,7 +12,7 @@ from database.models.core import NotificationBase
 
 class NotificationTemplate(NotificationBase, TimestampMixin):
     __tablename__ = "notification_templates"
-    ID_PREFIX = "notif_tmpl"
+    ID_PREFIX = NotificationIdPrefix.TEMPLATE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True, autoincrement=False)
     tenant_id: Mapped[str] = mapped_column(
@@ -32,7 +33,7 @@ class NotificationTemplate(NotificationBase, TimestampMixin):
 
 class NotificationOutbox(NotificationBase, OutboxMixin):
     __tablename__ = "notification_outbox"
-    ID_PREFIX = "notif_ob"
+    ID_PREFIX = NotificationIdPrefix.OUTBOX.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -55,7 +56,7 @@ class NotificationOutbox(NotificationBase, OutboxMixin):
 
 class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
     __tablename__ = "notification_route_configurations"
-    ID_PREFIX = "notif_rte"
+    ID_PREFIX = NotificationIdPrefix.ROUTE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -73,7 +74,7 @@ class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
 
 class NotificationRecord(NotificationBase, TimestampMixin):
     __tablename__ = "notification_records"
-    ID_PREFIX = "notif_rec"
+    ID_PREFIX = NotificationIdPrefix.RECORD.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -95,7 +96,7 @@ class NotificationRecord(NotificationBase, TimestampMixin):
 
 class UserNotificationPreference(NotificationBase, TimestampMixin):
     __tablename__ = "user_notification_preferences"
-    ID_PREFIX = "notif_pref"
+    ID_PREFIX = NotificationIdPrefix.PREFERENCE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(

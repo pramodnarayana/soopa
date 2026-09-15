@@ -7,4 +7,4 @@
 #
 # To generate a prefixed ID, use the entity constant directly:
 #   import os
-#   tenant_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
+#   tenant_id = generate_id(Tenant.ID_PREFIX)

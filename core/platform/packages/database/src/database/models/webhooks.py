@@ -2,6 +2,7 @@ import os
 
 from sqlalchemy import Boolean, String, text
 from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import UcpIdPrefix
 
 from database.models.common import SoftDeleteMixin, TimestampMixin
 from database.models.core import UcpBase
@@ -9,7 +10,7 @@ from database.models.core import UcpBase
 
 class Webhook(UcpBase, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "webhooks"
-    ID_PREFIX = "ucp_cp_wh"
+    ID_PREFIX = UcpIdPrefix.WEBHOOK.value
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     id: Mapped[str] = mapped_column(

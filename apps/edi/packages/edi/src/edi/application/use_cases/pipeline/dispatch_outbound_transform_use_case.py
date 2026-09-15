@@ -1,11 +1,13 @@
 import dataclasses
-import uuid
 from typing import cast
 
 import structlog
+from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.utils import generate_deterministic_id
 
 from edi.config.settings import AppSettings
+from edi.core.pipeline.connection_type_resolver import ConnectionTypeResolver
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
 from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
 from edi.domain.enums import (
@@ -91,7 +93,9 @@ class DispatchOutboundTransformUseCase:
             "outbound_transform.offloaded_to_compute_queue",
             trace_id=trace_id,
         )
-        compute_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:COMPUTE_TRANSFORM_EVENT"))
+        compute_key = generate_deterministic_id(
+            SystemIdPrefix.IDEMPOTENCY, trace_id, "COMPUTE_TRANSFORM_EVENT"
+        )
         await self.uow.outbox.append_event(
             idempotency_key=compute_key,
             event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
@@ -106,15 +110,6 @@ class DispatchOutboundTransformUseCase:
         )
 
     # Extraction logic lives exclusively in TransactionTypeResolver (DRY).
-
-    def _determine_connection_type(self, route_config: JsonDict, outbound_route: JsonDict) -> str:
-        connection_type = route_config.get("connection_type", "UNKNOWN")
-        if connection_type == "UNKNOWN" and outbound_route:
-            if outbound_route.get("as2_partner_id"):
-                return "AS2"
-            if outbound_route.get("sftp_partner_id"):
-                return "SFTP"
-        return str(connection_type)
 
     async def execute(self, trace_id: str) -> None:
         """Transforms an outbound JSON payload to X12 EDI."""
@@ -165,8 +160,10 @@ class DispatchOutboundTransformUseCase:
             #   Tier 3 — Dynamic extraction from raw payload (shared domain service)
             # A hard domain error is raised if all tiers are exhausted — UNKNOWN is
             # never a valid fallback because it causes grammar engine import failures.
+            explicit_txn_type = route_txn_type or edi_json.transaction_type
+
             transaction_type = TransactionTypeResolver.resolve(
-                explicit_type=route_txn_type or edi_json.transaction_type,
+                explicit_type=explicit_txn_type,
                 payload=edi_json.payload,
             )
 
@@ -188,6 +185,9 @@ class DispatchOutboundTransformUseCase:
             if "environment" not in route_config:
                 route_config["environment"] = self._settings.edi_environment
 
+            connection_type = ConnectionTypeResolver.resolve(route_config, outbound_route)
+            route_config["connection_type"] = connection_type.value
+
             if self._settings.enable_heavy_compute_queue:
                 await self._offload_to_compute_queue(
                     trace_id, edi_json.tenant_id or "", standard, transaction_type, route_config
@@ -203,7 +203,6 @@ class DispatchOutboundTransformUseCase:
             )
 
             edi_str = raw_edi_bytes.decode("utf-8")
-            connection_type = self._determine_connection_type(route_config, outbound_route)
 
             await self.uow.transactions.create_edi_message(
                 command=CreateEdiMessageCommand(
@@ -214,7 +213,7 @@ class DispatchOutboundTransformUseCase:
                     format_standard=standard,
                     transaction_type=transaction_type,
                     status=MessageStatus.PENDING_DELIVERY,
-                    connection_type=ConnectionType(connection_type),
+                    connection_type=ConnectionType(connection_type.value),
                     sender_id=isa_sender_id,
                     receiver_id=isa_receiver_id,
                     gs_sender_id=gs_sender_id,
@@ -223,8 +222,8 @@ class DispatchOutboundTransformUseCase:
                 )
             )
 
-            transform_completed_key = str(
-                uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:TRANSFORM_COMPLETED")
+            transform_completed_key = generate_deterministic_id(
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORM_COMPLETED"
             )
             await self.uow.outbox.append_event(
                 idempotency_key=transform_completed_key,

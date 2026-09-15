@@ -6,7 +6,6 @@ import typing
 import paramiko
 import structlog
 
-import edi.core.patches.paramiko  # noqa: F401 - applies legacy ssh-rsa patch on import
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
 logger = structlog.get_logger(__name__)

@@ -11,13 +11,10 @@ from edi.application.use_cases.pipeline.compute_transform_use_case import (
     ComputeTransformUseCase,
 )
 from edi.domain.enums import EdiDirection, EdiStandard
+from edi.domain.exceptions import InvalidMessageError
 from pubsub.aws.debezium_parser import DebeziumPayloadParser
 
 logger = structlog.get_logger(__name__)
-
-
-class InvalidMessageError(ValueError):
-    pass
 
 
 class EdiComputeDispatcher:
@@ -44,9 +41,14 @@ class EdiComputeDispatcher:
                 direction_val = payload.get("direction")
                 direction = str(direction_val if direction_val else EdiDirection.INBOUND.value)
 
+                trace_id = payload.get("trace_id")
+                tenant_id = payload.get("tenant_id")
+                if not trace_id or not tenant_id:
+                    raise InvalidMessageError("Missing or empty trace_id or tenant_id in payload")
+
                 base_kwargs = {
-                    "trace_id": str(payload.get("trace_id", "")),
-                    "tenant_id": str(payload.get("tenant_id", "")),
+                    "trace_id": str(trace_id),
+                    "tenant_id": str(tenant_id),
                     "standard": str(payload.get("standard", EdiStandard.X12.name)),
                 }
 

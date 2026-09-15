@@ -4,11 +4,12 @@ from seedwork.domain.types import JsonDict
 from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
+from ucp.domain.constants import UcpIdPrefix
 
 
 class UcpOutbox(UcpBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = "ucp_cp_ob"
+    ID_PREFIX = UcpIdPrefix.OUTBOX.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)

@@ -235,7 +235,7 @@ class TestReplayTransactionUseCase:
         )
         await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
         key = self.msg_repo.outbox_events[0]["key"]
-        assert "t-003" in key
+        assert key.startswith("sys_idemp_")
 
 
 @pytest.mark.asyncio

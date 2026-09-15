@@ -1,4 +1,5 @@
 import pytest
+from identity.domain.constants import IdentityIdPrefix
 
 pytestmark = pytest.mark.integration
 from datetime import UTC, datetime
@@ -21,7 +22,7 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
     """
     async with db_session.begin_nested():
         repo = TenantRepository(db_session)
-        tenant_id = generate_id("ten")
+        tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
         new_tenant = Tenant(
             id=tenant_id,

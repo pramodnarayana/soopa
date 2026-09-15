@@ -1,7 +1,6 @@
-import os
-
 import structlog
 from database.outbox_serializer import serialize_domain_event
+from seedwork.utils import generate_id
 from sqlalchemy.dialects.postgresql import insert
 
 from ucp.domain.constants import SubscriptionTier
@@ -124,7 +123,7 @@ class TenantRepository(TenantRepositoryPort):
 
     def _flush_events(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(tenant.domain_events):
-            outbox_id = f"{UcpOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = generate_id(UcpOutbox.ID_PREFIX)
             event_name = event.event_name
 
             final_idemp_key = (

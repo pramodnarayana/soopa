@@ -30,8 +30,8 @@ def test_domain_event_idempotency_key_generation():
     event2 = DummyEventNoId()
 
     # Should generate a prefixed ID
-    assert event1.idempotency_key.startswith("sys_id_")
-    assert event2.idempotency_key.startswith("sys_id_")
+    assert event1.idempotency_key.startswith("sys_idemp_")
+    assert event2.idempotency_key.startswith("sys_idemp_")
     assert event1.idempotency_key != event2.idempotency_key
 
     assert event1.event_name == "dummy.event"

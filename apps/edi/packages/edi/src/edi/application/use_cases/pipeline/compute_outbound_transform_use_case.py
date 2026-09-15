@@ -1,12 +1,12 @@
 import contextlib
-import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
 import structlog
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_deterministic_id
 
-from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
 from edi.domain.enums import (
     ConnectionType,
     EdiDirection,
@@ -14,7 +14,7 @@ from edi.domain.enums import (
     MessageStatus,
     PipelineEventType,
 )
-from edi.domain.exceptions import TransactionNotFoundError, UnresolvableTransactionTypeError
+from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.types import AstNode
 from edi.ports.outbound.transaction_repository import CreateEdiMessageCommand
 from edi.ports.outbound.transformer_port import TransformerPort
@@ -61,8 +61,11 @@ class ComputeOutboundTransformUseCase:
 
     def _determine_connection_type(self, route_config: dict[str, Any]) -> str:
         # Note: outbound_route is technically needed to perfectly determine this,
-        # but the orchestrator passed it via route_config if needed, or we just rely on connection_type.
-        return str(route_config.get("connection_type", "UNKNOWN"))
+        # but the orchestrator passed it via route_config if needed,
+        connection_type = route_config.get("connection_type")
+        if not connection_type:
+            raise ValueError("Unresolvable connection type")
+        return str(connection_type)
 
     async def execute(self, command: ComputeOutboundTransformCommand) -> None:
         """Transforms an outbound JSON payload to X12 EDI."""
@@ -94,16 +97,7 @@ class ComputeOutboundTransformUseCase:
             ):
                 raise TransactionNotFoundError(trace_id)
 
-            # Validate transaction_type is not the UNKNOWN sentinel.
-            # The dispatcher must have resolved it before constructing the command,
-            # but as a defense-in-depth guard we use TransactionTypeResolver to re-attempt
-            # extraction from the live payload before failing hard.
-            resolved_transaction_type = TransactionTypeResolver.resolve(
-                explicit_type=command.transaction_type,
-                payload=edi_json.payload,
-            )
-            if not resolved_transaction_type:
-                raise UnresolvableTransactionTypeError(trace_id)
+            resolved_transaction_type = command.transaction_type
 
             logger.info(
                 "compute_outbound_transform.resolved",
@@ -147,7 +141,7 @@ class ComputeOutboundTransformUseCase:
                     direction=EdiDirection.OUTBOUND,
                     edi_data=edi_str,
                     format_standard=standard,
-                    transaction_type=transaction_type,
+                    transaction_type=resolved_transaction_type,
                     status=MessageStatus.PENDING_DELIVERY,
                     connection_type=ConnectionType(connection_type),
                     sender_id=isa_sender_id,
@@ -160,8 +154,8 @@ class ComputeOutboundTransformUseCase:
             logger.info("compute_outbound_transform.edi_message_saved", trace_id=trace_id)
 
             # 3. Dispatch TRANSFORM_COMPLETED
-            transform_completed_key = str(
-                uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:TRANSFORM_COMPLETED")
+            transform_completed_key = generate_deterministic_id(
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORM_COMPLETED"
             )
             await uow.outbox.append_event(
                 idempotency_key=transform_completed_key,

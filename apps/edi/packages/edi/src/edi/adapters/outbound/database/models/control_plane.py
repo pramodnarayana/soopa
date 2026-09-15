@@ -1,10 +1,10 @@
-import os
-
+from seedwork.utils import generate_id
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 from database.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
+from edi.domain.constants import EdiIdPrefix
 
 from .base import EdiGlobalBase
 from .replicated_mixins import (
@@ -24,15 +24,10 @@ class AS2Partner(EdiGlobalBase, AS2PartnerMixin, TimestampMixin):
 
     __tablename__ = "as2_partners"
 
-    tenant_id: Mapped[str | None] = mapped_column(
-        String(128), nullable=True, index=True
-    )  # Null if shared global
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "as2_id", name="uq_tenant_as2_id"),
-        Index(
-            "uq_global_as2_id", "as2_id", unique=True, postgresql_where=text("tenant_id IS NULL")
-        ),
         {"schema": "edi"},
     )
 
@@ -45,7 +40,7 @@ class AS2Partnership(EdiGlobalBase, AS2PartnershipMixin, TimestampMixin):
 
     __tablename__ = "as2_partnerships"
 
-    tenant_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 
     local_partner_id: Mapped[str] = mapped_column(
         String(128), ForeignKey("edi.as2_partners.id", ondelete="CASCADE"), nullable=False
@@ -143,12 +138,12 @@ class OutboundEdiHeader(EdiGlobalBase, OutboundEdiHeaderMixin, TimestampMixin, S
 
 class ControlPlaneOutbox(EdiGlobalBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = "edi_cp_ob"
+    ID_PREFIX = EdiIdPrefix.CP_OUTBOX.value
 
     id: Mapped[str] = mapped_column(
         String(128),
         primary_key=True,
-        default=lambda: f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+        default=lambda: generate_id(ControlPlaneOutbox.ID_PREFIX),
     )
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
 

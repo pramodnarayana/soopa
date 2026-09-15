@@ -122,18 +122,22 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         try:
             partnerships = (
                 await self.uow.as2_partnerships.get_as2_partnerships_by_remote_partner_id(
-                    edi_msg.tenant_id, partner_id
+                    edi_msg.tenant_id, partner_id, active=True
                 )
             )
             if not partnerships:
-                raise ValueError(f"No AS2 partnership found for remote partner {partner_id}.")
+                raise ValueError(
+                    f"No active AS2 partnership found for remote partner {partner_id}."
+                )
 
-            if len(partnerships) > 1:
-                logger.warning(
-                    "multiple_as2_partnerships_found_for_remote_partner",
+            if len(partnerships) != 1:
+                logger.error(
+                    "multiple_active_as2_partnerships_found_for_remote_partner",
                     tenant_id=edi_msg.tenant_id,
                     remote_partner_id=partner_id,
-                    using_partnership_id=partnerships[0].id,
+                )
+                raise ValueError(
+                    f"Expected exactly 1 active AS2 partnership for remote partner {partner_id}, found {len(partnerships)}."
                 )
 
             partnership_dto = partnerships[0]

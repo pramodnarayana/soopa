@@ -1,7 +1,7 @@
-import uuid
-
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.constants import SystemIdPrefix
+from seedwork.utils import generate_deterministic_id
 
 from edi.domain.enums import PipelineEventType
 from edi.domain.models.transactions import EdiMessageDomainModel
@@ -18,7 +18,9 @@ class BaseDeliveryStrategy:
         self.secret_store = vault
 
     async def _emit_delivery_completed(self, trace_id: str, direction: str, status: str) -> None:
-        event_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:DELIVERY_COMPLETED:{status}"))
+        event_key = generate_deterministic_id(
+            SystemIdPrefix.IDEMPOTENCY, trace_id, f"DELIVERY_COMPLETED:{status}"
+        )
         await self.uow.outbox.append_event(
             idempotency_key=event_key,
             event_type=PipelineEventType.DELIVERY_COMPLETED,

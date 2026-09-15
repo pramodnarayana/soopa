@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 from collections.abc import Sequence
 from typing import Protocol, cast
 
@@ -15,7 +14,7 @@ class RouteModelProtocol(Protocol):
 
 
 def _event_idempotency_key(idempotency_key: str | None, *, index: int, event_count: int) -> str:
-    base_key = idempotency_key or generate_id(SystemIdPrefix.GENERIC)
+    base_key = idempotency_key or generate_id(SystemIdPrefix.IDEMPOTENCY)
     return f"{base_key}_{index}" if event_count > 1 else base_key
 
 
@@ -28,11 +27,6 @@ from sqlalchemy.sql.elements import ColumnElement
 from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
 from edi.adapters.outbound.database.base_repository import TenantSession, TenantSqlAlchemyRepository
-from edi.adapters.outbound.database.constants import (
-    API_GATEWAY_ID_PREFIX,
-    DATA_PLANE_OUTBOX_EVENT_PREFIX,
-    EDI_JSON_ID_PREFIX,
-)
 from edi.adapters.outbound.database.models.data_plane import (
     ApiGateway,
     DataPlaneOutbox,
@@ -47,7 +41,7 @@ from edi.application.dtos.transactions import (
     EdiJsonDTO,
     EdiMessageDTO,
 )
-from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
+from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import MessageStatus
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
@@ -81,7 +75,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         msg = EdiMessage(
-            id=command.id or f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}",
+            id=command.id or generate_id(EdiIdPrefix.EDI_MESSAGE.value),
             trace_id=command.trace_id,
             tenant_id=command.tenant_id,
             direction=command.direction,
@@ -209,7 +203,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             serialize_domain_event(payload) if not isinstance(payload, dict) else payload
         )
 
-        event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
+        event_id = generate_id(EdiIdPrefix.DP_OUTBOX.value)
         record = DataPlaneOutbox(
             id=event_id,
             tenant_id=tenant_id,
@@ -232,9 +226,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         the same open transaction. This is the DDD-compliant publishing mechanism.
         """
         # Save aggregate state
-        record_id = (
-            aggregate.id if aggregate.id else f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}"
-        )
+        record_id = aggregate.id if aggregate.id else generate_id(EdiIdPrefix.EDI_MESSAGE.value)
         record = EdiMessage(
             id=record_id,
             trace_id=aggregate.trace_id,
@@ -255,7 +247,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.session.merge(record)
 
         for index, event in enumerate(aggregate.domain_events):
-            event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
+            event_id = generate_id(EdiIdPrefix.DP_OUTBOX.value)
             idempotency_key = _event_idempotency_key(
                 event.idempotency_key,
                 index=index,
@@ -285,7 +277,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         the same open transaction.
         """
         # Save aggregate state
-        record_id = aggregate.id if aggregate.id else f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}"
+        record_id = aggregate.id if aggregate.id else generate_id(EdiIdPrefix.EDI_JSON.value)
         record = EdiJson(
             id=record_id,
             trace_id=aggregate.trace_id,
@@ -311,7 +303,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             ) from exc
 
         for index, event in enumerate(aggregate.domain_events):
-            event_id = f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}_{os.urandom(12).hex()}"
+            event_id = generate_id(EdiIdPrefix.DP_OUTBOX.value)
             idempotency_key = _event_idempotency_key(
                 event.idempotency_key,
                 index=index,
@@ -398,7 +390,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 return str(existing_id)
 
         msg = EdiJson(
-            id=command.id or f"{EDI_JSON_ID_PREFIX}_{os.urandom(12).hex()}",
+            id=command.id or generate_id(EdiIdPrefix.EDI_JSON.value),
             trace_id=command.trace_id,
             tenant_id=command.tenant_id,
             direction=command.direction,
@@ -416,7 +408,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
     async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
         log = ApiGateway(
-            id=command.id or f"{API_GATEWAY_ID_PREFIX}_{os.urandom(12).hex()}",
+            id=command.id or generate_id(EdiIdPrefix.API_GATEWAY.value),
             tenant_id=command.tenant_id,
             trace_id=command.trace_id,
             direction=command.direction,
@@ -553,14 +545,14 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             if field not in self._ALLOWED_FIELDS or operator not in self._ALLOWED_OPERATORS:
                 continue
 
-            # EdiJson no longer has ISA/GS fields; ignore these filters
+            # EdiJson no longer has ISA/GS fields; reject these filters
             if issubclass(model, EdiJson) and field in (
                 "sender_id",
                 "receiver_id",
                 "gs_sender_id",
                 "gs_receiver_id",
             ):
-                continue
+                raise ValueError(f"Filter field '{field}' is not supported for EdiJson models.")
 
             if field == "trading_partner_id":
                 if issubclass(model, EdiMessage):

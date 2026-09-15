@@ -4,6 +4,7 @@ from typing import cast
 
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
+from edi.domain.exceptions import InvalidMessageFormatError
 from edi.domain.types import AstNode, JsonDict, JsonValue
 
 
@@ -12,8 +13,12 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
     def _build_unb_segment(
         cls, route_config: JsonDict, now: datetime.datetime, unb05: str
     ) -> AstNode:
-        unb_sender_id = str(route_config.get("isa_sender_id", "UNKNOWN"))
-        unb_receiver_id = str(route_config.get("isa_receiver_id", "UNKNOWN"))
+        unb_sender_id = str(route_config.get("isa_sender_id") or "")
+        unb_receiver_id = str(route_config.get("isa_receiver_id") or "")
+        if not unb_sender_id or not unb_receiver_id:
+            raise InvalidMessageFormatError(
+                "Route config missing required UNB sender or receiver ID"
+            )
         version = str(route_config.get("default_version", "4"))
         environment = "1" if str(route_config.get("environment", "")) == "T" else ""
 

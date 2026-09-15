@@ -1,9 +1,9 @@
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
 from seedwork.domain.types import JsonValue
+from seedwork.utils import generate_id
 
 from edi.domain.enums import (
     EdiEventType,
@@ -60,7 +60,7 @@ class CreateAS2PartnershipUseCase:
             tenant_id=tenant_id,
         )
 
-        partner_id = f"{AS2PartnershipDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+        partner_id = generate_id(AS2PartnershipDomainModel.ID_PREFIX)
 
         aggregate = AS2PartnershipDomainModel(
             id=partner_id,

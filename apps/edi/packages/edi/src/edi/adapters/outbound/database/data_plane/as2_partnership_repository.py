@@ -69,12 +69,14 @@ class SqlAlchemyDataPlaneAS2PartnershipRepository(AS2PartnershipRepositoryPort):
         return self._to_domain_model(record) if record else None
 
     async def get_as2_partnerships_by_remote_partner_id(
-        self, tenant_id: str, remote_partner_id: str
+        self, tenant_id: str, remote_partner_id: str, active: bool | None = None
     ) -> list[AS2PartnershipDomainModel]:
         stmt = select(AS2Partnership).where(
             AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
             AS2Partnership.remote_partner_id == remote_partner_id,
         )
+        if active is not None:
+            stmt = stmt.where(AS2Partnership.active.is_(active))
         records = (await self.session.execute(stmt)).scalars().all()
         return [self._to_domain_model(r) for r in records]
 

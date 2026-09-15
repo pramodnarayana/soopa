@@ -82,7 +82,6 @@ class As2EncryptionAlgorithm(StrEnum):
 class EdiTransactionType(StrEnum):
     """Well-known X12 transaction set identifiers plus the generic envelope type."""
 
-    UNKNOWN = "UNKNOWN"
     ENVELOPE = "envelope"
     X12_204 = "204"
     X12_210 = "210"
@@ -108,7 +107,6 @@ class ConnectionType(StrEnum):
     SFTP = "SFTP"
     WEBHOOK = "WEBHOOK"
     API = "API"
-    UNKNOWN = "UNKNOWN"
 
 
 class ProcessingMode(StrEnum):

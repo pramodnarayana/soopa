@@ -29,18 +29,17 @@ class EdiIdPrefix(StrEnum):
     CP_OUTBOX = "edi_cp_ob"
     DP_OUTBOX = "edi_dp_ob"
     AS2_SERVER = "edi_as2"
-    AS2_PARTNER = "edi_as2p"
+    AS2_PARTNER = "edi_as2_tp"
+    AS2_PARTNERSHIP = "edi_as2_pship"
     SFTP_PARTNER = "edi_sftp"
     WEBHOOK = "edi_dp_wh"
-    INBOUND_ROUTE = "edi_inbrt"
-    OUTBOUND_HEADER = "edi_outhdr"
-    OUTBOUND_ROUTE = "edi_outrt"
+    INBOUND_ROUTE = "edi_inb_rt"
+    OUTBOUND_HEADER = "edi_outb_hdr"
+    OUTBOUND_ROUTE = "edi_outb_rt"
     EDI_MESSAGE = "edi_msg"
     EDI_JSON = "edi_json"
-    API_GATEWAY = "edi_apigw"
+    API_GATEWAY = "edi_api_gw"
 
-
-EDI_MESSAGE_ID_PREFIX = EdiIdPrefix.EDI_MESSAGE.value
 
 # ── Aggregated provisioning event set ────────────────────────────────────────
 ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType

@@ -1,7 +1,7 @@
-import uuid
-
 import structlog
+from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.utils import generate_deterministic_id
 
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.ports.outbound.transaction_repository import UpdateEdiJsonCommand
@@ -81,7 +81,9 @@ class PipelineLifecycleUseCase:
                 )
 
             # Emit DELIVER command
-            deliver_idempotency_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:DELIVER"))
+            deliver_idempotency_key = generate_deterministic_id(
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "DELIVER"
+            )
             await self.uow.outbox.append_event(
                 idempotency_key=deliver_idempotency_key,
                 event_type=PipelineEventType.DELIVER_EVENT,

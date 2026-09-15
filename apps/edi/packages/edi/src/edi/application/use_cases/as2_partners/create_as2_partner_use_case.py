@@ -1,6 +1,5 @@
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -47,6 +46,7 @@ class CreateAS2PartnerUseCase:
         private_key_vault_ref = cmd.private_key_vault_ref
         public_cert_pem = cmd.public_cert_pem
 
+        is_new_key = False
         if private_key_vault_ref:
             pass  # Pre-stored vault ref — use as-is
         elif cmd.private_key_pem:
@@ -55,6 +55,7 @@ class CreateAS2PartnerUseCase:
                 private_key_pem=cmd.private_key_pem.encode(),
                 category=SecretCategory.AS2_KEY,
             )
+            is_new_key = True
         else:
             # No key material provided. Certificate generation is an explicit user action
             # via POST /as2/certificates/generate. This endpoint must never auto-generate.
@@ -71,7 +72,7 @@ class CreateAS2PartnerUseCase:
                 "Supply private_key_pem or private_key_vault_ref."
             )
 
-        return False, private_key_vault_ref, public_cert_pem
+        return is_new_key, private_key_vault_ref, public_cert_pem
 
     async def _check_idempotency(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str
@@ -170,7 +171,7 @@ class CreateAS2PartnerUseCase:
                     public_cert_pem,
                 ) = await self._provision_local_key(cmd)
 
-            partner_id = f"{AS2PartnerDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+            partner_id = generate_id(AS2PartnerDomainModel.ID_PREFIX)
 
             aggregate = AS2PartnerDomainModel(
                 id=partner_id,

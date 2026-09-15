@@ -7,7 +7,7 @@ class IdentityIdPrefix(StrEnum):
     TOKEN = "iam_tok"  # noqa: S105
     KEY = "iam_key"
     ROLE = "iam_rol"
-    USER_ROLE = "iam_urol"
+    USER_ROLE = "iam_usr_rol"
     OUTBOX = "iam_ob"
 
 

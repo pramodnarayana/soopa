@@ -1,6 +1,7 @@
 import asyncio
 import signal
 
+import edi.core.patches.paramiko  # noqa: F401 - applies legacy ssh-rsa patch on import
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
 
@@ -77,14 +78,14 @@ async def main() -> None:
         outbound_use_case_factory=outbound_use_case_factory,
     )
 
-    transform_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.transform_queue_url,
+    compute_consumer = AwsSqsConsumer(
+        queue_url=settings.sqs.compute_queue_url,
         region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
     manager = SqsConsumerManager(
-        consumer=transform_consumer,
-        queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
+        consumer=compute_consumer,
+        queue_name=settings.sqs.compute_queue_url.rsplit("/", 1)[-1],
         handler=dispatcher.dispatch_raw,
     )
 

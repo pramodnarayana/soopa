@@ -17,7 +17,7 @@ from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
-from edi.domain.enums import EdiStandard, EdiTransactionType
+from edi.domain.enums import EdiStandard
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -25,7 +25,7 @@ class ComputeTransformCommand:
     trace_id: str
     tenant_id: str
     standard: str = EdiStandard.X12.name
-    transaction_type: str = EdiTransactionType.UNKNOWN.value
+    transaction_type: str | None = None
 
     def __post_init__(self) -> None:
         if not self.trace_id or not self.trace_id.strip():
@@ -75,7 +75,7 @@ class ComputeTransformUseCase:
 
             # 1. Transform
             transformed_txns = await self.transformer.transform_edi_to_json(
-                payload=raw_payload, standard=standard, transaction_type=transaction_type
+                payload=raw_payload, standard=standard, transaction_type=transaction_type or ""
             )
             if not transformed_txns:
                 logger.warning(

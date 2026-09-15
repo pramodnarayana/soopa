@@ -17,11 +17,9 @@ from edi.adapters.outbound.database.base_repository import (
     GlobalSqlAlchemyRepository,
     TenantSqlAlchemyRepository,
 )
-
-# Shared prefix constants for Data Plane IDs
-from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.domain.constants import EdiIdPrefix
 from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.outbox_event import OutboxEvent
@@ -212,7 +210,7 @@ class SqlAlchemyDataPlaneOutboxRepository(
 
         super().__init__(session)
         self.model_class = DataPlaneOutbox
-        self.id_prefix = DATA_PLANE_OUTBOX_EVENT_PREFIX
+        self.id_prefix = EdiIdPrefix.DP_OUTBOX
 
     async def publish_outbox_event(
         self,

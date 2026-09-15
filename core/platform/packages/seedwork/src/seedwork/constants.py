@@ -14,7 +14,7 @@ class SystemIdPrefix(StrEnum):
     IDEMPOTENCY = "sys_idemp"
     OUTBOX = "sys_out"
     CLIENT = "sys_client"
-    TRACE = "sys_trc"
+    TRACE = "sys_trace"
     TX = "sys_tx"
 
 

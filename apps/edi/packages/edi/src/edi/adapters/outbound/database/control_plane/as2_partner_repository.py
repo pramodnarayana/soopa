@@ -23,7 +23,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
             raise ValueError(
                 f"AS2Partner must be a global configuration. Expected tenant_id={PLATFORM_TENANT_ID}"
             )
-        conds = [AS2Partner.id == aggregate.id, AS2Partner.tenant_id == PLATFORM_TENANT_ID]
+        conds = [AS2Partner.id == aggregate.id, AS2Partner.tenant_id == aggregate.tenant_id]
 
         result = await self.session.execute(select(AS2Partner).where(*conds))
         record = result.scalar_one_or_none()
@@ -52,7 +52,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
         self, tenant_id: str, partner_id: str
     ) -> AS2PartnerDomainModel | None:
         stmt = select(AS2Partner).where(
-            AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.id == partner_id
+            AS2Partner.tenant_id == tenant_id, AS2Partner.id == partner_id
         )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
@@ -69,7 +69,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
 
     async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str) -> bool:
         stmt = select(AS2Partner).where(
-            AS2Partner.tenant_id == PLATFORM_TENANT_ID,
+            AS2Partner.tenant_id == tenant_id,
             or_(
                 AS2Partner.private_key_vault_ref == vault_ref,
                 AS2Partner.prev_private_key_vault_ref == vault_ref,
@@ -80,7 +80,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
 
     async def list_as2_partners(self, tenant_id: str) -> list[AS2PartnerDomainModel]:
         result = await self.session.execute(
-            select(AS2Partner).where(AS2Partner.tenant_id == PLATFORM_TENANT_ID)
+            select(AS2Partner).where(AS2Partner.tenant_id == tenant_id)
         )
         return [
             AS2PartnerDomainModel(
@@ -90,7 +90,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
         ]
 
     async def delete(self, aggregate: AS2PartnerDomainModel) -> None:
-        conds = [AS2Partner.id == aggregate.id, AS2Partner.tenant_id == PLATFORM_TENANT_ID]
+        conds = [AS2Partner.id == aggregate.id, AS2Partner.tenant_id == aggregate.tenant_id]
 
         try:
             async with intercept_db_errors():
@@ -109,7 +109,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
             return []
 
         stmt = select(AS2Partner).where(
-            AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.id.in_(partner_ids)
+            AS2Partner.tenant_id == tenant_id, AS2Partner.id.in_(partner_ids)
         )
         result = await self.session.execute(stmt)
         return [

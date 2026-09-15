@@ -1,9 +1,7 @@
-import os
 from email.message import EmailMessage
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
-from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
@@ -31,9 +29,10 @@ from typing import cast
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork import generate_id
 from seedwork.constants import SystemIdPrefix
-from seedwork.utils import generate_id
 
+from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import (
     ConnectionType,
     EdiConnectionType,
@@ -440,7 +439,7 @@ class ProcessInboundAs2MessageUseCase:
         )
 
         edi_record = {
-            "trace_id": generate_id(SystemIdPrefix.GENERIC),
+            "trace_id": generate_id(SystemIdPrefix.TRACE),
             "direction": EdiDirection.INBOUND.value,
             "connection_type": EdiConnectionType.AS2.value,
             "sender_id": isa_sender,
@@ -458,7 +457,7 @@ class ProcessInboundAs2MessageUseCase:
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
             edi_message_aggregate = EdiMessageDomainModel(
-                id=f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}",
+                id=generate_id(EdiIdPrefix.EDI_MESSAGE),
                 tenant_id=true_tenant_id,
                 trace_id=str(edi_record["trace_id"]),
                 direction=Direction(str(edi_record["direction"])),

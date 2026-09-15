@@ -83,7 +83,7 @@ class ProcessApiEdiJsonUseCase:
                 business_metadata["_idempotency_key"] = command.idempotency_key
 
             # 2. Create Trace ID
-            trace_id = generate_id(SystemIdPrefix.GENERIC)
+            trace_id = generate_id(SystemIdPrefix.TRACE)
             logger.info("trace_id_generated", trace_id=trace_id)
 
             if isinstance(command.payload, list):

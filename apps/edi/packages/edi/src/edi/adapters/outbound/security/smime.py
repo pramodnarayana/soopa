@@ -260,8 +260,16 @@ def sign_payload(
 
     boundary = f"----=_Part_{uuid.uuid4().hex}"
 
-    # We must format micalg correctly for older AS2 systems (sha-1 vs sha1)
-    micalg = "sha-1" if algorithm == As2SignatureAlgorithm.SHA1 else algorithm.value
+    # We must format micalg correctly for older AS2 systems
+    _MICALG_MAP = {
+        As2SignatureAlgorithm.SHA1: "sha-1",
+        As2SignatureAlgorithm.SHA256: "sha-256",
+        As2SignatureAlgorithm.SHA384: "sha-384",
+        As2SignatureAlgorithm.SHA512: "sha-512",
+    }
+    micalg = _MICALG_MAP.get(algorithm)
+    if micalg not in ("sha-1", "sha-256", "sha-384", "sha-512"):
+        raise ValueError(f"Unsupported micalg resolution for algorithm: {algorithm}")
 
     # 3. Construct the strictly canonicalized multipart/signed S/MIME byte stream.
     # We guarantee that the exact `payload` is what is sent, and the CRLF boundaries

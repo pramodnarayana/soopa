@@ -24,7 +24,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
 
     async def list_as2_partnerships(self, tenant_id: str) -> list[AS2PartnershipDomainModel]:
         result = await self.session.execute(
-            select(AS2Partnership).where(AS2Partnership.tenant_id == PLATFORM_TENANT_ID)
+            select(AS2Partnership).where(AS2Partnership.tenant_id == tenant_id)
         )
         return [
             AS2PartnershipDomainModel(
@@ -37,12 +37,14 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         ]
 
     async def get_as2_partnerships_by_remote_partner_id(
-        self, tenant_id: str, remote_partner_id: str
+        self, tenant_id: str, remote_partner_id: str, active: bool | None = None
     ) -> list[AS2PartnershipDomainModel]:
         stmt = select(AS2Partnership).where(
-            AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
+            AS2Partnership.tenant_id == tenant_id,
             AS2Partnership.remote_partner_id == remote_partner_id,
         )
+        if active is not None:
+            stmt = stmt.where(AS2Partnership.active.is_(active))
         records = (await self.session.execute(stmt)).scalars().all()
         return [
             AS2PartnershipDomainModel(
@@ -112,7 +114,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         if aggregate.active:
             existing_active = await self.session.execute(
                 select(AS2Partnership).where(
-                    AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
+                    AS2Partnership.tenant_id == aggregate.tenant_id,
                     AS2Partnership.local_partner_id == aggregate.local_partner_id,
                     AS2Partnership.remote_partner_id == aggregate.remote_partner_id,
                     AS2Partnership.active.is_(True),
@@ -129,7 +131,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         result = await self.session.execute(
             select(AS2Partnership).where(
                 AS2Partnership.id == aggregate.id,
-                AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
+                AS2Partnership.tenant_id == aggregate.tenant_id,
             )
         )
         record = result.scalar_one_or_none()
@@ -147,7 +149,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     async def delete(self, aggregate: AS2PartnershipDomainModel) -> None:
         await self.session.execute(
             delete(AS2Partnership).where(
-                AS2Partnership.id == aggregate.id, AS2Partnership.tenant_id == PLATFORM_TENANT_ID
+                AS2Partnership.id == aggregate.id, AS2Partnership.tenant_id == aggregate.tenant_id
             )
         )
         self._drain_events(aggregate)
@@ -157,7 +159,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         self, tenant_id: str, local_partner_id: str, remote_partner_id: str
     ) -> AS2PartnershipDomainModel | None:
         stmt = select(AS2Partnership).where(
-            AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
+            AS2Partnership.tenant_id == tenant_id,
             AS2Partnership.local_partner_id == local_partner_id,
             AS2Partnership.remote_partner_id == remote_partner_id,
         )
@@ -176,7 +178,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     ) -> AS2PartnershipDomainModel | None:
         result = await self.session.execute(
             select(AS2Partnership).where(
-                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == PLATFORM_TENANT_ID
+                AS2Partnership.id == partnership_id, AS2Partnership.tenant_id == tenant_id
             )
         )
         record = result.scalar_one_or_none()
