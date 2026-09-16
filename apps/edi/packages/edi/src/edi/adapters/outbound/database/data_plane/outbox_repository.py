@@ -4,15 +4,14 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from outbox.domain.constants import OutboxStatus
-from seedwork.constants import SystemIdPrefix
+from seedwork import generate_id
 from seedwork.domain.types import JsonValue
 from seedwork.events import EventEnvelope
-from seedwork.utils import generate_id, generate_random_hex
+from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 from sqlalchemy import CursorResult, or_, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.outbound.database.constants import DATA_PLANE_OUTBOX_EVENT_PREFIX
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 
@@ -39,7 +38,7 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
         stmt = (
             insert(DataPlaneOutbox)
             .values(
-                id=f"{DATA_PLANE_OUTBOX_EVENT_PREFIX}{generate_random_hex(6)}",
+                id=generate_id(DomainIdPrefix.EDI_DP_OUTBOX),
                 idempotency_key=str(idempotency_key)
                 if idempotency_key
                 else generate_id(SystemIdPrefix.GENERIC),

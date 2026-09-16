@@ -56,6 +56,10 @@ class SqsSettings(BaseSettings):
         validation_alias="SQS_TRANSFORM_QUEUE_URL",
         description="The SQS queue URL for EDI Transform",
     )
+    compute_queue_url: str = Field(
+        validation_alias="SQS_COMPUTE_QUEUE_URL",
+        description="The SQS queue URL for EDI heavy compute (JSON-to-EDI and EDI-to-JSON)",
+    )
     lifecycle_queue_url: str = Field(
         validation_alias="SQS_LIFECYCLE_QUEUE_URL",
         description="The SQS queue URL for EDI Lifecycle",

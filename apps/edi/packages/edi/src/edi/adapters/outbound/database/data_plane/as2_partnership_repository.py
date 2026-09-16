@@ -1,4 +1,5 @@
-from sqlalchemy import select
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -25,7 +26,7 @@ class SqlAlchemyDataPlaneAS2PartnershipRepository(AS2PartnershipRepositoryPort):
         self, tenant_id: str, partnership_id: str
     ) -> AS2PartnershipDomainModel | None:
         stmt = select(AS2Partnership).where(
-            AS2Partnership.tenant_id == tenant_id, AS2Partnership.id == partnership_id
+            AS2Partnership.tenant_id == PLATFORM_TENANT_ID, AS2Partnership.id == partnership_id
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
@@ -33,15 +34,17 @@ class SqlAlchemyDataPlaneAS2PartnershipRepository(AS2PartnershipRepositoryPort):
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
     ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel] | None:
-        sender_alias = aliased(AS2Partner)
-        receiver_alias = aliased(AS2Partner)
+        LocalPartner = aliased(AS2Partner)
+        RemotePartner = aliased(AS2Partner)
+
         stmt = (
-            select(AS2Partnership, sender_alias, receiver_alias)
-            .join(sender_alias, AS2Partnership.remote_partner_id == sender_alias.id)
-            .join(receiver_alias, AS2Partnership.local_partner_id == receiver_alias.id)
+            select(AS2Partnership, RemotePartner, LocalPartner)
+            .join(LocalPartner, AS2Partnership.local_partner_id == LocalPartner.id)
+            .join(RemotePartner, AS2Partnership.remote_partner_id == RemotePartner.id)
             .where(
-                sender_alias.as2_id == as2_from,
-                receiver_alias.as2_id == as2_to,
+                AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
+                func.lower(LocalPartner.as2_id) == as2_to.lower(),
+                func.lower(RemotePartner.as2_id) == as2_from.lower(),
             )
         )
         row = (await self.session.execute(stmt)).first()
@@ -58,15 +61,27 @@ class SqlAlchemyDataPlaneAS2PartnershipRepository(AS2PartnershipRepositoryPort):
         self, tenant_id: str, local_partner_id: str, remote_partner_id: str
     ) -> AS2PartnershipDomainModel | None:
         stmt = select(AS2Partnership).where(
-            AS2Partnership.tenant_id == tenant_id,
+            AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
             AS2Partnership.local_partner_id == local_partner_id,
             AS2Partnership.remote_partner_id == remote_partner_id,
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
+    async def get_as2_partnerships_by_remote_partner_id(
+        self, tenant_id: str, remote_partner_id: str, active: bool | None = None
+    ) -> list[AS2PartnershipDomainModel]:
+        stmt = select(AS2Partnership).where(
+            AS2Partnership.tenant_id == PLATFORM_TENANT_ID,
+            AS2Partnership.remote_partner_id == remote_partner_id,
+        )
+        if active is not None:
+            stmt = stmt.where(AS2Partnership.active.is_(active))
+        records = (await self.session.execute(stmt)).scalars().all()
+        return [self._to_domain_model(r) for r in records]
+
     async def list_as2_partnerships(self, tenant_id: str) -> list[AS2PartnershipDomainModel]:
-        stmt = select(AS2Partnership).where(AS2Partnership.tenant_id == tenant_id)
+        stmt = select(AS2Partnership).where(AS2Partnership.tenant_id == PLATFORM_TENANT_ID)
         records = (await self.session.execute(stmt)).scalars().all()
         return [self._to_domain_model(r) for r in records]
 

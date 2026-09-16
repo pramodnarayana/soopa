@@ -2,12 +2,12 @@ import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationRouteConfiguration
 from seedwork import generate_id, generate_random_hex
+from seedwork.id_registry import DomainIdPrefix
 from ucp.domain.constants import LifecycleStatus
 
 from notification.adapters.outbound.database.postgres_route_repository import (
     SqlAlchemyNotificationRouteRepository,
 )
-from notification.domain.constants import NotificationIdPrefix
 from notification.domain.models import Channel
 
 
@@ -29,7 +29,7 @@ async def test_get_channels_returns_configured_channels(db_session_factory):
         session.add(tenant)
 
         route = NotificationRouteConfiguration(
-            id=generate_id(NotificationIdPrefix.ROUTE),
+            id=generate_id(DomainIdPrefix.NOTIFICATION_ROUTE),
             tenant_id=tenant_id,
             event_type=event_type,
             channels=["EMAIL", "IN_APP"],

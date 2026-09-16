@@ -3,7 +3,7 @@ import asyncio
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)

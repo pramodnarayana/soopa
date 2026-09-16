@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import pytest
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from edi.application.dtos.trace import EdiTraceDTO
@@ -132,7 +132,7 @@ class TestGetEdiTraceUseCase:
         self.msg_repo = FakeEdiMessageRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.trace_repo, self.msg_repo)
         self.use_case = GetEdiTraceUseCase(uow=self.uow)
-        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
+        self.tenant_id = generate_id(DomainIdPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_trace_missing(self):
@@ -165,7 +165,7 @@ class TestReplayTransactionUseCase:
         self.msg_repo = FakeEdiMessageRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.trace_repo, self.msg_repo)
         self.use_case = ReplayTransactionUseCase(uow=self.uow)
-        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
+        self.tenant_id = generate_id(DomainIdPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_raises_not_found_when_transaction_missing(self):
@@ -235,7 +235,7 @@ class TestReplayTransactionUseCase:
         )
         await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
         key = self.msg_repo.outbox_events[0]["key"]
-        assert "t-003" in key
+        assert key.startswith("sys_idemp_")
 
 
 @pytest.mark.asyncio
@@ -243,7 +243,7 @@ async def test_bulk_replay_commits_after_saving_events():
     trace_repo = FakeTraceRepository()
     msg_repo = FakeEdiMessageRepository()
     uow = FakeDataPlaneUnitOfWork(trace_repo, msg_repo)
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
 
     model = EdiMessageDomainModel(
         id="msg-1",
@@ -274,7 +274,7 @@ class TestListEdiMessagesUseCase:
         self.msg_repo = FakeEdiMessageRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.trace_repo, self.msg_repo)
         self.use_case = ListEdiMessagesUseCase(uow=self.uow)
-        self.tenant_id = generate_id(IdentityIdPrefix.TENANT)
+        self.tenant_id = generate_id(DomainIdPrefix.TENANT)
 
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_no_messages(self):

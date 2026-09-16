@@ -1,9 +1,7 @@
-import os
 from email.message import EmailMessage
 
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
-from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
@@ -31,8 +29,8 @@ from typing import cast
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.constants import SystemIdPrefix
-from seedwork.utils import generate_id
+from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 
 from edi.domain.enums import (
     ConnectionType,
@@ -423,8 +421,6 @@ class ProcessInboundAs2MessageUseCase:
         true_tenant_id: str | None = await self.control_plane_uow.inbound_routes.get_tenant_by_isa(
             isa_sender, isa_receiver
         )
-        if not true_tenant_id and partnership.tenant_id is not None:
-            true_tenant_id = str(partnership.tenant_id)
 
         if not true_tenant_id or true_tenant_id == PLATFORM_TENANT_ID:
             logger.error(
@@ -442,7 +438,7 @@ class ProcessInboundAs2MessageUseCase:
         )
 
         edi_record = {
-            "trace_id": generate_id(SystemIdPrefix.GENERIC),
+            "trace_id": generate_id(SystemIdPrefix.TRACE),
             "direction": EdiDirection.INBOUND.value,
             "connection_type": EdiConnectionType.AS2.value,
             "sender_id": isa_sender,
@@ -460,7 +456,7 @@ class ProcessInboundAs2MessageUseCase:
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
             edi_message_aggregate = EdiMessageDomainModel(
-                id=f"{EDI_MESSAGE_ID_PREFIX}_{os.urandom(12).hex()}",
+                id=generate_id(DomainIdPrefix.EDI_MESSAGE),
                 tenant_id=true_tenant_id,
                 trace_id=str(edi_record["trace_id"]),
                 direction=Direction(str(edi_record["direction"])),
@@ -543,6 +539,7 @@ class ProcessInboundAs2MessageUseCase:
                 edi_message_id=str(msg_id),
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
+                direction=EdiDirection.INBOUND.value,
                 status=MessageStatus.RECEIVED.value,
                 idempotency_key=str(msg_id),
             )

@@ -6,8 +6,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import TypeVar
 
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 T = TypeVar("T")
@@ -168,10 +168,6 @@ class InMemoryRepositoryAdapter:
             for field in (
                 "trading_partner_id",
                 "standard",
-                "sender_id",
-                "receiver_id",
-                "gs_sender_id",
-                "gs_receiver_id",
             ):
                 value = getattr(command, field)
                 if value is not None:
@@ -241,10 +237,6 @@ class InMemoryRepositoryAdapter:
             "trading_partner_id": command.trading_partner_id,
             "business_metadata": command.business_metadata,
             "transaction_type": command.transaction_type,
-            "sender_id": command.sender_id,
-            "receiver_id": command.receiver_id,
-            "gs_sender_id": command.gs_sender_id,
-            "gs_receiver_id": command.gs_receiver_id,
             "payload": command.payload,
             "parent_trace_id": command.parent_trace_id,
         }
@@ -426,15 +418,32 @@ class InMemoryRepositoryAdapter:
     async def get_as2_partnership(
         self, tenant_id: str, partnership_id: str
     ) -> AS2PartnershipDomainModel | None:
-        data = self.as2_partners.get(partnership_id)
-        if data:
-            partnership_data = data.get("partnership") or data
-            return (
-                _from_dict(AS2PartnershipDomainModel, partnership_data)
-                if isinstance(partnership_data, dict)
-                else None
-            )
+        for data in self.as2_partners.values():
+            if not isinstance(data, dict):
+                continue
+            partnership_data = data.get("partnership")
+            if isinstance(partnership_data, dict) and partnership_data.get("id") == partnership_id:
+                return _from_dict(AS2PartnershipDomainModel, partnership_data)
         return None
+
+    async def get_as2_partnerships_by_remote_partner_id(
+        self, tenant_id: str, remote_partner_id: str, active: bool | None = None
+    ) -> list[AS2PartnershipDomainModel]:
+        results = []
+        for data in self.as2_partners.values():
+            if not isinstance(data, dict):
+                continue
+            partnership_data = data.get("partnership")
+            if (
+                isinstance(partnership_data, dict)
+                and partnership_data.get("remote_partner_id") == remote_partner_id
+            ):
+                if active is not None and partnership_data.get("active") != active:
+                    continue
+                model = _from_dict(AS2PartnershipDomainModel, partnership_data)
+                if model:
+                    results.append(model)
+        return results
 
     async def get_local_as2_partner(self, partner_id: str) -> LocalAS2PartnerDTO | None:
         data = self.local_as2_partners.get(partner_id)

@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.api_token_models import CreateApiTokenCommand
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.api_tokens.create_api_token_use_case import CreateApiTokenUseCase
@@ -24,7 +24,7 @@ async def test_create_api_token_success(create_api_token_use_case, fake_uow):
     command = CreateApiTokenCommand(name="My Token", expires_at=datetime.now(UTC))
 
     result = await create_api_token_use_case.execute(
-        tenant_id=generate_id(IdentityIdPrefix.TENANT), command=command
+        tenant_id=generate_id(DomainIdPrefix.TENANT), command=command
     )
 
     assert result.name == "My Token"

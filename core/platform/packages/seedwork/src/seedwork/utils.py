@@ -25,3 +25,28 @@ def generate_random_hex(entropy_bytes: int = 16) -> str:
     Generate a random hex string. Useful for test suffixes or pure randomness.
     """
     return os.urandom(entropy_bytes).hex()
+
+
+import uuid
+
+
+def generate_deterministic_id(prefix: Enum | str, namespace: str, name: str) -> str:
+    """
+    Generate an enterprise-grade Stripe-style prefixed deterministic ID using UUIDv5.
+
+    Args:
+        prefix: A DomainIdPrefix or SystemIdPrefix Enum member (or str fallback)
+        namespace: The namespace string (e.g. trace_id)
+        name: The specific name within the namespace (e.g. "TRANSFORM_COMPLETED")
+
+    Returns:
+        A strictly formatted deterministic ID string
+    """
+    if not prefix:
+        raise ValueError("Prefix cannot be empty")
+
+    prefix_val = prefix.value if isinstance(prefix, Enum) else prefix
+    namespace_uuid = uuid.uuid5(uuid.NAMESPACE_OID, namespace)
+    deterministic_uuid = uuid.uuid5(namespace_uuid, name)
+
+    return f"{prefix_val}_{deterministic_uuid.hex}"

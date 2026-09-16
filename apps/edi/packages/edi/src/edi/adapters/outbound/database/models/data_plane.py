@@ -1,8 +1,8 @@
-import os
 from datetime import UTC, datetime
 
 from seedwork import generate_id
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -232,7 +232,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "edi_json"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: generate_id("edi_json")
+        String(128), primary_key=True, default=lambda: generate_id(DomainIdPrefix.EDI_JSON.value)
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
@@ -241,10 +241,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
     standard: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    gs_sender_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    gs_receiver_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     business_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
@@ -256,7 +252,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
-        Index("ix_edi_json_sender_recv", "sender_id", "receiver_id", "created_at"),
         CheckConstraint(
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)",
             name="chk_edi_json_data_or_uri",
@@ -317,12 +312,12 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
             postgresql_where=text("status = 'PENDING'"),
         ),
     )
-    ID_PREFIX = "edi_dp_ob"
+    ID_PREFIX = DomainIdPrefix.EDI_DP_OUTBOX.value
 
     id: Mapped[str] = mapped_column(
         String(128),
         primary_key=True,
-        default=lambda: f"{DataPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}",
+        default=lambda: generate_id(DataPlaneOutbox.ID_PREFIX),
     )
 
 

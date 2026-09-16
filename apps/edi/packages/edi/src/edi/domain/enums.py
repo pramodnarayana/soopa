@@ -107,7 +107,6 @@ class ConnectionType(StrEnum):
     SFTP = "SFTP"
     WEBHOOK = "WEBHOOK"
     API = "API"
-    UNKNOWN = "UNKNOWN"
 
 
 class ProcessingMode(StrEnum):

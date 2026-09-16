@@ -20,6 +20,7 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
     ZitadelUsersAdapter,
 )
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
+from identity_worker.config.settings import get_settings
 from seedwork import generate_id
 
 pytestmark = [
@@ -35,12 +36,14 @@ pytestmark = [
 
 @pytest.fixture
 def zitadel_projects_adapter():
-    return ZitadelProjectsAdapter()
+    return ZitadelProjectsAdapter(settings=get_settings())
 
 
 @pytest.fixture
 def zitadel_orgs_adapter(zitadel_projects_adapter):
-    return ZitadelOrganizationsAdapter(project_provider=zitadel_projects_adapter)
+    return ZitadelOrganizationsAdapter(
+        project_provider=zitadel_projects_adapter, settings=get_settings()
+    )
 
 
 @pytest.fixture

@@ -13,6 +13,7 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
 )
 from edi.config.settings import AppSettings
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
+from edi.domain.exceptions import OutboundRouteNotFoundError, TransactionNotFoundError
 from edi.ports.outbound.transaction_repository import CreateEdiJsonCommand
 from edi.testing.fakes.pipeline_fakes import (
     FakeDataPlaneUnitOfWork,
@@ -118,7 +119,7 @@ async def test_outbound_transform_rejects_list_with_non_ast_node() -> None:
         "transaction_type": "850",
     }
 
-    with pytest.raises(ValueError, match="Payload is missing"):
+    with pytest.raises(TransactionNotFoundError):
         await make_use_case(uow=uow, transformer=transformer).execute(trace_id)
 
     assert transformer.transform_json_calls == []
@@ -136,10 +137,6 @@ async def test_pipeline_fake_preserves_saved_edi_json_payload() -> None:
             trading_partner_id=None,
             transaction_type="850",
             standard="X12",
-            sender_id=None,
-            receiver_id=None,
-            gs_sender_id=None,
-            gs_receiver_id=None,
             business_metadata={},
             payload=payload,
             status=MessageStatus.RECEIVED,
@@ -198,7 +195,7 @@ async def test_outbound_transform_missing_json_raises() -> None:
     uow = FakeDataPlaneUnitOfWork()
     use_case = make_use_case(uow=uow)
 
-    with pytest.raises(ValueError, match="No EdiJson record found"):
+    with pytest.raises(TransactionNotFoundError):
         await use_case.execute("missing-trace")
 
 
@@ -216,7 +213,7 @@ async def test_outbound_transform_missing_route_raises() -> None:
 
     use_case = make_use_case(uow=uow)
 
-    with pytest.raises(ValueError, match="Unsuccessful route/header lookup for trace_id="):
+    with pytest.raises(OutboundRouteNotFoundError):
         await use_case.execute(trace_id)
 
 

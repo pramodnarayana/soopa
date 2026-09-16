@@ -1,6 +1,6 @@
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.application.dtos.partners import AS2PartnershipDTO, LocalAS2PartnerDTO, RemoteAS2PartnerDTO
@@ -40,8 +40,9 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             await self.uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
             logger.error(
-                "AS2 Delivery failed for trace_id={trace_id}. "
-                "HTTP status: {status_code}, body: {response_body!r}"
+                "as2_delivery_http_failed",
+                trace_id=trace_id,
+                status_code=status_code,
             )
             raise RuntimeError(f"AS2 Delivery failed with HTTP {status_code}")
 
@@ -75,26 +76,31 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                     ):
                         is_success = False
                         logger.warning(
-                            "MDN MIC mismatch for trace_id={trace_id}. "
-                            "Expected {as2_msg.mic}, got {received_mic}"
+                            "as2_mdn_mic_mismatch",
+                            trace_id=trace_id,
+                            expected_mic=as2_msg.mic,
+                            received_mic=received_mic,
                         )
 
         if is_success:
             await self.uow.transactions.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
             await self._emit_delivery_completed(trace_id, direction, MessageStatus.DELIVERED)
             logger.info(
-                "Delivered trace_id={trace_id} (HTTP {status_code}). MIC={as2_msg.mic}",
+                "as2_delivery_succeeded",
                 trace_id=trace_id,
                 status_code=status_code,
-                as2_msg_mic=as2_msg.mic,
+                mic=as2_msg.mic,
             )
             return
 
         await self.uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
         await self._emit_delivery_completed(trace_id, direction, MessageStatus.FAILED)
         logger.error(
-            "Sync MDN indicates failure for trace_id={trace_id}. "
-            "Disposition: {disposition!r}, Received-MIC: {received_mic!r}, Expected-MIC: {as2_msg.mic!r}"
+            "as2_mdn_failure",
+            trace_id=trace_id,
+            disposition=disposition,
+            received_mic=received_mic,
+            expected_mic=as2_msg.mic,
         )
         raise RuntimeError(f"Sync MDN indicates failure: {disposition}")
 
@@ -107,17 +113,34 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
     ) -> None:
         if not await self.uow.transactions.claim_edi_message(trace_id):
             logger.warning(
-                "Could not claim trace_id={trace_id} (already claimed or terminal).",
+                "as2_delivery_claim_failed",
                 trace_id=trace_id,
+                reason="already claimed or in terminal status",
             )
             return
 
         try:
-            partnership_dto = await self.uow.as2_partnerships.get_as2_partnership(
-                edi_msg.tenant_id, partner_id
+            partnerships = (
+                await self.uow.as2_partnerships.get_as2_partnerships_by_remote_partner_id(
+                    edi_msg.tenant_id, partner_id, active=True
+                )
             )
-            if not partnership_dto:
-                raise ValueError(f"AS2 partnership {partner_id} not found.")
+            if not partnerships:
+                raise ValueError(
+                    f"No active AS2 partnership found for remote partner {partner_id}."
+                )
+
+            if len(partnerships) != 1:
+                logger.error(
+                    "multiple_active_as2_partnerships_found_for_remote_partner",
+                    tenant_id=edi_msg.tenant_id,
+                    remote_partner_id=partner_id,
+                )
+                raise ValueError(
+                    f"Expected exactly 1 active AS2 partnership for remote partner {partner_id}, found {len(partnerships)}."
+                )
+
+            partnership_dto = partnerships[0]
 
             remote_partner_dto = await self.uow.as2_partners.get_as2_partner(
                 edi_msg.tenant_id, partnership_dto.remote_partner_id
@@ -183,16 +206,15 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 partnership=partnership_dto_mapped,
                 idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
-        except Exception as e:
+        except Exception:
             await self.uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
-                "AS2 Delivery Adapter is misconfigured or failed to build for trace_id={trace_id}",
+                "as2_message_build_failed",
                 trace_id=trace_id,
+                partner_id=partner_id,
             )
-            raise RuntimeError(
-                "AS2 Delivery Adapter failed to build for trace_id={trace_id}"
-            ) from e
+            raise
 
         try:
             status_code, response_headers, response_body = await self.as2_delivery.deliver(
@@ -200,22 +222,15 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 body=as2_msg.body,
                 headers=as2_msg.headers,
             )
-        except RuntimeError as e:
+        except Exception:
             await self.uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
             logger.exception(
-                "AS2 Delivery Adapter is misconfigured for trace_id={trace_id}", trace_id=trace_id
+                "as2_http_transmission_failed",
+                trace_id=trace_id,
+                remote_url=remote_url,
             )
-            raise RuntimeError(
-                "AS2 Delivery Adapter is misconfigured for trace_id={trace_id}"
-            ) from e
-        except Exception as e:
-            await self.uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
-            await self._emit_delivery_completed(trace_id, edi_msg.direction, MessageStatus.FAILED)
-            logger.exception(
-                "AS2 HTTP transmission failed for trace_id={trace_id}", trace_id=trace_id
-            )
-            raise RuntimeError("AS2 HTTP transmission failed for trace_id={trace_id}") from e
+            raise
 
         await self._process_mdn_response(
             trace_id, edi_msg.direction, as2_msg, status_code, response_headers, response_body

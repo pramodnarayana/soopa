@@ -6,5 +6,5 @@
 #   from database.models.identity import Tenant
 #   from ucp_models.subscriptions import App
 #
-#   tenant_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
-#   app_id    = f"{App.ID_PREFIX}_{os.urandom(12).hex()}"
+#   tenant_id = generate_id(Tenant.ID_PREFIX)
+#   app_id    = generate_id(App.ID_PREFIX)

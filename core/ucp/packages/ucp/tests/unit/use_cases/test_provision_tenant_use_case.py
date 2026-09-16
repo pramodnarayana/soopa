@@ -68,7 +68,7 @@ async def test_provision_tenant_success(
     saved_tenant = fake_uow.tenant_repo.saved_tenants[0]
     assert saved_tenant.name == "Test Tenant"
     assert saved_tenant.idp_tenant_id is None
-    assert saved_tenant.id.startswith("ten_")
+    assert saved_tenant.id.startswith("iam_ten_")
 
     # Assert — the returned tenant is the same object persisted
     assert tenant is saved_tenant

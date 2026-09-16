@@ -123,7 +123,7 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
 
     keys = {row[0] for row in rows}
     assert keys == {
-        f"bulk_replay_{command_key}_0",
-        f"bulk_replay_{command_key}_1",
-        f"bulk_replay_{command_key}_2",
+        f"sys_idemp_bulk_replay_{command_key}_0",
+        f"sys_idemp_bulk_replay_{command_key}_1",
+        f"sys_idemp_bulk_replay_{command_key}_2",
     }

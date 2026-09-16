@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
 from edi.domain.types import JsonValue
@@ -81,7 +82,7 @@ class MDNResponse:
 
 @dataclass(kw_only=True)
 class AS2PartnerDomainModel(AggregateRoot):
-    ID_PREFIX = "edi_as2"
+    ID_PREFIX = DomainIdPrefix.EDI_AS2_PARTNER.value
 
     id: str
     as2_id: str
@@ -102,7 +103,7 @@ class AS2PartnerDomainModel(AggregateRoot):
 
 @dataclass(kw_only=True)
 class AS2PartnershipDomainModel(AggregateRoot):
-    ID_PREFIX = "edi_as2_pship"
+    ID_PREFIX = DomainIdPrefix.EDI_AS2_PARTNERSHIP.value
 
     id: str
     name: str

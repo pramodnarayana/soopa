@@ -1,5 +1,6 @@
-import os
 from typing import Any, ClassVar
+
+from seedwork.utils import generate_id
 
 from .events import DomainEvent
 
@@ -17,7 +18,7 @@ class AggregateRoot:
 
     @classmethod
     def new_id(cls) -> str:
-        return f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+        return generate_id(cls.ID_PREFIX)
 
     @property
     def domain_events(self) -> list[DomainEvent]:

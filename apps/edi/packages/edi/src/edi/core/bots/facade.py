@@ -2,6 +2,7 @@ import json
 import re
 from typing import cast
 
+import edi.core.bots.domain.parsers  # noqa: F401 - Must be imported to register parsers
 from edi.core.bots.domain import inmessage, outmessage
 from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.x12_ack import (

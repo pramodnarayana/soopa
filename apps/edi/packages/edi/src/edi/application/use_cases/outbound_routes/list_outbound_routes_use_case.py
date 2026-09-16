@@ -41,7 +41,9 @@ class ListOutboundRoutesUseCase:
 
         results: list[OutboundRouteDomainModel] = []
 
-        def _resolve_destination(r: OutboundRouteDomainModel) -> tuple[EdiConnectionType | None, str]:
+        def _resolve_destination(
+            r: OutboundRouteDomainModel,
+        ) -> tuple[EdiConnectionType | None, str]:
             if r.as2_partner_id:
                 return EdiConnectionType.AS2, as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
             if r.sftp_partner_id:

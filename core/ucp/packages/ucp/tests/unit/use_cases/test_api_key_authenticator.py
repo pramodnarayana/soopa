@@ -3,9 +3,9 @@ from datetime import UTC, datetime
 
 import pytest
 from identity.application.authenticate_use_case import AuthenticationError
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from identity.domain.models.api_token import ApiTokenDomainModel
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.api_key_authenticator import (
@@ -40,8 +40,8 @@ async def test_authenticate_api_key_success_and_cache(fake_token_repo):
     client_id = "test_client_id"
     client_key_val = "test_client_secret"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_key_val}"
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    token_id = generate_id(IdentityIdPrefix.TOKEN)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    token_id = generate_id(DomainIdPrefix.TOKEN)
 
     secret_hash = hashlib.sha256(client_key_val.encode("utf-8")).hexdigest()
 
@@ -107,8 +107,8 @@ async def test_authenticate_api_key_not_found(fake_token_repo):
 async def test_authenticate_api_key_wrong_secret(fake_token_repo):
     client_id = "test_client_id"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.wrong_secret"
-    token_id = generate_id(IdentityIdPrefix.TOKEN)
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    token_id = generate_id(DomainIdPrefix.TOKEN)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
 
     secret_hash = hashlib.sha256(b"correct_secret").hexdigest()
 

@@ -1,8 +1,9 @@
-import os
 from datetime import UTC, datetime
 from typing import Self
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
+from seedwork.utils import generate_id
 
 from ucp.domain.events import (
     WebhookCreatedEvent,
@@ -11,7 +12,7 @@ from ucp.domain.events import (
 
 
 class WebhookDomainModel(AggregateRoot):
-    ID_PREFIX = "web"
+    ID_PREFIX = DomainIdPrefix.UCP_WEBHOOK.value
 
     def __init__(
         self,
@@ -43,7 +44,7 @@ class WebhookDomainModel(AggregateRoot):
         auth_header_vault_ref: str | None,
     ) -> Self:
         now = datetime.now(UTC)
-        webhook_id = f"{cls.ID_PREFIX}_{os.urandom(12).hex()}"
+        webhook_id = generate_id(cls.ID_PREFIX)
 
         webhook = cls(
             id=webhook_id,

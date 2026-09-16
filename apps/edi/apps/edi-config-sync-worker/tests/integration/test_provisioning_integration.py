@@ -12,6 +12,7 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 from seedwork.events import EventEnvelope
+from seedwork.id_registry import DomainIdPrefix
 
 
 class SqsTestPublisher:
@@ -351,7 +352,7 @@ async def test_outbound_route_replication_e2e_flow(e2e_context: dict[str, Any]) 
     queue_name = ctx["queue_name"]
     tenant_id = ctx["tenant_id"]
 
-    route_id = generate_id("edi_ob_rt")
+    route_id = generate_id(DomainIdPrefix.EDI_OUTBOUND_ROUTE.value)
     trading_partner_id = generate_id("partner")
     as2_partner_id = ctx["partner_id"]
 
@@ -419,7 +420,7 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
     # Send an event missing resource_id
 
     envelope = EventEnvelope(
-        id=generate_id("edi_cp_ob"),
+        id=generate_id(DomainIdPrefix.EDI_CP_OUTBOX.value),
         source="edi_control_plane",
         event_type=EdiEventType.edi_as2_partner_created.value,
         tenant_id=tenant_id,
@@ -509,7 +510,7 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
 
     # Ensure it's there first (already inserted by e2e_context, but we must replicate it first)
     envelope_create = EventEnvelope(
-        id=generate_id("edi_cp_ob"),
+        id=generate_id(DomainIdPrefix.EDI_CP_OUTBOX.value),
         source="edi_control_plane",
         event_type=EdiEventType.edi_as2_partner_created.value,
         tenant_id=tenant_id,
@@ -527,7 +528,7 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
 
     # Now send the deleted event
     envelope_delete = EventEnvelope(
-        id=generate_id("edi_cp_ob"),
+        id=generate_id(DomainIdPrefix.EDI_CP_OUTBOX.value),
         source="edi_control_plane",
         event_type=EdiEventType.edi_as2_partner_deleted.value,
         tenant_id=tenant_id,
@@ -603,7 +604,7 @@ async def test_provisioning_broadcast_event(e2e_context: dict[str, Any]) -> None
     partner_id = generate_id("partner")
 
     envelope_broadcast = EventEnvelope(
-        id=generate_id("edi_cp_ob"),
+        id=generate_id(DomainIdPrefix.EDI_CP_OUTBOX.value),
         source="edi_control_plane",
         event_type=EdiEventType.edi_as2_partner_created.value,
         tenant_id=PLATFORM_TENANT_ID,

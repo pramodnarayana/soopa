@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 
@@ -31,7 +31,7 @@ class DomainEvent(ABC):
     """
 
     idempotency_key: str = field(
-        default_factory=lambda: generate_id(SystemIdPrefix.GENERIC), kw_only=True
+        default_factory=lambda: generate_id(SystemIdPrefix.IDEMPOTENCY), kw_only=True
     )
 
     @property

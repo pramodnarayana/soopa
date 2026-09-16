@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
 from edi.domain.enums import EdiConnectionType, EdiDirection
@@ -9,7 +10,7 @@ from edi.domain.models.base import ProcessingMode
 
 @dataclass(kw_only=True)
 class InboundRouteDomainModel(AggregateRoot):
-    ID_PREFIX = "edi_ib_rt"
+    ID_PREFIX = DomainIdPrefix.EDI_INBOUND_ROUTE.value
 
     id: str
     tenant_id: str

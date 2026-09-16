@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from seedwork import generate_id
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -33,7 +34,7 @@ class TimestampMixin:
 class AS2PartnerMixin(TimestampMixin):
     """Shared columns for AS2Partner across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_as2"
+    ID_PREFIX = DomainIdPrefix.EDI_AS2_PARTNER.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -89,7 +90,7 @@ class AS2PartnerMixin(TimestampMixin):
 class AS2PartnershipMixin(TimestampMixin):
     """Shared columns for AS2Partnership across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_as2ps"
+    ID_PREFIX = DomainIdPrefix.EDI_AS2_PARTNERSHIP.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -133,7 +134,7 @@ class AS2PartnershipMixin(TimestampMixin):
 class SFTPPartnerMixin(TimestampMixin):
     """Shared columns for SFTPPartner across Global and Tenant schemas."""
 
-    ID_PREFIX = "sftp"
+    ID_PREFIX = DomainIdPrefix.EDI_SFTP_PARTNER.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -185,7 +186,7 @@ class SFTPPartnerMixin(TimestampMixin):
 class WebhookMixin(TimestampMixin):
     """Shared columns for Webhook across Global and Tenant schemas."""
 
-    ID_PREFIX = "wh"
+    ID_PREFIX = DomainIdPrefix.EDI_WEBHOOK.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -213,7 +214,7 @@ class WebhookMixin(TimestampMixin):
 class InboundRouteMixin(TimestampMixin):
     """Shared columns for InboundRoute across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_ib_rt"
+    ID_PREFIX = DomainIdPrefix.EDI_INBOUND_ROUTE.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -265,7 +266,7 @@ class InboundRouteMixin(TimestampMixin):
 class OutboundEdiHeaderMixin(TimestampMixin):
     """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
 
-    ID_PREFIX = "edi_ob_hd"
+    ID_PREFIX = DomainIdPrefix.EDI_OUTBOUND_HEADER.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:
@@ -321,7 +322,7 @@ class OutboundEdiHeaderMixin(TimestampMixin):
 class OutboundRouteMixin(TimestampMixin):
     """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
 
-    ID_PREFIX = "edi_ob_rt"
+    ID_PREFIX = DomainIdPrefix.EDI_OUTBOUND_ROUTE.value
 
     @declared_attr
     def id(cls) -> Mapped[str]:

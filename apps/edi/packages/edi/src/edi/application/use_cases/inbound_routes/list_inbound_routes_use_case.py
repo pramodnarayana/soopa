@@ -55,7 +55,7 @@ class ListInboundRoutesUseCase:
                 # Use a persisted route display name (r.name) as fallback, then ID
                 display_name = webhook_names.get(r.webhook_id) or r.name or str(r.webhook_id)
                 return ConnectionType.WEBHOOK, display_name
-            return ConnectionType.UNKNOWN, ConnectionType.UNKNOWN.value
+            raise ValueError(f"Unresolvable connection type for route {r.id}")
 
         for r in inbound:
             _dest_type, _dest_name = _resolve_destination(r)

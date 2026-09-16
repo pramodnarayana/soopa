@@ -47,6 +47,7 @@ _REMOTE_PARTNER = {
         "name": "Walmart Partnership",
         "local_partner_id": "local-p1",
         "remote_partner_id": "remote-1",
+        "active": True,
         "credentials_vault_ref": None,
         "encryption_algorithm": "AES256",
         "signature_algorithm": "SHA256",
@@ -239,7 +240,7 @@ async def test_deliver_as2_failed_mdn_emits_one_failure_event() -> None:
     )
     as2_adapter = FakeAS2DeliveryAdapter(body=failed_mdn)
 
-    with pytest.raises(RuntimeError, match="Delivery strategy failed"):
+    with pytest.raises(RuntimeError, match="Sync MDN indicates failure"):
         await make_use_case(uow=uow, as2=as2_adapter).execute(trace_id)
 
     assert uow.repository.edi_messages[trace_id]["status"] == "FAILED"
@@ -350,12 +351,13 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     # local_partner_id points to a partner that does NOT exist in local_as2_partners
     nolocal_remote = copy.deepcopy(_REMOTE_PARTNER)
     nolocal_remote["partnership"]["local_partner_id"] = "missing-local"
+    nolocal_remote["partnership"]["remote_partner_id"] = "p-nolocal"
     uow.repository.as2_partners["p-nolocal"] = nolocal_remote
     # Do NOT seed local_as2_partners["missing-local"]
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, as2=as2_adapter)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ValueError):
         await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────

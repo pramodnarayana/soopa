@@ -1,6 +1,6 @@
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from notification.domain.constants import NotificationEventType

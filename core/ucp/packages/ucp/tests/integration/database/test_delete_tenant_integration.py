@@ -1,6 +1,6 @@
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.user import User
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
@@ -17,7 +17,7 @@ async def test_delete_tenant_not_found(db_session):
     delete_use_case = DeleteTenantUseCase(uow=uow)
 
     with pytest.raises(ResourceNotFoundError):
-        await delete_use_case.execute(generate_id(IdentityIdPrefix.TENANT))
+        await delete_use_case.execute(generate_id(DomainIdPrefix.TENANT))
 
 
 @pytest.mark.asyncio
@@ -25,8 +25,8 @@ async def test_delete_tenant_success(db_session):
     uow = SqlAlchemyUcpUnitOfWork(db_session)
     delete_use_case = DeleteTenantUseCase(uow=uow)
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    user_id = generate_id(IdentityIdPrefix.USER)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    user_id = generate_id(DomainIdPrefix.USER)
 
     tenant = Tenant.create(
         id=tenant_id,

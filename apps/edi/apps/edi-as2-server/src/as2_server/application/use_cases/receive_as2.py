@@ -1,5 +1,4 @@
 import time
-import uuid
 from contextlib import AsyncExitStack, aclosing
 from dataclasses import dataclass
 
@@ -13,6 +12,8 @@ from edi.domain.models.as2 import (
 from edi.domain.services.as2_protocol import generate_mdn
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import LoggerPort, ObservabilityProvider
+from seedwork import generate_id
+from seedwork.id_registry import SystemIdPrefix
 
 from as2_server.ports.outbound.repository_port import (
     AS2TenantRepositoryPort,
@@ -333,7 +334,7 @@ class ReceiveAS2UseCase:
     ) -> None:
         with self.tracer.start_span("as2.db_persist"):
             status = "ERROR" if "failed" in disposition.value else "RECEIVED"
-            trace_id = uuid.uuid4()
+            trace_id = generate_id(SystemIdPrefix.TRACE)
             try:
                 await message_repo.save_message(
                     tenant_id=tenant_id,

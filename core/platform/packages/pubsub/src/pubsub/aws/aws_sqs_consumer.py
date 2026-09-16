@@ -76,6 +76,7 @@ class AwsSqsConsumer:
         self, sqs_client: Any
     ) -> AsyncGenerator[AckableMessage | None, None]:
         try:
+            logger.debug("sqs_consumer_polling_started", queue_url=self.queue_url)
             response = await sqs_client.receive_message(
                 QueueUrl=self.queue_url,
                 MaxNumberOfMessages=1,
@@ -84,10 +85,17 @@ class AwsSqsConsumer:
 
             messages = response.get("Messages", [])
             if not messages:
+                logger.debug("sqs_consumer_polling_empty", queue_url=self.queue_url)
                 yield None
                 return
 
             msg = messages[0]
+            logger.info(
+                "sqs_consumer_received_raw_boto_message",
+                queue_url=self.queue_url,
+                message_id=msg.get("MessageId"),
+                body_length=len(msg.get("Body", "")),
+            )
             receipt_handle = msg["ReceiptHandle"]
             message_id = msg["MessageId"]
             body_str = msg["Body"]

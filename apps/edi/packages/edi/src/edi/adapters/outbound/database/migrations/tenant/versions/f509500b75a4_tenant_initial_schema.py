@@ -148,10 +148,6 @@ def upgrade() -> None:
         sa.Column("trading_partner_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("standard", sa.String(length=50), nullable=True),
-        sa.Column("sender_id", sa.String(length=255), nullable=True),
-        sa.Column("receiver_id", sa.String(length=255), nullable=True),
-        sa.Column("gs_sender_id", sa.String(length=255), nullable=True),
-        sa.Column("gs_receiver_id", sa.String(length=255), nullable=True),
         sa.Column("business_metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("storage_uri", sa.String(length=1024), nullable=True),
@@ -188,12 +184,6 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_edi_json_parent_trace_id"), "edi_json", ["parent_trace_id"], unique=False
-    )
-    op.create_index(
-        "ix_edi_json_sender_recv",
-        "edi_json",
-        ["sender_id", "receiver_id", "created_at"],
-        unique=False,
     )
     op.create_index(op.f("ix_edi_json_tenant_id"), "edi_json", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_edi_json_trace_id"), "edi_json", ["trace_id"], unique=False)
@@ -618,7 +608,6 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_edi_json_trading_partner_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_trace_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_tenant_id"), table_name="edi_json")
-    op.drop_index("ix_edi_json_sender_recv", table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_parent_trace_id"), table_name="edi_json")
     op.drop_index("ix_edi_json_business_metadata", table_name="edi_json", postgresql_using="gin")
     op.drop_table("edi_json")

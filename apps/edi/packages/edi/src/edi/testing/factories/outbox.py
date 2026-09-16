@@ -4,11 +4,11 @@ from datetime import UTC, datetime, timedelta
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from edi.domain.constants import EdiIdPrefix
 from edi.domain.enums import EdiJobName, PipelineEventType
 
 
@@ -25,7 +25,7 @@ class DataPlaneOutboxBuilder:
 
     async def create(self, **kwargs: object) -> DataPlaneOutbox:
         outbox_event = DataPlaneOutbox(
-            id=kwargs.get("id", generate_id(EdiIdPrefix.DP_OUTBOX)),
+            id=kwargs.get("id", generate_id(DomainIdPrefix.EDI_DP_OUTBOX)),
             tenant_id=kwargs.get("tenant_id", self.tenant_id),
             idempotency_key=kwargs.get("idempotency_key", f"idemp_{uuid.uuid4()}"),
             event_type=kwargs.get("event_type", self.event_type),
@@ -59,7 +59,7 @@ class ControlPlaneOutboxBuilder:
 
     async def create(self, **kwargs: object) -> ControlPlaneOutbox:
         outbox_event = ControlPlaneOutbox(
-            id=kwargs.get("id", generate_id(EdiIdPrefix.CP_OUTBOX)),
+            id=kwargs.get("id", generate_id(DomainIdPrefix.EDI_CP_OUTBOX)),
             tenant_id=kwargs.get("tenant_id", self.tenant_id),
             idempotency_key=kwargs.get("idempotency_key", f"idemp_{uuid.uuid4()}"),
             event_type=kwargs.get("event_type", self.event_type),

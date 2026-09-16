@@ -1,4 +1,5 @@
-from seedwork import generate_random_hex
+from seedwork import generate_id
+from seedwork.id_registry import SystemIdPrefix
 
 from edi.domain.events import TransactionReplayRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
@@ -25,7 +26,7 @@ class ReplayTransactionUseCase:
             trace_id=trace_id,
             tenant_id=tenant_id,
             tier=tier,
-            idempotency_key=f"replay_{trace_id}_{generate_random_hex(6)}",
+            idempotency_key=generate_id(SystemIdPrefix.IDEMPOTENCY),
         )
 
         # We assume the result is a EdiTraceDTO which doesn't have domain_events,

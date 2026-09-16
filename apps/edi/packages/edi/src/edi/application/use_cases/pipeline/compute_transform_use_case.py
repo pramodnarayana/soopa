@@ -1,6 +1,7 @@
 import contextlib
 import copy
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import cast
 
 import structlog
@@ -15,6 +16,22 @@ from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+from edi.domain.enums import EdiStandard
+
+
+@dataclass(frozen=True, kw_only=True)
+class ComputeTransformCommand:
+    trace_id: str
+    tenant_id: str
+    standard: str = EdiStandard.X12.name
+    transaction_type: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.trace_id or not self.trace_id.strip():
+            raise ValueError("Required field 'trace_id' is missing or empty")
+        if not self.tenant_id or not self.tenant_id.strip():
+            raise ValueError("Required field 'tenant_id' is missing or empty")
 
 
 class ComputeTransformUseCase:
@@ -31,8 +48,12 @@ class ComputeTransformUseCase:
         self.transformer = transformer
         self.uow_factory = uow_factory
 
-    async def execute(self, trace_id: str, standard: str, transaction_type: str) -> None:
+    async def execute(self, command: ComputeTransformCommand) -> None:
         """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORM_COMPLETED."""
+        trace_id = command.trace_id.strip()
+        standard = command.standard
+        transaction_type = command.transaction_type
+
         logger.info(
             "compute_transform.started",
             trace_id=trace_id,
@@ -54,7 +75,7 @@ class ComputeTransformUseCase:
 
             # 1. Transform
             transformed_txns = await self.transformer.transform_edi_to_json(
-                payload=raw_payload, standard=standard, transaction_type=transaction_type
+                payload=raw_payload, standard=standard, transaction_type=transaction_type or ""
             )
             if not transformed_txns:
                 logger.warning(
@@ -122,10 +143,6 @@ class ComputeTransformUseCase:
                         trading_partner_id=partnership_id_str,
                         transaction_type=txn_type,
                         standard=standard,
-                        sender_id=edi_msg.sender_id,
-                        receiver_id=edi_msg.receiver_id,
-                        gs_sender_id=gs_sender,
-                        gs_receiver_id=gs_receiver,
                         business_metadata=cast(JsonDict, business_metadata),
                         payload=cast(JsonDict, json_dict),
                         status=MessageStatus.PARSED,
@@ -192,6 +209,8 @@ class ComputeTransformUseCase:
                     trace_id=trace_id,
                     tenant_id=edi_msg.tenant_id or "",
                     direction=EdiDirection.INBOUND.value,
+                    isa_sender_id=edi_msg.sender_id,
+                    isa_receiver_id=edi_msg.receiver_id,
                     gs_sender_id=gs_sender_global,
                     gs_receiver_id=gs_receiver_global,
                     transaction_type=txn_type_for_parent,

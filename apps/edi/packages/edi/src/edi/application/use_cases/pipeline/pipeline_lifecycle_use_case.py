@@ -1,7 +1,7 @@
-import uuid
-
 import structlog
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_deterministic_id
 
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.ports.outbound.transaction_repository import UpdateEdiJsonCommand
@@ -66,14 +66,6 @@ class PipelineLifecycleUseCase:
                     update_kwargs["trading_partner_id"] = trading_partner_id
                 if "standard" in payload and payload["standard"] is not None:
                     update_kwargs["standard"] = str(payload["standard"])
-                if "isa_sender_id" in payload and payload["isa_sender_id"] is not None:
-                    update_kwargs["sender_id"] = str(payload["isa_sender_id"])
-                if "isa_receiver_id" in payload and payload["isa_receiver_id"] is not None:
-                    update_kwargs["receiver_id"] = str(payload["isa_receiver_id"])
-                if "gs_sender_id" in payload and payload["gs_sender_id"] is not None:
-                    update_kwargs["gs_sender_id"] = str(payload["gs_sender_id"])
-                if "gs_receiver_id" in payload and payload["gs_receiver_id"] is not None:
-                    update_kwargs["gs_receiver_id"] = str(payload["gs_receiver_id"])
 
                 if update_kwargs:
                     await self.uow.transactions.update_edi_json(
@@ -81,10 +73,6 @@ class PipelineLifecycleUseCase:
                             trace_id=trace_id,
                             trading_partner_id=update_kwargs.get("trading_partner_id"),
                             standard=update_kwargs.get("standard"),
-                            sender_id=update_kwargs.get("sender_id"),
-                            receiver_id=update_kwargs.get("receiver_id"),
-                            gs_sender_id=update_kwargs.get("gs_sender_id"),
-                            gs_receiver_id=update_kwargs.get("gs_receiver_id"),
                         )
                     )
 
@@ -93,7 +81,9 @@ class PipelineLifecycleUseCase:
                 )
 
             # Emit DELIVER command
-            deliver_idempotency_key = str(uuid.uuid5(uuid.NAMESPACE_OID, f"{trace_id}:DELIVER"))
+            deliver_idempotency_key = generate_deterministic_id(
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "DELIVER"
+            )
             await self.uow.outbox.append_event(
                 idempotency_key=deliver_idempotency_key,
                 event_type=PipelineEventType.DELIVER_EVENT,

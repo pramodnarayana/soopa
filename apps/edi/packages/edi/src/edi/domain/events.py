@@ -49,14 +49,16 @@ class TransformRequestedEvent(DomainEvent):
 @dataclass(frozen=True)
 class TransformCompleted(DomainEvent):
     """
-    Domain event emitted by the EdiMessage aggregate when an inbound EDI
-    transform pipeline has successfully completed. The repository drains
-    this event into the outbox within the same transaction.
+    Domain event emitted when an EDI transform pipeline has successfully completed
+    (both inbound and outbound). The repository drains this event into the outbox
+    within the same transaction.
     """
 
     trace_id: str
     tenant_id: str
     direction: str
+    isa_sender_id: str | None = None
+    isa_receiver_id: str | None = None
     gs_sender_id: str | None = None
     gs_receiver_id: str | None = None
     transaction_type: str | None = None

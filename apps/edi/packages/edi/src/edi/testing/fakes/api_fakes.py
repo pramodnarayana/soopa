@@ -5,8 +5,8 @@ from typing import TypeVar
 from database.exceptions import DuplicateEntityError
 from database.outbox_serializer import serialize_domain_event
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import UNSET, JsonValue
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 

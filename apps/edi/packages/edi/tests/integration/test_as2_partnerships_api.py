@@ -16,10 +16,9 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
         "as2_id": f"LOCAL_{generate_id('id')[:8]}",
         "is_local": True,
         "url": "http://local.example.com/as2",
+        "private_key_pem": "FAKE_PRIVATE_KEY",
     }
-    res_local = await platform_client.post(
-        "/api/v1/as2/trading-partners", json=local_payload
-    )
+    res_local = await platform_client.post("/api/v1/as2/trading-partners", json=local_payload)
     assert res_local.status_code == 201, f"Failed to create local AS2 partner: {res_local.text}"
     local_partner = res_local.json()
     local_id = local_partner["id"]
@@ -31,9 +30,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
         "is_local": False,
         "url": "http://remote.partner.com/as2",
     }
-    res_remote = await platform_client.post(
-        "/api/v1/as2/trading-partners", json=remote_payload
-    )
+    res_remote = await platform_client.post("/api/v1/as2/trading-partners", json=remote_payload)
     assert res_remote.status_code == 201, f"Failed to create remote AS2 partner: {res_remote.text}"
     remote_partner = res_remote.json()
     remote_id = remote_partner["id"]
@@ -82,9 +79,7 @@ async def test_as2_partnership_lifecycle(platform_client: AsyncClient):
     assert updated["mdn_type"] == "ASYNC"
 
     # 6. Delete AS2 Partnership (DELETE)
-    res_del = await platform_client.delete(
-        f"/api/v1/as2/partnerships/{partnership_id}"
-    )
+    res_del = await platform_client.delete(f"/api/v1/as2/partnerships/{partnership_id}")
     assert res_del.status_code == 204, f"Failed to delete AS2 partnership: {res_del.text}"
 
     # 7. List again and verify deletion
@@ -105,9 +100,7 @@ async def test_as2_partnership_validation_error(platform_client: AsyncClient):
         "remote_partner_id": fake_id_2,
         "mdn_type": "SYNC",
     }
-    response = await platform_client.post(
-        "/api/v1/as2/partnerships", json=bad_payload
-    )
+    response = await platform_client.post("/api/v1/as2/partnerships", json=bad_payload)
     assert response.status_code in (
         400,
         404,

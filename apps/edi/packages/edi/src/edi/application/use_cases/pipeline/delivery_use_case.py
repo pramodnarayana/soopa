@@ -2,7 +2,7 @@ import contextlib
 from collections.abc import Callable
 
 import structlog
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase

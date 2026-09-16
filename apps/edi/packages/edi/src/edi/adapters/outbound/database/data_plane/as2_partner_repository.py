@@ -1,3 +1,4 @@
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,16 +19,16 @@ class SqlAlchemyDataPlaneAS2PartnerRepository(AS2TradingPartnerRepositoryPort):
         raise ReadOnlyDataPlaneRepositoryError("Data Plane configs are read-only")
 
     async def get_as2_partner(
-        self, tenant_id: str, remote_partner_id: str
+        self, tenant_id: str, partner_id: str
     ) -> AS2PartnerDomainModel | None:
         stmt = select(AS2Partner).where(
-            AS2Partner.tenant_id == tenant_id, AS2Partner.id == remote_partner_id
+            AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.id == partner_id
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
     async def list_as2_partners(self, tenant_id: str) -> list[AS2PartnerDomainModel]:
-        stmt = select(AS2Partner).where(AS2Partner.tenant_id == tenant_id)
+        stmt = select(AS2Partner).where(AS2Partner.tenant_id == PLATFORM_TENANT_ID)
         records = (await self.session.execute(stmt)).scalars().all()
         return [self._to_domain_model(r) for r in records]
 
@@ -35,14 +36,15 @@ class SqlAlchemyDataPlaneAS2PartnerRepository(AS2TradingPartnerRepositoryPort):
         self, tenant_id: str, partner_ids: list[str]
     ) -> list[AS2PartnerDomainModel]:
         stmt = select(AS2Partner).where(
-            AS2Partner.tenant_id == tenant_id, AS2Partner.id.in_(partner_ids)
+            AS2Partner.tenant_id == PLATFORM_TENANT_ID, AS2Partner.id.in_(partner_ids)
         )
         records = (await self.session.execute(stmt)).scalars().all()
         return [self._to_domain_model(r) for r in records]
 
     async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str) -> bool:
         stmt = select(AS2Partner).where(
-            AS2Partner.tenant_id == tenant_id, AS2Partner.private_key_vault_ref == vault_ref
+            AS2Partner.tenant_id == PLATFORM_TENANT_ID,
+            AS2Partner.private_key_vault_ref == vault_ref,
         )
         return (await self.session.execute(stmt)).scalars().first() is not None
 

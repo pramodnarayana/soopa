@@ -27,7 +27,7 @@ async def test_route_registry_success() -> None:
         tenant_id="tenant123",
         event_type="TRANSFORM_EVENT",
         payload={"direction": "INBOUND"},
-        idempotency_key=None,
+        idempotency_key="idem123",
     )
 
     def real_uow_factory() -> None:
@@ -57,7 +57,7 @@ async def test_route_registry_fallback_to_none_direction() -> None:
         tenant_id="tenant123",
         event_type="DELIVER_EVENT",
         payload={"direction": "OUTBOUND"},  # OUTBOUND is in the payload
-        idempotency_key=None,
+        idempotency_key="idem123",
     )
 
     def real_uow_factory() -> None:
@@ -80,7 +80,7 @@ async def test_route_registry_no_route_found() -> None:
         tenant_id="tenant123",
         event_type="UNKNOWN_EVENT",
         payload={},
-        idempotency_key=None,
+        idempotency_key="idem123",
     )
 
     def real_uow_factory() -> None:

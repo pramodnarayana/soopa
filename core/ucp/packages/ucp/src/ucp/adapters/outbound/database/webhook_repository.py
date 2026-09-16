@@ -1,9 +1,9 @@
-import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from database.models import Webhook as DbWebhook
 from database.outbox_serializer import serialize_domain_event
+from seedwork.utils import generate_id
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import UcpOutbox
@@ -95,7 +95,7 @@ class SqlAlchemyWebhookRepository(WebhookRepositoryPort):
         self, webhook: WebhookDomainModel, idempotency_key: str | None = None
     ) -> None:
         for index, event in enumerate(webhook.domain_events):
-            outbox_id = f"{UcpOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = generate_id(UcpOutbox.ID_PREFIX)
             event_name = event.event_name
 
             final_idemp_key = (

@@ -1,8 +1,8 @@
-import os
 from dataclasses import dataclass
 
 import structlog
 from database.exceptions import DuplicateEntityError
+from seedwork.utils import generate_id
 
 from ucp.domain.exceptions import SlugExhaustedException
 from ucp.domain.models.tenant import Tenant
@@ -32,7 +32,7 @@ class ProvisionTenantUseCase:
         # NOTE: Tenant ID generation intentionally lives here (application layer)
         # because it requires os.urandom — a side-effectful infrastructure call.
         # A future improvement is a TenantId value object with a generate() factory.
-        local_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
+        local_id = generate_id(Tenant.ID_PREFIX)
         base_slug = generate_slug(command.name)
 
         logger.info(

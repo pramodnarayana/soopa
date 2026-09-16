@@ -1,5 +1,3 @@
-import os
-
 import structlog
 from database.exceptions import DuplicateEntityError, ForeignKeyViolationError
 from database.models import Role as OrmRole
@@ -8,11 +6,11 @@ from database.models.identity import IdentityOutbox
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role as DomainRole
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
@@ -192,7 +190,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         if not result.scalar_one_or_none():
             raise ResourceNotFoundError(f"Role '{role_id}' not found or is inactive.")
 
-        user_role_id = generate_id(IdentityIdPrefix.USER_ROLE)
+        user_role_id = generate_id(DomainIdPrefix.USER_ROLE)
         user_role = UserRole(
             id=user_role_id,
             tenant_id=tenant_id,
@@ -264,7 +262,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
 
     def _flush_events(self, role: DomainRole, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(role.domain_events):
-            outbox_id = f"{IdentityOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = generate_id(IdentityOutbox.ID_PREFIX)
             event_name = event.event_name
 
             payload_dict = serialize_domain_event(event)

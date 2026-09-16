@@ -5,10 +5,11 @@ import pytest
 from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.application.authenticate_use_case import TenantNotProvisionedError
-from identity.domain.constants import IdentityIdPrefix, UserStatus
+from identity.domain.constants import UserStatus
 from identity.domain.identity_context import TokenClaims
 from identity.domain.models.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
@@ -55,8 +56,8 @@ def jwt_strategy(db_session):
 @pytest.mark.asyncio
 async def test_jwt_strategy_resolves_idp_ids(jwt_strategy, db_session):
     # Generate canonical IDs
-    canonical_tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    canonical_user_id = generate_id(IdentityIdPrefix.USER)
+    canonical_tenant_id = generate_id(DomainIdPrefix.TENANT)
+    canonical_user_id = generate_id(DomainIdPrefix.USER)
 
     idp_org_id = "idp_org_456"
     idp_user_id = "idp_usr_456"
@@ -150,7 +151,7 @@ async def test_jwt_strategy_passes_unmapped_claims(jwt_strategy, db_session):
 
     user_repo = PostgresUserRepository(db_session)
     user = User(
-        id=generate_id(IdentityIdPrefix.USER),
+        id=generate_id(DomainIdPrefix.USER),
         email="test2@test.com",
         name="Test User",
         idp_user_id=idp_user_id,

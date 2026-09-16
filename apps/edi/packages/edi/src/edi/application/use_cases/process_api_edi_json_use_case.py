@@ -1,10 +1,20 @@
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 import structlog
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonValue
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+
+from edi.core.pipeline.metadata_extractor import MetadataExtractorService
+from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
+from edi.domain.enums import EdiDirection
+from edi.domain.events import TransformRequestedEvent
+from edi.domain.exceptions import IdempotencyConflictError
+from edi.domain.models.base import Direction, RecordStatus
+from edi.domain.models.transactions import EdiJsonDomainModel
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -16,17 +26,6 @@ class ProcessApiEdiJsonCommand:
     idempotency_key: str | None = None
 
 
-from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.domain.enums import EdiDirection
-from edi.domain.events import TransformRequestedEvent
-from edi.domain.exceptions import IdempotencyConflictError
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiJsonDomainModel
-from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
-
-logger = structlog.get_logger(__name__)
-
-
 class ProcessApiEdiJsonUseCase:
     """
     Application Service (Use Case Layer) for handling outbound API requests.
@@ -36,59 +35,6 @@ class ProcessApiEdiJsonUseCase:
     def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
         self.extractor = MetadataExtractorService()
-
-    @staticmethod
-    def _extract_from_flat_field(payload_dict: Mapping[str, object]) -> str | None:
-        """Extract transaction type from the flat `transaction_type` field."""
-        tt_val = payload_dict.get("transaction_type")
-        return tt_val if isinstance(tt_val, str) else None
-
-    @staticmethod
-    def _extract_from_heading(payload_dict: Mapping[str, object]) -> str | None:
-        """Extract transaction type from EDI JSON `heading` structure."""
-        heading = payload_dict.get("heading")
-        if not isinstance(heading, dict):
-            return None
-        for key in heading:
-            if isinstance(key, str) and key.startswith("transaction_set_header_ST"):
-                inner = heading[key]
-                if isinstance(inner, dict):
-                    val = inner.get("transaction_set_identifier_code")
-                    if isinstance(val, str):
-                        return val
-                break
-        return None
-
-    @staticmethod
-    def _extract_from_st_segment(payload_dict: Mapping[str, object]) -> str | None:
-        """Extract transaction type from the raw `ST` segment shorthand."""
-        st = payload_dict.get("ST")
-        if isinstance(st, dict):
-            val = st.get("ST01")
-            if isinstance(val, str):
-                return val
-        return None
-
-    def _resolve_transaction_type(
-        self, transaction_type: str | None, payload: JsonValue
-    ) -> str | None:
-        if transaction_type:
-            return transaction_type
-
-        first_payload = (
-            payload[0]
-            if isinstance(payload, list) and payload
-            else (payload if isinstance(payload, dict) else {})
-        )
-
-        if not isinstance(first_payload, dict):
-            return None
-
-        return (
-            self._extract_from_flat_field(first_payload)
-            or self._extract_from_heading(first_payload)
-            or self._extract_from_st_segment(first_payload)
-        )
 
     async def process_api_edi_json(
         self,
@@ -123,9 +69,12 @@ class ProcessApiEdiJsonUseCase:
                     )
                     return existing.trace_id
 
-            # 1. Resolve transaction_type from payload if not provided explicitly
-            transaction_type = self._resolve_transaction_type(
-                command.transaction_type, command.payload
+            # 1. Resolve transaction_type from payload if not provided explicitly.
+            # Shared domain service ensures the same extraction heuristics are used
+            # at ingestion time and at transform-dispatch time.
+            transaction_type = TransactionTypeResolver.resolve(
+                explicit_type=command.transaction_type,
+                payload=command.payload,
             )
             business_metadata = self.extractor.extract(transaction_type or "", command.payload)
 
@@ -134,7 +83,7 @@ class ProcessApiEdiJsonUseCase:
                 business_metadata["_idempotency_key"] = command.idempotency_key
 
             # 2. Create Trace ID
-            trace_id = generate_id(SystemIdPrefix.GENERIC)
+            trace_id = generate_id(SystemIdPrefix.TRACE)
             logger.info("trace_id_generated", trace_id=trace_id)
 
             if isinstance(command.payload, list):

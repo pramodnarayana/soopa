@@ -1,7 +1,6 @@
-import os
-
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from outbox.domain.constants import OutboxStatus
+from seedwork.utils import generate_id
 
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository as PlatformBaseSqlAlchemyRepository
@@ -30,7 +29,7 @@ class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
 
     def _drain_events(self, aggregate: HasDomainEvents) -> None:
         for _index, event in enumerate(aggregate.domain_events):
-            outbox_id = f"{ControlPlaneOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = generate_id(ControlPlaneOutbox.ID_PREFIX)
             event_name = event.event_name
             payload_dict = serialize_domain_event(event)
             tenant_id = event.get_routing_tenant_id() or PLATFORM_TENANT_ID

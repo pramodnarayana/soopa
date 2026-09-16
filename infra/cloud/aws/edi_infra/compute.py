@@ -871,6 +871,7 @@ class EdiComputeStack:
             storage.edi_payloads.bucket,
             messaging.edi_events_topic.arn,
             messaging.edi_transform.queue.url,
+            messaging.edi_compute.queue.url,
             messaging.edi_deliver.queue.url,
             messaging.edi_lifecycle.queue.url,
             messaging.edi_data_plane_jobs.queue.url,
@@ -880,10 +881,11 @@ class EdiComputeStack:
                 {"name": AppEnvKeys.S3_BUCKET, "value": a[0]},
                 {"name": AppEnvKeys.SNS_EDI_EVENTS_TOPIC_ARN, "value": a[1]},
                 {"name": AppEnvKeys.SQS_TRANSFORM_QUEUE_URL, "value": a[2]},
-                {"name": AppEnvKeys.SQS_DELIVER_QUEUE_URL, "value": a[3]},
-                {"name": AppEnvKeys.SQS_LIFECYCLE_QUEUE_URL, "value": a[4]},
-                {"name": AppEnvKeys.SQS_DATA_PLANE_JOBS_QUEUE_URL, "value": a[5]},
-                {"name": AppEnvKeys.SQS_CONTROL_PLANE_JOBS_QUEUE_URL, "value": a[6]},
+                {"name": AppEnvKeys.SQS_COMPUTE_QUEUE_URL, "value": a[3]},
+                {"name": AppEnvKeys.SQS_DELIVER_QUEUE_URL, "value": a[4]},
+                {"name": AppEnvKeys.SQS_LIFECYCLE_QUEUE_URL, "value": a[5]},
+                {"name": AppEnvKeys.SQS_DATA_PLANE_JOBS_QUEUE_URL, "value": a[6]},
+                {"name": AppEnvKeys.SQS_CONTROL_PLANE_JOBS_QUEUE_URL, "value": a[7]},
             ]
         )
 
@@ -896,6 +898,7 @@ class EdiComputeStack:
             storage.edi_payloads.arn,
             messaging.edi_events_topic.arn,
             messaging.edi_transform.queue.arn,
+            messaging.edi_compute.queue.arn,
             messaging.edi_deliver.queue.arn,
             messaging.edi_lifecycle.queue.arn,
             messaging.edi_config_sync.queue.arn,
@@ -921,7 +924,7 @@ class EdiComputeStack:
                     "Sid": "AS2ServerSQSEnqueue",
                     "Effect": "Allow",
                     "Action": ["sqs:SendMessage"],
-                    "Resource": [a[2], a[3], a[4], a[5], a[6], a[7], a[8]],
+                    "Resource": [a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]],
                 },
                 {
                     "Sid": "AS2ServerKMSAccess",
@@ -1022,8 +1025,8 @@ class EdiComputeStack:
         # ── edi-compute-worker ─────────────────────────────────────────────
         # Transforms EDI documents; reads/writes S3 payloads.
         compute_extra: pulumi.Output[list[dict[str, object]]] = pulumi.Output.all(
-            messaging.edi_transform.queue.arn,
-            messaging.edi_transform.dlq.arn,
+            messaging.edi_compute.queue.arn,
+            messaging.edi_compute.dlq.arn,
             storage.edi_payloads.arn,
             config.require("kms_key_arn"),
         ).apply(
@@ -1076,6 +1079,8 @@ class EdiComputeStack:
         orch_extra: pulumi.Output[list[dict[str, object]]] = pulumi.Output.all(
             messaging.edi_lifecycle.queue.arn,
             messaging.edi_lifecycle.dlq.arn,
+            messaging.edi_transform.queue.arn,
+            messaging.edi_transform.dlq.arn,
         ).apply(
             lambda a: [
                 {
@@ -1087,7 +1092,7 @@ class EdiComputeStack:
                         "sqs:ChangeMessageVisibility",
                         "sqs:GetQueueAttributes",
                     ],
-                    "Resource": [a[0], a[1]],
+                    "Resource": [a[0], a[1], a[2], a[3]],
                 }
             ]
         )

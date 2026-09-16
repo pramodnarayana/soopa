@@ -1,16 +1,14 @@
 import hashlib
 import json
-import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from edi.config.constants import SecretCategory
-from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.enums import EdiEventType
 from edi.domain.events import ProvisioningEvent
 from edi.domain.exceptions import IdempotencyConflictError
@@ -45,28 +43,36 @@ class CreateAS2PartnerUseCase:
     async def _provision_local_key(
         self, cmd: CreateAS2TradingPartnerCmd
     ) -> tuple[bool, str | None, str | None]:
-        auto_generated = False
         private_key_vault_ref = cmd.private_key_vault_ref
         public_cert_pem = cmd.public_cert_pem
 
+        is_new_key = False
         if private_key_vault_ref:
-            pass  # Pre-stored vault ref
+            pass  # Pre-stored vault ref — use as-is
         elif cmd.private_key_pem:
-            auto_generated = True
+            # User explicitly provided a private key — store it in vault
             private_key_vault_ref = await self.secret_store.store_private_key(
                 private_key_pem=cmd.private_key_pem.encode(),
                 category=SecretCategory.AS2_KEY,
             )
+            is_new_key = True
         else:
-            auto_generated = True
-            private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=cmd.as2_id)
-            private_key_vault_ref = await self.secret_store.store_private_key(
-                private_key_pem=private_key_bytes,
-                category=SecretCategory.AS2_KEY,
+            # No key material provided. Certificate generation is an explicit user action
+            # via POST /as2/certificates/generate. This endpoint must never auto-generate.
+            raise ValueError(
+                "No private key material provided for a local AS2 partner. "
+                "Use the 'Generate Certificate' action first and supply the resulting "
+                "private_key_vault_ref, or provide your own private_key_pem."
             )
-            public_cert_pem = public_cert_bytes.decode("utf-8")
 
-        return auto_generated, private_key_vault_ref, public_cert_pem
+        if cmd.public_cert_pem and not private_key_vault_ref:
+            # Defensive guard: cert without key is always an invalid configuration.
+            raise ValueError(
+                "A public_cert_pem was provided without a corresponding private key. "
+                "Supply private_key_pem or private_key_vault_ref."
+            )
+
+        return is_new_key, private_key_vault_ref, public_cert_pem
 
     async def _check_idempotency(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str
@@ -165,7 +171,7 @@ class CreateAS2PartnerUseCase:
                     public_cert_pem,
                 ) = await self._provision_local_key(cmd)
 
-            partner_id = f"{AS2PartnerDomainModel.ID_PREFIX}_{os.urandom(12).hex()}"
+            partner_id = generate_id(AS2PartnerDomainModel.ID_PREFIX)
 
             aggregate = AS2PartnerDomainModel(
                 id=partner_id,

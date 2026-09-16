@@ -2,8 +2,8 @@ import uuid
 from typing import Any
 
 from edi.adapters.outbound.database.models.data_plane import EdiMessage
-from edi.domain.constants import EDI_MESSAGE_ID_PREFIX
-from seedwork import generate_random_hex
+from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -25,7 +25,7 @@ class EdiMessageRepositoryAdapter:
     ) -> None:
 
         record = EdiMessage(
-            id=f"{EDI_MESSAGE_ID_PREFIX}_{generate_random_hex(6)}",
+            id=generate_id(DomainIdPrefix.EDI_MESSAGE),
             tenant_id=tenant_id,
             trace_id=str(trace_id),
             direction=direction,

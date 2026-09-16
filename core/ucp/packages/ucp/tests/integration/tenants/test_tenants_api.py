@@ -20,7 +20,7 @@ async def test_provision_and_get_tenant(client: AsyncClient) -> "Any":
 
     data = response.json()
     assert data["name"] == name
-    assert data["id"].startswith("ten_")
+    assert data["id"].startswith("iam_ten_")
     assert data["status"] == "active"
 
     tenant_id = data["id"]

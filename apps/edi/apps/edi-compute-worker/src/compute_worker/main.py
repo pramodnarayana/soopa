@@ -14,6 +14,9 @@ from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
+    ComputeOutboundTransformUseCase,
+)
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.config.settings import get_settings
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
@@ -62,18 +65,26 @@ async def main() -> None:
             transformer=transformer,
         )
 
+    async def outbound_use_case_factory(tenant_id: str) -> ComputeOutboundTransformUseCase:
+        uow_factory = await uow_provider.get_uow_factory(tenant_id)
+        return ComputeOutboundTransformUseCase(
+            uow_factory=uow_factory,
+            transformer=transformer,
+        )
+
     dispatcher = EdiComputeDispatcher(
         use_case_factory=use_case_factory,
+        outbound_use_case_factory=outbound_use_case_factory,
     )
 
-    transform_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.transform_queue_url,
+    compute_consumer = AwsSqsConsumer(
+        queue_url=settings.sqs.compute_queue_url,
         region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
     manager = SqsConsumerManager(
-        consumer=transform_consumer,
-        queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
+        consumer=compute_consumer,
+        queue_name=settings.sqs.compute_queue_url.rsplit("/", 1)[-1],
         handler=dispatcher.dispatch_raw,
     )
 

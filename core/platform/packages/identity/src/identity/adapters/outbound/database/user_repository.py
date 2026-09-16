@@ -1,10 +1,10 @@
-import os
 from datetime import UTC, datetime
 
 import structlog
 from database.models.identity import IdentityOutbox, Role, UserRole
 from database.models.identity import User as DbUser
 from database.outbox_serializer import serialize_domain_event
+from seedwork.utils import generate_id
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -205,7 +205,7 @@ class PostgresUserRepository(UserRepositoryPort):
     def _flush_events(self, user: User, idempotency_key: str | None = None) -> None:
 
         for index, event in enumerate(user.domain_events):
-            outbox_id = f"{IdentityOutbox.ID_PREFIX}_{os.urandom(12).hex()}"
+            outbox_id = generate_id(IdentityOutbox.ID_PREFIX)
             event_name = event.event_name
 
             final_idemp_key = (

@@ -7,7 +7,7 @@ from typing import Any
 import boto3
 import structlog
 from botocore.exceptions import ClientError
-from seedwork.constants import SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)

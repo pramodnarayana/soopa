@@ -2,13 +2,14 @@ from datetime import UTC, datetime
 
 from database.models.core import UcpBase
 from seedwork.constants import LifecycleStatus
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 
 class DatabaseShard(UcpBase):
     __tablename__ = "database_shards"
-    ID_PREFIX = "ucp_shard"
+    ID_PREFIX = DomainIdPrefix.UCP_SHARD.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)

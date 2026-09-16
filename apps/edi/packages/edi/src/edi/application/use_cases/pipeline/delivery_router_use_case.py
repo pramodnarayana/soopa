@@ -72,6 +72,14 @@ class DeliveryRouterUseCase:
         if not sender_id or not receiver_id:
             raise MissingRoutingInformationError(trace_id=edi_msg.trace_id)
 
+        logger.debug(
+            "looking_up_inbound_route",
+            sender_id=sender_id,
+            receiver_id=receiver_id,
+            tenant_id=edi_msg.tenant_id,
+            transaction_type=transaction_type,
+        )
+
         route = await self.uow.inbound_routes.get_inbound_route(
             isa_sender_id=str(sender_id),
             isa_receiver_id=str(receiver_id),
@@ -115,5 +123,11 @@ class DeliveryRouterUseCase:
 
         try:
             await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
-        except Exception as e:
-            raise RuntimeError(f"Delivery strategy failed for trace_id={trace_id}") from e
+        except Exception:
+            logger.exception(
+                "delivery_strategy_failed",
+                trace_id=trace_id,
+                partner_id=partner_id,
+                strategy=type(strategy).__name__,
+            )
+            raise

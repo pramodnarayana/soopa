@@ -2,8 +2,8 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-from seedwork.constants import SystemIdPrefix
 from seedwork.events import EventEnvelope
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from notification.domain.models import (

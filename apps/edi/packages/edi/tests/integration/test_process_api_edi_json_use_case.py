@@ -2,7 +2,7 @@ import json
 
 import pytest
 import pytest_asyncio
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -12,7 +12,6 @@ from edi.application.use_cases.process_api_edi_json_use_case import (
     ProcessApiEdiJsonCommand,
     ProcessApiEdiJsonUseCase,
 )
-from edi.domain.constants import EdiIdPrefix
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
@@ -34,11 +33,11 @@ async def test_process_api_edi_json_success(tenant_session):
     uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow)
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
             tenant_id=tenant_id,
-            trading_partner_id=generate_id(EdiIdPrefix.AS2_PARTNER),
+            trading_partner_id=generate_id(DomainIdPrefix.EDI_AS2_PARTNER),
             payload={"transaction_type": "204", "shipment_id": "SHP001"},
         )
     )
@@ -79,8 +78,8 @@ async def test_process_api_edi_json_heading(tenant_session):
 
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id=generate_id(IdentityIdPrefix.TENANT),
-            trading_partner_id=generate_id(EdiIdPrefix.AS2_PARTNER),
+            tenant_id=generate_id(DomainIdPrefix.TENANT),
+            trading_partner_id=generate_id(DomainIdPrefix.EDI_AS2_PARTNER),
             payload=[
                 {
                     "heading": {
@@ -108,8 +107,8 @@ async def test_process_api_edi_json_st_segment(tenant_session):
 
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id=generate_id(IdentityIdPrefix.TENANT),
-            trading_partner_id=generate_id(EdiIdPrefix.AS2_PARTNER),
+            tenant_id=generate_id(DomainIdPrefix.TENANT),
+            trading_partner_id=generate_id(DomainIdPrefix.EDI_AS2_PARTNER),
             payload=[{"ST": {"ST01": "855"}}],
         )
     )
@@ -133,10 +132,10 @@ async def test_process_api_edi_json_list_extraction(tenant_session):
         {"ST": {"ST01": "850"}, "BEG": {"BEG03": "123"}, "foo": "bar"},
         {"ST": {"ST01": "850"}, "BEG": {"BEG03": "456"}, "foo": "baz"},
     ]
-    p_id = generate_id(EdiIdPrefix.AS2_PARTNER)
+    p_id = generate_id(DomainIdPrefix.EDI_AS2_PARTNER)
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
-            tenant_id=generate_id(IdentityIdPrefix.TENANT), trading_partner_id=p_id, payload=payload
+            tenant_id=generate_id(DomainIdPrefix.TENANT), trading_partner_id=p_id, payload=payload
         )
     )
     assert trace_id is not None

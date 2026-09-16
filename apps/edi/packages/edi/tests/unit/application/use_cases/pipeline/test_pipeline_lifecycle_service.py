@@ -89,10 +89,6 @@ async def test_handle_transform_completed_outbound() -> None:
     assert saved_json["status"] == MessageStatus.TRANSFORMED
     assert saved_json["trading_partner_id"] == "tp1"
     assert saved_json["standard"] == "X12"
-    assert saved_json["sender_id"] == "ISA_SENDER"
-    assert saved_json["receiver_id"] == "ISA_RECEIVER"
-    assert saved_json["gs_sender_id"] == "GS_SENDER"
-    assert saved_json["gs_receiver_id"] == "GS_RECEIVER"
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]

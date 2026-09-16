@@ -12,6 +12,7 @@ from edi.adapters.outbound.transformer.domain.models import (
 )
 from edi.core.bots.facade import edi_to_json, json_to_edi
 from edi.domain.enums import EdiStandard, EdiTransactionType
+from edi.domain.exceptions import InvalidMessageFormatError
 
 logger = structlog.get_logger(__name__)
 
@@ -104,66 +105,92 @@ class BotsEDIAdapter(EDITransformerPort):
     def _extract_x12_metadata(
         self, ast_dict: JsonDict
     ) -> tuple[str, str, str, list[TransactionSet]]:
-        sender_id = "UNKNOWN"
-        receiver_id = "UNKNOWN"
-        interchange_control_number = "UNKNOWN"
+        sender_id: str | None = None
+        receiver_id: str | None = None
+        interchange_control_number: str | None = None
         transactions = []
 
         for isa_node in self._get_list_of_dicts(ast_dict, "interchange_ISA"):
             isa = self._get_dict(isa_node, "ISA")
             if isa:
-                sender_id = self._get_str(isa, "ISA06", "UNKNOWN")
-                receiver_id = self._get_str(isa, "ISA08", "UNKNOWN")
-                interchange_control_number = self._get_str(isa, "ISA13", "UNKNOWN")
+                sender_id = self._get_str(isa, "ISA06")
+                receiver_id = self._get_str(isa, "ISA08")
+                interchange_control_number = self._get_str(isa, "ISA13")
 
                 for gs_node in self._get_list_of_dicts(isa_node, "group_GS"):
                     gs_record = self._get_dict(gs_node, "GS")
-                    gs_sender = "UNKNOWN"
-                    gs_receiver = "UNKNOWN"
+                    gs_sender: str | None = None
+                    gs_receiver: str | None = None
                     if gs_record:
-                        gs_sender = self._get_str(gs_record, "GS02", "UNKNOWN")
-                        gs_receiver = self._get_str(gs_record, "GS03", "UNKNOWN")
+                        gs_sender = self._get_str(gs_record, "GS02")
+                        gs_receiver = self._get_str(gs_record, "GS03")
 
                     for st_node in self._get_list_of_dicts(gs_node, "transaction_ST"):
                         st_record = self._get_dict(st_node, "ST")
                         if st_record:
+                            txn_type = self._get_str(st_record, "ST01")
+                            if not txn_type:
+                                raise InvalidMessageFormatError(
+                                    "Missing transaction type (ST01) in X12 payload"
+                                )
                             transactions.append(
                                 TransactionSet(
-                                    transaction_type=self._get_str(st_record, "ST01", "UNKNOWN"),
-                                    control_number=self._get_str(st_record, "ST02", "UNKNOWN"),
+                                    transaction_type=txn_type,
+                                    control_number=self._get_str(st_record, "ST02") or "",
                                     gs_sender_id=gs_sender,
                                     gs_receiver_id=gs_receiver,
                                     data=st_node,
                                 )
                             )
+
+        if not sender_id or not receiver_id:
+            raise InvalidMessageFormatError(
+                "Invalid X12 Envelope: Missing ISA sender or receiver ID"
+            )
+        if not interchange_control_number:
+            raise InvalidMessageFormatError("Invalid X12 Envelope: Missing ISA control number")
+
         return sender_id, receiver_id, interchange_control_number, transactions
 
     def _extract_edifact_metadata(
         self, ast_dict: JsonDict
     ) -> tuple[str, str, str, list[TransactionSet]]:
-        sender_id = "UNKNOWN"
-        receiver_id = "UNKNOWN"
-        interchange_control_number = "UNKNOWN"
+        sender_id: str | None = None
+        receiver_id: str | None = None
+        interchange_control_number: str | None = None
         transactions = []
 
         for unb_node in self._get_list_of_dicts(ast_dict, "interchange_UNB"):
             unb = self._get_dict(unb_node, "UNB")
             if unb:
-                sender_id = self._get_str(unb, "S002.0004", "UNKNOWN")
-                receiver_id = self._get_str(unb, "S003.0010", "UNKNOWN")
-                interchange_control_number = self._get_str(unb, "0020", "UNKNOWN")
+                sender_id = self._get_str(unb, "S002.0004")
+                receiver_id = self._get_str(unb, "S003.0010")
+                interchange_control_number = self._get_str(unb, "0020")
 
             for unh_node in self._get_list_of_dicts(unb_node, "transaction_UNH"):
                 unh = self._get_dict(unh_node, "UNH")
                 if unh:
                     unh02 = self._get_dict(unh, "UNH02")
+                    txn_type = self._get_str(unh02, "UNH02.01") if unh02 else None
+                    if not txn_type:
+                        raise InvalidMessageFormatError(
+                            "Missing transaction type (UNH02.01) in EDIFACT payload"
+                        )
                     transactions.append(
                         TransactionSet(
-                            transaction_type=self._get_str(unh02, "UNH02.01", "UNKNOWN"),
-                            control_number=self._get_str(unh, "UNH01", "UNKNOWN"),
+                            transaction_type=txn_type,
+                            control_number=self._get_str(unh, "UNH01") or "",
                             data=unh_node,
                         )
                     )
+
+        if not sender_id or not receiver_id:
+            raise InvalidMessageFormatError(
+                "Invalid EDIFACT Envelope: Missing UNB sender or receiver ID"
+            )
+        if not interchange_control_number:
+            raise InvalidMessageFormatError("Invalid EDIFACT Envelope: Missing UNB control number")
+
         return sender_id, receiver_id, interchange_control_number, transactions
 
     async def transform(
@@ -195,15 +222,17 @@ class BotsEDIAdapter(EDITransformerPort):
                     f"Validation failed with {len(errors)} errors", errors=errors
                 )
 
-            sender_id, receiver_id, interchange_control_number, transactions = (
-                self._extract_x12_metadata(ast_dict)
-            )
-
-            # If X12 extraction didn't find anything, try EDIFACT
-            if sender_id == "UNKNOWN" and receiver_id == "UNKNOWN":
-                sender_id, receiver_id, interchange_control_number, transactions = (
-                    self._extract_edifact_metadata(ast_dict)
+            extractors = {
+                "edifact": self._extract_edifact_metadata,
+                "x12": self._extract_x12_metadata,
+            }
+            extractor = extractors.get(editype.lower())
+            if not extractor:
+                raise TransformationError(
+                    f"Unsupported EDI standard for metadata extraction: {editype}"
                 )
+
+            sender_id, receiver_id, interchange_control_number, transactions = extractor(ast_dict)
 
             return ParsedEdiPayload(
                 sender_id=sender_id,

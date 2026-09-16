@@ -18,6 +18,7 @@ async def test_global_as2_partners_crud(auth_client: httpx.AsyncClient, seeded_a
             "name": "Integration Test Local AS2",
             "as2_id": "INT_TEST_LOCAL_AS2",
             "is_local": True,
+            "private_key_vault_ref": "sec_dummy_vault_ref",
         },
     )
     assert res.status_code == 201
