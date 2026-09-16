@@ -1,12 +1,13 @@
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import aioboto3
 import structlog
-from botocore.exceptions import ClientError
-from pubsub.message import AckableMessage
+from botocore.exceptions import BotoCoreError, ClientError
+from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
+from pubsub.message import AckableMessage, SqsMessagePayload
 
 logger = structlog.get_logger(__name__)
 
@@ -71,6 +72,29 @@ class AwsSqsConsumer:
             ):
                 yield event
 
+    @staticmethod
+    def _extract_event_payload(body_str: str) -> dict[str, Any]:
+        """Parses the raw SQS body and unwraps the SNS envelope if present."""
+        raw_body = json.loads(body_str)
+        if (
+            isinstance(raw_body, dict)
+            and raw_body.get("Type") == "Notification"
+            and "Message" in raw_body
+        ):
+            return cast(dict[str, Any], json.loads(raw_body["Message"]))
+        return cast(dict[str, Any], raw_body)
+
+    @staticmethod
+    def _handle_client_error(e: ClientError) -> None:
+        error_code = e.response.get("Error", {}).get("Code", "")
+        if error_code in (
+            "AWS.SimpleQueueService.NonExistentQueue",
+            "InvalidParameterValue",
+            "AccessDenied",
+        ):
+            raise ConsumerTerminalError(str(e)) from e
+        raise ConsumerTransientError(str(e)) from e
+
     @asynccontextmanager
     async def _process_with_client(
         self, sqs_client: Any
@@ -103,16 +127,7 @@ class AwsSqsConsumer:
             yielded = False
             event_data: dict[str, Any] = {}
             try:
-                raw_body = json.loads(body_str)
-                # Handle SNS Envelope
-                if (
-                    "Type" in raw_body
-                    and raw_body["Type"] == "Notification"
-                    and "Message" in raw_body
-                ):
-                    event_data = json.loads(raw_body["Message"])
-                else:
-                    event_data = raw_body
+                event_data = self._extract_event_payload(body_str)
 
                 async def ack() -> None:
                     await sqs_client.delete_message(
@@ -123,8 +138,16 @@ class AwsSqsConsumer:
                     pass
 
                 yielded = True
+
+                payload_dto = SqsMessagePayload(
+                    idempotency_key=event_data.get("idempotency_key"),
+                    tenant_id=event_data.get("tenant_id"),
+                    event_type=event_data.get("event_type"),
+                    raw_data=event_data,
+                )
+
                 # Yield the ackable message
-                yield AckableMessage(payload=event_data, ack=ack, nack=nack)
+                yield AckableMessage(payload=payload_dto, ack=ack, nack=nack)
 
             except json.JSONDecodeError:
                 logger.exception(
@@ -138,23 +161,18 @@ class AwsSqsConsumer:
                 if not yielded:
                     yield None
             except Exception as e:
-                # Log the error but DO NOT raise. If we raise, it crashes the polling loop.
-                # By swallowing it here, we ensure the message is NOT deleted (so SQS will retry it later),
-                # but the worker can immediately continue polling the next message.
-                event_type = (
-                    event_data.get("event_type", "unknown")
-                    if isinstance(event_data, dict)
-                    else "unknown"
-                )
+                # We MUST raise the exception to satisfy the 'No Silenced Failures' enterprise rule.
+                # The upstream consumer manager is responsible for catching and handling this properly.
                 logger.exception(
                     "sqs_event_processing_failed",
                     message_id=message_id,
                     error=str(e),
-                    event_type=event_type,
                 )
                 if not yielded:
                     yield None
+                raise
 
-        except ClientError:
-            logger.exception("sqs_client_error")
-            raise
+        except ClientError as e:
+            self._handle_client_error(e)
+        except BotoCoreError as e:
+            raise ConsumerTransientError(str(e)) from e

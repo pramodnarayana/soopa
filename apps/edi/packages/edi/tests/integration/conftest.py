@@ -152,7 +152,7 @@ async def override_get_tenant_session(tenant_db_connection):
 
     async def _override(tenant_id: str = Depends(get_current_tenant_id)):
         async with SessionLocal() as session:
-            await session.execute(text(f"SET LOCAL app.current_tenant = '{tenant_id}';"))
+            await session.execute(text(f"SET LOCAL platform.current_tenant_id = '{tenant_id}';"))
             yield session
 
     return _override

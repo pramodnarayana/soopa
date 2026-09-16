@@ -154,7 +154,9 @@ def create_edi_app() -> FastAPI:
         Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
         """
         # 1. Verify RLS (Data Plane isolation)
-        rls_result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
+        rls_result = await session.execute(
+            text("SELECT current_setting('platform.current_tenant_id')")
+        )
         current_rls_tenant = rls_result.scalar()
 
         if str(current_rls_tenant) != tenant_id:

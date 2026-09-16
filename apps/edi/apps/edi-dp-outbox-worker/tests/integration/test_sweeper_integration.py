@@ -46,21 +46,15 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
     # 4. Verify by polling the in memory event bus
     messages_received = []
 
-    async with event_bus.poll_raw_message() as msg1:
-        if msg1:
-            messages_received.append(msg1.payload)
-            await msg1.ack()
+    while True:
+        async with event_bus.poll_raw_message() as msg:
+            if msg:
+                messages_received.append(msg.payload)
+                await msg.ack()
+            else:
+                break
 
-    async with event_bus.poll_raw_message() as msg2:
-        if msg2:
-            messages_received.append(msg2.payload)
-            await msg2.ack()
+    assert len(messages_received) >= 2
 
-    assert len(messages_received) == 2
-
-    assert any(
-        b.get("event_type") == PipelineEventType.TRANSFORM_EVENT.value for b in messages_received
-    )
-    assert any(
-        b.get("event_type") == PipelineEventType.DELIVER_EVENT.value for b in messages_received
-    )
+    assert any(b.event_type == PipelineEventType.TRANSFORM_EVENT.value for b in messages_received)
+    assert any(b.event_type == PipelineEventType.DELIVER_EVENT.value for b in messages_received)

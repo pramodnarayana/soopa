@@ -14,7 +14,7 @@ class IdempotencyResult(UcpBase):
     Keys expire after 24 hours and use INSERT ... ON CONFLICT DO NOTHING for lock-free concurrency.
     """
 
-    __tablename__ = "idempotency_results"
+    __tablename__ = "api_idempotency"
     __table_args__ = {"schema": "ucp"}
 
     tenant_id: Mapped[str] = mapped_column(String(128), primary_key=True)

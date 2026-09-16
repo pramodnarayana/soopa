@@ -96,9 +96,9 @@ async def test_sqs_pubsub_integration_via_localstack(
 
     # 3. Assertions
     assert received_message is not None, "Consumer failed to poll the message from LocalStack"
-    assert received_message.payload["id"] == test_event_id
-    assert received_message.payload["event_type"] == "TEST_INTEGRATION_EVENT"
-    assert received_message.payload["payload"]["some_key"] == "some_value"
+    assert received_message.payload.raw_data["id"] == test_event_id
+    assert received_message.payload.event_type == "TEST_INTEGRATION_EVENT"
+    assert received_message.payload.raw_data["payload"]["some_key"] == "some_value"
 
     # 4. Verify message was deleted from the queue (ack worked)
     sqs_client = boto3.client(

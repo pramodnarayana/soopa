@@ -288,7 +288,7 @@ def upgrade() -> None:
         schema="ucp",
     )
     op.create_table(
-        "idempotency_results",
+        "api_idempotency",
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
@@ -651,7 +651,7 @@ def downgrade() -> None:
     op.drop_table("api_keys", schema="identity")
     op.drop_index(op.f("ix_ucp_webhooks_tenant_id"), table_name="webhooks", schema="ucp")
     op.drop_table("webhooks", schema="ucp")
-    op.drop_table("idempotency_results", schema="ucp")
+    op.drop_table("api_idempotency", schema="ucp")
     op.drop_index(
         "ix_global_outbox_pending",
         table_name="outbox",

@@ -20,7 +20,7 @@ QUEUES_TO_PURGE = [
     "edi-outbox-events-dev",
 ]
 
-TABLES_TO_TRUNCATE = ["outbox", "processed_events", "edi_messages", "edi_json", "audit_log", "jobs"]
+TABLES_TO_TRUNCATE = ["outbox", "event_idempotency", "edi_messages", "edi_json", "jobs"]
 
 
 async def truncate_database():

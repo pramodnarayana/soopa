@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    PrimaryKeyConstraint,
     String,
     Text,
 )
@@ -66,7 +67,7 @@ class TenantAwareMixin:
     def tenant_id(cls) -> Mapped[str]:
         return mapped_column(
             String(128),
-            server_default=text("current_setting('app.current_tenant')::varchar"),
+            server_default=text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
             index=True,
         )
@@ -322,26 +323,16 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
 
 
 class ProcessedEvent(TenantBase, TenantAwareMixin):
-    __tablename__ = "processed_events"
+    __tablename__ = "event_idempotency"
 
-    idempotency_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(255))
     processed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
 
-
-class AuditLog(TenantBase, TenantAwareMixin, TimestampMixin):
-    __tablename__ = "audit_log"
-
-    id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: generate_id("edi_audit")
+    __table_args__ = (
+        PrimaryKeyConstraint("tenant_id", "idempotency_key", name="pk_event_idempotency"),
     )
-    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    step: Mapped[str] = mapped_column(String(100), nullable=False)
-    status: Mapped[str] = mapped_column(String(50), nullable=False)
-    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    metadata_: Mapped[dict[str, JsonValue] | None] = mapped_column("metadata", JSONB, nullable=True)
 
 
 class AckReceipt(TenantBase, TenantAwareMixin):

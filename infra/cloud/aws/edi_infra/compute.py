@@ -930,7 +930,7 @@ class EdiComputeStack:
                     "Sid": "AS2ServerKMSAccess",
                     "Effect": "Allow",
                     "Action": ["kms:Decrypt", "kms:GenerateDataKey"],
-                    "Resource": a[9],
+                    "Resource": a[10],
                 },
             ]
         )

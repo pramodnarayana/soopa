@@ -61,7 +61,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     async def uow_factory():
         async for session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
             await session.execute(
-                text(f"SELECT set_config('app.current_tenant', '{tenant_id}', true)")
+                text(f"SELECT set_config('platform.current_tenant_id', '{tenant_id}', true)")
             )
             yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session, storage=transformer)
             break
@@ -186,7 +186,7 @@ async def test_inbound_webhook_dispatch_transition(
     async def uow_factory():
         async for session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
             await session.execute(
-                text(f"SELECT set_config('app.current_tenant', '{tenant_id}', true)")
+                text(f"SELECT set_config('platform.current_tenant_id', '{tenant_id}', true)")
             )
             # We don't have a fake storage, use the real Transformer adapter
             # or just leave it empty if not used by WebhookDeliveryStrategy

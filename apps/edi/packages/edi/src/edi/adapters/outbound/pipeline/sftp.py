@@ -79,8 +79,8 @@ def get_ssh_client(
         # Apply legacy algorithms only to this specific transport instance
         def legacy_transport_factory(*args, **kwargs):
             t = paramiko.Transport(*args, **kwargs)
-            if "ssh-rsa" not in t._preferred_pubkeys:
-                t._preferred_pubkeys = (*t._preferred_pubkeys, "ssh-rsa")
+            if "ssh-rsa" not in t._preferred_keys:
+                t._preferred_keys = (*t._preferred_keys, "ssh-rsa")
             if "ssh-rsa" not in t._key_info:
                 t._key_info = dict(t._key_info)
                 t._key_info["ssh-rsa"] = paramiko.RSAKey

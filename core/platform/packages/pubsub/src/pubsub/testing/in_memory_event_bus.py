@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from pubsub.message import AckableMessage
+from pubsub.message import AckableMessage, SqsMessagePayload
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from seedwork.events import EventEnvelope
 
@@ -80,7 +80,13 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
             acknowledged = True
 
         try:
-            yield AckableMessage(payload=payload, ack=ack, nack=nack)
+            sqs_payload = SqsMessagePayload(
+                idempotency_key=payload.get("idempotency_key"),
+                tenant_id=payload.get("tenant_id"),
+                event_type=payload.get("event_type"),
+                raw_data=payload,
+            )
+            yield AckableMessage(payload=sqs_payload, ack=ack, nack=nack)
         finally:
             if not acknowledged:
                 await self.queue.put(payload)
