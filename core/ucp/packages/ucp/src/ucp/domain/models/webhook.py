@@ -1,10 +1,10 @@
 from datetime import UTC, datetime
 from typing import Self
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 
-from ucp.domain.constants import UcpIdPrefix
 from ucp.domain.events import (
     WebhookCreatedEvent,
     WebhookUpdatedEvent,
@@ -12,7 +12,7 @@ from ucp.domain.events import (
 
 
 class WebhookDomainModel(AggregateRoot):
-    ID_PREFIX = UcpIdPrefix.WEBHOOK.value
+    ID_PREFIX = DomainIdPrefix.UCP_WEBHOOK.value
 
     def __init__(
         self,

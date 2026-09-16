@@ -1,14 +1,14 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.subscribe_app_use_case import (
     SubscribeAppCommand,
     SubscribeAppUseCase,
 )
-from ucp.domain.constants import LifecycleStatus, UcpIdPrefix
+from ucp.domain.constants import LifecycleStatus
 from ucp.domain.models.app import App
 from ucp.domain.models.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
@@ -16,12 +16,12 @@ from ucp.testing.fakes import FakeUcpUnitOfWork
 
 @pytest.fixture
 def tenant_id() -> str:
-    return generate_id(IdentityIdPrefix.TENANT)
+    return generate_id(DomainIdPrefix.TENANT)
 
 
 @pytest.fixture
 def app_id() -> str:
-    return generate_id(UcpIdPrefix.APP)
+    return generate_id(DomainIdPrefix.UCP_APP)
 
 
 @pytest.fixture

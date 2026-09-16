@@ -3,13 +3,6 @@ from enum import StrEnum
 from seedwork.constants import LifecycleStatus as LifecycleStatus
 
 
-class UcpIdPrefix(StrEnum):
-    APP = "ucp_app"
-    SHARD = "ucp_shard"
-    OUTBOX = "ucp_ob"
-    WEBHOOK = "ucp_wh"
-
-
 class UcpEventType(StrEnum):
     APP_SUBSCRIBED = "app.subscribed"
     APP_UNSUBSCRIBED = "app.unsubscribed"

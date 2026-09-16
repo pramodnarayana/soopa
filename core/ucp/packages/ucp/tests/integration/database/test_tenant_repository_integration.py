@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from ucp_models.subscriptions import App
 
 from ucp.adapters.outbound.database.tenant_repository import TenantRepository
@@ -23,7 +23,7 @@ async def test_save_and_find_tenant(db_session):
 
     repo = TenantRepository(db_session)
 
-    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
     tenant = Tenant(
         id=tenant_id,
         name="Integration Test Tenant",

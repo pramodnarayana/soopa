@@ -158,6 +158,7 @@ class EdiMessagingStack:
 
         # ── SQS Queue Pairs ───────────────────────────────────────────────────
         self.edi_transform = _make_fifo_queue_pair("edi-transform")
+        self.edi_compute = _make_fifo_queue_pair("edi-compute")
         self.edi_lifecycle = _make_fifo_queue_pair("edi-lifecycle")
         self.edi_deliver = _make_fifo_queue_pair("edi-deliver")
         self.edi_config_sync = _make_fifo_queue_pair("edi-config-sync")
@@ -209,6 +210,17 @@ class EdiMessagingStack:
             filter_policy={
                 "event_type": [
                     PipelineEventType.TRANSFORM_EVENT,
+                ]
+            },
+        )
+
+        # EDI events → compute queue (compute transform events only)
+        _subscribe_queue(
+            "edi-compute-subscription",
+            topic=self.edi_events_topic,
+            queue_pair=self.edi_compute,
+            filter_policy={
+                "event_type": [
                     PipelineEventType.COMPUTE_TRANSFORM_EVENT,
                 ]
             },

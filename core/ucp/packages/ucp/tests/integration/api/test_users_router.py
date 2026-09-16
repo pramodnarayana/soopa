@@ -1,8 +1,8 @@
 import pytest
 from database.models.identity import Tenant as OrmTenant
 from httpx import AsyncClient
-from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id, generate_random_hex
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,7 +22,7 @@ async def test_create_user_endpoint_resolves_di_and_persists(
     # 1. Arrange: Create a Tenant to associate the user with
     async with db_session.begin():
         tenant = OrmTenant(
-            id=generate_id(IdentityIdPrefix.TENANT.value),
+            id=generate_id(DomainIdPrefix.TENANT.value),
             name=f"Test Tenant {generate_random_hex(6)}",
             slug=f"test-tenant-{generate_random_hex(6)}",
             idp_tenant_id=generate_id("fake_org"),

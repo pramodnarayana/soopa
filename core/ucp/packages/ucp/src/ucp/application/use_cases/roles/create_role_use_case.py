@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 
 import structlog
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.models.authorization import Capability, Role
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 
 from ucp.domain.exceptions import InvalidCapabilityError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
@@ -49,7 +49,7 @@ class CreateRoleUseCase:
 
         async with self.uow:
             role = Role.create(
-                id=generate_id(IdentityIdPrefix.ROLE.value),
+                id=generate_id(DomainIdPrefix.ROLE.value),
                 tenant_id=tenant_id,
                 name=request.name,
                 description=request.description,

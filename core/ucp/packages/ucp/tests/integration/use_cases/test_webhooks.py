@@ -1,8 +1,8 @@
 import json
 
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
+from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import UcpOutbox
@@ -25,7 +25,7 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     Uses the real PostgreSQL database and actual Repositories to test the full CRUD lifecycle
     and verifies that outbox events are properly committed to the database.
     """
-    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
 
     # Create Use Cases
     uow = SqlAlchemyUcpUnitOfWork(db_session)

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from identity.domain.constants import IdentityIdPrefix
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
 from ucp.domain.constants import LifecycleStatus
@@ -27,7 +27,7 @@ class TenantSubscription:
 
 
 class Tenant(AggregateRoot):
-    ID_PREFIX = IdentityIdPrefix.TENANT.value
+    ID_PREFIX = DomainIdPrefix.TENANT.value
 
     def __init__(
         self,

@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 
 import pytest
-from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.models.authorization import Role
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.create_user_use_case import CreateUserCommand, CreateUserUseCase
@@ -25,8 +25,8 @@ def create_user_use_case(fake_uow):
 
 @pytest.mark.asyncio
 async def test_create_user_success(fake_uow, create_user_use_case):
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
-    role_id = generate_id(IdentityIdPrefix.ROLE)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    role_id = generate_id(DomainIdPrefix.ROLE)
 
     tenant = Tenant(
         id=tenant_id,
@@ -76,7 +76,7 @@ async def test_create_user_success(fake_uow, create_user_use_case):
 
 @pytest.mark.asyncio
 async def test_create_user_tenant_not_found(create_user_use_case):
-    unknown_tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    unknown_tenant_id = generate_id(DomainIdPrefix.TENANT)
     command = CreateUserCommand(
         tenant_id=unknown_tenant_id,
         email="test@example.com",
@@ -93,7 +93,7 @@ async def test_create_user_tenant_not_found(create_user_use_case):
 
 @pytest.mark.asyncio
 async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     tenant = Tenant(
         id=tenant_id,
         name="Test Tenant",
@@ -120,7 +120,7 @@ async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
 
 @pytest.mark.asyncio
 async def test_create_user_role_not_found(fake_uow, create_user_use_case):
-    tenant_id = generate_id(IdentityIdPrefix.TENANT)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
     tenant = Tenant(
         id=tenant_id,
         name="Test Tenant",

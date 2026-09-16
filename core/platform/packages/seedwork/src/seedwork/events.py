@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from seedwork.constants import SystemIdPrefix
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 
