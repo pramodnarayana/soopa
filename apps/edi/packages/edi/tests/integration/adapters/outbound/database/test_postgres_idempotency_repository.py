@@ -1,3 +1,5 @@
+import os
+
 import pytest
 from database.models.identity import Tenant
 from database.router import DatabaseRouterPort
@@ -46,7 +48,7 @@ async def test_idempotency_repository_blocks_duplicates(tenant_db_session):
 
     repo = SqlAlchemyEdiIdempotencyRepository(FakeDbRouter(), FakeTenantResolver())
 
-    tenant_id = "test_tenant"
+    tenant_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
     idemp_val = "test_idemp_val_123"  # gitleaks:allow
 
     payload = SqsMessagePayload(
@@ -99,7 +101,9 @@ async def test_idempotency_repository_allows_missing_keys(tenant_db_session):
     repo = SqlAlchemyEdiIdempotencyRepository(FakeDbRouter(), FakeTenantResolver())
 
     payload = SqsMessagePayload(
-        idempotency_key=None, tenant_id="test_tenant", event_type="test_event"
+        idempotency_key=None,
+        tenant_id=f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}",
+        event_type="test_event",
     )
 
     # Missing idempotency key bypasses the check and returns True
@@ -112,21 +116,23 @@ async def test_idempotency_repository_real_router(db_session, tenant_db_session)
     Integration test exercising the real TenantResolver query logic.
     We seed the data in the test transaction and provide a router that yields that transaction.
     """
-    tenant_id = "test_real_router_tenant"
+    tenant_id = f"{Tenant.ID_PREFIX}_{os.urandom(12).hex()}"
+    app_id = f"{App.ID_PREFIX}_{os.urandom(12).hex()}"
+    shard_id = f"{DatabaseShard.ID_PREFIX}_{os.urandom(12).hex()}"
 
     # 1. Seed data required by TenantResolver
     db_session.add(Tenant(id=tenant_id, name="Test Tenant", slug="test-tenant"))
 
     app = await db_session.scalar(select(App).where(App.slug == "edi"))
     if not app:
-        app = App(id="app_edi_1", name="EDI App", slug="edi")
+        app = App(id=app_id, name="EDI App", slug="edi")
         db_session.add(app)
 
     shard = await db_session.scalar(
         select(DatabaseShard).where(DatabaseShard.name == "edi_shard_1")
     )
     if not shard:
-        shard = DatabaseShard(id="shard_1", name="edi_shard_1", dsn="postgresql+asyncpg://dummy")
+        shard = DatabaseShard(id=shard_id, name="edi_shard_1", dsn="postgresql+asyncpg://dummy")
         db_session.add(shard)
 
     await db_session.flush()
