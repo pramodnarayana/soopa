@@ -8,5 +8,11 @@
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "test:integration": "uv run pytest tests/integration",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+  },
+  "devDependencies": {
+    "@soopa/ucp": "workspace:*",
+    "@soopa/api": "workspace:*",
+    "@soopa/observability": "workspace:*",
+    "@soopa/notification": "workspace:*"
   }
 }

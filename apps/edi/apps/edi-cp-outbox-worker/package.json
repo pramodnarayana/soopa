@@ -8,5 +8,13 @@
     "test:integration": "uv run pytest tests/integration",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
     "dev": "PYTHONUNBUFFERED=1 uv run python -m edi_cp_outbox_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/api": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/config-sync-worker": "workspace:*"
   }
 }

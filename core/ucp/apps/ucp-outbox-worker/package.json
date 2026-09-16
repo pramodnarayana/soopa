@@ -6,5 +6,12 @@
   "scripts": {
     "start": "PYTHONUNBUFFERED=1 uv run python -m ucp_outbox_worker.main",
     "dev": "PYTHONUNBUFFERED=1 uv run python -m ucp_outbox_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/ucp": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/database": "workspace:*",
+    "@soopa/observability": "workspace:*"
   }
 }

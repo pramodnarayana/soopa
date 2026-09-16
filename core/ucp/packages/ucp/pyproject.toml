@@ -51,6 +51,7 @@ identity = { workspace = true }
 outbox = { workspace = true }
 edi = { workspace = true }
 seedwork = { workspace = true }
+pubsub = { workspace = true }
 [dependency-groups]
 dev = [
     "pytest (>=9.1.1,<10.0.0)",
@@ -60,6 +61,7 @@ dev = [
     "asyncpg>=0.31.0",
     "psycopg2-binary>=2.9.12",
     "boto3>=1.40.61",
+    "pubsub",
 ]
 
 [[tool.mypy.overrides]]

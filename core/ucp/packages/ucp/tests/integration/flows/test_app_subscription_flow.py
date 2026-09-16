@@ -118,7 +118,8 @@ async def test_app_subscription_flow(
             if not ackable_msg:
                 continue
 
-            raw_event = ackable_msg.payload
+            raw_event_payload = ackable_msg.payload
+            raw_event = raw_event_payload.raw_data
 
             if raw_event.get("tenant_id") != tenant.id:
                 await ackable_msg.ack()
@@ -167,7 +168,8 @@ async def test_app_subscription_flow(
             if not ackable_msg:
                 continue
 
-            raw_event = ackable_msg.payload
+            raw_event_payload = ackable_msg.payload
+            raw_event = raw_event_payload.raw_data
 
             if raw_event.get("tenant_id") != tenant.id:
                 await ackable_msg.ack()

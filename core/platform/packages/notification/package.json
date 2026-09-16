@@ -9,5 +9,10 @@
     "deadcode:deptry": "uv run deptry .",
     "test:integration": "uv run pytest tests/integration",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+  },
+  "devDependencies": {
+    "@soopa/database": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/seedwork": "workspace:*"
   }
 }

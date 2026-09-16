@@ -1,7 +1,7 @@
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any
 
 import aioboto3
 import structlog
@@ -76,13 +76,21 @@ class AwsSqsConsumer:
     def _extract_event_payload(body_str: str) -> dict[str, Any]:
         """Parses the raw SQS body and unwraps the SNS envelope if present."""
         raw_body = json.loads(body_str)
+
         if (
             isinstance(raw_body, dict)
             and raw_body.get("Type") == "Notification"
             and "Message" in raw_body
         ):
-            return cast(dict[str, Any], json.loads(raw_body["Message"]))
-        return cast(dict[str, Any], raw_body)
+            unwrapped = json.loads(raw_body["Message"])
+            if not isinstance(unwrapped, dict):
+                raise ValueError("Unwrapped SNS payload is not a JSON object")
+            return unwrapped
+
+        if not isinstance(raw_body, dict):
+            raise TypeError("SQS payload is not a JSON object")
+
+        return raw_body
 
     @staticmethod
     def _handle_client_error(e: ClientError) -> None:
@@ -149,7 +157,7 @@ class AwsSqsConsumer:
                 # Yield the ackable message
                 yield AckableMessage(payload=payload_dto, ack=ack, nack=nack)
 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError):
                 logger.exception(
                     "sqs_message_json_decode_failed",
                     message_id=message_id,
