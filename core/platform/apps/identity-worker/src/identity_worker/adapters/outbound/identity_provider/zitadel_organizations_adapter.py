@@ -56,12 +56,14 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
                         org_id, self.ucp_project_id, tenant_role_keys
                     )
                     grant_succeeded = True
-                except Exception:
+                except Exception as e:
                     logger.exception(
                         "failed_to_grant_ucp_project_to_org",
                         org_id=org_id,
-                        note="org_created_but_project_grant_failed_manual_intervention_required",
                     )
+                    raise IdentityProviderPortError(
+                        "Failed to grant UCP project to organization"
+                    ) from e
 
             return org_id, grant_succeeded
         except IdentityProviderPortError:

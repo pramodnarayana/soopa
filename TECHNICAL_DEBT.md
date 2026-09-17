@@ -303,7 +303,7 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Description**: Currently, data-plane cleanup jobs are executing inside `edi-orchestrator-worker` (which polls `edi-orchestrator-jobs`), tightly coupling low-priority DB sweeps with high-throughput real-time AS2/X12 event processing. This queue name is also misleading since it implies "orchestration" rather than "background jobs". Furthermore, control-plane cleanup jobs (`EDI_CONTROL_PLANE_OUTBOX_CLEANUP`) are defined in the domain but the SQS polling logic is missing entirely from `edi-config-sync-worker`, leaving these tables unswept.
 - **Action Item**:
   1. Rename `edi-orchestrator-jobs` to `edi-data-plane-jobs.fifo` (to match standard FIFO semantics) in Localstack setup and code.
-  2. Following Shopify-style monolith patterns, create a dedicated `edi-background-worker` entrypoint to execute all EDI background jobs, isolating them from the high-throughput workers.
+  2. Following Shopify-style modular monolith patterns, create a dedicated `edi-background-worker` entrypoint to execute all EDI background jobs, isolating them from the high-throughput workers.
   3. Ensure the missing control-plane sweeper polling is wired up correctly in the new background worker infrastructure.
 
 ## [RESOLVED] [Architecture] Eliminate `NULL` Tenant IDs in Favor of `PLATFORM_TENANT_ID`

@@ -1,0 +1,110 @@
+name: Deploy Infrastructure and Applications
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+      AWS_REGION: us-east-1
+      PULUMI_SKIP_UPDATE_CHECK: 'true'
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Pulumi CLI
+        run: curl -fsSL https://get.pulumi.com | sh
+
+      - name: Add Pulumi to PATH
+        run: echo "$HOME/.pulumi/bin" >> $GITHUB_PATH
+
+      - name: Enterprise Config (cp .env.example .env)
+        run: cp .env.example .env
+
+      - name: Create Python venv and Install Requirements
+        run: |
+          cd infra/cloud/aws
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Deploy Foundation Stack
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/foundation
+          pulumi up -s prod -y
+
+      - name: Deploy Platform Stack
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/platform
+          pulumi up -s prod -y
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, Tag, and Push Modular Monolith Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: sha-${{ github.sha }}
+          ECR_REPOSITORY: "prod-modular-monolith"
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Deploy Application Stacks
+        env:
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+
+          echo "Deploying API Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/api
+          pulumi config set image_tag $IMAGE_TAG -s prod
+          pulumi up -s prod -y
+
+          echo "Deploying EDI Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/edi
+          pulumi config set image_tag $IMAGE_TAG -s prod
+          pulumi up -s prod -y
+
+          echo "Deploying UCP Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/ucp
+          pulumi config set image_tag $IMAGE_TAG -s prod
+          pulumi up -s prod -y
+
+          echo "Deploying Identity Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/identity
+          pulumi config set image_tag $IMAGE_TAG -s prod
+          pulumi up -s prod -y
+
+          echo "Deploying Notification Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/notification
+          pulumi config set image_tag $IMAGE_TAG -s prod
+          pulumi up -s prod -y
+
+          echo "Deploying Scheduler Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/scheduler
+          pulumi config set image_tag $IMAGE_TAG -s prod
+          pulumi up -s prod -y

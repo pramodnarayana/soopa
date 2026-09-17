@@ -1,5 +1,5 @@
 # =============================================================================
-# Soopa Platform Monolith — Production Dockerfile
+# Platform Modular Monolith — Production Dockerfile
 # Multi-stage build for minimal image size.
 # Contains all EDI, UCP, and Platform components.
 # Run with different entrypoints to boot specific services.
@@ -36,16 +36,16 @@ RUN uv venv --relocatable .venv && uv sync --no-dev --frozen --all-packages --no
 FROM python:3.13-slim-bookworm@sha256:00faa2debb87529f9f0764e9491d8ba400a3678976616c3bd7cb193745ac20d1 AS runtime
 
 # Security: run as non-root
-RUN useradd --create-home --shell /bin/bash --uid 1000 soopa
+RUN useradd --create-home --shell /bin/bash --uid 1000 app
 USER 1000
 WORKDIR /app
 
 # Copy the built virtual environment from builder (works because of --relocatable)
-COPY --from=builder --chown=soopa:soopa /build/.venv /app/.venv
+COPY --from=builder --chown=app:app /build/.venv /app/.venv
 
 # Copy application source
-COPY --from=builder --chown=soopa:soopa /build/apps /app/apps
-COPY --from=builder --chown=soopa:soopa /build/core /app/core
+COPY --from=builder --chown=app:app /build/apps /app/apps
+COPY --from=builder --chown=app:app /build/core /app/core
 
 # Ensure python uses the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
