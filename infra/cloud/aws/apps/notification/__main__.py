@@ -27,9 +27,11 @@ _TAGS = {"ManagedBy": "pulumi", "Component": "notification", "Environment": _env
 config = pulumi.Config()
 foundation_stack_ref = config.get("foundation_stack") or f"foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"platform/{_env}"
+edi_stack_ref = config.get("edi_stack") or f"edi/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
+edi = pulumi.StackReference(edi_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -51,6 +53,7 @@ placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 # ── Messaging ─────────────────────────────────────────────────────────────────
 email_channel_q, _ = provision_fifo_queue_pair(f"{_prefix}email-channel", _TAGS)
 notification_jobs_q, _ = provision_fifo_queue_pair(f"{_prefix}notification-jobs", _TAGS)
+edi_priority_notifications_q = edi.require_output("edi_priority_notifications_queue_url")
 
 # ── Compute ───────────────────────────────────────────────────────────────────
 _region = aws.get_region()
@@ -70,7 +73,6 @@ execution_role = aws.iam.Role(
         }
     ),
     tags=_TAGS,
-    firelens_endpoint=firelens_endpoint,
 )
 aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",
@@ -90,6 +92,7 @@ notification_worker = provision_fargate_service(
     firelens_endpoint=firelens_endpoint,
     environment_vars=[
         {"name": "QUEUE_URL_NOTIFICATION_EMAIL", "value": email_channel_q.url},
+        {"name": "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", "value": edi_priority_notifications_q},
     ],
 )
 

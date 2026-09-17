@@ -52,7 +52,6 @@ def provision_secure_bucket(name: str, tags: dict, kms_key_arn: str = None) -> a
                     apply_server_side_encryption_by_default=aws.s3.BucketServerSideEncryptionConfigurationV2RuleApplyServerSideEncryptionByDefaultArgs(
                         sse_algorithm="AES256",
                     ),
-                    bucket_key_enabled=True,
                 )
             ],
         )

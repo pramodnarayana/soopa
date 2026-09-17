@@ -13,7 +13,7 @@ class DatabaseConstants:
 
 @dataclass(frozen=True)
 class ZitadelConstants:
-    IMAGE: str = "ghcr.io/zitadel/zitadel:latest"
+    IMAGE: str = "ghcr.io/zitadel/zitadel:v3.66.0"
     CONTAINER_NAME: str = "zitadel"
     PORT: int = 8080
     CPU: str = "1024"
@@ -24,3 +24,8 @@ class ZitadelConstants:
 class EcsConstants:
     CAPACITY_PROVIDER: str = "FARGATE"
     LOG_DRIVER: str = "awslogs"
+
+
+@dataclass(frozen=True)
+class OpenObserveConstants:
+    DEFAULT_ADMIN_EMAIL: str = "admin@example.com"

@@ -60,13 +60,25 @@ aws.ec2.RouteTableAssociation(
     f"{_prefix}public-rta-b", subnet_id=public_subnet_b.id, route_table_id=public_rt.id
 )
 
-# ── NAT Gateway ───────────────────────────────────────────────────────────────
-eip = aws.ec2.Eip(f"{_prefix}nat-eip", domain="vpc", tags={**_TAGS, "Name": f"{_prefix}nat-eip"})
-nat_gw = aws.ec2.NatGateway(
-    f"{_prefix}nat-gw",
+# ── NAT Gateways ───────────────────────────────────────────────────────────────
+eip_a = aws.ec2.Eip(
+    f"{_prefix}nat-eip-a", domain="vpc", tags={**_TAGS, "Name": f"{_prefix}nat-eip-a"}
+)
+nat_gw_a = aws.ec2.NatGateway(
+    f"{_prefix}nat-gw-a",
     subnet_id=public_subnet_a.id,
-    allocation_id=eip.id,
-    tags={**_TAGS, "Name": f"{_prefix}nat-gw"},
+    allocation_id=eip_a.id,
+    tags={**_TAGS, "Name": f"{_prefix}nat-gw-a"},
+)
+
+eip_b = aws.ec2.Eip(
+    f"{_prefix}nat-eip-b", domain="vpc", tags={**_TAGS, "Name": f"{_prefix}nat-eip-b"}
+)
+nat_gw_b = aws.ec2.NatGateway(
+    f"{_prefix}nat-gw-b",
+    subnet_id=public_subnet_b.id,
+    allocation_id=eip_b.id,
+    tags={**_TAGS, "Name": f"{_prefix}nat-gw-b"},
 )
 
 # ── Private subnets ───────────────────────────────────────────────────────────
@@ -85,17 +97,24 @@ private_subnet_b = aws.ec2.Subnet(
     tags={**_TAGS, "Name": f"{_prefix}private-b"},
 )
 
-private_rt = aws.ec2.RouteTable(
-    f"{_prefix}private-rt",
+private_rt_a = aws.ec2.RouteTable(
+    f"{_prefix}private-rt-a",
     vpc_id=vpc.id,
-    routes=[aws.ec2.RouteTableRouteArgs(cidr_block="0.0.0.0/0", nat_gateway_id=nat_gw.id)],
-    tags={**_TAGS, "Name": f"{_prefix}private-rt"},
+    routes=[aws.ec2.RouteTableRouteArgs(cidr_block="0.0.0.0/0", nat_gateway_id=nat_gw_a.id)],
+    tags={**_TAGS, "Name": f"{_prefix}private-rt-a"},
 )
 aws.ec2.RouteTableAssociation(
-    f"{_prefix}private-rta-a", subnet_id=private_subnet_a.id, route_table_id=private_rt.id
+    f"{_prefix}private-rta-a", subnet_id=private_subnet_a.id, route_table_id=private_rt_a.id
+)
+
+private_rt_b = aws.ec2.RouteTable(
+    f"{_prefix}private-rt-b",
+    vpc_id=vpc.id,
+    routes=[aws.ec2.RouteTableRouteArgs(cidr_block="0.0.0.0/0", nat_gateway_id=nat_gw_b.id)],
+    tags={**_TAGS, "Name": f"{_prefix}private-rt-b"},
 )
 aws.ec2.RouteTableAssociation(
-    f"{_prefix}private-rta-b", subnet_id=private_subnet_b.id, route_table_id=private_rt.id
+    f"{_prefix}private-rta-b", subnet_id=private_subnet_b.id, route_table_id=private_rt_b.id
 )
 
 # ── Security Groups ───────────────────────────────────────────────────────────
@@ -125,6 +144,13 @@ main_alb_sg = aws.ec2.SecurityGroup(
             protocol="tcp",
             cidr_blocks=["0.0.0.0/0"],
         ),
+        aws.ec2.SecurityGroupIngressArgs(
+            description="Zitadel UI/API",
+            from_port=8080,
+            to_port=8080,
+            protocol="tcp",
+            cidr_blocks=["0.0.0.0/0"],
+        ),
     ],
     egress=[
         aws.ec2.SecurityGroupEgressArgs(
@@ -138,6 +164,13 @@ main_alb_sg = aws.ec2.SecurityGroup(
             description="Forward to ECS containers on app port 5080 (OpenObserve)",
             from_port=5080,
             to_port=5080,
+            protocol="tcp",
+            cidr_blocks=["10.0.0.0/16"],
+        ),
+        aws.ec2.SecurityGroupEgressArgs(
+            description="Forward to ECS containers on app port 8080 (Zitadel)",
+            from_port=8080,
+            to_port=8080,
             protocol="tcp",
             cidr_blocks=["10.0.0.0/16"],
         ),
@@ -161,6 +194,13 @@ app_sg = aws.ec2.SecurityGroup(
             description="Traffic from ALB only (OpenObserve)",
             from_port=5080,
             to_port=5080,
+            protocol="tcp",
+            source_security_group_id=main_alb_sg.id,
+        ),
+        aws.ec2.SecurityGroupIngressArgs(
+            description="Traffic from ALB only (Zitadel)",
+            from_port=8080,
+            to_port=8080,
             protocol="tcp",
             source_security_group_id=main_alb_sg.id,
         ),

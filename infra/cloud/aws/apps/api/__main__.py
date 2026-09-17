@@ -58,7 +58,6 @@ execution_role = aws.iam.Role(
         }
     ),
     tags=_TAGS,
-    firelens_endpoint=firelens_endpoint,
 )
 aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",
@@ -74,7 +73,6 @@ api_tg = provision_target_group_and_rule(
     priority=500,
     path_pattern="/*",
     tags=_TAGS,
-    firelens_endpoint=firelens_endpoint,
 )
 
 api_service = provision_fargate_service(

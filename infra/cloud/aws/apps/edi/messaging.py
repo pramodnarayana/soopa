@@ -90,5 +90,6 @@ def provision_messaging(prefix: str, tags: dict):
             "config_sync": config_sync_q,
             "data_plane_jobs": data_plane_jobs_q,
             "control_plane_jobs": control_plane_jobs_q,
+            "priority_notifications": priority_notifications_q,
         },
     }

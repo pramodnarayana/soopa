@@ -55,7 +55,6 @@ events_topic = aws.sns.Topic(
     fifo_topic=True,
     content_based_deduplication=True,
     tags=_TAGS,
-    firelens_endpoint=firelens_endpoint,
 )
 
 events_q, _ = provision_fifo_queue_pair(f"{_prefix}events", _TAGS)
@@ -81,7 +80,6 @@ execution_role = aws.iam.Role(
         }
     ),
     tags=_TAGS,
-    firelens_endpoint=firelens_endpoint,
 )
 aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",

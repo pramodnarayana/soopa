@@ -4,6 +4,21 @@ import pulumi
 import pulumi_aws as aws
 
 
+def _build_base_statements(
+    queue_arns: list, topic_arns: list, bucket_arns: list, extra_statements: list
+) -> list:
+    statements = []
+    if queue_arns:
+        statements.append({"Effect": "Allow", "Action": ["sqs:*"], "Resource": queue_arns})
+    if topic_arns:
+        statements.append({"Effect": "Allow", "Action": ["sns:*"], "Resource": topic_arns})
+    if bucket_arns:
+        statements.append({"Effect": "Allow", "Action": ["s3:*"], "Resource": bucket_arns})
+    if extra_statements:
+        statements.extend(extra_statements)
+    return statements
+
+
 def provision_fargate_service(
     name: str,
     command: list,
@@ -25,12 +40,16 @@ def provision_fargate_service(
     extra_task_policy_statements: list = None,
     target_group_arn: str = None,
     firelens_endpoint: str = None,  # If provided, injects FluentBit sidecar
+    queue_arns: list = None,
+    topic_arns: list = None,
+    bucket_arns: list = None,
     desired_count: int = 1,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
     """
     _region = aws.get_region()
+    _identity = aws.get_caller_identity()
 
     # Task Role
     task_role = aws.iam.Role(
@@ -50,47 +69,26 @@ def provision_fargate_service(
         tags=tags,
     )
 
-    # Basic permissions for SQS, SNS, S3
-    base_statements = [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "sqs:*",
-                "sns:*",
-                "s3:*",
-            ],
-            "Resource": "*",
-        }
-    ]
-    if extra_task_policy_statements:
-        base_statements.extend(extra_task_policy_statements)
-
-    aws.iam.RolePolicy(
-        f"{name}-task-policy",
-        role=task_role.id,
-        policy=json.dumps(
-            {
-                "Version": "2012-10-17",
-                "Statement": base_statements,
-            }
-        ),
+    base_statements = _build_base_statements(
+        queue_arns, topic_arns, bucket_arns, extra_task_policy_statements
     )
+
+    if base_statements:
+        aws.iam.RolePolicy(
+            f"{name}-task-policy",
+            role=task_role.id,
+            policy=json.dumps(
+                {
+                    "Version": "2012-10-17",
+                    "Statement": base_statements,
+                }
+            ),
+        )
 
     port_mappings = [{"containerPort": port, "hostPort": port}] if port else []
     env_vars = environment_vars if environment_vars else []
 
-    # Setup FireLens Sidecar and Log Configuration
     sidecars = []
-    log_configuration = {
-        "logDriver": "awslogs",
-        "options": {
-            "awslogs-group": f"/ecs/{name}",
-            "awslogs-region": _region.name,
-            "awslogs-stream-prefix": "app",
-            "awslogs-create-group": "true",
-        },
-    }
-
     if firelens_endpoint:
         sidecars.append(
             {
@@ -112,22 +110,63 @@ def provision_fargate_service(
                 },
             }
         )
-        log_configuration = {
-            "logDriver": "awsfirelens",
+
+    if sidecar_container:
+        sidecars.append({**sidecar_container, "image": sidecar_container.get("image")})
+
+    def make_container_defs(args):
+        image = args[0]
+        env = args[1]
+        fl_end = args[2]
+
+        main_log_config = {
+            "logDriver": "awslogs",
             "options": {
-                "Name": "http",
-                "Host": firelens_endpoint.split(":")[0],
-                "Port": firelens_endpoint.split(":")[1] if ":" in firelens_endpoint else "80",
-                "URI": "/api/default/default/_json",
-                "HTTP_User": "admin@example.com",
-                "HTTP_Passwd": "ComplexPassword123!",
-                "Format": "json",
+                "awslogs-group": f"/ecs/{name}",
+                "awslogs-region": _region.name,
+                "awslogs-stream-prefix": "app",
+                "awslogs-create-group": "true",
             },
         }
 
-    if sidecar_container:
-        # In a real app we'd map this better, but assuming sidecar_container needs the app image if no image provided
-        sidecars.append({**sidecar_container, "image": sidecar_container.get("image")})
+        if fl_end:
+            host = fl_end.split(":")[0]
+            fl_port = fl_end.split(":")[1] if ":" in fl_end else "80"
+            secret_arn_prefix = f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:platform/openobserve"
+            main_log_config = {
+                "logDriver": "awsfirelens",
+                "options": {
+                    "Name": "http",
+                    "Host": host,
+                    "Port": fl_port,
+                    "URI": "/api/default/default/_json",
+                    "Format": "json",
+                    "tls": "on",
+                },
+                "secretOptions": [
+                    {"name": "HTTP_User", "valueFrom": f"{secret_arn_prefix}-user"},
+                    {"name": "HTTP_Passwd", "valueFrom": f"{secret_arn_prefix}-password"},
+                ],
+            }
+
+        containers = [
+            {
+                "name": "app",
+                "image": image,
+                "command": command,
+                "essential": True,
+                "portMappings": port_mappings,
+                "environment": env,
+                "mountPoints": app_mount_points or [],
+                "dependsOn": app_depends_on or [],
+                "logConfiguration": main_log_config,
+            }
+        ]
+
+        for s in sidecars:
+            containers.append({**s, "image": image} if not s.get("image") else s)
+
+        return json.dumps(containers)
 
     task_def = aws.ecs.TaskDefinition(
         f"{name}-task",
@@ -138,24 +177,9 @@ def provision_fargate_service(
         requires_compatibilities=["FARGATE"],
         execution_role_arn=execution_role_arn,
         task_role_arn=task_role.arn,
-        container_definitions=pulumi.Output.all(ecr_image_uri, env_vars).apply(
-            lambda args: json.dumps(
-                [
-                    {
-                        "name": "app",
-                        "image": args[0],
-                        "command": command,
-                        "essential": True,
-                        "portMappings": port_mappings,
-                        "environment": args[1],
-                        "mountPoints": app_mount_points or [],
-                        "dependsOn": app_depends_on or [],
-                        "logConfiguration": log_configuration,
-                    }
-                ]
-                + [{**s, "image": args[0]} if not s.get("image") else s for s in sidecars]
-            )
-        ),
+        container_definitions=pulumi.Output.all(
+            ecr_image_uri, env_vars, firelens_endpoint or ""
+        ).apply(make_container_defs),
         volumes=volumes,
         tags=tags,
     )

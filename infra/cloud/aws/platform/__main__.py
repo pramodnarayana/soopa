@@ -15,7 +15,12 @@ import json
 import pulumi
 import pulumi_aws as aws
 import pulumi_random as random
-from constants import DatabaseConstants, EcsConstants, ZitadelConstants
+from constants import (
+    DatabaseConstants,
+    EcsConstants,
+    OpenObserveConstants,
+    ZitadelConstants,
+)
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
@@ -24,7 +29,7 @@ _TAGS = {"ManagedBy": "pulumi", "Component": "platform", "Environment": _env}
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "packages")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "packages")))
 from seedwork.ecs import provision_fargate_service
 from seedwork.network import provision_alb, provision_target_group_and_rule
 
@@ -55,6 +60,7 @@ main_alb, main_listener, obs_listener = provision_alb(
     subnets=public_subnets,
     security_group_id=main_alb_sg_id,
     tags=_TAGS,
+    certificate_arn=config.get("acm_certificate_arn"),
 )
 
 # ── ECR Repository ────────────────────────────────────────────────────────────
@@ -121,7 +127,6 @@ db_subnet_group = aws.rds.SubnetGroup(
 db_password = random.RandomPassword(
     "global-db-password",
     length=32,
-    special=False,
 )
 
 config = pulumi.Config()
@@ -142,7 +147,8 @@ global_db = aws.rds.Instance(
     password=db_password.result,
     vpc_security_group_ids=[db_sg_id],
     db_subnet_group_name=db_subnet_group.name,
-    skip_final_snapshot=True,  # Set to False for true production
+    skip_final_snapshot=False,
+    final_snapshot_identifier=f"{_prefix}global-db-final-snapshot",
     publicly_accessible=False,
     tags=_TAGS,
 )
@@ -174,13 +180,31 @@ aws.secretsmanager.SecretVersion(
 zitadel_masterkey = random.RandomPassword(
     "zitadel-masterkey",
     length=32,
-    special=False,
 )
 
 zitadel_machinekey = random.RandomPassword(
     "zitadel-machinekey",
     length=32,
-    special=False,
+)
+
+aws.secretsmanager.SecretVersion(
+    f"{_prefix}zitadel-masterkey-secret-val",
+    secret_id=aws.secretsmanager.Secret(
+        f"{_prefix}zitadel-masterkey-secret",
+        name="platform/zitadel-masterkey",
+        tags=_TAGS,
+    ).id,
+    secret_string=zitadel_masterkey.result,
+)
+
+aws.secretsmanager.SecretVersion(
+    f"{_prefix}zitadel-machinekey-secret-val",
+    secret_id=aws.secretsmanager.Secret(
+        f"{_prefix}zitadel-machinekey-secret",
+        name="platform/zitadel-machinekey",
+        tags=_TAGS,
+    ).id,
+    secret_string=zitadel_machinekey.result,
 )
 
 # ECS Execution Role (to pull image & read secrets)
@@ -206,7 +230,56 @@ aws.iam.RolePolicyAttachment(
     policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
 )
 
+aws.iam.RolePolicy(
+    f"{_prefix}ecs-exec-role-secrets-policy",
+    role=ecs_execution_role.id,
+    policy=json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": ["secretsmanager:GetSecretValue"],
+                    "Resource": [
+                        db_secret.arn,
+                        f"arn:aws:secretsmanager:{aws.get_region().name}:{aws.get_caller_identity().account_id}:secret:platform/*",
+                    ],
+                }
+            ],
+        }
+    ),
+)
+
 _region = aws.get_region()
+_identity = aws.get_caller_identity()
+
+zitadel_listener = aws.lb.Listener(
+    f"{_prefix}zitadel-listener",
+    load_balancer_arn=main_alb.arn,
+    port=8080,
+    protocol="HTTP",
+    default_actions=[
+        aws.lb.ListenerDefaultActionArgs(
+            type="fixed-response",
+            fixed_response=aws.lb.ListenerDefaultActionFixedResponseArgs(
+                content_type="text/plain",
+                message_body="404: Not Found",
+                status_code="404",
+            ),
+        )
+    ],
+    tags=_TAGS,
+)
+
+zitadel_tg = provision_target_group_and_rule(
+    name=f"{_prefix}zitadel",
+    vpc_id=vpc_id,
+    listener_arn=zitadel_listener.arn,
+    priority=100,
+    path_pattern="/*",
+    tags=_TAGS,
+    port=ZitadelConstants.PORT,
+)
 
 # Zitadel Task Definition
 zitadel_task = aws.ecs.TaskDefinition(
@@ -231,19 +304,28 @@ zitadel_task = aws.ecs.TaskDefinition(
                         {"containerPort": ZitadelConstants.PORT, "hostPort": ZitadelConstants.PORT}
                     ],
                     "environment": [
-                        {"name": "ZITADEL_DATABASE_COCKROACH_HOST", "value": args[0].split(":")[0]},
-                        {"name": "ZITADEL_DATABASE_COCKROACH_PORT", "value": args[0].split(":")[1]},
+                        {"name": "ZITADEL_DATABASE_POSTGRES_HOST", "value": args[0].split(":")[0]},
+                        {"name": "ZITADEL_DATABASE_POSTGRES_PORT", "value": args[0].split(":")[1]},
                         {
-                            "name": "ZITADEL_DATABASE_COCKROACH_USER",
+                            "name": "ZITADEL_DATABASE_POSTGRES_USER",
                             "value": DatabaseConstants.MASTER_USERNAME,
                         },
-                        {"name": "ZITADEL_DATABASE_COCKROACH_PASSWORD", "value": args[1]},
                         {
-                            "name": "ZITADEL_DATABASE_COCKROACH_DATABASE",
+                            "name": "ZITADEL_DATABASE_POSTGRES_DATABASE",
                             "value": DatabaseConstants.GLOBAL_DB_NAME,
                         },
                         {"name": "ZITADEL_EXTERNALSECURE", "value": "false"},
                         {"name": "ZITADEL_TLS_ENABLED", "value": "false"},
+                    ],
+                    "secrets": [
+                        {
+                            "name": "ZITADEL_DATABASE_POSTGRES_PASSWORD",
+                            "valueFrom": db_secret.arn,
+                        },
+                        {
+                            "name": "ZITADEL_MASTERKEY",
+                            "valueFrom": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:platform/zitadel-masterkey",
+                        },
                     ],
                     "logConfiguration": {
                         "logDriver": EcsConstants.LOG_DRIVER,
@@ -272,6 +354,13 @@ zitadel_svc = aws.ecs.Service(
         security_groups=[app_sg_id],
         assign_public_ip=False,
     ),
+    load_balancers=[
+        aws.ecs.ServiceLoadBalancerArgs(
+            target_group_arn=zitadel_tg.arn,
+            container_name=ZitadelConstants.CONTAINER_NAME,
+            container_port=ZitadelConstants.PORT,
+        )
+    ],
     tags=_TAGS,
 )
 
@@ -309,12 +398,38 @@ if enable_observability:
     if obs_count is None:
         obs_count = 1
 
+    obs_user_password = random.RandomPassword(
+        "openobserve-password",
+        length=32,
+        special=True,
+    )
+
+    aws.secretsmanager.SecretVersion(
+        f"{_prefix}obs-user-secret-val",
+        secret_id=aws.secretsmanager.Secret(
+            f"{_prefix}obs-user-secret",
+            name="platform/openobserve-user",
+            tags=_TAGS,
+        ).id,
+        secret_string=OpenObserveConstants.DEFAULT_ADMIN_EMAIL,
+    )
+
+    aws.secretsmanager.SecretVersion(
+        f"{_prefix}obs-password-secret-val",
+        secret_id=aws.secretsmanager.Secret(
+            f"{_prefix}obs-password-secret",
+            name="platform/openobserve-password",
+            tags=_TAGS,
+        ).id,
+        secret_string=obs_user_password.result,
+    )
+
     obs_svc = provision_fargate_service(
         name=f"{_prefix}openobserve",
         command=[],
         cluster_arn=ecs_cluster.arn,
         execution_role_arn=ecs_execution_role.arn,
-        ecr_image_uri="public.ecr.aws/zinclabs/openobserve:latest",
+        ecr_image_uri="public.ecr.aws/zinclabs/openobserve:v0.12.0",
         subnets=private_subnets,
         security_group_id=app_sg_id,
         tags=_TAGS,
@@ -326,7 +441,7 @@ if enable_observability:
             {"name": "ZO_S3_BUCKET", "value": obs_bucket.bucket},
             {"name": "ZO_S3_REGION_NAME", "value": aws.get_region().name},
             {"name": "ZO_ROOT_USER_EMAIL", "value": "admin@example.com"},
-            {"name": "ZO_ROOT_USER_PASSWORD", "value": "ComplexPassword123!"},
+            {"name": "ZO_ROOT_USER_PASSWORD", "value": obs_user_password.result},
         ],
     )
 

@@ -1,5 +1,5 @@
 [project]
-name = "soopa-monorepo"
+name = "modular-monolith"
 version = "0.1.0"
 description = "EDI AS2 Integration Platform"
 authors = [
@@ -53,6 +53,7 @@ members = [
     "core/platform/apps/notification-outbox-worker",
     "core/platform/apps/unified-api",
     "apps/edi/apps/edi-secrets-sidecar",
+    "infra/cloud/aws",
 ]
 exclude = ["apps/edi/packages/ui"]
 

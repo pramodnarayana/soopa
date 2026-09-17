@@ -90,12 +90,6 @@ def provision_compute(
 
         extra_task_policy_statements = [
             {
-                "Sid": "SidecarListSecrets",
-                "Effect": "Allow",
-                "Action": ["secretsmanager:ListSecrets"],
-                "Resource": "*",
-            },
-            {
                 "Sid": "SidecarGetSecretValue",
                 "Effect": "Allow",
                 "Action": ["secretsmanager:GetSecretValue"],

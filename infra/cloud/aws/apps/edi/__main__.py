@@ -81,3 +81,6 @@ pulumi.export("edi_payloads_bucket", storage.id)
 pulumi.export("edi_events_topic_arn", messaging["edi_events_topic"].arn)
 pulumi.export("edi_data_plane_jobs_queue_url", messaging["queues"]["data_plane_jobs"].url)
 pulumi.export("edi_control_plane_jobs_queue_url", messaging["queues"]["control_plane_jobs"].url)
+pulumi.export(
+    "edi_priority_notifications_queue_url", messaging["queues"]["priority_notifications"].url
+)

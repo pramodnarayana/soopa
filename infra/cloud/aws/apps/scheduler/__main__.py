@@ -63,7 +63,6 @@ execution_role = aws.iam.Role(
         }
     ),
     tags=_TAGS,
-    firelens_endpoint=firelens_endpoint,
 )
 aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",
