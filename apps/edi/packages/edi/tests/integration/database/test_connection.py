@@ -61,7 +61,7 @@ async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     session: AsyncSession = await async_gen.__anext__()
     try:
         # Verify the RLS setting was successfully applied in the current transaction
-        result = await session.execute(text("SELECT current_setting('app.current_tenant')"))
+        result = await session.execute(text("SELECT current_setting('platform.current_tenant_id')"))
         applied_tenant_id = result.scalar()
 
         assert applied_tenant_id == tenant_id, "RLS current_tenant was not set correctly!"

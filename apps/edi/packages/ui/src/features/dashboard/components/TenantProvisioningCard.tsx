@@ -81,7 +81,7 @@ export function TenantProvisioningCard({
                 <Shield className="w-3.5 h-3.5 text-emerald-500" />
               </div>
               <div className="font-mono text-sm break-all">
-                <span className="text-indigo-600">app.current_tenant</span>
+                <span className="text-indigo-600">platform.current_tenant_id</span>
                 <span className="text-slate-500 mx-2">=</span>
                 <span className="text-emerald-600 font-bold">
                   {userProfile.rls_enforced_tenant || 'NULL (Global)'}

@@ -10,5 +10,9 @@
     "deadcode:deptry": "uv run deptry .",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
     "dev": "PYTHONUNBUFFERED=1 uv run python -m compute_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/api": "workspace:*"
   }
 }

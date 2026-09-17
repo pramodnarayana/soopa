@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -58,7 +58,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column(
@@ -88,7 +88,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -109,37 +109,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_as2_partners_tenant_id"), "as2_partners", ["tenant_id"], unique=False)
     op.create_table(
-        "audit_log",
-        sa.Column("id", sa.String(length=128), nullable=False),
-        sa.Column("trace_id", sa.String(length=128), nullable=False),
-        sa.Column("step", sa.String(length=100), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("duration_ms", sa.Integer(), nullable=True),
-        sa.Column("error", sa.Text(), nullable=True),
-        sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column(
-            "tenant_id",
-            sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
-            nullable=False,
-        ),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(op.f("ix_audit_log_tenant_id"), "audit_log", ["tenant_id"], unique=False)
-    op.create_index(op.f("ix_audit_log_trace_id"), "audit_log", ["trace_id"], unique=False)
-    op.create_table(
         "edi_json",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
@@ -155,7 +124,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column(
@@ -229,7 +198,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column(
@@ -277,7 +246,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column(
@@ -301,7 +270,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -338,7 +307,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
@@ -374,26 +343,26 @@ def upgrade() -> None:
         postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.create_table(
-        "processed_events",
+        "event_idempotency",
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
-        sa.PrimaryKeyConstraint("idempotency_key"),
+        sa.PrimaryKeyConstraint("tenant_id", "idempotency_key", name="pk_event_idempotency"),
     )
     op.create_index(
-        op.f("ix_processed_events_tenant_id"), "processed_events", ["tenant_id"], unique=False
+        op.f("ix_event_idempotency_tenant_id"), "event_idempotency", ["tenant_id"], unique=False
     )
     op.create_table(
         "sftp_partners",
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -419,7 +388,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -439,7 +408,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -468,7 +437,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -521,7 +490,7 @@ def upgrade() -> None:
         sa.Column(
             "tenant_id",
             sa.String(length=128),
-            server_default=sa.text("current_setting('app.current_tenant')::varchar"),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -581,8 +550,8 @@ def downgrade() -> None:
     op.drop_table("webhooks")
     op.drop_index(op.f("ix_sftp_partners_tenant_id"), table_name="sftp_partners")
     op.drop_table("sftp_partners")
-    op.drop_index(op.f("ix_processed_events_tenant_id"), table_name="processed_events")
-    op.drop_table("processed_events")
+    op.drop_index(op.f("ix_event_idempotency_tenant_id"), table_name="event_idempotency")
+    op.drop_table("event_idempotency")
     op.drop_index(
         "ix_tenant_outbox_pending",
         table_name="outbox",
@@ -611,9 +580,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_edi_json_parent_trace_id"), table_name="edi_json")
     op.drop_index("ix_edi_json_business_metadata", table_name="edi_json", postgresql_using="gin")
     op.drop_table("edi_json")
-    op.drop_index(op.f("ix_audit_log_trace_id"), table_name="audit_log")
-    op.drop_index(op.f("ix_audit_log_tenant_id"), table_name="audit_log")
-    op.drop_table("audit_log")
+
     op.drop_index(op.f("ix_as2_partners_tenant_id"), table_name="as2_partners")
     op.drop_table("as2_partners")
     op.drop_index(op.f("ix_api_gateway_trace_id"), table_name="api_gateway")

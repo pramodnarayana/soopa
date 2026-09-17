@@ -8,6 +8,9 @@ from typing import Any
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.data_plane.postgres_idempotency_repository import (
+    SqlAlchemyEdiIdempotencyRepository,
+)
 from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
@@ -140,6 +143,7 @@ async def main() -> None:
 
     db_router = DatabaseRouter(global_db_url=settings.database.global_url)
     resolver = TenantResolver(db_router)
+    idempotency_repo = SqlAlchemyEdiIdempotencyRepository(db_router, resolver)
 
     transformer = BotsTransformerAdapter()
     vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
@@ -173,6 +177,7 @@ async def main() -> None:
         consumer=transform_consumer,
         queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
+        idempotency_repo=idempotency_repo,
     )
     transform_manager.start()
 
@@ -185,6 +190,7 @@ async def main() -> None:
         consumer=lifecycle_consumer,
         queue_name=settings.sqs.lifecycle_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
+        idempotency_repo=idempotency_repo,
     )
     lifecycle_manager.start()
 
@@ -197,6 +203,7 @@ async def main() -> None:
         consumer=deliver_consumer,
         queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
+        idempotency_repo=idempotency_repo,
     )
     deliver_manager.start()
 

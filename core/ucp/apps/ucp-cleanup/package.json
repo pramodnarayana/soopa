@@ -5,5 +5,14 @@
   "scripts": {
     "start": "PYTHONUNBUFFERED=1 uv run python -m ucp_cleanup.main",
     "dev": "PYTHONUNBUFFERED=1 PYTHONPATH=src uv run python -m ucp_cleanup.main"
+  },
+  "devDependencies": {
+    "@soopa/ucp": "workspace:*",
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/database": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/observability": "workspace:*"
   }
 }

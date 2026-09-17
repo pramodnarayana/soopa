@@ -5,5 +5,13 @@
   "scripts": {
     "start": "PYTHONUNBUFFERED=1 uv run python -m identity_worker.main",
     "dev": "PYTHONUNBUFFERED=1 PYTHONPATH=src uv run python -m identity_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/database": "workspace:*",
+    "@soopa/identity": "workspace:*",
+    "@soopa/observability": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/ucp": "workspace:*",
+    "@soopa/ucp-models": "workspace:*"
   }
 }

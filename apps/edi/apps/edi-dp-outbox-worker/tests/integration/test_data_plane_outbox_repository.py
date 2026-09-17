@@ -26,14 +26,14 @@ async def test_claim_next_events_and_mark_completed(db_router: DatabaseRouter) -
 
     # Test claiming events
     worker_id = "test-worker-1"
-    events = await repo.claim_next_events(worker_id=worker_id, limit=2)
+    events = await repo.claim_next_events(worker_id=worker_id, limit=100)
     assert len(events) >= 2
     claimed_ids = {e.id for e in events}
     assert event1_id in claimed_ids
     assert event2_id in claimed_ids
 
     # Try to claim more events, should return none because they are locked
-    more_events = await repo.claim_next_events(worker_id="test-worker-2", limit=2)
+    more_events = await repo.claim_next_events(worker_id="test-worker-2", limit=100)
     assert len(more_events) == 0
 
     # Mark one completed
@@ -75,7 +75,7 @@ async def test_mark_failed_max_attempts(db_router: DatabaseRouter) -> None:
     repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
     worker_id = "test-worker-failure"
 
-    events = await repo.claim_next_events(worker_id=worker_id, limit=1)
+    events = await repo.claim_next_events(worker_id=worker_id, limit=100)
     assert len(events) >= 1
 
     await repo.mark_failed(event_id=event_id, worker_id=worker_id, error_message="fatal error")

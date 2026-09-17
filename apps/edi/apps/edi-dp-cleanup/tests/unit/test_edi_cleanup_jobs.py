@@ -2,9 +2,6 @@ from typing import Any
 
 import pytest
 
-from edi_dp_cleanup.adapters.inbound.jobs.edi_audit_log_cleanup_job import (
-    EdiAuditLogCleanupJobHandler,
-)
 from edi_dp_cleanup.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
     EdiDataPlaneOutboxCleanupJobHandler,
 )
@@ -30,7 +27,6 @@ class FakeUseCase:
     [
         EdiDataPlaneOutboxCleanupJobHandler,
         EdiIdempotencyCleanupJobHandler,
-        EdiAuditLogCleanupJobHandler,
     ],
 )
 async def test_edi_cleanup_execute(handler_class: Any) -> None:
@@ -48,7 +44,6 @@ async def test_edi_cleanup_execute(handler_class: Any) -> None:
     [
         EdiDataPlaneOutboxCleanupJobHandler,
         EdiIdempotencyCleanupJobHandler,
-        EdiAuditLogCleanupJobHandler,
     ],
 )
 async def test_edi_cleanup_execute_exception_propagates(handler_class: Any) -> None:

@@ -111,9 +111,13 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         async def process_next_event_helper() -> bool:
             async with test_consumer.poll_raw_message() as ackable_msg:
                 if ackable_msg:
-                    await dispatcher.dispatch_raw(ackable_msg.payload)
-                    await ackable_msg.ack()
-                    return True
+                    try:
+                        await dispatcher.dispatch_raw(ackable_msg.payload.raw_data)
+                        await ackable_msg.ack()
+                        return True
+                    except Exception:  # noqa: BLE001
+                        await ackable_msg.nack()
+                        return False
             return False
 
         worker_service.process_next_event = process_next_event_helper

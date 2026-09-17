@@ -121,7 +121,7 @@ async def test_poll_raw_message_yields_ackable_message_with_correct_payload():
 
     async with bus.poll_raw_message() as msg:
         assert isinstance(msg, AckableMessage)
-        assert msg.payload == dataclasses.asdict(event)
+        assert msg.payload.raw_data == dataclasses.asdict(event)
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +253,7 @@ async def test_full_round_trip_publish_poll_ack():
         received_payload = msg.payload
         await msg.ack()
 
-    assert received_payload == dataclasses.asdict(event)
+    assert received_payload.raw_data == dataclasses.asdict(event)
     assert bus.queue.empty()
 
 

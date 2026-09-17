@@ -7,5 +7,13 @@
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "test:integration": "uv run pytest tests/integration",
     "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e"
+  },
+  "devDependencies": {
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/api": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/database": "workspace:*"
   }
 }

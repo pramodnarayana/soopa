@@ -15,7 +15,7 @@ from database.router import DatabaseRouter
 
 global_url = os.environ["DATABASE_URL"]
 
-TABLES_TO_CLEAR = ["edi_messages", "edi_json", "api_gateway", "outbox", "processed_events"]
+TABLES_TO_CLEAR = ["edi_messages", "edi_json", "api_gateway", "outbox", "event_idempotency"]
 
 # ---------------------------------------------------------------------------
 # Safety guards

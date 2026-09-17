@@ -43,7 +43,9 @@
     "format": "turbo run format",
     "syncpack:format": "syncpack format",
     "syncpack:lint": "syncpack lint",
-    "syncpack:fix": "syncpack fix"
+    "syncpack:fix": "syncpack fix",
+    "syncpack:python": "uv run python scripts/sync_turborepo_deps.py",
+    "syncpack:python:check": "uv run python scripts/sync_turborepo_deps.py --check"
   },
   "lint-staged": {
     "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
@@ -77,7 +79,18 @@
     "turbo": "^2.10.11",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.11",
+    "@soopa/identity": "workspace:*",
+    "@soopa/database": "workspace:*",
+    "@soopa/schemas": "workspace:*",
+    "@soopa/observability": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/notification": "workspace:*",
+    "@soopa/scheduler": "workspace:*",
+    "@soopa/ucp": "workspace:*",
+    "@soopa/api": "workspace:*",
+    "@soopa/unified-api": "workspace:*"
   },
   "dependencies": {
     "ts-morph": "^28.0.0"

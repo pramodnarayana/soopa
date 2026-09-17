@@ -64,14 +64,14 @@ class TransactionalTestRouter(DatabaseRouterPort):
             try:
                 async with factory() as session:
                     await session.execute(
-                        text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                        text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
                         {"tenant_id": tenant_id},
                     )
                     session.info["session_type"] = "tenant"
                     yield cast(TenantSession, session)
             finally:
                 await self.shard_conn.execute(
-                    text("SELECT set_config('app.current_tenant', '', true)")
+                    text("SELECT set_config('platform.current_tenant_id', '', true)")
                 )
 
     async def get_shard_session(

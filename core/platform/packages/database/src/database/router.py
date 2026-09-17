@@ -140,7 +140,7 @@ class DatabaseRouter(DatabaseRouterPort):
             async with factory() as session:
                 # Enforce Row-Level Security by injecting the tenant ID context
                 await session.execute(
-                    text("SELECT set_config('app.current_tenant', :tenant_id, true)"),
+                    text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
                     {"tenant_id": tenant_id},
                 )
                 session.info["session_type"] = "tenant"

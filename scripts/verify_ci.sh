@@ -29,6 +29,9 @@ fi
 echo "✅ Running Architectural Semgrep Checks..."
 uv run semgrep --config=semgrep-architecture.yml --error apps core
 
+echo "✅ Validating Python-to-Package Dependency Sync..."
+pnpm run syncpack:python:check
+
 echo "✅ Running Typechecks..."
 pnpm run typecheck
 
