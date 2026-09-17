@@ -1,0 +1,58 @@
+from functools import lru_cache
+
+from pydantic import Field, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from seedwork.infrastructure.config import load_settings_safely
+from seedwork.infrastructure.config_models import (
+    PlatformAwsSettings,
+    PlatformDatabaseSettings,
+)
+
+
+class IdentityOutboxAwsSettings(PlatformAwsSettings):
+    sns_identity_events_topic_arn: str = Field(
+        validation_alias="SNS_IDENTITY_EVENTS_TOPIC_ARN", default=""
+    )
+
+
+class SqsSettings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+    identity_jobs_queue_url: str = Field(validation_alias="SQS_IDENTITY_JOBS_QUEUE_URL", default="")
+
+
+class AppSettings(BaseSettings):
+    model_config = SettingsConfigDict(extra="ignore")
+
+    database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
+    aws: IdentityOutboxAwsSettings = Field(default_factory=lambda: IdentityOutboxAwsSettings())
+    sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def database_url(self) -> str:
+        return self.database.global_url
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def sns_identity_events_topic_arn(self) -> str:
+        return self.aws.sns_identity_events_topic_arn
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def sqs_identity_jobs_queue_url(self) -> str:
+        return self.sqs.identity_jobs_queue_url
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def aws_endpoint_url(self) -> str | None:
+        return self.aws.endpoint_url
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def aws_region(self) -> str:
+        return self.aws.resolved_region
+
+
+@lru_cache
+def get_settings() -> AppSettings:
+    return load_settings_safely(AppSettings)

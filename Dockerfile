@@ -28,6 +28,7 @@ COPY pyproject.toml uv.lock ./
 COPY apps ./apps
 COPY core ./core
 COPY tools ./tools
+COPY infra ./infra
 
 # Create a relocatable virtual environment separately, as uv sync no longer supports the flag directly.
 # --no-editable prevents workspace packages from referencing /build paths so they work in /app.

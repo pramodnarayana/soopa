@@ -34,7 +34,10 @@ async def main() -> None:
     ObservabilityProvider.auto_configure_from_env("config-sync-worker")
     settings = get_settings()
     logger.info("config_sync_worker_starting")
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+    db_router = DatabaseRouter(
+        global_db_url=settings.database.global_url,
+        shard_overrides=settings.database.shard_overrides,
+    )
     tenant_adapter = SqlAlchemyTenantAdapter(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
