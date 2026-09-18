@@ -47,9 +47,9 @@ async def main() -> None:
         logger.error("ZITADEL_PLATFORM_ADMIN_ID environment variable is not set.")
         sys.exit(1)
 
-    shard_db_url = os.environ.get("TEST_SHARD_DB_URL", "")
+    shard_db_url = os.environ.get("SHARD_OVERRIDES__EDI_SHARD_1", "")
     if not shard_db_url:
-        logger.error("TEST_SHARD_DB_URL environment variable is not set.")
+        logger.error("SHARD_OVERRIDES__EDI_SHARD_1 environment variable is not set.")
         sys.exit(1)
 
     edi_project_id = os.environ.get("ZITADEL_EDI_PROJECT_ID", "")

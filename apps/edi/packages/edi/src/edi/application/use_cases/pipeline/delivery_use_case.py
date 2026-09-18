@@ -22,7 +22,7 @@ class DeliveryUseCase:
     def __init__(
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        router_factory: Callable[[DataPlaneUnitOfWorkPort], DeliveryRouterUseCase],
+        router_factory: Callable[[], DeliveryRouterUseCase],
     ) -> None:
         self._uow_factory = uow_factory
         self._router_factory = router_factory
@@ -49,28 +49,27 @@ class DeliveryUseCase:
                     return
                 await uow.commit()
 
-        # Phase 2: Execute delivery in new transaction scope
-        async with self._uow_factory() as uow, uow:
-            router = self._router_factory(uow)
-            try:
-                await router.deliver(trace_id, idempotency_key=key_str)
+        # Phase 2: Execute delivery and track status
+        router = self._router_factory()
+        try:
+            await router.deliver(trace_id, idempotency_key=key_str)
 
-                if key_str and owner_token:
+            if key_str and owner_token:
+                async with self._uow_factory() as uow, uow:
                     await uow.outbox.mark_delivery_success(key_str, owner_token)
-
-                await uow.commit()
-            except Exception:
-                if key_str and owner_token:
-                    try:
-                        await uow.rollback()
+                    await uow.commit()
+        except Exception:
+            if key_str and owner_token:
+                try:
+                    async with self._uow_factory() as uow, uow:
                         await uow.outbox.mark_delivery_failure(key_str, owner_token)
                         await uow.commit()
-                    except Exception:
-                        logger.exception(
-                            "outbox_delivery_failure_mark_failed",
-                            trace_id=trace_id,
-                            idempotency_key=key_str,
-                        )
+                except Exception:
+                    logger.exception(
+                        "outbox_delivery_failure_mark_failed",
+                        trace_id=trace_id,
+                        idempotency_key=key_str,
+                    )
 
-                logger.exception("delivery_failed", trace_id=trace_id)
-                raise
+            logger.exception("delivery_failed", trace_id=trace_id)
+            raise

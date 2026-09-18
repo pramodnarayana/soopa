@@ -60,25 +60,6 @@ def provision_messaging(prefix: str, tags: dict):
         priority_notifications_q,
         {"event_type": ["notification.triggered"]},
     )
-    subscribe(
-        "config-sync-sub",
-        edi_events_topic,
-        config_sync_q,
-        {
-            "event_type": [
-                {
-                    "anything-but": [
-                        "pipeline.transform_event",
-                        "pipeline.compute_transform_event",
-                        "pipeline.transform_completed",
-                        "pipeline.delivery_completed",
-                        "pipeline.deliver_event",
-                        "notification.triggered",
-                    ]
-                }
-            ]
-        },
-    )
 
     return {
         "edi_events_topic": edi_events_topic,

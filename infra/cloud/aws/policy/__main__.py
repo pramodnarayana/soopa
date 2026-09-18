@@ -21,7 +21,13 @@ def check_s3_bucket_acl(args: ResourceValidationArgs, report_violation: ReportVi
         if policy and isinstance(policy, str):
             try:
                 policy_doc = json.loads(policy)
-                for statement in policy_doc.get("Statement", []):
+                statements = policy_doc.get("Statement")
+                if isinstance(statements, dict):
+                    statements = [statements]
+                elif not isinstance(statements, list):
+                    statements = []
+
+                for statement in statements:
                     if statement.get("Effect") == "Allow" and statement.get("Principal") == "*":
                         report_violation("S3 Bucket policies must not allow public access.")
             except json.JSONDecodeError as e:
@@ -55,6 +61,13 @@ def check_sg_ingress(args: ResourceValidationArgs, report_violation: ReportViola
                 continue
             cidr_blocks = rule.get("cidrBlocks", [])
             if "0.0.0.0/0" in cidr_blocks:
+                protocol = rule.get("protocol")
+                if str(protocol) == "-1":
+                    report_violation(
+                        "Security Groups must not allow 0.0.0.0/0 ingress on all protocols (-1)."
+                    )
+                    continue
+
                 from_port = rule.get("fromPort")
                 to_port = rule.get("toPort")
 

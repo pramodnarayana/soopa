@@ -21,7 +21,7 @@ def _event_idempotency_key(idempotency_key: str | None, *, index: int, event_cou
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonValue
 from seedwork.id_registry import DomainIdPrefix
-from sqlalchemy import CursorResult, Select, and_, or_, select, update
+from sqlalchemy import Select, and_, or_, select, update
 from sqlalchemy.orm import Mapped
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -60,18 +60,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     def __init__(self, session: TenantSession, storage: StoragePort) -> None:
         TenantSqlAlchemyRepository.__init__(self, session)
         self.storage = storage
-
-    async def claim_edi_message(self, trace_id: str) -> bool:
-        stmt = (
-            update(EdiMessage)
-            .where(
-                EdiMessage.trace_id == str(trace_id),
-                EdiMessage.status == MessageStatus.PENDING_DELIVERY.value,
-            )
-            .values(status=MessageStatus.PROCESSING.value)
-        )
-        result = await self.session.execute(stmt)
-        return cast(CursorResult, result).rowcount > 0
 
     async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         msg = EdiMessage(
@@ -165,18 +153,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             "status": record.status,
             "webhook_url": record.webhook_url,
         }
-
-    async def claim_api_payload(self, trace_id: str) -> bool:
-        stmt = (
-            update(ApiGateway)
-            .where(
-                ApiGateway.trace_id == str(trace_id),
-                ApiGateway.status == MessageStatus.PENDING_DELIVERY.value,
-            )
-            .values(status=MessageStatus.PROCESSING.value)
-        )
-        result = await self.session.execute(stmt)
-        return cast(CursorResult, result).rowcount > 0
 
     async def update_api_payload_status(
         self,

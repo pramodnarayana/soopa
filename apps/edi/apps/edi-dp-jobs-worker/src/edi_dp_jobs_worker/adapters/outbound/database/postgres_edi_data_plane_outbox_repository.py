@@ -17,6 +17,7 @@ logger = structlog.get_logger(__name__)
 class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
     def __init__(self, db_router: DatabaseRouter) -> None:
         self.db_router = db_router
+        self._active_events_shard_map: dict[str, tuple[str, str]] = {}
 
     async def _claim_from_shard(
         self,
@@ -63,17 +64,21 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
             result = await session.execute(stmt)
             await session.commit()
 
-            return [
-                EventEnvelope(
-                    id=str(row.id),
-                    tenant_id=str(row.tenant_id) if row.tenant_id else None,
-                    event_type=str(row.event_type),
-                    payload=row.payload,
-                    idempotency_key=row.idempotency_key,
-                    source=EdiOutboxSource.EDI_DATA_PLANE.value,
+            events = []
+            for row in result.scalars():
+                event_id_str = str(row.id)
+                self._active_events_shard_map[event_id_str] = (shard_name, shard_dsn)
+                events.append(
+                    EventEnvelope(
+                        id=event_id_str,
+                        tenant_id=str(row.tenant_id) if row.tenant_id else None,
+                        event_type=str(row.event_type),
+                        payload=row.payload,
+                        idempotency_key=row.idempotency_key,
+                        source=EdiOutboxSource.EDI_DATA_PLANE.value,
+                    )
                 )
-                for row in result.scalars()
-            ]
+            return events
 
         return []
 
@@ -82,6 +87,8 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
     ) -> list[EventEnvelope]:
         if limit <= 0:
             return []
+        if lock_lease_ms <= 0:
+            raise ValueError("lock_lease_ms must be strictly positive")
 
         shards = await self.db_router.get_all_shards()
         if not shards:
@@ -152,22 +159,18 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                     await asyncio.sleep(0.1)
         return total_swept
 
-    async def _update_all_shards(self, get_stmt: Any, params: dict[str, Any]) -> None:
-        async def _update(shard_name: str, shard_dsn: str) -> None:
-            async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
-                await session.execute(get_stmt(params))
-                await session.commit()
+    async def _update_event_shard(
+        self, event_id: str, get_stmt: Any, params: dict[str, Any]
+    ) -> None:
+        shard_info = self._active_events_shard_map.pop(event_id, None)
+        if not shard_info:
+            logger.warning("event_shard_not_found_in_map", event_id=event_id)
+            return
 
-        results = await asyncio.gather(
-            *[
-                _update(shard_name, shard_dsn)
-                for shard_name, shard_dsn in await self.db_router.get_all_shards()
-            ],
-            return_exceptions=True,
-        )
-        exceptions = [result for result in results if isinstance(result, Exception)]
-        if exceptions:
-            raise ExceptionGroup("tenant_shard_outbox_update_failed", exceptions)
+        shard_name, shard_dsn = shard_info
+        async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
+            await session.execute(get_stmt(params))
+            await session.commit()
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
 
@@ -189,7 +192,8 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                 )
             )
 
-        await self._update_all_shards(
+        await self._update_event_shard(
+            event_id,
             _get_stmt,
             {"event_id": event_id, "worker_id": worker_id},
         )
@@ -222,7 +226,8 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
                 )
             )
 
-        await self._update_all_shards(
+        await self._update_event_shard(
+            event_id,
             _get_stmt,
             {
                 "event_id": event_id,

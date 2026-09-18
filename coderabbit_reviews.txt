@@ -1,0 +1,85 @@
+In `@apps/edi/apps/edi-cp-jobs-worker/package.json`:
+- Line 18: Update the worker’s dependency list to restore `@soopa/database`
+alongside the existing `@soopa/config-sync-worker` workspace dependency,
+preserving both workspace references required by bootstrap/container.py and the
+repository adapter.
+
+In
+`@apps/edi/apps/edi-dp-jobs-worker/src/edi_dp_jobs_worker/adapters/outbound/database/postgres_edi_data_plane_outbox_repository.py`:
+- Around line 81-84: Update claim_next_events to validate lock_lease_ms after
+the existing limit check and raise ValueError when it is zero or negative, while
+preserving the current empty-list return for non-positive limits.
+- Around line 161-170: Update _update_all_shards and the event-claiming flow to
+preserve each event’s owning shard identity, then route completion and failure
+status updates only to that shard instead of broadcasting to every shard. Keep
+each event associated with the shard returned during claiming and use it when
+invoking the update operation, while retaining existing status-update behavior
+otherwise.
+
+In
+`@apps/edi/apps/edi-dp-jobs-worker/src/edi_dp_jobs_worker/bootstrap/container.py`:
+- Line 119: Update the dispose method so db_router.close_all() always executes
+in a finally block when dp_manager.stop() raises, while preserving the existing
+conditional checks and async shutdown behavior.
+
+In `@apps/edi/scripts/reprocess_stranded.py`:
+- Around line 39-49: The recovery flow using generate_deterministic_id and the
+outbox INSERT must permit repeated attempts by safely requeuing the existing
+event or generating a unique identifier per recovery attempt. Change the insert
+to return whether a row was created or updated, and increment total_reprocessed
+only when INSERT ... RETURNING confirms the outbox state changed.
+- Around line 46-48: The recovery INSERT in the stranded-event reprocessing flow
+must match the tenant outbox schema: update the column list and values to use
+attempts instead of retry_count and max_retries, and include a non-null
+idempotency_key bound to a valid parameter. Update the surrounding parameter
+construction so that idempotency_key is supplied consistently.
+
+In `@core/platform/apps/identity-jobs-worker/package.json`:
+- Around line 11-15: Regenerate pnpm-lock.yaml using the repository’s configured
+pnpm version so the workspace dependencies declared in the identity-jobs-worker
+package manifest are included, then commit the updated lockfile without changing
+unrelated dependency entries.
+
+In
+`@core/platform/apps/identity-jobs-worker/src/identity_jobs_worker/config/settings.py`:
+- Line 14: Update both AWS resource identifier settings fields in the settings
+model to reject empty strings at validation time, using min_length=1 or an
+equivalent validator. Apply this to the SNS topic ARN and SQS queue URL fields
+referenced by AwsSnsPublisher and AwsSqsConsumer, while preserving their
+existing aliases and defaults where compatible.
+
+In `@core/platform/apps/identity-jobs-worker/src/identity_jobs_worker/main.py`:
+- Line 18: Update the ObservabilityProvider configuration and corresponding
+warning event name to use identity-jobs-worker consistently instead of
+identity-outbox-worker, including the additional occurrence identified in the
+comment.
+- Around line 33-37: Update the startup and shutdown lifecycle around the
+outbox_relay and jobs_consumer components to track which components started
+successfully, then stop each started component independently in a finally block
+so partial startup and stop failures still trigger cleanup. Ensure
+container.dispose() is always called, including when start or stop operations
+raise exceptions.
+
+In
+`@core/platform/apps/identity-jobs-worker/tests/integration/test_identity_outbox_worker_integration_structural.py`:
+- Around line 1-2: Replace the no-op test_structural with assertions against
+WorkerContainer.wire() that verify creation of the outbox relay, jobs consumer,
+scheduled-job handlers, and both IdentityJobName subscriptions. Ensure the test
+checks each component and registration so incomplete identity worker boot wiring
+fails.
+
+In `@core/platform/apps/notification-jobs-worker/package.json`:
+- Line 8: Update the test script in package.json to execute the worker’s unit
+tests with the existing project test runner, targeting tests/unit instead of
+only printing a no-tests message.
+
+In `@core/ucp/apps/ucp-jobs-worker/src/ucp_jobs_worker/bootstrap/container.py`:
+- Around line 60-63: Update the AwsSnsPublisher construction in the container
+bootstrap to pass self.settings.aws_region as region_name, while preserving the
+existing topic_arn and endpoint_url arguments.
+
+In `@core/ucp/apps/ucp-jobs-worker/src/ucp_jobs_worker/main.py`:
+- Around line 60-64: Update the shutdown cleanup around jobs_consumer.stop() and
+outbox_relay.stop() to catch stop exceptions, log each failure with the existing
+worker logging mechanism, and continue cleanup so container.dispose() is still
+called. Preserve the conditional outbox_relay handling and cleanup ordering.

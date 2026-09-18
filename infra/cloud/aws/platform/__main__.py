@@ -187,23 +187,27 @@ zitadel_machinekey = random.RandomPassword(
     length=32,
 )
 
+zitadel_masterkey_secret = aws.secretsmanager.Secret(
+    f"{_prefix}zitadel-masterkey-secret",
+    name=f"platform/{_prefix}zitadel-masterkey",
+    tags=_TAGS,
+)
+
 aws.secretsmanager.SecretVersion(
     f"{_prefix}zitadel-masterkey-secret-val",
-    secret_id=aws.secretsmanager.Secret(
-        f"{_prefix}zitadel-masterkey-secret",
-        name="platform/zitadel-masterkey",
-        tags=_TAGS,
-    ).id,
+    secret_id=zitadel_masterkey_secret.id,
     secret_string=zitadel_masterkey.result,
+)
+
+zitadel_machinekey_secret = aws.secretsmanager.Secret(
+    f"{_prefix}zitadel-machinekey-secret",
+    name=f"platform/{_prefix}zitadel-machinekey",
+    tags=_TAGS,
 )
 
 aws.secretsmanager.SecretVersion(
     f"{_prefix}zitadel-machinekey-secret-val",
-    secret_id=aws.secretsmanager.Secret(
-        f"{_prefix}zitadel-machinekey-secret",
-        name="platform/zitadel-machinekey",
-        tags=_TAGS,
-    ).id,
+    secret_id=zitadel_machinekey_secret.id,
     secret_string=zitadel_machinekey.result,
 )
 
@@ -242,7 +246,7 @@ aws.iam.RolePolicy(
                     "Action": ["secretsmanager:GetSecretValue"],
                     "Resource": [
                         db_secret.arn,
-                        f"arn:aws:secretsmanager:{aws.get_region().name}:{aws.get_caller_identity().account_id}:secret:platform/*",
+                        f"arn:aws:secretsmanager:{aws.get_region().name}:{aws.get_caller_identity().account_id}:secret:platform/{_prefix}*",
                     ],
                 }
             ],
@@ -256,8 +260,10 @@ _identity = aws.get_caller_identity()
 zitadel_listener = aws.lb.Listener(
     f"{_prefix}zitadel-listener",
     load_balancer_arn=main_alb.arn,
-    port=8080,
-    protocol="HTTP",
+    port=443,
+    protocol="HTTPS",
+    ssl_policy="ELBSecurityPolicy-2016-08",
+    certificate_arn=config.get("acm_certificate_arn"),
     default_actions=[
         aws.lb.ListenerDefaultActionArgs(
             type="fixed-response",
@@ -291,7 +297,12 @@ zitadel_task = aws.ecs.TaskDefinition(
     requires_compatibilities=[EcsConstants.CAPACITY_PROVIDER],
     execution_role_arn=ecs_execution_role.arn,
     container_definitions=pulumi.Output.all(
-        global_db.endpoint, db_password.result, zitadel_masterkey.result, zitadel_machinekey.result
+        global_db.endpoint,
+        db_password.result,
+        zitadel_masterkey.result,
+        zitadel_machinekey.result,
+        db_secret.arn,
+        zitadel_masterkey_secret.arn,
     ).apply(
         lambda args: json.dumps(
             [
@@ -320,11 +331,11 @@ zitadel_task = aws.ecs.TaskDefinition(
                     "secrets": [
                         {
                             "name": "ZITADEL_DATABASE_POSTGRES_PASSWORD",
-                            "valueFrom": db_secret.arn,
+                            "valueFrom": f"{args[4]}:password::",
                         },
                         {
                             "name": "ZITADEL_MASTERKEY",
-                            "valueFrom": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:platform/zitadel-masterkey",
+                            "valueFrom": args[5],
                         },
                     ],
                     "logConfiguration": {
@@ -404,23 +415,27 @@ if enable_observability:
         special=True,
     )
 
+    obs_user_secret = aws.secretsmanager.Secret(
+        f"{_prefix}obs-user-secret",
+        name=f"platform/{_prefix}openobserve-user",
+        tags=_TAGS,
+    )
+
     aws.secretsmanager.SecretVersion(
         f"{_prefix}obs-user-secret-val",
-        secret_id=aws.secretsmanager.Secret(
-            f"{_prefix}obs-user-secret",
-            name="platform/openobserve-user",
-            tags=_TAGS,
-        ).id,
+        secret_id=obs_user_secret.id,
         secret_string=OpenObserveConstants.DEFAULT_ADMIN_EMAIL,
+    )
+
+    obs_password_secret = aws.secretsmanager.Secret(
+        f"{_prefix}obs-password-secret",
+        name=f"platform/{_prefix}openobserve-password",
+        tags=_TAGS,
     )
 
     aws.secretsmanager.SecretVersion(
         f"{_prefix}obs-password-secret-val",
-        secret_id=aws.secretsmanager.Secret(
-            f"{_prefix}obs-password-secret",
-            name="platform/openobserve-password",
-            tags=_TAGS,
-        ).id,
+        secret_id=obs_password_secret.id,
         secret_string=obs_user_password.result,
     )
 
@@ -436,6 +451,8 @@ if enable_observability:
         port=5080,
         target_group_arn=obs_tg.arn,
         desired_count=obs_count,
+        obs_user_secret_arn=obs_user_secret.arn,
+        obs_password_secret_arn=obs_password_secret.arn,
         environment_vars=[
             {"name": "ZO_DATA_DIR", "value": "/data"},
             {"name": "ZO_S3_BUCKET", "value": obs_bucket.bucket},

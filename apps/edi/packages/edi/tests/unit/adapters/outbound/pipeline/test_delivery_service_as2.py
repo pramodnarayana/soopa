@@ -80,13 +80,15 @@ def make_use_case(
     async def uow_factory():
         yield u
 
-    def router_factory(u_ref: FakeDataPlaneUnitOfWork) -> DeliveryRouterUseCase:
+    def router_factory() -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(
-            u_ref,
+            uow_factory,
             {
-                "webhook_id": WebhookDeliveryStrategy(u_ref, FakeHttpDeliveryAdapter(), None),
-                "sftp_partner_id": SftpDeliveryStrategy(u_ref, FakeSftpDeliveryAdapter(), None),
-                "as2_partner_id": As2DeliveryStrategy(u_ref, a, None),
+                "webhook_id": WebhookDeliveryStrategy(uow_factory, FakeHttpDeliveryAdapter(), None),
+                "sftp_partner_id": SftpDeliveryStrategy(
+                    uow_factory, FakeSftpDeliveryAdapter(), None
+                ),
+                "as2_partner_id": As2DeliveryStrategy(uow_factory, a, None),
             },
         )
 
@@ -240,7 +242,7 @@ async def test_deliver_as2_failed_mdn_emits_one_failure_event() -> None:
     )
     as2_adapter = FakeAS2DeliveryAdapter(body=failed_mdn)
 
-    with pytest.raises(RuntimeError, match="Sync MDN indicates failure"):
+    with pytest.raises(ValueError, match="Sync MDN indicates failure"):
         await make_use_case(uow=uow, as2=as2_adapter).execute(trace_id)
 
     assert uow.repository.edi_messages[trace_id]["status"] == "FAILED"
@@ -279,6 +281,11 @@ async def test_deliver_as2_idempotent_claim() -> None:
     as2_adapter = FakeAS2DeliveryAdapter()
 
     trace_id = "trace-as2-idem"
+    idempotency_key = f"deliv-{trace_id}"
+
+    # Pre-claim the idempotency key in the outbox to simulate another worker grabbing it
+    uow.outbox.leased[idempotency_key] = "other-worker-token"
+
     uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
         "direction": "OUTBOUND",
@@ -287,7 +294,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
         "trading_partner_id": "p-idem",
         "transaction_type": "810",
         "edi_data": "EDI~",
-        "status": "PROCESSING",  # Already claimed — claim will return False
+        "status": "PENDING_DELIVERY",
     }
     uow.repository.routes.append(
         {
@@ -302,14 +309,16 @@ async def test_deliver_as2_idempotent_claim() -> None:
     )
     idem_remote = copy.deepcopy(_REMOTE_PARTNER)
     idem_remote["remote"]["url"] = "https://idem.example.com/as2"
+    idem_remote["remote"]["id"] = "p-idem"
+    idem_remote["partnership"]["remote_partner_id"] = "p-idem"
     uow.repository.as2_partners["p-idem"] = idem_remote
-    uow.repository.local_as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
+    uow.repository.as2_partners[str(_REMOTE_PARTNER["partnership"]["local_partner_id"])] = (
         _LOCAL_PARTNER
     )
 
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow, as2=as2_adapter)
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key=idempotency_key)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 0

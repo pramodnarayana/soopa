@@ -197,8 +197,18 @@ async def test_inbound_webhook_dispatch_transition(
 
     async def run_delivery(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
         async with uow_fact() as uow:
-            strategies = {"webhook_id": WebhookDeliveryStrategy(uow, real_http_delivery)}
-            await DeliveryRouterUseCase(uow, strategies).deliver(e.trace_id)
+
+            def mock_uow_factory():
+                @contextlib.asynccontextmanager
+                async def mock_manager():
+                    yield uow
+
+                return mock_manager()
+
+            strategies = {
+                "webhook_id": WebhookDeliveryStrategy(mock_uow_factory, real_http_delivery)
+            }
+            await DeliveryRouterUseCase(mock_uow_factory, strategies).deliver(e.trace_id)
             await uow.commit()
 
     registry.register(

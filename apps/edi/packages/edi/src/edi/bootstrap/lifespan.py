@@ -42,9 +42,10 @@ async def startup(app: FastAPI) -> None:
     settings = get_settings()
     logger.info("EDI: Initializing DatabaseRouter.")
     _db_router = DatabaseRouter(
-        settings.database.global_url,
+        global_db_url=settings.database.global_url,
         pool_size=settings.database.pool_size,
         max_overflow=settings.database.max_overflow,
+        shard_overrides=settings.database.shard_overrides,
     )
     # Attach to the EDI sub-app's state so request.app.state.db_router resolves correctly.
     app.state.db_router = _db_router

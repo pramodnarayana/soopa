@@ -25,7 +25,10 @@ services:
       - DEFAULT_REGION=us-east-1
       - AWS_ACCESS_KEY_ID=test
       - AWS_SECRET_ACCESS_KEY=test
+      - LS_LOG=warn
+      - PERSISTENCE=1
     volumes:
+      - localstack_data:/var/lib/localstack
       - ./localstack-setup.sh:/etc/localstack/init/ready.d/init.sh
     healthcheck:
       test: ["CMD", "curl", "-s", "-f", "http://localhost:4566/_localstack/health"]
@@ -41,3 +44,4 @@ services:
 
 volumes:
   postgres_global_data:
+  localstack_data:

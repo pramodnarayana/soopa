@@ -43,13 +43,13 @@ def make_use_case(
     async def uow_factory():
         yield u
 
-    def router_factory(u_ref: FakeDataPlaneUnitOfWork) -> DeliveryRouterUseCase:
+    def router_factory() -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(
-            u_ref,
+            uow_factory,
             {
-                "webhook_id": WebhookDeliveryStrategy(u_ref, h, vault),
-                "sftp_partner_id": SftpDeliveryStrategy(u_ref, s, vault),
-                "as2_partner_id": As2DeliveryStrategy(u_ref, a, vault),
+                "webhook_id": WebhookDeliveryStrategy(uow_factory, h, vault),
+                "sftp_partner_id": SftpDeliveryStrategy(uow_factory, s, vault),
+                "as2_partner_id": As2DeliveryStrategy(uow_factory, a, vault),
             },
         )
 

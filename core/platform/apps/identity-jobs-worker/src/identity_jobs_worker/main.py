@@ -15,7 +15,7 @@ logger = structlog.get_logger(__name__)
 async def main() -> None:
     settings = get_settings()
 
-    ObservabilityProvider.auto_configure_from_env("identity-outbox-worker")
+    ObservabilityProvider.auto_configure_from_env("identity-jobs-worker")
 
     container = WorkerContainer(settings)
     container.wire()
@@ -30,26 +30,42 @@ async def main() -> None:
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
 
-    if container.outbox_relay:
-        container.outbox_relay.start()
-        # The relay starts its own background task. We don't append it to `tasks` directly.
-    if container.jobs_consumer:
-        container.jobs_consumer.start()
+    relay_started = False
+    consumer_started = False
 
-    if not container.outbox_relay and not container.jobs_consumer:
-        logger.warning("no_tasks_configured_for_outbox_worker")
-        return
+    try:
+        if container.outbox_relay:
+            container.outbox_relay.start()
+            relay_started = True
+            # The relay starts its own background task. We don't append it to `tasks` directly.
+        if container.jobs_consumer:
+            container.jobs_consumer.start()
+            consumer_started = True
 
-    await shutdown_event.wait()
-    logger.info("identity_jobs_worker_shutting_down")
+        if not container.outbox_relay and not container.jobs_consumer:
+            logger.warning("no_tasks_configured_for_identity_jobs_worker")
+            return
 
-    if container.jobs_consumer:
-        await container.jobs_consumer.stop()
-    if container.outbox_relay:
-        await container.outbox_relay.stop()
+        await shutdown_event.wait()
+        logger.info("identity_jobs_worker_shutting_down")
 
-    await container.dispose()
-    logger.info("identity_jobs_worker_shutdown_complete")
+    finally:
+        if container.jobs_consumer and consumer_started:
+            try:
+                await container.jobs_consumer.stop()
+            except Exception:
+                logger.exception("consumer_stop_failed")
+        if container.outbox_relay and relay_started:
+            try:
+                await container.outbox_relay.stop()
+            except Exception:
+                logger.exception("relay_stop_failed")
+
+        try:
+            await container.dispose()
+        except Exception:
+            logger.exception("container_dispose_failed")
+        logger.info("identity_jobs_worker_shutdown_complete")
 
 
 if __name__ == "__main__":

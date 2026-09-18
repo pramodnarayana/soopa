@@ -79,6 +79,12 @@ async def db_session_factory(db_connection) -> AsyncGenerator[async_sessionmaker
     yield factory
 
 
+@pytest_asyncio.fixture(autouse=True, scope="function")
+async def clear_jobs_table(db_connection: Any) -> None:
+    """Ensure each test starts with an empty jobs table, avoiding conflicts with seed data."""
+    await db_connection.execute(text("DELETE FROM scheduling.scheduled_jobs"))
+
+
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_scheduler_worker_claims_and_dispatches_job(

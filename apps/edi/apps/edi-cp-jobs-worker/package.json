@@ -15,6 +15,7 @@
     "@soopa/outbox": "workspace:*",
     "@soopa/pubsub": "workspace:*",
     "@soopa/seedwork": "workspace:*",
-    "@soopa/config-sync-worker": "workspace:*"
+    "@soopa/config-sync-worker": "workspace:*",
+    "@soopa/database": "workspace:*"
   }
 }

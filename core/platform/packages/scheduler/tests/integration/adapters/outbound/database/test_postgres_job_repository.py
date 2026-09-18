@@ -40,6 +40,13 @@ async def test_session(db_connection: Any) -> AsyncGenerator[AsyncSession]:
         yield session
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def clear_jobs_table(test_session: AsyncSession) -> None:
+    """Ensure each test starts with an empty jobs table, avoiding conflicts with seed data."""
+    await test_session.execute(text("DELETE FROM scheduling.scheduled_jobs"))
+    await test_session.flush()
+
+
 @pytest.mark.integration
 async def test_claim_next_jobs(test_session: AsyncSession) -> None:
     # Insert some jobs manually

@@ -60,6 +60,7 @@ class WorkerContainer:
         outbox_pub = AwsSnsPublisher(
             topic_arn=self.settings.sns_tenant_events_topic_arn,
             endpoint_url=self.settings.aws_endpoint_url,
+            region_name=self.settings.aws_region,
         )
         self._wire_scheduled_jobs(outbox_repo, outbox_pub)
         self._wire_outbox_relay(outbox_repo, outbox_pub)

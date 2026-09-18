@@ -115,7 +115,9 @@ class WorkerContainer:
             self.dp_manager.start()
 
     async def dispose(self) -> None:
-        if self.dp_manager:
-            await self.dp_manager.stop()
-        if self.db_router:
-            await self.db_router.close_all()
+        try:
+            if self.dp_manager:
+                await self.dp_manager.stop()
+        finally:
+            if self.db_router:
+                await self.db_router.close_all()

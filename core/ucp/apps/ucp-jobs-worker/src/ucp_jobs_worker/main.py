@@ -57,12 +57,19 @@ async def main() -> None:  # noqa: C901
     finally:
         logger.info("ucp_jobs_worker.shutting_down")
         if container.jobs_consumer:
-            with contextlib.suppress(Exception):
+            try:
                 await container.jobs_consumer.stop()
+            except Exception:
+                logger.exception("consumer_stop_failed")
         if container.outbox_relay:
-            with contextlib.suppress(Exception):
+            try:
                 await container.outbox_relay.stop()
-        await container.dispose()
+            except Exception:
+                logger.exception("relay_stop_failed")
+        try:
+            await container.dispose()
+        except Exception:
+            logger.exception("container_dispose_failed")
 
 
 if __name__ == "__main__":

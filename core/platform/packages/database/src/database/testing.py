@@ -12,6 +12,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import cast
 
+from seedwork.infrastructure.config_models import PlatformDatabaseSettings
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
 from database.router import DatabaseRouter, DatabaseRouterPort
@@ -98,8 +99,17 @@ class TransactionalTestRouter(DatabaseRouterPort):
 async def get_test_shard_url_async(global_db_url: str) -> str:
     """
     Dynamically fetches the first active testing shard URL using the production DatabaseRouter.
+
+    Reads shard_overrides from the centralized PlatformDatabaseSettings so that
+    environment-injected overrides (e.g. SHARD_OVERRIDES__EDI_SHARD_1=localhost:5433)
+    are honoured. Without this, the router would return the raw Docker hostname
+    stored in the DB registry, which is unresolvable on the host machine.
     """
-    router = DatabaseRouter(global_db_url=global_db_url)
+    db_settings = PlatformDatabaseSettings()
+    router = DatabaseRouter(
+        global_db_url=global_db_url,
+        shard_overrides=db_settings.shard_overrides,
+    )
     shards = await router.get_all_shards()
     await router.close_all()
     if not shards:

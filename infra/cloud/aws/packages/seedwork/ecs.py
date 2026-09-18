@@ -44,6 +44,8 @@ def provision_fargate_service(
     topic_arns: list = None,
     bucket_arns: list = None,
     desired_count: int = 1,
+    obs_user_secret_arn: str = None,
+    obs_password_secret_arn: str = None,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
@@ -118,6 +120,8 @@ def provision_fargate_service(
         image = args[0]
         env = args[1]
         fl_end = args[2]
+        obs_user_arn = args[3]
+        obs_pass_arn = args[4]
 
         main_log_config = {
             "logDriver": "awslogs",
@@ -132,7 +136,6 @@ def provision_fargate_service(
         if fl_end:
             host = fl_end.split(":")[0]
             fl_port = fl_end.split(":")[1] if ":" in fl_end else "80"
-            secret_arn_prefix = f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:platform/openobserve"
             main_log_config = {
                 "logDriver": "awsfirelens",
                 "options": {
@@ -144,8 +147,8 @@ def provision_fargate_service(
                     "tls": "on",
                 },
                 "secretOptions": [
-                    {"name": "HTTP_User", "valueFrom": f"{secret_arn_prefix}-user"},
-                    {"name": "HTTP_Passwd", "valueFrom": f"{secret_arn_prefix}-password"},
+                    {"name": "HTTP_User", "valueFrom": obs_user_arn},
+                    {"name": "HTTP_Passwd", "valueFrom": obs_pass_arn},
                 ],
             }
 
@@ -178,7 +181,11 @@ def provision_fargate_service(
         execution_role_arn=execution_role_arn,
         task_role_arn=task_role.arn,
         container_definitions=pulumi.Output.all(
-            ecr_image_uri, env_vars, firelens_endpoint or ""
+            ecr_image_uri,
+            env_vars,
+            firelens_endpoint or "",
+            obs_user_secret_arn or "",
+            obs_password_secret_arn or "",
         ).apply(make_container_defs),
         volumes=volumes,
         tags=tags,

@@ -170,28 +170,7 @@ importers:
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
 
-  apps/edi/apps/edi-cp-cleanup:
-    devDependencies:
-      '@soopa/api':
-        specifier: workspace:*
-        version: link:../../packages/edi
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/database
-      '@soopa/outbox':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/outbox
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/pubsub
-      '@soopa/seedwork':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/seedwork
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../../../core/ucp/packages/models
-
-  apps/edi/apps/edi-cp-outbox-worker:
+  apps/edi/apps/edi-cp-jobs-worker:
     devDependencies:
       '@soopa/api':
         specifier: workspace:*
@@ -199,24 +178,6 @@ importers:
       '@soopa/config-sync-worker':
         specifier: workspace:*
         version: link:../edi-config-sync-worker
-      '@soopa/outbox':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/outbox
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/pubsub
-      '@soopa/seedwork':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/seedwork
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../../../core/ucp/packages/models
-
-  apps/edi/apps/edi-dp-cleanup:
-    devDependencies:
-      '@soopa/api':
-        specifier: workspace:*
-        version: link:../../packages/edi
       '@soopa/database':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/database
@@ -233,7 +194,7 @@ importers:
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/models
 
-  apps/edi/apps/edi-dp-outbox-worker:
+  apps/edi/apps/edi-dp-jobs-worker:
     devDependencies:
       '@soopa/api':
         specifier: workspace:*
@@ -505,25 +466,7 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
-  core/platform/apps/identity-cleanup:
-    devDependencies:
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../packages/database
-      '@soopa/identity':
-        specifier: workspace:*
-        version: link:../../packages/identity
-      '@soopa/outbox':
-        specifier: workspace:*
-        version: link:../../packages/outbox
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../packages/pubsub
-      '@soopa/seedwork':
-        specifier: workspace:*
-        version: link:../../packages/seedwork
-
-  core/platform/apps/identity-outbox-worker:
+  core/platform/apps/identity-jobs-worker:
     devDependencies:
       '@soopa/database':
         specifier: workspace:*
@@ -562,24 +505,6 @@ importers:
         specifier: workspace:*
         version: link:../../../ucp/packages/models
 
-  core/platform/apps/notification-cleanup:
-    devDependencies:
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../packages/database
-      '@soopa/notification':
-        specifier: workspace:*
-        version: link:../../packages/notification
-      '@soopa/outbox':
-        specifier: workspace:*
-        version: link:../../packages/outbox
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../packages/pubsub
-      '@soopa/seedwork':
-        specifier: workspace:*
-        version: link:../../packages/seedwork
-
   core/platform/apps/notification-email-worker:
     devDependencies:
       '@soopa/database':
@@ -595,7 +520,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/pubsub
 
-  core/platform/apps/notification-outbox-worker:
+  core/platform/apps/notification-jobs-worker:
     devDependencies:
       '@soopa/database':
         specifier: workspace:*
@@ -816,31 +741,7 @@ importers:
         specifier: ^8.2.2
         version: 8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.12)(yaml@2.9.0)
 
-  core/ucp/apps/ucp-cleanup:
-    devDependencies:
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../../platform/packages/database
-      '@soopa/observability':
-        specifier: workspace:*
-        version: link:../../../platform/packages/observability
-      '@soopa/outbox':
-        specifier: workspace:*
-        version: link:../../../platform/packages/outbox
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../../platform/packages/pubsub
-      '@soopa/seedwork':
-        specifier: workspace:*
-        version: link:../../../platform/packages/seedwork
-      '@soopa/ucp':
-        specifier: workspace:*
-        version: link:../../packages/ucp
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../packages/models
-
-  core/ucp/apps/ucp-outbox-worker:
+  core/ucp/apps/ucp-jobs-worker:
     devDependencies:
       '@soopa/database':
         specifier: workspace:*

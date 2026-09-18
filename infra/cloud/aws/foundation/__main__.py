@@ -144,13 +144,6 @@ main_alb_sg = aws.ec2.SecurityGroup(
             protocol="tcp",
             cidr_blocks=["0.0.0.0/0"],
         ),
-        aws.ec2.SecurityGroupIngressArgs(
-            description="Zitadel UI/API",
-            from_port=8080,
-            to_port=8080,
-            protocol="tcp",
-            cidr_blocks=["0.0.0.0/0"],
-        ),
     ],
     egress=[
         aws.ec2.SecurityGroupEgressArgs(

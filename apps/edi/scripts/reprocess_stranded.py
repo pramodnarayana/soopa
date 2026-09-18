@@ -41,21 +41,24 @@ async def reprocess_stranded_messages() -> None:
                     )
 
                     # Ensure we create a new outbox event to be picked up by the delivery worker/sweeper
-                    await conn.execute(
+                    result = await conn.execute(
                         text("""
                         INSERT INTO outbox
-                        (id, event_type, payload, status, created_at, updated_at, retry_count, max_retries)
-                        VALUES (:id, :event_type, :payload, 'PENDING', NOW(), NOW(), 0, 3)
+                        (id, event_type, payload, status, created_at, updated_at, attempts, idempotency_key)
+                        VALUES (:id, :event_type, :payload, 'PENDING', NOW(), NOW(), 0, :idempotency_key)
                         ON CONFLICT (id) DO NOTHING
+                        RETURNING id
                         """),
                         {
                             "id": deliver_key,
                             "event_type": PipelineEventType.DELIVER_EVENT.value,
                             "payload": f'{{"trace_id": "{trace_id}"}}',
+                            "idempotency_key": deliver_key,
                         },
                     )
-                    total_reprocessed += 1
-                    logger.info("reprocessed_stranded_message", trace_id=trace_id)
+                    if result.fetchone():
+                        total_reprocessed += 1
+                        logger.info("reprocessed_stranded_message", trace_id=trace_id)
 
         logger.info("reprocessing_complete", total_reprocessed=total_reprocessed)
     except Exception:

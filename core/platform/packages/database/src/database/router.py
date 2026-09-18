@@ -53,10 +53,17 @@ class DatabaseRouter(DatabaseRouterPort):
     Manages connections to the Global DB and dynamic Tenant DBs.
     """
 
-    def __init__(self, global_db_url: str, pool_size: int = 10, max_overflow: int = 20):
+    def __init__(
+        self,
+        global_db_url: str,
+        pool_size: int = 10,
+        max_overflow: int = 20,
+        shard_overrides: dict[str, str] | None = None,
+    ):
         self._global_db_url = global_db_url
         self._pool_size = pool_size
         self._max_overflow = max_overflow
+        self._shard_overrides = shard_overrides or {}
 
         # Cache for tenant engines to avoid recreation
         self._engines: dict[str, AsyncEngine] = {}
@@ -171,7 +178,6 @@ class DatabaseRouter(DatabaseRouterPort):
         """
         Retrieves all active shards (key, dsn) from the global database.
         """
-
         # Dynamically query the active database shards registered in the control plane
         async for session in self.get_global_session():
             result = await session.execute(
@@ -179,7 +185,11 @@ class DatabaseRouter(DatabaseRouterPort):
                     DatabaseShard.status == DatabaseShardStatus.ACTIVE
                 )
             )
-            return [(row.id, row.dsn) for row in result]
+            shards = []
+            for row in result:
+                dsn = self._shard_overrides.get(row.id, row.dsn)
+                shards.append((row.id, dsn))
+            return shards
         return []
 
     async def close_all(self) -> None:

@@ -117,6 +117,11 @@ class AppSettings(BaseSettings):
     storage_backend: Literal["postgres", "s3"] = Field(
         validation_alias="STORAGE_BACKEND", default="postgres"
     )
+    allow_private_ips: bool = Field(
+        validation_alias="EDI_ALLOW_PRIVATE_IPS",
+        default=False,
+        description="Allow private IPs in AS2/HTTP delivery (for local docker testing)",
+    )
 
     database: PlatformDatabaseSettings = Field(
         default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})

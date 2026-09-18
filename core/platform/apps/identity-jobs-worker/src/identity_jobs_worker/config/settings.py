@@ -11,13 +11,15 @@ from seedwork.infrastructure.config_models import (
 
 class IdentityOutboxAwsSettings(PlatformAwsSettings):
     sns_identity_events_topic_arn: str = Field(
-        validation_alias="SNS_IDENTITY_EVENTS_TOPIC_ARN", default=""
+        validation_alias="SNS_IDENTITY_EVENTS_TOPIC_ARN", default="", min_length=1
     )
 
 
 class SqsSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
-    identity_jobs_queue_url: str = Field(validation_alias="SQS_IDENTITY_JOBS_QUEUE_URL", default="")
+    identity_jobs_queue_url: str = Field(
+        validation_alias="SQS_IDENTITY_JOBS_QUEUE_URL", default="", min_length=1
+    )
 
 
 class AppSettings(BaseSettings):
