@@ -60,7 +60,7 @@ main_alb, main_listener, obs_listener = provision_alb(
     subnets=public_subnets,
     security_group_id=main_alb_sg_id,
     tags=_TAGS,
-    certificate_arn=config.get("acm_certificate_arn"),
+    certificate_arn=config.require("acm_certificate_arn"),
 )
 
 # ── ECR Repository ────────────────────────────────────────────────────────────
@@ -257,30 +257,10 @@ aws.iam.RolePolicy(
 _region = aws.get_region()
 _identity = aws.get_caller_identity()
 
-zitadel_listener = aws.lb.Listener(
-    f"{_prefix}zitadel-listener",
-    load_balancer_arn=main_alb.arn,
-    port=443,
-    protocol="HTTPS",
-    ssl_policy="ELBSecurityPolicy-2016-08",
-    certificate_arn=config.get("acm_certificate_arn"),
-    default_actions=[
-        aws.lb.ListenerDefaultActionArgs(
-            type="fixed-response",
-            fixed_response=aws.lb.ListenerDefaultActionFixedResponseArgs(
-                content_type="text/plain",
-                message_body="404: Not Found",
-                status_code="404",
-            ),
-        )
-    ],
-    tags=_TAGS,
-)
-
 zitadel_tg = provision_target_group_and_rule(
     name=f"{_prefix}zitadel",
     vpc_id=vpc_id,
-    listener_arn=zitadel_listener.arn,
+    listener_arn=main_listener.arn,
     priority=100,
     path_pattern="/*",
     tags=_TAGS,

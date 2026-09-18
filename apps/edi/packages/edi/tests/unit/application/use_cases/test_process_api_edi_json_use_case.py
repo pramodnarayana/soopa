@@ -9,7 +9,7 @@ This is the Outbound API ingestion use case. It:
 1. Resolves transaction_type from payload if not supplied in the command
 2. Extracts business_metadata using MetadataExtractorService
 3. Persists EdiJson via UoW.transactions.create_edi_json
-4. Publishes a TRANSFORM_EVENT outbox event
+4. Publishes a TRANSFORMATION_REQUESTED outbox event
 
 We inject a port-conforming in-memory UoW — no DB, no HTTP, no patches.
 """

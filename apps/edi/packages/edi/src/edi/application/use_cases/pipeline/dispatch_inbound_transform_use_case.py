@@ -41,11 +41,11 @@ class DispatchInboundTransformUseCase:
 
             # 2. Dispatch to Compute Worker
             compute_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, trace_id, "COMPUTE_TRANSFORM_EVENT"
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "COMPUTE_TRANSFORMATION_COMMAND"
             )
             await self.uow.outbox.append_event(
                 idempotency_key=compute_key,
-                event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
+                event_type=PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value,
                 payload={
                     "trace_id": trace_id,
                     "direction": EdiDirection.INBOUND.value,

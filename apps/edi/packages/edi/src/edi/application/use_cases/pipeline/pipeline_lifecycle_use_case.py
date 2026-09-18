@@ -14,7 +14,7 @@ class PipelineLifecycleUseCase:
     """
     Application Use Case — Saga Coordinator for the Pipeline Lifecycle.
 
-    Listens to domain events (TRANSFORM_COMPLETED, DELIVERY_COMPLETED) and
+    Listens to domain events (TRANSFORMATION_COMPLETED, DELIVERY_COMPLETED) and
     coordinates state transitions across the layers (EdiMessage, EdiJson, ApiGateway)
     to ensure strict SRP in the workers.
     """
@@ -86,7 +86,7 @@ class PipelineLifecycleUseCase:
             )
             await self.uow.outbox.append_event(
                 idempotency_key=deliver_idempotency_key,
-                event_type=PipelineEventType.DELIVER_EVENT,
+                event_type=PipelineEventType.DELIVERY_REQUESTED,
                 payload={"trace_id": trace_id},
             )
             await self.uow.commit()

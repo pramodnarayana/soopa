@@ -2,13 +2,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import cast
 
-from sqlalchemy import select
-from ucp_models.sharding import DatabaseShard, ShardRegistry
-from ucp_models.subscriptions import App
-
 from database.router import DatabaseRouterPort
-from edi.adapters.outbound.database.base_repository import GlobalSession
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
@@ -17,11 +13,11 @@ from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 class SqlAlchemyDataPlaneUnitOfWorkFactory(DataPlaneUnitOfWorkFactoryPort):
     def __init__(
         self,
-        global_session: GlobalSession,
+        resolver: TenantResolver,
         db_router: DatabaseRouterPort,
         storage: StoragePort,
     ) -> None:
-        self.global_session = global_session
+        self.resolver = resolver
         self.db_router = db_router
         self.storage = storage
 
@@ -29,21 +25,10 @@ class SqlAlchemyDataPlaneUnitOfWorkFactory(DataPlaneUnitOfWorkFactoryPort):
     async def get_data_plane_uow(
         self, tenant_id: str, app_slug: str
     ) -> AsyncGenerator[DataPlaneUnitOfWorkPort, None]:
-        # Resolve true shard
-        stmt = (
-            select(DatabaseShard)
-            .join(ShardRegistry, ShardRegistry.shard_id == DatabaseShard.id)
-            .join(App, App.id == ShardRegistry.app_id)
-            .where(ShardRegistry.tenant_id == tenant_id, App.slug == app_slug)
-        )
-        result = await self.global_session.execute(stmt)
-        shard = result.scalar_one_or_none()
-
-        if not shard:
-            raise ValueError(f"Tenant {tenant_id} not found or no shard configured for {app_slug}")
+        shard_name, shard_dsn = await self.resolver.resolve_shard(tenant_id)
 
         # Get tenant session
-        async_gen_tenant = self.db_router.get_tenant_session(tenant_id, shard.name, shard.dsn)
+        async_gen_tenant = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         tenant_session = await anext(async_gen_tenant)
 
         # Provision Unit of Work

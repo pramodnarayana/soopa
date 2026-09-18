@@ -162,7 +162,7 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
     async def _update_event_shard(
         self, event_id: str, get_stmt: Any, params: dict[str, Any]
     ) -> None:
-        shard_info = self._active_events_shard_map.pop(event_id, None)
+        shard_info = self._active_events_shard_map.get(event_id)
         if not shard_info:
             logger.warning("event_shard_not_found_in_map", event_id=event_id)
             return
@@ -171,6 +171,8 @@ class PostgresEdiDataPlaneOutboxRepository(OutboxRepositoryPort):
         async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
             await session.execute(get_stmt(params))
             await session.commit()
+
+        self._active_events_shard_map.pop(event_id, None)
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
 

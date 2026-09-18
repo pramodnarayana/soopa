@@ -48,12 +48,12 @@ async def test_replay_queues_validated_transaction(tenant_session):
     )
 
     service = ReplayTransactionUseCase(uow)
-    await service.replay_transaction(tenant_id, trace_id, "raw")
+    await service.retry_transform(tenant_id, trace_id, "api-user")
 
     # Assert event in outbox
     result = await tenant_session.execute(
         text(
-            "SELECT payload FROM outbox WHERE event_type = 'edi.transaction.replay_requested' AND tenant_id = :tenant_id"
+            "SELECT payload FROM outbox WHERE event_type = 'COMPUTE_TRANSFORMATION_COMMAND' AND tenant_id = :tenant_id"
         ),
         {"tenant_id": tenant_id},
     )
@@ -64,7 +64,6 @@ async def test_replay_queues_validated_transaction(tenant_session):
         payload = json.loads(payload)
 
     assert payload["trace_id"] == trace_id
-    assert payload["tier"] == "raw"
 
 
 @pytest.mark.asyncio
@@ -97,13 +96,13 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
     service = BulkReplayTransactionsUseCase(uow)
     command_key = f"cmd-{uuid.uuid4()}"
 
-    count = await service.bulk_replay_transactions(
-        tenant_id, [trace_id_1, trace_id_2, trace_id_1], "raw", command_key=command_key
+    count = await service.bulk_retry_transform(
+        tenant_id, [trace_id_1, trace_id_2], "api-user", command_key=command_key
     )
 
-    assert count == 3
+    assert count == 2
 
-    # Verify exactly 3 events with the idempotency key sequence
+    # Verify exactly 2 events with the idempotency key sequence
     VerificationSession = async_sessionmaker(
         bind=tenant_session.bind,
         expire_on_commit=False,
@@ -114,16 +113,15 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
     async with VerificationSession() as verification_session:
         result = await verification_session.execute(
             text(
-                "SELECT idempotency_key FROM outbox WHERE event_type = 'edi.transaction.replay_requested' AND tenant_id = :tenant_id ORDER BY idempotency_key"
+                "SELECT idempotency_key FROM outbox WHERE event_type = 'COMPUTE_TRANSFORMATION_COMMAND' AND tenant_id = :tenant_id ORDER BY idempotency_key"
             ),
             {"tenant_id": tenant_id},
         )
         rows = result.fetchall()
-    assert len(rows) == 3
+    assert len(rows) == 2
 
     keys = {row[0] for row in rows}
     assert keys == {
-        f"sys_idemp_bulk_replay_{command_key}_0",
-        f"sys_idemp_bulk_replay_{command_key}_1",
-        f"sys_idemp_bulk_replay_{command_key}_2",
+        f"{command_key}_0",
+        f"{command_key}_1",
     }

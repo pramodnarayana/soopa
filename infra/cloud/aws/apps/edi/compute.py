@@ -176,10 +176,18 @@ def provision_compute(
         "config-sync-worker", ["python", "-m", "config_sync_worker.provision.main"]
     )
 
+    # 6. CP Jobs Worker
+    cp_jobs_worker = make_service("cp-jobs-worker", ["python", "-m", "edi_cp_jobs_worker.main"])
+
+    # 7. DP Jobs Worker
+    dp_jobs_worker = make_service("dp-jobs-worker", ["python", "-m", "edi_dp_jobs_worker.main"])
+
     return {
         "as2_server": as2_server,
         "background_worker": background_worker,
         "compute_worker": compute_worker,
         "orchestrator_worker": orchestrator_worker,
         "config_sync_worker": config_sync_worker,
+        "cp_jobs_worker": cp_jobs_worker,
+        "dp_jobs_worker": dp_jobs_worker,
     }

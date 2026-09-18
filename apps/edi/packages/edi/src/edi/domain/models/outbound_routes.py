@@ -21,5 +21,6 @@ class OutboundRouteDomainModel(AggregateRoot):
     connection_type: EdiConnectionType | None = None
     as2_partner_id: str | None = None
     sftp_partner_id: str | None = None
+    webhook_id: str | None = None
     direction: EdiDirection = EdiDirection.OUTBOUND
     destination_name: str | None = None

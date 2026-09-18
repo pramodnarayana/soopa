@@ -105,3 +105,4 @@ ucp_worker = provision_fargate_service(
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("ucp_events_topic_arn", events_topic.arn)
+pulumi.export("ucp_jobs_queue_url", jobs_q.url)

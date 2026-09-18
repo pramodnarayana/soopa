@@ -176,8 +176,8 @@ async def test_deliver_as2_plain_no_crypto() -> None:
     assert uow.repository.edi_messages[trace_id]["status"] == "DELIVERED"
 
 
-async def test_deliver_as2_http_failure_sets_failed_status() -> None:
-    """Non-2xx response from the trading partner must result in FAILED status."""
+async def test_deliver_as2_http_failure_bubbles_as_transient() -> None:
+    """Non-2xx response from the trading partner must bubble as transient error."""
     # ── Arrange ────────────────────────────────────────────────────────────────
     uow = FakeDataPlaneUnitOfWork()
     as2_adapter = FakeAS2DeliveryAdapter(status_code=503)
@@ -219,10 +219,8 @@ async def test_deliver_as2_http_failure_sets_failed_status() -> None:
         await use_case.execute(trace_id)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert len(uow.outbox.events) == 1
-    outbox_event = uow.outbox.events[0]
-    assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
-    assert outbox_event["payload"]["status"] == "FAILED"
+    assert len(uow.outbox.events) == 0
+    assert uow.repository.edi_messages[trace_id]["status"] == "PENDING_DELIVERY"
     assert len(as2_adapter.delivered) == 1
 
 
@@ -250,11 +248,10 @@ async def test_deliver_as2_failed_mdn_emits_one_failure_event() -> None:
     assert uow.outbox.events[0]["payload"]["status"] == "FAILED"
 
 
-async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
+async def test_deliver_as2_null_adapter_is_caught_and_bubbles_transient() -> None:
     """
-    NullAS2DeliveryAdapter replaces the previous `as2_delivery=None` anti-pattern.
-    When AS2 is routed but the Null adapter is injected, it raises a RuntimeError
-    which is caught internally and the message is marked as FAILED.
+    NullAS2DeliveryAdapter raises RuntimeError, which is bubbled up as a transient error
+    so it can be retried (or moved to DLQ) rather than marked FAILED in the domain.
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
     uow = FakeDataPlaneUnitOfWork()
@@ -265,10 +262,8 @@ async def test_deliver_as2_null_adapter_is_caught_and_marked_failed() -> None:
     with pytest.raises(RuntimeError):
         await use_case.execute("trace-as2-null")
 
-    assert len(uow.outbox.events) == 1
-    outbox_event = uow.outbox.events[0]
-    assert outbox_event["event_type"] == PipelineEventType.DELIVERY_COMPLETED
-    assert outbox_event["payload"]["status"] == "FAILED"
+    assert len(uow.outbox.events) == 0
+    assert uow.repository.edi_messages["trace-as2-null"]["status"] == "PENDING_DELIVERY"
 
 
 async def test_deliver_as2_idempotent_claim() -> None:

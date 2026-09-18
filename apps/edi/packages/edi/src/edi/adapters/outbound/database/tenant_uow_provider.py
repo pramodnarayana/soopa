@@ -37,7 +37,7 @@ class TenantUowProvider:
         Resolves the tenant's database shard and returns a parameterless async
         context manager closure that yields a DataPlaneUnitOfWorkPort.
         """
-        shard_name, shard_dsn = await self._resolver.resolve(tenant_id)
+        shard_name, shard_dsn = await self._resolver.resolve_shard(tenant_id)
 
         @contextlib.asynccontextmanager
         async def uow_factory() -> AsyncGenerator[DataPlaneUnitOfWorkPort, None]:

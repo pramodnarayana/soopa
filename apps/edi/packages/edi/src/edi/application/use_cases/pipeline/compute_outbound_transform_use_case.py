@@ -153,13 +153,13 @@ class ComputeOutboundTransformUseCase:
             )
             logger.info("compute_outbound_transform.edi_message_saved", trace_id=trace_id)
 
-            # 3. Dispatch TRANSFORM_COMPLETED
+            # 3. Dispatch TRANSFORMATION_COMPLETED
             transform_completed_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORM_COMPLETED"
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORMATION_COMPLETED"
             )
             await uow.outbox.append_event(
                 idempotency_key=transform_completed_key,
-                event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+                event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
                 payload={
                     "trace_id": trace_id,
                     "direction": EdiDirection.OUTBOUND.value,

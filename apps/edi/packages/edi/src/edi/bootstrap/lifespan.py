@@ -20,8 +20,10 @@ from contextlib import asynccontextmanager
 
 import structlog
 from database.router import DatabaseRouter
+from dependency_injector import providers
 from fastapi import FastAPI
 
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -47,8 +49,14 @@ async def startup(app: FastAPI) -> None:
         max_overflow=settings.database.max_overflow,
         shard_overrides=settings.database.shard_overrides,
     )
-    # Attach to the EDI sub-app's state so request.app.state.db_router resolves correctly.
     app.state.db_router = _db_router
+
+    resolver = TenantResolver(_db_router)
+    app.state.tenant_resolver = resolver
+
+    if hasattr(app, "container"):
+        app.container.tenant_resolver.override(providers.Object(resolver))
+
     logger.info("EDI: DatabaseRouter initialized.")
 
 

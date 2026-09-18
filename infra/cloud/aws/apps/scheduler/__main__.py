@@ -21,11 +21,15 @@ foundation_stack_ref = config.get("foundation_stack") or f"foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"platform/{_env}"
 edi_stack_ref = config.get("edi_stack") or f"edi/{_env}"
 notification_stack_ref = config.get("notification_stack") or f"notification/{_env}"
+identity_stack_ref = config.get("identity_stack") or f"identity/{_env}"
+ucp_stack_ref = config.get("ucp_stack") or f"ucp/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 edi = pulumi.StackReference(edi_stack_ref)
 notification = pulumi.StackReference(notification_stack_ref)
+identity = pulumi.StackReference(identity_stack_ref)
+ucp = pulumi.StackReference(ucp_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -47,6 +51,8 @@ placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 edi_data_plane_jobs_q = edi.require_output("edi_data_plane_jobs_queue_url")
 edi_control_plane_jobs_q = edi.require_output("edi_control_plane_jobs_queue_url")
 notification_jobs_q = notification.require_output("notification_jobs_queue_url")
+identity_jobs_q = identity.require_output("identity_jobs_queue_url")
+ucp_jobs_q = ucp.require_output("ucp_jobs_queue_url")
 
 execution_role = aws.iam.Role(
     f"{_prefix}ecs-execution-role",
@@ -84,5 +90,7 @@ scheduler_worker = provision_fargate_service(
         {"name": "SQS_DATA_PLANE_JOBS_QUEUE_URL", "value": edi_data_plane_jobs_q},
         {"name": "SQS_CONTROL_PLANE_JOBS_QUEUE_URL", "value": edi_control_plane_jobs_q},
         {"name": "SQS_NOTIFICATION_JOBS_QUEUE_URL", "value": notification_jobs_q},
+        {"name": "SQS_IDENTITY_JOBS_QUEUE_URL", "value": identity_jobs_q},
+        {"name": "SQS_UCP_JOBS_QUEUE_URL", "value": ucp_jobs_q},
     ],
 )

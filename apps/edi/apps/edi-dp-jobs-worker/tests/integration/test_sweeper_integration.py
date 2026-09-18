@@ -22,10 +22,11 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
         builder = DataPlaneOutboxBuilder(session=test_session)
         # We will create events with default properties that makes them look "stuck".
         event1 = await builder.create(
-            event_type=PipelineEventType.TRANSFORM_EVENT.value, status=OutboxStatus.PROCESSING
+            event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
+            status=OutboxStatus.PROCESSING,
         )
         event2 = await builder.create(
-            event_type=PipelineEventType.DELIVER_EVENT.value, status=OutboxStatus.PROCESSING
+            event_type=PipelineEventType.DELIVERY_REQUESTED.value, status=OutboxStatus.PROCESSING
         )
 
         # Manually force them to be "stuck" by setting lease_expires_at to the past
@@ -56,5 +57,9 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
 
     assert len(messages_received) >= 2
 
-    assert any(b.event_type == PipelineEventType.TRANSFORM_EVENT.value for b in messages_received)
-    assert any(b.event_type == PipelineEventType.DELIVER_EVENT.value for b in messages_received)
+    assert any(
+        b.event_type == PipelineEventType.TRANSFORMATION_REQUESTED.value for b in messages_received
+    )
+    assert any(
+        b.event_type == PipelineEventType.DELIVERY_REQUESTED.value for b in messages_received
+    )

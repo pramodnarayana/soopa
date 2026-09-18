@@ -221,7 +221,7 @@ class InMemoryRepositoryAdapter:
             "msg_headers": command.msg_headers,
             "state": command.state,
             "status_message": command.status_message,
-            "is_resend": command.is_resend,
+            "is_replay": command.is_replay,
             "parent_trace_id": command.parent_trace_id,
         }
         return trace_id

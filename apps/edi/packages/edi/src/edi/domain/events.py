@@ -40,7 +40,7 @@ class TransformRequestedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return PipelineEventType.TRANSFORM_EVENT.value
+        return PipelineEventType.TRANSFORMATION_REQUESTED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -65,21 +65,23 @@ class TransformCompleted(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return PipelineEventType.TRANSFORM_COMPLETED.value
+        return PipelineEventType.TRANSFORMATION_COMPLETED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
 
 @dataclass(frozen=True)
-class TransactionReplayRequestedEvent(DomainEvent):
+class DeliverRequestedEvent(DomainEvent):
     trace_id: str
     tenant_id: str
-    tier: str
+    trading_partner_id: str | None = None
+    transaction_type: str | None = None
+    direction: str | None = None
 
     @property
     def event_name(self) -> str:
-        return "edi.transaction.replay_requested"
+        return PipelineEventType.DELIVERY_REQUESTED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

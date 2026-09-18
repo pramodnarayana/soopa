@@ -6,6 +6,7 @@ from edi.adapters.outbound.database.control_plane.tenant_repository import (
 )
 from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
@@ -34,7 +35,10 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     crypto_service = providers.Singleton(SmimeCryptoService)
     sftp_tester = providers.Singleton(ParamikoSftpTesterAdapter)
-    as2_tester = providers.Singleton(HttpxAS2TesterAdapter)
+    as2_tester = providers.Singleton(
+        HttpxAS2TesterAdapter,
+        allow_private_ips=config.allow_private_ips,
+    )
     vault_port = providers.Singleton(
         AwsSecretsManagerAdapter,
         secrets_mount_path=config.secrets.mount_path,
@@ -50,6 +54,7 @@ class Container(containers.DeclarativeContainer):
     # Repositories and Units of Work
     # Session dependencies must be passed at runtime using kwargs.
     # -----------------------------------------------------------------------
+    tenant_resolver = providers.Dependency(instance_of=TenantResolver)
     tenant_repo = providers.Factory(SqlAlchemyTenantRepository)
     cp_uow = providers.Factory(SqlAlchemyControlPlaneUnitOfWork)
     dp_uow = providers.Factory(SqlAlchemyDataPlaneUnitOfWork, storage=storage)

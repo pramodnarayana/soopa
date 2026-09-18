@@ -54,7 +54,7 @@ async def test_transform_edi_to_json_success() -> None:
     # Assert — outbox event was created instead of transformer being called
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORM_EVENT.value
+    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value
     assert event["payload"]["trace_id"] == trace_id
     assert event["payload"]["direction"] == EdiDirection.INBOUND.value
     assert event["payload"]["standard"] == "X12"

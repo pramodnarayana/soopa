@@ -153,7 +153,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
         )
         await conn.execute(
             text(
-                "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, is_resend, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', false, NOW(), NOW())"
+                "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, is_replay, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', false, NOW(), NOW())"
             ),
             {"mid": msg_id, "trid": trace_id, "tid": tenant_id},
         )
@@ -196,7 +196,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
         )
         outbox_rows = res.fetchall()
         assert len(outbox_rows) == 1
-        assert outbox_rows[0].event_type == "TRANSFORM_COMPLETED"
+        assert outbox_rows[0].event_type == "TRANSFORMATION_COMPLETED"
     finally:
         # Cleanup seeded data autonomously
         async with db_engine.connect() as conn:

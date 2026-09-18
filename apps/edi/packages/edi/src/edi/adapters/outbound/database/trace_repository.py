@@ -113,7 +113,7 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 msg_headers=None,  # Optimization: Not needed for full trace view currently
                 state=edi_msg.state,
                 status_message=edi_msg.status_message,
-                is_resend=edi_msg.is_resend,
+                is_replay=edi_msg.is_replay,
                 parent_trace_id=edi_msg.parent_trace_id,
                 created_at=edi_msg.created_at,
                 updated_at=edi_msg.updated_at,

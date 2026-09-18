@@ -60,11 +60,15 @@ def check_sg_ingress(args: ResourceValidationArgs, report_violation: ReportViola
             if not isinstance(rule, dict):
                 continue
             cidr_blocks = rule.get("cidrBlocks", [])
-            if "0.0.0.0/0" in cidr_blocks:
+            ipv6_cidr_blocks = rule.get("ipv6CidrBlocks", [])
+
+            is_open = "0.0.0.0/0" in cidr_blocks or "::/0" in ipv6_cidr_blocks
+
+            if is_open:
                 protocol = rule.get("protocol")
                 if str(protocol) == "-1":
                     report_violation(
-                        "Security Groups must not allow 0.0.0.0/0 ingress on all protocols (-1)."
+                        "Security Groups must not allow 0.0.0.0/0 or ::/0 ingress on all protocols (-1)."
                     )
                     continue
 
@@ -80,7 +84,7 @@ def check_sg_ingress(args: ResourceValidationArgs, report_violation: ReportViola
                         and from_port <= port <= to_port
                     ):
                         report_violation(
-                            f"Security Groups must not allow 0.0.0.0/0 ingress on port {port}."
+                            f"Security Groups must not allow 0.0.0.0/0 or ::/0 ingress on port {port}."
                         )
                         break
 

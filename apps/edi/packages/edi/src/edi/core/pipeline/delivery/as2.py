@@ -42,10 +42,6 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         response_body: bytes,
     ) -> None:
         if not (200 <= status_code < 300):
-            async with self.uow_factory() as uow, uow:
-                await uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
-                await self._emit_delivery_completed(uow, trace_id, direction, MessageStatus.FAILED)
-                await uow.commit()
             logger.error(
                 "as2_delivery_http_failed",
                 trace_id=trace_id,
@@ -242,12 +238,6 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 headers=as2_msg.headers,
             )
         except Exception as e:
-            async with self.uow_factory() as uow, uow:
-                await uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
-                await self._emit_delivery_completed(
-                    uow, trace_id, edi_msg.direction, MessageStatus.FAILED
-                )
-                await uow.commit()
             logger.exception(
                 "as2_http_transmission_failed",
                 trace_id=trace_id,

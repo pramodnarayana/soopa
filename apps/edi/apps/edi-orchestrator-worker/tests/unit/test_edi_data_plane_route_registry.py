@@ -19,13 +19,13 @@ async def test_route_registry_success() -> None:
     async def real_factory(evt: EdiDataPlaneEventMessage, uow_fact: Any) -> None:
         events_routed.append((evt, uow_fact))
 
-    # Register an INBOUND TRANSFORM_EVENT route
-    registry.register("TRANSFORM_EVENT", "INBOUND", real_factory)
+    # Register an INBOUND TRANSFORMATION_REQUESTED route
+    registry.register("TRANSFORMATION_REQUESTED", "INBOUND", real_factory)
 
     event = EdiDataPlaneEventMessage(
         trace_id="trace123",
         tenant_id="tenant123",
-        event_type="TRANSFORM_EVENT",
+        event_type="TRANSFORMATION_REQUESTED",
         payload={"direction": "INBOUND"},
         idempotency_key="idem123",
     )
@@ -49,13 +49,13 @@ async def test_route_registry_fallback_to_none_direction() -> None:
     async def real_factory(evt: EdiDataPlaneEventMessage, uow_fact: Any) -> None:
         events_routed.append((evt, uow_fact))
 
-    # Register a generic DELIVER_EVENT route without direction
-    registry.register("DELIVER_EVENT", None, real_factory)
+    # Register a generic DELIVERY_REQUESTED route without direction
+    registry.register("DELIVERY_REQUESTED", None, real_factory)
 
     event = EdiDataPlaneEventMessage(
         trace_id="trace123",
         tenant_id="tenant123",
-        event_type="DELIVER_EVENT",
+        event_type="DELIVERY_REQUESTED",
         payload={"direction": "OUTBOUND"},  # OUTBOUND is in the payload
         idempotency_key="idem123",
     )

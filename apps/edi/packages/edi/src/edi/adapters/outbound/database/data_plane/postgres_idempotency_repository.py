@@ -41,7 +41,7 @@ class SqlAlchemyEdiIdempotencyRepository(IdempotencyRepositoryPort):
             .on_conflict_do_nothing(index_elements=["tenant_id", "idempotency_key"])
         )
 
-        shard_name, shard_dsn = await self.resolver.resolve(tenant_id)
+        shard_name, shard_dsn = await self.resolver.resolve_shard(tenant_id)
         async with contextlib.aclosing(
             self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         ) as session_gen:

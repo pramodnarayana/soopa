@@ -114,7 +114,7 @@ async def test_list_transaction_json(client: AsyncClient, tenant_db_session: Asy
 
 
 @pytest.mark.asyncio
-async def test_replay_transaction(client: AsyncClient, tenant_db_session: AsyncSession):
+async def test_retry_transform_transaction(client: AsyncClient, tenant_db_session: AsyncSession):
     tenant_id = "1"
     trace_id = generate_id("trace")
 
@@ -133,8 +133,7 @@ async def test_replay_transaction(client: AsyncClient, tenant_db_session: AsyncS
     await tenant_db_session.flush()
 
     response = await client.post(
-        f"/api/v1/tenants/1/edi/transactions/{trace_id}/replay",
-        json={"tier": "translation"},
+        f"/api/v1/tenants/1/edi/transactions/{trace_id}/retry-transform",
     )
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"
@@ -173,8 +172,8 @@ async def test_bulk_replay_transactions(client: AsyncClient, tenant_db_session: 
     await tenant_db_session.flush()
 
     response = await client.post(
-        "/api/v1/tenants/1/edi/transactions/bulk-replay",
-        json={"trace_ids": [trace_id_1, trace_id_2], "tier": "translation"},
+        "/api/v1/tenants/1/edi/transactions/bulk-retry-transform",
+        json={"trace_ids": [trace_id_1, trace_id_2]},
     )
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"

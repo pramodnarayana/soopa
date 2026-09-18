@@ -16,7 +16,11 @@ from edi.domain.enums import (
     MessageStatus,
     SignatureAlgorithm,
 )
-from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.domain.models.transactions import (
+    EdiJsonDomainModel,
+    EdiMessageDomainModel,
+    TraceEventDomainModel,
+)
 
 # ---------------------------------------------------------------------------
 # Data-Plane Port Commands
@@ -58,7 +62,7 @@ class CreateEdiMessageCommand:
     msg_headers: dict[str, JsonValue] | None = None
     state: str | None = None
     status_message: str | None = None
-    is_resend: bool | None = None
+    is_replay: bool | None = None
     parent_trace_id: str | None = None
 
 
@@ -75,6 +79,7 @@ class CreateEdiJsonCommand:
     transaction_type: str | None = None
     payload: JsonValue | None = None
     parent_trace_id: str | None = None
+    is_replay: bool | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -99,6 +104,7 @@ class UpdateEdiJsonCommand:
     trace_id: str
     trading_partner_id: str | None = None
     standard: str | None = None
+    is_replay: bool | None = None
 
 
 class TransactionRepositoryPort(Protocol):
@@ -115,6 +121,14 @@ class TransactionRepositoryPort(Protocol):
     async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         """
         Fetches an EDI JSON record by trace_id and maps it to the domain model.
+        """
+        ...
+
+    async def get_edi_messages_by_traces(
+        self, trace_ids: Sequence[str]
+    ) -> Sequence[EdiMessageDomainModel]:
+        """
+        Fetches multiple EDI Messages by trace_ids and maps them to the domain model.
         """
         ...
 
@@ -139,10 +153,29 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
+    async def save_all(self, aggregates: Sequence[EdiMessageDomainModel]) -> None:
+        """
+        Persists multiple aggregate states and drains their domain events into the outbox
+        within the same transaction.
+        """
+        ...
+
     async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
         """
         Persists the EdiJson aggregate state and drains any domain events into the outbox
         within the same transaction.
+        """
+        ...
+
+    async def save_trace_event(self, event: TraceEventDomainModel) -> None:
+        """
+        Persists a TraceEvent to the Event Ledger for auditing and timeline history.
+        """
+        ...
+
+    async def save_all_trace_events(self, events: Sequence[TraceEventDomainModel]) -> None:
+        """
+        Persists multiple TraceEvents to the Event Ledger for auditing and timeline history.
         """
         ...
 

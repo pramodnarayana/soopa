@@ -96,6 +96,21 @@ notification_worker = provision_fargate_service(
     ],
 )
 
+notification_channel_worker = provision_fargate_service(
+    name=f"{_prefix}channel-worker",
+    command=["python", "-m", "notification_channel_worker.main"],
+    cluster_arn=ecs_cluster_arn,
+    execution_role_arn=execution_role.arn,
+    ecr_image_uri=placeholder_image,
+    subnets=private_subnets,
+    security_group_id=app_sg_id,
+    tags=_TAGS,
+    firelens_endpoint=firelens_endpoint,
+    environment_vars=[
+        {"name": "QUEUE_URL_NOTIFICATION_EMAIL", "value": email_channel_q.url},
+    ],
+)
+
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("email_channel_queue_url", email_channel_q.url)
 pulumi.export("notification_jobs_queue_url", notification_jobs_q.url)

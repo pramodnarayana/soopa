@@ -44,12 +44,13 @@ async def test_tenant_resolver_success(test_db_router: DatabaseRouterPort) -> No
         await session.flush()
         session.add(ShardRegistry(tenant_id=test_tenant_id, app_id=edi_app.id, shard_id=shard.id))
         await session.commit()
+        expected_shard_id = shard.id
 
     resolver = TenantResolver(db_router=db_router, ttl_secs=300)
 
     # First resolve should hit DB
-    shard_name, shard_dsn = await resolver.resolve(tenant_id=test_tenant_id)
-    assert shard_name == f"shard_{test_tenant_id}"
+    shard_name, shard_dsn = await resolver.resolve_shard(tenant_id=test_tenant_id)
+    assert shard_name == expected_shard_id
     assert shard_dsn == "postgresql://user:pass@host/db"
 
     # Second resolve should hit cache
@@ -62,8 +63,8 @@ async def test_tenant_resolver_success(test_db_router: DatabaseRouterPort) -> No
         )
         await session.commit()
 
-    shard_name_2, shard_dsn_2 = await resolver.resolve(tenant_id=test_tenant_id)
-    assert shard_name_2 == f"shard_{test_tenant_id}"
+    shard_name_2, shard_dsn_2 = await resolver.resolve_shard(tenant_id=test_tenant_id)
+    assert shard_name_2 == expected_shard_id
     assert shard_dsn_2 == "postgresql://user:pass@host/db"
 
 
@@ -73,7 +74,7 @@ async def test_tenant_resolver_not_found(test_db_router: DatabaseRouterPort) -> 
     resolver = TenantResolver(db_router=db_router, ttl_secs=300)
 
     with pytest.raises(ValueError, match="Tenant 999 not found in Global DB"):
-        await resolver.resolve(tenant_id="999")
+        await resolver.resolve_shard(tenant_id="999")
 
 
 @pytest.mark.integration
@@ -110,9 +111,9 @@ async def test_tenant_resolver_eviction(test_db_router: DatabaseRouterPort) -> N
         session.add(ShardRegistry(tenant_id=t3, app_id=edi_app.id, shard_id=shard3.id))
         await session.commit()
 
-    await resolver.resolve(tenant_id=t1)
-    await resolver.resolve(tenant_id=t2)
-    # This should evict t1 or t2
-    await resolver.resolve(tenant_id=t3)
+    await resolver.resolve_shard(tenant_id=t1)
+    await resolver.resolve_shard(tenant_id=t1)
+    await resolver.resolve_shard(tenant_id=t2)
+    await resolver.resolve_shard(tenant_id=t3)
 
     assert len(resolver._cache) == 2

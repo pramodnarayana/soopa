@@ -51,13 +51,10 @@ class DeliveryUseCase:
 
         # Phase 2: Execute delivery and track status
         router = self._router_factory()
+        delivery_success = False
         try:
             await router.deliver(trace_id, idempotency_key=key_str)
-
-            if key_str and owner_token:
-                async with self._uow_factory() as uow, uow:
-                    await uow.outbox.mark_delivery_success(key_str, owner_token)
-                    await uow.commit()
+            delivery_success = True
         except Exception:
             if key_str and owner_token:
                 try:
@@ -73,3 +70,8 @@ class DeliveryUseCase:
 
             logger.exception("delivery_failed", trace_id=trace_id)
             raise
+
+        if delivery_success and key_str and owner_token:
+            async with self._uow_factory() as uow, uow:
+                await uow.outbox.mark_delivery_success(key_str, owner_token)
+                await uow.commit()
