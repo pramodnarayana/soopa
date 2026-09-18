@@ -61,3 +61,13 @@ class TransactionListDomainModel(AggregateRoot):
     trading_partner_id: str | None
     status: str
     received_at: str
+
+
+@dataclass(kw_only=True)
+class TraceEventDomainModel:
+    id: str
+    tenant_id: str
+    trace_id: str
+    event_type: str
+    actor: str
+    metadata: dict[str, JsonValue] | None = None

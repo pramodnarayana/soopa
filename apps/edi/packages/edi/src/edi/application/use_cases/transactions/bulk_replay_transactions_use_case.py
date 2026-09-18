@@ -1,10 +1,11 @@
-from seedwork import generate_id
-from seedwork.id_registry import SystemIdPrefix
+import asyncio
 
-from edi.domain.events import TransactionReplayRequestedEvent
+from seedwork import generate_id
+
+from edi.domain.enums import TraceEventType
+from edi.domain.events import DeliverRequestedEvent, TransformRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiJsonDomainModel
+from edi.domain.models.transactions import TraceEventDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 
@@ -12,47 +13,104 @@ class BulkReplayTransactionsUseCase:
     def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
 
-    async def bulk_replay_transactions(
-        self, tenant_id: str, trace_ids: list[str], tier: str, command_key: str | None = None
+    async def bulk_retry_transform(
+        self, tenant_id: str, trace_ids: list[str], actor: str, command_key: str | None = None
     ) -> int:
         """
-        Trigger an asynchronous replay of multiple transactions at the specified tier.
+        Trigger an asynchronous replay of the transform pipeline for multiple transactions.
         """
+        edi_messages = await self.uow.transactions.get_edi_messages_by_traces(trace_ids)
+        if len(edi_messages) != len(trace_ids):
+            raise TransactionNotFoundError(trace_id="Multiple")
+
+        trace_events = []
         processed_count = 0
-        batch_id = command_key or generate_id(SystemIdPrefix.IDEMPOTENCY).replace(
-            SystemIdPrefix.IDEMPOTENCY.value, ""
-        )
 
-        for i, trace_id in enumerate(trace_ids):
-            result = await self.uow.traces.get_edi_trace(tenant_id, trace_id)
-            if not result or not result.edi_message:
-                raise TransactionNotFoundError(trace_id=trace_id)
-
-            replay_event = TransactionReplayRequestedEvent(
-                trace_id=trace_id,
-                tenant_id=tenant_id,
-                tier=tier,
-                idempotency_key=f"{SystemIdPrefix.IDEMPOTENCY.value}_bulk_replay_{batch_id}_{i}",
-            )
-
-            edi_message = await self.uow.transactions.get_edi_message(trace_id)
-            if edi_message:
-                edi_message.add_domain_event(replay_event)
-                await self.uow.transactions.save(edi_message)
-            else:
-                edi_json = EdiJsonDomainModel(
-                    id="dummy",
+        for i, edi_message in enumerate(edi_messages):
+            edi_message.is_replay = True
+            if command_key:
+                transform_event = TransformRequestedEvent(
+                    trace_id=edi_message.trace_id,
                     tenant_id=tenant_id,
-                    trace_id=trace_id,
-                    direction=Direction.OUTBOUND,
-                    transaction_type="",
-                    status=RecordStatus.RECEIVED,
-                    business_metadata={},
-                    payload={},
+                    trading_partner_id=edi_message.trading_partner_id,
+                    sender_id=edi_message.sender_id,
+                    receiver_id=edi_message.receiver_id,
+                    direction=edi_message.direction,
+                    edi_message_id=edi_message.id,
+                    status=edi_message.status,
+                    idempotency_key=f"{command_key}_{i}",
                 )
-                edi_json.add_domain_event(replay_event)
-                await self.uow.transactions.save_json(edi_json)
-            processed_count += 1
+            else:
+                transform_event = TransformRequestedEvent(
+                    trace_id=edi_message.trace_id,
+                    tenant_id=tenant_id,
+                    trading_partner_id=edi_message.trading_partner_id,
+                    sender_id=edi_message.sender_id,
+                    receiver_id=edi_message.receiver_id,
+                    direction=edi_message.direction,
+                    edi_message_id=edi_message.id,
+                    status=edi_message.status,
+                )
+            edi_message.add_domain_event(transform_event)
 
+            trace_events.append(
+                TraceEventDomainModel(
+                    id=generate_id("trace_evt"),
+                    tenant_id=tenant_id,
+                    trace_id=edi_message.trace_id,
+                    event_type=TraceEventType.REPLAY_TRANSFORM.value,
+                    actor=actor,
+                )
+            )
+            processed_count += 1
+            await asyncio.sleep(0)  # Yield to event loop
+
+        await self.uow.transactions.save_all(edi_messages)
+        await self.uow.transactions.save_all_trace_events(trace_events)
+        await self.uow.commit()
+        return processed_count
+
+    async def bulk_retry_deliver(
+        self, tenant_id: str, trace_ids: list[str], actor: str, command_key: str | None = None
+    ) -> int:
+        """
+        Trigger an asynchronous replay of the delivery pipeline for multiple transactions.
+        """
+        edi_messages = await self.uow.transactions.get_edi_messages_by_traces(trace_ids)
+        if len(edi_messages) != len(trace_ids):
+            raise TransactionNotFoundError(trace_id="Multiple")
+
+        trace_events = []
+        processed_count = 0
+
+        for i, edi_message in enumerate(edi_messages):
+            edi_message.is_replay = True
+            if command_key:
+                deliver_event = DeliverRequestedEvent(
+                    trace_id=edi_message.trace_id,
+                    tenant_id=tenant_id,
+                    idempotency_key=f"{command_key}_{i}",
+                )
+            else:
+                deliver_event = DeliverRequestedEvent(
+                    trace_id=edi_message.trace_id,
+                    tenant_id=tenant_id,
+                )
+            edi_message.add_domain_event(deliver_event)
+
+            trace_events.append(
+                TraceEventDomainModel(
+                    id=generate_id("trace_evt"),
+                    tenant_id=tenant_id,
+                    trace_id=edi_message.trace_id,
+                    event_type=TraceEventType.REPLAY_DELIVER.value,
+                    actor=actor,
+                )
+            )
+            processed_count += 1
+            await asyncio.sleep(0)  # Yield to event loop
+
+        await self.uow.transactions.save_all(edi_messages)
+        await self.uow.transactions.save_all_trace_events(trace_events)
         await self.uow.commit()
         return processed_count

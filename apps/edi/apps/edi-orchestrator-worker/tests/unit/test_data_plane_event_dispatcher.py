@@ -19,7 +19,7 @@ async def test_sqs_consumer_success() -> None:
 
     body = {
         "tenant_id": "tenant123",
-        "event_type": "TRANSFORM_EVENT",
+        "event_type": "TRANSFORMATION_REQUESTED",
         "idempotency_key": "idem123",
         "payload": {"trace_id": "trace123", "direction": "INBOUND"},
     }
@@ -32,7 +32,7 @@ async def test_sqs_consumer_success() -> None:
 
     assert event.tenant_id == "tenant123"
     assert event.trace_id == "trace123"
-    assert event.event_type == "TRANSFORM_EVENT"
+    assert event.event_type == "TRANSFORMATION_REQUESTED"
     assert event.idempotency_key == "idem123"
     assert event.payload == {"trace_id": "trace123", "direction": "INBOUND"}
 
@@ -48,7 +48,7 @@ async def test_sqs_consumer_missing_trace_id_drops_message() -> None:
 
     body = {
         "tenant_id": "tenant123",
-        "event_type": "TRANSFORM_EVENT",
+        "event_type": "TRANSFORMATION_REQUESTED",
         "payload": {
             # Missing trace_id
         },
@@ -68,7 +68,7 @@ async def test_sqs_consumer_missing_tenant_id_drops_message() -> None:
 
     consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
 
-    body = {"event_type": "TRANSFORM_EVENT", "payload": {"trace_id": "trace123"}}
+    body = {"event_type": "TRANSFORMATION_REQUESTED", "payload": {"trace_id": "trace123"}}
 
     await consumer.handle(body)
 
@@ -104,7 +104,7 @@ async def test_sqs_consumer_callback_exception_propogates() -> None:
 
     body = {
         "tenant_id": "tenant123",
-        "event_type": "TRANSFORM_EVENT",
+        "event_type": "TRANSFORMATION_REQUESTED",
         "idempotency_key": "idem123",
         "payload": {"trace_id": "trace123"},
     }

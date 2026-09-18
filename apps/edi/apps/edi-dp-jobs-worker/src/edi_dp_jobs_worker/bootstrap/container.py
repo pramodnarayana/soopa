@@ -1,10 +1,10 @@
 import structlog
 from database.router import DatabaseRouter
+from edi.adapters.outbound.pubsub.routing_sqs_publisher import RoutingSqsPublisher
 from edi.config.settings import get_settings
 from edi.domain.enums import EdiJobName
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
-from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
@@ -53,8 +53,12 @@ class WorkerContainer:
     def wire(self) -> None:
         dp_outbox_repo = PostgresEdiDataPlaneOutboxRepository(db_router=self.db_router)
 
-        dp_outbox_publisher = AwsSnsPublisher(
-            topic_arn=self.settings.aws.sns_topic_arn,
+        dp_outbox_publisher = RoutingSqsPublisher(
+            event_type_to_queue_url={
+                "TRANSFORMATION_REQUESTED": self.settings.sqs.transform_queue_url,
+                "COMPUTE_TRANSFORMATION_COMMAND": self.settings.sqs.compute_queue_url,
+                "DELIVERY_REQUESTED": self.settings.sqs.deliver_queue_url,
+            },
             endpoint_url=self.settings.aws.endpoint_url,
             region_name=self.settings.aws.resolved_region,
         )
@@ -65,7 +69,7 @@ class WorkerContainer:
     def _wire_scheduled_jobs(
         self,
         dp_repo: PostgresEdiDataPlaneOutboxRepository,
-        dp_pub: AwsSnsPublisher,
+        dp_pub: RoutingSqsPublisher,
     ) -> None:
         dp_sweeper_use_case = OutboxSweeperUseCase(dp_repo, dp_pub)
         self.dp_sweeper_job_handler = EdiDataPlaneOutboxSweeperJobHandler(dp_sweeper_use_case)

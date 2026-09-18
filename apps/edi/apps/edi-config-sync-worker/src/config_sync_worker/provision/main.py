@@ -5,6 +5,7 @@ from typing import Any
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.config.settings import get_settings
 from edi.domain.enums import EdiConstants
 from observability import ObservabilityProvider
@@ -16,7 +17,6 @@ from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
-from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
     EdiConfigSyncSqsDispatcher,
 )
@@ -38,7 +38,7 @@ async def main() -> None:
         global_db_url=settings.database.global_url,
         shard_overrides=settings.database.shard_overrides,
     )
-    tenant_adapter = SqlAlchemyTenantAdapter(db_router)
+    tenant_adapter = TenantResolver(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
     logger.info("starting_unified_provisioning_worker")

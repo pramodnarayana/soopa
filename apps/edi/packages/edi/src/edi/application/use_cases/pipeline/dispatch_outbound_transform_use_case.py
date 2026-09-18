@@ -94,11 +94,11 @@ class DispatchOutboundTransformUseCase:
             trace_id=trace_id,
         )
         compute_key = generate_deterministic_id(
-            SystemIdPrefix.IDEMPOTENCY, trace_id, "COMPUTE_TRANSFORM_EVENT"
+            SystemIdPrefix.IDEMPOTENCY, trace_id, "COMPUTE_TRANSFORMATION_COMMAND"
         )
         await self.uow.outbox.append_event(
             idempotency_key=compute_key,
-            event_type=PipelineEventType.COMPUTE_TRANSFORM_EVENT.value,
+            event_type=PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value,
             payload={
                 "trace_id": trace_id,
                 "tenant_id": tenant_id,
@@ -223,11 +223,11 @@ class DispatchOutboundTransformUseCase:
             )
 
             transform_completed_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORM_COMPLETED"
+                SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORMATION_COMPLETED"
             )
             await self.uow.outbox.append_event(
                 idempotency_key=transform_completed_key,
-                event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+                event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
                 payload={
                     "trace_id": trace_id,
                     "direction": EdiDirection.OUTBOUND.value,

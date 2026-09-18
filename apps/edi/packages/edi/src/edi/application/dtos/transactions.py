@@ -37,7 +37,7 @@ class EdiMessageDTO:
     msg_headers: dict[str, JsonValue] | None = None
     state: str | None = None
     status_message: str | None = None
-    is_resend: bool | None = None
+    is_replay: bool | None = None
     parent_trace_id: str | None = None
     created_at: datetime
     updated_at: datetime

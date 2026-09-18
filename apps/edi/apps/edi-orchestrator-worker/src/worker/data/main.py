@@ -2,7 +2,6 @@ import asyncio
 import signal
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from functools import partial
 from typing import Any
 
 import structlog
@@ -11,18 +10,13 @@ from dotenv import load_dotenv
 from edi.adapters.outbound.database.data_plane.postgres_idempotency_repository import (
     SqlAlchemyEdiIdempotencyRepository,
 )
-from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
 )
 from edi.adapters.outbound.database.tenant_uow_provider import (
     TenantUowProvider,
 )
-from edi.adapters.outbound.pipeline.as2 import HttpxAS2DeliveryClient
-from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
-from edi.adapters.outbound.pipeline.sftp import ParamikoSftpClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-from edi.adapters.outbound.security.network import validate_target_url
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
@@ -33,19 +27,11 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
 from edi.config.settings import AppSettings, get_settings
-from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
-from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import EdiDirection, PipelineEventType
-from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
-from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
-from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
-from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
-from secret_store.ports.secret_store_port import SecretStorePort
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -63,18 +49,9 @@ def _setup_registry(
     transformer: TransformerPort,
     settings: AppSettings,
     uow_provider: TenantUowProvider,
-    http_delivery: HttpDeliveryPort,
-    sftp_delivery: SftpDeliveryPort,
-    as2_delivery: AS2DeliveryPort,
-    vault: SecretStorePort,
 ) -> EdiDataPlaneEventDispatcher:
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
-        strategies = {
-            "webhook_id": WebhookDeliveryStrategy(uow_fact, http_delivery, vault),
-            "sftp_partner_id": SftpDeliveryStrategy(uow_fact, sftp_delivery, vault, db_encryption),
-            "as2_partner_id": As2DeliveryStrategy(uow_fact, as2_delivery, vault),
-        }
-        return DeliveryRouterUseCase(uow_factory=uow_fact, strategies=strategies)
+        return DeliveryRouterUseCase(uow_factory=uow_fact)
 
     registry = EdiDataPlaneRouteRegistry()
 
@@ -104,22 +81,22 @@ def _setup_registry(
         ).execute(trace_id=e.trace_id, idempotency_key=e.idempotency_key)
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction=EdiDirection.INBOUND.value,
         factory=run_inbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction=EdiDirection.OUTBOUND.value,
         factory=run_outbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+        event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
         direction=None,
         factory=run_transform_lifecycle,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVER_EVENT.value,
+        event_type=PipelineEventType.DELIVERY_REQUESTED.value,
         direction=None,
         factory=run_deliver,
     )
@@ -149,7 +126,6 @@ async def main() -> None:
     idempotency_repo = SqlAlchemyEdiIdempotencyRepository(db_router, resolver)
 
     transformer = BotsTransformerAdapter()
-    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
 
     uow_provider = TenantUowProvider(
         resolver=resolver,
@@ -159,16 +135,7 @@ async def main() -> None:
         aws_endpoint=aws_endpoint,
     )
 
-    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
-    sftp_delivery = ParamikoSftpClient()
-    as2_delivery = HttpxAS2DeliveryClient(
-        validator=partial(validate_target_url, allow_private_ips=settings.allow_private_ips),
-        allow_private_ips=settings.allow_private_ips,
-    )
-
-    consumer = _setup_registry(
-        transformer, settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
-    )
+    consumer = _setup_registry(transformer, settings, uow_provider)
 
     transform_consumer = AwsSqsConsumer(
         queue_url=settings.sqs.transform_queue_url,

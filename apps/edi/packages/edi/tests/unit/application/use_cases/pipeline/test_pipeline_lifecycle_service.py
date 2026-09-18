@@ -55,7 +55,7 @@ async def test_handle_transform_completed_inbound() -> None:
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.DELIVER_EVENT
+    assert event["event_type"] == PipelineEventType.DELIVERY_REQUESTED
     assert event["payload"]["trace_id"] == trace_id
 
 
@@ -92,7 +92,7 @@ async def test_handle_transform_completed_outbound() -> None:
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.DELIVER_EVENT
+    assert event["event_type"] == PipelineEventType.DELIVERY_REQUESTED
     assert event["payload"]["trace_id"] == trace_id
 
 

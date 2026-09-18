@@ -57,13 +57,13 @@ async def test_process_api_edi_json_success(tenant_session):
     # Verify outbox event
     outbox_result = await tenant_session.execute(
         text(
-            "SELECT event_type, payload FROM outbox WHERE event_type = 'TRANSFORM_EVENT' AND payload->>'trace_id' = :trace_id"
+            "SELECT event_type, payload FROM outbox WHERE event_type = 'TRANSFORMATION_REQUESTED' AND payload->>'trace_id' = :trace_id"
         ),
         {"trace_id": trace_id},
     )
     outbox_row = outbox_result.fetchone()
     assert outbox_row is not None
-    assert outbox_row[0] == "TRANSFORM_EVENT"
+    assert outbox_row[0] == "TRANSFORMATION_REQUESTED"
 
     outbox_payload = outbox_row[1]
     if isinstance(outbox_payload, str):

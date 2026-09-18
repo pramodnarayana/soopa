@@ -5,16 +5,13 @@ from typing import Any
 import pytest
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
     DispatchInboundTransformUseCase,
 )
 from edi.config.settings import get_settings
-from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import PipelineEventType
-from pytest_httpserver import HTTPServer
 from seedwork import generate_random_hex
 from sqlalchemy import text
 
@@ -44,7 +41,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
         await test_session.execute(
             text("""
                 INSERT INTO edi_messages
-                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_resend)
+                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_replay)
                 VALUES (:id, :id, :tenant_id, 'partner', 'soopa', 'INBOUND', 'X12', '850', 'RECEIVED', 'test_data', false)
             """),
             {"id": trace_id, "tenant_id": tenant_id},
@@ -71,7 +68,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
             await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction="INBOUND",
         factory=run_inbound,
     )
@@ -85,7 +82,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     sqs_body = {
         "tenant_id": tenant_id,
         "idempotency_key": "some_key",
-        "event_type": PipelineEventType.TRANSFORM_EVENT.value,
+        "event_type": PipelineEventType.TRANSFORMATION_REQUESTED.value,
         "payload": {"trace_id": trace_id, "direction": "INBOUND"},
     }
 
@@ -105,7 +102,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     )
 
     outbox_event = outbox_events[0]
-    assert outbox_event["event_type"] == PipelineEventType.COMPUTE_TRANSFORM_EVENT.value
+    assert outbox_event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value
     payload = outbox_event["payload"]
     assert payload["direction"] == "INBOUND"
     assert payload["standard"] == "X12"
@@ -115,9 +112,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
 
 @pytest.mark.asyncio
 @pytest.mark.integration
-async def test_inbound_webhook_dispatch_transition(
-    db_router: TransactionalTestRouter, httpserver: HTTPServer
-) -> None:
+async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestRouter) -> None:
     # 1. Setup DB Data
     tenant_id = f"ten_orch_web_{generate_random_hex(6)}"
     trace_id = f"trace_web_{generate_random_hex(6)}"
@@ -136,12 +131,12 @@ async def test_inbound_webhook_dispatch_transition(
         await test_session.execute(
             text("""
                 INSERT INTO edi_messages
-                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_resend)
+                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_replay)
                 VALUES (:id, :id, :tenant_id, 'sender1', 'receiver1', 'INBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', false)
             """),
             {"id": trace_id, "tenant_id": tenant_id},
         )
-        webhook_target_url = httpserver.url_for("/webhook")
+        webhook_target_url = "https://example.com/webhook"
         # Insert API Payload (used by webhook strategy)
         await test_session.execute(
             text("""
@@ -167,20 +162,14 @@ async def test_inbound_webhook_dispatch_transition(
         await test_session.execute(
             text("""
                 INSERT INTO inbound_routes
-                (id, tenant_id, name, isa_sender_id, isa_receiver_id, transaction_type, processing_mode, active, webhook_id, created_at, updated_at)
-                VALUES (:id, :tenant_id, 'Test Route', 'sender1', 'receiver1', '850', 'TRANSFORM', true, :webhook_id, NOW(), NOW())
+                (id, tenant_id, name, isa_sender_id, isa_receiver_id, transaction_type, processing_mode, active, webhook_id, connection_type, created_at, updated_at)
+                VALUES (:id, :tenant_id, 'Test Route', 'sender1', 'receiver1', '850', 'TRANSFORM', true, :webhook_id, 'Webhook', NOW(), NOW())
             """),
             {"id": route_id, "tenant_id": tenant_id, "webhook_id": webhook_id},
         )
         await test_session.commit()
 
-    # 2. Setup Delivery Router Use Case inside Orchestrator
-    # Serve a local endpoint on a real socket to capture the webhook
-    httpserver.expect_request("/webhook", method="POST").respond_with_json({"status": "ok"})
-
     registry = EdiDataPlaneRouteRegistry()
-    # Use real HTTPX client instead of AsyncFake
-    real_http_delivery = HttpxDeliveryClient(allow_private_ips=True)
 
     @contextlib.asynccontextmanager
     async def uow_factory():
@@ -205,14 +194,11 @@ async def test_inbound_webhook_dispatch_transition(
 
                 return mock_manager()
 
-            strategies = {
-                "webhook_id": WebhookDeliveryStrategy(mock_uow_factory, real_http_delivery)
-            }
-            await DeliveryRouterUseCase(mock_uow_factory, strategies).deliver(e.trace_id)
+            await DeliveryRouterUseCase(mock_uow_factory).deliver(e.trace_id)
             await uow.commit()
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+        event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
         direction="INBOUND",
         factory=run_delivery,
     )
@@ -221,11 +207,11 @@ async def test_inbound_webhook_dispatch_transition(
         callback=lambda event: registry.route(event, uow_factory)
     )
 
-    # 3. Simulate SQS payload for TRANSFORM_COMPLETED
+    # 3. Simulate SQS payload for TRANSFORMATION_COMPLETED
     sqs_body = {
         "tenant_id": tenant_id,
         "idempotency_key": "some_key_123",
-        "event_type": PipelineEventType.TRANSFORM_COMPLETED.value,
+        "event_type": PipelineEventType.TRANSFORMATION_COMPLETED.value,
         "payload": {"trace_id": trace_id, "direction": "INBOUND"},
     }
 
@@ -239,23 +225,12 @@ async def test_inbound_webhook_dispatch_transition(
         )
         outbox_events = result.mappings().all()
 
-    # WebhookDeliveryStrategy produces a DELIVERY_COMPLETED_EVENT
-    delivery_events = [
-        e for e in outbox_events if e["event_type"] == PipelineEventType.DELIVERY_COMPLETED.value
+    delivery_commands = [
+        e
+        for e in outbox_events
+        if e["event_type"] == PipelineEventType.EXECUTE_DELIVERY_COMMAND.value
     ]
-    assert len(delivery_events) == 1, "Expected DELIVERY_COMPLETED"
-
-    # Verify Http request was made successfully against our local HTTPServer
-    httpserver.check_assertions()
-    # Assuming only one request was made to /webhook
-    assert len(httpserver.log) == 1
-    req, _ = httpserver.log[0]
-    assert req.method == "POST"
-
-    # Verify API Gateway Status updated
-    async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
-        result = await test_session.execute(
-            text("SELECT status FROM api_gateway WHERE trace_id = :id"), {"id": trace_id}
-        )
-        status = result.scalar_one()
-        assert status == "DELIVERED"
+    assert len(delivery_commands) == 1, "Expected EXECUTE_DELIVERY_COMMAND"
+    payload = delivery_commands[0]["payload"]
+    assert payload["strategy_type"] == "webhook_id"
+    assert payload["partner_id"] == webhook_id

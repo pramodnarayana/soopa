@@ -146,11 +146,16 @@ def provision_fargate_service(
                     "Format": "json",
                     "tls": "on",
                 },
-                "secretOptions": [
+            }
+            if obs_user_arn and obs_pass_arn:
+                main_log_config["secretOptions"] = [
                     {"name": "HTTP_User", "valueFrom": obs_user_arn},
                     {"name": "HTTP_Passwd", "valueFrom": obs_pass_arn},
-                ],
-            }
+                ]
+            elif obs_user_arn or obs_pass_arn:
+                raise ValueError(
+                    "Both obs_user_secret_arn and obs_password_secret_arn must be provided together."
+                )
 
         containers = [
             {

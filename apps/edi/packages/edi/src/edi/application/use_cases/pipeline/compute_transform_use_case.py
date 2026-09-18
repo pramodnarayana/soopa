@@ -49,7 +49,7 @@ class ComputeTransformUseCase:
         self.uow_factory = uow_factory
 
     async def execute(self, command: ComputeTransformCommand) -> None:
-        """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORM_COMPLETED."""
+        """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORMATION_COMPLETED."""
         trace_id = command.trace_id.strip()
         standard = command.standard
         transaction_type = command.transaction_type
@@ -203,7 +203,7 @@ class ComputeTransformUseCase:
             )
             logger.info("compute_transform.api_payload_saved", trace_id=trace_id)
 
-            # 4. Record TRANSFORM_COMPLETED on the aggregate — repository drains to outbox.
+            # 4. Record TRANSFORMATION_COMPLETED on the aggregate — repository drains to outbox.
             edi_msg.add_domain_event(
                 TransformCompleted(
                     trace_id=trace_id,
@@ -220,7 +220,7 @@ class ComputeTransformUseCase:
             logger.info(
                 "compute_transform.outbox_event_dispatched",
                 trace_id=trace_id,
-                event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+                event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
             )
 
             await uow.commit()

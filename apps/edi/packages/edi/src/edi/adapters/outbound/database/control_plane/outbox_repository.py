@@ -201,7 +201,7 @@ class SqlAlchemyDataPlaneOutboxRepository(
 ):
     """
     Outbox repository for the Data Plane (Tenant Shard).
-    Writes pipeline events (TRANSFORM_EVENT, DELIVER_EVENT, etc.) consumed
+    Writes pipeline events (TRANSFORMATION_REQUESTED, DELIVERY_REQUESTED, etc.) consumed
     by the CDC Sweeper, which is configurable through the Scheduler UI.
     """
 

@@ -101,7 +101,7 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.TRANSFORM_COMPLETED
+    assert event["event_type"] == PipelineEventType.TRANSFORMATION_COMPLETED
     assert event["payload"]["trace_id"] == trace_id
     assert event["payload"]["trading_partner_id"] == "tp1"
 
@@ -187,7 +187,7 @@ async def test_outbound_transform_heavy_compute_offload() -> None:
     # But it should append to outbox
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORM_EVENT
+    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND
     assert event["payload"]["trace_id"] == trace_id
 
 

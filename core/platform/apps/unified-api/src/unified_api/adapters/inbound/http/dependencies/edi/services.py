@@ -49,7 +49,7 @@ def get_as2_receiver_service(
 ) -> ProcessInboundAS2MessageUseCase:
     control_plane_uow = cp_uow_factory(global_session=global_session)
     dp_factory = dp_factory_provider(
-        global_session=global_session, db_router=request.app.state.db_router
+        resolver=request.app.state.tenant_resolver, db_router=request.app.state.db_router
     )
     return cast(
         ProcessInboundAS2MessageUseCase,

@@ -123,9 +123,7 @@ class AppSettings(BaseSettings):
         description="Allow private IPs in AS2/HTTP delivery (for local docker testing)",
     )
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
-    )
+    database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
     s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
@@ -141,6 +139,9 @@ class AppSettings(BaseSettings):
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
         if self.env != "development":
+            if self.allow_private_ips:
+                raise ValueError("allow_private_ips must be False in non-development environments")
+
             if "://" not in self.public.base_url:
                 raise ValueError("base_url must include a scheme (e.g. https://)")
 

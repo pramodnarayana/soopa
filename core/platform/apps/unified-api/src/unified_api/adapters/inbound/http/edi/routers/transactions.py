@@ -1,5 +1,3 @@
-from typing import Any, Literal
-
 import structlog
 from edi.adapters.outbound.database.routing_resolver_repository import (
     SqlAlchemyRoutingResolverRepository,
@@ -56,13 +54,18 @@ class EdiTraceResponse(BaseModel):
     trading_partner_name: str | None = None
 
 
-class ReplayRequest(BaseModel):
-    tier: Literal["raw", "translation", "gateway"]
-
-
 class BulkReplayRequest(BaseModel):
-    trace_ids: list[str] = Field(min_length=1, max_length=100)
-    tier: Literal["raw", "translation", "gateway"]
+    trace_ids: list[str] = Field(..., max_length=100)
+
+
+class ReplayResponse(BaseModel):
+    status: str
+    trace_id: str
+
+
+class BulkReplayResponse(BaseModel):
+    status: str
+    processed_count: int
 
 
 # --- Endpoints ---
@@ -148,43 +151,73 @@ async def get_edi_trace(
             raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/{trace_id}/replay", status_code=202)
-async def replay_transaction(
+@router.post("/{trace_id}/retry-transform", status_code=202, response_model=ReplayResponse)
+async def retry_transform(
     trace_id: str,
-    request: ReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
-) -> dict[str, Any]:
-    """
-    Trigger an asynchronous replay of a transaction at the specified tier.
-    """
+) -> ReplayResponse:
+    actor = "USER"  # TODO: extract from token
     async with uow:
-        svc = ReplayTransactionUseCase(uow)
         try:
-            await svc.replay_transaction(tenant_id, trace_id, request.tier)
-        except TransactionNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            use_case = ReplayTransactionUseCase(uow)
+            await use_case.retry_transform(tenant_id, trace_id, actor)
+        except TransactionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+    return ReplayResponse(status="accepted", trace_id=trace_id)
 
-    return {"status": "accepted", "trace_id": trace_id}
+
+@router.post("/{trace_id}/retry-deliver", status_code=202, response_model=ReplayResponse)
+async def retry_deliver(
+    trace_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+) -> ReplayResponse:
+    actor = "USER"  # TODO: extract from token
+    async with uow:
+        try:
+            use_case = ReplayTransactionUseCase(uow)
+            await use_case.retry_deliver(tenant_id, trace_id, actor)
+        except TransactionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+    return ReplayResponse(status="accepted", trace_id=trace_id)
 
 
-@router.post("/bulk-replay", status_code=202)
-async def bulk_replay_transactions(
+@router.post("/bulk-retry-transform", status_code=202, response_model=BulkReplayResponse)
+async def bulk_retry_transform(
     request: BulkReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-) -> dict[str, Any]:
-    """
-    Trigger an asynchronous replay of multiple transactions at the specified tier.
-    """
+) -> BulkReplayResponse:
+    actor = "USER"
     async with uow:
-        svc = BulkReplayTransactionsUseCase(uow)
         try:
-            processed_count = await svc.bulk_replay_transactions(
-                tenant_id, request.trace_ids, request.tier, command_key=idempotency_key
+            use_case = BulkReplayTransactionsUseCase(uow)
+            processed = await use_case.bulk_retry_transform(
+                tenant_id, request.trace_ids, actor, command_key=idempotency_key
             )
-        except TransactionNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+        except TransactionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
 
-    return {"status": "accepted", "processed_count": processed_count}
+    return BulkReplayResponse(status="accepted", processed_count=processed)
+
+
+@router.post("/bulk-retry-deliver", status_code=202, response_model=BulkReplayResponse)
+async def bulk_retry_deliver(
+    request: BulkReplayRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+) -> BulkReplayResponse:
+    actor = "USER"
+    async with uow:
+        try:
+            use_case = BulkReplayTransactionsUseCase(uow)
+            processed = await use_case.bulk_retry_deliver(
+                tenant_id, request.trace_ids, actor, command_key=idempotency_key
+            )
+        except TransactionNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    return BulkReplayResponse(status="accepted", processed_count=processed)

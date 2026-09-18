@@ -202,7 +202,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signature_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
     encryption_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    is_resend: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_replay: Mapped[bool] = mapped_column(Boolean, default=False)
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     msg_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -246,6 +246,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     business_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    is_replay: Mapped[bool] = mapped_column(Boolean, default=False)
 
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default=MessageStatus.TRANSFORMED
@@ -258,6 +259,18 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
             name="chk_edi_json_data_or_uri",
         ),
     )
+
+
+class TraceEvent(TenantBase, TenantAwareMixin, TimestampMixin):
+    __tablename__ = "trace_events"
+
+    id: Mapped[str] = mapped_column(
+        String(128), primary_key=True, default=lambda: generate_id("trace_evt")
+    )
+    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    actor: Mapped[str] = mapped_column(String(128), nullable=False)
+    metadata_: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
 
 class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):

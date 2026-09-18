@@ -43,7 +43,7 @@ async def test_idempotency_repository_blocks_duplicates(tenant_db_session):
         def __init__(self):
             pass
 
-        async def resolve(self, tenant_id):
+        async def resolve_shard(self, tenant_id):
             return "fake_shard", "fake_dsn"
 
     repo = SqlAlchemyEdiIdempotencyRepository(FakeDbRouter(), FakeTenantResolver())
@@ -95,7 +95,7 @@ async def test_idempotency_repository_allows_missing_keys(tenant_db_session):
         def __init__(self):
             pass
 
-        async def resolve(self, tenant_id):
+        async def resolve_shard(self, tenant_id):
             return "fake_shard", "fake_dsn"
 
     repo = SqlAlchemyEdiIdempotencyRepository(FakeDbRouter(), FakeTenantResolver())

@@ -58,6 +58,7 @@ events_topic = aws.sns.Topic(
 )
 
 events_q, _ = provision_fifo_queue_pair(f"{_prefix}events", _TAGS)
+jobs_q, _ = provision_fifo_queue_pair(f"{_prefix}jobs", _TAGS)
 
 subscribe_queue(f"{_prefix}events-sub", events_topic, events_q)
 
@@ -103,3 +104,4 @@ identity_worker = provision_fargate_service(
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("identity_events_topic_arn", events_topic.arn)
+pulumi.export("identity_jobs_queue_url", jobs_q.url)

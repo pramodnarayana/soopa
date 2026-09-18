@@ -1,7 +1,7 @@
 import asyncio
 import json
 from collections.abc import Sequence
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
@@ -33,6 +33,7 @@ from edi.adapters.outbound.database.models.data_plane import (
     DataPlaneOutbox,
     EdiJson,
     EdiMessage,
+    TraceEvent,
 )
 from edi.adapters.outbound.database.payload_hydration import (
     hydrate_edi_data,
@@ -45,7 +46,11 @@ from edi.application.dtos.transactions import (
 from edi.domain.enums import MessageStatus
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.domain.models.transactions import (
+    EdiJsonDomainModel,
+    EdiMessageDomainModel,
+    TraceEventDomainModel,
+)
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.transaction_repository import (
     CreateApiGatewayCommand,
@@ -93,7 +98,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             msg_headers=json.dumps(command.msg_headers) if command.msg_headers else None,
             state=command.state,
             status_message=command.status_message,
-            is_resend=command.is_resend,
+            is_replay=command.is_replay,
             parent_trace_id=command.parent_trace_id,
         )
         self.session.add(msg)
@@ -125,11 +130,12 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         await self.session.execute(stmt)
 
     async def update_edi_json(self, command: UpdateEdiJsonCommand) -> None:
-        values: dict[str, str] = {
+        values: dict[str, Any] = {
             field: getattr(command, field)
             for field in (
                 "trading_partner_id",
                 "standard",
+                "is_replay",
             )
             if getattr(command, field) is not None
         }
@@ -247,6 +253,71 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         aggregate.clear_domain_events()
 
+    async def save_all(self, aggregates: Sequence[EdiMessageDomainModel]) -> None:
+        """
+        Drains domain events from multiple aggregates into the outbox table within
+        the same open transaction.
+        """
+        records = []
+        outbox_records = []
+
+        for aggregate in aggregates:
+            record_id = (
+                aggregate.id if aggregate.id else generate_id(DomainIdPrefix.EDI_MESSAGE.value)
+            )
+            records.append(
+                EdiMessage(
+                    id=record_id,
+                    trace_id=aggregate.trace_id,
+                    tenant_id=aggregate.tenant_id,
+                    direction=aggregate.direction.value if aggregate.direction else None,
+                    status=aggregate.status.value if aggregate.status else None,
+                    format_standard=aggregate.format_standard,
+                    transaction_type=aggregate.transaction_type,
+                    connection_type=aggregate.connection_type,
+                    sender_id=aggregate.sender_id,
+                    receiver_id=aggregate.receiver_id,
+                    gs_sender_id=aggregate.gs_sender_id,
+                    gs_receiver_id=aggregate.gs_receiver_id,
+                    edi_data=aggregate.edi_data,
+                    trading_partner_id=aggregate.trading_partner_id,
+                    storage_uri=aggregate.storage_uri,
+                )
+            )
+
+            for index, event in enumerate(aggregate.domain_events):
+                event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
+                idempotency_key = _event_idempotency_key(
+                    event.idempotency_key,
+                    index=index,
+                    event_count=len(aggregate.domain_events),
+                )
+                payload_dict = serialize_domain_event(event)
+                outbox_records.append(
+                    DataPlaneOutbox(
+                        id=event_id,
+                        tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
+                        idempotency_key=idempotency_key,
+                        event_type=event.event_name,
+                        payload=payload_dict,
+                        status=OutboxStatus.PENDING,
+                    )
+                )
+
+        for record in records:
+            await self.session.merge(record)
+
+        for outbox_record in outbox_records:
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(outbox_record)
+                    await self.flush()
+            except DuplicateEntityError:
+                pass  # Idempotent: already published, safe to skip.
+
+        for aggregate in aggregates:
+            aggregate.clear_domain_events()
+
     async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
         """
         Drains domain events from the EdiJson aggregate into the outbox table within
@@ -265,6 +336,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             standard=aggregate.standard,
             business_metadata=aggregate.business_metadata,
             payload=aggregate.payload,
+            parent_trace_id=aggregate.parent_trace_id,
+            is_replay=aggregate.is_replay,
         )
         try:
             async with self.session.begin_nested():
@@ -303,6 +376,35 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         aggregate.clear_domain_events()
 
+    async def save_trace_event(self, event: TraceEventDomainModel) -> None:
+
+        record = TraceEvent(
+            id=event.id,
+            tenant_id=event.tenant_id,
+            trace_id=event.trace_id,
+            event_type=event.event_type,
+            actor=event.actor,
+            metadata_=event.metadata,
+        )
+        self.session.add(record)
+        await self.flush()
+
+    async def save_all_trace_events(self, events: Sequence[TraceEventDomainModel]) -> None:
+
+        records = [
+            TraceEvent(
+                id=event.id,
+                tenant_id=event.tenant_id,
+                trace_id=event.trace_id,
+                event_type=event.event_type,
+                actor=event.actor,
+                metadata_=event.metadata,
+            )
+            for event in events
+        ]
+        self.session.add_all(records)
+        await self.flush()
+
     async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
         stmt = (
             select(EdiMessage)
@@ -317,6 +419,24 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         hydrated_payload = await hydrate_edi_data(self.storage, record.storage_uri, record.edi_data)
         return _map_edi_message_to_domain(record, hydrated_payload)
+
+    async def get_edi_messages_by_traces(
+        self, trace_ids: Sequence[str]
+    ) -> Sequence[EdiMessageDomainModel]:
+        if not trace_ids:
+            return []
+
+        stmt = select(EdiMessage).where(EdiMessage.trace_id.in_([str(tid) for tid in trace_ids]))
+        result = await self.session.execute(stmt)
+        records = result.scalars().all()
+
+        models = []
+        for record in records:
+            hydrated_payload = await hydrate_edi_data(
+                self.storage, record.storage_uri, record.edi_data
+            )
+            models.append(_map_edi_message_to_domain(record, hydrated_payload))
+        return models
 
     async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         stmt = (
@@ -344,6 +464,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             business_metadata=record.business_metadata,
             payload=payload,
             parent_trace_id=record.parent_trace_id,
+            is_replay=record.is_replay,
         )
 
     async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
@@ -377,6 +498,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             transaction_type=command.transaction_type,
             payload=command.payload,
             parent_trace_id=command.parent_trace_id,
+            is_replay=command.is_replay or False,
         )
         self.session.add(msg)
         await self.flush()
@@ -470,7 +592,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 msg_headers=json.loads(r.msg_headers) if r.msg_headers else None,
                 state=r.state,
                 status_message=r.status_message,
-                is_resend=r.is_resend,
+                is_replay=r.is_replay,
                 parent_trace_id=r.parent_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
@@ -680,7 +802,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 msg_headers=json.loads(r.msg_headers) if r.msg_headers else None,
                 state=r.state,
                 status_message=r.status_message,
-                is_resend=r.is_resend,
+                is_replay=r.is_replay,
                 parent_trace_id=r.parent_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,

@@ -1,10 +1,9 @@
 from seedwork import generate_id
-from seedwork.id_registry import SystemIdPrefix
 
-from edi.domain.events import TransactionReplayRequestedEvent
+from edi.domain.enums import TraceEventType
+from edi.domain.events import DeliverRequestedEvent, TransformRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiJsonDomainModel
+from edi.domain.models.transactions import TraceEventDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 
@@ -12,43 +11,83 @@ class ReplayTransactionUseCase:
     def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
 
-    async def replay_transaction(self, tenant_id: str, trace_id: str, tier: str) -> None:
+    async def retry_transform(self, tenant_id: str, trace_id: str, actor: str) -> None:
         """
-        Trigger an asynchronous replay of a transaction at the specified tier.
-        Publishes an outbox event.
+        Trigger a replay of the transform pipeline.
+        Updates state to indicate replay and emits a TRANSFORMATION_REQUESTED.
         """
-        # Validate existence
-        result = await self.uow.traces.get_edi_trace(tenant_id, trace_id)
-        if not result or not result.edi_message:
+        edi_message = await self.uow.transactions.get_edi_message(trace_id)
+        if not edi_message:
             raise TransactionNotFoundError(trace_id=trace_id)
 
-        replay_event = TransactionReplayRequestedEvent(
+        # Update state
+        edi_message.is_replay = True
+        # Emit Pipeline Event
+        transform_event = TransformRequestedEvent(
             trace_id=trace_id,
             tenant_id=tenant_id,
-            tier=tier,
-            idempotency_key=generate_id(SystemIdPrefix.IDEMPOTENCY),
+            trading_partner_id=edi_message.trading_partner_id,
+            sender_id=edi_message.sender_id,
+            receiver_id=edi_message.receiver_id,
+            direction=edi_message.direction,
+            edi_message_id=edi_message.id,
+            status=edi_message.status,
         )
+        edi_message.add_domain_event(transform_event)
 
-        # We assume the result is a EdiTraceDTO which doesn't have domain_events,
-        # so we need to instantiate a domain model just to act as the aggregate for outbox.
-        # But wait, replay is on EdiMessage or EdiJson.
-        # We can just fetch the EdiMessage and drain on it, since it's the aggregate root for transactions.
+        await self.uow.transactions.save(edi_message)
+
+        # Emit Audit Ledger Event
+        trace_event = TraceEventDomainModel(
+            id=generate_id("trace_evt"),
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            event_type=TraceEventType.REPLAY_TRANSFORM.value,
+            actor=actor,
+        )
+        await self.uow.transactions.save_trace_event(trace_event)
+
+        await self.uow.commit()
+
+    async def retry_deliver(self, tenant_id: str, trace_id: str, actor: str) -> None:
+        """
+        Trigger a replay of the delivery pipeline.
+        Updates state to indicate replay and emits a DELIVERY_REQUESTED.
+        """
+        # We need either an EdiMessage or EdiJson to attach the domain event
+        # Let's get the trace composite to figure out what we have
+        trace_dto = await self.uow.traces.get_edi_trace(tenant_id, trace_id)
+        if not trace_dto or not trace_dto.edi_message:
+            raise TransactionNotFoundError(trace_id=trace_id)
+
+        msg_dto = trace_dto.edi_message
+
         edi_message = await self.uow.transactions.get_edi_message(trace_id)
-        if edi_message:
-            edi_message.add_domain_event(replay_event)
-            await self.uow.transactions.save(edi_message)
-        else:
-            edi_json = EdiJsonDomainModel(
-                id="dummy",
-                tenant_id=tenant_id,
-                trace_id=trace_id,
-                direction=Direction.OUTBOUND,
-                transaction_type="",
-                status=RecordStatus.RECEIVED,
-                business_metadata={},
-                payload={},
-            )
-            edi_json.add_domain_event(replay_event)
-            await self.uow.transactions.save_json(edi_json)
+        if not edi_message:
+            raise TransactionNotFoundError(trace_id=trace_id)
+
+        # Update state
+        edi_message.is_replay = True
+        # Emit Pipeline Event
+        deliver_event = DeliverRequestedEvent(
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            trading_partner_id=msg_dto.trading_partner_id,
+            transaction_type=msg_dto.transaction_type,
+            direction=msg_dto.direction,
+        )
+        edi_message.add_domain_event(deliver_event)
+
+        await self.uow.transactions.save(edi_message)
+
+        # Emit Audit Ledger Event
+        trace_event = TraceEventDomainModel(
+            id=generate_id("trace_evt"),
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            event_type=TraceEventType.REPLAY_DELIVER.value,
+            actor=actor,
+        )
+        await self.uow.transactions.save_trace_event(trace_event)
 
         await self.uow.commit()
