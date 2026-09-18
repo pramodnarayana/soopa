@@ -1,4 +1,3 @@
-version: '3.9'
 # include:
 # - libs/identity/docker/docker-compose.yml
 services:

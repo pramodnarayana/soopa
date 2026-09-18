@@ -10,18 +10,28 @@ from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 logger = structlog.get_logger(__name__)
 
 
+import contextlib
+from collections.abc import Callable
+
+
 class BaseDeliveryStrategy:
     """Base class for delivery strategies."""
 
-    def __init__(self, uow: DataPlaneUnitOfWorkPort, vault: SecretStorePort | None = None) -> None:
-        self.uow = uow
+    def __init__(
+        self,
+        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
+        vault: SecretStorePort | None = None,
+    ) -> None:
+        self.uow_factory = uow_factory
         self.secret_store = vault
 
-    async def _emit_delivery_completed(self, trace_id: str, direction: str, status: str) -> None:
+    async def _emit_delivery_completed(
+        self, uow: DataPlaneUnitOfWorkPort, trace_id: str, direction: str, status: str
+    ) -> None:
         event_key = generate_deterministic_id(
             SystemIdPrefix.IDEMPOTENCY, trace_id, f"DELIVERY_COMPLETED:{status}"
         )
-        await self.uow.outbox.append_event(
+        await uow.outbox.append_event(
             idempotency_key=event_key,
             event_type=PipelineEventType.DELIVERY_COMPLETED,
             payload={

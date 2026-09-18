@@ -1,4 +1,4 @@
-name: Monolith CI
+name: Modular Monolith CI
 
 on:
   push:
@@ -79,8 +79,13 @@ jobs:
       - name: Test (Integration)
         run: CI=true pnpm test:integration
 
+      - name: Test Infrastructure (Pulumi Mocks)
+        run: |
+          cd infra/cloud/aws
+          uv run pytest tests/
+
       - name: Build Frontend/Node
         run: pnpm turbo build
 
-      - name: Build Monolith Docker Image
-        run: docker build -t soopa-monolith:latest .
+      - name: Build Modular Monolith Docker Image
+        run: docker build -t modular-monolith:latest .

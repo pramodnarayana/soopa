@@ -9,7 +9,10 @@ class PlatformDatabaseSettings(BaseSettings):
     Provides standard attributes consumed by DatabaseRouter.
     """
 
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(
+        extra="ignore",
+        env_nested_delimiter="__",
+    )
 
     global_url: str = Field(
         validation_alias="DATABASE_URL",
@@ -19,6 +22,7 @@ class PlatformDatabaseSettings(BaseSettings):
     )
     pool_size: int = Field(validation_alias="DB_POOL_SIZE", default=10)
     max_overflow: int = Field(validation_alias="DB_MAX_OVERFLOW", default=20)
+    shard_overrides: dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def force_asyncpg(self) -> "PlatformDatabaseSettings":

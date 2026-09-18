@@ -1,9 +1,9 @@
 import contextlib
-import os
 from collections.abc import AsyncGenerator
 
 import pytest
 from database.router import DatabaseRouter
+from seedwork.infrastructure.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 @pytest.fixture
 async def router() -> AsyncGenerator[DatabaseRouter, None]:
     # Setup
-    global_db_url = os.environ["DATABASE_URL"]
-    db_router = DatabaseRouter(global_db_url, pool_size=2, max_overflow=2)
+    db_settings = PlatformDatabaseSettings()
+    db_router = DatabaseRouter(
+        db_settings.global_url, pool_size=2, max_overflow=2, shard_overrides=db_settings.shard_overrides
+    )
     yield db_router
     # Teardown
     await db_router.close_all()

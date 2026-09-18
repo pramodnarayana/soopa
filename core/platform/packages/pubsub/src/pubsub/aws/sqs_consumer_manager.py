@@ -4,7 +4,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
+from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
+from pubsub.ports.consumer_error_handler_port import ConsumerErrorHandlerPort
 from pubsub.ports.idempotency_repository_port import IdempotencyRepositoryPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 
@@ -32,6 +34,7 @@ class SqsConsumerManager:
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
         idempotency_repo: IdempotencyRepositoryPort | None = None,
+        error_handler: ConsumerErrorHandlerPort | None = None,
     ):
         self.consumer = consumer
         self.handler = handler
@@ -40,6 +43,9 @@ class SqsConsumerManager:
         self.poll_sleep_seconds = poll_sleep_seconds
         self.error_sleep_seconds = error_sleep_seconds
         self.idempotency_repo = idempotency_repo
+
+        # Use injected strategy or fallback to default resilient strategy
+        self.error_handler = error_handler or DefaultConsumerErrorHandler(error_sleep_seconds)
 
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
@@ -120,10 +126,6 @@ class SqsConsumerManager:
                 raise
             except ConsumerTransientError:
                 logger.exception("sqs_consumer_manager_poll_error", queue=self.queue_name)
-                await asyncio.sleep(self.error_sleep_seconds)
-            except Exception:
-                logger.exception("sqs_consumer_manager_handler_error", queue=self.queue_name)
-                if ackable_msg:
-                    await ackable_msg.nack()
-                # Sleep briefly to prevent tight infinite loops on recurring fast failures
-                await asyncio.sleep(self.error_sleep_seconds)
+                await asyncio.sleep(self.poll_sleep_seconds * 5)
+            except Exception as e:  # noqa: BLE001
+                await self.error_handler.handle_error(e, ackable_msg, self.queue_name)

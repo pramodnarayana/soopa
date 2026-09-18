@@ -1,0 +1,19 @@
+{
+  "name": "@soopa/edi-dp-jobs-worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "test": "echo 'No tests implemented yet'",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
+    "test:integration": "uv run pytest tests/integration",
+    "cov": "uv run pytest --cov=src --cov-report=term-missing --cov-fail-under=80  --ignore=tests/e2e",
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m edi_dp_jobs_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/api": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/seedwork": "workspace:*"
+  }
+}

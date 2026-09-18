@@ -297,13 +297,6 @@ class InMemoryRepositoryAdapter:
         if trace_id in self.edi_messages:
             self.edi_messages[trace_id]["status"] = status
 
-    async def claim_edi_message(self, trace_id: str) -> bool:
-        msg = self.edi_messages.get(trace_id)
-        if msg and msg["status"] == MessageStatus.PENDING_DELIVERY:
-            msg["status"] = MessageStatus.PROCESSING
-            return True
-        return False
-
     async def publish_outbox_event(
         self, idempotency_key: str, event_type: str, payload: dict[str, JsonValue]
     ) -> None:
@@ -339,13 +332,6 @@ class InMemoryRepositoryAdapter:
                 self.api_gateway[trace_id]["http_status_code"] = http_status_code
             if response is not None:
                 self.api_gateway[trace_id]["response"] = response
-
-    async def claim_api_payload(self, trace_id: str) -> bool:
-        payload = self.api_gateway.get(trace_id)
-        if payload and payload["status"] == MessageStatus.PENDING_DELIVERY:
-            payload["status"] = MessageStatus.PROCESSING
-            return True
-        return False
 
     async def get_inbound_route(
         self,

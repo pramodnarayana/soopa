@@ -5,16 +5,20 @@ include:
 
 # Single image built once, reused by all runtime containers.
 # Follows the Shopify-style single-image deployment strategy.
-x-monolith-base: &monolith-base
+x-modular-monolith-base: &modular-monolith-base
   build:
     context: .
     dockerfile: Dockerfile
   image: platform:local
+  extra_hosts:
+    - "ucp.localhost:host-gateway"
+    - "host.docker.internal:host-gateway"
   env_file: .env
   environment:
     DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
     GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
     EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
+    SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
     AWS_ENDPOINT_URL: http://localstack:4566
     AWS_REGION: us-east-1
     SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/000000000000/edi-config-sync-queue.fifo
@@ -39,17 +43,45 @@ x-monolith-base: &monolith-base
 services:
 
   # -------------------------------------------------------------------------
+  # 0. One-Shot Seed Runner (invoked via: docker compose run --rm db-seed)
+  # Runs inside the Docker network so edi_postgres_shard resolves correctly.
+  # env_file provides all Zitadel/identity vars. environment overrides only
+  # the two URLs that differ from pnpm dev values in .env.
+  # -------------------------------------------------------------------------
+  db-seed:
+    image: platform:local
+    env_file: .env
+    extra_hosts:
+      - "ucp.localhost:host-gateway"
+    environment:
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
+      SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
+    command:
+      - sh
+      - -c
+      - >
+        python /app/core/ucp/packages/ucp/scripts/seed.py &&
+        python /app/apps/edi/scripts/seed_scheduler.py &&
+        python /app/apps/edi/apps/edi-as2-server/scripts/seed.py
+    restart: "no"
+    depends_on:
+      postgres_global:
+        condition: service_healthy
+      edi_postgres_shard:
+        condition: service_healthy
+
+  # -------------------------------------------------------------------------
   # 1. Ingress Tier (Synchronous Web Servers)
   # -------------------------------------------------------------------------
   unified-api:
-    <<: *monolith-base
-    command: ["uvicorn", "unified_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    <<: *modular-monolith-base
+    command: [ "uvicorn", "unified_api.main:app", "--host", "0.0.0.0", "--port", "8000" ]
     ports:
-      - "8000:8000"
+      - "3000:8000"
 
   edi-as2-server:
-    <<: *monolith-base
-    command: ["uvicorn", "as2_server.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    <<: *modular-monolith-base
+    command: [ "uvicorn", "as2_server.main:app", "--host", "0.0.0.0", "--port", "8001" ]
     ports:
       - "8001:8001"
 
@@ -57,79 +89,59 @@ services:
   # 2. Worker Tier (Asynchronous Event Processing)
   # -------------------------------------------------------------------------
   edi-orchestrator:
-    <<: *monolith-base
-    command: ["python", "-m", "worker.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "worker.main" ]
 
   edi-compute-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "compute_worker.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "compute_worker.main" ]
 
   edi-config-sync-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "config_sync_worker.provision.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "config_sync_worker.provision.main" ]
 
-  edi-cp-outbox-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "edi_cp_outbox_worker.main"]
+  edi-cp-jobs-worker:
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "edi_cp_jobs_worker.main" ]
 
-  edi-dp-outbox-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "edi_dp_outbox_worker.main"]
-
-  edi-cp-cleanup:
-    <<: *monolith-base
-    command: ["python", "-m", "edi_cp_cleanup.main"]
+  edi-dp-jobs-worker:
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "edi_dp_jobs_worker.main" ]
 
   ucp-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "ucp_worker.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "ucp_worker.main" ]
 
-  ucp-outbox-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "ucp_outbox_worker.main"]
-
-  ucp-cleanup:
-    <<: *monolith-base
-    command: ["python", "-m", "ucp_cleanup.main"]
+  ucp-jobs-worker:
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "ucp_jobs_worker.main" ]
 
   identity-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "identity_worker.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "identity_worker.main" ]
 
-  identity-outbox-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "identity_outbox_worker.main"]
-
-  identity-cleanup:
-    <<: *monolith-base
-    command: ["python", "-m", "identity_cleanup.main"]
+  identity-jobs-worker:
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "identity_jobs_worker.main" ]
 
   # -------------------------------------------------------------------------
   # 3. Replication & Reliability Tier (Background Daemons)
   # -------------------------------------------------------------------------
   notification-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "notification_worker.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "notification_worker.main" ]
 
-  notification-outbox-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "notification_outbox_worker.main"]
+  notification-jobs-worker:
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "notification_jobs_worker.main" ]
 
   notification-email-worker:
-    <<: *monolith-base
-    command: ["python", "-m", "notification_email_worker.main"]
-
-  notification-cleanup:
-    <<: *monolith-base
-    command: ["python", "-m", "notification_cleanup.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "notification_email_worker.main" ]
 
   # -------------------------------------------------------------------------
   # 4. Scheduler Tier (Cron)
   # -------------------------------------------------------------------------
   scheduler-engine:
-    <<: *monolith-base
-    command: ["python", "-m", "scheduler_engine.main"]
-
-  edi-dp-cleanup:
-    <<: *monolith-base
-    command: ["python", "-m", "edi_dp_cleanup.main"]
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "scheduler_worker.main" ]

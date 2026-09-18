@@ -1,0 +1,6 @@
+name: foundation
+runtime:
+  name: python
+  options:
+    virtualenv: ../.venv
+description: Layer 1 Foundation Infrastructure (VPC, Subnets, Security Groups) for the Platform.

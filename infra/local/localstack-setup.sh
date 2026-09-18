@@ -107,10 +107,6 @@ awslocal sns subscribe \
     --notification-endpoint "$EDI_CONFIG_ARN" \
     --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"webhook.\"}]}", "RawMessageDelivery": "true"}'
 
-awslocal sns subscribe \
-    --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
-    --protocol sqs \
-    --notification-endpoint "$EDI_CONFIG_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"anything-but\": [\"TRANSFORM_EVENT\", \"COMPUTE_TRANSFORM_EVENT\", \"TRANSFORM_COMPLETED\", \"DELIVERY_COMPLETED\", \"DELIVER_EVENT\", \"notification.triggered\"]}]}", "RawMessageDelivery": "true"}'
+
 
 echo "LocalStack SQS queues and SNS topics created successfully."

@@ -1,0 +1,6 @@
+name: identity
+runtime:
+  name: python
+  options:
+    virtualenv: ../../.venv
+description: Application Layer (Layer 3) - Identity Bounded Context infrastructure.

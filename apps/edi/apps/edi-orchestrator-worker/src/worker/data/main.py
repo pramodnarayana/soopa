@@ -68,13 +68,13 @@ def _setup_registry(
     as2_delivery: AS2DeliveryPort,
     vault: SecretStorePort,
 ) -> EdiDataPlaneEventDispatcher:
-    def router_factory(uow: DataPlaneUnitOfWorkPort) -> DeliveryRouterUseCase:
+    def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
         strategies = {
-            "webhook_id": WebhookDeliveryStrategy(uow, http_delivery, vault),
-            "sftp_partner_id": SftpDeliveryStrategy(uow, sftp_delivery, vault, db_encryption),
-            "as2_partner_id": As2DeliveryStrategy(uow, as2_delivery, vault),
+            "webhook_id": WebhookDeliveryStrategy(uow_fact, http_delivery, vault),
+            "sftp_partner_id": SftpDeliveryStrategy(uow_fact, sftp_delivery, vault, db_encryption),
+            "as2_partner_id": As2DeliveryStrategy(uow_fact, as2_delivery, vault),
         }
-        return DeliveryRouterUseCase(uow=uow, strategies=strategies)
+        return DeliveryRouterUseCase(uow_factory=uow_fact, strategies=strategies)
 
     registry = EdiDataPlaneRouteRegistry()
 
@@ -99,9 +99,9 @@ def _setup_registry(
             await PipelineLifecycleUseCase(uow).handle_delivery_completed(e.payload)
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        await DeliveryUseCase(uow_factory=uow_fact, router_factory=router_factory).execute(
-            trace_id=e.trace_id, idempotency_key=e.idempotency_key
-        )
+        await DeliveryUseCase(
+            uow_factory=uow_fact, router_factory=lambda: router_factory(uow_fact)
+        ).execute(trace_id=e.trace_id, idempotency_key=e.idempotency_key)
 
     registry.register(
         event_type=PipelineEventType.TRANSFORM_EVENT.value,
@@ -141,7 +141,10 @@ async def main() -> None:
     aws_endpoint = settings.aws.endpoint_url
     s3_bucket = "soopaedi-dev"
 
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+    db_router = DatabaseRouter(
+        global_db_url=settings.database.global_url,
+        shard_overrides=settings.database.shard_overrides,
+    )
     resolver = TenantResolver(db_router)
     idempotency_repo = SqlAlchemyEdiIdempotencyRepository(db_router, resolver)
 
@@ -158,10 +161,9 @@ async def main() -> None:
 
     http_delivery = HttpxDeliveryClient(validator=validate_target_url)
     sftp_delivery = ParamikoSftpClient()
-    allow_private_ips = settings.env == "development"
     as2_delivery = HttpxAS2DeliveryClient(
-        validator=partial(validate_target_url, allow_private_ips=allow_private_ips),
-        allow_private_ips=allow_private_ips,
+        validator=partial(validate_target_url, allow_private_ips=settings.allow_private_ips),
+        allow_private_ips=settings.allow_private_ips,
     )
 
     consumer = _setup_registry(

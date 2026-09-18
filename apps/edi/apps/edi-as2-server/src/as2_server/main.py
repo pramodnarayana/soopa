@@ -48,7 +48,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     # Initialize the global DatabaseRouter and mount it to app state
     db_router = DatabaseRouter(
-        settings.database.global_url,
+        global_db_url=settings.database.global_url,
+        shard_overrides=settings.database.shard_overrides,
         pool_size=settings.database.pool_size,
         max_overflow=settings.database.max_overflow,
     )

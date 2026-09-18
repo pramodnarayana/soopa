@@ -20,6 +20,8 @@ class SqsSettings(BaseSettings):
     notification_jobs_queue_url: str = Field(
         validation_alias="SQS_NOTIFICATION_JOBS_QUEUE_URL", default=""
     )
+    identity_jobs_queue_url: str = Field(validation_alias="SQS_IDENTITY_JOBS_QUEUE_URL", default="")
+    ucp_jobs_queue_url: str = Field(validation_alias="SQS_UCP_JOBS_QUEUE_URL", default="")
 
 
 class AppSettings(BaseSettings):
@@ -60,6 +62,16 @@ class AppSettings(BaseSettings):
     @property
     def sqs_notification_jobs_queue_url(self) -> str:
         return self.sqs.notification_jobs_queue_url
+
+    @computed_field
+    @property
+    def sqs_identity_jobs_queue_url(self) -> str:
+        return self.sqs.identity_jobs_queue_url
+
+    @computed_field
+    @property
+    def sqs_ucp_jobs_queue_url(self) -> str:
+        return self.sqs.ucp_jobs_queue_url
 
     @computed_field
     @property

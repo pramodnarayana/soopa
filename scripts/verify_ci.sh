@@ -47,4 +47,7 @@ pnpm cov:python
 echo "✅ Running Integration Tests..."
 pnpm test:integration
 
+echo "✅ Test Infrastructure (Pulumi Mocks)..."
+cd infra/cloud/aws && uv run pytest tests/ && cd ../../../
+
 echo "🎉 All CI checks passed perfectly!"

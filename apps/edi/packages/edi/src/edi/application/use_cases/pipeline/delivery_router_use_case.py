@@ -1,4 +1,5 @@
-from collections.abc import Mapping
+import contextlib
+from collections.abc import Callable, Mapping
 
 import structlog
 
@@ -19,10 +20,10 @@ class DeliveryRouterUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWorkPort,
+        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         strategies: Mapping[str, BaseDeliveryStrategy],
     ) -> None:
-        self.uow = uow
+        self.uow_factory = uow_factory
         self.strategies = strategies
 
     async def deliver(self, trace_id: str, idempotency_key: str | None = None) -> None:
@@ -32,25 +33,31 @@ class DeliveryRouterUseCase:
         """
         logger.info("Starting delivery pipeline for trace_id={trace_id}", trace_id=trace_id)
 
-        edi_msg = await self.uow.transactions.get_edi_message(trace_id)
-        if not edi_msg:
-            raise ValueError(f"No EDI Message found for trace_id={trace_id}")
+        async with self.uow_factory() as uow, uow:
+            edi_msg = await uow.transactions.get_edi_message(trace_id)
+            if not edi_msg:
+                raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
-        route = await self._resolve_route(edi_msg)
+            route = await self._resolve_route(edi_msg, uow)
+
         await self._dispatch_to_strategy(trace_id, route, edi_msg, idempotency_key)
 
-    async def _resolve_route(self, edi_msg) -> OutboundRouteDomainModel | InboundRouteDomainModel:
+    async def _resolve_route(
+        self, edi_msg, uow: DataPlaneUnitOfWorkPort
+    ) -> OutboundRouteDomainModel | InboundRouteDomainModel:
         if edi_msg.direction == EdiDirection.OUTBOUND:
-            return await self._get_outbound_route(edi_msg)
-        return await self._get_inbound_route(edi_msg)
+            return await self._get_outbound_route(edi_msg, uow)
+        return await self._get_inbound_route(edi_msg, uow)
 
-    async def _get_outbound_route(self, edi_msg) -> OutboundRouteDomainModel:
+    async def _get_outbound_route(
+        self, edi_msg, uow: DataPlaneUnitOfWorkPort
+    ) -> OutboundRouteDomainModel:
         if not edi_msg.trading_partner_id:
             raise ValueError(
                 f"EDI Message {edi_msg.trace_id} is missing trading_partner_id for OUTBOUND routing."
             )
 
-        route = await self.uow.outbound_routes.get_outbound_route_by_trading_partner_id(
+        route = await uow.outbound_routes.get_outbound_route_by_trading_partner_id(
             trading_partner_id=edi_msg.trading_partner_id,
             tenant_id=edi_msg.tenant_id,
         )
@@ -64,7 +71,9 @@ class DeliveryRouterUseCase:
             )
         return route
 
-    async def _get_inbound_route(self, edi_msg) -> InboundRouteDomainModel:
+    async def _get_inbound_route(
+        self, edi_msg, uow: DataPlaneUnitOfWorkPort
+    ) -> InboundRouteDomainModel:
         sender_id = edi_msg.sender_id
         receiver_id = edi_msg.receiver_id
         transaction_type = edi_msg.transaction_type or "*"
@@ -80,7 +89,7 @@ class DeliveryRouterUseCase:
             transaction_type=transaction_type,
         )
 
-        route = await self.uow.inbound_routes.get_inbound_route(
+        route = await uow.inbound_routes.get_inbound_route(
             isa_sender_id=str(sender_id),
             isa_receiver_id=str(receiver_id),
             tenant_id=edi_msg.tenant_id or "1",

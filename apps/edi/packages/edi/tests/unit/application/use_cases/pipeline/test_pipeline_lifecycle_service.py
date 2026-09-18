@@ -31,7 +31,7 @@ async def test_handle_transform_completed_inbound() -> None:
     # Seed data
     uow.repository.edi_messages[trace_id] = {
         "trace_id": trace_id,
-        "status": MessageStatus.PROCESSING,
+        "status": MessageStatus.PENDING_DELIVERY,
     }
 
     payload = {
@@ -66,7 +66,7 @@ async def test_handle_transform_completed_outbound() -> None:
     # Seed data
     uow.repository.edi_json[trace_id] = {
         "trace_id": trace_id,
-        "status": MessageStatus.PROCESSING,
+        "status": MessageStatus.PENDING_DELIVERY,
     }
 
     payload = {

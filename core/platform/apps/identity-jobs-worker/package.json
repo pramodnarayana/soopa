@@ -1,0 +1,17 @@
+{
+  "name": "@soopa/identity-jobs-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Worker service for handling Identity outbox relay and sweeping",
+  "scripts": {
+    "start": "PYTHONUNBUFFERED=1 uv run python -m identity_jobs_worker.main",
+    "dev": "PYTHONUNBUFFERED=1 uv run python -m identity_jobs_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/identity": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/database": "workspace:*",
+    "@soopa/observability": "workspace:*"
+  }
+}

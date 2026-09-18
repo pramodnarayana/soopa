@@ -40,7 +40,10 @@ async def main() -> None:
     aws_endpoint = settings.aws.endpoint_url
     s3_bucket = settings.s3.bucket
 
-    db_router = DatabaseRouter(global_db_url=settings.database.global_url)
+    db_router = DatabaseRouter(
+        global_db_url=settings.database.global_url,
+        shard_overrides=settings.database.shard_overrides,
+    )
 
     @contextlib.asynccontextmanager
     async def global_uow_factory() -> AsyncGenerator[ControlPlaneUnitOfWorkPort, None]:

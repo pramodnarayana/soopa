@@ -12,7 +12,7 @@ from edi.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
+async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) -> list[str]:
     """
     Connect to the global DB and fetch all registered shard URLs.
     If none exist (e.g., initial bootstrap), fallback to defaults.
@@ -22,8 +22,12 @@ async def fetch_tenant_shard_urls(global_url: str) -> list[str]:
     try:
         async with engine.connect() as conn:
             # We don't use ORM here to keep migration runner simple and resilient
-            result = await conn.execute(text("SELECT dsn FROM ucp.database_shards"))
-            urls = [row[0] for row in result.fetchall()]
+            result = await conn.execute(text("SELECT id, dsn FROM ucp.database_shards"))
+            for row in result.fetchall():
+                shard_id, dsn = row
+                if shard_id in overrides:
+                    dsn = overrides[shard_id]
+                urls.append(dsn)
     except Exception as e:
         # Check for SQLSTATE codes indicating missing database objects:
         # 42P01 = undefined_table, 3F000 = invalid_schema_name
@@ -65,7 +69,9 @@ def run_migrations():
 
     # 2. Fetch Shards dynamically
     logger.info("--- Fetching Tenant Shards ---")
-    shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.database.global_url))
+    shard_urls = asyncio.run(
+        fetch_tenant_shard_urls(settings.database.global_url, settings.database.shard_overrides)
+    )
     logger.info("Found {len(shard_urls)} shard(s) to migrate", val_0=len(shard_urls))
 
     # 3. Run Tenant Migrations per shard

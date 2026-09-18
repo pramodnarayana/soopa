@@ -1,0 +1,6 @@
+name: platform
+runtime:
+  name: python
+  options:
+    virtualenv: ../.venv
+description: Layer 2 Shared Platform Infrastructure (ECS Cluster, Global RDS, ECR, Zitadel).

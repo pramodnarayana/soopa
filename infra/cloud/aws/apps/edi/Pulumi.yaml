@@ -1,0 +1,6 @@
+name: edi
+runtime:
+  name: python
+  options:
+    virtualenv: ../../.venv
+description: Application Layer (Layer 3) - EDI Bounded Context infrastructure (SQS, S3, Workers).

@@ -1,0 +1,6 @@
+name: scheduler
+runtime:
+  name: python
+  options:
+    virtualenv: ../../.venv
+description: Application Layer (Layer 3) - Scheduler Bounded Context infrastructure.
