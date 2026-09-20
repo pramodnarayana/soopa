@@ -49,18 +49,25 @@ firelens_endpoint = (
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
 # ── Messaging ─────────────────────────────────────────────────────────────────
-events_topic = aws.sns.Topic(
-    f"{_prefix}events",
-    name=f"{_prefix}events.fifo",
-    fifo_topic=True,
-    content_based_deduplication=True,
-    tags=_TAGS,
-)
+sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
 
 events_q, _ = provision_fifo_queue_pair(f"{_prefix}events", _TAGS)
 jobs_q, _ = provision_fifo_queue_pair(f"{_prefix}jobs", _TAGS)
 
-subscribe_queue(f"{_prefix}events-sub", events_topic, events_q)
+subscribe_queue(
+    f"{_prefix}events-sub",
+    sns_platform_events_topic_arn,
+    events_q,
+    filter_policy=json.dumps(
+        {
+            "event_type": [
+                {"prefix": "tenant."},
+                {"prefix": "app."},
+                {"prefix": "user."},
+            ]
+        }
+    ),
+)
 
 # ── Compute ───────────────────────────────────────────────────────────────────
 _region = aws.get_region()
@@ -103,5 +110,5 @@ identity_worker = provision_fargate_service(
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────
-pulumi.export("identity_events_topic_arn", events_topic.arn)
+pulumi.export("identity_events_topic_arn", sns_platform_events_topic_arn)
 pulumi.export("identity_jobs_queue_url", jobs_q.url)

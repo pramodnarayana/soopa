@@ -32,8 +32,9 @@ class BulkReplayTransactionsUseCase:
         Persistence is driven exclusively through save_all() — no dual-writes.
         The original records are NEVER mutated.
         """
-        originals = await self.uow.transactions.get_edi_messages_by_traces(trace_ids)
-        if len(originals) != len(trace_ids):
+        unique_trace_ids = list(dict.fromkeys(trace_ids))
+        originals = await self.uow.transactions.get_edi_messages_by_traces(unique_trace_ids)
+        if len(originals) != len(unique_trace_ids):
             raise TransactionNotFoundError(trace_id="Multiple")
 
         logger.info(
@@ -127,8 +128,9 @@ class BulkReplayTransactionsUseCase:
         Persistence is driven exclusively through save_all() — no dual-writes.
         The original records are NEVER mutated.
         """
-        originals = await self.uow.transactions.get_edi_messages_by_traces(trace_ids)
-        if len(originals) != len(trace_ids):
+        unique_trace_ids = list(dict.fromkeys(trace_ids))
+        originals = await self.uow.transactions.get_edi_messages_by_traces(unique_trace_ids)
+        if len(originals) != len(unique_trace_ids):
             raise TransactionNotFoundError(trace_id="Multiple")
 
         logger.info(

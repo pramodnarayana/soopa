@@ -12,7 +12,7 @@ from seedwork.infrastructure.config_models import (
 
 class IdentityAwsSettings(PlatformAwsSettings):
     sns_identity_events_topic_arn: str = Field(
-        validation_alias="SNS_IDENTITY_EVENTS_TOPIC_ARN", default=""
+        validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default=""
     )
 
 

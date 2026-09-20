@@ -115,7 +115,9 @@ class TransactionRepositoryPort(Protocol):
     Port for the Data Plane transaction repository, handling Operational Data.
     """
 
-    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+    async def get_edi_message(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> EdiMessageDomainModel | None:
         """
         Fetches an EDI Message by trace_id and maps it to the domain model.
         """

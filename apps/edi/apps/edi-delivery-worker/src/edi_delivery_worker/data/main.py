@@ -31,6 +31,7 @@ from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import PipelineEventType
+from edi.domain.exceptions import InvalidMessageError
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
@@ -72,7 +73,17 @@ def _setup_registry(
         return ExecuteDeliveryUseCase(uow_factory=uow_fact, strategies=strategies)
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        command = ExecuteDeliveryCommand(**e.payload)
+        try:
+            command = ExecuteDeliveryCommand(
+                trace_id=e.payload["trace_id"],
+                tenant_id=e.payload["tenant_id"],
+                partner_id=e.payload["partner_id"],
+                strategy_type=e.payload["strategy_type"],
+            )
+        except KeyError as exc:
+            raise InvalidMessageError(
+                f"EXECUTE_DELIVERY_COMMAND payload is missing required field: {exc}"
+            ) from exc
         await use_case_factory(uow_fact).execute(command=command, idempotency_key=e.idempotency_key)
 
     # Note: EXECUTE_DELIVERY_COMMAND is the only event this worker listens to
@@ -92,7 +103,7 @@ def _setup_registry(
 async def main() -> None:
     settings = get_settings()
     aws_endpoint = settings.aws.endpoint_url
-    s3_bucket = "soopaedi-dev"
+    s3_bucket = settings.s3.bucket
 
     db_router = DatabaseRouter(
         global_db_url=settings.database.global_url,

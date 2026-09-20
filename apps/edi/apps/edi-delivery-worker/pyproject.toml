@@ -1,14 +1,17 @@
 [project]
 name = "edi_delivery_worker"
 version = "0.1.0"
-description = "Worker service for handling provisioning and data orchestration"
+description = "Dedicated SQS delivery worker that executes final-mile EDI delivery commands"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database", "seedwork", "secret-store"]
+dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database", "observability", "seedwork", "secret-store"]
 
 [tool.uv.sources]
 ucp_models = { workspace = true }
 edi = { workspace = true }
+identity = { workspace = true }
+database = { workspace = true }
+observability = { workspace = true }
 seedwork = { workspace = true }
 secret-store = { workspace = true }
 

@@ -8,7 +8,7 @@ interface ViewerProps {
 }
 
 export function EdiHumanReadableViewer({ data, validationErrors }: ViewerProps) {
-  const { dictionary, loading } = useEdiDictionary(data);
+  const { dictionary, loading } = useEdiDictionary(data as any);
 
   if (loading) {
     return <div className="p-4 text-slate-500 animate-pulse">Loading dictionary...</div>;

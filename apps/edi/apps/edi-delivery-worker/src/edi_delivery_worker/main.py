@@ -10,13 +10,13 @@ logger = structlog.get_logger(__name__)
 
 
 async def main() -> None:
-    ObservabilityProvider.auto_configure_from_env("edi-orchestrator-worker")
-    logger.info("orchestrator_worker_starting")
+    ObservabilityProvider.auto_configure_from_env("edi-delivery-worker")
+    logger.info("delivery_worker_starting")
 
     data_task = asyncio.create_task(data_main())
 
     def shutdown_handler(*args: object) -> None:
-        logger.info("orchestrator_worker_shutdown_signal_received")
+        logger.info("delivery_worker_shutdown_signal_received")
         data_task.cancel()
 
     loop = asyncio.get_running_loop()
@@ -26,9 +26,9 @@ async def main() -> None:
     try:
         await data_task
     except asyncio.CancelledError:
-        logger.info("orchestrator_worker_cancelled")
+        logger.info("delivery_worker_cancelled")
     finally:
-        logger.info("orchestrator_worker_stopped")
+        logger.info("delivery_worker_stopped")
 
 
 if __name__ == "__main__":

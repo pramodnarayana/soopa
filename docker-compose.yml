@@ -22,8 +22,8 @@ x-modular-monolith-base: &modular-monolith-base
     AWS_ENDPOINT_URL: http://localstack:4566
     AWS_REGION: us-east-1
     SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/000000000000/edi-config-sync-queue.fifo
-    SQS_TRANSFORM_QUEUE_URL: http://localstack:4566/000000000000/edi-transform.fifo
-    SQS_LIFECYCLE_QUEUE_URL: http://localstack:4566/000000000000/edi-lifecycle.fifo
+    SQS_ORCHESTRATOR_QUEUE_URL: http://localstack:4566/000000000000/edi-orchestrator.fifo
+    SQS_COMPUTE_QUEUE_URL: http://localstack:4566/000000000000/edi-compute.fifo
     SQS_DELIVER_QUEUE_URL: http://localstack:4566/000000000000/edi-deliver.fifo
     SQS_DATA_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-data-plane-jobs.fifo
     SQS_CONTROL_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-control-plane-jobs.fifo
@@ -50,6 +50,9 @@ services:
   # -------------------------------------------------------------------------
   db-seed:
     image: platform:local
+    volumes:
+      - ./core:/app/core
+      - ./apps:/app/apps
     env_file: .env
     extra_hosts:
       - "ucp.localhost:host-gateway"
@@ -61,7 +64,10 @@ services:
       - -c
       - >
         python /app/core/ucp/packages/ucp/scripts/seed.py &&
-        python /app/apps/edi/scripts/seed_scheduler.py &&
+        python /app/core/ucp/apps/ucp-jobs-worker/scripts/seed_jobs.py &&
+        python /app/core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py &&
+        python /app/core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py &&
+        python /app/apps/edi/scripts/seed_jobs.py &&
         python /app/apps/edi/apps/edi-as2-server/scripts/seed.py
     restart: "no"
     depends_on:
@@ -107,6 +113,10 @@ services:
   edi-dp-jobs-worker:
     <<: *modular-monolith-base
     command: [ "python", "-m", "edi_dp_jobs_worker.main" ]
+
+  edi-delivery-worker:
+    <<: *modular-monolith-base
+    command: [ "python", "-m", "edi_delivery_worker.main" ]
 
   ucp-worker:
     <<: *modular-monolith-base

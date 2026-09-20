@@ -139,7 +139,7 @@ export function InboundRouteDetails({
     }
 
     updateRoute.mutate(
-      { routeId: route.route_id, payload },
+      { routeId: route.route_id, payload: payload as any },
       {
         onSuccess: () => {
           toast({ title: 'Success', description: 'Inbound route updated successfully.' });

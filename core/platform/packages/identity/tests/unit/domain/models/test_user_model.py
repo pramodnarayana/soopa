@@ -1,6 +1,6 @@
 import pytest
 
-from identity.domain.constants import UserStatus
+from identity.domain.constants import IdentityEventType, UserStatus
 from identity.domain.models.user import User
 
 
@@ -70,11 +70,11 @@ def test_user_remove_membership():
     user = User.create(id="iam_usr_123", idp_user_id="idp_123", email="test@test.com", name="Test")
     user.remove_membership("tenant_123")
     assert len(user.domain_events) == 1
-    assert user.domain_events[0].event_name == "UserMembershipRemoved"
+    assert user.domain_events[0].event_name == IdentityEventType.USER_MEMBERSHIP_REMOVED.value
 
 
 def test_user_assign_role():
     user = User.create(id="iam_usr_123", idp_user_id="idp_123", email="test@test.com", name="Test")
     user.assign_role("role_123", "Role", "tenant_123")
     assert len(user.domain_events) == 1
-    assert user.domain_events[0].event_name == "user_role_assigned"
+    assert user.domain_events[0].event_name == IdentityEventType.USER_ROLE_ASSIGNED.value

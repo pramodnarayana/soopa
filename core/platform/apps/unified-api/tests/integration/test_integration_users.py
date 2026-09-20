@@ -18,6 +18,7 @@ from collections.abc import Callable, Coroutine
 import httpx
 import pytest
 from database.models.identity import IdentityOutbox, User
+from identity.domain.constants import IdentityEventType
 from sqlalchemy import select
 
 
@@ -66,7 +67,7 @@ async def test_create_user(
         )
 
         event = outbox_events[0]
-        assert event.event_type == "UserInvited"
+        assert event.event_type == IdentityEventType.USER_INVITED
         assert event.payload["email"] == "integration_test@example.com"
         assert event.payload["role"] == "TenantAdmin"
 

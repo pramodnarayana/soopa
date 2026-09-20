@@ -75,7 +75,7 @@ async def test_e2e_outbound_edi_json_debezium_realtime_flow(
         )
         outbox_event = outbox_result.scalar_one_or_none()
         assert outbox_event is not None
-        assert outbox_event.event_type == PipelineEventType.TRANSFORM_EVENT.value
+        assert outbox_event.event_type == PipelineEventType.TRANSFORMATION_REQUESTED.value
 
         # Generate the Debezium SMT Payload
         debezium_payload = simulate_debezium_unwrap_smt(outbox_event)
@@ -91,7 +91,7 @@ async def test_e2e_outbound_edi_json_debezium_realtime_flow(
 
     registry = EdiDataPlaneRouteRegistry()
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction="OUTBOUND",
         factory=fake_inbound_factory,
     )
@@ -137,7 +137,7 @@ async def test_e2e_inbound_debezium_realtime_flow(
     async with db_session_factory() as session:
         outbound_outbox = DataPlaneOutbox(
             tenant_id=tenant_id,
-            event_type=PipelineEventType.TRANSFORM_EVENT.value,
+            event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
             payload={"trace_id": trace_id, "direction": "INBOUND", "trading_partner_id": "tp_456"},
             status="PENDING",
             idempotency_key="idem_inbound_123",
@@ -160,7 +160,7 @@ async def test_e2e_inbound_debezium_realtime_flow(
 
     registry = EdiDataPlaneRouteRegistry()
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction="INBOUND",
         factory=fake_outbound_factory,
     )

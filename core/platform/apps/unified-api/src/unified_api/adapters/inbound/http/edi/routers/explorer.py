@@ -83,6 +83,7 @@ def _serialize_edi_message(msg: EdiMessageDTO) -> JsonDict:
         "created_at": msg.created_at.isoformat() if msg.created_at else None,
         "edi_data": msg.edi_data,
         "storage_uri": msg.storage_uri,
+        "original_trace_id": msg.original_trace_id,
     }
 
 
@@ -97,6 +98,7 @@ def _serialize_edi_json(j: EdiJsonDTO) -> JsonDict:
         "created_at": j.created_at.isoformat() if j.created_at else None,
         "business_metadata": j.business_metadata,
         "payload": j.payload,
+        "original_trace_id": j.original_trace_id,
     }
 
 

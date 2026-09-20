@@ -61,7 +61,7 @@ export function groupValidationErrors(validationErrors: (string | Record<string,
     if (typeof errStr === 'string') {
       return parseBotsError(errStr);
     }
-    return errStr; // fallback just in case
+    return errStr as unknown as ParsedEdiError; // fallback just in case
   });
 
   parsedErrors.forEach((err) => {

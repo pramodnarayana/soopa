@@ -13,7 +13,6 @@ from edi.adapters.outbound.database.models.control_plane import (
     OutboundRoute,
     SFTPPartner,
 )
-from edi.adapters.outbound.database.models.data_plane import Webhook
 from edi.domain.enums import EdiConnectionType
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
@@ -105,18 +104,6 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             if not result.scalar_one_or_none():
                 raise ValueError(
                     f"SFTP partner {sftp_id} not found or does not belong to this tenant"
-                )
-
-        if webhook_id:
-            result = await self.session.execute(
-                select(Webhook.id).where(
-                    Webhook.id == webhook_id,
-                    Webhook.tenant_id == tenant_id,
-                )
-            )
-            if not result.scalar_one_or_none():
-                raise ValueError(
-                    f"Webhook {webhook_id} not found or does not belong to this tenant"
                 )
 
     async def save(self, aggregate: OutboundRouteDomainModel) -> None:

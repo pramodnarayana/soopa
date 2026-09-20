@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp.domain.constants import LifecycleStatus
 
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from identity.domain.constants import UserStatus
+from identity.domain.constants import IdentityEventType, UserStatus
 from identity.domain.events import UserCreatedEvent
 from identity.domain.models.user import User
 
@@ -98,7 +98,7 @@ async def test_user_repository_lifecycle(
         )
         outbox_events = (await db_session.execute(outbox_stmt)).scalars().all()
         assert len(outbox_events) == 1
-        assert outbox_events[0].event_type == "UserInvited"
+        assert outbox_events[0].event_type == IdentityEventType.USER_INVITED
         assert len(user.domain_events) == 0
 
         # 2. Find by ID

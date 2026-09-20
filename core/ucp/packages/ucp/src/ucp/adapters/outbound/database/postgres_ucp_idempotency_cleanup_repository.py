@@ -17,7 +17,9 @@ class SqlAlchemyUcpIdempotencyCleanupRepository(UcpIdempotencyCleanupRepositoryP
         self.session_factory = session_factory
 
     async def cleanup_idempotency_results(self, retention_days: int) -> int:
-        cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        cutoff_date = (
+            datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        ).replace(tzinfo=None)
         idempotency_deleted = 0
         async with self.session_factory() as session:
             while True:

@@ -295,7 +295,6 @@ async def test_deliver_as2_idempotent_claim() -> None:
     """
     # ── Arrange ────────────────────────────────────────────────────────────────
     uow = FakeDataPlaneUnitOfWork()
-    as2_adapter = FakeAS2DeliveryAdapter()
 
     trace_id = "trace-as2-idem"
     idempotency_key = f"deliv-{trace_id}"
@@ -339,7 +338,6 @@ async def test_deliver_as2_idempotent_claim() -> None:
     await use_case.execute(trace_id, idempotency_key=idempotency_key)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert len(as2_adapter.delivered) == 0
     assert len(uow.outbox.events) == 0
 
 

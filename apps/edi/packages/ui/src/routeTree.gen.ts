@@ -23,8 +23,8 @@ import { Route as TenantDashboardRouteImport } from './routes/tenant/dashboard';
 import { Route as TenantDevelopersRouteImport } from './routes/tenant/developers';
 import { Route as TenantEdi_headersRouteImport } from './routes/tenant/edi_headers';
 import { Route as TenantEdi_toolRouteImport } from './routes/tenant/edi_tool';
-import { Route as TenantExplorerTraceIdRouteImport } from './routes/tenant/explorer/$traceId';
-import { Route as TenantExplorerIndexRouteImport } from './routes/tenant/explorer/index';
+import { Route as TenantTransactionsTraceIdRouteImport } from './routes/tenant/transactions/$traceId';
+import { Route as TenantTransactionsIndexRouteImport } from './routes/tenant/transactions/index';
 import { Route as TenantIndexRouteImport } from './routes/tenant/index';
 import { Route as TenantPartnersRouteImport } from './routes/tenant/partners';
 import { Route as TenantRoutesRouteImport } from './routes/tenant/routes';
@@ -125,14 +125,14 @@ const PlatformDashboardRoute = PlatformDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => PlatformRoute,
 } as any);
-const TenantExplorerIndexRoute = TenantExplorerIndexRouteImport.update({
-  id: '/explorer/',
-  path: '/explorer/',
+const TenantTransactionsIndexRoute = TenantTransactionsIndexRouteImport.update({
+  id: '/transactions/',
+  path: '/transactions/',
   getParentRoute: () => TenantRoute,
 } as any);
-const TenantExplorerTraceIdRoute = TenantExplorerTraceIdRouteImport.update({
-  id: '/explorer/$traceId',
-  path: '/explorer/$traceId',
+const TenantTransactionsTraceIdRoute = TenantTransactionsTraceIdRouteImport.update({
+  id: '/transactions/$traceId',
+  path: '/transactions/$traceId',
   getParentRoute: () => TenantRoute,
 } as any);
 
@@ -155,8 +155,8 @@ export interface FileRoutesByFullPath {
   '/tenant/users': typeof TenantUsersRoute;
   '/tenant/webhooks': typeof TenantWebhooksRoute;
   '/tenant/': typeof TenantIndexRoute;
-  '/tenant/explorer/$traceId': typeof TenantExplorerTraceIdRoute;
-  '/tenant/explorer/': typeof TenantExplorerIndexRoute;
+  '/tenant/transactions/$traceId': typeof TenantTransactionsTraceIdRoute;
+  '/tenant/transactions/': typeof TenantTransactionsIndexRoute;
 }
 export interface FileRoutesByTo {
   '/platform': typeof PlatformRouteWithChildren;
@@ -176,8 +176,8 @@ export interface FileRoutesByTo {
   '/tenant/webhooks': typeof TenantWebhooksRoute;
   '/': typeof MarketingIndexRoute;
   '/tenant': typeof TenantIndexRoute;
-  '/tenant/explorer/$traceId': typeof TenantExplorerTraceIdRoute;
-  '/tenant/explorer': typeof TenantExplorerIndexRoute;
+  '/tenant/transactions/$traceId': typeof TenantTransactionsTraceIdRoute;
+  '/tenant/transactions': typeof TenantTransactionsIndexRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
@@ -200,8 +200,8 @@ export interface FileRoutesById {
   '/tenant/webhooks': typeof TenantWebhooksRoute;
   '/_marketing/': typeof MarketingIndexRoute;
   '/tenant/': typeof TenantIndexRoute;
-  '/tenant/explorer/$traceId': typeof TenantExplorerTraceIdRoute;
-  '/tenant/explorer/': typeof TenantExplorerIndexRoute;
+  '/tenant/transactions/$traceId': typeof TenantTransactionsTraceIdRoute;
+  '/tenant/transactions/': typeof TenantTransactionsIndexRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
@@ -224,8 +224,8 @@ export interface FileRouteTypes {
     | '/tenant/users'
     | '/tenant/webhooks'
     | '/tenant/'
-    | '/tenant/explorer/$traceId'
-    | '/tenant/explorer/';
+    | '/tenant/transactions/$traceId'
+    | '/tenant/transactions/';
   fileRoutesByTo: FileRoutesByTo;
   to:
     | '/platform'
@@ -245,8 +245,8 @@ export interface FileRouteTypes {
     | '/tenant/webhooks'
     | '/'
     | '/tenant'
-    | '/tenant/explorer/$traceId'
-    | '/tenant/explorer';
+    | '/tenant/transactions/$traceId'
+    | '/tenant/transactions';
   id:
     | '__root__'
     | '/_marketing'
@@ -268,8 +268,8 @@ export interface FileRouteTypes {
     | '/tenant/webhooks'
     | '/_marketing/'
     | '/tenant/'
-    | '/tenant/explorer/$traceId'
-    | '/tenant/explorer/';
+    | '/tenant/transactions/$traceId'
+    | '/tenant/transactions/';
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
@@ -413,18 +413,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PlatformDashboardRouteImport;
       parentRoute: typeof PlatformRoute;
     };
-    '/tenant/explorer/': {
-      id: '/tenant/explorer/';
-      path: '/explorer';
-      fullPath: '/tenant/explorer/';
-      preLoaderRoute: typeof TenantExplorerIndexRouteImport;
+    '/tenant/transactions/': {
+      id: '/tenant/transactions/';
+      path: '/transactions';
+      fullPath: '/tenant/transactions/';
+      preLoaderRoute: typeof TenantTransactionsIndexRouteImport;
       parentRoute: typeof TenantRoute;
     };
-    '/tenant/explorer/$traceId': {
-      id: '/tenant/explorer/$traceId';
-      path: '/explorer/$traceId';
-      fullPath: '/tenant/explorer/$traceId';
-      preLoaderRoute: typeof TenantExplorerTraceIdRouteImport;
+    '/tenant/transactions/$traceId': {
+      id: '/tenant/transactions/$traceId';
+      path: '/transactions/$traceId';
+      fullPath: '/tenant/transactions/$traceId';
+      preLoaderRoute: typeof TenantTransactionsTraceIdRouteImport;
       parentRoute: typeof TenantRoute;
     };
   }
@@ -470,8 +470,8 @@ interface TenantRouteChildren {
   TenantUsersRoute: typeof TenantUsersRoute;
   TenantWebhooksRoute: typeof TenantWebhooksRoute;
   TenantIndexRoute: typeof TenantIndexRoute;
-  TenantExplorerTraceIdRoute: typeof TenantExplorerTraceIdRoute;
-  TenantExplorerIndexRoute: typeof TenantExplorerIndexRoute;
+  TenantTransactionsTraceIdRoute: typeof TenantTransactionsTraceIdRoute;
+  TenantTransactionsIndexRoute: typeof TenantTransactionsIndexRoute;
 }
 
 const TenantRouteChildren: TenantRouteChildren = {
@@ -484,8 +484,8 @@ const TenantRouteChildren: TenantRouteChildren = {
   TenantUsersRoute: TenantUsersRoute,
   TenantWebhooksRoute: TenantWebhooksRoute,
   TenantIndexRoute: TenantIndexRoute,
-  TenantExplorerTraceIdRoute: TenantExplorerTraceIdRoute,
-  TenantExplorerIndexRoute: TenantExplorerIndexRoute,
+  TenantTransactionsTraceIdRoute: TenantTransactionsTraceIdRoute,
+  TenantTransactionsIndexRoute: TenantTransactionsIndexRoute,
 };
 
 const TenantRouteWithChildren = TenantRoute._addFileChildren(TenantRouteChildren);

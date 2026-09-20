@@ -1,0 +1,351 @@
+from datetime import UTC, datetime
+
+from seedwork import generate_id
+from seedwork.domain.types import JsonValue
+from seedwork.id_registry import DomainIdPrefix
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Integer,
+    String,
+    Text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
+from sqlalchemy.sql import text
+
+
+class TimestampMixin:
+    """Shared timestamp columns."""
+
+    @declared_attr
+    def created_at(cls) -> Mapped[datetime]:
+        return mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+
+    @declared_attr
+    def updated_at(cls) -> Mapped[datetime]:
+        return mapped_column(
+            DateTime(timezone=True),
+            default=lambda: datetime.now(UTC),
+            onupdate=lambda: datetime.now(UTC),
+        )
+
+
+class AS2PartnerMixin(TimestampMixin):
+    """Shared columns for AS2Partner across Global and Tenant schemas."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_AS2_PARTNER.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def as2_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def public_cert_pem(cls) -> Mapped[str | None]:
+        return mapped_column(Text, nullable=True)
+
+    @declared_attr
+    def public_cert_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def private_key_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def prev_public_cert_pem(cls) -> Mapped[str | None]:
+        return mapped_column(Text, nullable=True)
+
+    @declared_attr
+    def prev_public_cert_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def prev_private_key_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def url(cls) -> Mapped[str | None]:
+        return mapped_column(String(1024), nullable=True)
+
+    @declared_attr
+    def is_local(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+
+    @declared_attr
+    def active(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class AS2PartnershipMixin(TimestampMixin):
+    """Shared columns for AS2Partnership across Global and Tenant schemas."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_AS2_PARTNERSHIP.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def credentials_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def mdn_type(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, default="SYNC")
+
+    @declared_attr
+    def mdn_url(cls) -> Mapped[str | None]:
+        return mapped_column(String(1024), nullable=True)
+
+    @declared_attr
+    def encryption_algorithm(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, default="AES256")
+
+    @declared_attr
+    def signature_algorithm(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, default="SHA256")
+
+    @declared_attr
+    def advanced_flags(cls) -> Mapped[dict[str, JsonValue] | None]:
+        return mapped_column(JSONB, nullable=True)
+
+    @declared_attr
+    def active(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class SFTPPartnerMixin(TimestampMixin):
+    """Shared columns for SFTPPartner across Global and Tenant schemas."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_SFTP_PARTNER.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def host(cls) -> Mapped[str]:
+        return mapped_column(String(1024), nullable=False)
+
+    @declared_attr
+    def port(cls) -> Mapped[int]:
+        return mapped_column(Integer, default=22)
+
+    @declared_attr
+    def username(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def host_key(cls) -> Mapped[str | None]:
+        return mapped_column(Text, nullable=True)
+
+    @declared_attr
+    def inbound_remote_path(cls) -> Mapped[str | None]:
+        return mapped_column(String(1024), nullable=True)
+
+    @declared_attr
+    def outbound_remote_path(cls) -> Mapped[str | None]:
+        return mapped_column(String(1024), nullable=True)
+
+    @declared_attr
+    def password_encrypted(cls) -> Mapped[str | None]:
+        return mapped_column(String(1024), nullable=True)
+
+    @declared_attr
+    def credentials_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def active(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class WebhookMixin(TimestampMixin):
+    """Shared columns for Webhook across Global and Tenant schemas."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_WEBHOOK.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def url(cls) -> Mapped[str]:
+        return mapped_column(String(1024), nullable=False)
+
+    @declared_attr
+    def auth_header_vault_ref(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def active(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class InboundRouteMixin(TimestampMixin):
+    """Shared columns for InboundRoute across Global and Tenant schemas."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_INBOUND_ROUTE.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def trading_partner_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def isa_sender_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def isa_receiver_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def gs_sender_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def gs_receiver_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def transaction_type(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False)
+
+    @declared_attr
+    def processing_mode(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, server_default="TRANSFORM")
+
+    @declared_attr
+    def connection_type(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, server_default="WEBHOOK")
+
+    @declared_attr
+    def active(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, default=False, server_default=text("false"))
+
+
+class OutboundEdiHeaderMixin(TimestampMixin):
+    """Configuration for Outbound EDI Headers (Ingestion/Translation Config)."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_OUTBOUND_HEADER.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def trading_partner_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def isa_sender_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def isa_sender_qualifier(cls) -> Mapped[str | None]:
+        return mapped_column(String(2), nullable=True)
+
+    @declared_attr
+    def isa_receiver_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def isa_receiver_qualifier(cls) -> Mapped[str | None]:
+        return mapped_column(String(2), nullable=True)
+
+    @declared_attr
+    def gs_sender_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def gs_receiver_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def transaction_type(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False)
+
+    @declared_attr
+    def default_standard(cls) -> Mapped[str]:
+        return mapped_column(String(50), default="x12", server_default="x12")
+
+    @declared_attr
+    def default_version(cls) -> Mapped[str]:
+        return mapped_column(String(50), default="004010", server_default="004010")
+
+
+class OutboundRouteMixin(TimestampMixin):
+    """Shared columns for OutboundRoute (Delivery Config) across Global and Tenant schemas."""
+
+    ID_PREFIX = DomainIdPrefix.EDI_OUTBOUND_ROUTE.value
+
+    @declared_attr
+    def id(cls) -> Mapped[str]:
+        return mapped_column(
+            String(128), primary_key=True, default=lambda: generate_id(cls.ID_PREFIX)
+        )
+
+    @declared_attr
+    def trading_partner_id(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def name(cls) -> Mapped[str]:
+        return mapped_column(String(255), nullable=False)
+
+    @declared_attr
+    def connection_type(cls) -> Mapped[str]:
+        return mapped_column(String(50), nullable=False, server_default="AS2")
+
+    @declared_attr
+    def webhook_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(128), nullable=True)
+
+    @declared_attr
+    def active(cls) -> Mapped[bool]:
+        return mapped_column(Boolean, default=False, server_default=text("false"))

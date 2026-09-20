@@ -1,6 +1,6 @@
 import { type FieldDef, type FilterRule, QueryBuilder } from '@soopa/ui';
 import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
-import { createRoute, Link } from '@tanstack/react-router';
+import { createRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { ArrowRight, Database, FileJson, RefreshCcw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
@@ -57,6 +57,32 @@ function TraceAction({
   );
 }
 
+function RowActions({
+  item,
+  onTraceClick,
+}: {
+  item: ExplorerEdiMessage | ExplorerEdiJson;
+  onTraceClick?: (traceId: string) => void;
+}) {
+  if (!item.trace_id) return null;
+
+  return (
+    <div className="flex items-center justify-end">
+      {item.original_trace_id && (
+        <div className="mr-8 md:mr-12">
+          <span
+            className="px-2 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider shadow-sm"
+            title={`Replayed from ${item.original_trace_id}`}
+          >
+            Replayed
+          </span>
+        </div>
+      )}
+      <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
+    </div>
+  );
+}
+
 // ─── Shared field renderers ───────────────────────────────────────────────────
 
 function FieldGrid({ items }: { items: { label: string; value: string | null | undefined }[] }) {
@@ -86,10 +112,16 @@ function EdiMessageExpandedRow({ item }: { item: ExplorerEdiMessage }) {
           <Button
             variant="default"
             disabled={isPending}
-            onClick={() => replay({ traceId: item.trace_id, tier: 'raw' })}
+            onClick={(e) => {
+              e.stopPropagation();
+              replay({
+                traceId: item.trace_id,
+                checkpoint: item.direction === 'OUTBOUND' ? 'DELIVERY' : 'TRANSFORM',
+              });
+            }}
           >
             <RefreshCcw className={`w-4 h-4 mr-2 ${isPending ? 'animate-spin' : ''}`} />
-            Reprocess (Replay Raw)
+            Replay
           </Button>
         )}
       </div>
@@ -99,6 +131,7 @@ function EdiMessageExpandedRow({ item }: { item: ExplorerEdiMessage }) {
           { label: 'ISA Receiver', value: item.receiver_id },
           { label: 'Transaction Type', value: item.transaction_type },
           { label: 'Status', value: item.status },
+          { label: 'Original Trace', value: item.original_trace_id },
         ]}
       />
       <div className="mt-4">
@@ -123,10 +156,16 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           <Button
             variant="default"
             disabled={isPending}
-            onClick={() => replay({ traceId: item.trace_id, tier: 'translation' })}
+            onClick={(e) => {
+              e.stopPropagation();
+              replay({
+                traceId: item.trace_id,
+                checkpoint: item.direction === 'OUTBOUND' ? 'TRANSFORM' : 'DELIVERY',
+              });
+            }}
           >
             <RefreshCcw className={`w-4 h-4 mr-2 ${isPending ? 'animate-spin' : ''}`} />
-            Reprocess (Replay Translation)
+            Replay
           </Button>
         )}
       </div>
@@ -136,6 +175,7 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           { label: 'Direction', value: item.direction },
           { label: 'Transaction Type', value: item.transaction_type },
           { label: 'Status', value: item.status },
+          { label: 'Original Trace', value: item.original_trace_id },
         ]}
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -321,6 +361,10 @@ const jsonFields: FieldDef[] = [
 const LIMIT = 50;
 
 export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: string) => void }) {
+  const router = useRouterState();
+  const isIndex =
+    router.location.pathname.endsWith('/transactions') ||
+    router.location.pathname.endsWith('/transactions/');
   const [activeTab, setActiveTab] = useState<ActiveTab>('messages');
   const [messagesFilters, setMessagesFilters] = useState<FilterRule[]>([]);
   const [jsonFilters, setJsonFilters] = useState<FilterRule[]>([]);
@@ -391,6 +435,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     setJsonRowSelection({});
   };
 
+  if (!isIndex) {
+    return <Outlet />;
+  }
+
   return (
     <div className="flex flex-col min-h-full animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
       {/* Page Header */}
@@ -455,8 +503,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                       .filter(Boolean) as string[];
                     if (traceIds.length === 0) return;
 
+                    const direction = selectedMessages[0]?.direction;
+                    const checkpoint = direction === 'OUTBOUND' ? 'DELIVERY' : 'TRANSFORM';
                     bulkReplay(
-                      { traceIds, tier: 'raw' },
+                      { traceIds, checkpoint },
                       {
                         onSuccess: () => {
                           setSelectedMessages([]);
@@ -467,9 +517,8 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                   }}
                 >
                   <RefreshCcw className={`w-4 h-4 mr-2 ${isBulkReplaying ? 'animate-spin' : ''}`} />
-                  Reprocess{' '}
-                  {selectedMessages.length > 0 ? `${selectedMessages.length} Selected` : 'Selected'}{' '}
-                  (Raw)
+                  Replay{' '}
+                  {selectedMessages.length > 0 ? `${selectedMessages.length} Selected` : 'Selected'}
                 </Button>
               </div>
               <QueryBuilder
@@ -490,9 +539,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               rowSelection={messagesRowSelection}
               onRowSelectionChange={setMessagesRowSelection}
               renderAction={(item) =>
-                item.trace_id ? (
-                  <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
-                ) : null
+                item.trace_id ? <RowActions item={item} onTraceClick={onTraceClick} /> : null
               }
             />
           </div>
@@ -509,8 +556,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                       .filter(Boolean) as string[];
                     if (traceIds.length === 0) return;
 
+                    const direction = selectedJson[0]?.direction;
+                    const checkpoint = direction === 'OUTBOUND' ? 'TRANSFORM' : 'DELIVERY';
                     bulkReplay(
-                      { traceIds, tier: 'translation' },
+                      { traceIds, checkpoint },
                       {
                         onSuccess: () => {
                           setSelectedJson([]);
@@ -521,9 +570,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                   }}
                 >
                   <RefreshCcw className={`w-4 h-4 mr-2 ${isBulkReplaying ? 'animate-spin' : ''}`} />
-                  Reprocess{' '}
-                  {selectedJson.length > 0 ? `${selectedJson.length} Selected` : 'Selected'}{' '}
-                  (Translation)
+                  Replay {selectedJson.length > 0 ? `${selectedJson.length} Selected` : 'Selected'}
                 </Button>
               </div>
               <QueryBuilder
@@ -544,9 +591,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               rowSelection={jsonRowSelection}
               onRowSelectionChange={setJsonRowSelection}
               renderAction={(item) =>
-                item.trace_id ? (
-                  <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
-                ) : null
+                item.trace_id ? <RowActions item={item} onTraceClick={onTraceClick} /> : null
               }
             />
           </div>

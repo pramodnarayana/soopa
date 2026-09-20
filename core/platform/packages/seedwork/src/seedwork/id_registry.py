@@ -59,3 +59,4 @@ class DomainIdPrefix(StrEnum):
     EDI_MESSAGE = "edi_msg"
     EDI_JSON = "edi_json"
     EDI_API_GATEWAY = "edi_api_gw"
+    EDI_TRACE_EVENT = "edi_trace_evt"

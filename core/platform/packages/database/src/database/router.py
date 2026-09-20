@@ -196,7 +196,7 @@ class DatabaseRouter(DatabaseRouterPort):
         # Dynamically query the active database shards registered in the control plane
         async for session in self.get_global_session():
             result = await session.execute(
-                select(DatabaseShard.id, DatabaseShard.dsn).where(
+                select(DatabaseShard.id, DatabaseShard.name, DatabaseShard.dsn).where(
                     DatabaseShard.status == DatabaseShardStatus.ACTIVE
                 )
             )

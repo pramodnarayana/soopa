@@ -45,14 +45,23 @@ function IsaGsFieldsGrid({
 }
 
 export function TransactionTimeline({ transaction }: Props) {
-  const msg = transaction.edi_message || {};
+  const msg = transaction.edi_message;
   const jsons = transaction.edi_json || [];
   const gateways = transaction.api_gateway || [];
 
-  const isOutbound = msg.direction === 'OUTBOUND';
-  const primaryStatus = isOutbound ? jsons[0]?.status || msg.status : msg.status;
+  // Infer direction from edi_message if available; fall back to edi_json (outbound replay
+  // creates EdiJson first — edi_message may not exist yet during the async race window).
+  const direction = msg?.direction ?? jsons[0]?.direction;
+  const isOutbound = direction === 'OUTBOUND';
+  const primaryStatus = isOutbound ? (jsons[0]?.status ?? msg?.status) : msg?.status;
   const isFailed = TRANSACTION_STATUS_GROUPS.ERROR.has(primaryStatus?.toUpperCase() || '');
   const colorClass = isFailed ? 'text-red-600' : 'text-emerald-600';
+
+  // Lineage: edi_json is the root aggregate for outbound replay — edi_message may not
+  // exist yet. Read original_trace_id from whichever exists.
+  const isReplay = msg?.is_replay ?? jsons[0]?.is_replay ?? false;
+  const originalTraceId = msg?.original_trace_id ?? jsons[0]?.original_trace_id ?? null;
+  const createdAt = msg?.created_at ?? jsons[0]?.created_at;
 
   const renderBadge = (status?: string) => {
     if (!status) return null;
@@ -79,53 +88,56 @@ export function TransactionTimeline({ transaction }: Props) {
   };
 
   // Common UI blocks
-  const renderEdiMessageBlock = () => (
-    <Card>
-      <CardHeader className="pb-3 border-b border-slate-100">
-        <div className="flex items-center justify-between">
-          <CardTitle className={`text-lg flex items-center gap-2 ${colorClass}`}>
-            Received from Trading Partner
-          </CardTitle>
-          <Badge variant="secondary">{msg.direction}</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
-          <Server className="w-5 h-5 text-slate-400 shrink-0" />
-          <div className="text-sm text-slate-600 space-y-0.5">
-            <div>
-              <span className="font-semibold text-slate-700">Trading Partner:</span>{' '}
-              {transaction.trading_partner_name || (
-                <span className="text-slate-400 italic">Unknown</span>
-              )}
-            </div>
-            <div>
-              <span className="font-semibold text-slate-700">Connection Type:</span>{' '}
-              {msg.connection_type && msg.connection_type !== 'UNKNOWN' ? (
-                msg.connection_type
-              ) : (
-                <span className="text-slate-400 italic">Unknown</span>
-              )}
+  const renderEdiMessageBlock = () => {
+    if (!msg) return null;
+    return (
+      <Card>
+        <CardHeader className="pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between">
+            <CardTitle className={`text-lg flex items-center gap-2 ${colorClass}`}>
+              Received from Trading Partner
+            </CardTitle>
+            <Badge variant="secondary">{msg.direction}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-4">
+          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+            <Server className="w-5 h-5 text-slate-400 shrink-0" />
+            <div className="text-sm text-slate-600 space-y-0.5">
+              <div>
+                <span className="font-semibold text-slate-700">Trading Partner:</span>{' '}
+                {transaction.trading_partner_name || (
+                  <span className="text-slate-400 italic">Unknown</span>
+                )}
+              </div>
+              <div>
+                <span className="font-semibold text-slate-700">Connection Type:</span>{' '}
+                {msg.connection_type && msg.connection_type !== 'UNKNOWN' ? (
+                  msg.connection_type
+                ) : (
+                  <span className="text-slate-400 italic">Unknown</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        <IsaGsFieldsGrid
-          senderId={msg.sender_id}
-          receiverId={msg.receiver_id}
-          gsSenderId={msg.gs_sender_id}
-          gsReceiverId={msg.gs_receiver_id}
-        />
-        <div className="mt-4">
-          <div className="text-sm font-semibold text-slate-700 mb-2">Raw Payload</div>
-          <CodeViewer
-            language="edi"
-            height={250}
-            value={msg.edi_data || 'No payload available (might be stored in blob).'}
+          <IsaGsFieldsGrid
+            senderId={msg.sender_id}
+            receiverId={msg.receiver_id}
+            gsSenderId={msg.gs_sender_id}
+            gsReceiverId={msg.gs_receiver_id}
           />
-        </div>
-      </CardContent>
-    </Card>
-  );
+          <div className="mt-4">
+            <div className="text-sm font-semibold text-slate-700 mb-2">Raw Payload</div>
+            <CodeViewer
+              language="edi"
+              height={250}
+              value={msg.edi_data || 'No payload available (might be stored in blob).'}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderApiGatewayReceiptBlock = () => (
     <Card>
@@ -215,6 +227,15 @@ export function TransactionTimeline({ transaction }: Props) {
   );
 
   const renderOutboundDeliveryBlock = () => {
+    if (!msg) {
+      return (
+        <Card>
+          <CardContent className="pt-8 text-center text-slate-400 py-12">
+            EDI message is being generated by the transform worker…
+          </CardContent>
+        </Card>
+      );
+    }
     const isDeliveryFailed = ['FAILED', 'ERROR'].includes(msg.status?.toUpperCase() || '');
     const isDelivered = msg.status?.toUpperCase() === 'DELIVERED';
     const deliveryColorClass = isDeliveryFailed
@@ -370,11 +391,23 @@ export function TransactionTimeline({ transaction }: Props) {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             Trace
+            {isReplay && (
+              <span
+                className="px-2 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider shadow-sm"
+                title={`Replayed from trace ${originalTraceId}`}
+              >
+                Replayed
+              </span>
+            )}
           </h2>
           <div className="mt-2 flex items-center gap-4 text-sm text-slate-500">
             <span className="flex items-center gap-1.5">
-              <Activity className="w-4 h-4" /> {new Date(msg.created_at).toLocaleString()}
+              <Activity className="w-4 h-4" />
+              {createdAt ? new Date(createdAt).toLocaleString() : '—'}
             </span>
+            {isReplay && originalTraceId && (
+              <span className="text-xs text-purple-600 font-mono">← {originalTraceId}</span>
+            )}
           </div>
         </div>
         <div className="text-right">{renderBadge(primaryStatus)}</div>

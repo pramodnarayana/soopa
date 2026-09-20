@@ -168,6 +168,7 @@ class InMemoryRepositoryAdapter:
             for field in (
                 "trading_partner_id",
                 "standard",
+                "is_replay",
             ):
                 value = getattr(command, field)
                 if value is not None:
@@ -239,6 +240,8 @@ class InMemoryRepositoryAdapter:
             "transaction_type": command.transaction_type,
             "payload": command.payload,
             "parent_trace_id": command.parent_trace_id,
+            "original_trace_id": command.original_trace_id,
+            "is_replay": command.is_replay,
         }
         return trace_id
 
@@ -255,6 +258,7 @@ class InMemoryRepositoryAdapter:
             "payload": command.payload,
             "response": command.response,
             "parent_trace_id": command.parent_trace_id,
+            "original_trace_id": command.original_trace_id,
         }
         return trace_id
 

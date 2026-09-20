@@ -5,6 +5,8 @@ from identity.domain.models.user import User
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from ucp.domain.constants import UcpEventType
+
 
 def test_user_mark_deleted_success() -> None:
     user = User.create(
@@ -21,7 +23,8 @@ def test_user_mark_deleted_success() -> None:
     assert isinstance(user.deleted_at, datetime)
     assert len(user.domain_events) == 1
     event = user.domain_events[0]
-    assert event.event_name == "UserDeleted"
+    event = user.domain_events[0]
+    assert event.event_name == UcpEventType.USER_DELETED.value
 
 
 def test_user_mark_deleted_already_deleted() -> None:

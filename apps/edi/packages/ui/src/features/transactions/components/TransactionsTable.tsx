@@ -88,8 +88,6 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
   isLoading,
   renderExpanded,
   headerToolbar,
-  onLoadMore,
-  hasMore,
   renderAction,
   enableRowSelection,
   onSelectionChange,
@@ -227,8 +225,6 @@ export function TransactionsTable<T extends { id: string; trace_id?: string; sta
         emptyIcon={<Database className="w-8 h-8" />}
         emptyTitle="No transactions found"
         columnsLength={tanstackColumns.length}
-        hasMore={hasMore}
-        onLoadMore={onLoadMore}
         renderExpandedRow={(row) => <div className="p-6">{renderExpanded(row.original)}</div>}
       />
     </div>

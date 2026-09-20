@@ -91,6 +91,24 @@ class IdentitySyncService:
             bound_logger.exception("identity_sync_tenant_failed", tenant_id=tenant_id)
             raise
 
+    async def handle_tenant_name_updated(self, tenant_id: str, new_name: str) -> None:
+        logger.info("handling_tenant_name_updated", tenant_id=tenant_id, new_name=new_name)
+        org_id = await self._resolve_idp_tenant_id(tenant_id)
+        await self.identity_provider.update_organization_name(org_id, new_name)
+        logger.info("tenant_name_updated_successfully", tenant_id=tenant_id, org_id=org_id)
+
+    async def handle_tenant_status_toggled(self, tenant_id: str, active: bool) -> None:
+        logger.info("handling_tenant_status_toggled", tenant_id=tenant_id, active=active)
+        org_id = await self._resolve_idp_tenant_id(tenant_id)
+        await self.identity_provider.toggle_organization_status(org_id, active)
+        logger.info("tenant_status_toggled_successfully", tenant_id=tenant_id, org_id=org_id)
+
+    async def handle_tenant_deleted(self, tenant_id: str) -> None:
+        logger.info("handling_tenant_deleted", tenant_id=tenant_id)
+        org_id = await self._resolve_idp_tenant_id(tenant_id)
+        await self.identity_provider.delete_organization(org_id)
+        logger.info("tenant_deleted_successfully", tenant_id=tenant_id, org_id=org_id)
+
     async def handle_app_subscribed(self, tenant_id: str, idp_project_id: str | None) -> None:
         """
         Grants the specified Identity Project to the tenant's organization.

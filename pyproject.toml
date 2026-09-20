@@ -34,6 +34,7 @@ members = [
     "apps/edi/apps/edi-compute-worker",
     "apps/edi/apps/edi-config-sync-worker",
     "apps/edi/apps/edi-orchestrator-worker",
+    "apps/edi/apps/edi-delivery-worker",
     "apps/edi/apps/edi-cp-jobs-worker",
     "apps/edi/apps/edi-dp-jobs-worker",
     "core/ucp/apps/ucp-jobs-worker",
@@ -44,7 +45,7 @@ members = [
     "core/platform/apps/identity-worker",
     "core/platform/apps/identity-jobs-worker",
     "core/platform/apps/notification-worker",
-    "core/platform/apps/notification-email-worker",
+    "core/platform/apps/notification-channel-worker",
     "core/platform/apps/notification-jobs-worker",
     "core/platform/apps/unified-api",
     "apps/edi/apps/edi-secrets-sidecar",
@@ -143,7 +144,7 @@ mypy_path = [
     "core/platform/apps/identity-worker/src",
     "core/platform/apps/identity-jobs-worker/src",
     "core/platform/apps/notification-worker/src",
-    "core/platform/apps/notification-email-worker/src",
+    "core/platform/apps/notification-channel-worker/src",
     "core/platform/apps/notification-jobs-worker/src",
     "core/ucp/apps/ucp-worker/src",
 ]
@@ -247,7 +248,7 @@ omit = [
     "apps/edi/apps/edi-compute-worker/src/compute_worker/main.py",
     # Platform worker entrypoints (wiring, integration only)
     "core/platform/apps/notification-worker/src/notification_worker/main.py",
-    "core/platform/apps/notification-email-worker/src/notification_email_worker/main.py",
+    "core/platform/apps/notification-channel-worker/src/notification_channel_worker/main.py",
     "core/platform/apps/notification-jobs-worker/src/notification_jobs_worker/main.py",
 ]
 
@@ -274,7 +275,7 @@ extraPaths = [
     "core/platform/packages/pubsub/src",
     "core/platform/apps/scheduler-worker/src",
     "core/platform/apps/notification-worker/src",
-    "core/platform/apps/notification-email-worker/src",
+    "core/platform/apps/notification-channel-worker/src",
     "core/platform/apps/notification-jobs-worker/src",
     "core/platform/apps/identity-worker/src",
     "core/platform/apps/identity-jobs-worker/src",
@@ -310,7 +311,7 @@ known_first_party = [
     "",
     "notification_worker",
     "",
-    "notification_email_worker",
+    "notification_channel_worker",
     "notification_jobs_worker",
     "edi_cp_jobs_worker",
     "edi_dp_jobs_worker",

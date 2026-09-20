@@ -6,7 +6,6 @@ All test doubles are imported from fakes.py (DRY). No fake library used.
 """
 
 import contextlib
-from typing import Any
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import (
     DeliveryRouterUseCase,
@@ -15,7 +14,6 @@ from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.domain.enums import EdiConnectionType, EdiDirection, MessageStatus
 from edi.domain.exceptions import RouteNotFoundError
 from edi.testing.fakes.pipeline_fakes import (
-    FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,
     FakeHttpDeliveryAdapter,
     FakeSftpDeliveryAdapter,
@@ -27,14 +25,8 @@ pytestmark = pytest.mark.asyncio
 
 def make_use_case(
     uow: FakeDataPlaneUnitOfWork | None = None,
-    sftp: FakeSftpDeliveryAdapter | None = None,
-    http: FakeHttpDeliveryAdapter | None = None,
-    vault: Any = None,
 ) -> DeliveryUseCase:
     _u = uow or FakeDataPlaneUnitOfWork()
-    _s = sftp or FakeSftpDeliveryAdapter()
-    _h = http or FakeHttpDeliveryAdapter()
-    _a = FakeAS2DeliveryAdapter()
 
     @contextlib.asynccontextmanager
     async def uow_factory():

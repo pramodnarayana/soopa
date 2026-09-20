@@ -261,7 +261,7 @@ zitadel_tg = provision_target_group_and_rule(
     name=f"{_prefix}zitadel",
     vpc_id=vpc_id,
     listener_arn=main_listener.arn,
-    priority=100,
+    priority=95,
     path_pattern="/*",
     tags=_TAGS,
     port=ZitadelConstants.PORT,
@@ -443,3 +443,13 @@ if enable_observability:
     )
 
     pulumi.export("openobserve_endpoint", main_alb.dns_name.apply(lambda dns: f"{dns}:5080"))
+
+# ── Universal Event Bus (Messaging) ───────────────────────────────────────────
+platform_events_topic = aws.sns.Topic(
+    f"{_prefix}events",
+    name=f"{_prefix}events.fifo",
+    fifo_topic=True,
+    content_based_deduplication=True,
+    tags=_TAGS,
+)
+pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)

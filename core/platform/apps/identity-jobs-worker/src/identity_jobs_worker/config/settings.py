@@ -11,7 +11,7 @@ from seedwork.infrastructure.config_models import (
 
 class IdentityOutboxAwsSettings(PlatformAwsSettings):
     sns_identity_events_topic_arn: str = Field(
-        validation_alias="SNS_IDENTITY_EVENTS_TOPIC_ARN", default="", min_length=1
+        validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default="", min_length=1
     )
 
 

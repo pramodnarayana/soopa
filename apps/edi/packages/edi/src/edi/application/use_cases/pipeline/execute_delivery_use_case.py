@@ -72,6 +72,7 @@ class ExecuteDeliveryUseCase:
                         "tenant_id": command.tenant_id,
                     },
                 )
+                await uow.commit()
 
         except Exception:
             logger.exception(
