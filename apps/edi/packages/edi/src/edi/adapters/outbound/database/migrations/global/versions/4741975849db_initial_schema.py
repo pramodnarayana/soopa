@@ -261,6 +261,7 @@ def upgrade() -> None:
     op.create_table(
         "outbound_routes",
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("webhook_id", sa.String(length=128), nullable=True),
         sa.Column("as2_partner_id", sa.String(length=128), nullable=True),
         sa.Column("sftp_partner_id", sa.String(length=128), nullable=True),
         sa.Column("id", sa.String(length=128), nullable=False),
@@ -273,7 +274,7 @@ def upgrade() -> None:
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("deleted_by", sa.String(length=128), nullable=True),
         sa.CheckConstraint(
-            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
         ),
         sa.ForeignKeyConstraint(

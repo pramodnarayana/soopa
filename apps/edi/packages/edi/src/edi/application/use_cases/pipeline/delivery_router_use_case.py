@@ -137,7 +137,7 @@ class DeliveryRouterUseCase:
             )
 
         command_key = generate_deterministic_id(
-            SystemIdPrefix.IDEMPOTENCY, trace_id, "EXECUTE_DELIVERY_COMMAND"
+            SystemIdPrefix.IDEMPOTENCY, trace_id, idempotency_key or "EXECUTE_DELIVERY_COMMAND"
         )
 
         logger.info(
@@ -157,3 +157,4 @@ class DeliveryRouterUseCase:
                 "strategy_type": strategy_type,
             },
         )
+        await uow.commit()

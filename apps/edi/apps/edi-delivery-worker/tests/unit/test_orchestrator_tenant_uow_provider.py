@@ -1,0 +1,69 @@
+import pytest
+from database.models.identity import Tenant
+from database.router import DatabaseRouterPort
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
+from edi.config.settings import get_settings
+from seedwork import generate_id
+from sqlalchemy import select, text
+from ucp_models.sharding import DatabaseShard, ShardRegistry
+from ucp_models.subscriptions import App
+
+
+@pytest.mark.integration
+async def test_tenant_uow_provider_success(db_router: DatabaseRouterPort) -> None:
+    """Test that TenantUowProvider resolves tenant and yields a DataPlaneUnitOfWorkPort."""
+    test_tenant_id = generate_id("t")
+    shard_name = f"shard_{test_tenant_id}"
+
+    # 1. Setup Data - self-contained, creates all required FK rows
+    async for session in db_router.get_global_session():
+        # ShardRegistry FK requires the tenant to exist in identity.tenants
+        tenant = Tenant(
+            id=test_tenant_id,
+            name=f"Test Tenant {test_tenant_id[:8]}",
+            slug=f"test-{test_tenant_id[:8]}",
+        )
+        session.add(tenant)
+        await session.flush()
+
+        # The 'edi' app slug is globally unique — fetch existing or create new
+        existing_app = await session.scalar(select(App).where(App.slug == "edi"))
+        if existing_app is None:
+            edi_app = App(slug="edi", name="EDI", description="EDI application")
+            session.add(edi_app)
+            await session.flush()
+        else:
+            edi_app = existing_app
+
+        shard = DatabaseShard(
+            id=generate_id("ucp_shard"),
+            name=shard_name,
+            dsn=db_router.shard_url,
+        )
+        session.add(shard)
+        await session.flush()
+        session.add(ShardRegistry(tenant_id=test_tenant_id, app_id=edi_app.id, shard_id=shard.id))
+        await session.commit()
+
+    # 2. Use Real components
+    real_resolver = TenantResolver(db_router=db_router, ttl_secs=300)
+    real_settings = get_settings()
+
+    provider = TenantUowProvider(
+        resolver=real_resolver,
+        db_router=db_router,
+        settings=real_settings,
+        s3_bucket="fake-bucket",
+        aws_endpoint=None,
+    )
+
+    # 3. Execute
+    uow_factory = await provider.get_uow_factory(test_tenant_id)
+
+    # 4. Verify it creates a real SQL Alchemy UOW
+    async with uow_factory() as uow:
+        assert isinstance(uow, SqlAlchemyDataPlaneUnitOfWork)
+        res = await uow.session.execute(text("SELECT 1"))
+        assert res.scalar() == 1

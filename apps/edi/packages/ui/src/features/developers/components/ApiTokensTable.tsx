@@ -1,4 +1,4 @@
-import { Badge } from '@soopa/ui';
+import { Badge, type FieldDef, QueryBuilder, useClientFilter } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
 import {
@@ -11,11 +11,6 @@ import {
 } from '@soopa/ui/components/ui/dialog';
 import { Input } from '@soopa/ui/components/ui/input';
 import { Label } from '@soopa/ui/components/ui/label';
-import {
-  type FieldDef,
-  QueryBuilder,
-  useClientFilter,
-} from '@soopa/ui/components/ui/query-builder';
 import { createColumnHelper, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Key, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
@@ -36,7 +31,7 @@ function DeleteTokenDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const [confirmText, setConfirmText] = useState('');
-  const deleteMutation = useDeleteApiTokenMutation();
+  const deleteMutation = useDeleteApiTokenMutation('default');
 
   const handleDelete = async () => {
     try {
@@ -118,7 +113,7 @@ function RenameTokenDialog({
     }
   }, [open, token.name]);
 
-  const updateMutation = useUpdateApiTokenMutation();
+  const updateMutation = useUpdateApiTokenMutation('default');
 
   const handleRename = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,7 +167,7 @@ function RenameTokenDialog({
 function TokenRowActions({ token }: { token: ApiToken }) {
   const [showDelete, setShowDelete] = useState(false);
   const [showRename, setShowRename] = useState(false);
-  const updateMutation = useUpdateApiTokenMutation();
+  const updateMutation = useUpdateApiTokenMutation('default');
   const isActive = token.active;
   const isUpdating = updateMutation.isPending;
   const isDeleting = false; // The actual delete mutation is managed in the modal

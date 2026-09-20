@@ -225,7 +225,7 @@ export const SchedulerDashboard = () => {
           <Tabs
             defaultValue="interval"
             value={scheduleType}
-            onValueChange={(v) => setScheduleType(v)}
+            onValueChange={(v) => setScheduleType(v as 'interval' | 'cron')}
           >
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="interval">Interval</TabsTrigger>

@@ -64,6 +64,7 @@ class CreateEdiMessageCommand:
     status_message: str | None = None
     is_replay: bool | None = None
     parent_trace_id: str | None = None
+    original_trace_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -79,6 +80,7 @@ class CreateEdiJsonCommand:
     transaction_type: str | None = None
     payload: JsonValue | None = None
     parent_trace_id: str | None = None
+    original_trace_id: str | None = None
     is_replay: bool | None = None
 
 
@@ -95,6 +97,7 @@ class CreateApiGatewayCommand:
     payload: JsonValue | None = None
     response: str | None = None
     parent_trace_id: str | None = None
+    original_trace_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

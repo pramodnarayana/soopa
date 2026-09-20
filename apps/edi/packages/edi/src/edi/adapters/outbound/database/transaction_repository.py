@@ -98,8 +98,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             msg_headers=json.dumps(command.msg_headers) if command.msg_headers else None,
             state=command.state,
             status_message=command.status_message,
-            is_replay=command.is_replay,
+            is_replay=command.is_replay or False,
             parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
         )
         self.session.add(msg)
         await self.flush()
@@ -225,6 +226,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             edi_data=aggregate.edi_data,
             trading_partner_id=aggregate.trading_partner_id,
             storage_uri=aggregate.storage_uri,
+            is_replay=aggregate.is_replay or False,
+            parent_trace_id=aggregate.parent_trace_id,
+            original_trace_id=aggregate.original_trace_id,
         )
         await self.session.merge(record)
 
@@ -282,6 +286,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     edi_data=aggregate.edi_data,
                     trading_partner_id=aggregate.trading_partner_id,
                     storage_uri=aggregate.storage_uri,
+                    is_replay=aggregate.is_replay or False,
+                    parent_trace_id=aggregate.parent_trace_id,
+                    original_trace_id=aggregate.original_trace_id,
                 )
             )
 
@@ -337,7 +344,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             business_metadata=aggregate.business_metadata,
             payload=aggregate.payload,
             parent_trace_id=aggregate.parent_trace_id,
-            is_replay=aggregate.is_replay,
+            original_trace_id=aggregate.original_trace_id,
+            is_replay=aggregate.is_replay or False,
         )
         try:
             async with self.session.begin_nested():
@@ -405,13 +413,17 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         self.session.add_all(records)
         await self.flush()
 
-    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+    async def get_edi_message(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> EdiMessageDomainModel | None:
         stmt = (
             select(EdiMessage)
             .where(EdiMessage.trace_id == str(trace_id))
             .order_by(EdiMessage.created_at.desc())
             .limit(1)
         )
+        if tenant_id:
+            stmt = stmt.where(EdiMessage.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
         if not record:
@@ -426,9 +438,20 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         if not trace_ids:
             return []
 
-        stmt = select(EdiMessage).where(EdiMessage.trace_id.in_([str(tid) for tid in trace_ids]))
+        stmt = (
+            select(EdiMessage)
+            .distinct(EdiMessage.trace_id)
+            .where(EdiMessage.trace_id.in_([str(tid) for tid in trace_ids]))
+            .order_by(EdiMessage.trace_id, EdiMessage.created_at.desc())
+        )
         result = await self.session.execute(stmt)
         records = result.scalars().all()
+
+        found_traces = {record.trace_id for record in records}
+        requested_traces = {str(tid) for tid in trace_ids}
+        if found_traces != requested_traces:
+            missing = requested_traces - found_traces
+            raise ValueError(f"Missing traces for bulk load: {missing}")
 
         models = []
         for record in records:
@@ -464,6 +487,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             business_metadata=record.business_metadata,
             payload=payload,
             parent_trace_id=record.parent_trace_id,
+            original_trace_id=record.original_trace_id,
             is_replay=record.is_replay,
         )
 
@@ -517,6 +541,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             payload=command.payload,
             response=command.response,
             parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
         )
         self.session.add(log)
         await self.flush()
@@ -594,6 +619,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 status_message=r.status_message,
                 is_replay=r.is_replay,
                 parent_trace_id=r.parent_trace_id,
+                original_trace_id=r.original_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
@@ -804,6 +830,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 status_message=r.status_message,
                 is_replay=r.is_replay,
                 parent_trace_id=r.parent_trace_id,
+                original_trace_id=r.original_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
@@ -841,7 +868,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 business_metadata=j.business_metadata,
                 transaction_type=j.transaction_type,
                 payload=payload,
+                is_replay=j.is_replay,
                 parent_trace_id=j.parent_trace_id,
+                original_trace_id=j.original_trace_id,
                 created_at=j.created_at,
                 updated_at=j.updated_at,
             )
@@ -878,7 +907,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 business_metadata=r.business_metadata,
                 transaction_type=r.transaction_type,
                 payload=payload,
+                is_replay=r.is_replay,
                 parent_trace_id=r.parent_trace_id,
+                original_trace_id=r.original_trace_id,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
             )
@@ -926,6 +957,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             transaction_type=record.transaction_type,
             business_metadata=record.business_metadata,
             payload=record.payload,
+            is_replay=record.is_replay,
             created_at=record.created_at,
             updated_at=record.updated_at,
         )
@@ -959,4 +991,6 @@ def _map_edi_message_to_domain(
         trading_partner_id=record.trading_partner_id,
         storage_uri=record.storage_uri,
         parent_trace_id=record.parent_trace_id,
+        original_trace_id=record.original_trace_id,
+        is_replay=record.is_replay,
     )

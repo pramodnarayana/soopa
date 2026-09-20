@@ -19,13 +19,13 @@ from edi_dp_jobs_worker.adapters.inbound.jobs.edi_data_plane_outbox_sweeper_job 
 from edi_dp_jobs_worker.adapters.inbound.jobs.edi_idempotency_cleanup_job import (
     EdiIdempotencyCleanupJobHandler,
 )
-from edi_dp_jobs_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_cleanup_repository import (
+from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_cleanup_repository import (
     SqlAlchemyEdiDataPlaneOutboxCleanupRepository,
 )
-from edi_dp_jobs_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_repository import (
-    PostgresEdiDataPlaneOutboxRepository,
+from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_repository import (
+    SqlAlchemyEdiDataPlaneOutboxRepository,
 )
-from edi_dp_jobs_worker.adapters.outbound.database.postgres_edi_idempotency_cleanup_repository import (
+from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_idempotency_cleanup_repository import (
     SqlAlchemyEdiIdempotencyCleanupRepository,
 )
 from edi_dp_jobs_worker.application.use_cases.edi_idempotency_cleanup_use_case import (
@@ -51,13 +51,16 @@ class WorkerContainer:
         self.idemp_cleanup_job_handler: EdiIdempotencyCleanupJobHandler | None = None
 
     def wire(self) -> None:
-        dp_outbox_repo = PostgresEdiDataPlaneOutboxRepository(db_router=self.db_router)
+        dp_outbox_repo = SqlAlchemyEdiDataPlaneOutboxRepository(db_router=self.db_router)
 
         dp_outbox_publisher = RoutingSqsPublisher(
             event_type_to_queue_url={
-                "TRANSFORMATION_REQUESTED": self.settings.sqs.transform_queue_url,
+                "TRANSFORMATION_REQUESTED": self.settings.sqs.orchestrator_queue_url,
                 "COMPUTE_TRANSFORMATION_COMMAND": self.settings.sqs.compute_queue_url,
-                "DELIVERY_REQUESTED": self.settings.sqs.deliver_queue_url,
+                "TRANSFORMATION_COMPLETED": self.settings.sqs.orchestrator_queue_url,
+                "DELIVERY_REQUESTED": self.settings.sqs.orchestrator_queue_url,
+                "DELIVERY_COMPLETED": self.settings.sqs.orchestrator_queue_url,
+                "EXECUTE_DELIVERY_COMMAND": self.settings.sqs.deliver_queue_url,
             },
             endpoint_url=self.settings.aws.endpoint_url,
             region_name=self.settings.aws.resolved_region,
@@ -68,7 +71,7 @@ class WorkerContainer:
 
     def _wire_scheduled_jobs(
         self,
-        dp_repo: PostgresEdiDataPlaneOutboxRepository,
+        dp_repo: SqlAlchemyEdiDataPlaneOutboxRepository,
         dp_pub: RoutingSqsPublisher,
     ) -> None:
         dp_sweeper_use_case = OutboxSweeperUseCase(dp_repo, dp_pub)

@@ -14,7 +14,10 @@ class GetEdiTraceUseCase:
         Get details for a specific trace lifecycle.
         """
         result = await self.uow.traces.get_edi_trace(tenant_id, trace_id)
-        if not result or not result.edi_message:
+        # A trace is valid if ANY of its composite parts exist. Outbound replay creates
+        # EdiJson first; the EdiMessage is written asynchronously by the transform worker.
+        # Raising 404 solely on missing EdiMessage would break the race window.
+        if not result:
             raise TransactionNotFoundError(trace_id=trace_id)
 
         # Optional: Resolve trading partner name if resolver is provided

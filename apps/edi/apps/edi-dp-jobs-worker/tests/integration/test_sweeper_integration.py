@@ -8,8 +8,8 @@ from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.domain.constants import OutboxStatus
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 
-from edi_dp_jobs_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_repository import (
-    PostgresEdiDataPlaneOutboxRepository,
+from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_repository import (
+    SqlAlchemyEdiDataPlaneOutboxRepository,
 )
 
 pytestmark = pytest.mark.integration
@@ -37,7 +37,7 @@ async def test_sweeper_fetches_and_processes_events(db_router: DatabaseRouterPor
 
     # 2. Use InMemoryEventBus test infra
     event_bus = InMemoryEventBus()
-    repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
+    repo = SqlAlchemyEdiDataPlaneOutboxRepository(db_router=db_router)
 
     use_case = OutboxSweeperUseCase(repository=repo, publisher=event_bus)
 

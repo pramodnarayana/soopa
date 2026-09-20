@@ -137,44 +137,18 @@ async def main() -> None:
 
     consumer = _setup_registry(transformer, settings, uow_provider)
 
-    transform_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.transform_queue_url,
+    orchestrator_consumer = AwsSqsConsumer(
+        queue_url=settings.sqs.orchestrator_queue_url,
         region_name=settings.aws.resolved_region,
         endpoint_url=aws_endpoint,
     )
-    transform_manager = SqsConsumerManager(
-        consumer=transform_consumer,
-        queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
+    orchestrator_manager = SqsConsumerManager(
+        consumer=orchestrator_consumer,
+        queue_name=settings.sqs.orchestrator_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
         idempotency_repo=idempotency_repo,
     )
-    transform_manager.start()
-
-    lifecycle_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.lifecycle_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    lifecycle_manager = SqsConsumerManager(
-        consumer=lifecycle_consumer,
-        queue_name=settings.sqs.lifecycle_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
-    )
-    lifecycle_manager.start()
-
-    deliver_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    deliver_manager = SqsConsumerManager(
-        consumer=deliver_consumer,
-        queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
-    )
-    deliver_manager.start()
+    orchestrator_manager.start()
 
     # ─────────────────────────────────────────────────────────────
     # Run all workers concurrently
@@ -186,7 +160,7 @@ async def main() -> None:
             loop.add_signal_handler(sig, stop_event.set)
 
         tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-        for mgr in [transform_manager, lifecycle_manager, deliver_manager]:
+        for mgr in [orchestrator_manager]:
             # Use the new task property once it is exposed
             task = getattr(mgr, "task", getattr(mgr, "_task", None))
             if task:
@@ -202,9 +176,7 @@ async def main() -> None:
     finally:
         logger.info("data_worker.shutting_down_gracefully")
         results = await asyncio.gather(
-            transform_manager.stop(),
-            lifecycle_manager.stop(),
-            deliver_manager.stop(),
+            orchestrator_manager.stop(),
             return_exceptions=True,
         )
         for res in results:

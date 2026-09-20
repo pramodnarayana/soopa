@@ -7,7 +7,7 @@ from sqlalchemy.sql import text
 from database.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
 
 from .base import EdiGlobalBase
-from .replicated_mixins import (
+from .mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,
     InboundRouteMixin,
@@ -106,7 +106,7 @@ class OutboundRoute(EdiGlobalBase, OutboundRouteMixin, TimestampMixin, SoftDelet
 
     __table_args__ = (
         CheckConstraint(
-            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
         ),
         Index(

@@ -23,7 +23,7 @@ from sqlalchemy.types import TypeDecorator
 from database.models.common import OutboxMixin, TimestampMixin
 from edi.domain.enums import MessageStatus
 
-from .replicated_mixins import (
+from .mixins import (
     AS2PartnerMixin,
     AS2PartnershipMixin,
     InboundRouteMixin,
@@ -145,10 +145,13 @@ class OutboundRoute(TenantBase, TenantAwareMixin, OutboundRouteMixin, TimestampM
     sftp_partner_id: Mapped[str | None] = mapped_column(
         String(128), ForeignKey("sftp_partners.id"), nullable=True
     )
+    webhook_id: Mapped[str | None] = mapped_column(
+        String(128), ForeignKey("webhooks.id"), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
         ),
         Index(
@@ -187,6 +190,7 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
 
@@ -237,6 +241,7 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -265,7 +270,7 @@ class TraceEvent(TenantBase, TenantAwareMixin, TimestampMixin):
     __tablename__ = "trace_events"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: generate_id("trace_evt")
+        String(128), primary_key=True, default=lambda: generate_id(DomainIdPrefix.EDI_TRACE_EVENT)
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -281,6 +286,7 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 

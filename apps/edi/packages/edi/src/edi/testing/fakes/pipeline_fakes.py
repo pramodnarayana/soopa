@@ -258,7 +258,9 @@ class InMemoryRepositoryAdapter:
         }
         return trace_id
 
-    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+    async def get_edi_message(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> EdiMessageDomainModel | None:
         raw = self.edi_messages.get(trace_id)
         if raw:
             # Shallow-copy so mutations inside the domain model (or test assertions)

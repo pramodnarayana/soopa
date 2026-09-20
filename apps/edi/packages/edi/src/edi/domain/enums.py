@@ -51,7 +51,7 @@ class EdiConnectionType(StrEnum):
     AS2 = "AS2"
     API = "API"
     SFTP = "SFTP"
-    WEBHOOK = "Webhook"
+    WEBHOOK = "WEBHOOK"
 
 
 class EdiStandard(StrEnum):
@@ -194,6 +194,18 @@ class EdiJobName(StrEnum):
 class EdiConstants(StrEnum):
     OUTBOX_CHANNEL = "edi_outbox_channel"
     EDI_APP_SLUG = "edi"
+
+
+class ReplayCheckpoint(StrEnum):
+    """
+    The pipeline stage from which to resume processing during a replay.
+
+    TRANSFORM — restart from the raw EDI payload (re-run transform + deliver).
+    DELIVERY  — restart from the translated JSON (re-run deliver only, skip transform).
+    """
+
+    TRANSFORM = "TRANSFORM"
+    DELIVERY = "DELIVERY"
 
 
 class EdiOutboxSource(StrEnum):

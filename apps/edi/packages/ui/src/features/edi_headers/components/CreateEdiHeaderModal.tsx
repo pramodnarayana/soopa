@@ -1,4 +1,4 @@
-import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
+import { buttonVariants } from '@soopa/ui/components/ui/button';
 import {
   Dialog,
   DialogContent,

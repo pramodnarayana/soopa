@@ -36,7 +36,6 @@ class TransformRequestedEvent(DomainEvent):
     receiver_id: str | None = None
     direction: str | None = None
     edi_message_id: str | None = None
-    status: str | None = None
 
     @property
     def event_name(self) -> str:

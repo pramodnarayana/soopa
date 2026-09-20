@@ -90,7 +90,7 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
             <span className="text-sm font-medium text-slate-700">Client Secret</span>
             <div className="flex gap-2">
               <Input
-                value={token.token.split('.')[1] || ''}
+                value={token.client_secret}
                 readOnly
                 type="password"
                 className="font-mono text-sm bg-slate-50"
@@ -98,7 +98,7 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => copyToClipboard(token.token.split('.')[1] || '', 'secret')}
+                onClick={() => copyToClipboard(token.client_secret, 'secret')}
                 className="shrink-0"
               >
                 {copiedSecret ? (
@@ -116,7 +116,7 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
             </span>
             <div className="flex gap-2">
               <Input
-                value={token.token}
+                value={`${token.client_id}.${token.client_secret}`}
                 readOnly
                 type="password"
                 className="font-mono text-sm bg-slate-50"
@@ -124,7 +124,9 @@ export function TokenCredentialsModal({ token, onClose }: Props) {
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => copyToClipboard(token.token, 'combined')}
+                onClick={() =>
+                  copyToClipboard(`${token.client_id}.${token.client_secret}`, 'combined')
+                }
                 className="shrink-0"
               >
                 {copiedCombined ? (

@@ -163,7 +163,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
             text("""
                 INSERT INTO inbound_routes
                 (id, tenant_id, name, isa_sender_id, isa_receiver_id, transaction_type, processing_mode, active, webhook_id, connection_type, created_at, updated_at)
-                VALUES (:id, :tenant_id, 'Test Route', 'sender1', 'receiver1', '850', 'TRANSFORM', true, :webhook_id, 'Webhook', NOW(), NOW())
+                VALUES (:id, :tenant_id, 'Test Route', 'sender1', 'receiver1', '850', 'TRANSFORM', true, :webhook_id, 'WEBHOOK', NOW(), NOW())
             """),
             {"id": route_id, "tenant_id": tenant_id, "webhook_id": webhook_id},
         )

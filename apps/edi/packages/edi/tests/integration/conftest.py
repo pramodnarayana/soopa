@@ -204,6 +204,7 @@ async def client(
     app = create_edi_app()
 
     app.state.db_router = None
+    app.state.tenant_resolver = None
     app.container.vault_port.override(providers.Object(override_get_secret_store))
 
     old_overrides = dict(app.dependency_overrides)
@@ -237,7 +238,7 @@ async def client(
     app.dependency_overrides[get_data_plane_uow] = _uow
 
     class FakeDpFactory:
-        def __init__(self, global_session, db_router):
+        def __init__(self, **kwargs):
             pass
 
         @asynccontextmanager
@@ -268,6 +269,7 @@ async def platform_client(
     app = create_edi_app()
 
     app.state.db_router = None
+    app.state.tenant_resolver = None
     app.container.vault_port.override(providers.Object(override_get_secret_store))
 
     old_overrides = dict(app.dependency_overrides)

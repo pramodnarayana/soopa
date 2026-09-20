@@ -42,7 +42,7 @@ class EdiAwsSettings(PlatformAwsSettings):
     Extends the base PlatformAwsSettings to include EDI-specific topics.
     """
 
-    sns_topic_arn: str = Field(validation_alias="SNS_EDI_EVENTS_TOPIC_ARN", default="")
+    sns_topic_arn: str = Field(validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default="")
 
 
 class SqsSettings(BaseSettings):
@@ -52,17 +52,13 @@ class SqsSettings(BaseSettings):
         validation_alias="SQS_PROVISIONING_QUEUE_URL",
         description="The SQS queue URL for EDI Config Sync/Provisioning",
     )
-    transform_queue_url: str = Field(
-        validation_alias="SQS_TRANSFORM_QUEUE_URL",
-        description="The SQS queue URL for EDI Transform",
+    orchestrator_queue_url: str = Field(
+        validation_alias="SQS_ORCHESTRATOR_QUEUE_URL",
+        description="The SQS queue URL for EDI Orchestrator (Transform & Lifecycle)",
     )
     compute_queue_url: str = Field(
         validation_alias="SQS_COMPUTE_QUEUE_URL",
-        description="The SQS queue URL for EDI heavy compute (JSON-to-EDI and EDI-to-JSON)",
-    )
-    lifecycle_queue_url: str = Field(
-        validation_alias="SQS_LIFECYCLE_QUEUE_URL",
-        description="The SQS queue URL for EDI Lifecycle",
+        description="The SQS queue URL for EDI Compute (BOTS)",
     )
     deliver_queue_url: str = Field(
         validation_alias="SQS_DELIVER_QUEUE_URL", description="The SQS queue URL for EDI Deliver"

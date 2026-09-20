@@ -1,5 +1,5 @@
 """
-Unit tests for the Outbound AS2 delivery path via DeliveryUseCase.
+Unit tests for the Outbound AS2 delivery path via As2DeliveryStrategy.
 
 All test doubles imported from fakes.py (DRY).
 NullAS2DeliveryAdapter is used to test the "AS2 not enabled" path.
@@ -16,14 +16,10 @@ from edi.application.use_cases.pipeline.delivery_router_use_case import (
 )
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
-from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import PipelineEventType
 from edi.testing.fakes.pipeline_fakes import (
     FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,
-    FakeHttpDeliveryAdapter,
-    FakeSftpDeliveryAdapter,
     InMemoryRepositoryAdapter,
 )
 
@@ -59,38 +55,24 @@ _REMOTE_PARTNER = {
 
 _LOCAL_PARTNER = {
     "id": "local-p1",
-    "name": "Our AS2 Gateway",
+    "name": "Acme AS2",
     "as2_id": "ACME",
-    "public_cert_pem": None,
-    "public_cert_vault_ref": None,
     "private_key_vault_ref": None,
-    "prev_private_key_vault_ref": None,
-    "prev_public_cert_vault_ref": None,
+    "public_cert_pem": None,
 }
 
 
 def make_use_case(
     uow: FakeDataPlaneUnitOfWork | None = None,
-    as2: FakeAS2DeliveryAdapter | NullAS2DeliveryAdapter | None = None,
 ) -> DeliveryUseCase:
     u = uow or FakeDataPlaneUnitOfWork()
-    a = as2 or FakeAS2DeliveryAdapter()
 
     @contextlib.asynccontextmanager
     async def uow_factory():
         yield u
 
     def router_factory() -> DeliveryRouterUseCase:
-        return DeliveryRouterUseCase(
-            uow_factory,
-            {
-                "webhook_id": WebhookDeliveryStrategy(uow_factory, FakeHttpDeliveryAdapter(), None),
-                "sftp_partner_id": SftpDeliveryStrategy(
-                    uow_factory, FakeSftpDeliveryAdapter(), None
-                ),
-                "as2_partner_id": As2DeliveryStrategy(uow_factory, a, None),
-            },
-        )
+        return DeliveryRouterUseCase(uow_factory)
 
     return DeliveryUseCase(
         uow_factory=uow_factory,
@@ -98,22 +80,28 @@ def make_use_case(
     )
 
 
+def make_as2_strategy(
+    uow: FakeDataPlaneUnitOfWork,
+    as2: FakeAS2DeliveryAdapter | NullAS2DeliveryAdapter,
+) -> As2DeliveryStrategy:
+    @contextlib.asynccontextmanager
+    async def uow_factory():
+        yield uow
+
+    return As2DeliveryStrategy(uow_factory, as2)
+
+
 def _seed_as2_route(
-    repo: InMemoryRepositoryAdapter,
-    trace_id: str,
-    edi_data: str,
-    partner_id: str = "remote-p1",
-    transaction_type: str = "850",
+    repo: InMemoryRepositoryAdapter, trace_id: str, payload: str, partner_id: str = "remote-1"
 ) -> None:
-    """Seeds all repository state needed for an outbound AS2 delivery."""
     repo.edi_messages[trace_id] = {
         "trace_id": trace_id,
         "direction": "OUTBOUND",
         "sender_id": "SENDER",
         "receiver_id": "RECEIVER",
         "trading_partner_id": partner_id,
-        "transaction_type": transaction_type,
-        "edi_data": edi_data,
+        "transaction_type": "850",
+        "edi_data": payload,
         "status": "PENDING_DELIVERY",
     }
     repo.routes.append(
@@ -125,6 +113,7 @@ def _seed_as2_route(
             "isa_receiver_id": "RECEIVER",
             "transaction_type": "*",
             "as2_partner_id": partner_id,
+            "connection_type": "AS2",
         }
     )
     partner_copy = dict(_REMOTE_PARTNER)
@@ -138,6 +127,25 @@ def _seed_as2_route(
 
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
+
+
+async def test_delivery_router_emits_execute_delivery_command() -> None:
+    """
+    DeliveryRouterUseCase should emit an EXECUTE_DELIVERY_COMMAND outbox event.
+    """
+    uow = FakeDataPlaneUnitOfWork()
+    trace_id = "trace-router"
+    _seed_as2_route(uow.repository, trace_id, "EDI")
+
+    use_case = make_use_case(uow=uow)
+    await use_case.execute(trace_id)
+
+    assert len(uow.outbox.events) == 1
+    event = uow.outbox.events[0]
+    assert event["event_type"] == PipelineEventType.EXECUTE_DELIVERY_COMMAND.value
+    assert event["payload"]["strategy_type"] == "as2_partner_id"
+    assert event["payload"]["partner_id"] == "remote-1"
+    assert event["payload"]["trace_id"] == trace_id
 
 
 async def test_deliver_as2_plain_no_crypto() -> None:
@@ -157,8 +165,9 @@ async def test_deliver_as2_plain_no_crypto() -> None:
     _seed_as2_route(uow.repository, trace_id, raw_edi.decode("utf-8"))
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, as2=as2_adapter)
-    await use_case.execute(trace_id)
+    strategy = make_as2_strategy(uow, as2_adapter)
+    edi_msg = await uow.repository.get_edi_message(trace_id)
+    await strategy.deliver(trace_id, "remote-1", edi_msg, None)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(as2_adapter.delivered) == 1
@@ -202,6 +211,7 @@ async def test_deliver_as2_http_failure_bubbles_as_transient() -> None:
             "isa_receiver_id": "R1",
             "transaction_type": "*",
             "as2_partner_id": "p-fail",
+            "connection_type": "AS2",
         }
     )
     remote = copy.deepcopy(_REMOTE_PARTNER)
@@ -214,14 +224,23 @@ async def test_deliver_as2_http_failure_bubbles_as_transient() -> None:
     )
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, as2=as2_adapter)
+    strategy = make_as2_strategy(uow, as2_adapter)
+    edi_msg = await uow.repository.get_edi_message(trace_id)
     with pytest.raises(RuntimeError):
-        await use_case.execute(trace_id)
+        await strategy.deliver(trace_id, "p-fail", edi_msg, "fixed-idem-key")
+
+    with pytest.raises(RuntimeError):
+        await strategy.deliver(trace_id, "p-fail", edi_msg, "fixed-idem-key")
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(uow.outbox.events) == 0
     assert uow.repository.edi_messages[trace_id]["status"] == "PENDING_DELIVERY"
-    assert len(as2_adapter.delivered) == 1
+    assert len(as2_adapter.delivered) == 2
+
+    # Verify identical Message-IDs are used across retries
+    headers_1 = as2_adapter.delivered[0]["headers"]
+    headers_2 = as2_adapter.delivered[1]["headers"]
+    assert headers_1["Message-ID"] == headers_2["Message-ID"]
 
 
 async def test_deliver_as2_failed_mdn_emits_one_failure_event() -> None:
@@ -240,8 +259,10 @@ async def test_deliver_as2_failed_mdn_emits_one_failure_event() -> None:
     )
     as2_adapter = FakeAS2DeliveryAdapter(body=failed_mdn)
 
+    strategy = make_as2_strategy(uow, as2_adapter)
+    edi_msg = await uow.repository.get_edi_message(trace_id)
     with pytest.raises(ValueError, match="Sync MDN indicates failure"):
-        await make_use_case(uow=uow, as2=as2_adapter).execute(trace_id)
+        await strategy.deliver(trace_id, "remote-1", edi_msg, None)
 
     assert uow.repository.edi_messages[trace_id]["status"] == "FAILED"
     assert len(uow.outbox.events) == 1
@@ -258,9 +279,10 @@ async def test_deliver_as2_null_adapter_is_caught_and_bubbles_transient() -> Non
     _seed_as2_route(uow.repository, "trace-as2-null", "EDI~", partner_id="p-null")
 
     # ── Act / Assert ───────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, as2=NullAS2DeliveryAdapter())
+    strategy = make_as2_strategy(uow, NullAS2DeliveryAdapter())
+    edi_msg = await uow.repository.get_edi_message("trace-as2-null")
     with pytest.raises(RuntimeError):
-        await use_case.execute("trace-as2-null")
+        await strategy.deliver("trace-as2-null", "p-null", edi_msg, None)
 
     assert len(uow.outbox.events) == 0
     assert uow.repository.edi_messages["trace-as2-null"]["status"] == "PENDING_DELIVERY"
@@ -300,6 +322,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
             "isa_receiver_id": "B",
             "transaction_type": "*",
             "as2_partner_id": "p-idem",
+            "connection_type": "AS2",
         }
     )
     idem_remote = copy.deepcopy(_REMOTE_PARTNER)
@@ -312,7 +335,7 @@ async def test_deliver_as2_idempotent_claim() -> None:
     )
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, as2=as2_adapter)
+    use_case = make_use_case(uow=uow)
     await use_case.execute(trace_id, idempotency_key=idempotency_key)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
@@ -350,6 +373,7 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
             "isa_receiver_id": "Y",
             "transaction_type": "*",
             "as2_partner_id": "p-nolocal",
+            "connection_type": "AS2",
         }
     )
     # local_partner_id points to a partner that does NOT exist in local_as2_partners
@@ -360,9 +384,10 @@ async def test_deliver_as2_missing_local_partner_sets_failed() -> None:
     # Do NOT seed local_as2_partners["missing-local"]
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, as2=as2_adapter)
+    strategy = make_as2_strategy(uow, as2_adapter)
+    edi_msg = await uow.repository.get_edi_message(trace_id)
     with pytest.raises(ValueError):
-        await use_case.execute(trace_id)
+        await strategy.deliver(trace_id, "p-nolocal", edi_msg, None)
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(uow.outbox.events) == 1

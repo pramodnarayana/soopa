@@ -23,7 +23,7 @@ from edi.application.use_cases.transactions.replay_transaction_use_case import (
 )
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 
 
 @dataclass
@@ -84,11 +84,42 @@ class FakeEdiMessageRepository:
         )
         return key
 
-    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+    async def get_edi_message(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> EdiMessageDomainModel | None:
         for model in self._models.values():
             if model.trace_id == trace_id:
                 return model
         return None
+
+    async def get_edi_json(
+        self, trace_id: str
+    ) -> EdiJsonDomainModel | None:
+        # For tests, just return a dummy if trace_id exists in models (or blindly return one)
+        for model in self._models.values():
+            if model.trace_id == trace_id:
+                return EdiJsonDomainModel(
+                    id="sys_json_123",
+                    tenant_id=model.tenant_id,
+                    trace_id=trace_id,
+                    direction=Direction.INBOUND.value,
+                    status=RecordStatus.SUCCESS.value,
+                    payload={"fake": "json"},
+                    created_at=model.created_at,
+                    updated_at=model.updated_at,
+                )
+        return None
+
+    async def create_edi_json(
+        self, record: EdiJsonDomainModel
+    ) -> None:
+        pass
+
+    async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
+        return {"fake": "api_payload"}
+
+    async def create_api_gateway(self, command: Any) -> str:
+        return "fake_api_gateway_id"
 
     async def save(self, model: Any) -> None:
         for e in model.domain_events:
@@ -205,7 +236,7 @@ class TestReplayTransactionUseCase:
         await self.use_case.retry_deliver(self.tenant_id, "t-001", actor="USER")
         assert len(self.msg_repo.outbox_events) == 1
         event = self.msg_repo.outbox_events[0]
-        assert event["event_type"] == "EXECUTE_DELIVERY_COMMAND"
+        assert event["event_type"] == "DELIVERY_REQUESTED"
 
     @pytest.mark.asyncio
     async def test_replay_event_includes_trace_id_and_tier(self):
@@ -223,9 +254,9 @@ class TestReplayTransactionUseCase:
         self.trace_repo.seed_trace(
             self.tenant_id, "t-002", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
         )
-        await self.use_case.retry_transform(self.tenant_id, "t-002", actor="USER")
+        new_trace_id = await self.use_case.retry_transform(self.tenant_id, "t-002", actor="USER")
         payload = self.msg_repo.outbox_events[0]["payload"]
-        assert payload["trace_id"] == "t-002"
+        assert payload["trace_id"] == new_trace_id
 
     @pytest.mark.asyncio
     async def test_replay_event_has_unique_idempotency_key(self):

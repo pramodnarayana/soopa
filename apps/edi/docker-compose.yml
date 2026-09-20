@@ -38,7 +38,7 @@ services:
     - AWS_REGION=${AWS_REGION:-us-east-1}
     - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
     - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}
-    - SNS_EDI_EVENTS_TOPIC_ARN=${SNS_EDI_EVENTS_TOPIC_ARN:?SNS_EDI_EVENTS_TOPIC_ARN is required}
+    - SNS_EDI_DATA_PLANE_TOPIC_ARN=${SNS_EDI_DATA_PLANE_TOPIC_ARN:?SNS_EDI_DATA_PLANE_TOPIC_ARN is required}
     extra_hosts:
     - host.docker.internal:host-gateway
     volumes:

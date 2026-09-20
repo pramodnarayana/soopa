@@ -219,6 +219,9 @@ class DispatchOutboundTransformUseCase:
                     gs_sender_id=gs_sender_id,
                     gs_receiver_id=gs_receiver_id,
                     trading_partner_id=trading_partner_id,
+                    is_replay=edi_json.is_replay,
+                    parent_trace_id=edi_json.parent_trace_id,
+                    original_trace_id=edi_json.original_trace_id,
                 )
             )
 

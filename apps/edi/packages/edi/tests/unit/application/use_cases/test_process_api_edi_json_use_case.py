@@ -63,7 +63,7 @@ class FakeTransactionRepository:
             self.outbox_events.append(
                 {
                     "tenant_id": aggregate.tenant_id,
-                    "event_type": str(event.__class__.__name__),
+                    "event_type": event.event_name,
                     "payload": event,
                     "idempotency_key": event.idempotency_key,
                 }
@@ -180,7 +180,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
         await self.use_case.process_api_edi_json(cmd)
         assert len(self.repo.outbox_events) == 1
         event = self.repo.outbox_events[0]
-        assert "TRANSFORM" in event["event_type"].upper()
+        assert event["event_type"] == "TRANSFORMATION_REQUESTED"
 
     @pytest.mark.asyncio
     async def test_fake_preserves_event_idempotency_key(self):
@@ -263,6 +263,31 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
         await self.use_case.process_api_edi_json(cmd)
         saved_type = self.repo.created_edi_jsons[0]["payload"]["transaction_type"]
         assert saved_type == "204"
+
+    @pytest.mark.asyncio
+    async def test_resolves_transaction_type_from_stedi_interchange_structure(self):
+        """Resolves via interchange > transaction_sets > heading > transaction_set_header_ST*."""
+        cmd = ProcessApiEdiJsonCommand(
+            tenant_id="ten_001",
+            trading_partner_id=TP_001,
+            payload={
+                "interchange": {
+                    "transaction_sets": [
+                        {
+                            "heading": {
+                                "transaction_set_header_ST": {
+                                    "transaction_set_identifier_code": "850"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            transaction_type=None,
+        )
+        await self.use_case.process_api_edi_json(cmd)
+        saved_type = self.repo.created_edi_jsons[0]["payload"]["transaction_type"]
+        assert saved_type == "850"
 
     @pytest.mark.asyncio
     async def test_resolves_transaction_type_from_st_segment(self):

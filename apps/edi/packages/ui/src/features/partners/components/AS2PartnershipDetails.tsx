@@ -110,11 +110,10 @@ export function AS2PartnershipDetails({
     const payload: UpdateAS2PartnershipPayload = {};
     if (formData.name !== as2Partnership.name) payload.name = formData.name;
     if (formData.local_partner_id !== as2Partnership.local_partner_id)
-      payload.local_partner_id = formData.local_partner_id;
-    if (formData.remote_partner_id !== as2Partnership.remote_partner_id)
-      payload.remote_partner_id = formData.remote_partner_id;
-    if (formData.mdn_type !== as2Partnership.mdn_type) payload.mdn_type = formData.mdn_type;
-    if (formData.mdn_url !== as2Partnership.mdn_url) payload.mdn_url = formData.mdn_url || null;
+      if (formData.remote_partner_id !== as2Partnership.remote_partner_id)
+        if (formData.mdn_type !== as2Partnership.mdn_type) payload.mdn_type = formData.mdn_type;
+    if (formData.mdn_url !== as2Partnership.mdn_url)
+      payload.mdn_url = formData.mdn_url || undefined;
     if (formData.encryption_algorithm !== as2Partnership.encryption_algorithm)
       payload.encryption_algorithm = formData.encryption_algorithm;
     if (formData.signature_algorithm !== as2Partnership.signature_algorithm)

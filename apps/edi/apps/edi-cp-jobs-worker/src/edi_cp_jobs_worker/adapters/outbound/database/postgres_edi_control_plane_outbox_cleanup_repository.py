@@ -17,7 +17,9 @@ class SqlAlchemyEdiControlPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPo
         self.db_router = db_router
 
     async def cleanup_outbox(self, retention_days: int) -> int:
-        cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        cutoff_date = (
+            datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        ).replace(tzinfo=None)
         outbox_deleted = 0
         async for session in self.db_router.get_global_session():
             while True:

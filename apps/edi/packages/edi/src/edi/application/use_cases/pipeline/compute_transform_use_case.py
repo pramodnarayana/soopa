@@ -146,6 +146,9 @@ class ComputeTransformUseCase:
                         business_metadata=cast(JsonDict, business_metadata),
                         payload=cast(JsonDict, json_dict),
                         status=MessageStatus.PARSED,
+                        is_replay=edi_msg.is_replay,
+                        parent_trace_id=edi_msg.parent_trace_id,
+                        original_trace_id=edi_msg.original_trace_id,
                     )
                 )
                 logger.info(

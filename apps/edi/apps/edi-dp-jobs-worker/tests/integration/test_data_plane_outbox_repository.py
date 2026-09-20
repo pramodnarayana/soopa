@@ -5,8 +5,8 @@ from edi.testing.factories.outbox import DataPlaneOutboxBuilder
 from outbox.domain.constants import OutboxStatus
 from sqlalchemy import select
 
-from edi_dp_jobs_worker.adapters.outbound.database.postgres_edi_data_plane_outbox_repository import (
-    PostgresEdiDataPlaneOutboxRepository,
+from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_repository import (
+    SqlAlchemyEdiDataPlaneOutboxRepository,
 )
 
 pytestmark = pytest.mark.integration
@@ -22,7 +22,7 @@ async def test_claim_next_events_and_mark_completed(db_router: DatabaseRouter) -
         event1_id = str(event1.id)
         event2_id = str(event2.id)
 
-    repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
+    repo = SqlAlchemyEdiDataPlaneOutboxRepository(db_router=db_router)
 
     # Test claiming events
     worker_id = "test-worker-1"
@@ -72,7 +72,7 @@ async def test_mark_failed_max_attempts(db_router: DatabaseRouter) -> None:
         await test_session.commit()
         event_id = str(event.id)
 
-    repo = PostgresEdiDataPlaneOutboxRepository(db_router=db_router)
+    repo = SqlAlchemyEdiDataPlaneOutboxRepository(db_router=db_router)
     worker_id = "test-worker-failure"
 
     events = await repo.claim_next_events(worker_id=worker_id, limit=100)

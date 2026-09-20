@@ -34,6 +34,7 @@ export interface ExplorerEdiMessage {
   created_at: string | null;
   edi_data: string | null;
   storage_uri: string | null;
+  original_trace_id?: string | null;
 }
 
 export interface ExplorerEdiJson {
@@ -46,6 +47,7 @@ export interface ExplorerEdiJson {
   created_at: string | null;
   business_metadata: Record<string, unknown> | null;
   payload: Record<string, unknown> | null;
+  original_trace_id?: string | null;
 }
 
 export interface ExplorerResponse<T> {
