@@ -1,5 +1,5 @@
 import structlog
-from sqlalchemy import CursorResult
+from sqlalchemy import CursorResult, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,3 +108,17 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
         )
         result = await self.session.execute(stmt)
         return type(result) is CursorResult and result.rowcount > 0
+
+    async def has_been_processed(self, tenant_id: str, idempotency_key: str) -> bool:
+        """
+        Checks if an idempotency record exists in the events_processed table.
+        """
+        if not tenant_id or not idempotency_key:
+            return False
+
+        stmt = select(ProcessedEvent).where(
+            ProcessedEvent.tenant_id == tenant_id,
+            ProcessedEvent.idempotency_key == idempotency_key,
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None

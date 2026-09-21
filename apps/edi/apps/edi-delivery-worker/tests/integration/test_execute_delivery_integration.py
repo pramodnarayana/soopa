@@ -95,6 +95,17 @@ async def test_execute_delivery_integration(
         )
         await test_session.commit()
 
+        # Insert EDI JSON payload
+        await test_session.execute(
+            text("""
+                INSERT INTO edi_json
+                (id, trace_id, tenant_id, payload, standard, direction, status, trading_partner_id, created_at, updated_at)
+                VALUES (:id, :trace_id, :tenant_id, '{"test": "json"}', 'X12', 'OUTBOUND', 'TRANSFORMED', 'partner_123', NOW(), NOW())
+            """),
+            {"id": f"json_{generate_random_hex(6)}", "trace_id": trace_id, "tenant_id": tenant_id},
+        )
+        await test_session.commit()
+
     httpserver.expect_request("/webhook", method="POST").respond_with_json({"status": "ok"})
 
     http_delivery = HttpxDeliveryClient(validator=lambda url: True, allow_private_ips=True)
