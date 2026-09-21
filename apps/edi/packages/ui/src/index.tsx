@@ -7,8 +7,6 @@ export { Dashboard as EdiDashboardPage } from './routes/tenant/dashboard';
 export { DevelopersPage } from './routes/tenant/developers';
 export { EdiSetupPage } from './routes/tenant/edi_setup';
 export { EdiToolPage } from './routes/tenant/edi_tool';
-export { TransactionDetailPage } from './routes/tenant/explorer/$traceId';
-export { ExplorerPage } from './routes/tenant/explorer/index';
 export { TenantIndexPage } from './routes/tenant/index';
 export { PartnersPage } from './routes/tenant/partners';
 

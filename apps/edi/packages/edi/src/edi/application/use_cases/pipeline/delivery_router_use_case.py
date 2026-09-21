@@ -38,6 +38,12 @@ class DeliveryRouterUseCase:
             if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
+            if idempotency_key:
+                is_new = await uow.record_idempotency(edi_msg.tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info("delivery_router.duplicate_skipped", trace_id=trace_id)
+                    return
+
             route = await self._resolve_route(edi_msg, uow)
 
             await self._dispatch_to_outbox(trace_id, route, edi_msg, uow, idempotency_key)
@@ -136,8 +142,11 @@ class DeliveryRouterUseCase:
                 f"Route {route_id} is configured for {route.connection_type} but destination ID is missing."
             )
 
+        if not idempotency_key:
+            raise ValueError("idempotency_key is required for strict event chaining")
+
         command_key = generate_deterministic_id(
-            SystemIdPrefix.IDEMPOTENCY, trace_id, idempotency_key or "EXECUTE_DELIVERY_COMMAND"
+            SystemIdPrefix.IDEMPOTENCY, idempotency_key, "EXECUTE_DELIVERY_COMMAND"
         )
 
         logger.info(

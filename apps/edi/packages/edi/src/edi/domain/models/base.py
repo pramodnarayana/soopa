@@ -40,7 +40,9 @@ class EdiRecordBase(AggregateRoot):
     status: MessageStatus
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    is_replay: bool | None = None
+    replay_count: int = 0
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.id, UUID):

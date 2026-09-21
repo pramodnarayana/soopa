@@ -14,6 +14,10 @@ import contextlib
 from collections.abc import Callable
 
 
+class TerminalDeliveryError(Exception):
+    """Raised when delivery fails fatally and should not be retried."""
+
+
 class BaseDeliveryStrategy:
     """Base class for delivery strategies."""
 

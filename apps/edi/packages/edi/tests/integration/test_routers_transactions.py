@@ -175,7 +175,11 @@ async def test_bulk_replay_transactions(client: AsyncClient, tenant_db_session: 
 
     response = await client.post(
         "/api/v1/tenants/1/edi/transactions/bulk-replay",
-        json={"trace_ids": [trace_id_1, trace_id_2], "tier": "raw", "checkpoint": ReplayCheckpoint.TRANSFORM.value},
+        json={
+            "trace_ids": [trace_id_1, trace_id_2],
+            "tier": "raw",
+            "checkpoint": ReplayCheckpoint.TRANSFORM.value,
+        },
     )
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"

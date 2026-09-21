@@ -194,6 +194,30 @@ importers:
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/models
 
+  apps/edi/apps/edi-delivery-worker:
+    devDependencies:
+      '@soopa/api':
+        specifier: workspace:*
+        version: link:../../packages/edi
+      '@soopa/database':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/database
+      '@soopa/identity':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/identity
+      '@soopa/observability':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/observability
+      '@soopa/secret_store':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/secret_store
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/seedwork
+      '@soopa/ucp-models':
+        specifier: workspace:*
+        version: link:../../../../core/ucp/packages/models
+
   apps/edi/apps/edi-dp-jobs-worker:
     devDependencies:
       '@soopa/api':
@@ -505,7 +529,7 @@ importers:
         specifier: workspace:*
         version: link:../../../ucp/packages/models
 
-  core/platform/apps/notification-email-worker:
+  core/platform/apps/notification-channel-worker:
     devDependencies:
       '@soopa/database':
         specifier: workspace:*

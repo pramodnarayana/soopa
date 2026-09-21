@@ -12,6 +12,9 @@ export interface TransactionListItem {
   status: string;
   edi_data?: string | null;
   created_at: string;
+  replay_count: number;
+  parent_trace_id: string | null;
+  original_trace_id: string | null;
 }
 
 export interface TransactionDetailResponse {
@@ -28,10 +31,10 @@ export interface TransactionDetailResponse {
     gs_receiver_id: string | null;
     status: string;
     edi_data: string | null;
-    is_replay: boolean;
-    original_trace_id: string | null;
-    parent_trace_id: string | null;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   } | null;
   edi_json: {
     id: string;
@@ -40,10 +43,10 @@ export interface TransactionDetailResponse {
     business_metadata: Record<string, any> | null;
     payload: Record<string, unknown> | null;
     status: string;
-    is_replay: boolean;
-    original_trace_id: string | null;
-    parent_trace_id: string | null;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   }[];
   api_gateway: {
     id: string;
@@ -53,6 +56,9 @@ export interface TransactionDetailResponse {
     response: string | null;
     status: string;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   }[];
   trading_partner_name?: string | null;
 }
@@ -68,5 +74,8 @@ export interface TransactionThreadResponse {
     status: string;
     business_metadata: Record<string, unknown> | null;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   }[];
 }

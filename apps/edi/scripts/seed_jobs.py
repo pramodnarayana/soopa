@@ -67,6 +67,16 @@ async def main() -> None:
             "max_retries": 3,
             "next_run_at": datetime.now(UTC),
         },
+        {
+            "name": EdiJobName.EDI_DATA_RETENTION_CLEANUP.value,
+            "payload": {},
+            "status": "PENDING",
+            "cron_expression": "0 2 * * *",  # Nightly at 2am
+            "target_queue": "edi-data-plane-jobs.fifo",
+            "retry_count": 0,
+            "max_retries": 3,
+            "next_run_at": datetime.now(UTC),
+        },
     ]
 
     try:

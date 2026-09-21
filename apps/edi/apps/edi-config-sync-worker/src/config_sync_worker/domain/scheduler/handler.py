@@ -1,12 +1,12 @@
 import datetime
 from abc import ABC, abstractmethod
 
-from .models import Job
+from scheduler.domain.models import ScheduledJob
 
 
 class JobHandlerPort(ABC):
     @abstractmethod
-    async def execute(self, job: Job) -> datetime.datetime | None:
+    async def execute(self, job: ScheduledJob) -> datetime.datetime | None:
         """
         Process the scheduled job payload.
         Returns an optional datetime indicating when the job should next run.

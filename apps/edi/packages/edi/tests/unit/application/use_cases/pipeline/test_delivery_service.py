@@ -56,7 +56,7 @@ async def test_delivery_service_inbound_webhook() -> None:
         "edi_data": "FAKE*EDI*DATA~",
         "status": MessageStatus.PENDING_DELIVERY,
     }
-    uow.repository.api_gateway[trace_id] = {
+    uow.api_gateway_transactions.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "payload": {"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]},
         "status": MessageStatus.PENDING_DELIVERY,
@@ -84,7 +84,7 @@ async def test_delivery_service_inbound_webhook() -> None:
     # ── Act ────────────────────────────────────────────────────────────────────
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow)
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     assert len(uow.outbox.events) == 1
@@ -139,7 +139,7 @@ async def test_delivery_service_outbound_sftp() -> None:
     # ── Act ────────────────────────────────────────────────────────────────────
     # ── Act ────────────────────────────────────────────────────────────────────
     use_case = make_use_case(uow=uow)
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # ── Assert ─────────────────────────────────────────────────────────────────
     # ── Assert ─────────────────────────────────────────────────────────────────
@@ -163,4 +163,4 @@ async def test_delivery_service_no_route_raises() -> None:
 
     use_case = make_use_case(uow=uow)
     with pytest.raises(RouteNotFoundError, match="No route found for"):
-        await use_case.execute(trace_id)
+        await use_case.execute(trace_id, idempotency_key="test-key")

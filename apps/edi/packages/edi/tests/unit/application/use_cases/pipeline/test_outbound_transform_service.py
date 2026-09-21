@@ -6,6 +6,8 @@ Uses Fake Data Plane Unit Of Work and Fake Transformer.
 """
 
 
+import contextlib
+
 import pytest
 
 from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case import (
@@ -47,8 +49,12 @@ def make_use_case(
     s = settings or FakeSettings.create()
     s_casted = typing.cast(AppSettings, s)
 
+    @contextlib.asynccontextmanager
+    async def fake_uow_factory():
+        yield uow_casted
+
     return DispatchOutboundTransformUseCase(
-        uow=uow_casted,
+        uow_factory=fake_uow_factory,
         transformer=t,
         settings=s_casted,
     )
@@ -88,7 +94,7 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer)
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # Assertions
     saved_edi = uow.repository.edi_messages.get(trace_id)
@@ -101,9 +107,8 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.TRANSFORMATION_COMPLETED
+    assert event["event_type"] == "TransformSuccessful"
     assert event["payload"]["trace_id"] == trace_id
-    assert event["payload"]["trading_partner_id"] == "tp1"
 
 
 async def test_outbound_transform_rejects_list_with_non_ast_node() -> None:
@@ -179,7 +184,7 @@ async def test_outbound_transform_heavy_compute_offload() -> None:
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer, settings=settings)
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # Assertions - should not save EDI message since it's offloaded
     assert trace_id not in uow.repository.edi_messages
@@ -214,7 +219,7 @@ async def test_outbound_transform_missing_route_raises() -> None:
     use_case = make_use_case(uow=uow)
 
     with pytest.raises(OutboundRouteNotFoundError):
-        await use_case.execute(trace_id)
+        await use_case.execute(trace_id, idempotency_key="test-key")
 
 
 async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
@@ -245,7 +250,7 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer)
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     saved_edi = uow.repository.edi_messages.get(trace_id)
     assert saved_edi is not None

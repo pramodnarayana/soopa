@@ -1,9 +1,18 @@
 import { Badge } from '@soopa/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
-import { Activity, AlertCircle, CheckCircle2, Database, FileJson, Server } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Database,
+  FileJson,
+  Server,
+} from 'lucide-react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 import type { TransactionDetailResponse } from '../types';
+import { ReplayBadge } from './ReplayBadge';
 
 interface Props {
   transaction: TransactionDetailResponse;
@@ -57,10 +66,6 @@ export function TransactionTimeline({ transaction }: Props) {
   const isFailed = TRANSACTION_STATUS_GROUPS.ERROR.has(primaryStatus?.toUpperCase() || '');
   const colorClass = isFailed ? 'text-red-600' : 'text-emerald-600';
 
-  // Lineage: edi_json is the root aggregate for outbound replay — edi_message may not
-  // exist yet. Read original_trace_id from whichever exists.
-  const isReplay = msg?.is_replay ?? jsons[0]?.is_replay ?? false;
-  const originalTraceId = msg?.original_trace_id ?? jsons[0]?.original_trace_id ?? null;
   const createdAt = msg?.created_at ?? jsons[0]?.created_at;
 
   const renderBadge = (status?: string) => {
@@ -96,6 +101,7 @@ export function TransactionTimeline({ transaction }: Props) {
           <div className="flex items-center justify-between">
             <CardTitle className={`text-lg flex items-center gap-2 ${colorClass}`}>
               Received from Trading Partner
+              <ReplayBadge count={msg.replay_count} />
             </CardTitle>
             <Badge variant="secondary">{msg.direction}</Badge>
           </div>
@@ -189,9 +195,12 @@ export function TransactionTimeline({ transaction }: Props) {
           jsons.map((json, idx) => (
             <div key={json.id} className={idx > 0 ? 'pt-6 border-t border-slate-100' : ''}>
               <div className="flex items-center justify-between mb-4">
-                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                  {json.transaction_type || 'Unknown Type'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    {json.transaction_type || 'Unknown Type'}
+                  </Badge>
+                  <ReplayBadge count={json.replay_count} className="ml-2" />
+                </div>
                 {renderBadge(json.status)}
               </div>
 
@@ -247,17 +256,20 @@ export function TransactionTimeline({ transaction }: Props) {
     return (
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100">
-          <CardTitle className={`text-lg ${deliveryColorClass}`}>
-            {isDelivered
-              ? 'Delivered to '
-              : isDeliveryFailed
-                ? 'Failed to deliver to '
-                : 'Delivering to '}
-            {transaction.trading_partner_name ||
-              (msg.connection_type && msg.connection_type !== 'UNKNOWN'
-                ? msg.connection_type
-                : 'Partner')}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className={`text-lg flex items-center gap-2 ${deliveryColorClass}`}>
+              {isDelivered
+                ? 'Delivered to '
+                : isDeliveryFailed
+                  ? 'Failed to deliver to '
+                  : 'Delivering to '}
+              {transaction.trading_partner_name ||
+                (msg.connection_type && msg.connection_type !== 'UNKNOWN'
+                  ? msg.connection_type
+                  : 'Partner')}
+              <ReplayBadge count={msg.replay_count} />
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="pt-4 space-y-4">
           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-100">
@@ -321,13 +333,20 @@ export function TransactionTimeline({ transaction }: Props) {
           </div>
         ) : (
           gateways.map((gw, idx) => {
+            const isPending = gw.status === 'PENDING_DELIVERY';
             const isSuccess =
-              gw.http_status_code && gw.http_status_code >= 200 && gw.http_status_code < 300;
+              !isPending &&
+              gw.http_status_code &&
+              gw.http_status_code >= 200 &&
+              gw.http_status_code < 300;
+
             return (
               <div key={gw.id} className={idx > 0 ? 'pt-6 border-t border-slate-100' : ''}>
                 <div className="flex items-center justify-between mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                   <div className="flex items-center gap-3">
-                    {isSuccess ? (
+                    {isPending ? (
+                      <Clock className="w-5 h-5 text-blue-500" />
+                    ) : isSuccess ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                     ) : (
                       <AlertCircle className="w-5 h-5 text-red-500" />
@@ -344,12 +363,14 @@ export function TransactionTimeline({ transaction }: Props) {
                   <Badge
                     variant="outline"
                     className={
-                      isSuccess
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-red-50 text-red-700 border-red-200'
+                      isPending
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : isSuccess
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-red-50 text-red-700 border-red-200'
                     }
                   >
-                    HTTP {gw.http_status_code || '---'}
+                    {isPending ? 'PENDING' : `HTTP ${gw.http_status_code || '---'}`}
                   </Badge>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -391,23 +412,12 @@ export function TransactionTimeline({ transaction }: Props) {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
             Trace
-            {isReplay && (
-              <span
-                className="px-2 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider shadow-sm"
-                title={`Replayed from trace ${originalTraceId}`}
-              >
-                Replayed
-              </span>
-            )}
           </h2>
           <div className="mt-2 flex items-center gap-4 text-sm text-slate-500">
             <span className="flex items-center gap-1.5">
               <Activity className="w-4 h-4" />
               {createdAt ? new Date(createdAt).toLocaleString() : '—'}
             </span>
-            {isReplay && originalTraceId && (
-              <span className="text-xs text-purple-600 font-mono">← {originalTraceId}</span>
-            )}
           </div>
         </div>
         <div className="text-right">{renderBadge(primaryStatus)}</div>

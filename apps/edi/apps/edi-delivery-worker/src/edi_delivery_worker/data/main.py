@@ -8,9 +8,6 @@ from typing import Any
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.data_plane.postgres_idempotency_repository import (
-    SqlAlchemyEdiIdempotencyRepository,
-)
 from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
@@ -84,7 +81,16 @@ def _setup_registry(
             raise InvalidMessageError(
                 f"EXECUTE_DELIVERY_COMMAND payload is missing required field: {exc}"
             ) from exc
-        await use_case_factory(uow_fact).execute(command=command, idempotency_key=e.idempotency_key)
+
+        async with uow_fact() as uow:
+            if e.idempotency_key and not await uow.record_idempotency(
+                e.tenant_id, e.idempotency_key
+            ):
+                logger.info("delivery_worker.duplicate_deliver_skipped", trace_id=e.trace_id)
+                return
+            await use_case_factory(lambda: uow_fact()).execute(
+                command=command, idempotency_key=e.idempotency_key
+            )
 
     # Note: EXECUTE_DELIVERY_COMMAND is the only event this worker listens to
     registry.register(
@@ -110,7 +116,6 @@ async def main() -> None:
         shard_overrides=settings.database.shard_overrides,
     )
     resolver = TenantResolver(db_router)
-    idempotency_repo = SqlAlchemyEdiIdempotencyRepository(db_router, resolver)
 
     vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
 
@@ -142,7 +147,6 @@ async def main() -> None:
         consumer=deliver_consumer,
         queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
     )
     deliver_manager.start()
 

@@ -84,6 +84,7 @@ def _serialize_edi_message(msg: EdiMessageDTO) -> JsonDict:
         "edi_data": msg.edi_data,
         "storage_uri": msg.storage_uri,
         "original_trace_id": msg.original_trace_id,
+        "replay_count": msg.replay_count,
     }
 
 
@@ -99,6 +100,7 @@ def _serialize_edi_json(j: EdiJsonDTO) -> JsonDict:
         "business_metadata": j.business_metadata,
         "payload": j.payload,
         "original_trace_id": j.original_trace_id,
+        "replay_count": j.replay_count,
     }
 
 

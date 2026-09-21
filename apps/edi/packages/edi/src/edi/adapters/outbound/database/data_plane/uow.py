@@ -1,8 +1,11 @@
 import structlog
+from sqlalchemy import CursorResult
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.types import TenantSession
 from database.uow import BaseSqlAlchemyUnitOfWork
+from edi.adapters.outbound.database.api_gateway_repository import SqlAlchemyApiGatewayRepository
 from edi.adapters.outbound.database.data_plane.as2_partner_repository import (
     SqlAlchemyDataPlaneAS2PartnerRepository,
 )
@@ -27,8 +30,10 @@ from edi.adapters.outbound.database.data_plane.sftp_partner_repository import (
 from edi.adapters.outbound.database.data_plane.webhook_repository import (
     SqlAlchemyDataPlaneWebhookRepository,
 )
+from edi.adapters.outbound.database.models.data_plane import ProcessedEvent
 from edi.adapters.outbound.database.trace_repository import SqlAlchemyTraceRepository
 from edi.adapters.outbound.database.transaction_repository import SqlAlchemyTransactionRepository
+from edi.ports.outbound.api_gateway_repository import ApiGatewayRepositoryPort
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
@@ -55,6 +60,7 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     This satisfies the `pipeline.ports.outbound.data_plane_unit_of_work_port.DataPlaneUnitOfWorkPort` Protocol.
     """
 
+    api_gateway_transactions: ApiGatewayRepositoryPort
     transactions: TransactionRepositoryPort
     traces: TraceRepositoryPort
     outbox: DataPlaneOutboxRepositoryPort
@@ -73,6 +79,7 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
     ) -> None:
         super().__init__(tenant_session)
         self._storage = storage
+        self.api_gateway_transactions = SqlAlchemyApiGatewayRepository(tenant_session)
         self.transactions = SqlAlchemyTransactionRepository(TenantSession(tenant_session), storage)
         self.traces = SqlAlchemyTraceRepository(tenant_session, storage)
         self.outbox = SqlAlchemyDataPlaneOutboxRepository(session=tenant_session)
@@ -83,3 +90,21 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork):
         self.as2_partnerships = SqlAlchemyDataPlaneAS2PartnershipRepository(session=tenant_session)
         self.webhooks = SqlAlchemyDataPlaneWebhookRepository(session=tenant_session)
         self.edi_headers = SqlAlchemyDataPlaneEdiHeaderRepository(session=tenant_session)
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        """
+        Attempts to insert an idempotency record into the events_processed table.
+        Returns True if successful (meaning the event is new).
+        Returns False if a unique constraint violation occurs (meaning the event was already processed).
+        This executes within the UoW's active transaction but does NOT commit.
+        """
+        if not tenant_id or not idempotency_key:
+            return True
+
+        stmt = (
+            insert(ProcessedEvent)
+            .values(tenant_id=tenant_id, idempotency_key=idempotency_key)
+            .on_conflict_do_nothing(index_elements=["tenant_id", "idempotency_key"])
+        )
+        result = await self.session.execute(stmt)
+        return type(result) is CursorResult and result.rowcount > 0

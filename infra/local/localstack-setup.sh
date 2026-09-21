@@ -76,7 +76,7 @@ awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs -
 # Data Plane pipeline queues: Debezium CDC publishes all outbox events to the new edi-data-plane-topic.
 # Each queue subscribes with a filter on its specific event_type(s).
 awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_ORCHESTRATOR_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORMATION_REQUESTED\", \"TRANSFORMATION_COMPLETED\", \"DELIVERY_REQUESTED\", \"DELIVERY_COMPLETED\"]}", "RawMessageDelivery": "true"}'
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORMATION_REQUESTED\", \"TRANSFORMATION_SUCCESSFUL\", \"TRANSFORMATION_FAILED\", \"DELIVERY_REQUESTED\", \"DELIVERY_SUCCESSFUL\", \"DELIVERY_FAILED\"]}", "RawMessageDelivery": "true"}'
 
 awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_COMPUTE_ARN" \
     --attributes '{"FilterPolicy": "{\"event_type\": [\"COMPUTE_TRANSFORMATION_COMMAND\"]}", "RawMessageDelivery": "true"}'

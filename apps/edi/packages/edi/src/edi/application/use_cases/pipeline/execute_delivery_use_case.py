@@ -3,11 +3,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import structlog
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_deterministic_id
 
-from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
-from edi.domain.enums import PipelineEventType
+from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDeliveryError
+from edi.domain.enums import MessageStatus
+from edi.domain.events import DeliveryFailed, DeliverySuccessful
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -54,31 +53,40 @@ class ExecuteDeliveryUseCase:
             if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={command.trace_id}")
 
-        try:
-            await strategy.deliver(command.trace_id, command.partner_id, edi_msg, idempotency_key)
-            logger.info("delivery_worker.delivery_successful", trace_id=command.trace_id)
-
-            # Emit DELIVERY_COMPLETED domain event back to orchestrator
-            completion_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, command.trace_id, "DELIVERY_COMPLETED"
-            )
-
-            async with self.uow_factory() as uow, uow:
-                await uow.outbox.append_event(
-                    idempotency_key=completion_key,
-                    event_type=PipelineEventType.DELIVERY_COMPLETED.value,
-                    payload={
-                        "trace_id": command.trace_id,
-                        "tenant_id": command.tenant_id,
-                    },
+            try:
+                await strategy.deliver(
+                    command.trace_id, command.partner_id, edi_msg, idempotency_key
                 )
-                await uow.commit()
 
-        except Exception:
-            logger.exception(
-                "delivery_worker.delivery_failed",
-                trace_id=command.trace_id,
-                strategy=command.strategy_type,
-                partner_id=command.partner_id,
-            )
-            raise
+                # Register success on the aggregate
+                edi_msg.status = MessageStatus.DELIVERED
+                edi_msg.add_domain_event(
+                    DeliverySuccessful(
+                        trace_id=command.trace_id,
+                        tenant_id=command.tenant_id,
+                        direction=edi_msg.direction,
+                    )
+                )
+                logger.info("delivery_worker.delivery_successful", trace_id=command.trace_id)
+
+            except TerminalDeliveryError as e:
+                # Register failure on the aggregate
+                edi_msg.status = MessageStatus.FAILED
+                edi_msg.add_domain_event(
+                    DeliveryFailed(
+                        trace_id=command.trace_id,
+                        tenant_id=command.tenant_id,
+                        direction=edi_msg.direction,
+                        failure_reason=str(e),
+                    )
+                )
+                logger.exception(
+                    "delivery_worker.delivery_failed",
+                    trace_id=command.trace_id,
+                    strategy=command.strategy_type,
+                    partner_id=command.partner_id,
+                )
+
+            # Save the aggregate (which flushes domain events)
+            await uow.transactions.save(edi_msg)
+            await uow.commit()

@@ -11,9 +11,6 @@ from collections.abc import AsyncGenerator
 
 import structlog
 from database.router import DatabaseRouter
-from edi.adapters.outbound.database.data_plane.postgres_idempotency_repository import (
-    SqlAlchemyEdiIdempotencyRepository,
-)
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
@@ -92,7 +89,6 @@ async def main() -> None:
         consumer=compute_consumer,
         queue_name=settings.sqs.compute_queue_url.rsplit("/", 1)[-1],
         handler=dispatcher.dispatch_raw,
-        idempotency_repo=SqlAlchemyEdiIdempotencyRepository(db_router, resolver),
     )
 
     # Handle shutdown signals

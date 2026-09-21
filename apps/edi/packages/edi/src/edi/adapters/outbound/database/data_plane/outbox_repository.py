@@ -1,18 +1,11 @@
-import asyncio
-import typing
-from datetime import UTC, datetime, timedelta
-
 import structlog
-from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
 from seedwork.domain.types import JsonValue
-from seedwork.events import EventEnvelope
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
-from sqlalchemy import CursorResult, or_, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox, ProcessedEvent
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 
 logger = structlog.get_logger(__name__)
@@ -44,186 +37,8 @@ class SqlAlchemyDataPlaneOutboxRepository(DataPlaneOutboxRepositoryPort):
                 else generate_id(SystemIdPrefix.GENERIC),
                 event_type=event_type,
                 payload=payload,
-                status=OutboxStatus.PENDING,
             )
             .on_conflict_do_nothing(index_elements=["idempotency_key"])
         )
         await self._session.execute(stmt)
         await self._session.flush()
-
-    async def sweep_stuck_events(self, lock_lease_ms: int = 30000) -> int:
-
-        total_swept = 0
-        while True:
-            # We use text-based CTE here to avoid SQLAlchemy ORM issues with SKIP LOCKED inside UPDATE
-
-            query = text("""
-                WITH cte AS (
-                    SELECT id FROM edi.data_plane_outbox
-                    WHERE status = :processing_status
-                      AND lease_expires_at < NOW()
-                    LIMIT 5000
-                    FOR UPDATE SKIP LOCKED
-                )
-                UPDATE edi.data_plane_outbox
-                SET status = :pending_status, lease_expires_at = NULL, owner_token = NULL
-                WHERE id IN (SELECT id FROM cte)
-            """)
-            result = await self._session.execute(
-                query,
-                {
-                    "processing_status": OutboxStatus.PROCESSING.value,
-                    "pending_status": OutboxStatus.PENDING.value,
-                },
-            )
-            cursor_result = typing.cast(CursorResult[tuple[object, ...]], result)
-            swept = int(cursor_result.rowcount)
-            total_swept += swept
-            await self._session.flush()
-            if swept < 5000:
-                break
-            await asyncio.sleep(0.1)
-        return total_swept
-
-    async def claim_next_events(
-        self, worker_id: str, limit: int, lock_lease_ms: int = 30000
-    ) -> list[EventEnvelope]:
-
-        query = text("""
-            UPDATE edi.data_plane_outbox
-            SET status = :processing_status, updated_at = NOW(), lease_expires_at = NOW() + interval '1 millisecond' * :lock_lease_ms, owner_token = :worker_id
-            WHERE id IN (
-                SELECT id FROM edi.data_plane_outbox
-                WHERE (status = :pending_status OR (status = :processing_status AND lease_expires_at < NOW()))
-                ORDER BY created_at ASC
-                LIMIT :limit
-                FOR UPDATE SKIP LOCKED
-            )
-            RETURNING *;
-        """)
-        result = await self._session.execute(
-            query,
-            {
-                "worker_id": worker_id,
-                "lock_lease_ms": lock_lease_ms,
-                "limit": limit,
-                "processing_status": OutboxStatus.PROCESSING.value,
-                "pending_status": OutboxStatus.PENDING.value,
-            },
-        )
-        await self._session.flush()
-
-        events = []
-        for row in result:
-            mapping = row._mapping
-            events.append(
-                EventEnvelope(
-                    id=str(mapping["id"]),
-                    tenant_id=str(mapping["tenant_id"]) if mapping.get("tenant_id") else None,
-                    event_type=str(mapping["event_type"]),
-                    payload=typing.cast(dict[str, JsonValue], mapping["payload"]),
-                    idempotency_key=mapping.get("idempotency_key"),
-                    source="edi_data_plane",
-                )
-            )
-        return events
-
-    async def mark_completed(self, event_id: str, worker_id: str) -> None:
-        update_result = await self._session.execute(
-            update(DataPlaneOutbox)
-            .where(
-                DataPlaneOutbox.id == event_id,
-                DataPlaneOutbox.status == OutboxStatus.PROCESSING,
-                DataPlaneOutbox.owner_token == worker_id,
-            )
-            .values(
-                status=OutboxStatus.PROCESSED,
-                owner_token=None,
-                lease_expires_at=None,
-                updated_at=datetime.now(UTC).replace(tzinfo=None),
-            )
-        )
-        if typing.cast(CursorResult[tuple[object, ...]], update_result).rowcount > 0:
-            # Re-fetch the key to insert into processed events if needed, but the ID implies success
-            pass
-        else:
-            logger.warning("stale_success_update", event_id=event_id)
-
-    async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
-        update_result = await self._session.execute(
-            update(DataPlaneOutbox)
-            .where(
-                DataPlaneOutbox.id == event_id,
-                DataPlaneOutbox.status == OutboxStatus.PROCESSING,
-                DataPlaneOutbox.owner_token == worker_id,
-            )
-            .values(
-                status=OutboxStatus.PENDING,
-                attempts=DataPlaneOutbox.attempts + 1,
-                lease_expires_at=None,
-                owner_token=None,
-                updated_at=datetime.now(UTC).replace(tzinfo=None),
-                error_reason=error_message,
-            )
-        )
-        if typing.cast(CursorResult[tuple[object, ...]], update_result).rowcount == 0:
-            logger.warning("stale_failure_update", event_id=event_id)
-
-    async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
-
-        owner_token = generate_id(SystemIdPrefix.GENERIC)
-        now = datetime.now(UTC).replace(tzinfo=None)
-        lease_expires = now + timedelta(minutes=_DELIVERY_LEASE_MINUTES)
-
-        stmt = (
-            update(DataPlaneOutbox)
-            .where(
-                DataPlaneOutbox.idempotency_key == key_str,
-                DataPlaneOutbox.status != OutboxStatus.PROCESSED,
-                or_(
-                    DataPlaneOutbox.lease_expires_at.is_(None),
-                    DataPlaneOutbox.lease_expires_at < now,
-                ),
-            )
-            .values(
-                status=OutboxStatus.DELIVERING,
-                owner_token=owner_token,
-                lease_expires_at=lease_expires,
-                updated_at=now,
-            )
-            .returning(DataPlaneOutbox.idempotency_key)
-        )
-        result = await self._session.execute(stmt)
-        if not typing.cast(CursorResult[tuple[object, ...]], result).scalar_one_or_none():
-            return None
-        return owner_token
-
-    async def mark_delivery_success(self, key_str: str, owner_token: str) -> None:
-
-        update_result = await self._session.execute(
-            update(DataPlaneOutbox)
-            .where(
-                DataPlaneOutbox.idempotency_key == key_str,
-                DataPlaneOutbox.owner_token == owner_token,
-            )
-            .values(status=OutboxStatus.PROCESSED, owner_token=None, lease_expires_at=None)
-        )
-        if typing.cast(CursorResult[tuple[object, ...]], update_result).rowcount > 0:
-            await self._session.execute(
-                insert(ProcessedEvent).values(idempotency_key=key_str).on_conflict_do_nothing()
-            )
-        else:
-            logger.warning("stale_success_update", key_str=key_str)
-
-    async def mark_delivery_failure(self, key_str: str, owner_token: str) -> None:
-
-        result = await self._session.execute(
-            update(DataPlaneOutbox)
-            .where(
-                DataPlaneOutbox.idempotency_key == key_str,
-                DataPlaneOutbox.owner_token == owner_token,
-            )
-            .values(status=OutboxStatus.FAILED, owner_token=None, lease_expires_at=None)
-        )
-        if typing.cast(CursorResult[tuple[object, ...]], result).rowcount == 0:
-            logger.warning("stale_failure_update", key_str=key_str)

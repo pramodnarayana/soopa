@@ -46,7 +46,7 @@ class TransformRequestedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
-class TransformCompleted(DomainEvent):
+class TransformSuccessful(DomainEvent):
     """
     Domain event emitted when an EDI transform pipeline has successfully completed
     (both inbound and outbound). The repository drains this event into the outbox
@@ -64,7 +64,28 @@ class TransformCompleted(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return PipelineEventType.TRANSFORMATION_COMPLETED.value
+        return PipelineEventType.TRANSFORMATION_SUCCESSFUL.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class TransformFailed(DomainEvent):
+    """
+    Domain event emitted when an EDI transform pipeline has fatally failed.
+    The repository drains this event into the outbox before re-raising the exception
+    to NACK the message.
+    """
+
+    trace_id: str
+    tenant_id: str
+    direction: str
+    failure_reason: str
+
+    @property
+    def event_name(self) -> str:
+        return PipelineEventType.TRANSFORMATION_FAILED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -81,6 +102,43 @@ class DeliverRequestedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return PipelineEventType.DELIVERY_REQUESTED.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class DeliverySuccessful(DomainEvent):
+    """
+    Domain event emitted when an EDI message is successfully delivered.
+    """
+
+    trace_id: str
+    tenant_id: str
+    direction: str
+
+    @property
+    def event_name(self) -> str:
+        return PipelineEventType.DELIVERY_SUCCESSFUL.value
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class DeliveryFailed(DomainEvent):
+    """
+    Domain event emitted when an EDI message delivery fatally fails.
+    """
+
+    trace_id: str
+    tenant_id: str
+    direction: str
+    failure_reason: str
+
+    @property
+    def event_name(self) -> str:
+        return PipelineEventType.DELIVERY_FAILED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

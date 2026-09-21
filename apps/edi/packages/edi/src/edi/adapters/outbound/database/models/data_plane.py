@@ -5,7 +5,6 @@ from seedwork.domain.types import JsonValue
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import (
     BigInteger,
-    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -20,7 +19,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
-from database.models.common import OutboxMixin, TimestampMixin
+from database.models.common import TimestampMixin
 from edi.domain.enums import MessageStatus
 
 from .mixins import (
@@ -189,8 +188,6 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
         String(128), primary_key=True, default=lambda: generate_id("edi_msg")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
 
@@ -206,7 +203,6 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     content_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     signature_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
     encryption_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    is_replay: Mapped[bool] = mapped_column(Boolean, default=False)
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     msg_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -223,6 +219,9 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
+    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),
@@ -240,8 +239,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
         String(128), primary_key=True, default=lambda: generate_id(DomainIdPrefix.EDI_JSON.value)
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -251,11 +248,13 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     business_metadata: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    is_replay: Mapped[bool] = mapped_column(Boolean, default=False)
 
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default=MessageStatus.TRANSFORMED
     )
+    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
@@ -285,8 +284,6 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
         String(128), primary_key=True, default=lambda: generate_id("edi_api_gw")
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -300,6 +297,9 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     headers: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
+    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -322,16 +322,11 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
+class DataPlaneOutbox(TenantBase, TenantAwareMixin):
+    """Lightweight CDC signal table — read by Debezium, NOT polled by a sweeper."""
+
     __tablename__ = "outbox"
-    __table_args__ = (
-        Index(
-            "ix_tenant_outbox_pending",
-            "status",
-            "created_at",
-            postgresql_where=text("status = 'PENDING'"),
-        ),
-    )
+
     ID_PREFIX = DomainIdPrefix.EDI_DP_OUTBOX.value
 
     id: Mapped[str] = mapped_column(
@@ -339,10 +334,16 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
         primary_key=True,
         default=lambda: generate_id(DataPlaneOutbox.ID_PREFIX),
     )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"), default=lambda: datetime.now(UTC)
+    )
 
 
 class ProcessedEvent(TenantBase, TenantAwareMixin):
-    __tablename__ = "event_idempotency"
+    __tablename__ = "events_processed"
 
     idempotency_key: Mapped[str] = mapped_column(String(255))
     processed_at: Mapped[datetime] = mapped_column(
@@ -350,7 +351,7 @@ class ProcessedEvent(TenantBase, TenantAwareMixin):
     )
 
     __table_args__ = (
-        PrimaryKeyConstraint("tenant_id", "idempotency_key", name="pk_event_idempotency"),
+        PrimaryKeyConstraint("tenant_id", "idempotency_key", name="pk_events_processed"),
     )
 
 

@@ -56,7 +56,7 @@ class EdiComputeDispatcher:
         )
 
     def _parse_command(
-        self, payload: dict[str, Any]
+        self, payload: dict[str, Any], idempotency_key: str
     ) -> ComputeTransformCommand | ComputeOutboundTransformCommand:
         direction_val = payload.get("direction")
         direction = str(direction_val if direction_val else EdiDirection.INBOUND.value)
@@ -69,6 +69,7 @@ class EdiComputeDispatcher:
         base_kwargs = {
             "trace_id": str(trace_id),
             "tenant_id": str(tenant_id),
+            "idempotency_key": idempotency_key,
             "standard": str(payload.get("standard", EdiStandard.X12.name)),
         }
 
@@ -86,8 +87,14 @@ class EdiComputeDispatcher:
             if not payload:
                 raise InvalidMessageError("Message payload must be a valid JSON dictionary")
 
+            # idempotency_key is a top-level outbox column surfaced by Debezium,
+            # NOT inside the payload JSONB blob.
+            idempotency_key = body_json.get("idempotency_key")
+            if not idempotency_key or not str(idempotency_key).strip():
+                raise InvalidMessageError("Missing or empty 'idempotency_key' in message body")
+
             try:
-                command = self._parse_command(payload)
+                command = self._parse_command(payload, str(idempotency_key))
             except ValueError as e:
                 raise InvalidMessageError(str(e))
 

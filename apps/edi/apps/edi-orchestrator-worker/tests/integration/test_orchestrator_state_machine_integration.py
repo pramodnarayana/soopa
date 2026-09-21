@@ -41,8 +41,8 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
         await test_session.execute(
             text("""
                 INSERT INTO edi_messages
-                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_replay)
-                VALUES (:id, :id, :tenant_id, 'partner', 'soopa', 'INBOUND', 'X12', '850', 'RECEIVED', 'test_data', false)
+                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, replay_count)
+                VALUES (:id, :id, :tenant_id, 'partner', 'soopa', 'INBOUND', 'X12', '850', 'RECEIVED', 'test_data', 0)
             """),
             {"id": trace_id, "tenant_id": tenant_id},
         )
@@ -131,8 +131,8 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         await test_session.execute(
             text("""
                 INSERT INTO edi_messages
-                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_replay)
-                VALUES (:id, :id, :tenant_id, 'sender1', 'receiver1', 'INBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', false)
+                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, replay_count)
+                VALUES (:id, :id, :tenant_id, 'sender1', 'receiver1', 'INBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', 0)
             """),
             {"id": trace_id, "tenant_id": tenant_id},
         )

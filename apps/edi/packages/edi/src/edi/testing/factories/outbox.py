@@ -30,10 +30,7 @@ class DataPlaneOutboxBuilder:
             idempotency_key=kwargs.get("idempotency_key", f"idemp_{uuid.uuid4()}"),
             event_type=kwargs.get("event_type", self.event_type),
             payload=kwargs.get("payload", self.payload),
-            status=kwargs.get("status", self.status),
-            attempts=kwargs.get("attempts", self.attempts),
             created_at=kwargs.get("created_at", self.created_at),
-            updated_at=kwargs.get("updated_at", self.updated_at),
         )
         self.session.add(outbox_event)
         await self.session.flush()

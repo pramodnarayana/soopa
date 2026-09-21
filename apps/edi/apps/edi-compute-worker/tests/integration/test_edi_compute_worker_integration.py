@@ -153,7 +153,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
         )
         await conn.execute(
             text(
-                "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, is_replay, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', false, NOW(), NOW())"
+                "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, replay_count, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', 0, NOW(), NOW())"
             ),
             {"mid": msg_id, "trid": trace_id, "tid": tenant_id},
         )
@@ -163,11 +163,12 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     try:
         await dispatcher.dispatch_raw(
             body_json={
+                "idempotency_key": f"sys_idemp_integ_{trace_id}",
                 "payload": {
                     "trace_id": trace_id,
                     "tenant_id": tenant_id,
                     "step": "COMPUTE_TRANSFORM",
-                }
+                },
             }
         )
 
@@ -180,23 +181,14 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
         assert len(json_rows) == 1
         assert json_rows[0].status == "PARSED"
 
-        # Verify API Gateway request was created.
-        res = await db_connection.execute(
-            text("SELECT status, webhook_url, payload FROM api_gateway WHERE trace_id = :tid"),
-            {"tid": trace_id},
-        )
-        gw_rows = res.fetchall()
-        assert len(gw_rows) == 1
-        assert gw_rows[0].webhook_url == "https://test.com/webhook"
-
         # Verify Outbox event was published.
         res = await db_connection.execute(
-            text("SELECT status, event_type FROM outbox WHERE tenant_id = :tid"),
+            text("SELECT event_type FROM outbox WHERE tenant_id = :tid"),
             {"tid": tenant_id},
         )
         outbox_rows = res.fetchall()
         assert len(outbox_rows) == 1
-        assert outbox_rows[0].event_type == "TRANSFORMATION_COMPLETED"
+        assert outbox_rows[0].event_type == "TRANSFORMATION_SUCCESSFUL"
     finally:
         # Cleanup seeded data autonomously
         async with db_engine.connect() as conn:

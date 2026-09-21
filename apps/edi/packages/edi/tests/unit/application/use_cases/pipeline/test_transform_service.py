@@ -8,6 +8,8 @@ Unit tests for InboundTransformUseCase — verifies inbound EDI→JSON transform
 All test doubles are imported from fakes.py (DRY). No fake library used.
 """
 
+import contextlib
+
 import pytest
 
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
@@ -46,10 +48,15 @@ async def test_transform_edi_to_json_success() -> None:
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, uow)
 
     settings_casted = typing.cast(AppSettings, settings)
+
+    @contextlib.asynccontextmanager
+    async def fake_uow_factory():
+        yield uow_casted
+
     use_case = DispatchInboundTransformUseCase(
-        uow=uow_casted, transformer=transformer, settings=settings_casted
+        uow_factory=fake_uow_factory, transformer=transformer, settings=settings_casted
     )
-    await use_case.execute(trace_id)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # Assert — outbox event was created instead of transformer being called
     assert len(uow.outbox.events) == 1
@@ -71,8 +78,13 @@ async def test_transform_missing_message_raises_error() -> None:
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, uow)
 
     settings_casted = typing.cast(AppSettings, settings)
+
+    @contextlib.asynccontextmanager
+    async def fake_uow_factory():
+        yield uow_casted
+
     use_case = DispatchInboundTransformUseCase(
-        uow=uow_casted, transformer=transformer, settings=settings_casted
+        uow_factory=fake_uow_factory, transformer=transformer, settings=settings_casted
     )
 
     with pytest.raises(ValueError, match="No EDI message found for trace_id=invalid-trace"):

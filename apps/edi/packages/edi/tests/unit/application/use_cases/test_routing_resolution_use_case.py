@@ -63,8 +63,6 @@ def _make_edi_json(
         trace_id=trace_id,
         direction=direction,
         trading_partner_id=trading_partner_id,
-        is_replay=is_replay,
-        original_trace_id=original_trace_id,
         business_metadata=business_metadata,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
@@ -84,7 +82,6 @@ def _make_edi_message(
         direction=direction,
         trading_partner_id=trading_partner_id,
         connection_type=connection_type,
-        is_replay=is_replay,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -112,7 +109,9 @@ class TestResolveRoutingContextMsgAbsent:
         """
         repo = FakeRoutingResolverRepository(outbound_route=None)
         use_case = RoutingResolutionUseCase(repo)
-        edi_json = _make_edi_json(direction="OUTBOUND", is_replay=True)
+        edi_json = _make_edi_json(
+            direction="OUTBOUND",
+        )
 
         result = await use_case.resolve_routing_context(msg=None, edi_jsons=[edi_json])
 
@@ -128,7 +127,6 @@ class TestResolveRoutingContextMsgAbsent:
         use_case = RoutingResolutionUseCase(repo)
         edi_json = _make_edi_json(
             direction="OUTBOUND",
-            is_replay=True,
             business_metadata={"_routing": {"trading_partner_id": "tp-001"}},
         )
 
@@ -145,7 +143,9 @@ class TestResolveRoutingContextMsgAbsent:
         """
         repo = FakeRoutingResolverRepository(inbound_route=None)
         use_case = RoutingResolutionUseCase(repo)
-        edi_json = _make_edi_json(direction="INBOUND", is_replay=True)
+        edi_json = _make_edi_json(
+            direction="INBOUND",
+        )
 
         result = await use_case.resolve_routing_context(msg=None, edi_jsons=[edi_json])
 
@@ -200,7 +200,9 @@ class TestResolveOutboundRoutingWithMsg:
         """
         repo = FakeRoutingResolverRepository(outbound_route=("Partner B", "AS2"))
         use_case = RoutingResolutionUseCase(repo)
-        msg = _make_edi_message(trading_partner_id="tp-001", is_replay=True)
+        msg = _make_edi_message(
+            trading_partner_id="tp-001",
+        )
 
         name, conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[])
 

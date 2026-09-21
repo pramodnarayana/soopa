@@ -2,7 +2,7 @@ import { type FieldDef, type FilterRule, QueryBuilder } from '@soopa/ui';
 import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
 import { createRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { ArrowRight, Database, FileJson, RefreshCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
 import {
   useExplorerEdiJson,
@@ -13,6 +13,7 @@ import {
   useBulkReplayTransactions,
   useReplayTransaction,
 } from '../../../features/transactions/api/transactionsApi';
+import { ReplayBadge } from '../../../features/transactions/components/ReplayBadge';
 import { TransactionsTable } from '../../../features/transactions/components/TransactionsTable';
 import { Route as appRoute } from '../../tenant';
 
@@ -68,16 +69,9 @@ function RowActions({
 
   return (
     <div className="flex items-center justify-end">
-      {item.original_trace_id && (
-        <div className="mr-8 md:mr-12">
-          <span
-            className="px-2 py-1 rounded-md text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider shadow-sm"
-            title={`Replayed from ${item.original_trace_id}`}
-          >
-            Replayed
-          </span>
-        </div>
-      )}
+      <div className="mr-4 md:mr-8 flex gap-2">
+        <ReplayBadge count={item.replay_count} className="ml-2" />
+      </div>
       <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
     </div>
   );
@@ -131,7 +125,6 @@ function EdiMessageExpandedRow({ item }: { item: ExplorerEdiMessage }) {
           { label: 'ISA Receiver', value: item.receiver_id },
           { label: 'Transaction Type', value: item.transaction_type },
           { label: 'Status', value: item.status },
-          { label: 'Original Trace', value: item.original_trace_id },
         ]}
       />
       <div className="mt-4">
@@ -175,7 +168,6 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           { label: 'Direction', value: item.direction },
           { label: 'Transaction Type', value: item.transaction_type },
           { label: 'Status', value: item.status },
-          { label: 'Original Trace', value: item.original_trace_id },
         ]}
       />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -386,16 +378,17 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     activeTab === 'messages',
   );
 
-  useEffect(() => {
-    if (messagesData?.items) {
-      setAccumulatedMessages((prev) => {
-        if (messagesOffset === 0) return messagesData.items;
-        const map = new Map(prev.map((i) => [i.id, i]));
-        messagesData.items.forEach((i) => map.set(i.id, i));
-        return Array.from(map.values());
-      });
+  const [prevMessagesData, setPrevMessagesData] = useState(null);
+  if (messagesData?.items && messagesData !== prevMessagesData) {
+    setPrevMessagesData(messagesData as any);
+    if (messagesOffset === 0) {
+      setAccumulatedMessages(messagesData.items);
+    } else {
+      const map = new Map(accumulatedMessages.map((i) => [i.id, i]));
+      messagesData.items.forEach((i) => map.set(i.id, i));
+      setAccumulatedMessages(Array.from(map.values()));
     }
-  }, [messagesData, messagesOffset]);
+  }
 
   // EDI JSON (from explorer endpoint with direction filter)
   const [jsonOffset, setJsonOffset] = useState(0);
@@ -408,16 +401,17 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     activeTab === 'json',
   );
 
-  useEffect(() => {
-    if (jsonData?.items) {
-      setAccumulatedJson((prev) => {
-        if (jsonOffset === 0) return jsonData.items;
-        const map = new Map(prev.map((i) => [i.id, i]));
-        jsonData.items.forEach((i) => map.set(i.id, i));
-        return Array.from(map.values());
-      });
+  const [prevJsonData, setPrevJsonData] = useState(null);
+  if (jsonData?.items && jsonData !== prevJsonData) {
+    setPrevJsonData(jsonData as any);
+    if (jsonOffset === 0) {
+      setAccumulatedJson(jsonData.items);
+    } else {
+      const map = new Map(accumulatedJson.map((i) => [i.id, i]));
+      jsonData.items.forEach((i) => map.set(i.id, i));
+      setAccumulatedJson(Array.from(map.values()));
     }
-  }, [jsonData, jsonOffset]);
+  }
 
   const handleMessagesFiltersChange = (f: FilterRule[]) => {
     setMessagesFilters(f);
@@ -498,22 +492,38 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                   variant={selectedMessages.length > 0 ? 'default' : 'secondary'}
                   disabled={isBulkReplaying || selectedMessages.length === 0}
                   onClick={() => {
-                    const traceIds = selectedMessages
+                    const inboundIds = selectedMessages
+                      .filter((m) => m.direction === 'INBOUND')
                       .map((m) => m.trace_id)
                       .filter(Boolean) as string[];
-                    if (traceIds.length === 0) return;
 
-                    const direction = selectedMessages[0]?.direction;
-                    const checkpoint = direction === 'OUTBOUND' ? 'DELIVERY' : 'TRANSFORM';
-                    bulkReplay(
-                      { traceIds, checkpoint },
-                      {
-                        onSuccess: () => {
-                          setSelectedMessages([]);
-                          setMessagesRowSelection({});
+                    const outboundIds = selectedMessages
+                      .filter((m) => m.direction === 'OUTBOUND')
+                      .map((m) => m.trace_id)
+                      .filter(Boolean) as string[];
+
+                    if (inboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: inboundIds, checkpoint: 'TRANSFORM' },
+                        {
+                          onSuccess: () => {
+                            setSelectedMessages([]);
+                            setMessagesRowSelection({});
+                          },
                         },
-                      },
-                    );
+                      );
+                    }
+                    if (outboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: outboundIds, checkpoint: 'DELIVERY' },
+                        {
+                          onSuccess: () => {
+                            setSelectedMessages([]);
+                            setMessagesRowSelection({});
+                          },
+                        },
+                      );
+                    }
                   }}
                 >
                   <RefreshCcw className={`w-4 h-4 mr-2 ${isBulkReplaying ? 'animate-spin' : ''}`} />
@@ -551,22 +561,38 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                   variant={selectedJson.length > 0 ? 'default' : 'secondary'}
                   disabled={isBulkReplaying || selectedJson.length === 0}
                   onClick={() => {
-                    const traceIds = selectedJson
+                    const inboundIds = selectedJson
+                      .filter((m) => m.direction === 'INBOUND')
                       .map((m) => m.trace_id)
                       .filter(Boolean) as string[];
-                    if (traceIds.length === 0) return;
 
-                    const direction = selectedJson[0]?.direction;
-                    const checkpoint = direction === 'OUTBOUND' ? 'TRANSFORM' : 'DELIVERY';
-                    bulkReplay(
-                      { traceIds, checkpoint },
-                      {
-                        onSuccess: () => {
-                          setSelectedJson([]);
-                          setJsonRowSelection({});
+                    const outboundIds = selectedJson
+                      .filter((m) => m.direction === 'OUTBOUND')
+                      .map((m) => m.trace_id)
+                      .filter(Boolean) as string[];
+
+                    if (inboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: inboundIds, checkpoint: 'DELIVERY' },
+                        {
+                          onSuccess: () => {
+                            setSelectedJson([]);
+                            setJsonRowSelection({});
+                          },
                         },
-                      },
-                    );
+                      );
+                    }
+                    if (outboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: outboundIds, checkpoint: 'TRANSFORM' },
+                        {
+                          onSuccess: () => {
+                            setSelectedJson([]);
+                            setJsonRowSelection({});
+                          },
+                        },
+                      );
+                    }
                   }}
                 >
                   <RefreshCcw className={`w-4 h-4 mr-2 ${isBulkReplaying ? 'animate-spin' : ''}`} />

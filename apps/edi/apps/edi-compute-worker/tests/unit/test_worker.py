@@ -1,89 +1,121 @@
 import pytest
-from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload
+from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
+    ComputeOutboundTransformCommand,
+)
+from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformCommand
 
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
 
 
-class FakeProcessInboundEdiUseCase:
-    def __init__(self):
-        self.called_trace_id = None
-        self.called_s3_uri = None
-        self.called_standard = None
-        self.called_transaction_type = None
+class FakeComputeTransformUseCase:
+    """Typed fake for ComputeTransformUseCase. Records the command it was called with."""
 
-    async def execute(self, command) -> ParsedEdiPayload:
-        self.called_trace_id = command.trace_id
-        self.called_standard = command.standard
-        self.called_transaction_type = command.transaction_type
+    called_command: ComputeTransformCommand | None = None
 
-        if not command.trace_id or command.trace_id == "unknown":
-            raise ValueError("Invalid trace ID")
+    async def execute(self, command: ComputeTransformCommand) -> None:
+        self.called_command = command
 
-        return ParsedEdiPayload(
-            sender_id="TEST", receiver_id="TEST", interchange_control_number="1", transactions=[]
-        )
+
+class FakeComputeOutboundTransformUseCase:
+    """Typed fake for ComputeOutboundTransformUseCase. Records the command it was called with."""
+
+    called_command: ComputeOutboundTransformCommand | None = None
+
+    async def execute(self, command: ComputeOutboundTransformCommand) -> None:
+        self.called_command = command
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_process_message_success():
-    """Tests that the dispatcher parses payload and routes it to the use case."""
-    fake_use_case = FakeProcessInboundEdiUseCase()
+async def test_dispatcher_process_inbound_message_success() -> None:
+    """Dispatcher correctly parses an inbound Debezium body and threads all fields
+    — including idempotency_key — into the ComputeTransformCommand."""
+    fake_use_case = FakeComputeTransformUseCase()
 
-    async def fake_factory(tenant_id: str):
-        assert tenant_id == "1"
+    async def fake_factory(tenant_id: str) -> FakeComputeTransformUseCase:
+        assert tenant_id == "tenant-1"
         return fake_use_case
 
-    async def fake_outbound_factory(tenant_id: str):
-        pass
+    async def fake_outbound_factory(tenant_id: str) -> FakeComputeOutboundTransformUseCase:
+        raise AssertionError("outbound factory must not be called for an INBOUND message")
 
     dispatcher = EdiComputeDispatcher(
         use_case_factory=fake_factory, outbound_use_case_factory=fake_outbound_factory
     )
 
     message_body = {
-        "payload": {"trace_id": "trace-123", "tenant_id": "1", "s3_uri": "s3://edi/123.x12"}
+        "idempotency_key": "sys_idemp_test-inbound-success",
+        "payload": {"trace_id": "trace-123", "tenant_id": "tenant-1"},
     }
 
     await dispatcher.dispatch_raw(message_body)
 
-    assert fake_use_case.called_trace_id == "trace-123"
+    assert fake_use_case.called_command is not None
+    assert fake_use_case.called_command.trace_id == "trace-123"
+    assert fake_use_case.called_command.tenant_id == "tenant-1"
+    # Critical: verify the idempotency_key is correctly propagated from body into the command.
+    assert fake_use_case.called_command.idempotency_key == "sys_idemp_test-inbound-success"
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_process_message_error_handling():
-    """Tests that the dispatcher rejects invalid message bodies without invoking the use case."""
-    fake_use_case = FakeProcessInboundEdiUseCase()
+async def test_dispatcher_drops_message_with_missing_idempotency_key() -> None:
+    """Dispatcher must drop (not raise) messages that have no top-level idempotency_key.
+    This covers the new guard that prevents mistaking trace_id for the idempotency fence."""
+    fake_use_case = FakeComputeTransformUseCase()
 
-    async def fake_factory(tenant_id: str):
+    async def fake_factory(tenant_id: str) -> FakeComputeTransformUseCase:
         return fake_use_case
 
-    async def fake_outbound_factory(tenant_id: str):
-        pass
+    async def fake_outbound_factory(tenant_id: str) -> FakeComputeOutboundTransformUseCase:
+        raise AssertionError("outbound factory must not be called")
 
     dispatcher = EdiComputeDispatcher(
         use_case_factory=fake_factory, outbound_use_case_factory=fake_outbound_factory
     )
 
-    # missing trace_id should be rejected before the use case runs
-    message_body = {"payload": {"s3_uri": "s3://edi/123.x12", "tenant_id": "1"}}
+    # Body has no idempotency_key — message must be silently dropped, not raise.
+    message_body = {"payload": {"trace_id": "trace-123", "tenant_id": "tenant-1"}}
 
-    # Should not raise exception (InvalidMessageError is swallowed so message gets deleted)
     await dispatcher.dispatch_raw(message_body)
 
-    # Use case should not have been called with invalid data
-    assert fake_use_case.called_trace_id is None
+    assert fake_use_case.called_command is None
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_process_outbound_message_success():
-    """Tests that the dispatcher parses an outbound payload and routes it to the outbound use case."""
-    fake_outbound_use_case = FakeProcessInboundEdiUseCase()
+async def test_dispatcher_drops_message_with_missing_trace_id() -> None:
+    """Dispatcher rejects messages missing trace_id without invoking the use case."""
+    fake_use_case = FakeComputeTransformUseCase()
 
-    async def fake_factory(tenant_id: str):
-        pass
+    async def fake_factory(tenant_id: str) -> FakeComputeTransformUseCase:
+        return fake_use_case
 
-    async def fake_outbound_factory(tenant_id: str):
-        assert tenant_id == "1"
+    async def fake_outbound_factory(tenant_id: str) -> FakeComputeOutboundTransformUseCase:
+        raise AssertionError("outbound factory must not be called")
+
+    dispatcher = EdiComputeDispatcher(
+        use_case_factory=fake_factory, outbound_use_case_factory=fake_outbound_factory
+    )
+
+    message_body = {
+        "idempotency_key": "sys_idemp_test-missing-trace-id",
+        "payload": {"tenant_id": "tenant-1"},
+    }
+
+    await dispatcher.dispatch_raw(message_body)
+
+    assert fake_use_case.called_command is None
+
+
+@pytest.mark.asyncio
+async def test_dispatcher_process_outbound_message_success() -> None:
+    """Dispatcher correctly parses an outbound Debezium body and threads all fields
+    — including idempotency_key — into the ComputeOutboundTransformCommand."""
+    fake_outbound_use_case = FakeComputeOutboundTransformUseCase()
+
+    async def fake_factory(tenant_id: str) -> FakeComputeTransformUseCase:
+        raise AssertionError("inbound factory must not be called for an OUTBOUND message")
+
+    async def fake_outbound_factory(tenant_id: str) -> FakeComputeOutboundTransformUseCase:
+        assert tenant_id == "tenant-1"
         return fake_outbound_use_case
 
     dispatcher = EdiComputeDispatcher(
@@ -91,73 +123,80 @@ async def test_dispatcher_process_outbound_message_success():
     )
 
     message_body = {
+        "idempotency_key": "sys_idemp_test-outbound-success",
         "payload": {
             "trace_id": "trace-123",
-            "tenant_id": "1",
+            "tenant_id": "tenant-1",
             "direction": "OUTBOUND",
             "transaction_type": "850",
             "route_config": {"as2_partner_id": "p-1", "connection_type": "AS2"},
-        }
+        },
     }
 
     await dispatcher.dispatch_raw(message_body)
 
-    assert fake_outbound_use_case.called_trace_id == "trace-123"
+    assert fake_outbound_use_case.called_command is not None
+    assert fake_outbound_use_case.called_command.trace_id == "trace-123"
+    assert fake_outbound_use_case.called_command.tenant_id == "tenant-1"
+    # Critical: verify the idempotency_key is correctly propagated from body into the command.
+    assert (
+        fake_outbound_use_case.called_command.idempotency_key == "sys_idemp_test-outbound-success"
+    )
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_process_outbound_message_missing_type():
-    """Tests that the dispatcher rejects outbound messages missing transaction_type."""
-    fake_outbound_use_case = FakeProcessInboundEdiUseCase()
+async def test_dispatcher_drops_outbound_message_missing_transaction_type() -> None:
+    """Dispatcher rejects outbound messages missing transaction_type without invoking use case."""
+    fake_outbound_use_case = FakeComputeOutboundTransformUseCase()
 
-    async def fake_factory(tenant_id: str):
-        pass
+    async def fake_factory(tenant_id: str) -> FakeComputeTransformUseCase:
+        raise AssertionError("inbound factory must not be called")
 
-    async def fake_outbound_factory(tenant_id: str):
+    async def fake_outbound_factory(tenant_id: str) -> FakeComputeOutboundTransformUseCase:
         return fake_outbound_use_case
 
     dispatcher = EdiComputeDispatcher(
         use_case_factory=fake_factory, outbound_use_case_factory=fake_outbound_factory
     )
 
-    # Missing transaction_type for outbound should fail
     message_body = {
+        "idempotency_key": "sys_idemp_test-missing-txn-type",
         "payload": {
             "trace_id": "trace-123",
-            "tenant_id": "1",
+            "tenant_id": "tenant-1",
             "direction": "OUTBOUND",
-        }
+        },
     }
 
-    # Should not raise exception (swallowed)
     await dispatcher.dispatch_raw(message_body)
 
-    # Use case should not be called
-    assert fake_outbound_use_case.called_trace_id is None
+    assert fake_outbound_use_case.called_command is None
 
 
 @pytest.mark.asyncio
-async def test_dispatcher_process_invalid_direction():
-    """Tests that the dispatcher rejects invalid direction strings."""
-    fake_use_case = FakeProcessInboundEdiUseCase()
+async def test_dispatcher_drops_message_with_invalid_direction() -> None:
+    """Dispatcher rejects messages with unrecognised direction strings."""
+    fake_use_case = FakeComputeTransformUseCase()
 
-    async def fake_factory(tenant_id: str):
+    async def fake_factory(tenant_id: str) -> FakeComputeTransformUseCase:
         return fake_use_case
 
-    async def fake_outbound_factory(tenant_id: str):
-        return fake_use_case
+    async def fake_outbound_factory(tenant_id: str) -> FakeComputeOutboundTransformUseCase:
+        raise AssertionError("outbound factory must not be called")
 
     dispatcher = EdiComputeDispatcher(
         use_case_factory=fake_factory, outbound_use_case_factory=fake_outbound_factory
     )
 
     message_body = {
+        "idempotency_key": "sys_idemp_test-invalid-direction",
         "payload": {
             "trace_id": "trace-123",
-            "tenant_id": "1",
+            "tenant_id": "tenant-1",
             "direction": "invalid_dir",
-        }
+        },
     }
 
     await dispatcher.dispatch_raw(message_body)
-    assert fake_use_case.called_trace_id is None
+
+    assert fake_use_case.called_command is None

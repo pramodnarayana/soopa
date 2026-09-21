@@ -169,7 +169,6 @@ export function AppLayout() {
           </div>
 
           <NavItem icon={Activity} label="Transactions" to="/tenant/transactions" />
-          <NavItem icon={Database} label="Data Explorer" to="/tenant/explorer" />
           <NavItem icon={Users} label="Trading Partners" to="/tenant/partners" />
           <NavItem icon={Network} label="EDI Headers" to="/tenant/edi_headers" />
           <NavItem icon={Network} label="Routes" to="/tenant/routes" />

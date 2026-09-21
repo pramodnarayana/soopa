@@ -2,8 +2,6 @@ import contextlib
 from collections.abc import Callable
 
 import structlog
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -36,42 +34,13 @@ class DeliveryUseCase:
         """
         key_str = str(idempotency_key) if idempotency_key else None
 
-        # Phase 1: Claim lease (in isolated short-lived transaction)
-        owner_token: str | None = None
-        if key_str:
-            async with self._uow_factory() as uow, uow:
-                owner_token = await uow.outbox.claim_delivery_outbox_event(key_str)
-                if not owner_token:
-                    logger.info(
-                        "delivery.skipped_already_claimed",
-                        idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
-                    )
-                    return
-                await uow.commit()
+        if not key_str:
+            logger.warning("delivery.missing_idempotency_key", trace_id=trace_id)
 
         # Phase 2: Execute delivery and track status
         router = self._router_factory()
-        delivery_success = False
         try:
             await router.deliver(trace_id, idempotency_key=key_str)
-            delivery_success = True
         except Exception:
-            if key_str and owner_token:
-                try:
-                    async with self._uow_factory() as uow, uow:
-                        await uow.outbox.mark_delivery_failure(key_str, owner_token)
-                        await uow.commit()
-                except Exception:
-                    logger.exception(
-                        "outbox_delivery_failure_mark_failed",
-                        trace_id=trace_id,
-                        idempotency_key=key_str,
-                    )
-
             logger.exception("delivery_failed", trace_id=trace_id)
             raise
-
-        if delivery_success and key_str and owner_token:
-            async with self._uow_factory() as uow, uow:
-                await uow.outbox.mark_delivery_success(key_str, owner_token)
-                await uow.commit()

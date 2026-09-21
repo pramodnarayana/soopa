@@ -1,6 +1,7 @@
 from types import TracebackType
 from typing import Protocol
 
+from edi.ports.outbound.api_gateway_repository import ApiGatewayRepositoryPort
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
 from edi.ports.outbound.control_plane_outbox_repository_port import (
@@ -55,6 +56,7 @@ class DataPlaneUnitOfWorkPort(Protocol):
     Exposes abstract repository interfaces.
     """
 
+    api_gateway_transactions: ApiGatewayRepositoryPort
     transactions: TransactionRepositoryPort
     traces: TraceRepositoryPort
     outbox: DataPlaneOutboxRepositoryPort
@@ -78,3 +80,5 @@ class DataPlaneUnitOfWorkPort(Protocol):
     async def commit(self) -> None: ...
 
     async def rollback(self) -> None: ...
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool: ...

@@ -60,7 +60,7 @@ class CreateInboundRouteUseCase:
             webhook_id=str(cmd.webhook_id) if cmd.webhook_id else None,
             as2_partner_id=str(cmd.as2_partner_id) if cmd.as2_partner_id else None,
             sftp_partner_id=str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None,
-            connection_type=cmd.connection_type,
+            connection_type=EdiConnectionType.WEBHOOK,
             processing_mode=ProcessingMode(cmd.processing_mode) if cmd.processing_mode else None,
         )
 

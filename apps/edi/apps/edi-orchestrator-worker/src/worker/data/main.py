@@ -7,9 +7,6 @@ from typing import Any
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.data_plane.postgres_idempotency_repository import (
-    SqlAlchemyEdiIdempotencyRepository,
-)
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
 )
@@ -56,24 +53,42 @@ def _setup_registry(
     registry = EdiDataPlaneRouteRegistry()
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        async with uow_fact() as uow:
-            await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
+        await DispatchInboundTransformUseCase(uow_fact, transformer, settings).execute(
+            e.trace_id, idempotency_key=e.idempotency_key
+        )
 
     async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        async with uow_fact() as uow:
-            await DispatchOutboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
+        await DispatchOutboundTransformUseCase(uow_fact, transformer, settings).execute(
+            e.trace_id, idempotency_key=e.idempotency_key
+        )
 
-    async def run_transform_lifecycle(
+    async def run_transform_successful(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        async with uow_fact() as uow:
-            await PipelineLifecycleUseCase(uow).handle_transform_completed(e.payload)
+        await PipelineLifecycleUseCase(uow_fact).handle_transform_successful(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
 
-    async def run_delivery_lifecycle(
+    async def run_transform_failed(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        async with uow_fact() as uow:
-            await PipelineLifecycleUseCase(uow).handle_delivery_completed(e.payload)
+        await PipelineLifecycleUseCase(uow_fact).handle_transform_failed(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
+
+    async def run_delivery_successful(
+        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
+    ) -> None:
+        await PipelineLifecycleUseCase(uow_fact).handle_delivery_successful(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
+
+    async def run_delivery_failed(
+        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
+    ) -> None:
+        await PipelineLifecycleUseCase(uow_fact).handle_delivery_failed(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await DeliveryUseCase(
@@ -91,9 +106,14 @@ def _setup_registry(
         factory=run_outbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
+        event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
         direction=None,
-        factory=run_transform_lifecycle,
+        factory=run_transform_successful,
+    )
+    registry.register(
+        event_type=PipelineEventType.TRANSFORMATION_FAILED.value,
+        direction=None,
+        factory=run_transform_failed,
     )
     registry.register(
         event_type=PipelineEventType.DELIVERY_REQUESTED.value,
@@ -101,9 +121,14 @@ def _setup_registry(
         factory=run_deliver,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVERY_COMPLETED.value,
+        event_type=PipelineEventType.DELIVERY_SUCCESSFUL.value,
         direction=None,
-        factory=run_delivery_lifecycle,
+        factory=run_delivery_successful,
+    )
+    registry.register(
+        event_type=PipelineEventType.DELIVERY_FAILED.value,
+        direction=None,
+        factory=run_delivery_failed,
     )
 
     async def route_event(event: EdiDataPlaneEventMessage) -> None:
@@ -123,7 +148,6 @@ async def main() -> None:
         shard_overrides=settings.database.shard_overrides,
     )
     resolver = TenantResolver(db_router)
-    idempotency_repo = SqlAlchemyEdiIdempotencyRepository(db_router, resolver)
 
     transformer = BotsTransformerAdapter()
 
@@ -146,7 +170,6 @@ async def main() -> None:
         consumer=orchestrator_consumer,
         queue_name=settings.sqs.orchestrator_queue_url.rsplit("/", 1)[-1],
         handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
     )
     orchestrator_manager.start()
 

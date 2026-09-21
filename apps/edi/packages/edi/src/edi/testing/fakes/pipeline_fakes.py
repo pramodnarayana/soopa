@@ -10,6 +10,12 @@ from seedwork.domain.types import JsonValue
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
+from edi.ports.outbound.api_gateway_repository import (
+    ApiGatewayPayloadDTO,
+    ApiGatewayRepositoryPort,
+    CreateApiGatewayCommand,
+)
+
 T = TypeVar("T")
 
 
@@ -52,7 +58,6 @@ from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainM
 from edi.domain.models.webhooks import WebhookDomainModel
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.transaction_repository import (
-    CreateApiGatewayCommand,
     CreateEdiJsonCommand,
     CreateEdiMessageCommand,
     UpdateEdiJsonCommand,
@@ -123,7 +128,6 @@ class FakeTransformerAdapter(TransformerPort):
 class InMemoryRepositoryAdapter:
     def __init__(self) -> None:
         self.edi_messages: dict[str, dict[str, object]] = {}
-        self.api_gateway: dict[str, dict[str, JsonValue]] = {}
         self.edi_json: dict[str, dict[str, object]] = {}
         self.outbound_routes: dict[str, dict[str, object]] = {}
         self.outbound_edi_headers: dict[str, dict[str, object]] = {}
@@ -133,6 +137,9 @@ class InMemoryRepositoryAdapter:
         self.sftp_partners: dict[str, dict[str, object]] = {}
         self.as2_partners: dict[str, dict[str, object]] = {}
         self.local_as2_partners: dict[str, dict[str, object]] = {}
+        self.outbox_repo: FakeDataPlaneOutboxRepository | None = (
+            None  # To be set by FakeDataPlaneUnitOfWork
+        )
 
     async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         raw = self.edi_json.get(trace_id)
@@ -168,7 +175,7 @@ class InMemoryRepositoryAdapter:
             for field in (
                 "trading_partner_id",
                 "standard",
-                "is_replay",
+                "replay_count",
             ):
                 value = getattr(command, field)
                 if value is not None:
@@ -222,10 +229,91 @@ class InMemoryRepositoryAdapter:
             "msg_headers": command.msg_headers,
             "state": command.state,
             "status_message": command.status_message,
-            "is_replay": command.is_replay,
-            "parent_trace_id": command.parent_trace_id,
         }
         return trace_id
+
+    async def save(self, aggregate: EdiMessageDomainModel) -> None:
+        trace_id = aggregate.trace_id
+        if not trace_id:
+            trace_id = str(uuid.uuid4())
+            aggregate.trace_id = trace_id
+
+        # Merge or create message
+        if trace_id not in self.edi_messages:
+            self.edi_messages[trace_id] = {}
+
+        # Serialize fields
+        msg = self.edi_messages[trace_id]
+        msg["id"] = str(aggregate.id) if aggregate.id else str(uuid.uuid4())
+        msg["trace_id"] = trace_id
+        msg["tenant_id"] = aggregate.tenant_id
+        msg["direction"] = aggregate.direction.value if aggregate.direction else None
+        msg["status"] = aggregate.status.value if aggregate.status else None
+        msg["format_standard"] = aggregate.format_standard
+        msg["transaction_type"] = aggregate.transaction_type
+        msg["connection_type"] = aggregate.connection_type
+        msg["sender_id"] = aggregate.sender_id
+        msg["receiver_id"] = aggregate.receiver_id
+        msg["gs_sender_id"] = aggregate.gs_sender_id
+        msg["gs_receiver_id"] = aggregate.gs_receiver_id
+        msg["edi_data"] = aggregate.edi_data
+        msg["trading_partner_id"] = aggregate.trading_partner_id
+        msg["storage_uri"] = aggregate.storage_uri
+
+        for event in aggregate.domain_events:
+            event_type = type(event).__name__
+            payload = dataclasses.asdict(event)
+            if self.outbox_repo:
+                await self.outbox_repo.append_event(
+                    event_type=event_type, payload=payload, idempotency_key=event.idempotency_key
+                )
+            else:
+                self.outbox.append(
+                    {
+                        "idempotency_key": event.idempotency_key,
+                        "event_type": event_type,
+                        "payload": payload,
+                    }
+                )
+        aggregate.clear_domain_events()
+
+    async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
+        trace_id = aggregate.trace_id
+        if not trace_id:
+            trace_id = str(uuid.uuid4())
+            aggregate.trace_id = trace_id
+
+        if trace_id not in self.edi_json:
+            self.edi_json[trace_id] = {}
+
+        record = self.edi_json[trace_id]
+        record["id"] = str(aggregate.id) if aggregate.id else str(uuid.uuid4())
+        record["trace_id"] = trace_id
+        record["tenant_id"] = aggregate.tenant_id
+        record["direction"] = aggregate.direction.value if aggregate.direction else None
+        record["status"] = aggregate.status.value if aggregate.status else None
+        record["trading_partner_id"] = aggregate.trading_partner_id
+        record["transaction_type"] = aggregate.transaction_type
+        record["standard"] = aggregate.standard
+        record["business_metadata"] = aggregate.business_metadata
+        record["payload"] = aggregate.payload
+
+        for event in aggregate.domain_events:
+            event_type = type(event).__name__
+            payload = dataclasses.asdict(event)
+            if self.outbox_repo:
+                await self.outbox_repo.append_event(
+                    event_type=event_type, payload=payload, idempotency_key=event.idempotency_key
+                )
+            else:
+                self.outbox.append(
+                    {
+                        "idempotency_key": event.idempotency_key,
+                        "event_type": event_type,
+                        "payload": payload,
+                    }
+                )
+        aggregate.clear_domain_events()
 
     async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
         trace_id = command.trace_id or str(uuid.uuid4())
@@ -239,26 +327,6 @@ class InMemoryRepositoryAdapter:
             "business_metadata": command.business_metadata,
             "transaction_type": command.transaction_type,
             "payload": command.payload,
-            "parent_trace_id": command.parent_trace_id,
-            "original_trace_id": command.original_trace_id,
-            "is_replay": command.is_replay,
-        }
-        return trace_id
-
-    async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
-        trace_id = command.trace_id or str(uuid.uuid4())
-        self.api_gateway[trace_id] = {
-            "trace_id": trace_id,
-            "tenant_id": command.tenant_id,
-            "direction": command.direction,
-            "status": command.status,
-            "transaction_type": command.transaction_type,
-            "webhook_url": command.webhook_url,
-            "http_status_code": command.http_status_code,
-            "payload": command.payload,
-            "response": command.response,
-            "parent_trace_id": command.parent_trace_id,
-            "original_trace_id": command.original_trace_id,
         }
         return trace_id
 
@@ -317,27 +385,6 @@ class InMemoryRepositoryAdapter:
                 "payload": payload,
             }
         )
-
-    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None:
-        raw = self.api_gateway.get(trace_id)
-        return raw
-
-    async def update_api_payload_status(
-        self,
-        trace_id: str,
-        status: str,
-        webhook_url: str | None = None,
-        http_status_code: int | None = None,
-        response: str | None = None,
-    ) -> None:
-        if trace_id in self.api_gateway:
-            self.api_gateway[trace_id]["status"] = status
-            if webhook_url is not None:
-                self.api_gateway[trace_id]["webhook_url"] = webhook_url
-            if http_status_code is not None:
-                self.api_gateway[trace_id]["http_status_code"] = http_status_code
-            if response is not None:
-                self.api_gateway[trace_id]["response"] = response
 
     async def get_inbound_route(
         self,
@@ -635,6 +682,8 @@ class FakeDataPlaneUnitOfWork:
         outbox: FakeDataPlaneOutboxRepository | None = None,
     ) -> None:
         self.repository = repository or InMemoryRepositoryAdapter()
+        self.api_gateway_transactions = FakeApiGatewayRepository()
+
         self.transactions = self.repository
         self.traces = self.repository
         self.outbound_routes = self.repository
@@ -645,6 +694,7 @@ class FakeDataPlaneUnitOfWork:
         self.sftp_partners = self.repository
         self.webhooks = self.repository
         self.outbox = outbox or FakeDataPlaneOutboxRepository()
+        self.repository.outbox_repo = self.outbox
         self.committed = False
         self.rolled_back = False
 
@@ -665,6 +715,9 @@ class FakeDataPlaneUnitOfWork:
 
     async def rollback(self) -> None:
         self.rolled_back = True
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        return True
 
 
 class FakeControlPlaneUnitOfWork:
@@ -688,3 +741,56 @@ class FakeControlPlaneUnitOfWork:
         _exc_tb: object | None,
     ) -> None:
         pass
+
+
+class FakeApiGatewayRepository(ApiGatewayRepositoryPort):
+    def __init__(self) -> None:
+        self.api_gateway: dict[str, dict[str, JsonValue]] = {}
+
+    async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
+        trace_id = command.trace_id or str(uuid.uuid4())
+        self.api_gateway[trace_id] = {
+            "trace_id": trace_id,
+            "tenant_id": command.tenant_id,
+            "direction": command.direction.value if command.direction else None,
+            "status": command.status.value if command.status else None,
+            "transaction_type": command.transaction_type,
+            "webhook_url": command.webhook_url,
+            "http_status_code": command.http_status_code,
+            "payload": command.payload,
+            "response": command.response,
+        }
+        return trace_id
+
+    async def get_api_payload(self, trace_id: str) -> ApiGatewayPayloadDTO | None:
+        data = self.api_gateway.get(trace_id)
+        if not data:
+            return None
+        return ApiGatewayPayloadDTO(
+            id=str(data.get("id", str(uuid.uuid4()))),
+            trace_id=trace_id,
+            payload=typing.cast(dict[str, JsonValue] | None, data.get("payload")),
+            status=str(data.get("status", str(MessageStatus.PENDING))),
+            http_status_code=int(typing.cast(int, data["http_status_code"]))
+            if data.get("http_status_code")
+            else None,
+            response=str(data["response"]) if data.get("response") else None,
+        )
+
+    async def update_api_payload_status(
+        self,
+        trace_id: str,
+        status: str,
+        webhook_url: str | None = None,
+        http_status_code: int | None = None,
+        response: str | None = None,
+        record_id: str | None = None,
+    ) -> None:
+        if trace_id in self.api_gateway:
+            self.api_gateway[trace_id]["status"] = status
+            if webhook_url is not None:
+                self.api_gateway[trace_id]["webhook_url"] = webhook_url
+            if http_status_code is not None:
+                self.api_gateway[trace_id]["http_status_code"] = http_status_code
+            if response is not None:
+                self.api_gateway[trace_id]["response"] = response

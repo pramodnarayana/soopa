@@ -4,12 +4,12 @@ import typing
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
 
-from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
-from edi.domain.enums import MessageStatus
+from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDeliveryError
+from edi.core.pipeline.models import EdiWebhookPayload
+from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.ports.outbound.api_gateway_repository import CreateApiGatewayCommand
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -28,6 +28,87 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         super().__init__(uow_factory, vault)
         self.http_delivery = http_delivery
 
+    async def _build_payload(
+        self,
+        trace_id: str,
+        partner_id: str,
+        edi_msg: EdiMessageDomainModel,
+        uow: DataPlaneUnitOfWorkPort,
+    ) -> tuple[str, dict[str, typing.Any], str | None]:
+        partner = await uow.webhooks.get_webhook(edi_msg.tenant_id, partner_id)
+        if not partner:
+            raise TerminalDeliveryError(f"Webhook partner {partner_id} not found.")
+
+        edi_jsons = await uow.transactions.get_edi_jsons_by_trace_id(trace_id)
+        if not edi_jsons:
+            raise TerminalDeliveryError(
+                f"No EDI JSONs found for webhook delivery of trace_id={trace_id}"
+            )
+
+        standard = edi_jsons[0].standard if edi_jsons else "Unknown"
+        partner_id_from_json = edi_jsons[0].trading_partner_id if edi_jsons else None
+
+        direction_val = edi_msg.direction.value if edi_msg.direction else EdiDirection.INBOUND.value
+
+        # Ensure transactions is a valid list of dicts, excluding None
+        transactions: list[dict[str, typing.Any]] = []
+        for j in edi_jsons:
+            if j.payload is not None:
+                transactions.append(typing.cast(dict[str, typing.Any], j.payload))
+
+        envelope = EdiWebhookPayload.build(
+            trace_id=trace_id,
+            direction=direction_val,
+            sender_id=edi_msg.sender_id,
+            receiver_id=edi_msg.receiver_id,
+            trading_partner_id=edi_msg.trading_partner_id or partner_id_from_json,
+            format_standard=standard,
+            transactions=transactions,
+        )
+        return partner.url, envelope.model_dump(), partner.auth_header_vault_ref
+
+    async def _get_auth_token(self, auth_header_vault_ref: str | None) -> str | None:
+        if not auth_header_vault_ref:
+            return None
+        if not self.secret_store:
+            raise TerminalDeliveryError(
+                "Secret store is not configured but webhook partner requires an auth token."
+            )
+        return await self.secret_store.get_secret(auth_header_vault_ref)
+
+    async def _record_api_gateway(
+        self,
+        trace_id: str,
+        edi_msg: EdiMessageDomainModel,
+        payload_data: dict[str, typing.Any],
+        partner_url: str,
+        status_code: int | None,
+        response_text: str | None,
+        error_msg: str | None,
+        standard: str,
+    ) -> None:
+        async with self.uow_factory() as uow, uow:
+            final_status = MessageStatus.FAILED
+            if status_code is not None and 200 <= status_code < 300:
+                final_status = MessageStatus.DELIVERED
+
+            direction = edi_msg.direction if edi_msg.direction else EdiDirection.INBOUND
+
+            await uow.api_gateway_transactions.create_api_gateway(
+                CreateApiGatewayCommand(
+                    trace_id=trace_id,
+                    tenant_id=edi_msg.tenant_id,
+                    direction=direction,
+                    payload=typing.cast(dict[str, typing.Any], payload_data),
+                    status=final_status,
+                    transaction_type=standard,
+                    webhook_url=partner_url,
+                    http_status_code=status_code,
+                    response=response_text or error_msg,
+                )
+            )
+            await uow.commit()
+
     async def deliver(
         self,
         trace_id: str,
@@ -37,43 +118,13 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
     ) -> None:
         try:
             async with self.uow_factory() as uow, uow:
-                api_payload = await uow.transactions.get_api_payload(trace_id)
-                if not api_payload:
-                    raise ValueError(
-                        f"No API Payload found for webhook delivery of trace_id={trace_id}"
-                    )
-
-                partner = await uow.webhooks.get_webhook(edi_msg.tenant_id, partner_id)
-                if not partner:
-                    raise ValueError(f"Webhook partner {partner_id} not found.")
-
-                payload_data = api_payload.get("payload")
-                if not payload_data:
-                    raise ValueError(f"ApiGateway payload is empty for trace_id={trace_id}")
+                partner_url, payload_data, auth_vault_ref = await self._build_payload(
+                    trace_id, partner_id, edi_msg, uow
+                )
 
             raw_payload = json.dumps(payload_data).encode("utf-8")
-
-            auth_token = None
-            if partner.auth_header_vault_ref:
-                if not self.secret_store:
-                    raise ValueError(
-                        "Secret store is not configured but webhook partner requires an auth token."
-                    )
-                auth_token = await self.secret_store.get_secret(partner.auth_header_vault_ref)
-        except ValueError:
-            async with self.uow_factory() as uow, uow:
-                await uow.transactions.update_api_payload_status(
-                    trace_id=trace_id,
-                    status=MessageStatus.FAILED,
-                    webhook_url=partner.url if "partner" in locals() and partner else None,
-                )
-                await self._emit_delivery_completed(
-                    uow, trace_id, edi_msg.direction, MessageStatus.FAILED
-                )
-                await uow.commit()
-            logger.exception(
-                "Webhook delivery terminal failure for trace_id={trace_id}", trace_id=trace_id
-            )
+            auth_token = await self._get_auth_token(auth_vault_ref)
+        except TerminalDeliveryError:
             raise
         except Exception:
             logger.exception(
@@ -81,56 +132,48 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             )
             raise
 
+        status_code = None
+        response_text = None
+        error_msg = None
         try:
-            # Pass idempotency_key down to the http_delivery if it supports it, or add it to headers manually
             status_code, response_text = await self.http_delivery.deliver(
-                url=partner.url,
+                url=partner_url,
                 payload=raw_payload,
                 auth_token=auth_token,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                idempotency_key=idempotency_key,
             )
         except Exception as e:
             logger.exception(
                 "Webhook delivery HTTP transmission failed for trace_id={trace_id}",
                 trace_id=trace_id,
             )
-            raise RuntimeError(f"Webhook delivery failed: {e}") from e
+            error_msg = str(e)
 
-        if 200 <= status_code < 300:
-            async with self.uow_factory() as uow, uow:
-                await uow.transactions.update_api_payload_status(
-                    trace_id=trace_id,
-                    status=MessageStatus.DELIVERED,
-                    webhook_url=partner.url,
-                    http_status_code=status_code,
-                    response=response_text[:4000] if response_text else None,  # Cap response size
-                )
-                await self._emit_delivery_completed(
-                    uow, trace_id, edi_msg.direction, MessageStatus.DELIVERED
-                )
-                await uow.commit()
-            logger.info(
-                "Delivered trace_id={trace_id} → webhook {partner_url}",
-                trace_id=trace_id,
-                partner_url=partner.url,
-            )
-        else:
-            async with self.uow_factory() as uow, uow:
-                await uow.transactions.update_api_payload_status(
-                    trace_id=trace_id,
-                    status=MessageStatus.FAILED,
-                    webhook_url=partner.url,
-                    http_status_code=status_code,
-                    response=response_text[:4000] if response_text else None,
-                )
-                await self._emit_delivery_completed(
-                    uow, trace_id, edi_msg.direction, MessageStatus.FAILED
-                )
-                await uow.commit()
+        await self._record_api_gateway(
+            trace_id,
+            edi_msg,
+            payload_data,
+            partner_url,
+            status_code,
+            response_text,
+            error_msg,
+            "Unknown",
+        )
+
+        if error_msg:
+            raise TerminalDeliveryError(f"Webhook delivery failed: {error_msg}")
+        elif status_code is None or not (200 <= status_code < 300):
             logger.error(
                 "Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}",
                 trace_id=trace_id,
                 status_code=status_code,
             )
-            # Transient error, raise so outbox can retry if applicable
-            raise RuntimeError(f"Webhook delivery failed with HTTP {status_code}: {response_text}")
+            raise TerminalDeliveryError(
+                f"Webhook delivery failed with HTTP {status_code}: {response_text}"
+            )
+
+        logger.info(
+            "Delivered trace_id={trace_id} → webhook {partner_url}",
+            trace_id=trace_id,
+            partner_url=partner_url,
+        )

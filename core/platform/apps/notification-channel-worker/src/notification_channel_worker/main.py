@@ -23,6 +23,8 @@ async def main() -> None:  # noqa: C901
     container = WorkerContainer()
     container.config.from_pydantic(settings)
 
+    consumers = []
+
     try:
         await cast(Awaitable[None], container.init_resources())
 

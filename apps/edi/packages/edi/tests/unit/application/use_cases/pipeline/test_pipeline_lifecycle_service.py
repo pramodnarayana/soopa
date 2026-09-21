@@ -7,6 +7,8 @@ Unit tests for the PipelineLifecycleUseCase.
 Uses Fake Data Plane Unit Of Work.
 """
 
+import contextlib
+
 import pytest
 
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
@@ -21,10 +23,15 @@ def make_use_case(uow: FakeDataPlaneUnitOfWork | None = None) -> PipelineLifecyc
     u = uow or FakeDataPlaneUnitOfWork()
 
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, u)
-    return PipelineLifecycleUseCase(uow=uow_casted)
+
+    @contextlib.asynccontextmanager
+    async def fake_uow_factory():
+        yield uow_casted
+
+    return PipelineLifecycleUseCase(uow_factory=fake_uow_factory)
 
 
-async def test_handle_transform_completed_inbound() -> None:
+async def test_handle_transform_successful_inbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-inbound"
 
@@ -43,7 +50,7 @@ async def test_handle_transform_completed_inbound() -> None:
     }
 
     use_case = make_use_case(uow=uow)
-    await use_case.handle_transform_completed(payload)
+    await use_case.handle_transform_successful("tenant1", "key1", payload)
 
     # Assertions
     saved_edi = uow.repository.edi_messages.get(trace_id)
@@ -59,7 +66,7 @@ async def test_handle_transform_completed_inbound() -> None:
     assert event["payload"]["trace_id"] == trace_id
 
 
-async def test_handle_transform_completed_outbound() -> None:
+async def test_handle_transform_successful_outbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-outbound"
 
@@ -81,7 +88,7 @@ async def test_handle_transform_completed_outbound() -> None:
     }
 
     use_case = make_use_case(uow=uow)
-    await use_case.handle_transform_completed(payload)
+    await use_case.handle_transform_successful("tenant1", "key1", payload)
 
     # Assertions
     saved_json = uow.repository.edi_json.get(trace_id)
@@ -96,11 +103,11 @@ async def test_handle_transform_completed_outbound() -> None:
     assert event["payload"]["trace_id"] == trace_id
 
 
-async def test_handle_delivery_completed_inbound() -> None:
+async def test_handle_delivery_successful_inbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-inbound-dlv"
 
-    uow.repository.api_gateway[trace_id] = {
+    uow.api_gateway_transactions.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "status": MessageStatus.PENDING_DELIVERY,
     }
@@ -112,33 +119,37 @@ async def test_handle_delivery_completed_inbound() -> None:
     }
 
     use_case = make_use_case(uow=uow)
-    await use_case.handle_delivery_completed(payload)
+    await use_case.handle_delivery_successful("tenant1", "key1", payload)
 
-    saved_api = uow.repository.api_gateway.get(trace_id)
+    saved_api = uow.api_gateway_transactions.api_gateway.get(trace_id)
     assert saved_api is not None
     assert saved_api["status"] == str(MessageStatus.DELIVERED)
 
 
-async def test_handle_delivery_completed_null_direction_defaults_to_inbound() -> None:
+async def test_handle_delivery_successful_null_direction_defaults_to_inbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-null-direction-dlv"
-    uow.repository.api_gateway[trace_id] = {
+    uow.api_gateway_transactions.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "status": MessageStatus.PENDING_DELIVERY,
     }
 
-    await make_use_case(uow=uow).handle_delivery_completed(
+    await make_use_case(uow=uow).handle_delivery_successful(
+        "tenant1",
+        "key1",
         {
             "trace_id": trace_id,
             "direction": None,
             "status": MessageStatus.DELIVERED,
-        }
+        },
     )
 
-    assert uow.repository.api_gateway[trace_id]["status"] == str(MessageStatus.DELIVERED)
+    assert uow.api_gateway_transactions.api_gateway[trace_id]["status"] == str(
+        MessageStatus.DELIVERED
+    )
 
 
-async def test_handle_delivery_completed_outbound() -> None:
+async def test_handle_delivery_successful_outbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-outbound-dlv"
 
@@ -154,7 +165,7 @@ async def test_handle_delivery_completed_outbound() -> None:
     }
 
     use_case = make_use_case(uow=uow)
-    await use_case.handle_delivery_completed(payload)
+    await use_case.handle_delivery_successful("tenant1", "key1", payload)
 
     saved_edi = uow.repository.edi_messages.get(trace_id)
     assert saved_edi is not None

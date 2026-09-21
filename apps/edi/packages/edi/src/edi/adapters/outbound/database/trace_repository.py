@@ -91,11 +91,11 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 business_metadata=j.business_metadata,
                 transaction_type=j.transaction_type,
                 payload=payload,
-                is_replay=j.is_replay,
-                parent_trace_id=j.parent_trace_id,
-                original_trace_id=j.original_trace_id,
                 created_at=j.created_at,
                 updated_at=j.updated_at,
+                replay_count=j.replay_count,
+                original_trace_id=j.original_trace_id,
+                parent_trace_id=j.parent_trace_id,
             )
             for j, payload in zip(json_records, hydrated_json_payloads, strict=True)
         ]
@@ -133,11 +133,11 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 msg_headers=None,  # Optimization: Not needed for full trace view currently
                 state=edi_msg.state,
                 status_message=edi_msg.status_message,
-                is_replay=edi_msg.is_replay,
-                parent_trace_id=edi_msg.parent_trace_id,
-                original_trace_id=edi_msg.original_trace_id,
                 created_at=edi_msg.created_at,
                 updated_at=edi_msg.updated_at,
+                replay_count=edi_msg.replay_count,
+                original_trace_id=edi_msg.original_trace_id,
+                parent_trace_id=edi_msg.parent_trace_id,
             )
         else:
             edi_message_dto = None
@@ -154,10 +154,11 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                     http_status_code=g.http_status_code,
                     payload=g.payload,
                     response=g.response,
-                    parent_trace_id=g.parent_trace_id,
-                    original_trace_id=g.original_trace_id,
                     created_at=g.created_at,
                     updated_at=g.updated_at,
+                    replay_count=g.replay_count,
+                    original_trace_id=g.original_trace_id,
+                    parent_trace_id=g.parent_trace_id,
                 )
                 for g in gw_records
             ],

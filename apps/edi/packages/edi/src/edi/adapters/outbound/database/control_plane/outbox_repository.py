@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Generic, TypeVar
 
@@ -33,7 +34,7 @@ T_Session = TypeVar("T_Session", bound=AsyncSession)
 class SqlAlchemyOutboxRepositoryMixin(Generic[T_Session]):
     session: T_Session
 
-    model_class: type[ControlPlaneOutbox] | type[DataPlaneOutbox]
+    model_class: type[ControlPlaneOutbox]
     id_prefix: str = "obevt_"
 
     async def flush(self) -> None: ...
@@ -107,7 +108,7 @@ class SqlAlchemyControlPlaneOutboxRepository(
     def __init__(
         self,
         session: GlobalSession,
-        model_class: type[ControlPlaneOutbox] | type[DataPlaneOutbox] = ControlPlaneOutbox,
+        model_class: type[ControlPlaneOutbox] = ControlPlaneOutbox,
     ) -> None:
         super().__init__(session)
         self.model_class = model_class
@@ -197,18 +198,16 @@ class SqlAlchemyControlPlaneOutboxRepository(
 
 
 class SqlAlchemyDataPlaneOutboxRepository(
-    SqlAlchemyOutboxRepositoryMixin, TenantSqlAlchemyRepository, DataPlaneOutboxRepositoryPort
+    TenantSqlAlchemyRepository, DataPlaneOutboxRepositoryPort
 ):
     """
     Outbox repository for the Data Plane (Tenant Shard).
     Writes pipeline events (TRANSFORMATION_REQUESTED, DELIVERY_REQUESTED, etc.) consumed
-    by the CDC Sweeper, which is configurable through the Scheduler UI.
+    by Debezium CDC — lightweight INSERT only, no sweeper columns.
     """
 
     def __init__(self, session: TenantSession) -> None:
-
         super().__init__(session)
-        self.model_class = DataPlaneOutbox
         self.id_prefix = DomainIdPrefix.EDI_DP_OUTBOX
 
     async def publish_outbox_event(
@@ -218,9 +217,15 @@ class SqlAlchemyDataPlaneOutboxRepository(
         payload: dict[str, JsonValue],
         idempotency_key: str | None = None,
     ) -> str:
-        return await self._publish_record(
+        event_id = f"{self.id_prefix}{generate_random_hex(6)}"
+        record = DataPlaneOutbox(
+            id=event_id,
             tenant_id=tenant_id,
-            event_type=event_type,
-            payload=payload,
             idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+            event_type=event_type.value if isinstance(event_type, Enum) else str(event_type),
+            payload=payload,
+            created_at=datetime.now(UTC),
         )
+        self.session.add(record)
+        await self.session.flush()
+        return event_id

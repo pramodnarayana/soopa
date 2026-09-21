@@ -1,5 +1,3 @@
-import json
-
 import pulumi_aws as aws
 from seedwork.messaging import provision_fifo_queue_pair, subscribe_queue
 
@@ -30,38 +28,38 @@ def provision_messaging(prefix: str, tags: dict, platform_events_topic_arn: str)
         "config-sync-sub",
         platform_events_topic_arn,
         config_sync_q,
-        json.dumps({"event_type": [{"prefix": "webhook."}, {"prefix": "edi."}]}),
+        {"event_type": [{"prefix": "webhook."}, {"prefix": "edi."}]},
     )
 
     subscribe(
         "transform-sub",
         platform_events_topic_arn,
         transform_q,
-        json.dumps({"event_type": ["pipeline.transform_event"]}),
+        {"event_type": ["pipeline.transform_event"]},
     )
     subscribe(
         "compute-sub",
         platform_events_topic_arn,
         compute_q,
-        json.dumps({"event_type": ["pipeline.compute_transform_event"]}),
+        {"event_type": ["pipeline.compute_transform_event"]},
     )
     subscribe(
         "lifecycle-sub",
         platform_events_topic_arn,
         lifecycle_q,
-        json.dumps({"event_type": ["pipeline.transform_completed", "pipeline.delivery_completed"]}),
+        {"event_type": ["pipeline.transform_completed", "pipeline.delivery_completed"]},
     )
     subscribe(
         "deliver-sub",
         platform_events_topic_arn,
         deliver_q,
-        json.dumps({"event_type": ["pipeline.deliver_event"]}),
+        {"event_type": ["pipeline.deliver_event"]},
     )
     subscribe(
         "notifications-sub",
         platform_events_topic_arn,
         priority_notifications_q,
-        json.dumps({"event_type": [{"prefix": "notification."}]}),
+        {"event_type": [{"prefix": "notification."}]},
     )
 
     return {

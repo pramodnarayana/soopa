@@ -66,6 +66,12 @@ Refactor the Outbox Sweeper to use Bounded Concurrency or Distributed Job Fan-ou
 
 ## 5. Testing
 
+### Missing End-to-End Infrastructure Tests (SQS/SNS Routing)
+
+**Priority:** High
+**Description:** Currently, our testing suite (unit, e2e, and integration) bypasses the actual Localstack infrastructure wiring for the data plane (e.g., Debezium CDC -> SNS -> SQS). Our E2E tests manually instantiate Use Cases sequentially, and pub/sub integration tests provision temporary topics. As a result, critical infrastructure misconfigurations (like mismatched SNS Filter Policies) go undetected by CI/CD.
+**Proposed Resolution:** Implement a true "Black Box" system integration test using `testcontainers` or `docker compose` that spins up the actual Worker Containers, Debezium, and Localstack using the real `localstack-setup.sh` script, drops a payload into the API, and asserts that the final delivery webhook is triggered.
+
 ### No Frontend Test Runner (Vitest)
 
 **Priority:** Medium

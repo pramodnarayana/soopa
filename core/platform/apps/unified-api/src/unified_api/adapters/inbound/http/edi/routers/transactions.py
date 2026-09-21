@@ -16,6 +16,9 @@ from edi.application.use_cases.transactions.list_edi_json_use_case import (
 from edi.application.use_cases.transactions.list_edi_messages_use_case import (
     ListEdiMessagesUseCase,
 )
+from edi.application.use_cases.transactions.modify_and_replay_use_case import (
+    ModifyAndReplayTransactionUseCase,
+)
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
@@ -78,7 +81,47 @@ class BulkReplayResponse(BaseModel):
     processed_count: int
 
 
+class ModifyAndReplayRequest(BaseModel):
+    modified_payload: str
+
+
+class ModifyAndReplayResponse(BaseModel):
+    status: str
+    original_trace_id: str
+    new_trace_id: str
+
+
 # --- Endpoints ---
+
+
+@router.post(
+    "/{trace_id}/modify-and-replay", status_code=202, response_model=ModifyAndReplayResponse
+)
+async def modify_and_replay_transaction(
+    trace_id: str,
+    request: ModifyAndReplayRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+) -> ModifyAndReplayResponse:
+    actor = "USER"
+    log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
+    log.info("modify_and_replay_transaction.received")
+    async with uow:
+        try:
+            use_case = ModifyAndReplayTransactionUseCase(uow)
+            new_trace_id = await use_case.execute(
+                tenant_id, trace_id, request.modified_payload, actor
+            )
+        except TransactionNotFoundError as exc:
+            log.warning("modify_and_replay_transaction.not_found", reason=str(exc))
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            log.warning("modify_and_replay_transaction.bad_request", reason=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc))
+    log.info("modify_and_replay_transaction.accepted", new_trace_id=new_trace_id)
+    return ModifyAndReplayResponse(
+        status="accepted", original_trace_id=trace_id, new_trace_id=new_trace_id
+    )
 
 
 @router.get("/messages", response_model=EdiMessageListResponse)

@@ -21,6 +21,7 @@ from edi.application.use_cases.transactions.list_edi_messages_use_case import (
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
+from edi.domain.enums import TransactionEntityType
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
@@ -92,9 +93,7 @@ class FakeEdiMessageRepository:
                 return model
         return None
 
-    async def get_edi_json(
-        self, trace_id: str
-    ) -> EdiJsonDomainModel | None:
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
         # For tests, just return a dummy if trace_id exists in models (or blindly return one)
         for model in self._models.values():
             if model.trace_id == trace_id:
@@ -110,9 +109,7 @@ class FakeEdiMessageRepository:
                 )
         return None
 
-    async def create_edi_json(
-        self, record: EdiJsonDomainModel
-    ) -> None:
+    async def create_edi_json(self, record: EdiJsonDomainModel) -> None:
         pass
 
     async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
@@ -140,8 +137,18 @@ class FakeEdiMessageRepository:
         for model in models:
             await self.save(model)
 
-    async def get_edi_messages_by_traces(self, trace_ids: list[str]) -> list[EdiMessageDomainModel]:
+    async def get_edi_messages_by_traces(
+        self, tenant_id: str, trace_ids: list[str]
+    ) -> list[EdiMessageDomainModel]:
         return [m for m in self._models.values() if m.trace_id in trace_ids]
+
+    async def increment_replay_count(
+        self, tenant_id: str, trace_ids: list[str], entity_type: TransactionEntityType
+    ) -> None:
+        for trace_id in trace_ids:
+            for model in self._models.values():
+                if model.trace_id == trace_id:
+                    model.replay_count += 1
 
     async def save_trace_event(self, event: Any) -> None:
         pass

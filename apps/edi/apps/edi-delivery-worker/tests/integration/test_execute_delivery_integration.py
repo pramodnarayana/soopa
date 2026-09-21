@@ -64,8 +64,8 @@ async def test_execute_delivery_integration(
         await test_session.execute(
             text("""
                 INSERT INTO edi_messages
-                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, is_replay)
-                VALUES (:id, :id, :tenant_id, 'partner', 'soopa', 'OUTBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', false)
+                (id, trace_id, tenant_id, sender_id, receiver_id, direction, format_standard, transaction_type, status, edi_data, replay_count)
+                VALUES (:id, :id, :tenant_id, 'sender1', 'receiver1', 'OUTBOUND', 'X12', '850', 'TRANSFORMED', 'test_data', 0)
             """),
             {"id": trace_id, "tenant_id": tenant_id},
         )
@@ -132,7 +132,10 @@ async def test_execute_delivery_integration(
     # Verify domain event in outbox
     async for test_session in db_router.get_tenant_session(tenant_id, "fake_shard", "fake_dsn"):
         res = await test_session.execute(
-            text("SELECT payload FROM outbox WHERE event_type = 'DELIVERY_COMPLETED'")
+            text(
+                "SELECT payload FROM outbox WHERE event_type = 'DELIVERY_SUCCESSFUL' AND payload->>'trace_id' = :trace_id"
+            ),
+            {"trace_id": trace_id},
         )
         outbox_row = res.fetchone()
         assert outbox_row is not None

@@ -7,7 +7,6 @@ import structlog
 from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
 from pubsub.ports.consumer_error_handler_port import ConsumerErrorHandlerPort
-from pubsub.ports.idempotency_repository_port import IdempotencyRepositoryPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 
 logger = structlog.get_logger(__name__)
@@ -33,7 +32,6 @@ class SqsConsumerManager:
         queue_name: str = "",
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
-        idempotency_repo: IdempotencyRepositoryPort | None = None,
         error_handler: ConsumerErrorHandlerPort | None = None,
     ):
         self.consumer = consumer
@@ -42,7 +40,6 @@ class SqsConsumerManager:
         self.queue_name = queue_name
         self.poll_sleep_seconds = poll_sleep_seconds
         self.error_sleep_seconds = error_sleep_seconds
-        self.idempotency_repo = idempotency_repo
 
         # Use injected strategy or fallback to default resilient strategy
         self.error_handler = error_handler or DefaultConsumerErrorHandler(error_sleep_seconds)
@@ -105,18 +102,6 @@ class SqsConsumerManager:
                         queue=self.queue_name,
                         payload_keys=list(ackable_msg.payload.raw_data.keys()),
                     )
-                    if self.idempotency_repo:
-                        is_new = await self.idempotency_repo.check_and_record_idempotency(
-                            ackable_msg.payload
-                        )
-                        if not is_new:
-                            logger.info(
-                                "sqs_consumer_manager_duplicate_skipped",
-                                queue=self.queue_name,
-                                payload_keys=list(ackable_msg.payload.raw_data.keys()),
-                            )
-                            await ackable_msg.ack()
-                            continue
 
                     await self.handler(ackable_msg.payload.raw_data)
                     await ackable_msg.ack()

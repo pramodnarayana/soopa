@@ -5,7 +5,6 @@ from typing import Any, cast
 import structlog
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import CursorResult, delete, select
 
@@ -35,7 +34,6 @@ class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort)
                                 DataPlaneOutbox.id.in_(
                                     select(DataPlaneOutbox.id)
                                     .where(
-                                        DataPlaneOutbox.status == OutboxStatus.PROCESSED,
                                         DataPlaneOutbox.created_at < cutoff_date,
                                     )
                                     .limit(5000)

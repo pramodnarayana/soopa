@@ -15,6 +15,7 @@ from edi.domain.enums import (
     MDNType,
     MessageStatus,
     SignatureAlgorithm,
+    TransactionEntityType,
 )
 from edi.domain.models.transactions import (
     EdiJsonDomainModel,
@@ -62,7 +63,7 @@ class CreateEdiMessageCommand:
     msg_headers: dict[str, JsonValue] | None = None
     state: str | None = None
     status_message: str | None = None
-    is_replay: bool | None = None
+    replay_count: int = 0
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
 
@@ -79,23 +80,7 @@ class CreateEdiJsonCommand:
     business_metadata: dict[str, JsonValue] | None = None
     transaction_type: str | None = None
     payload: JsonValue | None = None
-    parent_trace_id: str | None = None
-    original_trace_id: str | None = None
-    is_replay: bool | None = None
-
-
-@dataclass(frozen=True, kw_only=True)
-class CreateApiGatewayCommand:
-    trace_id: str
-    tenant_id: str
-    id: str | None = None
-    direction: EdiDirection | None = None
-    status: MessageStatus | None = None
-    transaction_type: str | None = None
-    webhook_url: str | None = None
-    http_status_code: int | None = None
-    payload: JsonValue | None = None
-    response: str | None = None
+    replay_count: int = 0
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
 
@@ -107,7 +92,7 @@ class UpdateEdiJsonCommand:
     trace_id: str
     trading_partner_id: str | None = None
     standard: str | None = None
-    is_replay: bool | None = None
+    replay_count: int | None = None
 
 
 class TransactionRepositoryPort(Protocol):
@@ -129,21 +114,31 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
+    async def get_edi_jsons_by_trace_id(self, trace_id: str) -> list[EdiJsonDomainModel]:
+        """
+        Fetches all EDI JSON records by trace_id and maps them to domain models.
+        """
+        ...
+
     async def get_edi_messages_by_traces(
-        self, trace_ids: Sequence[str]
+        self, tenant_id: str, trace_ids: Sequence[str]
     ) -> Sequence[EdiMessageDomainModel]:
         """
-        Fetches multiple EDI Messages by trace_ids and maps them to the domain model.
+        Fetch multiple EDI messages in bulk by trace_id and tenant_id.
         """
         ...
 
-    async def create_api_gateway(self, command: CreateApiGatewayCommand) -> str:
+    async def increment_replay_count(
+        self,
+        tenant_id: str,
+        trace_ids: Sequence[str],
+        entity_types: Sequence[TransactionEntityType],
+    ) -> None:
         """
-        Saves a new ApiGateway record to the Data Plane.
+        Atomically increments the replay_count for the given trace_ids for the specific entity_type
+        ('edi_message' or 'edi_json'). This is a high-performance bulk operation.
         """
         ...
-
-    async def get_api_payload(self, trace_id: str) -> dict[str, JsonValue] | None: ...
 
     async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         """
@@ -217,19 +212,6 @@ class TransactionRepositoryPort(Protocol):
     async def update_edi_json_status(self, trace_id: str, status: str) -> None:
         """
         Updates the status of an existing EdiJson record.
-        """
-        ...
-
-    async def update_api_payload_status(
-        self,
-        trace_id: str,
-        status: str,
-        webhook_url: str | None = None,
-        http_status_code: int | None = None,
-        response: str | None = None,
-    ) -> None:
-        """
-        Updates the status of an existing ApiGateway payload.
         """
         ...
 
