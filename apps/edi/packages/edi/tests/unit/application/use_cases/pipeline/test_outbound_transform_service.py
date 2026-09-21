@@ -107,7 +107,7 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == "TransformSuccessful"
+    assert event["event_type"] == PipelineEventType.TRANSFORMATION_SUCCESSFUL.value
     assert event["payload"]["trace_id"] == trace_id
 
 

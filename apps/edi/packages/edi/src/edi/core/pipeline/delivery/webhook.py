@@ -1,6 +1,6 @@
 import contextlib
 import json
-import typing
+from collections.abc import Callable
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
@@ -9,6 +9,7 @@ from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDelive
 from edi.core.pipeline.models import EdiWebhookPayload
 from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.types import JsonDict
 from edi.ports.outbound.api_gateway_repository import CreateApiGatewayCommand
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -19,9 +20,7 @@ logger = structlog.get_logger(__name__)
 class WebhookDeliveryStrategy(BaseDeliveryStrategy):
     def __init__(
         self,
-        uow_factory: typing.Callable[
-            [], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]
-        ],
+        uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         http_delivery: HttpDeliveryPort,
         vault: SecretStorePort | None = None,
     ) -> None:
@@ -34,7 +33,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         partner_id: str,
         edi_msg: EdiMessageDomainModel,
         uow: DataPlaneUnitOfWorkPort,
-    ) -> tuple[str, dict[str, typing.Any], str | None]:
+    ) -> tuple[str, EdiWebhookPayload, str | None, str]:
         partner = await uow.webhooks.get_webhook(edi_msg.tenant_id, partner_id)
         if not partner:
             raise TerminalDeliveryError(f"Webhook partner {partner_id} not found.")
@@ -45,16 +44,16 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 f"No EDI JSONs found for webhook delivery of trace_id={trace_id}"
             )
 
-        standard = edi_jsons[0].standard if edi_jsons else "Unknown"
+        standard: str = edi_jsons[0].standard or "Unknown"
         partner_id_from_json = edi_jsons[0].trading_partner_id if edi_jsons else None
 
         direction_val = edi_msg.direction.value if edi_msg.direction else EdiDirection.INBOUND.value
 
-        # Ensure transactions is a valid list of dicts, excluding None
-        transactions: list[dict[str, typing.Any]] = []
+        # Collect all non-None JSON payloads. j.payload is JsonValue (no Any needed).
+        transactions: list[JsonDict] = []
         for j in edi_jsons:
-            if j.payload is not None:
-                transactions.append(typing.cast(dict[str, typing.Any], j.payload))
+            if isinstance(j.payload, dict):
+                transactions.append(j.payload)
 
         envelope = EdiWebhookPayload.build(
             trace_id=trace_id,
@@ -65,7 +64,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             format_standard=standard,
             transactions=transactions,
         )
-        return partner.url, envelope.model_dump(), partner.auth_header_vault_ref
+        return partner.url, envelope, partner.auth_header_vault_ref, standard
 
     async def _get_auth_token(self, auth_header_vault_ref: str | None) -> str | None:
         if not auth_header_vault_ref:
@@ -80,7 +79,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         self,
         trace_id: str,
         edi_msg: EdiMessageDomainModel,
-        payload_data: dict[str, typing.Any],
+        envelope: EdiWebhookPayload,
         partner_url: str,
         status_code: int | None,
         response_text: str | None,
@@ -99,7 +98,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                     trace_id=trace_id,
                     tenant_id=edi_msg.tenant_id,
                     direction=direction,
-                    payload=typing.cast(dict[str, typing.Any], payload_data),
+                    payload=envelope.model_dump(),
                     status=final_status,
                     transaction_type=standard,
                     webhook_url=partner_url,
@@ -118,11 +117,11 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
     ) -> None:
         try:
             async with self.uow_factory() as uow, uow:
-                partner_url, payload_data, auth_vault_ref = await self._build_payload(
+                partner_url, envelope, auth_vault_ref, standard = await self._build_payload(
                     trace_id, partner_id, edi_msg, uow
                 )
 
-            raw_payload = json.dumps(payload_data).encode("utf-8")
+            raw_payload = json.dumps(envelope.model_dump()).encode("utf-8")
             auth_token = await self._get_auth_token(auth_vault_ref)
         except TerminalDeliveryError:
             raise
@@ -152,12 +151,12 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         await self._record_api_gateway(
             trace_id,
             edi_msg,
-            payload_data,
+            envelope,
             partner_url,
             status_code,
             response_text,
             error_msg,
-            "Unknown",
+            standard,
         )
 
         if error_msg:

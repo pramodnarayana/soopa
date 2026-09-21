@@ -132,6 +132,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             for field in (
                 "trading_partner_id",
                 "standard",
+                "replay_count",
             )
             if getattr(command, field) is not None
         }

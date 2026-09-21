@@ -142,23 +142,6 @@ class ComputeOutboundTransformUseCase:
             transaction_type=transaction_type,
         )
 
-        async with self.uow_factory() as uow, uow:
-            edi_json = await uow.transactions.get_edi_json(trace_id)
-            if not edi_json:
-                logger.warning("compute_outbound_transform.edi_json_not_found", trace_id=trace_id)
-                raise TransactionNotFoundError(trace_id)
-
-            json_payload = edi_json.payload
-            if not json_payload or not (
-                isinstance(json_payload, dict)
-                or (
-                    isinstance(json_payload, list)
-                    and all(isinstance(node, dict) for node in json_payload)
-                )
-            ):
-                raise TransactionNotFoundError(trace_id)
-
-            resolved_transaction_type = command.transaction_type
         try:
             async with self.uow_factory() as uow, uow:
                 # 0. Idempotency Check — use per-event idempotency_key, NOT trace_id.
@@ -230,8 +213,10 @@ class ComputeOutboundTransformUseCase:
                 logger.info("compute_outbound_transform.edi_message_saved", trace_id=trace_id)
 
                 # 3. Dispatch TRANSFORMATION_SUCCESSFUL
+                # Seed from command.idempotency_key (not trace_id) so replays produce a
+                # distinct outbox key and are not silently dropped as duplicates.
                 transform_successful_key = generate_deterministic_id(
-                    SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORMATION_SUCCESSFUL"
+                    SystemIdPrefix.IDEMPOTENCY, command.idempotency_key, "TRANSFORMATION_SUCCESSFUL"
                 )
                 await uow.outbox.append_event(
                     idempotency_key=transform_successful_key,
@@ -257,7 +242,7 @@ class ComputeOutboundTransformUseCase:
                 edi_json_fallback = await failure_uow.transactions.get_edi_json(trace_id)
                 if edi_json_fallback:
                     event_key = generate_deterministic_id(
-                        SystemIdPrefix.IDEMPOTENCY, trace_id, "TRANSFORMATION_FAILED"
+                        SystemIdPrefix.IDEMPOTENCY, command.idempotency_key, "TRANSFORMATION_FAILED"
                     )
                     await failure_uow.outbox.append_event(
                         idempotency_key=event_key,

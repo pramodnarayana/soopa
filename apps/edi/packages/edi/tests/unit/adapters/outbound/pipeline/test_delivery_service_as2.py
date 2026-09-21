@@ -76,7 +76,6 @@ def make_use_case(
         return DeliveryRouterUseCase(uow_factory)
 
     return DeliveryUseCase(
-        uow_factory=uow_factory,
         router_factory=router_factory,
     )
 

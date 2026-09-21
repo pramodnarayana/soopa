@@ -253,7 +253,6 @@ async def test_inbound_flow_e2e(
             return DeliveryRouterUseCase(local_uow, strategies)
 
         deliver_svc = DeliveryUseCase(
-            uow_factory=real_uow_factory,
             router_factory=real_router_factory,
         )
         await deliver_svc.execute(trace_id)

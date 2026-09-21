@@ -49,6 +49,20 @@ class ExecuteDeliveryUseCase:
             raise ValueError(f"Unknown delivery strategy_type: {command.strategy_type}")
 
         async with self.uow_factory() as uow, uow:
+            # Idempotency guard: write events_processed in the SAME transaction as
+            # the delivery result. This is the only way to guarantee atomicity —
+            # any separate UOW would create a split-brain where the delivery succeeds
+            # but events_processed is not committed, causing the sweeper to re-deliver.
+            if idempotency_key:
+                is_new = await uow.record_idempotency(command.tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info(
+                        "delivery_worker.duplicate_deliver_skipped",
+                        trace_id=command.trace_id,
+                        idempotency_key=idempotency_key,
+                    )
+                    return
+
             edi_msg = await uow.transactions.get_edi_message(command.trace_id)
             if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={command.trace_id}")

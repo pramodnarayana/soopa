@@ -93,14 +93,12 @@ class PipelineLifecycleUseCase:
                     trace_id, str(MessageStatus.TRANSFORMED)
                 )
 
-            # Emit DELIVER command
-            # We use the incoming event's idempotency key to seed the next step.
-            # This is critical for Replays: the trace_id is constant, but the incoming event
-            # has a fresh idempotency_key. By chaining them, we prevent the outbox from
-            # silently dropping the Replay's delivery request as a duplicate!
-            transform_event_key = payload.get("idempotency_key", trace_id)
+            # Seed from the incoming event's idempotency_key parameter (not payload).
+            # Using the parameter guarantees we always have the correct per-event key,
+            # while payload.get() could silently fall back to trace_id if the key is absent.
+            deliver_key_seed = idempotency_key if idempotency_key else trace_id
             deliver_idempotency_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, str(transform_event_key), "DELIVER"
+                SystemIdPrefix.IDEMPOTENCY, deliver_key_seed, "DELIVER"
             )
             await uow.outbox.append_event(
                 idempotency_key=deliver_idempotency_key,

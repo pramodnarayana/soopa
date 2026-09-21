@@ -105,11 +105,9 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
             # First try admin v1 delete (which works cross-org)
             try:
                 await self.fetch_with_auth(endpoint=f"/admin/v1/orgs/{org_id}", method="DELETE")
-            except ZitadelHttpError as e:
-                # Fallback to management v1 if admin fails
-                if isinstance(e, ZitadelHttpNotFoundError):
-                    # We still want to try the fallback if admin fails with 404, just in case
-                    pass
+            except ZitadelHttpError:
+                # Fallback to management v1 if admin fails — even a 404 should still
+                # proceed to the management fallback, just in case.
                 await self.fetch_with_auth(
                     endpoint=f"/management/v1/orgs/{org_id}", method="DELETE"
                 )

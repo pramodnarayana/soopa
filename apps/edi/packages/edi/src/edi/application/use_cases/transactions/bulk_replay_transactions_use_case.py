@@ -2,7 +2,7 @@ import asyncio
 
 import structlog
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
+from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 
 from edi.domain.enums import TraceEventType, TransactionEntityType
 from edi.domain.events import DeliverRequestedEvent, TransformRequestedEvent
@@ -52,7 +52,9 @@ class BulkReplayTransactionsUseCase:
         audit_events: list[TraceEventDomainModel] = []
 
         for i, original in enumerate(originals):
-            idempotency_key = f"{command_key}_{i}" if command_key else original.trace_id
+            idempotency_key = (
+                f"{command_key}_{i}" if command_key else generate_id(SystemIdPrefix.IDEMPOTENCY)
+            )
 
             if original.direction and str(original.direction.value) == "INBOUND":
                 transform_event = TransformRequestedEvent(
@@ -132,7 +134,9 @@ class BulkReplayTransactionsUseCase:
         audit_events: list[TraceEventDomainModel] = []
 
         for i, original in enumerate(originals):
-            idempotency_key = f"{command_key}_{i}" if command_key else original.trace_id
+            idempotency_key = (
+                f"{command_key}_{i}" if command_key else generate_id(SystemIdPrefix.IDEMPOTENCY)
+            )
 
             deliver_event = DeliverRequestedEvent(
                 trace_id=original.trace_id,

@@ -82,15 +82,7 @@ def _setup_registry(
                 f"EXECUTE_DELIVERY_COMMAND payload is missing required field: {exc}"
             ) from exc
 
-        async with uow_fact() as uow:
-            if e.idempotency_key and not await uow.record_idempotency(
-                e.tenant_id, e.idempotency_key
-            ):
-                logger.info("delivery_worker.duplicate_deliver_skipped", trace_id=e.trace_id)
-                return
-            await use_case_factory(lambda: uow_fact()).execute(
-                command=command, idempotency_key=e.idempotency_key
-            )
+        await use_case_factory(uow_fact).execute(command=command, idempotency_key=e.idempotency_key)
 
     # Note: EXECUTE_DELIVERY_COMMAND is the only event this worker listens to
     registry.register(

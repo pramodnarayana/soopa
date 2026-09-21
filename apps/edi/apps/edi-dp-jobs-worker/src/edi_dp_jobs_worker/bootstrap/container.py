@@ -74,8 +74,11 @@ class WorkerContainer:
             PipelineEventType.TRANSFORMATION_REQUESTED.value: self.settings.sqs.compute_queue_url,
             PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value: self.settings.sqs.orchestrator_queue_url,
             PipelineEventType.TRANSFORMATION_SUCCESSFUL.value: self.settings.sqs.orchestrator_queue_url,
+            PipelineEventType.TRANSFORMATION_FAILED.value: self.settings.sqs.orchestrator_queue_url,
             PipelineEventType.EXECUTE_DELIVERY_COMMAND.value: self.settings.sqs.deliver_queue_url,
             PipelineEventType.DELIVERY_REQUESTED.value: self.settings.sqs.deliver_queue_url,
+            PipelineEventType.DELIVERY_SUCCESSFUL.value: self.settings.sqs.orchestrator_queue_url,
+            PipelineEventType.DELIVERY_FAILED.value: self.settings.sqs.orchestrator_queue_url,
         }
         publisher = RoutingSqsPublisher(
             event_type_to_queue_url=routing_map,

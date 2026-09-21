@@ -64,8 +64,9 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
             break
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
-        async with uow_fact() as uow:
-            await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
+        await DispatchInboundTransformUseCase(uow_fact, transformer, settings).execute(
+            e.trace_id, idempotency_key=e.idempotency_key
+        )
 
     registry.register(
         event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
@@ -194,11 +195,13 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
 
                 return mock_manager()
 
-            await DeliveryRouterUseCase(mock_uow_factory).deliver(e.trace_id)
+            await DeliveryRouterUseCase(mock_uow_factory).deliver(
+                trace_id=e.trace_id, idempotency_key=e.idempotency_key
+            )
             await uow.commit()
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORMATION_COMPLETED.value,
+        event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
         direction="INBOUND",
         factory=run_delivery,
     )
@@ -211,7 +214,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
     sqs_body = {
         "tenant_id": tenant_id,
         "idempotency_key": "some_key_123",
-        "event_type": PipelineEventType.TRANSFORMATION_COMPLETED.value,
+        "event_type": PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
         "payload": {"trace_id": trace_id, "direction": "INBOUND"},
     }
 

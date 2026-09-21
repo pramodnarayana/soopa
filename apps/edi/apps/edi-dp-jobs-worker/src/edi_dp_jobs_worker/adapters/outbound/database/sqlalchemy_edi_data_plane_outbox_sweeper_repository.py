@@ -37,8 +37,11 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(EdiDataPlaneOutboxSweeperRep
             PipelineEventType.TRANSFORMATION_REQUESTED.value,
             PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value,
             PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
+            PipelineEventType.TRANSFORMATION_FAILED.value,
             PipelineEventType.EXECUTE_DELIVERY_COMMAND.value,
             PipelineEventType.DELIVERY_REQUESTED.value,
+            PipelineEventType.DELIVERY_SUCCESSFUL.value,
+            PipelineEventType.DELIVERY_FAILED.value,
         ]
 
         stmt = (

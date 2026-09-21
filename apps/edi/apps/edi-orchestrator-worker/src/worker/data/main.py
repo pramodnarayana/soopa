@@ -91,9 +91,9 @@ def _setup_registry(
         )
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        await DeliveryUseCase(
-            uow_factory=uow_fact, router_factory=lambda: router_factory(uow_fact)
-        ).execute(trace_id=e.trace_id, idempotency_key=e.idempotency_key)
+        await DeliveryUseCase(router_factory=lambda: router_factory(uow_fact)).execute(
+            trace_id=e.trace_id, idempotency_key=e.idempotency_key
+        )
 
     registry.register(
         event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,

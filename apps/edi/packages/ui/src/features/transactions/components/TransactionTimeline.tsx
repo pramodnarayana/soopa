@@ -94,7 +94,15 @@ export function TransactionTimeline({ transaction }: Props) {
 
   // Common UI blocks
   const renderEdiMessageBlock = () => {
-    if (!msg) return null;
+    if (!msg) {
+      return (
+        <Card>
+          <CardContent className="pt-8 text-center text-slate-400 py-12">
+            EDI message is being received…
+          </CardContent>
+        </Card>
+      );
+    }
     return (
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100">

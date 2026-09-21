@@ -261,7 +261,7 @@ class InMemoryRepositoryAdapter:
         msg["storage_uri"] = aggregate.storage_uri
 
         for event in aggregate.domain_events:
-            event_type = type(event).__name__
+            event_type = event.event_name
             payload = dataclasses.asdict(event)
             if self.outbox_repo:
                 await self.outbox_repo.append_event(
@@ -299,7 +299,7 @@ class InMemoryRepositoryAdapter:
         record["payload"] = aggregate.payload
 
         for event in aggregate.domain_events:
-            event_type = type(event).__name__
+            event_type = event.event_name
             payload = dataclasses.asdict(event)
             if self.outbox_repo:
                 await self.outbox_repo.append_event(
