@@ -35,7 +35,9 @@ class ModifyAndReplayTransactionUseCase:
         """
         # 1. Determine what kind of record the original trace was.
         # We check EdiMessage first, then EdiJson.
-        original_msg = await self.uow.transactions.get_edi_message(original_trace_id)
+        original_msg = await self.uow.transactions.get_edi_message(
+            original_trace_id, tenant_id=tenant_id
+        )
 
         new_trace_id = generate_id(SystemIdPrefix.TRACE)
 
@@ -52,7 +54,9 @@ class ModifyAndReplayTransactionUseCase:
                 tenant_id, original_trace_id, new_trace_id, modified_payload, actor, original_msg
             )
 
-        original_json = await self.uow.transactions.get_edi_json(original_trace_id)
+        original_json = await self.uow.transactions.get_edi_json(
+            original_trace_id, tenant_id=tenant_id
+        )
         if original_json:
             return await self._handle_edi_json(
                 tenant_id, original_trace_id, new_trace_id, modified_payload, actor, original_json

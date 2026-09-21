@@ -2,10 +2,15 @@ import contextlib
 import json
 from collections.abc import Callable
 
+import httpx
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDeliveryError
+from edi.core.pipeline.delivery.base import (
+    BaseDeliveryStrategy,
+    TerminalDeliveryError,
+    TransientDeliveryError,
+)
 from edi.core.pipeline.models import EdiWebhookPayload
 from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
@@ -134,6 +139,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         status_code = None
         response_text = None
         error_msg = None
+        is_transient = False
         try:
             status_code, response_text = await self.http_delivery.deliver(
                 url=partner_url,
@@ -141,6 +147,13 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 auth_token=auth_token,
                 idempotency_key=idempotency_key,
             )
+        except httpx.RequestError as e:
+            logger.exception(
+                "Webhook delivery transient transport error for trace_id={trace_id}",
+                trace_id=trace_id,
+            )
+            error_msg = str(e)
+            is_transient = True
         except Exception as e:
             logger.exception(
                 "Webhook delivery HTTP transmission failed for trace_id={trace_id}",
@@ -160,6 +173,8 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         )
 
         if error_msg:
+            if is_transient:
+                raise TransientDeliveryError(f"Webhook delivery failed (transient): {error_msg}")
             raise TerminalDeliveryError(f"Webhook delivery failed: {error_msg}")
         elif status_code is None or not (200 <= status_code < 300):
             logger.error(

@@ -71,9 +71,15 @@ def _setup_registry(
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         try:
+            payload_tenant_id = e.payload["tenant_id"]
+            if payload_tenant_id != e.tenant_id:
+                raise InvalidMessageError(
+                    f"Tenant ID mismatch: event tenant_id {e.tenant_id} != payload tenant_id {payload_tenant_id}"
+                )
+
             command = ExecuteDeliveryCommand(
                 trace_id=e.payload["trace_id"],
-                tenant_id=e.payload["tenant_id"],
+                tenant_id=e.tenant_id,
                 partner_id=e.payload["partner_id"],
                 strategy_type=e.payload["strategy_type"],
             )

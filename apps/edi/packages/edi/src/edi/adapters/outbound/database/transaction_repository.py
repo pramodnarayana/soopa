@@ -191,6 +191,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             edi_data=aggregate.edi_data,
             trading_partner_id=aggregate.trading_partner_id,
             storage_uri=aggregate.storage_uri,
+            replay_count=aggregate.replay_count,
+            parent_trace_id=aggregate.parent_trace_id,
+            original_trace_id=aggregate.original_trace_id,
         )
         await self.session.merge(record)
 
@@ -247,6 +250,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     edi_data=aggregate.edi_data,
                     trading_partner_id=aggregate.trading_partner_id,
                     storage_uri=aggregate.storage_uri,
+                    replay_count=aggregate.replay_count,
+                    parent_trace_id=aggregate.parent_trace_id,
+                    original_trace_id=aggregate.original_trace_id,
                 )
             )
 
@@ -448,13 +454,17 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             )
             await self.session.execute(stmt)
 
-    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
+    async def get_edi_json(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> EdiJsonDomainModel | None:
         stmt = (
             select(EdiJson)
             .where(EdiJson.trace_id == str(trace_id))
             .order_by(EdiJson.created_at.desc())
             .limit(1)
         )
+        if tenant_id:
+            stmt = stmt.where(EdiJson.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
         if not record:

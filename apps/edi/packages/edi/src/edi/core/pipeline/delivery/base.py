@@ -18,6 +18,10 @@ class TerminalDeliveryError(Exception):
     """Raised when delivery fails fatally and should not be retried."""
 
 
+class TransientDeliveryError(Exception):
+    """Raised when delivery fails due to a temporary network or transport error, and should be retried."""
+
+
 class BaseDeliveryStrategy:
     """Base class for delivery strategies."""
 
