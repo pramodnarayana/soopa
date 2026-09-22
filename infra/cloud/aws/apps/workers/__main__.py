@@ -130,17 +130,29 @@ volumes = [aws.ecs.TaskDefinitionVolumeArgs(name="secrets")]
 
 # Gather all queue URLs from other stacks
 env_vars = [
-    {"name": "QUEUE_URL_EDI_TRANSFORM", "value": edi.require_output("sqs_transform_queue_url")},
-    {"name": "QUEUE_URL_EDI_LIFECYCLE", "value": edi.require_output("sqs_lifecycle_queue_url")},
-    {"name": "QUEUE_URL_EDI_DELIVER", "value": edi.require_output("sqs_deliver_queue_url")},
-    {"name": "QUEUE_URL_EDI_CONFIG_SYNC", "value": edi.require_output("sqs_config_sync_queue_url")},
+    {
+        "name": "SQS_ORCHESTRATOR_QUEUE_URL",
+        "value": edi.require_output("sqs_orchestrator_queue_url"),
+    },
+    {
+        "name": "SQS_COMPUTE_QUEUE_URL",
+        "value": edi.require_output("sqs_compute_queue_url"),
+    },
+    {
+        "name": "SQS_DELIVER_QUEUE_URL",
+        "value": edi.require_output("sqs_deliver_queue_url"),
+    },
+    {
+        "name": "SQS_PROVISIONING_QUEUE_URL",
+        "value": edi.require_output("sqs_config_sync_queue_url"),
+    },
     {
         "name": "QUEUE_URL_EDI_DATA_PLANE_JOBS",
-        "value": edi.require_output("sqs_data_plane_jobs_queue_url"),
+        "value": edi.require_output("edi_data_plane_jobs_queue_url"),
     },
     {
         "name": "QUEUE_URL_EDI_CONTROL_PLANE_JOBS",
-        "value": edi.require_output("sqs_control_plane_jobs_queue_url"),
+        "value": edi.require_output("edi_control_plane_jobs_queue_url"),
     },
     {
         "name": "SQS_DATA_PLANE_JOBS_QUEUE_URL",
@@ -172,6 +184,10 @@ env_vars = [
     {
         "name": "SQS_NOTIFICATION_JOBS_QUEUE_URL",
         "value": notification.require_output("notification_jobs_queue_url"),
+    },
+    {
+        "name": "SNS_PLATFORM_EVENTS_TOPIC_ARN",
+        "value": platform.require_output("sns_platform_events_topic_arn"),
     },
 ]
 

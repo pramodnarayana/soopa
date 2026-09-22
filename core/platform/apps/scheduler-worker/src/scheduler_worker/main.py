@@ -57,16 +57,17 @@ class SchedulerWorkerModule(LaunchableWorker):
 
     async def stop(self) -> None:
         logger.info("Stopping scheduler worker gracefully...")
-        if self.worker:
-            await self.worker.stop()
-        if self.worker_task:
-            # Wait for the background task to complete gracefully
-            with contextlib.suppress(asyncio.CancelledError):
-                await self.worker_task
-
-        if self.engine:
-            await self.engine.dispose()
-        logger.info("Database engine disposed. Scheduler worker shutdown complete.")
+        try:
+            if self.worker:
+                await self.worker.stop()
+            if self.worker_task:
+                # Wait for the background task to complete gracefully
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self.worker_task
+        finally:
+            if self.engine:
+                await self.engine.dispose()
+            logger.info("Database engine disposed. Scheduler worker shutdown complete.")
 
 
 async def main() -> None:

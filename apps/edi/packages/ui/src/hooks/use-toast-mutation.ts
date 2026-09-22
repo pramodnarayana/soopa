@@ -25,7 +25,7 @@ export function useToastMutation<TData, TVariables = void>(
       const message =
         typeof successMessage === 'function' ? successMessage(data, variables) : successMessage;
       if (message) {
-        toast({ title: 'Success', description: message });
+        toast({ title: 'Success', description: message, variant: 'success' });
       }
     },
     onError: (error: Error) => {

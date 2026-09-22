@@ -84,3 +84,7 @@ pulumi.export("edi_control_plane_jobs_queue_url", messaging["queues"]["control_p
 pulumi.export(
     "edi_priority_notifications_queue_url", messaging["queues"]["priority_notifications"].url
 )
+pulumi.export("sqs_orchestrator_queue_url", messaging["queues"]["transform"].url)
+pulumi.export("sqs_compute_queue_url", messaging["queues"]["compute"].url)
+pulumi.export("sqs_deliver_queue_url", messaging["queues"]["deliver"].url)
+pulumi.export("sqs_config_sync_queue_url", messaging["queues"]["config_sync"].url)

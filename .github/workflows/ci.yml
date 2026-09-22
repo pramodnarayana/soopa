@@ -7,52 +7,21 @@ on:
     branches: [ "main", "development" ]
 
 jobs:
-  build-lint-test:
-    name: Build, Lint, and Test
+  lint-and-typecheck:
+    name: Lint & Typecheck
     runs-on: ubuntu-latest
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}
+      group: ${{ github.workflow }}-lint-${{ github.ref }}
       cancel-in-progress: true
     permissions:
       contents: read
-    env:
-      ENVIRONMENT: test
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
 
-      - name: Load local environment
-        run: cp .env.example .env
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # v4.0.0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@887a942a15af3a7626099df99e897a18d9e5ab3a # v5.1.0
-        with:
-          version: "0.5.21"
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
-
-      - name: Setup Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
-        with:
-          python-version: '3.13' # Updated to match Dockerfile
-
-      - name: Install Node dependencies
-        run: pnpm install
-
-      - name: Install Python dependencies
-        run: uv sync --all-packages
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
 
       - name: Typecheck (Node)
         run: pnpm turbo typecheck
@@ -63,18 +32,53 @@ jobs:
       - name: Lint (Node)
         run: pnpm turbo lint
 
-      - name: Start Database & Infrastructure
-        run: |
-          docker compose up -d postgres_global edi_postgres_shard localstack debezium_shard otel-collector sftp --wait
-          pnpm db:migrate:platform
-          pnpm db:seed
-          pnpm db:migrate:edi
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-test-unit-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
 
       - name: Test (Node)
         run: CI=true pnpm test:node
 
       - name: Test with Coverage (Python)
         run: CI=true pnpm cov:python
+
+  test-integration:
+    name: Integration Tests
+    needs: [lint-and-typecheck, test-unit]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-test-integration-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    env:
+      ENVIRONMENT: test
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Start Database & Infrastructure
+        run: |
+          docker compose up -d postgres_global edi_postgres_shard localstack debezium_shard otel-collector sftp --wait
+          pnpm db:migrate:platform
+          pnpm db:seed
+          pnpm db:migrate:edi
 
       - name: Test (Integration)
         run: CI=true pnpm test:integration
@@ -84,8 +88,30 @@ jobs:
           cd infra/cloud/aws
           uv run pytest tests/
 
-      - name: Build Frontend/Node
-        run: pnpm turbo build
+  build-docker:
+    name: Build Modular Monolith
+    needs: [lint-and-typecheck, test-unit]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-build-docker-${{ github.ref }}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3.8.0
 
       - name: Build Modular Monolith Docker Image
-        run: docker build -t modular-monolith:latest .
+        uses: docker/build-push-action@b32b51a8eda65d6793cd0494a773d4f6bcef32dc # v6.11.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: modular-monolith:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

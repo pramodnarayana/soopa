@@ -150,7 +150,7 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
         logger.info("orchestrator_worker_starting")
         settings = get_settings()
         aws_endpoint = settings.aws.endpoint_url
-        s3_bucket = "soopaedi-dev"
+        s3_bucket = settings.s3.bucket
 
         self.db_router = DatabaseRouter(
             global_db_url=settings.database.global_url,

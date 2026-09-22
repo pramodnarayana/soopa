@@ -3,12 +3,35 @@ import contextlib
 import os
 import signal
 import sys
+from typing import Any
 
 import structlog
 from observability import ObservabilityProvider
 from unified_worker.registry import get_worker_instance
 
 logger = structlog.get_logger(__name__)
+
+
+async def _start_workers(workers: list[tuple[str, Any]]) -> list[Any]:
+    started_workers = []
+    start_tasks = [worker.start() for _, worker in workers]
+    results = await asyncio.gather(*start_tasks, return_exceptions=True)
+    for (name, worker), res in zip(workers, results, strict=True):
+        if isinstance(res, Exception):
+            logger.error("worker_start_failed", worker=name, exc_info=res)
+            raise res
+        started_workers.append(worker)
+    return started_workers
+
+
+async def _stop_workers(started_workers: list[Any]) -> None:
+    if not started_workers:
+        return
+    stop_tasks = [worker.stop() for worker in started_workers]
+    results = await asyncio.gather(*stop_tasks, return_exceptions=True)
+    for worker, res in zip(started_workers, results, strict=True):
+        if isinstance(res, Exception):
+            logger.error("worker_stop_failed", worker=worker.__class__.__name__, exc_info=res)
 
 
 async def main(stop_event: asyncio.Event | None = None) -> None:
@@ -39,20 +62,17 @@ async def main(stop_event: asyncio.Event | None = None) -> None:
 
     logger.info("starting_workers", count=len(workers), workers=module_names)
 
-    # Start all workers concurrently
-    start_tasks = [worker.start() for _, worker in workers]
-    await asyncio.gather(*start_tasks)
+    started_workers = []
+    try:
+        started_workers = await _start_workers(workers)
+        logger.info("all_workers_started_successfully")
 
-    logger.info("all_workers_started_successfully")
+        # Wait for termination signal
+        await stop_event.wait()
 
-    # Wait for termination signal
-    await stop_event.wait()
-
-    logger.info("unified_worker_shutting_down")
-
-    # Stop all workers concurrently
-    stop_tasks = [worker.stop() for _, worker in workers]
-    await asyncio.gather(*stop_tasks, return_exceptions=True)
+        logger.info("unified_worker_shutting_down")
+    finally:
+        await _stop_workers(started_workers)
 
     logger.info("unified_worker_shutdown_complete")
 

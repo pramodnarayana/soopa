@@ -553,9 +553,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 existing_record.business_metadata = command.business_metadata
                 existing_record.trading_partner_id = command.trading_partner_id
                 existing_record.standard = command.standard
-                existing_record.replay_count = command.replay_count
-                existing_record.parent_trace_id = command.parent_trace_id
-                existing_record.original_trace_id = command.original_trace_id
                 await self.flush()
                 return str(existing_record.id)
 

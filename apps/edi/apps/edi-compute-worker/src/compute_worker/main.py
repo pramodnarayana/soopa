@@ -106,8 +106,12 @@ class EdiComputeWorkerModule(LaunchableWorker):
 
     async def stop(self) -> None:
         logger.info("compute_worker_stopping")
-        if self.manager:
-            await self.manager.stop()
+        try:
+            if self.manager:
+                await self.manager.stop()
+        finally:
+            if self.db_router:
+                await self.db_router.close_all()
         logger.info("compute_worker_stopped")
 
 

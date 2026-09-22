@@ -65,7 +65,6 @@ async def main() -> None:
     ObservabilityProvider.auto_configure_from_env("identity-jobs-worker")
 
     module = IdentityJobsWorkerModule()
-    await module.start()
 
     shutdown_event = asyncio.Event()
 
@@ -77,6 +76,7 @@ async def main() -> None:
     signal.signal(signal.SIGTERM, handle_sigint)
 
     try:
+        await module.start()
         await shutdown_event.wait()
     finally:
         await module.stop()
