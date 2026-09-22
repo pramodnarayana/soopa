@@ -1,16 +1,27 @@
-"""
-Monorepo Root conftest.py — Single Source of Truth for Test Environment
+import os
 
-All test configuration (database URLs, AWS credentials, identity provider URLs)
-is loaded from the project's `.env` file here, ONCE, at the start of the entire
-test session.
+import pytest
 
-Individual conftest.py files MUST NOT duplicate `os.environ.setdefault` calls
-for infrastructure values. They should only define pytest fixtures.
 
-See: .env.example for the full list of required environment variables.
-"""
+@pytest.fixture(autouse=True)
+def _enforce_unit_test_isolation(request):
+    """
+    Enterprise Standard: Unit tests must NEVER connect to the database.
+    If a test is not explicitly marked with @pytest.mark.integration,
+    we scramble the DATABASE_URL to guarantee it crashes if it tries to connect.
+    """
+    if "integration" not in [m.name for m in request.node.iter_markers()]:
+        # Save original
+        original = os.environ.get("DATABASE_URL")
+        # Scramble it
+        os.environ["DATABASE_URL"] = "postgresql+asyncpg://blocked:blocked@localhost:0/blocked"
 
-from dotenv import load_dotenv
+        yield
 
-load_dotenv()
+        # Restore
+        if original is not None:
+            os.environ["DATABASE_URL"] = original
+        else:
+            del os.environ["DATABASE_URL"]
+    else:
+        yield
