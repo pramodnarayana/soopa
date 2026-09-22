@@ -25,3 +25,13 @@ def _enforce_unit_test_isolation(request):
             del os.environ["DATABASE_URL"]
     else:
         yield
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """
+    Enterprise Standard: Do not fail the build if a package has zero tests collected
+    (e.g., when a package only has integration tests but the unit test phase runs).
+    Pytest returns 5 when no tests are collected. We gracefully downgrade 5 to 0.
+    """
+    if exitstatus == 5:
+        session.exitstatus = 0
