@@ -1,6 +1,5 @@
 import asyncio
 import signal
-from typing import Any
 
 import structlog
 from database.router import DatabaseRouter
@@ -23,48 +22,74 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
+from seedwork.infra.worker import LaunchableWorker
+
+
+class EdiConfigSyncWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.db_router: DatabaseRouter | None = None
+        self.sqs_manager: SqsConsumerManager | None = None
+
+    async def start(self) -> None:
+        logger.info("config_sync_worker_starting")
+        settings = get_settings()
+        self.db_router = DatabaseRouter(
+            global_db_url=settings.database.global_url,
+            shard_overrides=settings.database.shard_overrides,
+        )
+        assert self.db_router is not None
+        tenant_adapter = TenantResolver(self.db_router)
+        replication_adapter = SqlAlchemyReplicationAdapter(self.db_router, tenant_adapter)
+
+        logger.info("starting_unified_provisioning_worker")
+
+        # 1. AWS SQS Consumer (Data Plane Replication)
+        logger.info("initializing_sqs_consumer")
+        translator = DefaultEventTranslator()
+        replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
+        dispatcher = EdiConfigSyncSqsDispatcher(
+            domain_service=replication_service, translator_port=translator
+        )
+
+        provisioning_consumer = AwsSqsConsumer(
+            queue_url=settings.sqs.provisioning_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=settings.aws.endpoint_url,
+        )
+        self.sqs_manager = SqsConsumerManager(
+            consumer=provisioning_consumer,
+            queue_name=settings.sqs.provisioning_queue_url.rsplit("/", 1)[-1],
+            handler=dispatcher.dispatch_raw,
+        )
+        assert self.sqs_manager is not None
+        self.sqs_manager.start()
+
+    async def stop(self) -> None:
+        logger.info("shutting_down_gracefully")
+        if self.sqs_manager:
+            await self.sqs_manager.stop()
+
+        # Close adapter resources
+        if self.db_router:
+            await self.db_router.close_all()
+
+
 async def main() -> None:
     ObservabilityProvider.auto_configure_from_env("config-sync-worker")
-    settings = get_settings()
-    logger.info("config_sync_worker_starting")
-    db_router = DatabaseRouter(
-        global_db_url=settings.database.global_url,
-        shard_overrides=settings.database.shard_overrides,
-    )
-    tenant_adapter = TenantResolver(db_router)
-    replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
-    logger.info("starting_unified_provisioning_worker")
+    module = EdiConfigSyncWorkerModule()
 
-    # 1. AWS SQS Consumer (Data Plane Replication)
-    logger.info("initializing_sqs_consumer")
-    translator = DefaultEventTranslator()
-    replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
-    dispatcher = EdiConfigSyncSqsDispatcher(
-        domain_service=replication_service, translator_port=translator
-    )
-
-    provisioning_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.provisioning_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=settings.aws.endpoint_url,
-    )
-    sqs_manager = SqsConsumerManager(
-        consumer=provisioning_consumer,
-        queue_name=settings.sqs.provisioning_queue_url.rsplit("/", 1)[-1],
-        handler=dispatcher.dispatch_raw,
-    )
-
-    loop = asyncio.get_running_loop()
-    stop_event = asyncio.Event()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, stop_event.set)
     try:
-        sqs_manager.start()
+        await module.start()
+
+        loop = asyncio.get_running_loop()
+        stop_event = asyncio.Event()
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, stop_event.set)
 
         # Wait for stop signal, or if sqs_manager fails
-        manager_task = sqs_manager.task
-        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
+        manager_task = module.sqs_manager.task if module.sqs_manager else None
+        tasks_to_wait: list[asyncio.Task[object]] = [asyncio.create_task(stop_event.wait())]
         if manager_task:
             tasks_to_wait.append(manager_task)
 
@@ -72,18 +97,14 @@ async def main() -> None:
 
         # If the manager task completed with an exception, re-raise it
         for task in done:
-            if task is manager_task and task.exception():
+            if manager_task and task is manager_task and task.exception():
                 exc = task.exception()
                 logger.error("sqs_consumer_manager_failed", exc_info=exc)
                 if exc:
                     raise exc
 
     finally:
-        logger.info("shutting_down_gracefully")
-        await sqs_manager.stop()
-
-        # Close adapter resources
-        await db_router.close_all()
+        await module.stop()
 
 
 if __name__ == "__main__":

@@ -104,59 +104,93 @@ def _setup_registry(
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
+from seedwork.infra.worker import LaunchableWorker
+
+
+class EdiDeliveryWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.db_router: DatabaseRouter | None = None
+        self.deliver_manager: SqsConsumerManager | None = None
+
+    async def start(self) -> None:
+        settings = get_settings()
+        aws_endpoint = settings.aws.endpoint_url
+        s3_bucket = settings.s3.bucket
+
+        self.db_router = DatabaseRouter(
+            global_db_url=settings.database.global_url,
+            shard_overrides=settings.database.shard_overrides,
+        )
+        assert self.db_router is not None
+        resolver = TenantResolver(self.db_router)
+
+        vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
+
+        uow_provider = TenantUowProvider(
+            resolver=resolver,
+            db_router=self.db_router,
+            settings=settings,
+            s3_bucket=s3_bucket,
+            aws_endpoint=aws_endpoint,
+        )
+
+        http_delivery = HttpxDeliveryClient(validator=validate_target_url)
+        sftp_delivery = ParamikoSftpClient()
+        as2_delivery = HttpxAS2DeliveryClient(
+            validator=partial(validate_target_url, allow_private_ips=settings.allow_private_ips),
+            allow_private_ips=settings.allow_private_ips,
+        )
+
+        consumer = _setup_registry(
+            settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
+        )
+
+        deliver_consumer = AwsSqsConsumer(
+            queue_url=settings.sqs.deliver_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=aws_endpoint,
+        )
+        self.deliver_manager = SqsConsumerManager(
+            consumer=deliver_consumer,
+            queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
+            handler=consumer.handle,
+        )
+        assert self.deliver_manager is not None
+        self.deliver_manager.start()
+
+    async def stop(self) -> None:
+        logger.info("data_edi_delivery_worker.shutting_down_gracefully")
+        if self.deliver_manager:
+            results = await asyncio.gather(
+                self.deliver_manager.stop(),
+                return_exceptions=True,
+            )
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.error("manager_stop_failed", exc_info=res)
+
+        if self.db_router:
+            await self.db_router.close_all()
+
+
 async def main() -> None:
-    settings = get_settings()
-    aws_endpoint = settings.aws.endpoint_url
-    s3_bucket = settings.s3.bucket
+    module = EdiDeliveryWorkerModule()
 
-    db_router = DatabaseRouter(
-        global_db_url=settings.database.global_url,
-        shard_overrides=settings.database.shard_overrides,
-    )
-    resolver = TenantResolver(db_router)
-
-    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
-
-    uow_provider = TenantUowProvider(
-        resolver=resolver,
-        db_router=db_router,
-        settings=settings,
-        s3_bucket=s3_bucket,
-        aws_endpoint=aws_endpoint,
-    )
-
-    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
-    sftp_delivery = ParamikoSftpClient()
-    as2_delivery = HttpxAS2DeliveryClient(
-        validator=partial(validate_target_url, allow_private_ips=settings.allow_private_ips),
-        allow_private_ips=settings.allow_private_ips,
-    )
-
-    consumer = _setup_registry(
-        settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
-    )
-
-    deliver_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    deliver_manager = SqsConsumerManager(
-        consumer=deliver_consumer,
-        queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-    )
-    deliver_manager.start()
-
-    stop_event = asyncio.Event()
     try:
+        await module.start()
+
+        stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop_event.set)
 
         tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
 
-        task = getattr(deliver_manager, "task", getattr(deliver_manager, "_task", None))
+        task = (
+            getattr(module.deliver_manager, "task", getattr(module.deliver_manager, "_task", None))
+            if module.deliver_manager
+            else None
+        )
         if task:
             tasks_to_wait.append(task)
 
@@ -168,16 +202,7 @@ async def main() -> None:
                 if exc:
                     raise exc
     finally:
-        logger.info("data_edi_delivery_worker.shutting_down_gracefully")
-        results = await asyncio.gather(
-            deliver_manager.stop(),
-            return_exceptions=True,
-        )
-        for res in results:
-            if isinstance(res, Exception):
-                logger.error("manager_stop_failed", exc_info=res)
-
-        await db_router.close_all()
+        await module.stop()
 
 
 if __name__ == "__main__":

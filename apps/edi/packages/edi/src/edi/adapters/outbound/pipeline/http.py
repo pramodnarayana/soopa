@@ -3,6 +3,7 @@ from collections.abc import Callable
 import httpx
 
 from edi.adapters.outbound.security.network import ssrf_safe_context
+from edi.core.pipeline.delivery.base import TransientDeliveryError
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 
 
@@ -38,6 +39,11 @@ class HttpxDeliveryClient(HttpDeliveryPort):
             raise ValueError("URL validation failed for provided destination.")
 
         with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
-            async with httpx.AsyncClient(timeout=self.timeout, follow_redirects=False) as client:
-                response = await client.post(url, content=payload, headers=headers)
-                return response.status_code, response.text
+            try:
+                async with httpx.AsyncClient(
+                    timeout=self.timeout, follow_redirects=False
+                ) as client:
+                    response = await client.post(url, content=payload, headers=headers)
+                    return response.status_code, response.text
+            except httpx.RequestError as e:
+                raise TransientDeliveryError(str(e)) from e

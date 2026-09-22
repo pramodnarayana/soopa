@@ -138,54 +138,84 @@ def _setup_registry(
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
+from seedwork.infra.worker import LaunchableWorker
+
+
+class EdiOrchestratorWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.db_router: DatabaseRouter | None = None
+        self.orchestrator_manager: SqsConsumerManager | None = None
+
+    async def start(self) -> None:
+        logger.info("orchestrator_worker_starting")
+        settings = get_settings()
+        aws_endpoint = settings.aws.endpoint_url
+        s3_bucket = "soopaedi-dev"
+
+        self.db_router = DatabaseRouter(
+            global_db_url=settings.database.global_url,
+            shard_overrides=settings.database.shard_overrides,
+        )
+        resolver = TenantResolver(self.db_router)
+
+        transformer = BotsTransformerAdapter()
+
+        uow_provider = TenantUowProvider(
+            resolver=resolver,
+            db_router=self.db_router,
+            settings=settings,
+            s3_bucket=s3_bucket,
+            aws_endpoint=aws_endpoint,
+        )
+
+        consumer = _setup_registry(transformer, settings, uow_provider)
+
+        orchestrator_consumer = AwsSqsConsumer(
+            queue_url=settings.sqs.orchestrator_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=aws_endpoint,
+        )
+        self.orchestrator_manager = SqsConsumerManager(
+            consumer=orchestrator_consumer,
+            queue_name=settings.sqs.orchestrator_queue_url.rsplit("/", 1)[-1],
+            handler=consumer.handle,
+        )
+        assert self.orchestrator_manager is not None
+        self.orchestrator_manager.start()
+
+    async def stop(self) -> None:
+        logger.info("data_worker.shutting_down_gracefully")
+        if self.orchestrator_manager:
+            results = await asyncio.gather(
+                self.orchestrator_manager.stop(),
+                return_exceptions=True,
+            )
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.error("manager_stop_failed", exc_info=res)
+
+        if self.db_router:
+            await self.db_router.close_all()
+
+
 async def main() -> None:
-    settings = get_settings()
-    aws_endpoint = settings.aws.endpoint_url
-    s3_bucket = "soopaedi-dev"
+    module = EdiOrchestratorWorkerModule()
 
-    db_router = DatabaseRouter(
-        global_db_url=settings.database.global_url,
-        shard_overrides=settings.database.shard_overrides,
-    )
-    resolver = TenantResolver(db_router)
-
-    transformer = BotsTransformerAdapter()
-
-    uow_provider = TenantUowProvider(
-        resolver=resolver,
-        db_router=db_router,
-        settings=settings,
-        s3_bucket=s3_bucket,
-        aws_endpoint=aws_endpoint,
-    )
-
-    consumer = _setup_registry(transformer, settings, uow_provider)
-
-    orchestrator_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.orchestrator_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    orchestrator_manager = SqsConsumerManager(
-        consumer=orchestrator_consumer,
-        queue_name=settings.sqs.orchestrator_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-    )
-    orchestrator_manager.start()
-
-    # ─────────────────────────────────────────────────────────────
-    # Run all workers concurrently
-    # ─────────────────────────────────────────────────────────────
-    stop_event = asyncio.Event()
     try:
+        await module.start()
+
+        # ─────────────────────────────────────────────────────────────
+        # Run all workers concurrently
+        # ─────────────────────────────────────────────────────────────
+        stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop_event.set)
 
         tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-        for mgr in [orchestrator_manager]:
+        for mgr in [module.orchestrator_manager]:
             # Use the new task property once it is exposed
-            task = getattr(mgr, "task", getattr(mgr, "_task", None))
+            task = getattr(mgr, "task", getattr(mgr, "_task", None)) if mgr else None
             if task:
                 tasks_to_wait.append(task)
 
@@ -197,16 +227,7 @@ async def main() -> None:
                 if exc:
                     raise exc
     finally:
-        logger.info("data_worker.shutting_down_gracefully")
-        results = await asyncio.gather(
-            orchestrator_manager.stop(),
-            return_exceptions=True,
-        )
-        for res in results:
-            if isinstance(res, Exception):
-                logger.error("manager_stop_failed", exc_info=res)
-
-        await db_router.close_all()
+        await module.stop()
 
 
 if __name__ == "__main__":

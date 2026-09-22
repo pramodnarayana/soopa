@@ -6,8 +6,8 @@ from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infrastructure.config import load_settings_safely
-from seedwork.infrastructure.config_models import (
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
     PlatformIdentitySettings,

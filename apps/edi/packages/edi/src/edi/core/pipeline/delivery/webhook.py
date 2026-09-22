@@ -2,7 +2,6 @@ import contextlib
 import json
 from collections.abc import Callable
 
-import httpx
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
@@ -43,7 +42,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         if not partner:
             raise TerminalDeliveryError(f"Webhook partner {partner_id} not found.")
 
-        edi_jsons = await uow.transactions.get_edi_jsons_by_trace_id(trace_id)
+        edi_jsons = await uow.transactions.get_edi_jsons_by_trace_id(trace_id, edi_msg.tenant_id)
         if not edi_jsons:
             raise TerminalDeliveryError(
                 f"No EDI JSONs found for webhook delivery of trace_id={trace_id}"
@@ -139,7 +138,6 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         status_code = None
         response_text = None
         error_msg = None
-        is_transient = False
         try:
             status_code, response_text = await self.http_delivery.deliver(
                 url=partner_url,
@@ -147,19 +145,27 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 auth_token=auth_token,
                 idempotency_key=idempotency_key,
             )
-        except httpx.RequestError as e:
+        except ValueError as e:
+            logger.exception(
+                "Webhook delivery configuration error for trace_id={trace_id}",
+                trace_id=trace_id,
+            )
+            error_msg = str(e)
+        except TransientDeliveryError:
             logger.exception(
                 "Webhook delivery transient transport error for trace_id={trace_id}",
                 trace_id=trace_id,
             )
-            error_msg = str(e)
-            is_transient = True
-        except Exception as e:
+            raise
+        except TerminalDeliveryError as e:
             logger.exception(
-                "Webhook delivery HTTP transmission failed for trace_id={trace_id}",
+                "Webhook delivery terminal error for trace_id={trace_id}",
                 trace_id=trace_id,
             )
             error_msg = str(e)
+
+        # Re-raise any other unexpected exception instead of converting to TerminalDeliveryError
+        # (This is implicitly handled by not having a generic `except Exception` here)
 
         await self._record_api_gateway(
             trace_id,
@@ -172,9 +178,17 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             standard,
         )
 
+        if status_code is not None and (status_code in (429, 529) or 500 <= status_code < 600):
+            logger.warning(
+                "Webhook delivery received transient HTTP {status_code} for trace_id={trace_id}",
+                status_code=status_code,
+                trace_id=trace_id,
+            )
+            raise TransientDeliveryError(
+                f"Webhook delivery received transient HTTP {status_code}: {response_text}"
+            )
+
         if error_msg:
-            if is_transient:
-                raise TransientDeliveryError(f"Webhook delivery failed (transient): {error_msg}")
             raise TerminalDeliveryError(f"Webhook delivery failed: {error_msg}")
         elif status_code is None or not (200 <= status_code < 300):
             logger.error(

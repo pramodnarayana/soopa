@@ -48,6 +48,7 @@ members = [
     "core/platform/apps/notification-channel-worker",
     "core/platform/apps/notification-jobs-worker",
     "core/platform/apps/unified-api",
+    "core/platform/apps/unified-worker",
     "apps/edi/apps/edi-secrets-sidecar",
     "infra/cloud/aws",
 ]
@@ -67,6 +68,7 @@ ucp-models = { workspace = true }
 edi = { workspace = true }
 as2-server = { workspace = true }
 unified-api = { workspace = true }
+unified-worker = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
@@ -147,6 +149,7 @@ mypy_path = [
     "core/platform/apps/notification-channel-worker/src",
     "core/platform/apps/notification-jobs-worker/src",
     "core/ucp/apps/ucp-worker/src",
+    "core/platform/apps/unified-worker/src",
 ]
 
 [[tool.mypy.overrides]]
@@ -283,6 +286,7 @@ extraPaths = [
     "core/ucp/packages/ucp/src",
     "core/ucp/packages/models/src",
     "core/ucp/apps/ucp-worker/src",
+    "core/platform/apps/unified-worker/src",
     "apps/edi/packages/edi/src",
     "apps/edi/apps/edi-compute-worker/src",
     "apps/edi/apps/edi-orchestrator-worker/src",

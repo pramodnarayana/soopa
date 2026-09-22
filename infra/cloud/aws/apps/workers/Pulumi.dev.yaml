@@ -1,0 +1,7 @@
+encryptionsalt: v1:XcCujzeBXP0=:v1:13QW5ybvaSdOe1iL:bfzF4aov6DwpiKkKQxMqw68Ex3XiPQ==
+config:
+  workers:worker_groups:
+    - name: "cp-workers"
+      modules: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker"
+    - name: "dp-workers"
+      modules: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker"

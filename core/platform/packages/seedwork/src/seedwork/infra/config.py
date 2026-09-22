@@ -6,7 +6,7 @@ from typing import TypeVar
 import structlog
 from pydantic_settings import BaseSettings
 
-from seedwork.infrastructure.repo_root import find_repo_root
+from seedwork.infra.repo_root import find_repo_root
 
 logger = structlog.get_logger(__name__)
 

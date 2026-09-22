@@ -3,10 +3,12 @@ import contextlib
 import inspect
 import signal
 from collections.abc import Awaitable
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from observability import ObservabilityProvider
+from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from notification_jobs_worker.bootstrap.container import WorkerContainer as Container
 from notification_jobs_worker.config.settings import get_settings
@@ -14,37 +16,63 @@ from notification_jobs_worker.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:
-    settings = get_settings()
+from seedwork.infra.worker import LaunchableWorker
 
-    ObservabilityProvider.auto_configure_from_env("notification-jobs-worker")
-    logger.info("notification_jobs_worker_starting")
 
-    container = Container()
-    container.config.from_pydantic(settings)
-    container.config.database_url.from_value(settings.database_url)
-    container.config.sns_topic_arn.from_value(settings.sns_topic_arn)
-    container.config.aws_region.from_value(settings.aws_region)
-    container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
-    container.config.sqs_notification_jobs_queue_url.from_value(
-        settings.sqs_notification_jobs_queue_url
-    )
+class NotificationJobsWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.container = Container()
+        self.outbox_listener: PostgresOutboxRelay | None = None
+        self.jobs_consumer: SqsConsumerManager | None = None
 
-    try:
-        await cast(Awaitable[None], container.init_resources())
+    async def start(self) -> None:
+        logger.info("notification_jobs_worker_starting")
+        settings = get_settings()
 
-        outbox_listener = container.outbox_listener()
-        while inspect.isawaitable(outbox_listener):
-            outbox_listener = await outbox_listener
+        self.container.config.from_pydantic(settings)
+        self.container.config.database_url.from_value(settings.database_url)
+        self.container.config.sns_topic_arn.from_value(settings.sns_topic_arn)
+        self.container.config.aws_region.from_value(settings.aws_region)
+        self.container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
+        self.container.config.sqs_notification_jobs_queue_url.from_value(
+            settings.sqs_notification_jobs_queue_url
+        )
 
-        outbox_listener.start()
+        await cast(Awaitable[None], self.container.init_resources())
+
+        self.outbox_listener = self.container.outbox_listener()
+        while inspect.isawaitable(self.outbox_listener):
+            self.outbox_listener = await self.outbox_listener
+
+        assert self.outbox_listener is not None
+        self.outbox_listener.start()
         logger.info("notification_jobs_worker_relay_started")
 
-        jobs_consumer = container.jobs_consumer()
-        while inspect.isawaitable(jobs_consumer):
-            jobs_consumer = await jobs_consumer
-        jobs_consumer.start()
+        self.jobs_consumer = self.container.jobs_consumer()
+        while inspect.isawaitable(self.jobs_consumer):
+            self.jobs_consumer = await self.jobs_consumer
+        assert self.jobs_consumer is not None
+        self.jobs_consumer.start()
         logger.info("notification_jobs_worker_consumer_started")
+
+    async def stop(self) -> None:
+        logger.info("notification_jobs_worker_shutting_down")
+        if self.jobs_consumer:
+            with contextlib.suppress(Exception):
+                await self.jobs_consumer.stop()
+        if self.outbox_listener:
+            with contextlib.suppress(Exception):
+                await self.outbox_listener.stop()
+        await cast(Awaitable[None], self.container.shutdown_resources())
+
+
+async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("notification-jobs-worker")
+
+    module = NotificationJobsWorkerModule()
+
+    try:
+        await module.start()
 
         stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
@@ -53,9 +81,14 @@ async def main() -> None:
                 loop.add_signal_handler(sig, stop_event.set)
 
         # Supervise the relay task alongside the stop event so relay failures are propagated.
-        relay_task: asyncio.Task[Any] | None = getattr(outbox_listener, "_task", None)
-        consumer_task: asyncio.Task[Any] | None = getattr(jobs_consumer, "_task", None)
-        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
+        relay_task: asyncio.Task[object] | None = (
+            getattr(module.outbox_listener, "_task", None) if module.outbox_listener else None
+        )
+        consumer_task: asyncio.Task[object] | None = (
+            getattr(module.jobs_consumer, "_task", None) if module.jobs_consumer else None
+        )
+
+        tasks_to_wait: list[asyncio.Task[object]] = [asyncio.create_task(stop_event.wait())]
         if relay_task is not None:
             tasks_to_wait.append(relay_task)
         if consumer_task is not None:
@@ -70,12 +103,7 @@ async def main() -> None:
                 if exc:
                     raise exc
     finally:
-        logger.info("notification_jobs_worker_shutting_down")
-        with contextlib.suppress(Exception):
-            await jobs_consumer.stop()
-        with contextlib.suppress(Exception):
-            await outbox_listener.stop()
-        await cast(Awaitable[None], container.shutdown_resources())
+        await module.stop()
 
 
 if __name__ == "__main__":

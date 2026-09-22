@@ -116,7 +116,9 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def get_edi_jsons_by_trace_id(self, trace_id: str) -> list[EdiJsonDomainModel]:
+    async def get_edi_jsons_by_trace_id(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> list[EdiJsonDomainModel]:
         """
         Fetches all EDI JSON records by trace_id and maps them to domain models.
         """

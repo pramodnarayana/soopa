@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from database.router import DatabaseRouter
-from seedwork.infrastructure.config_models import PlatformDatabaseSettings
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 

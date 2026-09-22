@@ -1,0 +1,35 @@
+{
+  "name": "@soopa/unified-worker",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "PYTHONUNBUFFERED=1 uv run python -m unified_worker.main",
+    "dev": "PYTHONUNBUFFERED=1 PYTHONPATH=src uv run python -m unified_worker.main"
+  },
+  "devDependencies": {
+    "@soopa/database": "workspace:*",
+    "@soopa/identity": "workspace:*",
+    "@soopa/observability": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/ucp": "workspace:*",
+    "@soopa/ucp-models": "workspace:*",
+    "@soopa/identity-worker": "workspace:*",
+    "@soopa/identity-jobs-worker": "workspace:*",
+    "@soopa/notification-worker": "workspace:*",
+    "@soopa/notification-jobs-worker": "workspace:*",
+    "@soopa/notification-channel-worker": "workspace:*",
+    "@soopa/ucp-worker": "workspace:*",
+    "@soopa/ucp-jobs-worker": "workspace:*",
+    "@soopa/scheduler-worker": "workspace:*",
+    "@soopa/edi-orchestrator-worker": "workspace:*",
+    "@soopa/edi-delivery-worker": "workspace:*",
+    "@soopa/edi-compute-worker": "workspace:*",
+    "@soopa/edi-config-sync-worker": "workspace:*",
+    "@soopa/edi-cp-jobs-worker": "workspace:*",
+    "@soopa/edi-dp-jobs-worker": "workspace:*",
+    "@soopa/orchestrator-worker": "workspace:*",
+    "@soopa/compute-worker": "workspace:*",
+    "@soopa/config-sync-worker": "workspace:*",
+    "@soopa/edi-cp-worker": "workspace:*"
+  }
+}

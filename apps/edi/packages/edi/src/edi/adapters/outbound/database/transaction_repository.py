@@ -97,6 +97,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             msg_headers=json.dumps(command.msg_headers) if command.msg_headers else None,
             state=command.state,
             status_message=command.status_message,
+            replay_count=command.replay_count,
+            parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
         )
         self.session.add(msg)
         await self.flush()
@@ -306,6 +309,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             standard=aggregate.standard,
             business_metadata=aggregate.business_metadata,
             payload=aggregate.payload,
+            replay_count=aggregate.replay_count,
+            parent_trace_id=aggregate.parent_trace_id,
+            original_trace_id=aggregate.original_trace_id,
         )
         try:
             async with self.session.begin_nested():
@@ -487,12 +493,16 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             original_trace_id=record.original_trace_id,
         )
 
-    async def get_edi_jsons_by_trace_id(self, trace_id: str) -> list[EdiJsonDomainModel]:
+    async def get_edi_jsons_by_trace_id(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> list[EdiJsonDomainModel]:
         stmt = (
             select(EdiJson)
             .where(EdiJson.trace_id == str(trace_id))
             .order_by(EdiJson.created_at.asc())
         )
+        if tenant_id:
+            stmt = stmt.where(EdiJson.tenant_id == tenant_id)
         result = await self.session.execute(stmt)
         records = result.scalars().all()
 
@@ -543,6 +553,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 existing_record.business_metadata = command.business_metadata
                 existing_record.trading_partner_id = command.trading_partner_id
                 existing_record.standard = command.standard
+                existing_record.replay_count = command.replay_count
+                existing_record.parent_trace_id = command.parent_trace_id
+                existing_record.original_trace_id = command.original_trace_id
                 await self.flush()
                 return str(existing_record.id)
 
@@ -557,6 +570,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             business_metadata=command.business_metadata,
             transaction_type=command.transaction_type,
             payload=command.payload,
+            replay_count=command.replay_count,
+            parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
         )
         self.session.add(msg)
         await self.flush()

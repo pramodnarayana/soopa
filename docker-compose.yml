@@ -3,8 +3,25 @@ include:
   - infra/local/observability/docker-compose.yml
   - apps/edi/docker-compose.yml
 
-# Single image built once, reused by all runtime containers.
-# Follows the Shopify-style single-image deployment strategy.
+x-base-env: &base-env
+  DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
+  GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
+  EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
+  SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
+  AWS_ENDPOINT_URL: http://localstack:4566
+  AWS_REGION: us-east-1
+  SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/000000000000/edi-config-sync-queue.fifo
+  SQS_ORCHESTRATOR_QUEUE_URL: http://localstack:4566/000000000000/edi-orchestrator
+  SQS_COMPUTE_QUEUE_URL: http://localstack:4566/000000000000/edi-compute
+  SQS_DELIVER_QUEUE_URL: http://localstack:4566/000000000000/edi-deliver
+  SQS_DATA_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-data-plane-jobs.fifo
+  SQS_CONTROL_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-control-plane-jobs.fifo
+  SQS_UCP_JOBS_QUEUE_URL: http://localstack:4566/000000000000/ucp-jobs.fifo
+  SQS_UCP_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/ucp-events.fifo
+  SQS_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/identity-events.fifo
+  SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL: http://localstack:4566/000000000000/edi-priority-notifications.fifo
+  SQS_EMAIL_CHANNEL_QUEUE_URL: http://localstack:4566/000000000000/email-channel.fifo
+
 x-modular-monolith-base: &modular-monolith-base
   build:
     context: .
@@ -15,23 +32,7 @@ x-modular-monolith-base: &modular-monolith-base
     - "host.docker.internal:host-gateway"
   env_file: .env
   environment:
-    DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
-    GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
-    EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
-    SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
-    AWS_ENDPOINT_URL: http://localstack:4566
-    AWS_REGION: us-east-1
-    SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/000000000000/edi-config-sync-queue.fifo
-    SQS_ORCHESTRATOR_QUEUE_URL: http://localstack:4566/000000000000/edi-orchestrator
-    SQS_COMPUTE_QUEUE_URL: http://localstack:4566/000000000000/edi-compute
-    SQS_DELIVER_QUEUE_URL: http://localstack:4566/000000000000/edi-deliver
-    SQS_DATA_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-data-plane-jobs.fifo
-    SQS_CONTROL_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-control-plane-jobs.fifo
-    SQS_UCP_JOBS_QUEUE_URL: http://localstack:4566/000000000000/ucp-jobs.fifo
-    SQS_UCP_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/ucp-events.fifo
-    SQS_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/identity-events.fifo
-    SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL: http://localstack:4566/000000000000/edi-priority-notifications.fifo
-    SQS_EMAIL_CHANNEL_QUEUE_URL: http://localstack:4566/000000000000/email-channel.fifo
+    <<: *base-env
   depends_on:
     postgres_global:
       condition: service_healthy
@@ -92,66 +93,18 @@ services:
       - "8001:8001"
 
   # -------------------------------------------------------------------------
-  # 2. Worker Tier (Asynchronous Event Processing)
+  # 2. Worker Tier (Asynchronous Event Processing & Daemons)
   # -------------------------------------------------------------------------
-  edi-orchestrator:
+  cp-workers:
     <<: *modular-monolith-base
-    command: [ "python", "-m", "worker.main" ]
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker"
 
-  edi-compute-worker:
+  dp-workers:
     <<: *modular-monolith-base
-    command: [ "python", "-m", "compute_worker.main" ]
-
-  edi-config-sync-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "config_sync_worker.provision.main" ]
-
-  edi-cp-jobs-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "edi_cp_jobs_worker.main" ]
-
-  edi-dp-jobs-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "edi_dp_jobs_worker.main" ]
-
-  edi-delivery-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "edi_delivery_worker.main" ]
-
-  ucp-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "ucp_worker.main" ]
-
-  ucp-jobs-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "ucp_jobs_worker.main" ]
-
-  identity-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "identity_worker.main" ]
-
-  identity-jobs-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "identity_jobs_worker.main" ]
-
-  # -------------------------------------------------------------------------
-  # 3. Replication & Reliability Tier (Background Daemons)
-  # -------------------------------------------------------------------------
-  notification-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "notification_worker.main" ]
-
-  notification-jobs-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "notification_jobs_worker.main" ]
-
-  notification-channel-worker:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "notification_channel_worker.main" ]
-
-  # -------------------------------------------------------------------------
-  # 4. Scheduler Tier (Cron)
-  # -------------------------------------------------------------------------
-  scheduler-engine:
-    <<: *modular-monolith-base
-    command: [ "python", "-m", "scheduler_worker.main" ]
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker"

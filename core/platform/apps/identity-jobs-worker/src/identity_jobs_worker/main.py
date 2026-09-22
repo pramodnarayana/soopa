@@ -12,14 +12,60 @@ from identity_jobs_worker.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:
-    settings = get_settings()
+from seedwork.infra.worker import LaunchableWorker
 
+
+class IdentityJobsWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.container: WorkerContainer | None = None
+        self.relay_started = False
+        self.consumer_started = False
+
+    async def start(self) -> None:
+        logger.info("identity_jobs_worker_starting")
+        settings = get_settings()
+        self.container = WorkerContainer(settings)
+        self.container.wire()
+
+        if self.container.outbox_relay:
+            self.container.outbox_relay.start()
+            self.relay_started = True
+
+        if self.container.jobs_consumer:
+            self.container.jobs_consumer.start()
+            self.consumer_started = True
+
+        if not self.container.outbox_relay and not self.container.jobs_consumer:
+            logger.warning("no_tasks_configured_for_identity_jobs_worker")
+
+    async def stop(self) -> None:
+        logger.info("identity_jobs_worker_shutting_down")
+        if self.container:
+            if self.container.jobs_consumer and self.consumer_started:
+                try:
+                    await self.container.jobs_consumer.stop()
+                except Exception:
+                    logger.exception("consumer_stop_failed")
+
+            if self.container.outbox_relay and self.relay_started:
+                try:
+                    await self.container.outbox_relay.stop()
+                except Exception:
+                    logger.exception("relay_stop_failed")
+
+            try:
+                await self.container.dispose()
+            except Exception:
+                logger.exception("container_dispose_failed")
+
+        logger.info("identity_jobs_worker_shutdown_complete")
+
+
+async def main() -> None:
     ObservabilityProvider.auto_configure_from_env("identity-jobs-worker")
 
-    container = WorkerContainer(settings)
-    container.wire()
-    logger.info("identity_jobs_worker_starting")
+    module = IdentityJobsWorkerModule()
+    await module.start()
 
     shutdown_event = asyncio.Event()
 
@@ -30,42 +76,10 @@ async def main() -> None:
     signal.signal(signal.SIGINT, handle_sigint)
     signal.signal(signal.SIGTERM, handle_sigint)
 
-    relay_started = False
-    consumer_started = False
-
     try:
-        if container.outbox_relay:
-            container.outbox_relay.start()
-            relay_started = True
-            # The relay starts its own background task. We don't append it to `tasks` directly.
-        if container.jobs_consumer:
-            container.jobs_consumer.start()
-            consumer_started = True
-
-        if not container.outbox_relay and not container.jobs_consumer:
-            logger.warning("no_tasks_configured_for_identity_jobs_worker")
-            return
-
         await shutdown_event.wait()
-        logger.info("identity_jobs_worker_shutting_down")
-
     finally:
-        if container.jobs_consumer and consumer_started:
-            try:
-                await container.jobs_consumer.stop()
-            except Exception:
-                logger.exception("consumer_stop_failed")
-        if container.outbox_relay and relay_started:
-            try:
-                await container.outbox_relay.stop()
-            except Exception:
-                logger.exception("relay_stop_failed")
-
-        try:
-            await container.dispose()
-        except Exception:
-            logger.exception("container_dispose_failed")
-        logger.info("identity_jobs_worker_shutdown_complete")
+        await module.stop()
 
 
 if __name__ == "__main__":
