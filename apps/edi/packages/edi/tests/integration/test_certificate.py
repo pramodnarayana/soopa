@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
 from edi.domain.certificate import generate_self_signed_cert
 
 

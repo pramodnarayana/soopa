@@ -16,6 +16,7 @@ async def sweeper_repo(db_router: DatabaseRouter) -> SqlAlchemyEdiDataPlaneOutbo
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_fetch_stranded_outbox_events(
     sweeper_repo: SqlAlchemyEdiDataPlaneOutboxSweeperRepository,
     db_router: DatabaseRouter,

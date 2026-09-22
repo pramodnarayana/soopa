@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scheduler_worker.bootstrap.container import Container
+from scheduler_worker.config.settings import get_settings
 
 
 @pytest.fixture(scope="session")
@@ -53,7 +54,7 @@ def localstack_container() -> Generator[dict[str, str]]:
 
 @pytest_asyncio.fixture(scope="function")
 async def db_engine() -> AsyncGenerator[Any]:
-    db_url = os.environ["DATABASE_URL"]
+    db_url = get_settings().database_url
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()

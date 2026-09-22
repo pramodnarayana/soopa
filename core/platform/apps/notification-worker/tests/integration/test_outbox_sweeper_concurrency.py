@@ -10,6 +10,7 @@ from sqlalchemy.engine import CursorResult
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_outbox_sweeper_concurrency(db_session_factory):
     """
     Regression test: Ensure that if a sweeper reads a row in its inner CTE, but before

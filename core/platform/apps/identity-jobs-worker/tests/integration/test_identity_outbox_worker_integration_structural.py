@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from identity.domain.constants import IdentityJobName
 
 from identity_jobs_worker.bootstrap.container import WorkerContainer

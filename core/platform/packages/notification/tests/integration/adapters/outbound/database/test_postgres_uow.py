@@ -1,5 +1,9 @@
 import pytest
 
+pytestmark = pytest.mark.integration
+
+import pytest
+
 from notification.adapters.outbound.database.uow import SqlAlchemyNotificationUnitOfWork
 
 

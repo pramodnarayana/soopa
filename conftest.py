@@ -1,6 +1,9 @@
 import os
 
 import pytest
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +25,7 @@ def _enforce_unit_test_isolation(request):
         if original is not None:
             os.environ["DATABASE_URL"] = original
         else:
-            del os.environ["DATABASE_URL"]
+            os.environ.pop("DATABASE_URL", None)
     else:
         yield
 

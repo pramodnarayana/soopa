@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from httpx import AsyncClient
 from seedwork import generate_id
 

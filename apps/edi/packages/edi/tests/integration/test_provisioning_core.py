@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from seedwork import generate_id
 from seedwork.domain.types import UNSET
 

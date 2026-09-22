@@ -1,11 +1,11 @@
 import asyncio
-import os
 import uuid
 from typing import Any
 
 from dotenv import load_dotenv
 
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+from edi.config.settings import get_settings
 
 load_dotenv()
 
@@ -48,7 +48,7 @@ def event_loop():
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
     """Create an async SQLAlchemy engine pointing to the test database."""
-    db_url = os.environ["DATABASE_URL"]
+    db_url = get_settings().database.global_url
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()
@@ -68,7 +68,7 @@ async def db_connection(db_engine):
 async def tenant_db_engine():
     """Create an async SQLAlchemy engine pointing to the tenant shard test database."""
 
-    global_url = os.environ["DATABASE_URL"]
+    global_url = get_settings().database.global_url
     db_url = await get_test_shard_url_async(global_url)
     engine = get_async_engine(db_url)
     yield engine

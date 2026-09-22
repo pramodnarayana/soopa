@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationRouteConfiguration
 from seedwork import generate_id, generate_random_hex
