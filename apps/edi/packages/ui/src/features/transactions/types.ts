@@ -12,9 +12,14 @@ export interface TransactionListItem {
   status: string;
   edi_data?: string | null;
   created_at: string;
+  replay_count: number;
+  parent_trace_id: string | null;
+  original_trace_id: string | null;
 }
 
 export interface TransactionDetailResponse {
+  // edi_message is nullable: outbound replay creates EdiJson first; the EdiMessage
+  // is written asynchronously by the transform worker. The UI must handle this race window.
   edi_message: {
     id: string;
     trace_id: string;
@@ -27,14 +32,21 @@ export interface TransactionDetailResponse {
     status: string;
     edi_data: string | null;
     created_at: string;
-  };
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
+  } | null;
   edi_json: {
     id: string;
+    direction: 'INBOUND' | 'OUTBOUND';
     transaction_type: string;
     business_metadata: Record<string, any> | null;
     payload: Record<string, unknown> | null;
     status: string;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   }[];
   api_gateway: {
     id: string;
@@ -44,6 +56,9 @@ export interface TransactionDetailResponse {
     response: string | null;
     status: string;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   }[];
   trading_partner_name?: string | null;
 }
@@ -59,5 +74,8 @@ export interface TransactionThreadResponse {
     status: string;
     business_metadata: Record<string, unknown> | null;
     created_at: string;
+    replay_count: number;
+    parent_trace_id: string | null;
+    original_trace_id: string | null;
   }[];
 }

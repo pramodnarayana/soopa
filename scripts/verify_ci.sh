@@ -42,12 +42,15 @@ uv run ruff check apps/edi
 
 echo "✅ Running Tests (Node + Python Coverage)..."
 pnpm test:node
-pnpm cov:python
+COVERAGE_FILE=.coverage.unit CI=true pnpm cov:python
 
 echo "✅ Running Integration Tests..."
-pnpm test:integration
+COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
 
 echo "✅ Test Infrastructure (Pulumi Mocks)..."
 cd infra/cloud/aws && uv run pytest tests/ && cd ../../../
+
+echo "✅ Aggregating Coverage and Enforcing Thresholds..."
+./scripts/aggregate_coverage.py
 
 echo "🎉 All CI checks passed perfectly!"

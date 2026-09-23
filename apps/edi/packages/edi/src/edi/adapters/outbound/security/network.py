@@ -54,10 +54,12 @@ def validate_target_url(url: str, allow_private_ips: bool = False) -> bool:
                 or ip.is_reserved
                 or ip.is_multicast
             ):
-                if allow_private_ips and ip.is_loopback:
+                if allow_private_ips and (ip.is_private or ip.is_loopback):
                     pass
                 else:
-                    logger.warning("SSRF check failed: resolved to private/internal IP {ip}", ip=ip)
+                    logger.warning(
+                        "SSRF check failed: resolved to private/internal IP {ip}", ip=str(ip)
+                    )
                     return False
 
         return True
@@ -106,7 +108,7 @@ def get_safe_ip(hostname: str, allow_private_ips: bool = False) -> str | None:
         ip_str = str(sockaddr[0])
         ip = ipaddress.ip_address(ip_str)
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            if allow_private_ips and ip.is_loopback:
+            if allow_private_ips and (ip.is_private or ip.is_loopback):
                 return ip_str
             return None
         return ip_str

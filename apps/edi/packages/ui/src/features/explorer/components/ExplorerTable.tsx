@@ -142,7 +142,7 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                   <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
                     {item.trace_id && (
                       <Link
-                        to="/tenant/explorer/$traceId"
+                        to="/tenant/transactions/$traceId"
                         params={{ traceId: item.trace_id }}
                         className={buttonVariants({ variant: 'secondary', size: 'sm' })}
                         title="View Trace Timeline"

@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
 import json
 import uuid
 
@@ -48,12 +52,12 @@ async def test_replay_queues_validated_transaction(tenant_session):
     )
 
     service = ReplayTransactionUseCase(uow)
-    await service.replay_transaction(tenant_id, trace_id, "raw")
+    new_trace_id = await service.retry_transform(tenant_id, trace_id, "api-user")
 
     # Assert event in outbox
     result = await tenant_session.execute(
         text(
-            "SELECT payload FROM outbox WHERE event_type = 'edi.transaction.replay_requested' AND tenant_id = :tenant_id"
+            "SELECT payload FROM outbox WHERE event_type = 'TRANSFORMATION_REQUESTED' AND tenant_id = :tenant_id"
         ),
         {"tenant_id": tenant_id},
     )
@@ -63,8 +67,43 @@ async def test_replay_queues_validated_transaction(tenant_session):
     if isinstance(payload, str):
         payload = json.loads(payload)
 
-    assert payload["trace_id"] == trace_id
-    assert payload["tier"] == "raw"
+    assert payload["trace_id"] == new_trace_id
+
+
+@pytest.mark.asyncio
+async def test_replay_deliver_queues_validated_transaction(tenant_session):
+    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
+    tenant_id = "tenant-1"
+    trace_id = f"trace-{uuid.uuid4()}"
+
+    # Pre-seed the DB with an EdiMessage
+    await uow.transactions.create_edi_message(
+        command=CreateEdiMessageCommand(
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            direction="OUTBOUND",
+            status="PENDING_DELIVERY",
+            edi_data="raw data",
+        )
+    )
+
+    service = ReplayTransactionUseCase(uow)
+    new_trace_id = await service.retry_deliver(tenant_id, trace_id, "api-user")
+
+    # Assert event in outbox
+    result = await tenant_session.execute(
+        text(
+            "SELECT payload FROM outbox WHERE event_type = 'DELIVERY_REQUESTED' AND tenant_id = :tenant_id"
+        ),
+        {"tenant_id": tenant_id},
+    )
+    row = result.fetchone()
+    assert row is not None
+    payload = row[0]
+    if isinstance(payload, str):
+        payload = json.loads(payload)
+
+    assert payload["trace_id"] == new_trace_id
 
 
 @pytest.mark.asyncio
@@ -97,13 +136,13 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
     service = BulkReplayTransactionsUseCase(uow)
     command_key = f"cmd-{uuid.uuid4()}"
 
-    count = await service.bulk_replay_transactions(
-        tenant_id, [trace_id_1, trace_id_2, trace_id_1], "raw", command_key=command_key
+    count = await service.bulk_retry_transform(
+        tenant_id, [trace_id_1, trace_id_2], "api-user", command_key=command_key
     )
 
-    assert count == 3
+    assert count == 2
 
-    # Verify exactly 3 events with the idempotency key sequence
+    # Verify exactly 2 events with the idempotency key sequence
     VerificationSession = async_sessionmaker(
         bind=tenant_session.bind,
         expire_on_commit=False,
@@ -114,16 +153,15 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
     async with VerificationSession() as verification_session:
         result = await verification_session.execute(
             text(
-                "SELECT idempotency_key FROM outbox WHERE event_type = 'edi.transaction.replay_requested' AND tenant_id = :tenant_id ORDER BY idempotency_key"
+                "SELECT idempotency_key FROM outbox WHERE event_type = 'TRANSFORMATION_REQUESTED' AND tenant_id = :tenant_id ORDER BY idempotency_key"
             ),
             {"tenant_id": tenant_id},
         )
         rows = result.fetchall()
-    assert len(rows) == 3
+    assert len(rows) == 2
 
     keys = {row[0] for row in rows}
     assert keys == {
-        f"sys_idemp_bulk_replay_{command_key}_0",
-        f"sys_idemp_bulk_replay_{command_key}_1",
-        f"sys_idemp_bulk_replay_{command_key}_2",
+        f"{command_key}_0",
+        f"{command_key}_1",
     }

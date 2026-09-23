@@ -14,7 +14,7 @@ logger = structlog.get_logger(__name__)
 
 
 async def reprocess_stranded_messages() -> None:
-    """Finds EDI messages stuck in PENDING_DELIVERY and injects a DELIVER_EVENT into the outbox."""
+    """Finds EDI messages stuck in PENDING_DELIVERY and injects a DELIVERY_REQUESTED into the outbox."""
     logger.info("Starting reprocessing of stranded EDI messages...")
     settings = get_settings()
 
@@ -51,7 +51,7 @@ async def reprocess_stranded_messages() -> None:
                         """),
                         {
                             "id": deliver_key,
-                            "event_type": PipelineEventType.DELIVER_EVENT.value,
+                            "event_type": PipelineEventType.DELIVERY_REQUESTED.value,
                             "payload": f'{{"trace_id": "{trace_id}"}}',
                             "idempotency_key": deliver_key,
                         },

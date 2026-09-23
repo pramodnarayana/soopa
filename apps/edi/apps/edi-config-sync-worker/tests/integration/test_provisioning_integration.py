@@ -44,6 +44,7 @@ from edi.adapters.outbound.database.models.control_plane import OutboundRoute as
 from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
 from edi.adapters.outbound.database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.domain.enums import EdiConnectionType, EdiEventType
 from sqlalchemy import delete, select
 from ucp_models.sharding import DatabaseShard, ShardRegistry
@@ -51,7 +52,6 @@ from ucp_models.subscriptions import App
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
-from config_sync_worker.adapters.db_tenant import SqlAlchemyTenantAdapter
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
     EdiConfigSyncSqsDispatcher,
 )
@@ -68,7 +68,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     """
     db_router = test_db_router
     base_url = os.environ["DATABASE_URL"]
-    tenant_adapter = SqlAlchemyTenantAdapter(db_router)
+    tenant_adapter = TenantResolver(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
     # We use localstack URL directly as per the local dev environment

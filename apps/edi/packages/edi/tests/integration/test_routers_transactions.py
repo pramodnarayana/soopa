@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
 from datetime import UTC, datetime
 
 import pytest
@@ -6,6 +10,7 @@ from seedwork.utils import generate_id
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.data_plane import EdiJson, EdiMessage
+from edi.domain.enums import ReplayCheckpoint
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
 
@@ -134,7 +139,7 @@ async def test_replay_transaction(client: AsyncClient, tenant_db_session: AsyncS
 
     response = await client.post(
         f"/api/v1/tenants/1/edi/transactions/{trace_id}/replay",
-        json={"tier": "translation"},
+        json={"tier": "raw", "checkpoint": ReplayCheckpoint.TRANSFORM.value},
     )
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"
@@ -174,7 +179,11 @@ async def test_bulk_replay_transactions(client: AsyncClient, tenant_db_session: 
 
     response = await client.post(
         "/api/v1/tenants/1/edi/transactions/bulk-replay",
-        json={"trace_ids": [trace_id_1, trace_id_2], "tier": "translation"},
+        json={
+            "trace_ids": [trace_id_1, trace_id_2],
+            "tier": "raw",
+            "checkpoint": ReplayCheckpoint.TRANSFORM.value,
+        },
     )
     assert response.status_code == 202
     assert response.json()["status"] == "accepted"

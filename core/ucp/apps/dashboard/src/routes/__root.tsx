@@ -30,7 +30,7 @@ export const Route = createRootRoute({
     <AuthProvider {...oidcConfig}>
       <QueryClientProvider client={queryClient}>
         <Outlet />
-        <Toaster position="top-right" />
+        <Toaster />
       </QueryClientProvider>
     </AuthProvider>
   ),

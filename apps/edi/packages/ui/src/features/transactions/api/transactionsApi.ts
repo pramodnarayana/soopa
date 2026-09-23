@@ -89,11 +89,12 @@ export function useReplayTransaction() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ traceId, tier }: { traceId: string; tier: string }) => {
-      const response = await api.post(`transactions/${traceId}/replay`, { tier });
+    mutationFn: async ({ traceId, checkpoint }: { traceId: string; checkpoint: string }) => {
+      const response = await api.post(`transactions/${traceId}/replay`, { checkpoint });
       return response.data;
     },
     onSuccess: (_, { traceId }) => {
+      toast({ title: 'Replay queued', description: 'The transaction has been queued for replay.' });
       // Invalidate the detail query to show the new state
       queryClient.invalidateQueries({ queryKey: transactionsKeys.detail(tenantId, traceId) });
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
@@ -112,11 +113,19 @@ export function useBulkReplayTransactions() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ traceIds, tier }: { traceIds: string[]; tier: string }) => {
-      const response = await api.post(`transactions/bulk-replay`, { trace_ids: traceIds, tier });
+    mutationFn: async ({ traceIds, checkpoint }: { traceIds: string[]; checkpoint: string }) => {
+      const response = await api.post(`transactions/bulk-replay`, {
+        trace_ids: traceIds,
+        checkpoint,
+      });
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data: { processed_count?: number }) => {
+      const count = data?.processed_count ?? 0;
+      toast({
+        title: 'Replay queued',
+        description: `${count} transaction${count === 1 ? '' : 's'} queued for replay.`,
+      });
       // Invalidate all transaction lists to show the new state
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
       queryClient.invalidateQueries({ queryKey: explorerKeys.all(tenantId) });

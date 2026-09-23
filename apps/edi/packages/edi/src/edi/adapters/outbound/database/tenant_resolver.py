@@ -1,3 +1,4 @@
+import contextlib
 import time
 
 from sqlalchemy import select
@@ -32,7 +33,23 @@ class TenantResolver:
             for k, _ in sorted_entries[:to_evict]:
                 del self._cache[k]
 
-    async def resolve(self, tenant_id: str) -> tuple[str, str]:
+    async def get_all_tenant_ids(self) -> list[str]:
+        global_gen = self.db_router.get_global_session()
+        global_session = await global_gen.__anext__()
+        try:
+            stmt = (
+                select(Tenant.id)
+                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+                .join(App, App.id == ShardRegistry.app_id)
+                .where(App.slug == EDI_APP_SLUG)
+            )
+            result = await global_session.execute(stmt)
+            return [str(t_id) for t_id in result.scalars().all()]
+        finally:
+            with contextlib.suppress(StopAsyncIteration):
+                await global_gen.__anext__()
+
+    async def resolve_shard(self, tenant_id: str) -> tuple[str, str]:
         now = time.monotonic()
         self._sweep(now)
 
@@ -57,8 +74,8 @@ class TenantResolver:
             if not row:
                 raise ValueError(f"Tenant {tid_str} not found in Global DB")
             _, shard_obj = row
-            self._cache[tid_str] = (str(shard_obj.name), str(shard_obj.dsn), now + self._ttl)
+            self._cache[tid_str] = (str(shard_obj.id), str(shard_obj.dsn), now + self._ttl)
             self._sweep(now)
-            return str(shard_obj.name), str(shard_obj.dsn)
+            return str(shard_obj.id), str(shard_obj.dsn)
         finally:
             await global_gen.aclose()

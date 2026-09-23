@@ -1,4 +1,4 @@
-import { Copy } from 'lucide-react';
+import { CheckIcon, Copy } from 'lucide-react';
 import * as React from 'react';
 import { type ExternalToast, toast as sonnerToast } from 'sonner';
 
@@ -17,7 +17,7 @@ type ToasterToast = {
   action?: ToastActionElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  variant?: 'default' | 'destructive';
+  variant?: 'default' | 'destructive' | 'success';
 };
 
 let count = 0;
@@ -177,7 +177,26 @@ function dispatchSonnerToast(props: Partial<ToasterToast>, id: string) {
       </div>
     );
 
+    delete sonnerOpts.description;
     sonnerToast.error(<ToastContent />, sonnerOpts);
+  } else if (
+    props.variant === 'success' ||
+    (typeof props.title === 'string' && props.title.toLowerCase().includes('success'))
+  ) {
+    const SuccessContent = () => (
+      <div className="flex items-start w-full gap-4 group/toast-inner">
+        <div className="relative flex items-center justify-center w-8 h-8 shrink-0 bg-green-700 rounded-full mt-0.5">
+          <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-40 animate-[ping_1.5s_ease-in-out_1]" />
+          <CheckIcon className="relative w-5 h-5 text-white" strokeWidth={3} />
+        </div>
+        <div className="flex flex-col gap-1 pr-4">
+          <span className="font-semibold text-lg">{props.title}</span>
+          {props.description && <span className="text-base opacity-90">{props.description}</span>}
+        </div>
+      </div>
+    );
+    delete sonnerOpts.description;
+    sonnerToast(<SuccessContent />, sonnerOpts);
   } else {
     sonnerToast(props.title, sonnerOpts);
   }

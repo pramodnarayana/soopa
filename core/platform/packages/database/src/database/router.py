@@ -63,7 +63,8 @@ class DatabaseRouter(DatabaseRouterPort):
         self._global_db_url = global_db_url
         self._pool_size = pool_size
         self._max_overflow = max_overflow
-        self._shard_overrides = shard_overrides or {}
+        # Normalize override keys to lowercase for robust case-insensitive lookup
+        self._shard_overrides = {k.lower(): v for k, v in (shard_overrides or {}).items()}
 
         # Cache for tenant engines to avoid recreation
         self._engines: dict[str, AsyncEngine] = {}
@@ -72,6 +73,16 @@ class DatabaseRouter(DatabaseRouterPort):
         # Initialize the global control plane engine
         self._engines["global"] = self._create_engine(self._global_db_url)
         logger.info("Initialized DatabaseRouter with global connection pool.")
+
+    def _resolve_dsn(self, default_dsn: str, *keys: str | None) -> str:
+        """
+        Resolves a DSN by checking for overrides against a list of candidate keys.
+        The first matching override wins. Returns the default_dsn if no match.
+        """
+        for key in keys:
+            if key and key.lower() in self._shard_overrides:
+                return self._shard_overrides[key.lower()]
+        return default_dsn
 
     def _create_engine(self, url: str) -> AsyncEngine:
         return get_async_engine(
@@ -136,6 +147,8 @@ class DatabaseRouter(DatabaseRouterPort):
         Crucially, it sets the PostgreSQL Row-Level Security (RLS) variable
         for the transaction context.
         """
+        # Apply overrides to support local host dev vs docker internal networking
+        shard_url = self._resolve_dsn(shard_url, shard_key)
         engine = await self.get_engine(shard_key, shard_url)
         factory = async_sessionmaker(
             engine,
@@ -164,6 +177,8 @@ class DatabaseRouter(DatabaseRouterPort):
         Yields a raw session to a shard, bypassing RLS.
         Used ONLY by background sweeping and replication jobs.
         """
+        # Apply overrides to support local host dev vs docker internal networking
+        shard_url = self._resolve_dsn(shard_url, shard_key)
         engine = await self.get_engine(shard_key, shard_url)
         factory = async_sessionmaker(
             engine,
@@ -181,13 +196,13 @@ class DatabaseRouter(DatabaseRouterPort):
         # Dynamically query the active database shards registered in the control plane
         async for session in self.get_global_session():
             result = await session.execute(
-                select(DatabaseShard.id, DatabaseShard.dsn).where(
+                select(DatabaseShard.id, DatabaseShard.name, DatabaseShard.dsn).where(
                     DatabaseShard.status == DatabaseShardStatus.ACTIVE
                 )
             )
             shards = []
             for row in result:
-                dsn = self._shard_overrides.get(row.id, row.dsn)
+                dsn = self._resolve_dsn(row.dsn, row.id, getattr(row, "name", None))
                 shards.append((row.id, dsn))
             return shards
         return []

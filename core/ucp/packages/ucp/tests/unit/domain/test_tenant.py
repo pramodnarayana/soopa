@@ -4,6 +4,7 @@ import pytest
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from ucp.domain.constants import UcpEventType
 from ucp.domain.events import TenantDeletedEvent
 from ucp.domain.exceptions import StateConflictError
 from ucp.domain.models.tenant import Tenant
@@ -24,7 +25,7 @@ def test_tenant_mark_deleted_success() -> None:
     assert isinstance(tenant.deleted_at, datetime)
     assert len(tenant.domain_events) == 2
     assert isinstance(tenant.domain_events[-1], TenantDeletedEvent)
-    assert tenant.domain_events[-1].event_name == "TenantDeleted"
+    assert tenant.domain_events[-1].event_name == UcpEventType.TENANT_DELETED.value
 
 
 def test_tenant_mark_deleted_already_deleted() -> None:

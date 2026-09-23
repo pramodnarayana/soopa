@@ -40,6 +40,20 @@ class TenantProvisionedPayload(BaseModel):
     tenant_id: str
 
 
+class TenantNameUpdatedPayload(BaseModel):
+    org_id: str
+    name: str
+
+
+class TenantStatusToggledPayload(BaseModel):
+    org_id: str
+    active: bool
+
+
+class TenantDeletedPayload(BaseModel):
+    org_id: str
+
+
 class AppSubscribedPayload(BaseModel):
     tenant_id: str
     idp_project_id: str | None = None
@@ -106,7 +120,7 @@ class WorkerContainer:
     def wire(self) -> None:
         self._wire_events_consumer()
 
-    def _register_identity_handlers(
+    def _register_identity_handlers(  # noqa: C901
         self,
         consumer: IdentityEventDispatcher,
         identity_service: IdentitySyncService,
@@ -114,6 +128,18 @@ class WorkerContainer:
         async def identity_tenant_provisioned_handler(event: IdentityEventMessage) -> None:
             payload = TenantProvisionedPayload.model_validate(event.payload)
             await identity_service.handle_tenant_provisioned(payload.tenant_id)
+
+        async def identity_tenant_name_updated_handler(event: IdentityEventMessage) -> None:
+            payload = TenantNameUpdatedPayload.model_validate(event.payload)
+            await identity_service.handle_tenant_name_updated(payload.org_id, payload.name)
+
+        async def identity_tenant_status_toggled_handler(event: IdentityEventMessage) -> None:
+            payload = TenantStatusToggledPayload.model_validate(event.payload)
+            await identity_service.handle_tenant_status_toggled(payload.org_id, payload.active)
+
+        async def identity_tenant_deleted_handler(event: IdentityEventMessage) -> None:
+            payload = TenantDeletedPayload.model_validate(event.payload)
+            await identity_service.handle_tenant_deleted(payload.org_id)
 
         async def identity_app_subscribed_handler(event: IdentityEventMessage) -> None:
             payload = AppSubscribedPayload.model_validate(event.payload)
@@ -172,6 +198,13 @@ class WorkerContainer:
         consumer.subscribe(
             IdentityEventType.TENANT_PROVISIONED, identity_tenant_provisioned_handler
         )
+        consumer.subscribe(
+            IdentityEventType.TENANT_NAME_UPDATED, identity_tenant_name_updated_handler
+        )
+        consumer.subscribe(
+            IdentityEventType.TENANT_STATUS_TOGGLED, identity_tenant_status_toggled_handler
+        )
+        consumer.subscribe(IdentityEventType.TENANT_DELETED, identity_tenant_deleted_handler)
         consumer.subscribe(IdentityEventType.APP_SUBSCRIBED, identity_app_subscribed_handler)
         consumer.subscribe(IdentityEventType.APP_UNSUBSCRIBED, identity_app_unsubscribed_handler)
         consumer.subscribe(IdentityEventType.USER_INVITED, identity_user_created_handler)

@@ -177,6 +177,7 @@ async def main() -> None:
         engine = get_async_engine(database_url)
         try:
             async with engine.begin() as conn:
+                await conn.execute(text("SET lock_timeout = '5s'"))
                 await conn.execute(text("TRUNCATE identity.tenants CASCADE"))
                 logger.info("Truncated identity.tenants table.")
         finally:

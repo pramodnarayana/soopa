@@ -16,7 +16,9 @@ class SqlAlchemyUcpAuditLogCleanupRepository(UcpAuditLogCleanupRepositoryPort):
         self.session_factory = session_factory
 
     async def cleanup_system_audit_logs(self, retention_days: int) -> int:
-        cutoff_date = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        cutoff_date = (
+            datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=retention_days)
+        ).replace(tzinfo=None)
         audit_deleted = 0
         async with self.session_factory() as session:
             while True:

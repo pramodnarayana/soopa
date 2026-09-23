@@ -160,26 +160,6 @@ def provision_compute(
         target_group_arn=as2_tg.arn,
     )
 
-    # 2. Background Worker
-    background_worker = make_service(
-        "background-worker", ["python", "-m", "edi_background_worker.main"]
-    )
-
-    # 3. Compute Worker
-    compute_worker = make_service("compute-worker", ["python", "-m", "compute_worker.main"])
-
-    # 4. Orchestrator Worker
-    orchestrator_worker = make_service("orchestrator-worker", ["python", "-m", "worker.main"])
-
-    # 5. Config Sync Worker
-    config_sync_worker = make_service(
-        "config-sync-worker", ["python", "-m", "config_sync_worker.provision.main"]
-    )
-
     return {
         "as2_server": as2_server,
-        "background_worker": background_worker,
-        "compute_worker": compute_worker,
-        "orchestrator_worker": orchestrator_worker,
-        "config_sync_worker": config_sync_worker,
     }

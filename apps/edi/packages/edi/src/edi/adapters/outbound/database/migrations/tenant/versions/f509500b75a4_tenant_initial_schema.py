@@ -44,7 +44,6 @@ def upgrade() -> None:
         "api_gateway",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
-        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
         sa.Column("webhook_url", sa.String(length=1024), nullable=True),
@@ -55,6 +54,9 @@ def upgrade() -> None:
         sa.Column("response", sa.Text(), nullable=True),
         sa.Column("headers", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=128), nullable=True),
         sa.Column(
             "tenant_id",
             sa.String(length=128),
@@ -77,9 +79,6 @@ def upgrade() -> None:
             "(payload IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_apigw_data_or_uri"
         ),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_api_gateway_parent_trace_id"), "api_gateway", ["parent_trace_id"], unique=False
     )
     op.create_index(op.f("ix_api_gateway_tenant_id"), "api_gateway", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_api_gateway_trace_id"), "api_gateway", ["trace_id"], unique=False)
@@ -112,7 +111,6 @@ def upgrade() -> None:
         "edi_json",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
-        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("trading_partner_id", sa.String(length=255), nullable=True),
         sa.Column("transaction_type", sa.String(length=50), nullable=True),
@@ -121,6 +119,9 @@ def upgrade() -> None:
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("storage_uri", sa.String(length=1024), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=128), nullable=True),
         sa.Column(
             "tenant_id",
             sa.String(length=128),
@@ -151,9 +152,6 @@ def upgrade() -> None:
         unique=False,
         postgresql_using="gin",
     )
-    op.create_index(
-        op.f("ix_edi_json_parent_trace_id"), "edi_json", ["parent_trace_id"], unique=False
-    )
     op.create_index(op.f("ix_edi_json_tenant_id"), "edi_json", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_edi_json_trace_id"), "edi_json", ["trace_id"], unique=False)
     op.create_index(
@@ -166,7 +164,6 @@ def upgrade() -> None:
         "edi_messages",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
-        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
         sa.Column("direction", sa.String(length=50), nullable=False),
         sa.Column("connection_type", sa.String(length=50), nullable=True),
         sa.Column("sender_id", sa.String(length=255), nullable=True),
@@ -181,7 +178,6 @@ def upgrade() -> None:
         sa.Column("content_type", sa.String(length=255), nullable=True),
         sa.Column("signature_algorithm", sa.String(length=50), nullable=True),
         sa.Column("encryption_algorithm", sa.String(length=50), nullable=True),
-        sa.Column("is_resend", sa.Boolean(), nullable=False),
         sa.Column("status_message", sa.Text(), nullable=True),
         sa.Column("state", sa.String(length=255), nullable=True),
         sa.Column("msg_headers", sa.Text(), nullable=True),
@@ -195,6 +191,9 @@ def upgrade() -> None:
         sa.Column("storage_uri", sa.String(length=1024), nullable=True),
         sa.Column("file_size_bytes", sa.BigInteger(), nullable=True),
         sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("parent_trace_id", sa.String(length=128), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=128), nullable=True),
         sa.Column(
             "tenant_id",
             sa.String(length=128),
@@ -217,9 +216,6 @@ def upgrade() -> None:
             "(edi_data IS NOT NULL OR storage_uri IS NOT NULL)", name="chk_edi_msg_data_or_uri"
         ),
         sa.PrimaryKeyConstraint("id"),
-    )
-    op.create_index(
-        op.f("ix_edi_messages_parent_trace_id"), "edi_messages", ["parent_trace_id"], unique=False
     )
     op.create_index(op.f("ix_edi_messages_tenant_id"), "edi_messages", ["tenant_id"], unique=False)
     op.create_index(op.f("ix_edi_messages_trace_id"), "edi_messages", ["trace_id"], unique=False)
@@ -313,37 +309,18 @@ def upgrade() -> None:
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("status", sa.String(length=50), nullable=False),
-        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
-        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("error_reason", sa.String(), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.text("now()"),
-            nullable=False,
-        ),
-        sa.Column("owner_token", sa.String(length=128), nullable=True),
-        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
     )
     op.create_index(op.f("ix_outbox_tenant_id"), "outbox", ["tenant_id"], unique=False)
-    op.create_index(
-        "ix_tenant_outbox_pending",
-        "outbox",
-        ["status", "created_at"],
-        unique=False,
-        postgresql_where=sa.text("status = 'PENDING'"),
-    )
     op.create_table(
-        "event_idempotency",
+        "events_processed",
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("processed_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column(
@@ -352,10 +329,10 @@ def upgrade() -> None:
             server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
             nullable=False,
         ),
-        sa.PrimaryKeyConstraint("tenant_id", "idempotency_key", name="pk_event_idempotency"),
+        sa.PrimaryKeyConstraint("tenant_id", "idempotency_key", name="pk_events_processed"),
     )
     op.create_index(
-        op.f("ix_event_idempotency_tenant_id"), "event_idempotency", ["tenant_id"], unique=False
+        op.f("ix_events_processed_tenant_id"), "events_processed", ["tenant_id"], unique=False
     )
     op.create_table(
         "sftp_partners",
@@ -451,7 +428,9 @@ def upgrade() -> None:
         sa.Column(
             "processing_mode", sa.String(length=50), server_default="TRANSFORM", nullable=False
         ),
-        sa.Column("connection_type", sa.String(length=50), server_default="API", nullable=False),
+        sa.Column(
+            "connection_type", sa.String(length=50), server_default="WEBHOOK", nullable=False
+        ),
         sa.Column("active", sa.Boolean(), server_default=sa.text("false"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
@@ -487,6 +466,7 @@ def upgrade() -> None:
         "outbound_routes",
         sa.Column("as2_partner_id", sa.String(length=128), nullable=True),
         sa.Column("sftp_partner_id", sa.String(length=128), nullable=True),
+        sa.Column("webhook_id", sa.String(length=128), nullable=True),
         sa.Column(
             "tenant_id",
             sa.String(length=128),
@@ -501,7 +481,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
-            "(as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
+            "(webhook_id IS NOT NULL)::int + (as2_partner_id IS NOT NULL)::int + (sftp_partner_id IS NOT NULL)::int = 1",
             name="chk_outbound_routes_exactly_one_dest",
         ),
         sa.ForeignKeyConstraint(
@@ -512,11 +492,45 @@ def upgrade() -> None:
             ["sftp_partner_id"],
             ["sftp_partners.id"],
         ),
+        sa.ForeignKeyConstraint(
+            ["webhook_id"],
+            ["webhooks.id"],
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
         op.f("ix_outbound_routes_tenant_id"), "outbound_routes", ["tenant_id"], unique=False
     )
+
+    op.create_table(
+        "trace_events",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("trace_id", sa.String(length=128), nullable=False),
+        sa.Column("event_type", sa.String(length=100), nullable=False),
+        sa.Column("actor", sa.String(length=128), nullable=False),
+        sa.Column("metadata_", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "tenant_id",
+            sa.String(length=128),
+            server_default=sa.text("current_setting('platform.current_tenant_id')::varchar"),
+            nullable=False,
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(op.f("ix_trace_events_trace_id"), "trace_events", ["trace_id"], unique=False)
+    op.create_index(op.f("ix_trace_events_tenant_id"), "trace_events", ["tenant_id"], unique=False)
     op.create_index(
         "ix_outbound_routes_unique_trading_partner_id",
         "outbound_routes",
@@ -530,6 +544,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade schema."""
     # ### commands auto generated by Alembic - please adjust! ###
+    op.drop_index(op.f("ix_trace_events_tenant_id"), table_name="trace_events")
+    op.drop_index(op.f("ix_trace_events_trace_id"), table_name="trace_events")
+    op.drop_table("trace_events")
     op.drop_index(
         "ix_outbound_routes_unique_trading_partner_id",
         table_name="outbound_routes",
@@ -550,13 +567,8 @@ def downgrade() -> None:
     op.drop_table("webhooks")
     op.drop_index(op.f("ix_sftp_partners_tenant_id"), table_name="sftp_partners")
     op.drop_table("sftp_partners")
-    op.drop_index(op.f("ix_event_idempotency_tenant_id"), table_name="event_idempotency")
-    op.drop_table("event_idempotency")
-    op.drop_index(
-        "ix_tenant_outbox_pending",
-        table_name="outbox",
-        postgresql_where=sa.text("status = 'PENDING'"),
-    )
+    op.drop_index(op.f("ix_events_processed_tenant_id"), table_name="events_processed")
+    op.drop_table("events_processed")
     op.drop_index(op.f("ix_outbox_tenant_id"), table_name="outbox")
     op.drop_table("outbox")
     op.drop_index(
@@ -571,13 +583,11 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_edi_messages_trading_partner_id"), table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_trace_id"), table_name="edi_messages")
     op.drop_index(op.f("ix_edi_messages_tenant_id"), table_name="edi_messages")
-    op.drop_index(op.f("ix_edi_messages_parent_trace_id"), table_name="edi_messages")
     op.drop_table("edi_messages")
     op.drop_index(op.f("ix_edi_json_transaction_type"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_trading_partner_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_trace_id"), table_name="edi_json")
     op.drop_index(op.f("ix_edi_json_tenant_id"), table_name="edi_json")
-    op.drop_index(op.f("ix_edi_json_parent_trace_id"), table_name="edi_json")
     op.drop_index("ix_edi_json_business_metadata", table_name="edi_json", postgresql_using="gin")
     op.drop_table("edi_json")
 
@@ -585,7 +595,6 @@ def downgrade() -> None:
     op.drop_table("as2_partners")
     op.drop_index(op.f("ix_api_gateway_trace_id"), table_name="api_gateway")
     op.drop_index(op.f("ix_api_gateway_tenant_id"), table_name="api_gateway")
-    op.drop_index(op.f("ix_api_gateway_parent_trace_id"), table_name="api_gateway")
     op.drop_table("api_gateway")
     op.drop_index(op.f("ix_ack_receipts_trace_id"), table_name="ack_receipts")
     op.drop_index(op.f("ix_ack_receipts_tenant_id"), table_name="ack_receipts")

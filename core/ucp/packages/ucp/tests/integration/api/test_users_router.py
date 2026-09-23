@@ -1,6 +1,7 @@
 import pytest
 from database.models.identity import Tenant as OrmTenant
 from httpx import AsyncClient
+from identity.domain.constants import IdentityEventType
 from seedwork import generate_id, generate_random_hex
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
@@ -82,4 +83,4 @@ async def test_create_user_endpoint_resolves_di_and_persists(
         {"user_id": user_id},
     )
     events = [row.event_type for row in outbox_result.fetchall()]
-    assert "UserInvited" in events
+    assert IdentityEventType.USER_INVITED in events

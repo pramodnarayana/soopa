@@ -1,7 +1,7 @@
-import os
 from collections.abc import AsyncGenerator
 
 from dotenv import load_dotenv
+from edi.config.settings import get_settings
 
 load_dotenv()
 
@@ -13,7 +13,7 @@ from database.testing import TransactionalTestRouter, get_test_shard_url_async
 
 @pytest.fixture
 async def db_router() -> "AsyncGenerator[DatabaseRouterPort, None]":
-    global_url = os.environ["DATABASE_URL"]
+    global_url = get_settings().database.global_url
 
     shard_url = await get_test_shard_url_async(global_url)
 

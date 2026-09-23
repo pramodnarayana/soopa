@@ -25,7 +25,7 @@ SQS_DELIVER_QUEUE_URL            ← sqs_deliver_queue_url
 SQS_PROVISIONING_QUEUE_URL       ← sqs_config_sync_queue_url
 SQS_DATA_PLANE_JOBS_QUEUE_URL    ← sqs_data_plane_jobs_queue_url
 SQS_CONTROL_PLANE_JOBS_QUEUE_URL ← sqs_control_plane_jobs_queue_url
-SNS_EDI_EVENTS_TOPIC_ARN                ← sns_edi_events_topic_arn
+SNS_PLATFORM_EVENTS_TOPIC_ARN                ← sns_platform_events_topic_arn
 S3_BUCKET                        ← s3_edi_payloads_bucket
 ECR_REPOSITORY_URL               ← ecr_repository_url
 ECS_CLUSTER_NAME                 ← ecs_cluster_name
@@ -56,8 +56,8 @@ pulumi.export(
     "sqs_priority_notifications_queue_url", messaging.edi_priority_notifications.queue.url
 )
 
-# SNS Topic ARNs (injected as SNS_EDI_EVENTS_TOPIC_ARN env vars)
-pulumi.export("sns_edi_events_topic_arn", messaging.edi_events_topic.arn)
+# SNS Topic ARNs (injected as SNS_PLATFORM_EVENTS_TOPIC_ARN env vars)
+pulumi.export("sns_platform_events_topic_arn", messaging.edi_events_topic.arn)
 pulumi.export("sns_ucp_events_topic_arn", messaging.ucp_events_topic.arn)
 pulumi.export("sns_identity_events_topic_arn", messaging.identity_events_topic.arn)
 

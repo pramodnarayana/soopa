@@ -4,31 +4,36 @@ import signal
 import structlog
 from observability import ObservabilityProvider
 
-from worker.data.main import main as data_main
-
 logger = structlog.get_logger(__name__)
+
+
+# Expose the module for the unified runner
+from worker.data.main import EdiOrchestratorWorkerModule
 
 
 async def main() -> None:
     ObservabilityProvider.auto_configure_from_env("edi-orchestrator-worker")
     logger.info("orchestrator_worker_starting")
 
-    data_task = asyncio.create_task(data_main())
-
-    def shutdown_handler(*args: object) -> None:
-        logger.info("orchestrator_worker_shutdown_signal_received")
-        data_task.cancel()
-
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, shutdown_handler)
-    loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
+    module = EdiOrchestratorWorkerModule()
 
     try:
-        await data_task
-    except asyncio.CancelledError:
-        logger.info("orchestrator_worker_cancelled")
+        await module.start()
+
+        stop_event = asyncio.Event()
+        loop = asyncio.get_running_loop()
+
+        def shutdown_handler(*args: object) -> None:
+            logger.info("orchestrator_worker_shutdown_signal_received")
+            stop_event.set()
+
+        loop.add_signal_handler(signal.SIGINT, shutdown_handler)
+        loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
+
+        await stop_event.wait()
     finally:
         logger.info("orchestrator_worker_stopped")
+        await module.stop()
 
 
 if __name__ == "__main__":

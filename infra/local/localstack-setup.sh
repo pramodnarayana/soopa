@@ -1,10 +1,11 @@
 #!/bin/bash
+set -eo pipefail
+
 echo "Initializing LocalStack SQS queues and SNS topics..."
 
 # 1. Create SNS Topics
-awslocal sns create-topic --name ucp-events-topic.fifo --attributes FifoTopic=true,ContentBasedDeduplication=true
-awslocal sns create-topic --name edi-events-topic.fifo --attributes FifoTopic=true,ContentBasedDeduplication=true
-awslocal sns create-topic --name identity-events-topic.fifo --attributes FifoTopic=true,ContentBasedDeduplication=true
+awslocal sns create-topic --name platform-events-topic.fifo --attributes FifoTopic=true,ContentBasedDeduplication=true
+awslocal sns create-topic --name edi-data-plane-topic
 
 # 2. Create SQS Queues
 create_queue_with_dlq() {
@@ -42,70 +43,50 @@ create_queue_with_dlq identity-jobs.fifo identity-jobs-dlq.fifo true
 create_queue_with_dlq ucp-events.fifo ucp-events-dlq.fifo true
 create_queue_with_dlq identity-events.fifo identity-events-dlq.fifo true
 create_queue_with_dlq edi-config-sync-queue.fifo edi-config-sync-queue-dlq.fifo true
-create_queue_with_dlq edi-transform.fifo edi-transform-dlq.fifo true
-create_queue_with_dlq edi-compute.fifo edi-compute-dlq.fifo true
-create_queue_with_dlq edi-lifecycle.fifo edi-lifecycle-dlq.fifo true
+create_queue_with_dlq edi-orchestrator edi-orchestrator-dlq false
+create_queue_with_dlq edi-compute edi-compute-dlq false
 create_queue_with_dlq edi-data-plane-jobs.fifo edi-data-plane-jobs-dlq.fifo true
 create_queue_with_dlq edi-control-plane-jobs.fifo edi-control-plane-jobs-dlq.fifo true
-create_queue_with_dlq edi-deliver.fifo edi-deliver-dlq.fifo true
+create_queue_with_dlq edi-deliver edi-deliver-dlq false
 create_queue_with_dlq edi-priority-notifications.fifo edi-priority-notifications-dlq.fifo true
 create_queue_with_dlq email-channel.fifo email-channel-dlq.fifo true
 
 # 3. Get ARNs
-UCP_EVENTS_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:ucp-events-topic.fifo --query 'Attributes.TopicArn' --output text)
-EDI_EVENTS_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:edi-events-topic.fifo --query 'Attributes.TopicArn' --output text)
-IDENTITY_EVENTS_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:identity-events-topic.fifo --query 'Attributes.TopicArn' --output text)
+PLATFORM_EVENTS_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:platform-events-topic.fifo --query 'Attributes.TopicArn' --output text)
+EDI_DATA_PLANE_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:edi-data-plane-topic --query 'Attributes.TopicArn' --output text)
 
 UCP_EVENTS_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/ucp-events.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 IDENTITY_EVENTS_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/identity-events.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 
-EDI_TRANSFORM_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-transform.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-EDI_COMPUTE_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-compute.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-EDI_LIFECYCLE_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-lifecycle.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-EDI_DELIVER_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-deliver.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+EDI_ORCHESTRATOR_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-orchestrator --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+EDI_COMPUTE_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-compute --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+EDI_DELIVER_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-deliver --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 EDI_CONFIG_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-config-sync-queue.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 
 
 # 4. Subscribe Queues to Topics
 
-awslocal sns subscribe --topic-arn "$UCP_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$UCP_EVENTS_ARN" --attributes '{"RawMessageDelivery": "true"}'
-awslocal sns subscribe --topic-arn "$IDENTITY_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$IDENTITY_EVENTS_ARN" --attributes '{"RawMessageDelivery": "true"}'
+awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$UCP_EVENTS_ARN" \
+    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"app.\"}, {\"prefix\": \"tenant.\"}]}", "RawMessageDelivery": "true"}'
 
-# Identity worker needs to listen to UCP events to provision tenants
-awslocal sns subscribe --topic-arn "$UCP_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$IDENTITY_EVENTS_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"tenant.provisioned\", \"app.subscribed\", \"app.unsubscribed\"]}", "RawMessageDelivery": "true"}'
+# Identity worker needs to listen to UCP events to provision tenants and sync users
+awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$IDENTITY_EVENTS_ARN" \
+    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"tenant.\"}, {\"prefix\": \"app.\"}, {\"prefix\": \"user.\"}]}", "RawMessageDelivery": "true"}'
 
-# Setup Data Plane SNS to SQS Subscriptions with Payload Filtering
-awslocal sns subscribe \
-    --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
-    --protocol sqs \
-    --notification-endpoint "$EDI_TRANSFORM_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORM_EVENT\"]}", "RawMessageDelivery": "true"}'
+# Data Plane pipeline queues: Debezium CDC publishes all outbox events to the new edi-data-plane-topic.
+# Each queue subscribes with a filter on its specific event_type(s).
+awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_ORCHESTRATOR_ARN" \
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORMATION_REQUESTED\", \"TRANSFORMATION_SUCCESSFUL\", \"TRANSFORMATION_FAILED\", \"DELIVERY_REQUESTED\", \"DELIVERY_SUCCESSFUL\", \"DELIVERY_FAILED\"]}", "RawMessageDelivery": "true"}'
 
-awslocal sns subscribe \
-    --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
-    --protocol sqs \
-    --notification-endpoint "$EDI_COMPUTE_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"COMPUTE_TRANSFORM_EVENT\"]}", "RawMessageDelivery": "true"}'
+awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_COMPUTE_ARN" \
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"COMPUTE_TRANSFORMATION_COMMAND\"]}", "RawMessageDelivery": "true"}'
 
-awslocal sns subscribe \
-    --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
-    --protocol sqs \
-    --notification-endpoint "$EDI_LIFECYCLE_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORM_COMPLETED\", \"DELIVERY_COMPLETED\"]}", "RawMessageDelivery": "true"}'
+awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_DELIVER_ARN" \
+    --attributes '{"FilterPolicy": "{\"event_type\": [\"EXECUTE_DELIVERY_COMMAND\"]}", "RawMessageDelivery": "true"}'
 
-awslocal sns subscribe \
-    --topic-arn "$EDI_EVENTS_TOPIC_ARN" \
-    --protocol sqs \
-    --notification-endpoint "$EDI_DELIVER_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"DELIVER_EVENT\"]}", "RawMessageDelivery": "true"}'
-
-# Everything else goes to config sync (provisioning)
-awslocal sns subscribe \
-    --topic-arn "$UCP_EVENTS_TOPIC_ARN" \
-    --protocol sqs \
-    --notification-endpoint "$EDI_CONFIG_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"webhook.\"}]}", "RawMessageDelivery": "true"}'
+# EDI Config Sync: provisioning + webhook events (published by the CP outbox relay)
+awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_CONFIG_ARN" \
+    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"webhook.\"}, {\"prefix\": \"edi.\"}]}", "RawMessageDelivery": "true"}'
 
 
 

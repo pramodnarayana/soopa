@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text

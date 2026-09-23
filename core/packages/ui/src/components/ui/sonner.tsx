@@ -1,24 +1,18 @@
 'use client';
 
-import {
-  CircleCheckIcon,
-  InfoIcon,
-  Loader2Icon,
-  OctagonXIcon,
-  TriangleAlertIcon,
-} from 'lucide-react';
+import { CheckIcon, InfoIcon, Loader2Icon, OctagonXIcon, TriangleAlertIcon } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Toaster as Sonner, type ToasterProps } from 'sonner';
 
-const Toaster = ({ ...props }: ToasterProps) => {
+const Toaster = ({ position = 'bottom-right', ...props }: ToasterProps) => {
   const { theme = 'system' } = useTheme();
 
   return (
     <Sonner
       theme={theme as ToasterProps['theme']}
+      position={position}
       className="toaster group"
       icons={{
-        success: <CircleCheckIcon className="size-4" />,
         info: <InfoIcon className="size-4" />,
         warning: <TriangleAlertIcon className="size-4" />,
         error: <OctagonXIcon className="size-4" />,
@@ -34,7 +28,9 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: 'cn-toast',
+          toast: 'cn-toast flex items-start gap-4',
+          title: 'text-lg font-bold',
+          description: 'text-base',
         },
       }}
       {...props}

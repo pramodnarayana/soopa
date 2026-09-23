@@ -3,7 +3,6 @@ from collections.abc import AsyncGenerator
 from typing import Annotated, Any, cast
 
 import structlog
-from database.models.identity import Tenant
 from dependency_injector.wiring import Provide, inject
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort, DataPlaneUnitOfWorkPort
 
@@ -14,10 +13,7 @@ from edi.adapters.outbound.database.session import get_global_session
 from edi.bootstrap.container import Container
 from edi.exceptions import TenantNotSubscribedException
 from fastapi import Depends, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.sharding import DatabaseShard, ShardRegistry
-from ucp_models.subscriptions import App
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 
@@ -36,30 +32,23 @@ async def get_tenant_session_for_id(
 ) -> AsyncGenerator[AsyncSession, None]:
     """Yields an AsyncSession bound to the database shard for a given tenant."""
     db_router = request.app.state.db_router
-    if not db_router:
-        raise RuntimeError("DatabaseRouter not initialized in app state")
+    tenant_resolver = request.app.state.tenant_resolver
 
-    stmt = (
-        select(Tenant, DatabaseShard)
-        .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
-        .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
-        .join(App, App.id == ShardRegistry.app_id)
-        .where(Tenant.id == tenant_id, App.slug == "edi")
-    )
-    result = await global_session.execute(stmt)
-    row = result.one_or_none()
+    if not db_router or not tenant_resolver:
+        raise RuntimeError("DatabaseRouter or TenantResolver not initialized in app state")
 
-    if not row:
-        logger.error(
+    try:
+        shard_name, shard_dsn = await tenant_resolver.resolve_shard(tenant_id)
+    except ValueError as e:
+        logger.exception(
             "tenant_subscription_guard_failed",
             tenant_id=tenant_id,
             app_slug="edi",
-            reason="No active subscription or shard mapping found in ShardRegistry",
+            reason=str(e),
         )
         raise TenantNotSubscribedException(tenant_id)
 
-    _, shard = row
-    async_gen_tenant = db_router.get_tenant_session(tenant_id, shard.name, shard.dsn)
+    async_gen_tenant = db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
     tenant_session: AsyncSession = await async_gen_tenant.__anext__()
 
     try:

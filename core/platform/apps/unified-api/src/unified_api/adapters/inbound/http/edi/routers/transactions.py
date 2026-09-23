@@ -1,5 +1,3 @@
-from typing import Any, Literal
-
 import structlog
 from edi.adapters.outbound.database.routing_resolver_repository import (
     SqlAlchemyRoutingResolverRepository,
@@ -18,9 +16,13 @@ from edi.application.use_cases.transactions.list_edi_json_use_case import (
 from edi.application.use_cases.transactions.list_edi_messages_use_case import (
     ListEdiMessagesUseCase,
 )
+from edi.application.use_cases.transactions.modify_and_replay_use_case import (
+    ModifyAndReplayTransactionUseCase,
+)
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
+from edi.domain.enums import ReplayCheckpoint
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -50,22 +52,76 @@ class EdiJsonListResponse(BaseModel):
 
 
 class EdiTraceResponse(BaseModel):
-    edi_message: EdiMessageDTO
+    # edi_message is Optional: outbound replay commits EdiJson as the root record;
+    # EdiMessage is created asynchronously by the transform worker. The HTTP contract
+    # must reflect this — a non-nullable field here causes a 500 on in-flight traces.
+    edi_message: EdiMessageDTO | None = None
     edi_json: list[EdiJsonDTO]
     api_gateway: list[ApiGatewayDTO]
     trading_partner_name: str | None = None
 
 
-class ReplayRequest(BaseModel):
-    tier: Literal["raw", "translation", "gateway"]
-
-
 class BulkReplayRequest(BaseModel):
-    trace_ids: list[str] = Field(min_length=1, max_length=100)
-    tier: Literal["raw", "translation", "gateway"]
+    trace_ids: list[str] = Field(..., min_length=1, max_length=100)
+    checkpoint: ReplayCheckpoint
+
+
+class ReplayRequest(BaseModel):
+    checkpoint: ReplayCheckpoint
+
+
+class ReplayResponse(BaseModel):
+    status: str
+    trace_id: str  # original trace that was replayed
+    replay_trace_id: str  # newly generated immutable trace
+
+
+class BulkReplayResponse(BaseModel):
+    status: str
+    processed_count: int
+
+
+class ModifyAndReplayRequest(BaseModel):
+    modified_payload: str
+
+
+class ModifyAndReplayResponse(BaseModel):
+    status: str
+    original_trace_id: str
+    new_trace_id: str
 
 
 # --- Endpoints ---
+
+
+@router.post(
+    "/{trace_id}/modify-and-replay", status_code=202, response_model=ModifyAndReplayResponse
+)
+async def modify_and_replay_transaction(
+    trace_id: str,
+    request: ModifyAndReplayRequest,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+) -> ModifyAndReplayResponse:
+    actor = "USER"
+    log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
+    log.info("modify_and_replay_transaction.received")
+    async with uow:
+        try:
+            use_case = ModifyAndReplayTransactionUseCase(uow)
+            new_trace_id = await use_case.execute(
+                tenant_id, trace_id, request.modified_payload, actor
+            )
+        except TransactionNotFoundError as exc:
+            log.warning("modify_and_replay_transaction.not_found", reason=str(exc))
+            raise HTTPException(status_code=404, detail=str(exc))
+        except ValueError as exc:
+            log.warning("modify_and_replay_transaction.bad_request", reason=str(exc))
+            raise HTTPException(status_code=400, detail=str(exc))
+    log.info("modify_and_replay_transaction.accepted", new_trace_id=new_trace_id)
+    return ModifyAndReplayResponse(
+        status="accepted", original_trace_id=trace_id, new_trace_id=new_trace_id
+    )
 
 
 @router.get("/messages", response_model=EdiMessageListResponse)
@@ -124,15 +180,23 @@ async def get_edi_trace(
     """
     Get the full deep-dive trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
     """
+    log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
+    log.info("get_edi_trace.received")
+
     resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, tenant_session)
     resolver = RoutingResolutionUseCase(resolver_repo)
 
     async with uow:
         svc = GetEdiTraceUseCase(uow)
         try:
-            # We don't pass the resolver into the use case anymore for simplicity,
-            # we just resolve the partner name in the router to keep the domain pure.
             result = await svc.get_edi_trace(tenant_id, trace_id, resolver)
+
+            log.info(
+                "get_edi_trace.use_case_result",
+                has_edi_message=result.edi_message is not None,
+                edi_json_count=len(result.edi_jsons),
+                api_gateway_count=len(result.api_gateways),
+            )
 
             trading_partner_name, _new_conn_type = await resolver.resolve_routing_context(
                 result.edi_message, result.edi_jsons
@@ -145,46 +209,62 @@ async def get_edi_trace(
                 trading_partner_name=trading_partner_name,
             )
         except TransactionNotFoundError as e:
+            log.warning("get_edi_trace.not_found", reason=str(e))
             raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.post("/{trace_id}/replay", status_code=202)
+@router.post("/{trace_id}/replay", status_code=202, response_model=ReplayResponse)
 async def replay_transaction(
     trace_id: str,
     request: ReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
-) -> dict[str, Any]:
-    """
-    Trigger an asynchronous replay of a transaction at the specified tier.
-    """
+) -> ReplayResponse:
+    actor = "USER"  # TODO: extract from token
+    log = logger.bind(tenant_id=tenant_id, trace_id=trace_id, checkpoint=request.checkpoint)
+    log.info("replay_transaction.received")
     async with uow:
-        svc = ReplayTransactionUseCase(uow)
         try:
-            await svc.replay_transaction(tenant_id, trace_id, request.tier)
-        except TransactionNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            use_case = ReplayTransactionUseCase(uow)
+            match request.checkpoint:
+                case ReplayCheckpoint.TRANSFORM:
+                    replay_trace_id = await use_case.retry_transform(tenant_id, trace_id, actor)
+                case ReplayCheckpoint.DELIVERY:
+                    replay_trace_id = await use_case.retry_deliver(tenant_id, trace_id, actor)
+        except TransactionNotFoundError as exc:
+            log.warning("replay_transaction.not_found", reason=str(exc))
+            raise HTTPException(status_code=404, detail=str(exc))
+    log.info("replay_transaction.accepted", replay_trace_id=replay_trace_id)
+    return ReplayResponse(status="accepted", trace_id=trace_id, replay_trace_id=replay_trace_id)
 
-    return {"status": "accepted", "trace_id": trace_id}
 
-
-@router.post("/bulk-replay", status_code=202)
-async def bulk_replay_transactions(
+@router.post("/bulk-replay", status_code=202, response_model=BulkReplayResponse)
+async def bulk_replay(
     request: BulkReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-) -> dict[str, Any]:
-    """
-    Trigger an asynchronous replay of multiple transactions at the specified tier.
-    """
+) -> BulkReplayResponse:
+    actor = "USER"
+    log = logger.bind(
+        tenant_id=tenant_id, checkpoint=request.checkpoint, count=len(request.trace_ids)
+    )
+    log.info("bulk_replay_transaction.received")
     async with uow:
-        svc = BulkReplayTransactionsUseCase(uow)
         try:
-            processed_count = await svc.bulk_replay_transactions(
-                tenant_id, request.trace_ids, request.tier, command_key=idempotency_key
-            )
-        except TransactionNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            use_case = BulkReplayTransactionsUseCase(uow)
+            match request.checkpoint:
+                case ReplayCheckpoint.TRANSFORM:
+                    processed = await use_case.bulk_retry_transform(
+                        tenant_id, request.trace_ids, actor, command_key=idempotency_key
+                    )
+                case ReplayCheckpoint.DELIVERY:
+                    processed = await use_case.bulk_retry_deliver(
+                        tenant_id, request.trace_ids, actor, command_key=idempotency_key
+                    )
+        except TransactionNotFoundError as exc:
+            log.warning("bulk_replay_transaction.not_found", reason=str(exc))
+            raise HTTPException(status_code=404, detail=str(exc))
 
-    return {"status": "accepted", "processed_count": processed_count}
+    log.info("bulk_replay_transaction.accepted", processed_count=processed)
+    return BulkReplayResponse(status="accepted", processed_count=processed)

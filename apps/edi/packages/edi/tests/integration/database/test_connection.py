@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from database.router import DatabaseRouter
-from seedwork.infrastructure.config_models import PlatformDatabaseSettings
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,10 @@ async def router() -> AsyncGenerator[DatabaseRouter, None]:
     # Setup
     db_settings = PlatformDatabaseSettings()
     db_router = DatabaseRouter(
-        db_settings.global_url, pool_size=2, max_overflow=2, shard_overrides=db_settings.shard_overrides
+        db_settings.global_url,
+        pool_size=2,
+        max_overflow=2,
+        shard_overrides=db_settings.shard_overrides,
     )
     yield db_router
     # Teardown

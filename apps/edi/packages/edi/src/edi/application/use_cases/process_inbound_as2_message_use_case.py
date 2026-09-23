@@ -540,7 +540,6 @@ class ProcessInboundAs2MessageUseCase:
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
                 direction=EdiDirection.INBOUND.value,
-                status=MessageStatus.RECEIVED.value,
                 idempotency_key=str(msg_id),
             )
 

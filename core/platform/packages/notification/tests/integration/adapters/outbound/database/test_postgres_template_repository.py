@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from database.models.identity import Tenant
 from database.models.notifications import NotificationTemplate
 from identity.domain.identity_context import PLATFORM_TENANT_ID

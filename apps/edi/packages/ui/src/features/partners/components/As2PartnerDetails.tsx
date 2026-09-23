@@ -127,7 +127,7 @@ export function As2PartnerDetails({
         id: partner.id,
         payload: {
           action: 'upload',
-          public_cert_pem: publicCert.trim() || undefined,
+          public_cert_pem: publicCert.trim() || '',
           private_key_pem: partner.is_local && privateKey.trim() ? privateKey.trim() : undefined,
         },
       },
@@ -504,7 +504,7 @@ function CertificateRow({
                       <Button
                         type="button"
                         className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold gap-2"
-                        onClick={() => handleCopy(completePem, 'Complete Identity')}
+                        onClick={() => handleCopy(completePem || '', 'Complete Identity')}
                       >
                         <Copy className="w-4 h-4" /> Copy Key Pair
                       </Button>
@@ -513,7 +513,7 @@ function CertificateRow({
                         className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold gap-2"
                         onClick={() =>
                           handleDownload(
-                            completePem,
+                            completePem || '',
                             `${partnerName}_${role.toLowerCase()}_complete.pem`,
                           )
                         }

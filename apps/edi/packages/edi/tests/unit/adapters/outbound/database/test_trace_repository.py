@@ -18,6 +18,9 @@ class EmptyScalars:
     def first(self) -> None:
         return None
 
+    def all(self) -> list:
+        return []
+
 
 class EmptyResult:
     def scalars(self) -> EmptyScalars:

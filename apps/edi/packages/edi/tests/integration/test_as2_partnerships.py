@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
 from typing import Any
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (

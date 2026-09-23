@@ -6,19 +6,14 @@ All test doubles are imported from fakes.py (DRY). No fake library used.
 """
 
 import contextlib
-from typing import Any
 
 from edi.application.use_cases.pipeline.delivery_router_use_case import (
     DeliveryRouterUseCase,
 )
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
-from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.enums import EdiDirection, MessageStatus
+from edi.domain.enums import EdiConnectionType, EdiDirection, MessageStatus
 from edi.domain.exceptions import RouteNotFoundError
 from edi.testing.fakes.pipeline_fakes import (
-    FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,
     FakeHttpDeliveryAdapter,
     FakeSftpDeliveryAdapter,
@@ -30,31 +25,17 @@ pytestmark = pytest.mark.asyncio
 
 def make_use_case(
     uow: FakeDataPlaneUnitOfWork | None = None,
-    sftp: FakeSftpDeliveryAdapter | None = None,
-    http: FakeHttpDeliveryAdapter | None = None,
-    vault: Any = None,
 ) -> DeliveryUseCase:
-    u = uow or FakeDataPlaneUnitOfWork()
-    s = sftp or FakeSftpDeliveryAdapter()
-    h = http or FakeHttpDeliveryAdapter()
-    a = FakeAS2DeliveryAdapter()
+    _u = uow or FakeDataPlaneUnitOfWork()
 
     @contextlib.asynccontextmanager
     async def uow_factory():
-        yield u
+        yield _u
 
     def router_factory() -> DeliveryRouterUseCase:
-        return DeliveryRouterUseCase(
-            uow_factory,
-            {
-                "webhook_id": WebhookDeliveryStrategy(uow_factory, h, vault),
-                "sftp_partner_id": SftpDeliveryStrategy(uow_factory, s, vault),
-                "as2_partner_id": As2DeliveryStrategy(uow_factory, a, vault),
-            },
-        )
+        return DeliveryRouterUseCase(uow_factory)
 
     return DeliveryUseCase(
-        uow_factory=uow_factory,
         router_factory=router_factory,
     )
 
@@ -62,7 +43,7 @@ def make_use_case(
 async def test_delivery_service_inbound_webhook() -> None:
     # ── Arrange ────────────────────────────────────────────────────────────────
     uow = FakeDataPlaneUnitOfWork()
-    http_adapter = FakeHttpDeliveryAdapter()
+    _http_adapter = FakeHttpDeliveryAdapter()
 
     trace_id = "trace-456"
     uow.repository.edi_messages[trace_id] = {
@@ -74,7 +55,7 @@ async def test_delivery_service_inbound_webhook() -> None:
         "edi_data": "FAKE*EDI*DATA~",
         "status": MessageStatus.PENDING_DELIVERY,
     }
-    uow.repository.api_gateway[trace_id] = {
+    uow.api_gateway_transactions.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "payload": {"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]},
         "status": MessageStatus.PENDING_DELIVERY,
@@ -88,6 +69,7 @@ async def test_delivery_service_inbound_webhook() -> None:
             "isa_receiver_id": "RECV1",
             "transaction_type": "850",
             "webhook_id": "wp1",
+            "connection_type": EdiConnectionType.WEBHOOK,
         }
     )
     uow.repository.webhooks["wp1"] = {
@@ -99,20 +81,22 @@ async def test_delivery_service_inbound_webhook() -> None:
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, http=http_adapter)
-    await use_case.execute(trace_id)
+    # ── Act ────────────────────────────────────────────────────────────────────
+    use_case = make_use_case(uow=uow)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert len(http_adapter.delivered) == 1
-    assert http_adapter.delivered[0]["url"] == "https://webhook.example.com/edi"
-    assert uow.repository.api_gateway[trace_id]["status"] == MessageStatus.DELIVERED
+    assert len(uow.outbox.events) == 1
+    event = uow.outbox.events[0]
+    assert event["event_type"] == "EXECUTE_DELIVERY_COMMAND"
+    assert event["payload"]["partner_id"] == "wp1"
 
 
 async def test_delivery_service_outbound_sftp() -> None:
     # ── Arrange ────────────────────────────────────────────────────────────────
     uow = FakeDataPlaneUnitOfWork()
-    sftp_adapter = FakeSftpDeliveryAdapter()
-    vault = FakeVault({"fake_password": "fake_private_key_data"})
+    _sftp_adapter = FakeSftpDeliveryAdapter()
+    _vault = FakeVault({"fake_password": "fake_private_key_data"})
 
     trace_id = "trace-sftp"
     uow.repository.edi_messages[trace_id] = {
@@ -134,6 +118,7 @@ async def test_delivery_service_outbound_sftp() -> None:
             "isa_receiver_id": "RECV1",
             "transaction_type": "*",
             "sftp_partner_id": "sftp1",
+            "connection_type": EdiConnectionType.SFTP,
         }
     )
     uow.repository.sftp_partners["sftp1"] = {
@@ -151,16 +136,16 @@ async def test_delivery_service_outbound_sftp() -> None:
     }
 
     # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, sftp=sftp_adapter, vault=vault)
-    await use_case.execute(trace_id)
+    # ── Act ────────────────────────────────────────────────────────────────────
+    use_case = make_use_case(uow=uow)
+    await use_case.execute(trace_id, idempotency_key="test-key")
 
     # ── Assert ─────────────────────────────────────────────────────────────────
-    assert len(sftp_adapter.delivered) == 1
-    assert sftp_adapter.delivered[0]["client_key"] == "fake_private_key_data"
-    assert sftp_adapter.delivered[0]["password"] == ""
-    assert sftp_adapter.delivered[0]["host"] == "sftp.example.com"
-    assert sftp_adapter.delivered[0]["payload"] == b"FAKE*EDI*DATA~"
-    assert uow.repository.edi_messages[trace_id]["status"] == MessageStatus.DELIVERED
+    # ── Assert ─────────────────────────────────────────────────────────────────
+    assert len(uow.outbox.events) == 1
+    event = uow.outbox.events[0]
+    assert event["event_type"] == "EXECUTE_DELIVERY_COMMAND"
+    assert event["payload"]["partner_id"] == "sftp1"
 
 
 async def test_delivery_service_no_route_raises() -> None:
@@ -177,55 +162,4 @@ async def test_delivery_service_no_route_raises() -> None:
 
     use_case = make_use_case(uow=uow)
     with pytest.raises(RouteNotFoundError, match="No route found for"):
-        await use_case.execute(trace_id)
-
-
-async def test_delivery_service_http_failure_sets_failed_status() -> None:
-    # ── Arrange ────────────────────────────────────────────────────────────────
-    uow = FakeDataPlaneUnitOfWork()
-    http_adapter = FakeHttpDeliveryAdapter(status_code=503)
-
-    trace_id = "trace-fail"
-    uow.repository.edi_messages[trace_id] = {
-        "trace_id": trace_id,
-        "direction": EdiDirection.INBOUND,
-        "sender_id": "SENDER1",
-        "receiver_id": "RECV1",
-        "transaction_type": "850",
-        "edi_data": "FAKE*EDI*DATA~",
-        "status": MessageStatus.PENDING_DELIVERY,
-    }
-    uow.repository.api_gateway[trace_id] = {
-        "trace_id": trace_id,
-        "payload": {"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]},
-        "status": MessageStatus.PENDING_DELIVERY,
-    }
-    uow.repository.routes.append(
-        {
-            "tenant_id": "1",
-            "route_id": "r1",
-            "direction": EdiDirection.INBOUND,
-            "isa_sender_id": "SENDER1",
-            "isa_receiver_id": "RECV1",
-            "transaction_type": "850",
-            "webhook_id": "wp1",
-        }
-    )
-    uow.repository.webhooks["wp1"] = {
-        "id": "wp1",
-        "name": "Test",
-        "url": "https://webhook.example.com/edi",
-        "active": True,
-        "auth_header_vault_ref": None,
-    }
-
-    # ── Act ────────────────────────────────────────────────────────────────────
-    use_case = make_use_case(uow=uow, http=http_adapter)
-
-    with pytest.raises(RuntimeError):
-        await use_case.execute(trace_id)
-
-    # ── Assert ─────────────────────────────────────────────────────────────────
-    assert uow.repository.api_gateway[trace_id]["status"] == MessageStatus.FAILED
-    assert len(http_adapter.delivered) == 1
-    assert uow.committed is True
+        await use_case.execute(trace_id, idempotency_key="test-key")

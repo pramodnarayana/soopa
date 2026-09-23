@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import signal
-from typing import Any
 
 import structlog
 from observability import ObservabilityProvider
@@ -12,24 +11,50 @@ from ucp_jobs_worker.bootstrap.container import WorkerContainer as Container
 logger = structlog.get_logger(__name__)
 
 
-async def main() -> None:  # noqa: C901
-    settings = get_settings()
+from seedwork.infra.worker import LaunchableWorker
 
-    ObservabilityProvider.auto_configure_from_env("ucp-jobs-worker")
-    logger.info("ucp_jobs_worker.starting")
 
-    container = Container(settings)
+class UcpJobsWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.container = Container(get_settings())
 
-    try:
-        container.wire()
+    async def start(self) -> None:
+        logger.info("ucp_jobs_worker.starting")
+        self.container.wire()
 
-        if container.outbox_relay:
-            container.outbox_relay.start()
+        if self.container.outbox_relay:
+            self.container.outbox_relay.start()
             logger.info("ucp_outbox_relay_started")
 
-        if container.jobs_consumer:
-            container.jobs_consumer.start()
+        if self.container.jobs_consumer:
+            self.container.jobs_consumer.start()
             logger.info("ucp_jobs_consumer_started")
+
+    async def stop(self) -> None:
+        logger.info("ucp_jobs_worker.shutting_down")
+        if self.container.jobs_consumer:
+            try:
+                await self.container.jobs_consumer.stop()
+            except Exception:
+                logger.exception("consumer_stop_failed")
+        if self.container.outbox_relay:
+            try:
+                await self.container.outbox_relay.stop()
+            except Exception:
+                logger.exception("relay_stop_failed")
+        try:
+            await self.container.dispose()
+        except Exception:
+            logger.exception("container_dispose_failed")
+
+
+async def main() -> None:
+    ObservabilityProvider.auto_configure_from_env("ucp-jobs-worker")
+
+    module = UcpJobsWorkerModule()
+
+    try:
+        await module.start()
 
         stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
@@ -37,9 +62,13 @@ async def main() -> None:  # noqa: C901
             with contextlib.suppress(NotImplementedError, RuntimeError):
                 loop.add_signal_handler(sig, stop_event.set)
 
-        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-        relay_task: asyncio.Task[Any] | None = getattr(container.outbox_relay, "_task", None)
-        consumer_task: asyncio.Task[Any] | None = getattr(container.jobs_consumer, "_task", None)
+        tasks_to_wait: list[asyncio.Task[object]] = [asyncio.create_task(stop_event.wait())]
+        relay_task: asyncio.Task[object] | None = getattr(
+            module.container.outbox_relay, "_task", None
+        )
+        consumer_task: asyncio.Task[object] | None = getattr(
+            module.container.jobs_consumer, "_task", None
+        )
 
         if relay_task is not None:
             tasks_to_wait.append(relay_task)
@@ -55,21 +84,7 @@ async def main() -> None:  # noqa: C901
                 if exc:
                     raise exc
     finally:
-        logger.info("ucp_jobs_worker.shutting_down")
-        if container.jobs_consumer:
-            try:
-                await container.jobs_consumer.stop()
-            except Exception:
-                logger.exception("consumer_stop_failed")
-        if container.outbox_relay:
-            try:
-                await container.outbox_relay.stop()
-            except Exception:
-                logger.exception("relay_stop_failed")
-        try:
-            await container.dispose()
-        except Exception:
-            logger.exception("container_dispose_failed")
+        await module.stop()
 
 
 if __name__ == "__main__":

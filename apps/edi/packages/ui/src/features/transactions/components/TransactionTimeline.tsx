@@ -1,9 +1,18 @@
 import { Badge } from '@soopa/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
-import { Activity, AlertCircle, CheckCircle2, Database, FileJson, Server } from 'lucide-react';
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Clock,
+  Database,
+  FileJson,
+  Server,
+} from 'lucide-react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 import type { TransactionDetailResponse } from '../types';
+import { ReplayBadge } from './ReplayBadge';
 
 interface Props {
   transaction: TransactionDetailResponse;
@@ -45,14 +54,19 @@ function IsaGsFieldsGrid({
 }
 
 export function TransactionTimeline({ transaction }: Props) {
-  const msg = transaction.edi_message || {};
+  const msg = transaction.edi_message;
   const jsons = transaction.edi_json || [];
   const gateways = transaction.api_gateway || [];
 
-  const isOutbound = msg.direction === 'OUTBOUND';
-  const primaryStatus = isOutbound ? jsons[0]?.status || msg.status : msg.status;
+  // Infer direction from edi_message if available; fall back to edi_json (outbound replay
+  // creates EdiJson first — edi_message may not exist yet during the async race window).
+  const direction = msg?.direction ?? jsons[0]?.direction;
+  const isOutbound = direction === 'OUTBOUND';
+  const primaryStatus = isOutbound ? (jsons[0]?.status ?? msg?.status) : msg?.status;
   const isFailed = TRANSACTION_STATUS_GROUPS.ERROR.has(primaryStatus?.toUpperCase() || '');
   const colorClass = isFailed ? 'text-red-600' : 'text-emerald-600';
+
+  const createdAt = msg?.created_at ?? jsons[0]?.created_at;
 
   const renderBadge = (status?: string) => {
     if (!status) return null;
@@ -79,53 +93,65 @@ export function TransactionTimeline({ transaction }: Props) {
   };
 
   // Common UI blocks
-  const renderEdiMessageBlock = () => (
-    <Card>
-      <CardHeader className="pb-3 border-b border-slate-100">
-        <div className="flex items-center justify-between">
-          <CardTitle className={`text-lg flex items-center gap-2 ${colorClass}`}>
-            Received from Trading Partner
-          </CardTitle>
-          <Badge variant="secondary">{msg.direction}</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-4">
-        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
-          <Server className="w-5 h-5 text-slate-400 shrink-0" />
-          <div className="text-sm text-slate-600 space-y-0.5">
-            <div>
-              <span className="font-semibold text-slate-700">Trading Partner:</span>{' '}
-              {transaction.trading_partner_name || (
-                <span className="text-slate-400 italic">Unknown</span>
-              )}
-            </div>
-            <div>
-              <span className="font-semibold text-slate-700">Connection Type:</span>{' '}
-              {msg.connection_type && msg.connection_type !== 'UNKNOWN' ? (
-                msg.connection_type
-              ) : (
-                <span className="text-slate-400 italic">Unknown</span>
-              )}
+  const renderEdiMessageBlock = () => {
+    if (!msg) {
+      return (
+        <Card>
+          <CardContent className="pt-8 text-center text-slate-400 py-12">
+            EDI message is being received…
+          </CardContent>
+        </Card>
+      );
+    }
+    return (
+      <Card>
+        <CardHeader className="pb-3 border-b border-slate-100">
+          <div className="flex items-center justify-between">
+            <CardTitle className={`text-lg flex items-center gap-2 ${colorClass}`}>
+              Received from Trading Partner
+              <ReplayBadge count={msg.replay_count} />
+            </CardTitle>
+            <Badge variant="secondary">{msg.direction}</Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4 space-y-4">
+          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
+            <Server className="w-5 h-5 text-slate-400 shrink-0" />
+            <div className="text-sm text-slate-600 space-y-0.5">
+              <div>
+                <span className="font-semibold text-slate-700">Trading Partner:</span>{' '}
+                {transaction.trading_partner_name || (
+                  <span className="text-slate-400 italic">Unknown</span>
+                )}
+              </div>
+              <div>
+                <span className="font-semibold text-slate-700">Connection Type:</span>{' '}
+                {msg.connection_type && msg.connection_type !== 'UNKNOWN' ? (
+                  msg.connection_type
+                ) : (
+                  <span className="text-slate-400 italic">Unknown</span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        <IsaGsFieldsGrid
-          senderId={msg.sender_id}
-          receiverId={msg.receiver_id}
-          gsSenderId={msg.gs_sender_id}
-          gsReceiverId={msg.gs_receiver_id}
-        />
-        <div className="mt-4">
-          <div className="text-sm font-semibold text-slate-700 mb-2">Raw Payload</div>
-          <CodeViewer
-            language="edi"
-            height={250}
-            value={msg.edi_data || 'No payload available (might be stored in blob).'}
+          <IsaGsFieldsGrid
+            senderId={msg.sender_id}
+            receiverId={msg.receiver_id}
+            gsSenderId={msg.gs_sender_id}
+            gsReceiverId={msg.gs_receiver_id}
           />
-        </div>
-      </CardContent>
-    </Card>
-  );
+          <div className="mt-4">
+            <div className="text-sm font-semibold text-slate-700 mb-2">Raw Payload</div>
+            <CodeViewer
+              language="edi"
+              height={250}
+              value={msg.edi_data || 'No payload available (might be stored in blob).'}
+            />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   const renderApiGatewayReceiptBlock = () => (
     <Card>
@@ -177,9 +203,12 @@ export function TransactionTimeline({ transaction }: Props) {
           jsons.map((json, idx) => (
             <div key={json.id} className={idx > 0 ? 'pt-6 border-t border-slate-100' : ''}>
               <div className="flex items-center justify-between mb-4">
-                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                  {json.transaction_type || 'Unknown Type'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                    {json.transaction_type || 'Unknown Type'}
+                  </Badge>
+                  <ReplayBadge count={json.replay_count} className="ml-2" />
+                </div>
                 {renderBadge(json.status)}
               </div>
 
@@ -215,6 +244,15 @@ export function TransactionTimeline({ transaction }: Props) {
   );
 
   const renderOutboundDeliveryBlock = () => {
+    if (!msg) {
+      return (
+        <Card>
+          <CardContent className="pt-8 text-center text-slate-400 py-12">
+            EDI message is being generated by the transform worker…
+          </CardContent>
+        </Card>
+      );
+    }
     const isDeliveryFailed = ['FAILED', 'ERROR'].includes(msg.status?.toUpperCase() || '');
     const isDelivered = msg.status?.toUpperCase() === 'DELIVERED';
     const deliveryColorClass = isDeliveryFailed
@@ -226,17 +264,20 @@ export function TransactionTimeline({ transaction }: Props) {
     return (
       <Card>
         <CardHeader className="pb-3 border-b border-slate-100">
-          <CardTitle className={`text-lg ${deliveryColorClass}`}>
-            {isDelivered
-              ? 'Delivered to '
-              : isDeliveryFailed
-                ? 'Failed to deliver to '
-                : 'Delivering to '}
-            {transaction.trading_partner_name ||
-              (msg.connection_type && msg.connection_type !== 'UNKNOWN'
-                ? msg.connection_type
-                : 'Partner')}
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className={`text-lg flex items-center gap-2 ${deliveryColorClass}`}>
+              {isDelivered
+                ? 'Delivered to '
+                : isDeliveryFailed
+                  ? 'Failed to deliver to '
+                  : 'Delivering to '}
+              {transaction.trading_partner_name ||
+                (msg.connection_type && msg.connection_type !== 'UNKNOWN'
+                  ? msg.connection_type
+                  : 'Partner')}
+              <ReplayBadge count={msg.replay_count} />
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent className="pt-4 space-y-4">
           <div className="flex items-center justify-between bg-slate-50 p-4 rounded-lg border border-slate-100">
@@ -300,13 +341,20 @@ export function TransactionTimeline({ transaction }: Props) {
           </div>
         ) : (
           gateways.map((gw, idx) => {
+            const isPending = gw.status === 'PENDING_DELIVERY';
             const isSuccess =
-              gw.http_status_code && gw.http_status_code >= 200 && gw.http_status_code < 300;
+              !isPending &&
+              gw.http_status_code &&
+              gw.http_status_code >= 200 &&
+              gw.http_status_code < 300;
+
             return (
               <div key={gw.id} className={idx > 0 ? 'pt-6 border-t border-slate-100' : ''}>
                 <div className="flex items-center justify-between mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                   <div className="flex items-center gap-3">
-                    {isSuccess ? (
+                    {isPending ? (
+                      <Clock className="w-5 h-5 text-blue-500" />
+                    ) : isSuccess ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                     ) : (
                       <AlertCircle className="w-5 h-5 text-red-500" />
@@ -323,12 +371,14 @@ export function TransactionTimeline({ transaction }: Props) {
                   <Badge
                     variant="outline"
                     className={
-                      isSuccess
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-red-50 text-red-700 border-red-200'
+                      isPending
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : isSuccess
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-red-50 text-red-700 border-red-200'
                     }
                   >
-                    HTTP {gw.http_status_code || '---'}
+                    {isPending ? 'PENDING' : `HTTP ${gw.http_status_code || '---'}`}
                   </Badge>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -373,7 +423,8 @@ export function TransactionTimeline({ transaction }: Props) {
           </h2>
           <div className="mt-2 flex items-center gap-4 text-sm text-slate-500">
             <span className="flex items-center gap-1.5">
-              <Activity className="w-4 h-4" /> {new Date(msg.created_at).toLocaleString()}
+              <Activity className="w-4 h-4" />
+              {createdAt ? new Date(createdAt).toLocaleString() : '—'}
             </span>
           </div>
         </div>

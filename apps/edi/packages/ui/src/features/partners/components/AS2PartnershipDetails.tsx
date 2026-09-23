@@ -114,7 +114,8 @@ export function AS2PartnershipDetails({
     if (formData.remote_partner_id !== as2Partnership.remote_partner_id)
       payload.remote_partner_id = formData.remote_partner_id;
     if (formData.mdn_type !== as2Partnership.mdn_type) payload.mdn_type = formData.mdn_type;
-    if (formData.mdn_url !== as2Partnership.mdn_url) payload.mdn_url = formData.mdn_url || null;
+    if (formData.mdn_url !== as2Partnership.mdn_url)
+      payload.mdn_url = formData.mdn_url || undefined;
     if (formData.encryption_algorithm !== as2Partnership.encryption_algorithm)
       payload.encryption_algorithm = formData.encryption_algorithm;
     if (formData.signature_algorithm !== as2Partnership.signature_algorithm)

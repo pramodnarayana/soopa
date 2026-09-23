@@ -58,7 +58,7 @@ class TransactionTypeResolver:
         return TransactionTypeResolver._extract_from_dict(first)
 
     @staticmethod
-    def _extract_from_dict(payload_dict: Mapping[str, object]) -> str | None:
+    def _extract_from_dict(payload_dict: Mapping[str, object]) -> str | None:  # noqa: C901
         """Extract from a single payload dict using the ordered cascade."""
 
         # Pattern 1: flat field
@@ -67,7 +67,17 @@ class TransactionTypeResolver:
             return val.strip()
 
         # Pattern 2: heading-based EDI JSON structure
+        # Support both flat heading and Stedi's interchange > transaction_sets structure
         heading = payload_dict.get("heading")
+        if not heading:
+            interchange = payload_dict.get("interchange")
+            if isinstance(interchange, dict):
+                transaction_sets = interchange.get("transaction_sets")
+                if isinstance(transaction_sets, list) and transaction_sets:
+                    first_set = transaction_sets[0]
+                    if isinstance(first_set, dict):
+                        heading = first_set.get("heading")
+
         if isinstance(heading, dict):
             for key in heading:
                 if isinstance(key, str) and key.startswith("transaction_set_header_ST"):

@@ -34,6 +34,7 @@ class FakeDispatcher:
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_outbox_sweeper_integration(db_session_factory):
     """
     A High-Quality Narrow Integration Test that uses a real Postgres database

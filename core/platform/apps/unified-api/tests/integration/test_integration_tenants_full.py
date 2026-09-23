@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
 import httpx
 import pytest
 from identity.domain.identity_context import IdentityContext

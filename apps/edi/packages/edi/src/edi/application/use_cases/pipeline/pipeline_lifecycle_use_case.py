@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
+
 import structlog
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
@@ -14,27 +17,37 @@ class PipelineLifecycleUseCase:
     """
     Application Use Case — Saga Coordinator for the Pipeline Lifecycle.
 
-    Listens to domain events (TRANSFORM_COMPLETED, DELIVERY_COMPLETED) and
+    Listens to domain events (TRANSFORMATION_COMPLETED, DELIVERY_COMPLETED) and
     coordinates state transitions across the layers (EdiMessage, EdiJson, ApiGateway)
     to ensure strict SRP in the workers.
     """
 
-    def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
-        self.uow = uow
+    def __init__(
+        self, uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]
+    ) -> None:
+        self.uow_factory = uow_factory
 
-    async def handle_transform_completed(self, payload: JsonDict) -> None:
+    async def handle_transform_successful(
+        self, tenant_id: str, idempotency_key: str | None, payload: JsonDict
+    ) -> None:
         """
-        Triggered when a TransformUseCase finishes transforming a payload.
+        Triggered when a TransformUseCase finishes successfully transforming a payload.
         """
         trace_id = str(payload["trace_id"])
         direction_val = payload.get("direction")
         direction = str(direction_val) if direction_val is not None else EdiDirection.INBOUND.value
         logger.info(
-            "pipeline_lifecycle.transform_completed",
+            "pipeline_lifecycle.transform_successful",
             trace_id=trace_id,
         )
 
-        async with self.uow:
+        async with self.uow_factory() as uow, uow:
+            if idempotency_key:
+                is_new = await uow.record_idempotency(tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info("pipeline_lifecycle.duplicate_skipped", trace_id=trace_id)
+                    return
+
             if direction == EdiDirection.INBOUND.value:
                 gs_sender_val = payload.get("gs_sender_id")
                 gs_receiver_val = payload.get("gs_receiver_id")
@@ -45,13 +58,13 @@ class PipelineLifecycleUseCase:
                 transaction_type = str(txn_val) if txn_val else None
 
                 if gs_sender_id and gs_receiver_id:
-                    await self.uow.transactions.update_edi_message_metadata(
+                    await uow.transactions.update_edi_message_metadata(
                         trace_id=trace_id,
                         gs_sender_id=gs_sender_id,
                         gs_receiver_id=gs_receiver_id,
                         transaction_type=transaction_type,
                     )
-                await self.uow.transactions.update_edi_message_status(
+                await uow.transactions.update_edi_message_status(
                     trace_id, str(MessageStatus.TRANSFORMED)
                 )
             else:
@@ -68,7 +81,7 @@ class PipelineLifecycleUseCase:
                     update_kwargs["standard"] = str(payload["standard"])
 
                 if update_kwargs:
-                    await self.uow.transactions.update_edi_json(
+                    await uow.transactions.update_edi_json(
                         command=UpdateEdiJsonCommand(
                             trace_id=trace_id,
                             trading_partner_id=update_kwargs.get("trading_partner_id"),
@@ -76,52 +89,120 @@ class PipelineLifecycleUseCase:
                         )
                     )
 
-                await self.uow.transactions.update_edi_json_status(
+                await uow.transactions.update_edi_json_status(
                     trace_id, str(MessageStatus.TRANSFORMED)
                 )
 
-            # Emit DELIVER command
+            # Seed from the incoming event's idempotency_key parameter (not payload).
+            # Using the parameter guarantees we always have the correct per-event key,
+            # while payload.get() could silently fall back to trace_id if the key is absent.
+            deliver_key_seed = idempotency_key if idempotency_key else trace_id
             deliver_idempotency_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, trace_id, "DELIVER"
+                SystemIdPrefix.IDEMPOTENCY, deliver_key_seed, "DELIVER"
             )
-            await self.uow.outbox.append_event(
+            await uow.outbox.append_event(
                 idempotency_key=deliver_idempotency_key,
-                event_type=PipelineEventType.DELIVER_EVENT,
+                event_type=PipelineEventType.DELIVERY_REQUESTED,
                 payload={"trace_id": trace_id},
             )
-            await self.uow.commit()
+            await uow.commit()
 
         logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
-    async def handle_delivery_completed(self, payload: JsonDict) -> None:
+    async def handle_transform_failed(
+        self, tenant_id: str, idempotency_key: str | None, payload: JsonDict
+    ) -> None:
         """
-        Triggered when a DeliveryUseCase completes its delivery attempt.
+        Triggered when a TransformUseCase fails fatally.
         """
         trace_id = str(payload["trace_id"])
         direction_val = payload.get("direction")
         direction = str(direction_val) if direction_val is not None else EdiDirection.INBOUND.value
-        status = payload.get("status")
+        failure_reason = payload.get("failure_reason", "Unknown failure")
 
-        # Validate status field is present before proceeding
-        if not status:
-            logger.error(
-                "pipeline_lifecycle.missing_status",
-                trace_id=trace_id,
-                payload=payload,
-            )
-            raise ValueError(
-                f"Missing status field in DELIVERY_COMPLETED payload for trace_id={trace_id}"
-            )
+        logger.error(
+            "pipeline_lifecycle.transform_failed",
+            trace_id=trace_id,
+            failure_reason=failure_reason,
+        )
+
+        async with self.uow_factory() as uow, uow:
+            if idempotency_key:
+                is_new = await uow.record_idempotency(tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info("pipeline_lifecycle.duplicate_skipped", trace_id=trace_id)
+                    return
+
+            if direction == EdiDirection.INBOUND.value:
+                await uow.transactions.update_edi_message_status(
+                    trace_id, str(MessageStatus.FAILED)
+                )
+            else:
+                await uow.transactions.update_edi_json_status(trace_id, str(MessageStatus.FAILED))
+            await uow.commit()
+
+    async def handle_delivery_successful(
+        self, tenant_id: str, idempotency_key: str | None, payload: JsonDict
+    ) -> None:
+        """
+        Triggered when a DeliveryUseCase completes its delivery attempt successfully.
+        """
+        trace_id = str(payload["trace_id"])
+        direction_val = payload.get("direction")
+        direction = str(direction_val) if direction_val is not None else EdiDirection.INBOUND.value
 
         logger.info(
-            "pipeline_lifecycle.delivery_completed",
-            status=status,
+            "pipeline_lifecycle.delivery_successful",
             trace_id=trace_id,
         )
 
-        async with self.uow:
+        async with self.uow_factory() as uow, uow:
+            if idempotency_key:
+                is_new = await uow.record_idempotency(tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info("pipeline_lifecycle.duplicate_skipped", trace_id=trace_id)
+                    return
+
             if direction == EdiDirection.INBOUND.value:
-                await self.uow.transactions.update_api_payload_status(trace_id, str(status))
+                await uow.api_gateway_transactions.update_api_payload_status(
+                    trace_id, str(MessageStatus.DELIVERED)
+                )
             else:
-                await self.uow.transactions.update_edi_message_status(trace_id, str(status))
-            await self.uow.commit()
+                await uow.transactions.update_edi_message_status(
+                    trace_id, str(MessageStatus.DELIVERED)
+                )
+            await uow.commit()
+
+    async def handle_delivery_failed(
+        self, tenant_id: str, idempotency_key: str | None, payload: JsonDict
+    ) -> None:
+        """
+        Triggered when a DeliveryUseCase encounters a terminal delivery failure.
+        """
+        trace_id = str(payload["trace_id"])
+        direction_val = payload.get("direction")
+        direction = str(direction_val) if direction_val is not None else EdiDirection.INBOUND.value
+        failure_reason = payload.get("failure_reason", "Unknown failure")
+
+        logger.error(
+            "pipeline_lifecycle.delivery_failed",
+            trace_id=trace_id,
+            failure_reason=failure_reason,
+        )
+
+        async with self.uow_factory() as uow, uow:
+            if idempotency_key:
+                is_new = await uow.record_idempotency(tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info("pipeline_lifecycle.duplicate_skipped", trace_id=trace_id)
+                    return
+
+            if direction == EdiDirection.INBOUND.value:
+                await uow.api_gateway_transactions.update_api_payload_status(
+                    trace_id, str(MessageStatus.FAILED)
+                )
+            else:
+                await uow.transactions.update_edi_message_status(
+                    trace_id, str(MessageStatus.FAILED)
+                )
+            await uow.commit()

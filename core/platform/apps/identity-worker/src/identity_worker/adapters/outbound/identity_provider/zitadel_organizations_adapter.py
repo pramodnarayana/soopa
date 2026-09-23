@@ -1,6 +1,6 @@
 import structlog
 from identity.adapters.outbound.zitadel.client import ZitadelClient
-from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpError
+from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpError, ZitadelHttpNotFoundError
 from pydantic import BaseModel, Field
 
 from identity_worker.config.settings import AppSettings
@@ -106,12 +106,15 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
             try:
                 await self.fetch_with_auth(endpoint=f"/admin/v1/orgs/{org_id}", method="DELETE")
             except ZitadelHttpError:
-                # Fallback to management v1 if admin fails
+                # Fallback to management v1 if admin fails — even a 404 should still
+                # proceed to the management fallback, just in case.
                 await self.fetch_with_auth(
                     endpoint=f"/management/v1/orgs/{org_id}", method="DELETE"
                 )
 
             logger.info("successfully_deleted_organization_from_zitadel", org_id=org_id)
+        except ZitadelHttpNotFoundError:
+            logger.info("organization_already_deleted", org_id=org_id)
         except Exception as e:
             logger.exception("error_deleting_organization_in_zitadel", org_id=org_id)
             raise IdentityProviderPortError("Failed to delete organization") from e

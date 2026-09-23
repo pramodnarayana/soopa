@@ -12,7 +12,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import cast
 
-from seedwork.infrastructure.config_models import PlatformDatabaseSettings
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
 from database.router import DatabaseRouter, DatabaseRouterPort

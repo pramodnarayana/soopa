@@ -321,8 +321,12 @@ export function EdiToolPage() {
     },
   });
 
-  // Auto-run transformation when debounced payload or input format changes
-  useEffect(() => {
+  const [prevDebouncedPayload, setPrevDebouncedPayload] = useState(debouncedPayload);
+  const [prevInputFormat, setPrevInputFormat] = useState(inputFormat);
+
+  if (debouncedPayload !== prevDebouncedPayload || inputFormat !== prevInputFormat) {
+    setPrevDebouncedPayload(debouncedPayload);
+    setPrevInputFormat(inputFormat);
     if (debouncedPayload.trim()) {
       transformMutation.mutate({
         action: inputFormat === 'EDI' ? 'EDI_TO_JSON' : 'JSON_TO_EDI',
@@ -333,7 +337,7 @@ export function EdiToolPage() {
       setValidationErrors([]);
       setIsValid(null);
     }
-  }, [debouncedPayload, inputFormat]);
+  }
 
   const handleCopy = async (text: string, paneName: string) => {
     if (!text) return;

@@ -16,7 +16,7 @@ from edi.domain.enums import EdiJobName, PipelineEventType
 class DataPlaneOutboxBuilder:
     session: AsyncSession
     tenant_id: str = "ten_default_123"
-    event_type: str = PipelineEventType.TRANSFORM_EVENT.value
+    event_type: str = PipelineEventType.TRANSFORMATION_REQUESTED.value
     payload: dict[str, object] = field(default_factory=dict)
     status: str = OutboxStatus.PENDING.value
     attempts: int = 0
@@ -30,10 +30,7 @@ class DataPlaneOutboxBuilder:
             idempotency_key=kwargs.get("idempotency_key", f"idemp_{uuid.uuid4()}"),
             event_type=kwargs.get("event_type", self.event_type),
             payload=kwargs.get("payload", self.payload),
-            status=kwargs.get("status", self.status),
-            attempts=kwargs.get("attempts", self.attempts),
             created_at=kwargs.get("created_at", self.created_at),
-            updated_at=kwargs.get("updated_at", self.updated_at),
         )
         self.session.add(outbox_event)
         await self.session.flush()

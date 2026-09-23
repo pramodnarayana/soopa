@@ -54,6 +54,7 @@ async def test_aioboto3_payload_storage_download_valid(storage: Aioboto3PayloadS
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_aioboto3_payload_storage_download_invalid_uri(
     storage: Aioboto3PayloadStorage,
 ) -> None:
@@ -79,6 +80,7 @@ async def test_aioboto3_payload_storage_generate_presigned_url(
 
 
 @pytest.mark.asyncio
+@pytest.mark.integration
 async def test_aioboto3_payload_storage_generate_presigned_url_invalid_uri(
     storage: Aioboto3PayloadStorage,
 ) -> None:

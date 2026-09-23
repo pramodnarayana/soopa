@@ -37,10 +37,11 @@ class EdiMessageDTO:
     msg_headers: dict[str, JsonValue] | None = None
     state: str | None = None
     status_message: str | None = None
-    is_resend: bool | None = None
-    parent_trace_id: str | None = None
     created_at: datetime
     updated_at: datetime
+    replay_count: int = 0
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -54,9 +55,11 @@ class EdiJsonDTO:
     business_metadata: dict[str, JsonValue] | None = None
     transaction_type: str | None = None
     payload: JsonValue | None = None
-    parent_trace_id: str | None = None
     created_at: datetime
     updated_at: datetime
+    replay_count: int = 0
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -68,6 +71,8 @@ class ApiGatewayDTO:
     http_status_code: int | None = None
     payload: JsonValue | None = None
     response: str | None = None
-    parent_trace_id: str | None = None
     created_at: datetime
     updated_at: datetime
+    replay_count: int = 0
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None

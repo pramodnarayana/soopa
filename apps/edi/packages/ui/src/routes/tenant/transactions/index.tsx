@@ -1,8 +1,8 @@
 import { type FieldDef, type FilterRule, QueryBuilder } from '@soopa/ui';
 import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
-import { createRoute, Link } from '@tanstack/react-router';
+import { createRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { ArrowRight, Database, FileJson, RefreshCcw } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
 import {
   useExplorerEdiJson,
@@ -13,6 +13,7 @@ import {
   useBulkReplayTransactions,
   useReplayTransaction,
 } from '../../../features/transactions/api/transactionsApi';
+import { ReplayBadge } from '../../../features/transactions/components/ReplayBadge';
 import { TransactionsTable } from '../../../features/transactions/components/TransactionsTable';
 import { Route as appRoute } from '../../tenant';
 
@@ -57,6 +58,25 @@ function TraceAction({
   );
 }
 
+function RowActions({
+  item,
+  onTraceClick,
+}: {
+  item: ExplorerEdiMessage | ExplorerEdiJson;
+  onTraceClick?: (traceId: string) => void;
+}) {
+  if (!item.trace_id) return null;
+
+  return (
+    <div className="flex items-center justify-end">
+      <div className="mr-4 md:mr-8 flex gap-2">
+        <ReplayBadge count={item.replay_count} className="ml-2" />
+      </div>
+      <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
+    </div>
+  );
+}
+
 // ─── Shared field renderers ───────────────────────────────────────────────────
 
 function FieldGrid({ items }: { items: { label: string; value: string | null | undefined }[] }) {
@@ -86,10 +106,16 @@ function EdiMessageExpandedRow({ item }: { item: ExplorerEdiMessage }) {
           <Button
             variant="default"
             disabled={isPending}
-            onClick={() => replay({ traceId: item.trace_id, tier: 'raw' })}
+            onClick={(e) => {
+              e.stopPropagation();
+              replay({
+                traceId: item.trace_id,
+                checkpoint: item.direction === 'OUTBOUND' ? 'DELIVERY' : 'TRANSFORM',
+              });
+            }}
           >
             <RefreshCcw className={`w-4 h-4 mr-2 ${isPending ? 'animate-spin' : ''}`} />
-            Reprocess (Replay Raw)
+            Replay
           </Button>
         )}
       </div>
@@ -123,10 +149,16 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           <Button
             variant="default"
             disabled={isPending}
-            onClick={() => replay({ traceId: item.trace_id, tier: 'translation' })}
+            onClick={(e) => {
+              e.stopPropagation();
+              replay({
+                traceId: item.trace_id,
+                checkpoint: item.direction === 'OUTBOUND' ? 'TRANSFORM' : 'DELIVERY',
+              });
+            }}
           >
             <RefreshCcw className={`w-4 h-4 mr-2 ${isPending ? 'animate-spin' : ''}`} />
-            Reprocess (Replay Translation)
+            Replay
           </Button>
         )}
       </div>
@@ -321,6 +353,10 @@ const jsonFields: FieldDef[] = [
 const LIMIT = 50;
 
 export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: string) => void }) {
+  const router = useRouterState();
+  const isIndex =
+    router.location.pathname.endsWith('/transactions') ||
+    router.location.pathname.endsWith('/transactions/');
   const [activeTab, setActiveTab] = useState<ActiveTab>('messages');
   const [messagesFilters, setMessagesFilters] = useState<FilterRule[]>([]);
   const [jsonFilters, setJsonFilters] = useState<FilterRule[]>([]);
@@ -342,16 +378,17 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     activeTab === 'messages',
   );
 
-  useEffect(() => {
-    if (messagesData?.items) {
-      setAccumulatedMessages((prev) => {
-        if (messagesOffset === 0) return messagesData.items;
-        const map = new Map(prev.map((i) => [i.id, i]));
-        messagesData.items.forEach((i) => map.set(i.id, i));
-        return Array.from(map.values());
-      });
+  const [prevMessagesData, setPrevMessagesData] = useState(null);
+  if (messagesData?.items && messagesData !== prevMessagesData) {
+    setPrevMessagesData(messagesData as any);
+    if (messagesOffset === 0) {
+      setAccumulatedMessages(messagesData.items);
+    } else {
+      const map = new Map(accumulatedMessages.map((i) => [i.id, i]));
+      messagesData.items.forEach((i) => map.set(i.id, i));
+      setAccumulatedMessages(Array.from(map.values()));
     }
-  }, [messagesData, messagesOffset]);
+  }
 
   // EDI JSON (from explorer endpoint with direction filter)
   const [jsonOffset, setJsonOffset] = useState(0);
@@ -364,16 +401,17 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     activeTab === 'json',
   );
 
-  useEffect(() => {
-    if (jsonData?.items) {
-      setAccumulatedJson((prev) => {
-        if (jsonOffset === 0) return jsonData.items;
-        const map = new Map(prev.map((i) => [i.id, i]));
-        jsonData.items.forEach((i) => map.set(i.id, i));
-        return Array.from(map.values());
-      });
+  const [prevJsonData, setPrevJsonData] = useState(null);
+  if (jsonData?.items && jsonData !== prevJsonData) {
+    setPrevJsonData(jsonData as any);
+    if (jsonOffset === 0) {
+      setAccumulatedJson(jsonData.items);
+    } else {
+      const map = new Map(accumulatedJson.map((i) => [i.id, i]));
+      jsonData.items.forEach((i) => map.set(i.id, i));
+      setAccumulatedJson(Array.from(map.values()));
     }
-  }, [jsonData, jsonOffset]);
+  }
 
   const handleMessagesFiltersChange = (f: FilterRule[]) => {
     setMessagesFilters(f);
@@ -390,6 +428,10 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
     setSelectedJson([]);
     setJsonRowSelection({});
   };
+
+  if (!isIndex) {
+    return <Outlet />;
+  }
 
   return (
     <div className="flex flex-col min-h-full animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
@@ -450,26 +492,43 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                   variant={selectedMessages.length > 0 ? 'default' : 'secondary'}
                   disabled={isBulkReplaying || selectedMessages.length === 0}
                   onClick={() => {
-                    const traceIds = selectedMessages
+                    const inboundIds = selectedMessages
+                      .filter((m) => m.direction === 'INBOUND')
                       .map((m) => m.trace_id)
                       .filter(Boolean) as string[];
-                    if (traceIds.length === 0) return;
 
-                    bulkReplay(
-                      { traceIds, tier: 'raw' },
-                      {
-                        onSuccess: () => {
-                          setSelectedMessages([]);
-                          setMessagesRowSelection({});
+                    const outboundIds = selectedMessages
+                      .filter((m) => m.direction === 'OUTBOUND')
+                      .map((m) => m.trace_id)
+                      .filter(Boolean) as string[];
+
+                    if (inboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: inboundIds, checkpoint: 'TRANSFORM' },
+                        {
+                          onSuccess: () => {
+                            setSelectedMessages([]);
+                            setMessagesRowSelection({});
+                          },
                         },
-                      },
-                    );
+                      );
+                    }
+                    if (outboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: outboundIds, checkpoint: 'DELIVERY' },
+                        {
+                          onSuccess: () => {
+                            setSelectedMessages([]);
+                            setMessagesRowSelection({});
+                          },
+                        },
+                      );
+                    }
                   }}
                 >
                   <RefreshCcw className={`w-4 h-4 mr-2 ${isBulkReplaying ? 'animate-spin' : ''}`} />
-                  Reprocess{' '}
-                  {selectedMessages.length > 0 ? `${selectedMessages.length} Selected` : 'Selected'}{' '}
-                  (Raw)
+                  Replay{' '}
+                  {selectedMessages.length > 0 ? `${selectedMessages.length} Selected` : 'Selected'}
                 </Button>
               </div>
               <QueryBuilder
@@ -490,9 +549,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               rowSelection={messagesRowSelection}
               onRowSelectionChange={setMessagesRowSelection}
               renderAction={(item) =>
-                item.trace_id ? (
-                  <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
-                ) : null
+                item.trace_id ? <RowActions item={item} onTraceClick={onTraceClick} /> : null
               }
             />
           </div>
@@ -504,26 +561,42 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
                   variant={selectedJson.length > 0 ? 'default' : 'secondary'}
                   disabled={isBulkReplaying || selectedJson.length === 0}
                   onClick={() => {
-                    const traceIds = selectedJson
+                    const inboundIds = selectedJson
+                      .filter((m) => m.direction === 'INBOUND')
                       .map((m) => m.trace_id)
                       .filter(Boolean) as string[];
-                    if (traceIds.length === 0) return;
 
-                    bulkReplay(
-                      { traceIds, tier: 'translation' },
-                      {
-                        onSuccess: () => {
-                          setSelectedJson([]);
-                          setJsonRowSelection({});
+                    const outboundIds = selectedJson
+                      .filter((m) => m.direction === 'OUTBOUND')
+                      .map((m) => m.trace_id)
+                      .filter(Boolean) as string[];
+
+                    if (inboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: inboundIds, checkpoint: 'DELIVERY' },
+                        {
+                          onSuccess: () => {
+                            setSelectedJson([]);
+                            setJsonRowSelection({});
+                          },
                         },
-                      },
-                    );
+                      );
+                    }
+                    if (outboundIds.length > 0) {
+                      bulkReplay(
+                        { traceIds: outboundIds, checkpoint: 'TRANSFORM' },
+                        {
+                          onSuccess: () => {
+                            setSelectedJson([]);
+                            setJsonRowSelection({});
+                          },
+                        },
+                      );
+                    }
                   }}
                 >
                   <RefreshCcw className={`w-4 h-4 mr-2 ${isBulkReplaying ? 'animate-spin' : ''}`} />
-                  Reprocess{' '}
-                  {selectedJson.length > 0 ? `${selectedJson.length} Selected` : 'Selected'}{' '}
-                  (Translation)
+                  Replay {selectedJson.length > 0 ? `${selectedJson.length} Selected` : 'Selected'}
                 </Button>
               </div>
               <QueryBuilder
@@ -544,9 +617,7 @@ export function TransactionsPage({ onTraceClick }: { onTraceClick?: (traceId: st
               rowSelection={jsonRowSelection}
               onRowSelectionChange={setJsonRowSelection}
               renderAction={(item) =>
-                item.trace_id ? (
-                  <TraceAction traceId={item.trace_id} onTraceClick={onTraceClick} />
-                ) : null
+                item.trace_id ? <RowActions item={item} onTraceClick={onTraceClick} /> : null
               }
             />
           </div>

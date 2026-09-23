@@ -58,8 +58,9 @@ class UpdateInboundRouteUseCase:
             aggregate.as2_partner_id = cmd.as2_partner_id
         if not isinstance(cmd.sftp_partner_id, UnsetType):
             aggregate.sftp_partner_id = cmd.sftp_partner_id
-        if not isinstance(cmd.connection_type, UnsetType):
-            aggregate.connection_type = cmd.connection_type
+        # connection_type is strictly WEBHOOK for InboundRoutes
+        aggregate.connection_type = EdiConnectionType.WEBHOOK
+
         if not isinstance(cmd.active, UnsetType):
             aggregate.active = cmd.active
         if not isinstance(cmd.name, UnsetType):

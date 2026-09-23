@@ -37,6 +37,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             else None,
             as2_partner_id=record.as2_partner_id,
             sftp_partner_id=record.sftp_partner_id,
+            webhook_id=record.webhook_id,
         )
 
     async def get_outbound_route(
@@ -69,12 +70,15 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         tenant_id: str,
         as2_id: str | UUID | UnsetType | None,
         sftp_id: str | UUID | UnsetType | None,
+        webhook_id: str | UUID | UnsetType | None,
     ) -> None:
         destinations = [
-            d for d in (as2_id, sftp_id) if d is not None and not isinstance(d, UnsetType)
+            d
+            for d in (as2_id, sftp_id, webhook_id)
+            if d is not None and not isinstance(d, UnsetType)
         ]
         if len(destinations) != 1:
-            raise ValueError("Exactly one destination (as2 or sftp) must be provided")
+            raise ValueError("Exactly one destination (as2, sftp, or webhook) must be provided")
 
         if as2_id:
             result = await self.session.execute(
@@ -104,7 +108,10 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
 
     async def save(self, aggregate: OutboundRouteDomainModel) -> None:
         await self._validate_outbound_destination(
-            aggregate.tenant_id, aggregate.as2_partner_id, aggregate.sftp_partner_id
+            aggregate.tenant_id,
+            aggregate.as2_partner_id,
+            aggregate.sftp_partner_id,
+            aggregate.webhook_id,
         )
 
         result = await self.session.execute(

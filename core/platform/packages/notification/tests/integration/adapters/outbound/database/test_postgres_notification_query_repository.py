@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from database.models.identity import Role, Tenant, User, UserRole
 from database.models.notifications import NotificationRecord
 from seedwork import generate_id, generate_random_hex

@@ -127,10 +127,15 @@ class HttpxAS2TesterAdapter:
             return False, f"Remote returned HTTP {response.status_code}", payload_str, full_mdn
 
         content_type = response.headers.get("content-type", "").lower()
-        if "multipart/report" not in content_type:
+        # A signed MDN (multipart/signed) wraps the inner multipart/report in an S/MIME
+        # signature envelope per RFC 4130 §7.4. Both are valid MDN responses.
+        is_valid_mdn_content_type = (
+            "multipart/report" in content_type or "multipart/signed" in content_type
+        )
+        if not is_valid_mdn_content_type:
             return (
                 False,
-                f"MDN parse error: missing Content-Type multipart/report, got {content_type}",
+                f"MDN parse error: missing Content-Type multipart/report or multipart/signed, got {content_type}",
                 payload_str,
                 full_mdn,
             )

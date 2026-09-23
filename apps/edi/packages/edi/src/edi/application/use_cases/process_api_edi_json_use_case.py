@@ -97,6 +97,7 @@ class ProcessApiEdiJsonUseCase:
                 tenant_id=command.tenant_id,
                 trace_id=trace_id,
                 direction=Direction.OUTBOUND,
+                trading_partner_id=command.trading_partner_id,
                 transaction_type=transaction_type,
                 business_metadata=business_metadata,
                 payload=domain_payload,

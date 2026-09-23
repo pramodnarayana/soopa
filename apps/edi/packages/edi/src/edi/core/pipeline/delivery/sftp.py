@@ -4,8 +4,7 @@ from collections.abc import Callable
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
-from edi.domain.enums import MessageStatus
+from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDeliveryError
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.ports.outbound.field_encryption import FieldEncryptionPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
@@ -37,9 +36,9 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             async with self.uow_factory() as uow, uow:
                 partner = await uow.sftp_partners.get_sftp_partner(edi_msg.tenant_id, partner_id)
                 if not partner:
-                    raise ValueError(f"SFTP partner {partner_id} not found.")
+                    raise TerminalDeliveryError(f"SFTP partner {partner_id} not found.")
                 if not edi_msg.edi_data:
-                    raise ValueError("Empty EDI data")
+                    raise TerminalDeliveryError("Empty EDI data")
                 raw_payload = edi_msg.edi_data.encode("utf-8")
                 filename = f"{trace_id}.edi"
 
@@ -53,16 +52,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
                     vault_secret = await self.secret_store.get_secret(partner.credentials_vault_ref)
                     client_key = vault_secret
                     password = ""
-        except ValueError:
-            async with self.uow_factory() as uow, uow:
-                await uow.transactions.update_edi_message_status(trace_id, MessageStatus.FAILED)
-                await self._emit_delivery_completed(
-                    uow, trace_id, edi_msg.direction, MessageStatus.FAILED
-                )
-                await uow.commit()
-            logger.exception(
-                "SFTP delivery terminal failure for trace_id={trace_id}", trace_id=trace_id
-            )
+        except TerminalDeliveryError:
             raise
         except Exception:
             logger.exception(
@@ -87,13 +77,6 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
                 "SFTP delivery HTTP transmission failed for trace_id={trace_id}", trace_id=trace_id
             )
             raise RuntimeError(f"SFTP delivery failed: {e}") from e
-
-        async with self.uow_factory() as uow, uow:
-            await uow.transactions.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
-            await self._emit_delivery_completed(
-                uow, trace_id, edi_msg.direction, MessageStatus.DELIVERED
-            )
-            await uow.commit()
 
         logger.info(
             "Delivered trace_id={trace_id} → SFTP {partner_host}",

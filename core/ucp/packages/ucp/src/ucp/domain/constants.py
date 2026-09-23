@@ -6,16 +6,16 @@ from seedwork.constants import LifecycleStatus as LifecycleStatus
 class UcpEventType(StrEnum):
     APP_SUBSCRIBED = "app.subscribed"
     APP_UNSUBSCRIBED = "app.unsubscribed"
-    ROLE_CREATED = "role_created"
-    USER_ROLE_ASSIGNED = "user_role_assigned"
+    ROLE_CREATED = "role.created"
+    USER_ROLE_ASSIGNED = "user.role_assigned"
     TENANT_PROVISIONED = "tenant.provisioned"
-    TENANT_NAME_UPDATED = "TenantNameUpdated"
-    TENANT_STATUS_TOGGLED = "TenantStatusToggled"
-    TENANT_DELETED = "TenantDeleted"
-    USER_UPDATED = "UserUpdated"
-    USER_STATUS_TOGGLED = "UserStatusToggled"
-    USER_DELETED = "UserDeleted"
-    USER_MEMBERSHIP_REMOVED = "UserMembershipRemoved"
+    TENANT_NAME_UPDATED = "tenant.name_updated"
+    TENANT_STATUS_TOGGLED = "tenant.status_toggled"
+    TENANT_DELETED = "tenant.deleted"
+    USER_UPDATED = "user.updated"
+    USER_STATUS_TOGGLED = "user.status_toggled"
+    USER_DELETED = "user.deleted"
+    USER_MEMBERSHIP_REMOVED = "user.membership_removed"
 
 
 class SubscriptionTier(StrEnum):

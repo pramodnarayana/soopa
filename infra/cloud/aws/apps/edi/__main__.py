@@ -57,10 +57,11 @@ firelens_endpoint = (
     platform.require_output("openobserve_endpoint") if enable_observability else None
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
+sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
 
 # ── Provision Domain Resources ────────────────────────────────────────────────
 storage = provision_storage(_prefix, _TAGS)
-messaging = provision_messaging(_prefix, _TAGS)
+messaging = provision_messaging(_prefix, _TAGS, sns_platform_events_topic_arn)
 
 compute = provision_compute(
     prefix=_prefix,
@@ -78,9 +79,12 @@ compute = provision_compute(
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("edi_payloads_bucket", storage.id)
-pulumi.export("edi_events_topic_arn", messaging["edi_events_topic"].arn)
 pulumi.export("edi_data_plane_jobs_queue_url", messaging["queues"]["data_plane_jobs"].url)
 pulumi.export("edi_control_plane_jobs_queue_url", messaging["queues"]["control_plane_jobs"].url)
 pulumi.export(
     "edi_priority_notifications_queue_url", messaging["queues"]["priority_notifications"].url
 )
+pulumi.export("sqs_orchestrator_queue_url", messaging["queues"]["transform"].url)
+pulumi.export("sqs_compute_queue_url", messaging["queues"]["compute"].url)
+pulumi.export("sqs_deliver_queue_url", messaging["queues"]["deliver"].url)
+pulumi.export("sqs_config_sync_queue_url", messaging["queues"]["config_sync"].url)

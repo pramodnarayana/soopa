@@ -6,8 +6,8 @@ from urllib.parse import urlparse
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infrastructure.config import load_settings_safely
-from seedwork.infrastructure.config_models import (
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
     PlatformIdentitySettings,
@@ -42,7 +42,7 @@ class EdiAwsSettings(PlatformAwsSettings):
     Extends the base PlatformAwsSettings to include EDI-specific topics.
     """
 
-    sns_topic_arn: str = Field(validation_alias="SNS_EDI_EVENTS_TOPIC_ARN", default="")
+    sns_topic_arn: str = Field(validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default="")
 
 
 class SqsSettings(BaseSettings):
@@ -52,17 +52,13 @@ class SqsSettings(BaseSettings):
         validation_alias="SQS_PROVISIONING_QUEUE_URL",
         description="The SQS queue URL for EDI Config Sync/Provisioning",
     )
-    transform_queue_url: str = Field(
-        validation_alias="SQS_TRANSFORM_QUEUE_URL",
-        description="The SQS queue URL for EDI Transform",
+    orchestrator_queue_url: str = Field(
+        validation_alias="SQS_ORCHESTRATOR_QUEUE_URL",
+        description="The SQS queue URL for EDI Orchestrator (Transform & Lifecycle)",
     )
     compute_queue_url: str = Field(
         validation_alias="SQS_COMPUTE_QUEUE_URL",
-        description="The SQS queue URL for EDI heavy compute (JSON-to-EDI and EDI-to-JSON)",
-    )
-    lifecycle_queue_url: str = Field(
-        validation_alias="SQS_LIFECYCLE_QUEUE_URL",
-        description="The SQS queue URL for EDI Lifecycle",
+        description="The SQS queue URL for EDI Compute (BOTS)",
     )
     deliver_queue_url: str = Field(
         validation_alias="SQS_DELIVER_QUEUE_URL", description="The SQS queue URL for EDI Deliver"
@@ -123,9 +119,7 @@ class AppSettings(BaseSettings):
         description="Allow private IPs in AS2/HTTP delivery (for local docker testing)",
     )
 
-    database: PlatformDatabaseSettings = Field(
-        default_factory=lambda: typing.cast(PlatformDatabaseSettings, {})
-    )
+    database: PlatformDatabaseSettings = Field(default_factory=PlatformDatabaseSettings)
     s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     sqs: SqsSettings = Field(default_factory=lambda: typing.cast(SqsSettings, {}))
@@ -141,6 +135,9 @@ class AppSettings(BaseSettings):
     @model_validator(mode="after")
     def validate_external_url(self) -> "AppSettings":
         if self.env != "development":
+            if self.allow_private_ips:
+                raise ValueError("allow_private_ips must be False in non-development environments")
+
             if "://" not in self.public.base_url:
                 raise ValueError("base_url must include a scheme (e.g. https://)")
 

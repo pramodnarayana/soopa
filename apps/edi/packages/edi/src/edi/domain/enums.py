@@ -51,7 +51,7 @@ class EdiConnectionType(StrEnum):
     AS2 = "AS2"
     API = "API"
     SFTP = "SFTP"
-    WEBHOOK = "Webhook"
+    WEBHOOK = "WEBHOOK"
 
 
 class EdiStandard(StrEnum):
@@ -157,11 +157,25 @@ class WebhookEventType(StrEnum):
 class PipelineEventType(StrEnum):
     """Internal pipeline orchestration event types (SQS message type discriminators)."""
 
-    TRANSFORM_EVENT = "TRANSFORM_EVENT"
-    COMPUTE_TRANSFORM_EVENT = "COMPUTE_TRANSFORM_EVENT"
-    TRANSFORM_COMPLETED = "TRANSFORM_COMPLETED"
-    DELIVER_EVENT = "DELIVER_EVENT"
+    TRANSFORMATION_REQUESTED = "TRANSFORMATION_REQUESTED"
+    COMPUTE_TRANSFORMATION_COMMAND = "COMPUTE_TRANSFORMATION_COMMAND"
+    TRANSFORMATION_SUCCESSFUL = "TRANSFORMATION_SUCCESSFUL"
+    TRANSFORMATION_FAILED = "TRANSFORMATION_FAILED"
+    DELIVERY_REQUESTED = "DELIVERY_REQUESTED"
+    EXECUTE_DELIVERY_COMMAND = "EXECUTE_DELIVERY_COMMAND"
     DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
+    DELIVERY_SUCCESSFUL = "DELIVERY_SUCCESSFUL"
+    DELIVERY_FAILED = "DELIVERY_FAILED"
+
+
+class TraceEventType(StrEnum):
+    """Event types for audit ledger trace events."""
+
+    REPLAY_TRANSFORM = "REPLAY_TRANSFORM"
+    REPLAY_DELIVER = "REPLAY_DELIVER"
+    MODIFY_AND_REPLAY_TRANSFORM = "MODIFY_AND_REPLAY_TRANSFORM"
+    MODIFY_AND_REPLAY_DELIVER = "MODIFY_AND_REPLAY_DELIVER"
+    CREATED_FROM_MODIFICATION = "CREATED_FROM_MODIFICATION"
 
 
 class NotificationEventType(StrEnum):
@@ -180,12 +194,31 @@ class EdiJobName(StrEnum):
     EDI_DATA_PLANE_OUTBOX_SWEEPER = "EDI_DATA_PLANE_OUTBOX_SWEEPER"
     EDI_CONTROL_PLANE_OUTBOX_CLEANUP = "EDI_CONTROL_PLANE_OUTBOX_CLEANUP"
     EDI_DATA_PLANE_OUTBOX_CLEANUP = "EDI_DATA_PLANE_OUTBOX_CLEANUP"
-    EDI_IDEMPOTENCY_CLEANUP = "EDI_IDEMPOTENCY_CLEANUP"
+    EDI_DATA_RETENTION_CLEANUP = "EDI_DATA_RETENTION_CLEANUP"
 
 
 class EdiConstants(StrEnum):
     OUTBOX_CHANNEL = "edi_outbox_channel"
     EDI_APP_SLUG = "edi"
+
+
+class ReplayCheckpoint(StrEnum):
+    """
+    The pipeline stage from which to resume processing during a replay.
+
+    TRANSFORM — restart from the raw EDI payload (re-run transform + deliver).
+    DELIVERY  — restart from the translated JSON (re-run deliver only, skip transform).
+    """
+
+    TRANSFORM = "TRANSFORM"
+    DELIVERY = "DELIVERY"
+
+
+class TransactionEntityType(StrEnum):
+    """Discriminator for which read model to target during a replay operation."""
+
+    EDI_MESSAGE = "edi_message"
+    EDI_JSON = "edi_json"
 
 
 class EdiOutboxSource(StrEnum):

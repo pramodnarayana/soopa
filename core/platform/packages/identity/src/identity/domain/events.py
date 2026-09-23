@@ -2,6 +2,8 @@ from dataclasses import dataclass
 
 from seedwork.events import DomainEvent
 
+from identity.domain.constants import IdentityEventType
+
 
 @dataclass(frozen=True)
 class RoleCreatedEvent(DomainEvent):
@@ -14,7 +16,7 @@ class RoleCreatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "role_created"
+        return IdentityEventType.ROLE_CREATED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return None
@@ -30,7 +32,7 @@ class UserUpdatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserUpdated"
+        return IdentityEventType.USER_UPDATED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -44,7 +46,7 @@ class UserStatusToggledEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserStatusToggled"
+        return IdentityEventType.USER_STATUS_TOGGLED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -56,7 +58,7 @@ class UserDeletedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserDeleted"
+        return IdentityEventType.USER_DELETED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return None
@@ -69,7 +71,7 @@ class UserMembershipRemovedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserMembershipRemoved"
+        return IdentityEventType.USER_MEMBERSHIP_REMOVED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -85,7 +87,7 @@ class UserRoleAssignedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "user_role_assigned"
+        return IdentityEventType.USER_ROLE_ASSIGNED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -102,7 +104,7 @@ class UserCreatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "UserInvited"
+        return IdentityEventType.USER_INVITED.value
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

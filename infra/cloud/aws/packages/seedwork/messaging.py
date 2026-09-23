@@ -35,7 +35,7 @@ def provision_fifo_queue_pair(
 
 def subscribe_queue(
     subscription_name: str,
-    topic: aws.sns.Topic,
+    topic_arn: pulumi.Input[str],
     queue: aws.sqs.Queue,
     filter_policy: dict = None,
 ) -> aws.sns.TopicSubscription:
@@ -45,7 +45,7 @@ def subscribe_queue(
     aws.sqs.QueuePolicy(
         f"{subscription_name}-policy",
         queue_url=queue.url,
-        policy=pulumi.Output.all(topic.arn, queue.arn).apply(
+        policy=pulumi.Output.all(topic_arn, queue.arn).apply(
             lambda args: json.dumps(
                 {
                     "Version": "2012-10-17",
@@ -65,7 +65,7 @@ def subscribe_queue(
 
     return aws.sns.TopicSubscription(
         subscription_name,
-        topic=topic.arn,
+        topic=topic_arn,
         protocol="sqs",
         endpoint=queue.arn,
         raw_message_delivery=True,

@@ -2,27 +2,18 @@ import asyncio
 import signal
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from functools import partial
 from typing import Any
 
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.data_plane.postgres_idempotency_repository import (
-    SqlAlchemyEdiIdempotencyRepository,
-)
-from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
 )
 from edi.adapters.outbound.database.tenant_uow_provider import (
     TenantUowProvider,
 )
-from edi.adapters.outbound.pipeline.as2 import HttpxAS2DeliveryClient
-from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
-from edi.adapters.outbound.pipeline.sftp import ParamikoSftpClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-from edi.adapters.outbound.security.network import validate_target_url
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
@@ -33,19 +24,11 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
 from edi.config.settings import AppSettings, get_settings
-from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
-from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import EdiDirection, PipelineEventType
-from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
-from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
-from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
-from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
-from secret_store.ports.secret_store_port import SecretStorePort
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -63,70 +46,89 @@ def _setup_registry(
     transformer: TransformerPort,
     settings: AppSettings,
     uow_provider: TenantUowProvider,
-    http_delivery: HttpDeliveryPort,
-    sftp_delivery: SftpDeliveryPort,
-    as2_delivery: AS2DeliveryPort,
-    vault: SecretStorePort,
 ) -> EdiDataPlaneEventDispatcher:
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
-        strategies = {
-            "webhook_id": WebhookDeliveryStrategy(uow_fact, http_delivery, vault),
-            "sftp_partner_id": SftpDeliveryStrategy(uow_fact, sftp_delivery, vault, db_encryption),
-            "as2_partner_id": As2DeliveryStrategy(uow_fact, as2_delivery, vault),
-        }
-        return DeliveryRouterUseCase(uow_factory=uow_fact, strategies=strategies)
+        return DeliveryRouterUseCase(uow_factory=uow_fact)
 
     registry = EdiDataPlaneRouteRegistry()
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        async with uow_fact() as uow:
-            await DispatchInboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
+        await DispatchInboundTransformUseCase(uow_fact, transformer, settings).execute(
+            e.trace_id, idempotency_key=e.idempotency_key
+        )
 
     async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        async with uow_fact() as uow:
-            await DispatchOutboundTransformUseCase(uow, transformer, settings).execute(e.trace_id)
+        await DispatchOutboundTransformUseCase(uow_fact, transformer, settings).execute(
+            e.trace_id, idempotency_key=e.idempotency_key
+        )
 
-    async def run_transform_lifecycle(
+    async def run_transform_successful(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        async with uow_fact() as uow:
-            await PipelineLifecycleUseCase(uow).handle_transform_completed(e.payload)
+        await PipelineLifecycleUseCase(uow_fact).handle_transform_successful(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
 
-    async def run_delivery_lifecycle(
+    async def run_transform_failed(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        async with uow_fact() as uow:
-            await PipelineLifecycleUseCase(uow).handle_delivery_completed(e.payload)
+        await PipelineLifecycleUseCase(uow_fact).handle_transform_failed(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
+
+    async def run_delivery_successful(
+        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
+    ) -> None:
+        await PipelineLifecycleUseCase(uow_fact).handle_delivery_successful(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
+
+    async def run_delivery_failed(
+        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
+    ) -> None:
+        await PipelineLifecycleUseCase(uow_fact).handle_delivery_failed(
+            e.tenant_id, e.idempotency_key, e.payload
+        )
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        await DeliveryUseCase(
-            uow_factory=uow_fact, router_factory=lambda: router_factory(uow_fact)
-        ).execute(trace_id=e.trace_id, idempotency_key=e.idempotency_key)
+        await DeliveryUseCase(router_factory=lambda: router_factory(uow_fact)).execute(
+            trace_id=e.trace_id, idempotency_key=e.idempotency_key
+        )
 
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction=EdiDirection.INBOUND.value,
         factory=run_inbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         direction=EdiDirection.OUTBOUND.value,
         factory=run_outbound,
     )
     registry.register(
-        event_type=PipelineEventType.TRANSFORM_COMPLETED.value,
+        event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
         direction=None,
-        factory=run_transform_lifecycle,
+        factory=run_transform_successful,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVER_EVENT.value,
+        event_type=PipelineEventType.TRANSFORMATION_FAILED.value,
+        direction=None,
+        factory=run_transform_failed,
+    )
+    registry.register(
+        event_type=PipelineEventType.DELIVERY_REQUESTED.value,
         direction=None,
         factory=run_deliver,
     )
     registry.register(
-        event_type=PipelineEventType.DELIVERY_COMPLETED.value,
+        event_type=PipelineEventType.DELIVERY_SUCCESSFUL.value,
         direction=None,
-        factory=run_delivery_lifecycle,
+        factory=run_delivery_successful,
+    )
+    registry.register(
+        event_type=PipelineEventType.DELIVERY_FAILED.value,
+        direction=None,
+        factory=run_delivery_failed,
     )
 
     async def route_event(event: EdiDataPlaneEventMessage) -> None:
@@ -136,92 +138,84 @@ def _setup_registry(
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
+from seedwork.infra.worker import LaunchableWorker
+
+
+class EdiOrchestratorWorkerModule(LaunchableWorker):
+    def __init__(self) -> None:
+        self.db_router: DatabaseRouter | None = None
+        self.orchestrator_manager: SqsConsumerManager | None = None
+
+    async def start(self) -> None:
+        logger.info("orchestrator_worker_starting")
+        settings = get_settings()
+        aws_endpoint = settings.aws.endpoint_url
+        s3_bucket = settings.s3.bucket
+
+        self.db_router = DatabaseRouter(
+            global_db_url=settings.database.global_url,
+            shard_overrides=settings.database.shard_overrides,
+        )
+        resolver = TenantResolver(self.db_router)
+
+        transformer = BotsTransformerAdapter()
+
+        uow_provider = TenantUowProvider(
+            resolver=resolver,
+            db_router=self.db_router,
+            settings=settings,
+            s3_bucket=s3_bucket,
+            aws_endpoint=aws_endpoint,
+        )
+
+        consumer = _setup_registry(transformer, settings, uow_provider)
+
+        orchestrator_consumer = AwsSqsConsumer(
+            queue_url=settings.sqs.orchestrator_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=aws_endpoint,
+        )
+        self.orchestrator_manager = SqsConsumerManager(
+            consumer=orchestrator_consumer,
+            queue_name=settings.sqs.orchestrator_queue_url.rsplit("/", 1)[-1],
+            handler=consumer.handle,
+        )
+        assert self.orchestrator_manager is not None
+        self.orchestrator_manager.start()
+
+    async def stop(self) -> None:
+        logger.info("data_worker.shutting_down_gracefully")
+        if self.orchestrator_manager:
+            results = await asyncio.gather(
+                self.orchestrator_manager.stop(),
+                return_exceptions=True,
+            )
+            for res in results:
+                if isinstance(res, Exception):
+                    logger.error("manager_stop_failed", exc_info=res)
+
+        if self.db_router:
+            await self.db_router.close_all()
+
+
 async def main() -> None:
-    settings = get_settings()
-    aws_endpoint = settings.aws.endpoint_url
-    s3_bucket = "soopaedi-dev"
+    module = EdiOrchestratorWorkerModule()
 
-    db_router = DatabaseRouter(
-        global_db_url=settings.database.global_url,
-        shard_overrides=settings.database.shard_overrides,
-    )
-    resolver = TenantResolver(db_router)
-    idempotency_repo = SqlAlchemyEdiIdempotencyRepository(db_router, resolver)
-
-    transformer = BotsTransformerAdapter()
-    vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
-
-    uow_provider = TenantUowProvider(
-        resolver=resolver,
-        db_router=db_router,
-        settings=settings,
-        s3_bucket=s3_bucket,
-        aws_endpoint=aws_endpoint,
-    )
-
-    http_delivery = HttpxDeliveryClient(validator=validate_target_url)
-    sftp_delivery = ParamikoSftpClient()
-    as2_delivery = HttpxAS2DeliveryClient(
-        validator=partial(validate_target_url, allow_private_ips=settings.allow_private_ips),
-        allow_private_ips=settings.allow_private_ips,
-    )
-
-    consumer = _setup_registry(
-        transformer, settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
-    )
-
-    transform_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.transform_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    transform_manager = SqsConsumerManager(
-        consumer=transform_consumer,
-        queue_name=settings.sqs.transform_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
-    )
-    transform_manager.start()
-
-    lifecycle_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.lifecycle_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    lifecycle_manager = SqsConsumerManager(
-        consumer=lifecycle_consumer,
-        queue_name=settings.sqs.lifecycle_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
-    )
-    lifecycle_manager.start()
-
-    deliver_consumer = AwsSqsConsumer(
-        queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=aws_endpoint,
-    )
-    deliver_manager = SqsConsumerManager(
-        consumer=deliver_consumer,
-        queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
-        handler=consumer.handle,
-        idempotency_repo=idempotency_repo,
-    )
-    deliver_manager.start()
-
-    # ─────────────────────────────────────────────────────────────
-    # Run all workers concurrently
-    # ─────────────────────────────────────────────────────────────
-    stop_event = asyncio.Event()
     try:
+        await module.start()
+
+        # ─────────────────────────────────────────────────────────────
+        # Run all workers concurrently
+        # ─────────────────────────────────────────────────────────────
+        stop_event = asyncio.Event()
         loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, stop_event.set)
 
         tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-        for mgr in [transform_manager, lifecycle_manager, deliver_manager]:
+        for mgr in [module.orchestrator_manager]:
             # Use the new task property once it is exposed
-            task = getattr(mgr, "task", getattr(mgr, "_task", None))
+            task = getattr(mgr, "task", getattr(mgr, "_task", None)) if mgr else None
             if task:
                 tasks_to_wait.append(task)
 
@@ -233,18 +227,7 @@ async def main() -> None:
                 if exc:
                     raise exc
     finally:
-        logger.info("data_worker.shutting_down_gracefully")
-        results = await asyncio.gather(
-            transform_manager.stop(),
-            lifecycle_manager.stop(),
-            deliver_manager.stop(),
-            return_exceptions=True,
-        )
-        for res in results:
-            if isinstance(res, Exception):
-                logger.error("manager_stop_failed", exc_info=res)
-
-        await db_router.close_all()
+        await module.stop()
 
 
 if __name__ == "__main__":

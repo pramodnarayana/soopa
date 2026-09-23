@@ -1,10 +1,11 @@
 import contextlib
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 
 import structlog
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_deterministic_id
 
-from edi.core.pipeline.delivery.base import BaseDeliveryStrategy
-from edi.domain.enums import EdiDirection
+from edi.domain.enums import EdiConnectionType, EdiDirection, PipelineEventType
 from edi.domain.exceptions import MissingRoutingInformationError, RouteNotFoundError
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
@@ -15,16 +16,15 @@ logger = structlog.get_logger(__name__)
 
 class DeliveryRouterUseCase:
     """
-    Orchestrates final-mile delivery by delegating to the appropriate strategy.
+    Resolves the delivery route and emits an EXECUTE_DELIVERY_COMMAND to be picked up
+    by the dedicated EDI delivery worker.
     """
 
     def __init__(
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
-        strategies: Mapping[str, BaseDeliveryStrategy],
     ) -> None:
         self.uow_factory = uow_factory
-        self.strategies = strategies
 
     async def deliver(self, trace_id: str, idempotency_key: str | None = None) -> None:
         """
@@ -38,9 +38,15 @@ class DeliveryRouterUseCase:
             if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
+            if idempotency_key:
+                is_new = await uow.record_idempotency(edi_msg.tenant_id, idempotency_key)
+                if not is_new:
+                    logger.info("delivery_router.duplicate_skipped", trace_id=trace_id)
+                    return
+
             route = await self._resolve_route(edi_msg, uow)
 
-        await self._dispatch_to_strategy(trace_id, route, edi_msg, idempotency_key)
+            await self._dispatch_to_outbox(trace_id, route, edi_msg, uow, idempotency_key)
 
     async def _resolve_route(
         self, edi_msg, uow: DataPlaneUnitOfWorkPort
@@ -76,7 +82,7 @@ class DeliveryRouterUseCase:
     ) -> InboundRouteDomainModel:
         sender_id = edi_msg.sender_id
         receiver_id = edi_msg.receiver_id
-        transaction_type = edi_msg.transaction_type or "*"
+        transaction_type = edi_msg.transaction_type
 
         if not sender_id or not receiver_id:
             raise MissingRoutingInformationError(trace_id=edi_msg.trace_id)
@@ -92,7 +98,7 @@ class DeliveryRouterUseCase:
         route = await uow.inbound_routes.get_inbound_route(
             isa_sender_id=str(sender_id),
             isa_receiver_id=str(receiver_id),
-            tenant_id=edi_msg.tenant_id or "1",
+            tenant_id=str(edi_msg.tenant_id),
             transaction_type=str(transaction_type) if transaction_type else None,
         )
         if not route:
@@ -106,37 +112,58 @@ class DeliveryRouterUseCase:
             )
         return route
 
-    async def _dispatch_to_strategy(
+    async def _dispatch_to_outbox(
         self,
         trace_id: str,
         route: OutboundRouteDomainModel | InboundRouteDomainModel,
         edi_msg,
+        uow: DataPlaneUnitOfWorkPort,
         idempotency_key: str | None,
     ) -> None:
-        partner_id = None
-        strategy = None
+        DESTINATION_RESOLVER = {
+            EdiConnectionType.SFTP: lambda r: ("sftp_partner_id", r.sftp_partner_id),
+            EdiConnectionType.AS2: lambda r: ("as2_partner_id", r.as2_partner_id),
+            EdiConnectionType.WEBHOOK: lambda r: ("webhook_id", r.webhook_id),
+        }
 
-        if route.sftp_partner_id:
-            partner_id = route.sftp_partner_id
-            strategy = self.strategies["sftp_partner_id"]
-        elif route.as2_partner_id:
-            partner_id = route.as2_partner_id
-            strategy = self.strategies["as2_partner_id"]
-        elif isinstance(route, InboundRouteDomainModel) and route.webhook_id:
-            partner_id = route.webhook_id
-            strategy = self.strategies["webhook_id"]
-
-        if not partner_id or not strategy:
+        if not route.connection_type:
             route_id = route.id if isinstance(route, OutboundRouteDomainModel) else "inbound_route"
-            raise ValueError(f"Route {route_id} is not configured with any destination partner.")
+            raise ValueError(f"Route {route_id} does not specify a connection_type.")
 
-        try:
-            await strategy.deliver(trace_id, partner_id, edi_msg, idempotency_key)
-        except Exception:
-            logger.exception(
-                "delivery_strategy_failed",
-                trace_id=trace_id,
-                partner_id=partner_id,
-                strategy=type(strategy).__name__,
+        resolver = DESTINATION_RESOLVER.get(route.connection_type)
+        if not resolver:
+            raise ValueError(f"Unsupported connection type: {route.connection_type}")
+
+        strategy_type, partner_id = resolver(route)
+
+        if not partner_id:
+            route_id = route.id if isinstance(route, OutboundRouteDomainModel) else "inbound_route"
+            raise ValueError(
+                f"Route {route_id} is configured for {route.connection_type} but destination ID is missing."
             )
-            raise
+
+        if not idempotency_key:
+            raise ValueError("idempotency_key is required for strict event chaining")
+
+        command_key = generate_deterministic_id(
+            SystemIdPrefix.IDEMPOTENCY, idempotency_key, "EXECUTE_DELIVERY_COMMAND"
+        )
+
+        logger.info(
+            "routing.delivery_command_emitted",
+            trace_id=trace_id,
+            partner_id=partner_id,
+            strategy_type=strategy_type,
+        )
+
+        await uow.outbox.append_event(
+            idempotency_key=command_key,
+            event_type=PipelineEventType.EXECUTE_DELIVERY_COMMAND.value,
+            payload={
+                "trace_id": trace_id,
+                "tenant_id": edi_msg.tenant_id,
+                "partner_id": partner_id,
+                "strategy_type": strategy_type,
+            },
+        )
+        await uow.commit()

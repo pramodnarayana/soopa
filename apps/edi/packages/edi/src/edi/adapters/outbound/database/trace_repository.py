@@ -1,5 +1,6 @@
 import asyncio
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -12,6 +13,8 @@ from edi.application.dtos.trace import EdiTraceDTO
 from edi.application.dtos.transactions import ApiGatewayDTO, EdiJsonDTO, EdiMessageDTO
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.trace_repository import TraceRepositoryPort
+
+logger = structlog.get_logger(__name__)
 
 
 class SqlAlchemyTraceRepository(TraceRepositoryPort):
@@ -49,13 +52,28 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
         msg_res = await self.session.execute(msg_stmt)
         edi_msg = msg_res.scalars().first()
 
-        if not edi_msg:
-            return None
-
         json_res = await self.session.execute(json_stmt)
         gw_res = await self.session.execute(gw_stmt)
 
         json_records = json_res.scalars().all()
+        gw_records = gw_res.scalars().all()
+
+        logger.info(
+            "trace_repository.get_edi_trace.db_result",
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            edi_message_found=edi_msg is not None,
+            edi_json_count=len(json_records),
+            api_gateway_count=len(gw_records),
+        )
+
+        if not edi_msg and not json_records and not gw_records:
+            logger.warning(
+                "trace_repository.get_edi_trace.not_found",
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+            )
+            return None
 
         json_hydration_tasks = [
             hydrate_json_payload(self.storage, j.storage_uri, j.payload) for j in json_records
@@ -73,15 +91,17 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 business_metadata=j.business_metadata,
                 transaction_type=j.transaction_type,
                 payload=payload,
-                parent_trace_id=j.parent_trace_id,
                 created_at=j.created_at,
                 updated_at=j.updated_at,
+                replay_count=j.replay_count,
+                original_trace_id=j.original_trace_id,
+                parent_trace_id=j.parent_trace_id,
             )
             for j, payload in zip(json_records, hydrated_json_payloads, strict=True)
         ]
 
-        return EdiTraceDTO(
-            edi_message=EdiMessageDTO(
+        if edi_msg:
+            edi_message_dto = EdiMessageDTO(
                 id=str(edi_msg.id),
                 trace_id=str(edi_msg.trace_id),
                 direction=edi_msg.direction,
@@ -113,11 +133,17 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                 msg_headers=None,  # Optimization: Not needed for full trace view currently
                 state=edi_msg.state,
                 status_message=edi_msg.status_message,
-                is_resend=edi_msg.is_resend,
-                parent_trace_id=edi_msg.parent_trace_id,
                 created_at=edi_msg.created_at,
                 updated_at=edi_msg.updated_at,
-            ),
+                replay_count=edi_msg.replay_count,
+                original_trace_id=edi_msg.original_trace_id,
+                parent_trace_id=edi_msg.parent_trace_id,
+            )
+        else:
+            edi_message_dto = None
+
+        return EdiTraceDTO(
+            edi_message=edi_message_dto,
             edi_jsons=edi_jsons,
             api_gateways=[
                 ApiGatewayDTO(
@@ -128,10 +154,12 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
                     http_status_code=g.http_status_code,
                     payload=g.payload,
                     response=g.response,
-                    parent_trace_id=g.parent_trace_id,
                     created_at=g.created_at,
                     updated_at=g.updated_at,
+                    replay_count=g.replay_count,
+                    original_trace_id=g.original_trace_id,
+                    parent_trace_id=g.parent_trace_id,
                 )
-                for g in gw_res.scalars().all()
+                for g in gw_records
             ],
         )

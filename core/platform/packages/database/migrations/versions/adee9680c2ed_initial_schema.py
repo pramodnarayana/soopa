@@ -595,20 +595,10 @@ def upgrade() -> None:
         """
     )
 
-    op.execute(
-        """
-        INSERT INTO scheduling.scheduled_jobs (id, name, target_queue, app_namespace, cron_expression, timezone, max_retries, retry_count, payload, status, created_at, updated_at)
-        VALUES
-            ('job_notif_sweeper', 'NOTIFICATION_OUTBOX_SWEEPER', 'notification-jobs.fifo', 'NOTIFICATION', '* * * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
-            ('job_edi_orch_sweep', 'EDI_ORCHESTRATOR_OUTBOX_SWEEPER', 'edi-orchestrator-jobs', 'EDI', '* * * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
-            ('job_edi_prov_sweep', 'EDI_PROVISIONING_OUTBOX_SWEEPER', 'edi-orchestrator-jobs', 'EDI', '* * * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
-            ('job_edi_ctrl_clean', 'EDI_CONTROL_PLANE_OUTBOX_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
-            ('job_edi_data_clean', 'EDI_DATA_PLANE_OUTBOX_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
-            ('job_edi_idem_clean', 'EDI_IDEMPOTENCY_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW()),
-            ('job_edi_audt_clean', 'EDI_AUDIT_LOG_CLEANUP', 'edi-orchestrator-jobs', 'EDI', '0 2 * * *', 'UTC', 3, 0, '{}'::jsonb, 'PENDING', NOW(), NOW())
-        ON CONFLICT (id) DO NOTHING;
-        """
-    )
+    # Runtime job seeding is intentionally NOT done here.
+    # Scheduled jobs are seeded per bounded context via dedicated seed scripts
+    # (e.g. apps/edi/scripts/seed_jobs.py, core/platform/apps/*/scripts/seed_jobs.py).
+    # Migrations define schema only.
     # ### end Alembic commands ###
 
 

@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from database.models.identity import Tenant
 from seedwork import generate_random_hex
 from seedwork.events import EventEnvelope

@@ -21,9 +21,10 @@ from edi.application.use_cases.transactions.list_edi_messages_use_case import (
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
+from edi.domain.enums import TransactionEntityType
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
 
 
 @dataclass
@@ -84,11 +85,38 @@ class FakeEdiMessageRepository:
         )
         return key
 
-    async def get_edi_message(self, trace_id: str) -> EdiMessageDomainModel | None:
+    async def get_edi_message(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> EdiMessageDomainModel | None:
         for model in self._models.values():
             if model.trace_id == trace_id:
                 return model
         return None
+
+    async def get_edi_json(self, trace_id: str) -> EdiJsonDomainModel | None:
+        # For tests, just return a dummy if trace_id exists in models (or blindly return one)
+        for model in self._models.values():
+            if model.trace_id == trace_id:
+                return EdiJsonDomainModel(
+                    id="sys_json_123",
+                    tenant_id=model.tenant_id,
+                    trace_id=trace_id,
+                    direction=Direction.INBOUND.value,
+                    status=RecordStatus.SUCCESS.value,
+                    payload={"fake": "json"},
+                    created_at=model.created_at,
+                    updated_at=model.updated_at,
+                )
+        return None
+
+    async def create_edi_json(self, record: EdiJsonDomainModel) -> None:
+        pass
+
+    async def get_api_payload(self, trace_id: str) -> dict[str, Any] | None:
+        return {"fake": "api_payload"}
+
+    async def create_api_gateway(self, command: Any) -> str:
+        return "fake_api_gateway_id"
 
     async def save(self, model: Any) -> None:
         for e in model.domain_events:
@@ -104,6 +132,29 @@ class FakeEdiMessageRepository:
                 }
             )
         model.clear_domain_events()
+
+    async def save_all(self, models: list[Any]) -> None:
+        for model in models:
+            await self.save(model)
+
+    async def get_edi_messages_by_traces(
+        self, tenant_id: str, trace_ids: list[str]
+    ) -> list[EdiMessageDomainModel]:
+        return [m for m in self._models.values() if m.trace_id in trace_ids]
+
+    async def increment_replay_count(
+        self, tenant_id: str, trace_ids: list[str], entity_type: TransactionEntityType
+    ) -> None:
+        for trace_id in trace_ids:
+            for model in self._models.values():
+                if model.trace_id == trace_id:
+                    model.replay_count += 1
+
+    async def save_trace_event(self, event: Any) -> None:
+        pass
+
+    async def save_all_trace_events(self, events: list[Any]) -> None:
+        pass
 
 
 class FakeDataPlaneUnitOfWork:
@@ -170,9 +221,7 @@ class TestReplayTransactionUseCase:
     @pytest.mark.asyncio
     async def test_raises_not_found_when_transaction_missing(self):
         with pytest.raises(TransactionNotFoundError) as exc_info:
-            await self.use_case.replay_transaction(
-                self.tenant_id, "missing-trace", tier="transform"
-            )
+            await self.use_case.retry_transform(self.tenant_id, "missing-trace", actor="USER")
         assert exc_info.value.trace_id == "missing-trace"
 
     @pytest.mark.asyncio
@@ -191,10 +240,10 @@ class TestReplayTransactionUseCase:
         self.trace_repo.seed_trace(
             self.tenant_id, "t-001", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
         )
-        await self.use_case.replay_transaction(self.tenant_id, "t-001", tier="deliver")
+        await self.use_case.retry_deliver(self.tenant_id, "t-001", actor="USER")
         assert len(self.msg_repo.outbox_events) == 1
         event = self.msg_repo.outbox_events[0]
-        assert event["event_type"] == "edi.transaction.replay_requested"
+        assert event["event_type"] == "DELIVERY_REQUESTED"
 
     @pytest.mark.asyncio
     async def test_replay_event_includes_trace_id_and_tier(self):
@@ -212,10 +261,9 @@ class TestReplayTransactionUseCase:
         self.trace_repo.seed_trace(
             self.tenant_id, "t-002", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
         )
-        await self.use_case.replay_transaction(self.tenant_id, "t-002", tier="transform")
+        new_trace_id = await self.use_case.retry_transform(self.tenant_id, "t-002", actor="USER")
         payload = self.msg_repo.outbox_events[0]["payload"]
-        assert payload["trace_id"] == "t-002"
-        assert payload["tier"] == "transform"
+        assert payload["trace_id"] == new_trace_id
 
     @pytest.mark.asyncio
     async def test_replay_event_has_unique_idempotency_key(self):
@@ -233,9 +281,9 @@ class TestReplayTransactionUseCase:
         self.trace_repo.seed_trace(
             self.tenant_id, "t-003", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
         )
-        await self.use_case.replay_transaction(self.tenant_id, "t-003", tier="transform")
+        await self.use_case.retry_transform(self.tenant_id, "t-003", actor="USER")
         key = self.msg_repo.outbox_events[0]["key"]
-        assert key.startswith("sys_idemp_")
+        assert key is not None
 
 
 @pytest.mark.asyncio
@@ -260,8 +308,8 @@ async def test_bulk_replay_commits_after_saving_events():
         tenant_id, "trace-1", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
     )
 
-    count = await BulkReplayTransactionsUseCase(uow).bulk_replay_transactions(
-        tenant_id, ["trace-1"], "raw", command_key="request-1"
+    count = await BulkReplayTransactionsUseCase(uow).bulk_retry_transform(
+        tenant_id, ["trace-1"], "USER", command_key="request-1"
     )
 
     assert count == 1

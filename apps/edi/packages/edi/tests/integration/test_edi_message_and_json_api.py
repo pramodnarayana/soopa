@@ -1,11 +1,15 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from httpx import AsyncClient
 from seedwork import generate_id
 
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.domain.enums import ConnectionType, EdiDirection, MessageStatus
+from edi.ports.outbound.api_gateway_repository import CreateApiGatewayCommand
 from edi.ports.outbound.transaction_repository import (
-    CreateApiGatewayCommand,
     CreateEdiJsonCommand,
     CreateEdiMessageCommand,
 )
@@ -112,7 +116,7 @@ async def test_edi_message_explorer_and_detail(
                 status=MessageStatus.TRANSFORMED,
             )
         )
-        await uow.transactions.create_api_gateway(
+        await uow.api_gateway_transactions.create_api_gateway(
             command=CreateApiGatewayCommand(
                 trace_id=trace_id,
                 tenant_id=tenant_id,

@@ -2,8 +2,8 @@ from functools import lru_cache
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from seedwork.infrastructure.config import load_settings_safely
-from seedwork.infrastructure.config_models import (
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
     PlatformIdentitySettings,
@@ -12,7 +12,7 @@ from seedwork.infrastructure.config_models import (
 
 class IdentityAwsSettings(PlatformAwsSettings):
     sns_identity_events_topic_arn: str = Field(
-        validation_alias="SNS_IDENTITY_EVENTS_TOPIC_ARN", default=""
+        validation_alias="SNS_PLATFORM_EVENTS_TOPIC_ARN", default=""
     )
 
 

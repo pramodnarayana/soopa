@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from database.models.identity import Tenant, User
 from database.models.notifications import NotificationRecord
 from identity.domain.constants import UserStatus

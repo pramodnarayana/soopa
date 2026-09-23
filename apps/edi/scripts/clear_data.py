@@ -15,7 +15,14 @@ from database.router import DatabaseRouter
 
 global_url = os.environ["DATABASE_URL"]
 
-TABLES_TO_CLEAR = ["edi_messages", "edi_json", "api_gateway", "outbox", "event_idempotency"]
+TABLES_TO_CLEAR = [
+    "edi_messages",
+    "edi_json",
+    "api_gateway",
+    "outbox",
+    "events_processed",
+    "trace_events",
+]
 
 # ---------------------------------------------------------------------------
 # Safety guards
@@ -106,7 +113,7 @@ async def main(i_am_sure: bool) -> None:
     shards = await router.get_all_shards()
     await router.close_all()
 
-    db_urls = [global_url] + [shard[1] for shard in shards]
+    db_urls = [shard[1].replace("@edi_postgres_shard:5432", "@localhost:5433") for shard in shards]
 
     # Validate all targets are local before touching anything.
     for db_url in db_urls:

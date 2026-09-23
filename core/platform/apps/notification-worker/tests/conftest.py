@@ -1,10 +1,11 @@
 import asyncio
-import os
 
 import pytest
 import pytest_asyncio
 from database.provider import DatabaseProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from notification_worker.config.settings import get_settings
 
 
 @pytest.fixture(scope="session")
@@ -21,7 +22,7 @@ async def db_session_factory():
     full test isolation. Rolls back all changes after each test — nothing is
     written to the physical database.
     """
-    db_url = os.environ["DATABASE_URL"]
+    db_url = get_settings().database_url
     provider = DatabaseProvider.from_url(db_url)
 
     connection = await provider.engine.connect()

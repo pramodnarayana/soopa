@@ -1,4 +1,8 @@
 import pytest
+
+pytestmark = pytest.mark.integration
+
+import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
 from edi.adapters.outbound.database.encryption import DBEncryptionAdapter

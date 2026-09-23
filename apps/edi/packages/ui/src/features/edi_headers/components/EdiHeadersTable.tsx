@@ -1,10 +1,6 @@
+import { type FieldDef, QueryBuilder, useClientFilter } from '@soopa/ui';
 import { Button } from '@soopa/ui/components/ui/button';
 import { DataTable } from '@soopa/ui/components/ui/data-table';
-import {
-  type FieldDef,
-  QueryBuilder,
-  useClientFilter,
-} from '@soopa/ui/components/ui/query-builder';
 import {
   createColumnHelper,
   getCoreRowModel,
