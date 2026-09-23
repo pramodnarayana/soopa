@@ -9,7 +9,6 @@ coverage/
 __pycache__/
 *.pyc
 .pytest_cache/
-uv.lock
 *.tsbuildinfo
 routeTree.gen.ts
 
