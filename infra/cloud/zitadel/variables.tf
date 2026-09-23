@@ -56,3 +56,8 @@ variable "dev_mode" {
   description = "Enable dev mode for Zitadel applications"
   type        = bool
 }
+
+variable "zitadel_token" {
+  description = "Temporary PAT used for automated initial bootstrapping"
+  type        = string
+}

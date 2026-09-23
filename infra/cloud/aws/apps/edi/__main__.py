@@ -17,7 +17,6 @@ sys.path.insert(0, os.path.abspath("../../packages"))
 import pulumi
 from compute import provision_compute
 from messaging import provision_messaging
-from storage import provision_storage
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -58,9 +57,10 @@ firelens_endpoint = (
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
+edi_shard_db_endpoint = platform.require_output("edi_shard_db_endpoint")
+edi_shard_db_secret_arn = platform.require_output("edi_shard_db_secret_arn")
 
 # ── Provision Domain Resources ────────────────────────────────────────────────
-storage = provision_storage(_prefix, _TAGS)
 messaging = provision_messaging(_prefix, _TAGS, sns_platform_events_topic_arn)
 
 compute = provision_compute(
@@ -75,10 +75,13 @@ compute = provision_compute(
     queues=messaging["queues"],
     alb_listener_arn=main_alb_listener_arn,
     firelens_endpoint=firelens_endpoint,
+    data_plane_events_topic_arn=messaging["data_plane_events_topic"].arn,
+    edi_shard_db_endpoint=edi_shard_db_endpoint,
+    edi_shard_db_secret_arn=edi_shard_db_secret_arn,
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────
-pulumi.export("edi_payloads_bucket", storage.id)
+pulumi.export("sns_data_plane_events_topic_arn", messaging["data_plane_events_topic"].arn)
 pulumi.export("edi_data_plane_jobs_queue_url", messaging["queues"]["data_plane_jobs"].url)
 pulumi.export("edi_control_plane_jobs_queue_url", messaging["queues"]["control_plane_jobs"].url)
 pulumi.export(

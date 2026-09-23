@@ -22,12 +22,9 @@ def provision_alb(
         tags=tags,
     )
 
-    listener = aws.lb.Listener(
-        f"{name}-http-listener",
-        load_balancer_arn=alb.arn,
-        port=80,
-        protocol="HTTP",
-        default_actions=[
+    if certificate_arn:
+        # HTTP redirects to HTTPS
+        http_actions = [
             aws.lb.ListenerDefaultActionArgs(
                 type="redirect",
                 redirect=aws.lb.ListenerDefaultActionRedirectArgs(
@@ -36,7 +33,26 @@ def provision_alb(
                     status_code="HTTP_301",
                 ),
             )
-        ],
+        ]
+    else:
+        # HTTP is the main listener and just 404s by default
+        http_actions = [
+            aws.lb.ListenerDefaultActionArgs(
+                type="fixed-response",
+                fixed_response=aws.lb.ListenerDefaultActionFixedResponseArgs(
+                    content_type="text/plain",
+                    message_body="404: Not Found",
+                    status_code="404",
+                ),
+            )
+        ]
+
+    listener = aws.lb.Listener(
+        f"{name}-http-listener",
+        load_balancer_arn=alb.arn,
+        port=80,
+        protocol="HTTP",
+        default_actions=http_actions,
         tags=tags,
     )
 

@@ -1,9 +1,8 @@
-import ipaddress
 import json
 
+import pulumi
 import pulumi_aws as aws
 from seedwork.ecs import provision_fargate_service
-from seedwork.network import provision_target_group_and_rule
 
 
 def provision_compute(
@@ -17,6 +16,9 @@ def provision_compute(
     ecr_image_uri: str,
     queues: dict,
     alb_listener_arn: str,
+    data_plane_events_topic_arn: str,
+    edi_shard_db_endpoint: str,
+    edi_shard_db_secret_arn: str,
     firelens_endpoint: str = None,
 ):
     _region = aws.get_region()
@@ -51,6 +53,9 @@ def provision_compute(
         is_public: bool = False,
         port: int = None,
         target_group_arn: str = None,
+        image_override: str = None,
+        extra_env: list = None,
+        secrets: list = None,
     ):
         env_vars = [
             {"name": "QUEUE_URL_EDI_TRANSFORM", "value": queues["transform"].url},
@@ -61,6 +66,8 @@ def provision_compute(
             {"name": "QUEUE_URL_EDI_DATA_PLANE_JOBS", "value": queues["data_plane_jobs"].url},
             {"name": "QUEUE_URL_EDI_CONTROL_PLANE_JOBS", "value": queues["control_plane_jobs"].url},
         ]
+        if extra_env:
+            env_vars.extend(extra_env)
 
         # ── EDI Specific: Secrets Sidecar ──
         sidecar = {
@@ -119,7 +126,7 @@ def provision_compute(
             command=command,
             cluster_arn=cluster_arn,
             execution_role_arn=execution_role.arn,
-            ecr_image_uri=ecr_image_uri,
+            ecr_image_uri=image_override or ecr_image_uri,
             subnets=public_subnets if is_public else private_subnets,
             security_group_id=app_sg_id,
             tags=tags,
@@ -133,33 +140,38 @@ def provision_compute(
             extra_task_policy_statements=extra_task_policy_statements,
             target_group_arn=target_group_arn,
             firelens_endpoint=firelens_endpoint,
+            topic_arns=[data_plane_events_topic_arn] if data_plane_events_topic_arn else None,
+            secrets=secrets,
         )
 
-    # Define the 5 Shopify-style workers (same image, different entrypoints)
-    # 1. AS2 Server (HTTP)
-    as2_tg = provision_target_group_and_rule(
-        name=f"{prefix}as2",
-        vpc_id=vpc_id,
-        listener_arn=alb_listener_arn,
-        priority=100,  # EDI AS2 gets priority 100
-        path_pattern="/as2/*",
-        tags=tags,
-    )
+    # 1. Debezium CDC Server
 
-    as2_server = make_service(
-        "as2-server",
-        [
-            "uvicorn",
-            "as2_server.main:app",
-            "--host",
-            str(ipaddress.IPv4Address(0)),
-            "--port",
-            "8000",
+    debezium_server = make_service(
+        "debezium-server",
+        command=[],
+        image_override="quay.io/debezium/server:2.5",
+        extra_env=[
+            {"name": "DEBEZIUM_SINK_TYPE", "value": "sns"},
+            {"name": "DEBEZIUM_SINK_SNS_TOPIC_ARN", "value": data_plane_events_topic_arn},
+            {
+                "name": "DEBEZIUM_SOURCE_DATABASE_HOSTNAME",
+                "value": pulumi.Output.all(edi_shard_db_endpoint).apply(
+                    lambda args: args[0].split(":")[0]
+                ),
+            },
         ],
-        port=8000,
-        target_group_arn=as2_tg.arn,
+        secrets=[
+            {
+                "name": "DEBEZIUM_SOURCE_DATABASE_USER",
+                "valueFrom": f"{edi_shard_db_secret_arn}:username::",
+            },
+            {
+                "name": "DEBEZIUM_SOURCE_DATABASE_PASSWORD",
+                "valueFrom": f"{edi_shard_db_secret_arn}:password::",
+            },
+        ],
     )
 
     return {
-        "as2_server": as2_server,
+        "debezium_server": debezium_server,
     }

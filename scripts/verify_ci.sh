@@ -6,8 +6,8 @@ find . -name '.pytest_cache' -type d -exec rm -rf {} +
 find . -name '.ruff_cache' -type d -exec rm -rf {} +
 find . -name '.mypy_cache' -type d -exec rm -rf {} +
 
-echo "🔄 Resetting infrastructure..."
-pnpm infra-reset
+echo "🔄 Ensuring infrastructure is running (Non-Destructive)..."
+pnpm infra:up
 
 echo "🔒 Hiding .env and injecting .env.example to simulate strict CI environment..."
 
