@@ -15,8 +15,6 @@ from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 @pytest.fixture
 async def uow(db_session: AsyncSession) -> SqlAlchemyDataPlaneUnitOfWork:
     """Provides a fresh DataPlaneUnitOfWork instance with an active test transaction."""
-    conn = await db_session.connection()
-    await conn.run_sync(ProcessedEvent.metadata.create_all)
 
     db_session.info["session_type"] = "tenant"
     tenant_session = TenantSession(db_session)
