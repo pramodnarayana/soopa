@@ -20,3 +20,17 @@ rules:
         negative:
           - "url = settings.database_url"
           - "conn_str = 'redis://localhost:6379'"
+
+  - id: ban-create-all-in-tests
+    patterns:
+      - pattern: $X.metadata.create_all(...)
+    message: |
+      Enterprise Rule: Never use create_all() in tests. Database schema must strictly
+      originate from Alembic migrations (pnpm db:migrate) to avoid race conditions and
+      hiding missing migrations.
+    severity: ERROR
+    languages:
+      - python
+    paths:
+      include:
+        - "**/tests/**"
