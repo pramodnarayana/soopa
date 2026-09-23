@@ -30,6 +30,7 @@ services:
     volumes:
       - localstack_data:/var/lib/localstack
       - ./localstack-setup.sh:/etc/localstack/init/ready.d/init.sh
+      - ../topology.json:/etc/localstack/init/ready.d/topology.json
     healthcheck:
       test: ["CMD", "curl", "-s", "-f", "http://localhost:4566/_localstack/health"]
       interval: 5s

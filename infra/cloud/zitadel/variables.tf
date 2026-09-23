@@ -58,6 +58,7 @@ variable "dev_mode" {
 }
 
 variable "zitadel_token" {
-  description = "Temporary PAT used for automated initial bootstrapping"
+  description = "Temporary PAT used for automated initial bootstrapping. Injected at apply-time via TF_VAR_zitadel_token."
   type        = string
+  default     = ""
 }

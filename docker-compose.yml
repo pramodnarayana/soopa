@@ -10,17 +10,6 @@ x-base-env: &base-env
   SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
   AWS_ENDPOINT_URL: http://localstack:4566
   AWS_REGION: us-east-1
-  SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/000000000000/edi-config-sync-queue.fifo
-  SQS_ORCHESTRATOR_QUEUE_URL: http://localstack:4566/000000000000/edi-orchestrator
-  SQS_COMPUTE_QUEUE_URL: http://localstack:4566/000000000000/edi-compute
-  SQS_DELIVER_QUEUE_URL: http://localstack:4566/000000000000/edi-deliver
-  SQS_DATA_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-data-plane-jobs.fifo
-  SQS_CONTROL_PLANE_JOBS_QUEUE_URL: http://localstack:4566/000000000000/edi-control-plane-jobs.fifo
-  SQS_UCP_JOBS_QUEUE_URL: http://localstack:4566/000000000000/ucp-jobs.fifo
-  SQS_UCP_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/ucp-events.fifo
-  SQS_IDENTITY_SYNC_QUEUE_URL: http://localstack:4566/000000000000/identity-events.fifo
-  SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL: http://localstack:4566/000000000000/edi-priority-notifications.fifo
-  SQS_EMAIL_CHANNEL_QUEUE_URL: http://localstack:4566/000000000000/email-channel.fifo
 
 x-modular-monolith-base: &modular-monolith-base
   build:

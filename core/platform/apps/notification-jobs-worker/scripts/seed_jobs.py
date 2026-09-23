@@ -31,7 +31,9 @@ async def main() -> None:
             "payload": {},
             "status": "PENDING",
             "cron_expression": "* * * * *",
-            "target_queue": "notification-jobs.fifo",
+            "target_queue": os.environ["SQS_NOTIFICATION_JOBS_QUEUE_URL"]
+            .rstrip("/")
+            .split("/")[-1],
             "retry_count": 0,
             "max_retries": 3,
             "next_run_at": datetime.now(UTC),
@@ -41,7 +43,9 @@ async def main() -> None:
             "payload": {},
             "status": "PENDING",
             "cron_expression": "* * * * *",
-            "target_queue": "notification-jobs.fifo",
+            "target_queue": os.environ["SQS_NOTIFICATION_JOBS_QUEUE_URL"]
+            .rstrip("/")
+            .split("/")[-1],
             "retry_count": 0,
             "max_retries": 3,
             "next_run_at": datetime.now(UTC),

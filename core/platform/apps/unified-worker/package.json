@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "PYTHONUNBUFFERED=1 uv run python -m unified_worker.main"
+    "start": "PYTHONUNBUFFERED=1 uv run python -m unified_worker.main",
+    "dev": "PYTHONPATH=src PYTHONUNBUFFERED=1 uv run python -m unified_worker.main"
   },
   "devDependencies": {
     "@soopa/database": "workspace:*",

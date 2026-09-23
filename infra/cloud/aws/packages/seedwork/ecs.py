@@ -80,11 +80,13 @@ def provision_fargate_service(
         aws.iam.RolePolicy(
             f"{name}-task-policy",
             role=task_role.id,
-            policy=json.dumps(
-                {
-                    "Version": "2012-10-17",
-                    "Statement": base_statements,
-                }
+            policy=pulumi.Output.from_input(base_statements).apply(
+                lambda resolved_statements: json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": resolved_statements,
+                    }
+                )
             ),
         )
 

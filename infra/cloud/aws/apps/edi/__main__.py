@@ -9,6 +9,7 @@ Provisions all EDI-specific infrastructure:
 Relies on Foundation and Platform StackReferences.
 """
 
+import json
 import os
 import sys
 
@@ -17,6 +18,7 @@ sys.path.insert(0, os.path.abspath("../../packages"))
 import pulumi
 from compute import provision_compute
 from messaging import provision_messaging
+from storage import provision_storage
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -56,12 +58,29 @@ firelens_endpoint = (
     platform.require_output("openobserve_endpoint") if enable_observability else None
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
-sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
 edi_shard_db_endpoint = platform.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = platform.require_output("edi_shard_db_secret_arn")
 
+topology_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../../../topology.json")
+)
+with open(topology_path) as f:
+    topology = json.load(f)
+
+external_topics = {}
+for topic in topology.get("topics", []):
+    name = topic["name"]
+    if not name.startswith("edi-"):
+        output_name = f"sns_{name.replace('-', '_')}_arn"
+        external_topics[name] = platform.require_output(output_name)
+
 # ── Provision Domain Resources ────────────────────────────────────────────────
-messaging = provision_messaging(_prefix, _TAGS, sns_platform_events_topic_arn)
+storage = provision_storage(_prefix, _TAGS)
+messaging = provision_messaging(
+    _prefix,
+    _TAGS,
+    external_topics=external_topics,
+)
 
 compute = provision_compute(
     prefix=_prefix,
@@ -75,19 +94,14 @@ compute = provision_compute(
     queues=messaging["queues"],
     alb_listener_arn=main_alb_listener_arn,
     firelens_endpoint=firelens_endpoint,
-    data_plane_events_topic_arn=messaging["data_plane_events_topic"].arn,
+    topics=messaging["topics"],
     edi_shard_db_endpoint=edi_shard_db_endpoint,
     edi_shard_db_secret_arn=edi_shard_db_secret_arn,
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────
-pulumi.export("sns_data_plane_events_topic_arn", messaging["data_plane_events_topic"].arn)
-pulumi.export("edi_data_plane_jobs_queue_url", messaging["queues"]["data_plane_jobs"].url)
-pulumi.export("edi_control_plane_jobs_queue_url", messaging["queues"]["control_plane_jobs"].url)
-pulumi.export(
-    "edi_priority_notifications_queue_url", messaging["queues"]["priority_notifications"].url
-)
-pulumi.export("sqs_orchestrator_queue_url", messaging["queues"]["transform"].url)
-pulumi.export("sqs_compute_queue_url", messaging["queues"]["compute"].url)
-pulumi.export("sqs_deliver_queue_url", messaging["queues"]["deliver"].url)
-pulumi.export("sqs_config_sync_queue_url", messaging["queues"]["config_sync"].url)
+for topic_name, topic in messaging["topics"].items():
+    pulumi.export(f"sns_{topic_name.replace('-', '_')}_arn", topic.arn)
+
+for queue_name, queue in messaging["queues"].items():
+    pulumi.export(f"sqs_{queue_name.replace('-', '_')}_url", queue.url)

@@ -8,8 +8,8 @@ terraform {
 }
 
 provider "zitadel" {
-  domain   = var.zitadel_domain
-  insecure = var.zitadel_insecure
-  port     = var.zitadel_port
+  domain       = var.zitadel_domain
+  insecure     = var.zitadel_insecure
+  port         = var.zitadel_port
   access_token = var.zitadel_token
 }

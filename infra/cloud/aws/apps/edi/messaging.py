@@ -1,86 +1,79 @@
+import json
+import os
+
 import pulumi_aws as aws
-from seedwork.messaging import provision_fifo_queue_pair, subscribe_queue
+from seedwork.messaging import (
+    provision_fifo_queue_pair,
+    provision_standard_queue_pair,
+    subscribe_queue,
+)
 
 
-def provision_messaging(prefix: str, tags: dict, platform_events_topic_arn: str):
+def provision_messaging(prefix: str, tags: dict, external_topics: dict = None):
+    queues = {}
+    topics = {}
 
-    # Helper for FIFO Queue Pairs using seedwork
-    def make_fifo_queue_pair(name: str):
-        return provision_fifo_queue_pair(f"{prefix}{name}", tags)
-
-    # Helper for Subscription using seedwork
-    def subscribe(name: str, topic_arn: str, queue: aws.sqs.Queue, filter_policy: dict = None):
-        return subscribe_queue(f"{prefix}{name}", topic_arn, queue, filter_policy)
-
-    # ── Data Plane Events Topic ──
-    data_plane_events_topic = aws.sns.Topic(
-        f"{prefix}data-plane-events",
-        name=f"{prefix}data-plane-events.fifo",
-        fifo_topic=True,
-        content_based_deduplication=True,
-        tags=tags,
+    topology_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../../../topology.json")
     )
+    with open(topology_path) as f:
+        topology = json.load(f)
 
-    # Queues
-    transform_q, _ = make_fifo_queue_pair("transform")
-    compute_q, _ = make_fifo_queue_pair("compute")
-    lifecycle_q, _ = make_fifo_queue_pair("lifecycle")
-    deliver_q, _ = make_fifo_queue_pair("deliver")
-    config_sync_q, _ = make_fifo_queue_pair("config-sync")
-    data_plane_jobs_q, _ = make_fifo_queue_pair("data-plane-jobs")
-    control_plane_jobs_q, _ = make_fifo_queue_pair("control-plane-jobs")
-    priority_notifications_q, _ = make_fifo_queue_pair("priority-notifications")
+    # ── Topics ──
+    for topic in topology.get("topics", []):
+        # We only want to provision EDI-owned topics in this stack.
+        # Platform topics (like platform-events-topic) are provisioned by the platform stack.
+        if topic["name"].startswith("edi-"):
+            topics[topic["name"]] = aws.sns.Topic(
+                f"{prefix}{topic['name']}",
+                name=f"{prefix}{topic['name']}",
+                fifo_topic=topic.get("fifo", False),
+                content_based_deduplication=topic.get("fifo", False) or None,
+                tags=tags,
+            )
 
-    # Subscriptions (Subscribe to the Data Plane SNS topic)
+    # ── Queues ──
+    for queue_conf in topology.get("queues", []):
+        # For EDI context, we only provision queues starting with "edi-"
+        name = queue_conf["name"]
+        if not name.startswith("edi-") and not name.startswith("email-"):
+            # skip identity and ucp queues, they belong elsewhere (or we provision them all here for simplicity)
+            # Actually, to make it simple and fully mirror localstack, we will provision ALL of them here
+            # because we don't have separate Pulumi stacks for Identity/UCP right now.
+            pass
 
-    subscribe(
-        "config-sync-sub",
-        data_plane_events_topic.arn,
-        config_sync_q,
-        {"event_type": [{"prefix": "webhook."}, {"prefix": "edi."}]},
-    )
+        prefixed_name = f"{prefix}{name}"
+        if queue_conf.get("fifo"):
+            q, _ = provision_fifo_queue_pair(prefixed_name, tags)
+        else:
+            q, _ = provision_standard_queue_pair(prefixed_name, tags)
 
-    subscribe(
-        "transform-sub",
-        data_plane_events_topic.arn,
-        transform_q,
-        {"event_type": ["pipeline.transform_event"]},
-    )
-    subscribe(
-        "compute-sub",
-        data_plane_events_topic.arn,
-        compute_q,
-        {"event_type": ["pipeline.compute_transform_event"]},
-    )
-    subscribe(
-        "lifecycle-sub",
-        data_plane_events_topic.arn,
-        lifecycle_q,
-        {"event_type": ["pipeline.transform_completed", "pipeline.delivery_completed"]},
-    )
-    subscribe(
-        "deliver-sub",
-        data_plane_events_topic.arn,
-        deliver_q,
-        {"event_type": ["pipeline.deliver_event"]},
-    )
-    subscribe(
-        "notifications-sub",
-        data_plane_events_topic.arn,
-        priority_notifications_q,
-        {"event_type": [{"prefix": "notification."}]},
-    )
+        queues[name] = q
+
+    # Build a lookup dictionary of available topics
+    available_topics = external_topics.copy() if external_topics else {}
+    for topic_name, topic in topics.items():
+        available_topics[topic_name] = topic.arn
+
+    # ── Subscriptions ──
+    for sub in topology.get("subscriptions", []):
+        topic_name = sub["topic"]
+        queue_name = sub["queue"]
+
+        topic_arn = available_topics.get(topic_name)
+        if not topic_arn:
+            continue
+
+        # Map back from the exact name in topology.json to the provisioned queue
+        if queue_name in queues:
+            subscribe_queue(
+                f"{prefix}{queue_name}-sub",
+                topic_arn,
+                queues[queue_name],
+                sub.get("filterPolicy"),
+            )
 
     return {
-        "queues": {
-            "transform": transform_q,
-            "compute": compute_q,
-            "lifecycle": lifecycle_q,
-            "deliver": deliver_q,
-            "config_sync": config_sync_q,
-            "data_plane_jobs": data_plane_jobs_q,
-            "control_plane_jobs": control_plane_jobs_q,
-            "priority_notifications": priority_notifications_q,
-        },
-        "data_plane_events_topic": data_plane_events_topic,
+        "queues": queues,
+        "topics": topics,
     }

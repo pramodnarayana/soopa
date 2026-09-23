@@ -24,6 +24,9 @@ fi
 if [ -f .env.example ]; then
   cp .env.example .env
   ENV_INJECTED=1
+
+  echo "🔌 Injecting Dynamic Topology Configuration into CI .env..."
+  pnpm infra:sync-topology
 fi
 
 echo "✅ Running Architectural Semgrep Checks..."

@@ -178,6 +178,21 @@ aws.secretsmanager.SecretVersion(
 edi_db_password = random.RandomPassword(
     "edi-shard-db-password",
     length=32,
+    override_special="!#$%^&*()-_=+[]{}|;:,.<>?",
+)
+
+# Custom Parameter Group for Debezium Logical Replication
+edi_db_parameter_group = aws.rds.ParameterGroup(
+    f"{_prefix}edi-shard-db-pg",
+    family="postgres15",
+    parameters=[
+        aws.rds.ParameterGroupParameterArgs(
+            name="rds.logical_replication",
+            value="1",
+            apply_method="pending-reboot",
+        )
+    ],
+    tags=_TAGS,
 )
 
 edi_shard_db = aws.rds.Instance(
@@ -192,6 +207,7 @@ edi_shard_db = aws.rds.Instance(
     password=edi_db_password.result,
     vpc_security_group_ids=[db_sg_id],
     db_subnet_group_name=db_subnet_group.name,
+    parameter_group_name=edi_db_parameter_group.name,
     skip_final_snapshot=False,
     final_snapshot_identifier=f"{_prefix}edi-shard-db-final-snapshot",
     publicly_accessible=False,
@@ -495,8 +511,8 @@ if enable_observability:
 
 # ── Universal Event Bus (Messaging) ───────────────────────────────────────────
 platform_events_topic = aws.sns.Topic(
-    f"{_prefix}events",
-    name=f"{_prefix}events.fifo",
+    f"{_prefix}platform-events-topic",
+    name=f"{_prefix}platform-events-topic.fifo",
     fifo_topic=True,
     content_based_deduplication=True,
     tags=_TAGS,

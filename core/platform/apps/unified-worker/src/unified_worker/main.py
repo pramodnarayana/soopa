@@ -40,13 +40,15 @@ async def main(stop_event: asyncio.Event | None = None) -> None:
 
     worker_modules_env = os.environ.get("WORKER_MODULES", "")
     if not worker_modules_env:
-        logger.error("No WORKER_MODULES environment variable provided. Exiting.")
-        sys.exit(1)
+        logger.warning("No WORKER_MODULES environment variable provided. Exiting gracefully.")
+        sys.exit(0)
 
     module_names = [name.strip() for name in worker_modules_env.split(",") if name.strip()]
     if not module_names:
-        logger.error("WORKER_MODULES environment variable is empty after parsing. Exiting.")
-        sys.exit(1)
+        logger.warning(
+            "WORKER_MODULES environment variable is empty after parsing. Exiting gracefully."
+        )
+        sys.exit(0)
 
     workers = []
     for name in module_names:

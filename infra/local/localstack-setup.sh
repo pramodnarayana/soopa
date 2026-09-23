@@ -1,13 +1,63 @@
 #!/bin/bash
 set -eo pipefail
 
-echo "Initializing LocalStack SQS queues and SNS topics..."
+TOPOLOGY_FILE="/etc/localstack/init/ready.d/topology.json"
 
-# 1. Create SNS Topics
-awslocal sns create-topic --name platform-events-topic.fifo --attributes FifoTopic=true,ContentBasedDeduplication=true
-awslocal sns create-topic --name edi-data-plane-topic
+echo "Initializing LocalStack infrastructure from $TOPOLOGY_FILE..."
 
-# 2. Create SQS Queues
+# Wait for localstack to be ready just in case
+awslocal sns list-topics >/dev/null 2>&1 || true
+
+# Helper to run python JSON parser
+parse_json() {
+    python3 -c "import sys, json; data=json.load(open('$TOPOLOGY_FILE')); print('\n'.join([json.dumps(x) for x in data.get('$1', [])]))"
+}
+
+IFS=$'\n'
+
+# 1. Create S3 Buckets
+echo "--- Provisioning S3 Buckets ---"
+for row in $(parse_json "buckets"); do
+    bucket_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('name', ''))" "$row")
+    echo "Creating Bucket: $bucket_name"
+    awslocal s3 mb "s3://$bucket_name" || true
+done
+
+# 2. Create Secrets Manager Secrets
+echo "--- Provisioning Secrets ---"
+for row in $(parse_json "secrets"); do
+    secret_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('name', ''))" "$row")
+    mock_value=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('mockValue', '{}'))" "$row")
+    echo "Creating Secret: $secret_name"
+
+    # Check if secret exists, otherwise create it
+    if ! awslocal secretsmanager describe-secret --secret-id "$secret_name" >/dev/null 2>&1; then
+        awslocal secretsmanager create-secret --name "$secret_name" --secret-string "$mock_value"
+    else
+        echo "Secret $secret_name already exists, updating..."
+        awslocal secretsmanager update-secret --secret-id "$secret_name" --secret-string "$mock_value"
+    fi
+done
+
+# 3. Create SNS Topics
+echo "--- Provisioning SNS Topics ---"
+for row in $(parse_json "topics"); do
+    logical_topic_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('name', ''))" "$row")
+    fifo=$(python3 -c "import sys, json; print(str(json.loads(sys.argv[1]).get('fifo', False)).lower())" "$row")
+
+    if [ "$fifo" = "true" ]; then
+        physical_topic_name="${logical_topic_name}.fifo"
+        echo "Creating FIFO Topic: $physical_topic_name"
+        awslocal sns create-topic --name "$physical_topic_name" --attributes FifoTopic=true,ContentBasedDeduplication=true
+    else
+        physical_topic_name="${logical_topic_name}"
+        echo "Creating Standard Topic: $physical_topic_name"
+        awslocal sns create-topic --name "$physical_topic_name"
+    fi
+done
+
+# 4. Create SQS Queues
+echo "--- Provisioning SQS Queues ---"
 create_queue_with_dlq() {
     local source_queue=$1
     local dlq=$2
@@ -37,57 +87,56 @@ create_queue_with_dlq() {
     awslocal sqs create-queue --queue-name "$source_queue" --attributes "$queue_attributes"
 }
 
-create_queue_with_dlq ucp-jobs.fifo ucp-jobs-dlq.fifo true
-create_queue_with_dlq notification-jobs.fifo notification-jobs-dlq.fifo true
-create_queue_with_dlq identity-jobs.fifo identity-jobs-dlq.fifo true
-create_queue_with_dlq ucp-events.fifo ucp-events-dlq.fifo true
-create_queue_with_dlq identity-events.fifo identity-events-dlq.fifo true
-create_queue_with_dlq edi-config-sync-queue.fifo edi-config-sync-queue-dlq.fifo true
-create_queue_with_dlq edi-orchestrator edi-orchestrator-dlq false
-create_queue_with_dlq edi-compute edi-compute-dlq false
-create_queue_with_dlq edi-data-plane-jobs.fifo edi-data-plane-jobs-dlq.fifo true
-create_queue_with_dlq edi-control-plane-jobs.fifo edi-control-plane-jobs-dlq.fifo true
-create_queue_with_dlq edi-deliver edi-deliver-dlq false
-create_queue_with_dlq edi-priority-notifications.fifo edi-priority-notifications-dlq.fifo true
-create_queue_with_dlq email-channel.fifo email-channel-dlq.fifo true
+for row in $(parse_json "queues"); do
+    logical_queue_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('name', ''))" "$row")
+    fifo=$(python3 -c "import sys, json; print(str(json.loads(sys.argv[1]).get('fifo', False)).lower())" "$row")
 
-# 3. Get ARNs
-PLATFORM_EVENTS_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:platform-events-topic.fifo --query 'Attributes.TopicArn' --output text)
-EDI_DATA_PLANE_TOPIC_ARN=$(awslocal sns get-topic-attributes --topic-arn arn:aws:sns:us-east-1:000000000000:edi-data-plane-topic --query 'Attributes.TopicArn' --output text)
+    if [ "$fifo" = "true" ]; then
+        physical_queue_name="${logical_queue_name}.fifo"
+        dlq_name="${logical_queue_name}-dlq.fifo"
+    else
+        physical_queue_name="${logical_queue_name}"
+        dlq_name="${logical_queue_name}-dlq"
+    fi
 
-UCP_EVENTS_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/ucp-events.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-IDENTITY_EVENTS_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/identity-events.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+    echo "Creating Queue: $physical_queue_name (FIFO=$fifo)"
+    create_queue_with_dlq "$physical_queue_name" "$dlq_name" "$fifo"
+done
 
-EDI_ORCHESTRATOR_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-orchestrator --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-EDI_COMPUTE_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-compute --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-EDI_DELIVER_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-deliver --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
-EDI_CONFIG_ARN=$(awslocal sqs get-queue-attributes --queue-url http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/edi-config-sync-queue.fifo --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
+# 5. Create Subscriptions
+echo "--- Provisioning SNS Subscriptions ---"
+for row in $(parse_json "subscriptions"); do
+    logical_topic_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('topic', ''))" "$row")
+    logical_queue_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('queue', ''))" "$row")
+    filter_policy=$(python3 -c "import sys, json; print(json.dumps(json.loads(sys.argv[1]).get('filterPolicy', {})))" "$row")
 
+    # We must determine if the topic/queue is FIFO to resolve the physical AWS name for subscription
+    # Since subscriptions in topology.json don't have the fifo flag natively, we look it up in the JSON!
+    topic_fifo=$(python3 -c "import sys, json; data=json.load(open('$TOPOLOGY_FILE')); print(str(next((t.get('fifo', False) for t in data.get('topics', []) if t.get('name') == '$logical_topic_name'), False)).lower())")
+    queue_fifo=$(python3 -c "import sys, json; data=json.load(open('$TOPOLOGY_FILE')); print(str(next((q.get('fifo', False) for q in data.get('queues', []) if q.get('name') == '$logical_queue_name'), False)).lower())")
 
-# 4. Subscribe Queues to Topics
+    if [ "$topic_fifo" = "true" ]; then
+        physical_topic_name="${logical_topic_name}.fifo"
+    else
+        physical_topic_name="${logical_topic_name}"
+    fi
 
-awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$UCP_EVENTS_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"app.\"}, {\"prefix\": \"tenant.\"}]}", "RawMessageDelivery": "true"}'
+    if [ "$queue_fifo" = "true" ]; then
+        physical_queue_name="${logical_queue_name}.fifo"
+    else
+        physical_queue_name="${logical_queue_name}"
+    fi
 
-# Identity worker needs to listen to UCP events to provision tenants and sync users
-awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$IDENTITY_EVENTS_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"tenant.\"}, {\"prefix\": \"app.\"}, {\"prefix\": \"user.\"}]}", "RawMessageDelivery": "true"}'
+    topic_arn="arn:aws:sns:us-east-1:000000000000:$physical_topic_name"
+    queue_url="http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/$physical_queue_name"
+    queue_arn=$(awslocal sqs get-queue-attributes --queue-url "$queue_url" --attribute-names QueueArn --query 'Attributes.QueueArn' --output text)
 
-# Data Plane pipeline queues: Debezium CDC publishes all outbox events to the new edi-data-plane-topic.
-# Each queue subscribes with a filter on its specific event_type(s).
-awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_ORCHESTRATOR_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"TRANSFORMATION_REQUESTED\", \"TRANSFORMATION_SUCCESSFUL\", \"TRANSFORMATION_FAILED\", \"DELIVERY_REQUESTED\", \"DELIVERY_SUCCESSFUL\", \"DELIVERY_FAILED\"]}", "RawMessageDelivery": "true"}'
+    # We must properly escape the filter_policy JSON for AWS CLI
+    escaped_filter_policy=$(echo $filter_policy | sed 's/"/\\"/g')
 
-awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_COMPUTE_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"COMPUTE_TRANSFORMATION_COMMAND\"]}", "RawMessageDelivery": "true"}'
+    echo "Subscribing $queue_name to $topic_name..."
+    awslocal sns subscribe --topic-arn "$topic_arn" --protocol sqs --notification-endpoint "$queue_arn" \
+        --attributes "{\"FilterPolicy\": \"$escaped_filter_policy\", \"RawMessageDelivery\": \"true\"}"
+done
 
-awslocal sns subscribe --topic-arn "$EDI_DATA_PLANE_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_DELIVER_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [\"EXECUTE_DELIVERY_COMMAND\"]}", "RawMessageDelivery": "true"}'
-
-# EDI Config Sync: provisioning + webhook events (published by the CP outbox relay)
-awslocal sns subscribe --topic-arn "$PLATFORM_EVENTS_TOPIC_ARN" --protocol sqs --notification-endpoint "$EDI_CONFIG_ARN" \
-    --attributes '{"FilterPolicy": "{\"event_type\": [{\"prefix\": \"webhook.\"}, {\"prefix\": \"edi.\"}]}", "RawMessageDelivery": "true"}'
-
-
-
-echo "LocalStack SQS queues and SNS topics created successfully."
+echo "LocalStack initialization successfully completed from topology.json!"
