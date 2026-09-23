@@ -147,6 +147,7 @@ jobs:
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: coverage-*
           path: coverage_artifacts
           merge-multiple: false
 
