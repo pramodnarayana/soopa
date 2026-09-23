@@ -78,7 +78,11 @@ export function SftpPartnerDetails({
       { id: partner.id, payload },
       {
         onSuccess: () => {
-          toast({ title: 'Success', description: 'SFTP Partner updated successfully.' });
+          toast({
+            title: 'Success',
+            description: 'SFTP Partner updated successfully.',
+            variant: 'success',
+          });
           reset(formData);
         },
       },

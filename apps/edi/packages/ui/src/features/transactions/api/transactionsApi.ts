@@ -94,7 +94,7 @@ export function useReplayTransaction() {
       return response.data;
     },
     onSuccess: (_, { traceId }) => {
-      toast({ title: 'Replay queued', description: 'The transaction has been queued for replay.' });
+      toast({ title: 'Replay queued', description: 'Transaction queued.', variant: 'success' });
       // Invalidate the detail query to show the new state
       queryClient.invalidateQueries({ queryKey: transactionsKeys.detail(tenantId, traceId) });
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
@@ -124,7 +124,8 @@ export function useBulkReplayTransactions() {
       const count = data?.processed_count ?? 0;
       toast({
         title: 'Replay queued',
-        description: `${count} transaction${count === 1 ? '' : 's'} queued for replay.`,
+        description: `${count} transaction${count === 1 ? '' : 's'} queued.`,
+        variant: 'success',
       });
       // Invalidate all transaction lists to show the new state
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });

@@ -93,6 +93,7 @@ function RowActions({ route }: { route: InboundRouteItem }) {
           toast({
             title: `Route ${!route.active ? 'Activated' : 'Deactivated'}`,
             description: `Inbound route "${route.name}" has been ${!route.active ? 'activated' : 'deactivated'}.`,
+            variant: 'success',
           });
         },
         onError: (err) => {
@@ -109,7 +110,12 @@ function RowActions({ route }: { route: InboundRouteItem }) {
   const handleDelete = () => {
     if (!confirm('Are you sure you want to delete this inbound route?')) return;
     deleteMutation.mutate(route.route_id, {
-      onSuccess: () => toast({ title: 'Route Deleted', description: 'Inbound route removed.' }),
+      onSuccess: () =>
+        toast({
+          title: 'Route Deleted',
+          description: 'Inbound route removed.',
+          variant: 'success',
+        }),
       onError: (err) =>
         toast({
           title: 'Error',

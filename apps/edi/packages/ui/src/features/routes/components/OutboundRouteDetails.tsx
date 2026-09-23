@@ -83,7 +83,11 @@ export function OutboundRouteDetails({
       { routeId: route.route_id, payload },
       {
         onSuccess: () => {
-          toast({ title: 'Success', description: 'Outbound route updated successfully.' });
+          toast({
+            title: 'Success',
+            description: 'Outbound route updated successfully.',
+            variant: 'success',
+          });
           reset(formData);
         },
         onError: (err) => {
