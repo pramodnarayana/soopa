@@ -41,7 +41,7 @@ export function OutboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
         sftp_partner_id: selectedPartner.type?.toUpperCase() === 'SFTP' ? targetId : undefined,
       });
 
-      toast({ title: 'Outbound route created successfully' });
+      toast({ title: 'Outbound route created successfully', variant: 'success' });
       onSuccess();
     } catch (err) {
       toast({

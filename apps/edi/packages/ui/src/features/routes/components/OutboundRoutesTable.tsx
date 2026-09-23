@@ -81,6 +81,7 @@ function RowActions({ route }: { route: OutboundRouteItem }) {
           toast({
             title: `Route ${!route.active ? 'Activated' : 'Deactivated'}`,
             description: `Outbound route "${route.name}" has been ${!route.active ? 'activated' : 'deactivated'}.`,
+            variant: 'success',
           });
         },
         onError: (err) => {
@@ -97,7 +98,12 @@ function RowActions({ route }: { route: OutboundRouteItem }) {
   const handleDelete = () => {
     if (!confirm('Are you sure you want to delete this outbound route?')) return;
     deleteMutation.mutate(route.route_id, {
-      onSuccess: () => toast({ title: 'Route Deleted', description: 'Outbound route removed.' }),
+      onSuccess: () =>
+        toast({
+          title: 'Route Deleted',
+          description: 'Outbound route removed.',
+          variant: 'success',
+        }),
       onError: (err) =>
         toast({
           title: 'Error',

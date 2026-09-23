@@ -13,13 +13,11 @@ from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
 @pytest.fixture
-async def uow(db_session: AsyncSession) -> SqlAlchemyDataPlaneUnitOfWork:
+async def uow(tenant_db_session: AsyncSession) -> SqlAlchemyDataPlaneUnitOfWork:
     """Provides a fresh DataPlaneUnitOfWork instance with an active test transaction."""
-    conn = await db_session.connection()
-    await conn.run_sync(ProcessedEvent.metadata.create_all)
 
-    db_session.info["session_type"] = "tenant"
-    tenant_session = TenantSession(db_session)
+    tenant_db_session.info["session_type"] = "tenant"
+    tenant_session = TenantSession(tenant_db_session)
     return SqlAlchemyDataPlaneUnitOfWork(
         tenant_session=tenant_session, storage=InMemoryStorageAdapter()
     )
@@ -27,7 +25,7 @@ async def uow(db_session: AsyncSession) -> SqlAlchemyDataPlaneUnitOfWork:
 
 @pytest.mark.asyncio
 async def test_record_idempotency_success_when_new(
-    uow: SqlAlchemyDataPlaneUnitOfWork, db_session: AsyncSession
+    uow: SqlAlchemyDataPlaneUnitOfWork, tenant_db_session: AsyncSession
 ) -> None:
     # Arrange
     tenant_id = "tenant-test-123"
@@ -40,8 +38,8 @@ async def test_record_idempotency_success_when_new(
     assert is_new is True
 
     # Verify the record actually got inserted (flush required if check inside transaction)
-    await db_session.flush()
-    result = await db_session.execute(
+    await tenant_db_session.flush()
+    result = await tenant_db_session.execute(
         sa.select(ProcessedEvent).where(
             ProcessedEvent.tenant_id == tenant_id,
             ProcessedEvent.idempotency_key == idempotency_key,
@@ -54,7 +52,7 @@ async def test_record_idempotency_success_when_new(
 
 @pytest.mark.asyncio
 async def test_record_idempotency_fails_when_duplicate(
-    uow: SqlAlchemyDataPlaneUnitOfWork, db_session: AsyncSession
+    uow: SqlAlchemyDataPlaneUnitOfWork, tenant_db_session: AsyncSession
 ) -> None:
     # Arrange
     tenant_id = "tenant-test-456"

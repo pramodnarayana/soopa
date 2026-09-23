@@ -125,7 +125,11 @@ export function AS2PartnershipDetails({
       { id: as2Partnership.id, payload },
       {
         onSuccess: () => {
-          toast({ title: 'Success', description: 'AS2Partnership updated successfully.' });
+          toast({
+            title: 'Success',
+            description: 'AS2Partnership updated successfully.',
+            variant: 'success',
+          });
           reset(formData);
         },
       },

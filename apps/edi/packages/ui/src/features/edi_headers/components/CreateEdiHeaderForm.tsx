@@ -60,7 +60,7 @@ export function CreateEdiHeaderForm({ onSuccess }: { onSuccess: () => void }) {
         transaction_type: transactionType,
       });
 
-      toast({ title: 'EDI Header created successfully' });
+      toast({ title: 'EDI Header created successfully', variant: 'success' });
       onSuccess();
     } catch (err) {
       toast({

@@ -81,7 +81,11 @@ export function EdiHeaderDetails({
       { headerId: header.id, payload },
       {
         onSuccess: () => {
-          toast({ title: 'Success', description: 'EDI Header updated successfully.' });
+          toast({
+            title: 'Success',
+            description: 'EDI Header updated successfully.',
+            variant: 'success',
+          });
           reset(formData);
         },
         onError: (err) => {

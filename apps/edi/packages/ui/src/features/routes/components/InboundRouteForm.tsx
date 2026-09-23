@@ -69,7 +69,7 @@ export function InboundRouteForm({ onSuccess }: { onSuccess: () => void }) {
         sftp_partner_id: selectedEndpoint.type === DestinationType.SFTP ? targetId : undefined,
       });
 
-      toast({ title: 'Inbound route created successfully' });
+      toast({ title: 'Inbound route created successfully', variant: 'success' });
       onSuccess();
     } catch (err) {
       toast({
