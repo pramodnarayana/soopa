@@ -1,8 +1,16 @@
-# ruff: noqa: S603, S607
 import json
 import os
+import shutil
 import subprocess
 import sys
+
+DOCKER_BIN = shutil.which("docker")
+TERRAFORM_BIN = shutil.which("terraform")
+
+if not DOCKER_BIN:
+    raise RuntimeError("docker binary not found in PATH")
+if not TERRAFORM_BIN:
+    raise RuntimeError("terraform binary not found in PATH")
 
 import structlog
 
@@ -66,9 +74,9 @@ def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
     # Step 3: Stop ALL containers and wipe all named volumes (destroys Postgres databases)
     # This ensures that when Zitadel is reset, all downstream apps are also wiped,
     # preventing stale ID references (e.g., idp_user_id conflicts).
-    subprocess.run(
+    subprocess.run(  # noqa: S603 - Docker compose is a trusted local executable
         [
-            "docker",
+            DOCKER_BIN,
             "compose",
             "-f",
             "docker-compose.yml",
@@ -91,7 +99,7 @@ def _sync_outputs_to_env(root_dir: Path) -> None:
     (avoids a cross-runtime dependency on pnpm/Node.js).
     """
     sync_script = root_dir / "infra" / "cloud" / "zitadel" / "sync.py"
-    subprocess.run([sys.executable, str(sync_script)], cwd=root_dir, check=True)
+    subprocess.run([sys.executable, str(sync_script)], cwd=root_dir, check=True)  # noqa: S603 - sys.executable is a trusted path
 
 
 def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) -> None:
@@ -104,8 +112,8 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
       5. Delete the ephemeral PAT
     """
     # Start Zitadel so it generates a fresh PAT on the clean database
-    subprocess.run(
-        ["docker", "compose", "-f", "docker-compose.identity.yml", "up", "-d"],
+    subprocess.run(  # noqa: S603 - Docker compose is a trusted local executable
+        [DOCKER_BIN, "compose", "-f", "docker-compose.identity.yml", "up", "-d"],
         cwd=root_dir,
         check=True,
     )
@@ -132,13 +140,13 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
     try:
         # Provision Zitadel IAM resources via Terraform
         logger.info("Running terraform init...")
-        subprocess.run(["terraform", "init"], cwd=script_dir, check=True)
+        subprocess.run([TERRAFORM_BIN, "init"], cwd=script_dir, check=True)  # noqa: S603 - Terraform is a trusted local executable
 
         logger.info("Applying Terraform configuration...")
         env = os.environ.copy()
         env["TF_VAR_zitadel_token"] = actual_token
-        subprocess.run(
-            ["terraform", "apply", "-var-file=local.tfvars.example", "-auto-approve"],
+        subprocess.run(  # noqa: S603 - Terraform is a trusted local executable
+            [TERRAFORM_BIN, "apply", "-var-file=local.tfvars.example", "-auto-approve"],
             cwd=script_dir,
             env=env,
             check=True,
@@ -163,7 +171,7 @@ def main() -> None:
 
     resource_count = _count_provisioned_resources(tf_state_path)
 
-    if resource_count > 0:
+    if "--reset" in sys.argv and resource_count > 0:
         _destroy_existing(script_dir, root_dir)
 
     _run_full_bootstrap(script_dir, root_dir, pat_key_path)

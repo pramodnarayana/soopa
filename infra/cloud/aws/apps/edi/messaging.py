@@ -15,11 +15,15 @@ def provision_messaging(prefix: str, tags: dict, topology: dict, external_topics
         # We only want to provision EDI-owned topics in this stack.
         # Platform topics (like platform-events-topic) are provisioned by the platform stack.
         if topic["name"].startswith("edi-"):
+            is_fifo = topic.get("fifo", False)
+            physical_name = (
+                f"{prefix}{topic['name']}.fifo" if is_fifo else f"{prefix}{topic['name']}"
+            )
             topics[topic["name"]] = aws.sns.Topic(
                 f"{prefix}{topic['name']}",
-                name=f"{prefix}{topic['name']}",
-                fifo_topic=topic.get("fifo", False),
-                content_based_deduplication=topic.get("fifo", False) or None,
+                name=physical_name,
+                fifo_topic=is_fifo,
+                content_based_deduplication=is_fifo or None,
                 tags=tags,
             )
 

@@ -18,7 +18,6 @@ sys.path.insert(0, os.path.abspath("../../packages"))
 import pulumi
 from compute import provision_compute
 from messaging import provision_messaging
-from storage import provision_storage
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -75,7 +74,6 @@ for topic in topology.get("topics", []):
         external_topics[name] = platform.require_output(output_name)
 
 # ── Provision Domain Resources ────────────────────────────────────────────────
-storage = provision_storage(_prefix, _TAGS)
 messaging = provision_messaging(
     _prefix,
     _TAGS,

@@ -19,7 +19,7 @@ from database.models.identity import Tenant, User, UserRole
 from database.utils import normalize_to_asyncpg
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import delete, func, update
+from sqlalchemy import func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
 from ucp_models.sharding import DatabaseShard
@@ -105,12 +105,15 @@ async def main() -> None:
             # Guard against Zitadel re-bootstrap: if the admin email already exists
             # with a different idp_user_id (because Zitadel was reset and issued a new
             # admin ID), the ON CONFLICT (idp_user_id) clause below will not fire and
-            # the INSERT will collide on uq_users_email_lower. Delete the stale row first.
+            # the INSERT will collide on uq_users_email_lower. Update the stale row first
+            # to point to the new idp_user_id so we don't drop dependent data.
             await conn.execute(
-                delete(User).where(
+                update(User)
+                .where(
                     func.lower(User.email) == "admin@soopa.io",
                     User.idp_user_id != platform_admin_id,
                 )
+                .values(idp_user_id=platform_admin_id)
             )
 
             stmt_user = (
