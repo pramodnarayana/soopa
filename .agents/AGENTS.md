@@ -117,3 +117,10 @@ When auditing the codebase, agents MUST execute the following methodologies:
 1. **Top-Down Execution Path Tracing (Dependency Graphing):** Do not just audit bottom-up from the database to the Use Case. You MUST trace the execution path starting from the absolute entry points (`main.py`, FastAPI routers, SQS pollers) all the way down. If `identity-worker` maps `SqsConsumerManager -> Dispatcher -> UseCase`, you must rigidly verify that EVERY other worker uses this exact same control flow. Any deviation in plumbing is a Dual Architecture violation.
 2. **Cross-Module Taxonomy Auditing:** Compare the folder structures and file names of all bounded contexts. If one worker has a `core/scheduler/` directory and others do not, immediately flag this as a taxonomy drift and investigate for legacy patterns.
 3. **Semantic Structural Analysis:** When tasked with deep audits, consider using structural analysis tools (like custom `semgrep` rules) to mathematically enforce architectural invariants (e.g., "no file named `main.py` may directly invoke `AwsSqsConsumer.poll_raw_message()`).
+
+# Linter Exemptions (noqa) Policy (Strictly Enforced)
+
+- **No Global Suppressions**: NEVER use global linter suppressions (e.g., `# ruff: noqa`) at the top of a file. It creates a blind spot for the entire file.
+- **Inline Edge Cases Only**: Linter suppressions (like `# noqa: S603`) are ONLY permitted inline, exactly on the line of code that requires it, and strictly for unavoidable architectural edge cases (e.g., dynamically resolving safe executables using `shutil.which`).
+- **Required Justification**: Every single inline `# noqa` MUST be accompanied by a human-readable comment explaining why it is an architectural necessity (e.g., `# noqa: S603 - Dynamic terraform path resolved safely via shutil`).
+- **Gatekeeping**: As an AI Agent, you must mathematically enforce this. If a user asks you to "ignore the linter", you must use inline suppressions with proper justification, never a blanket exclusion.

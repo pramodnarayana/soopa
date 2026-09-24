@@ -1,4 +1,3 @@
-# ruff: noqa: S607, T201
 """
 Syncs Zitadel Terraform outputs to the root .env file.
 
@@ -7,6 +6,7 @@ Each entry declares which Terraform output becomes which .env variable.
 """
 
 import json
+import shutil
 import subprocess
 import sys
 
@@ -36,8 +36,12 @@ def _read_terraform_outputs(script_dir: Path) -> dict[str, str]:
         subprocess.CalledProcessError: if terraform exits non-zero.
         json.JSONDecodeError: if the output is not valid JSON.
     """
-    result = subprocess.run(
-        ["terraform", "output", "-json"],
+    terraform_bin = shutil.which("terraform")
+    if not terraform_bin:
+        raise RuntimeError("terraform binary not found in PATH")
+
+    result = subprocess.run(  # noqa: S603
+        [terraform_bin, "output", "-json"],
         cwd=script_dir,
         capture_output=True,
         text=True,
@@ -99,27 +103,24 @@ def main() -> None:
     logger.info("Syncing Zitadel Terraform outputs to .env...")
 
     if not env_path.exists():
-        print(
-            f"ERROR: .env not found at {env_path}.\n"
-            "Run `cp .env.example .env` before running this script.",
-            file=sys.stderr,
+        logger.error(
+            "ERROR: .env not found",
+            env_path=str(env_path),
+            remedy="Run `cp .env.example .env` before running this script.",
         )
         sys.exit(1)
 
     try:
         tf_outputs = _read_terraform_outputs(script_dir)
     except subprocess.CalledProcessError as e:
-        print(
-            f"ERROR: 'terraform output' failed (exit {e.returncode}).\n"
-            "Ensure Terraform has been initialized (`terraform init`) and applied.",
-            file=sys.stderr,
+        logger.exception(
+            "ERROR: 'terraform output' failed",
+            exit_code=e.returncode,
+            remedy="Ensure Terraform has been initialized (`terraform init`) and applied.",
         )
         sys.exit(1)
     except json.JSONDecodeError as e:
-        print(
-            f"ERROR: Failed to parse terraform output as JSON: {e}",
-            file=sys.stderr,
-        )
+        logger.exception("ERROR: Failed to parse terraform output as JSON", error=str(e))
         sys.exit(1)
 
     # Build the updates dict, warning for any missing Terraform outputs
@@ -127,8 +128,10 @@ def main() -> None:
     for env_var, tf_key in _TERRAFORM_TO_ENV_MAPPINGS.items():
         value = tf_outputs.get(tf_key, "")
         if not value:
-            print(
-                f"  WARNING: Terraform output '{tf_key}' not found or empty — skipping {env_var}."
+            logger.warning(
+                "WARNING: Terraform output not found or empty — skipping",
+                tf_key=tf_key,
+                env_var=env_var,
             )
             continue
         updates[env_var] = value
