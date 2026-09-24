@@ -4,9 +4,9 @@ FirstInstance:
       Machine:
         Username: 'terraform'
         Name: 'Terraform Provisioner'
-      MachineKey:
-        Type: 1
+      Pat:
+        ExpirationDate: '2030-01-01T00:00:00Z'
     Human:
       Username: 'zitadel-admin'
       Password: 'Password1!'
-  MachineKeyPath: '/machinekey/terraform.json'
+  PatPath: '/machinekey/pat.json'

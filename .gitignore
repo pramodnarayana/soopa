@@ -83,3 +83,4 @@ volume/
 .terraform/
 .terraform.lock.hcl
 terraform-admin-key.json
+pat.json

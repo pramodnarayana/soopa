@@ -1,0 +1,115 @@
+{
+  "topics": [
+    { "name": "platform-events-topic", "fifo": true, "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN" },
+    { "name": "edi-data-plane-topic", "fifo": false, "env_var": "SNS_EDI_DATA_PLANE_TOPIC_ARN" }
+  ],
+  "queues": [
+    { "name": "ucp-jobs", "fifo": true, "dlq": true },
+    { "name": "notification-jobs", "fifo": true, "dlq": true },
+    { "name": "identity-jobs", "fifo": true, "dlq": true },
+    {
+      "name": "ucp-events",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_UCP_IDENTITY_SYNC_QUEUE_URL"
+    },
+    {
+      "name": "identity-events",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_IDENTITY_SYNC_QUEUE_URL"
+    },
+    {
+      "name": "edi-config-sync-queue",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_PROVISIONING_QUEUE_URL"
+    },
+    {
+      "name": "edi-orchestrator",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_ORCHESTRATOR_QUEUE_URL"
+    },
+    { "name": "edi-compute", "fifo": false, "dlq": true, "env_var": "SQS_COMPUTE_QUEUE_URL" },
+    {
+      "name": "edi-data-plane-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_DATA_PLANE_JOBS_QUEUE_URL"
+    },
+    {
+      "name": "edi-control-plane-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_CONTROL_PLANE_JOBS_QUEUE_URL"
+    },
+    { "name": "edi-deliver", "fifo": false, "dlq": true, "env_var": "SQS_DELIVER_QUEUE_URL" },
+    {
+      "name": "edi-priority-notifications",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL"
+    },
+    { "name": "email-channel", "fifo": true, "dlq": true }
+  ],
+  "subscriptions": [
+    {
+      "topic": "platform-events-topic",
+      "queue": "ucp-events",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "app." }, { "prefix": "tenant." }]
+      }
+    },
+    {
+      "topic": "platform-events-topic",
+      "queue": "identity-events",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "tenant." }, { "prefix": "app." }, { "prefix": "user." }]
+      }
+    },
+    {
+      "topic": "edi-data-plane-topic",
+      "queue": "edi-orchestrator",
+      "filterPolicy": {
+        "event_type": [
+          "TRANSFORMATION_REQUESTED",
+          "TRANSFORMATION_SUCCESSFUL",
+          "TRANSFORMATION_FAILED",
+          "DELIVERY_REQUESTED",
+          "DELIVERY_SUCCESSFUL",
+          "DELIVERY_FAILED"
+        ]
+      }
+    },
+    {
+      "topic": "edi-data-plane-topic",
+      "queue": "edi-compute",
+      "filterPolicy": {
+        "event_type": ["COMPUTE_TRANSFORMATION_COMMAND"]
+      }
+    },
+    {
+      "topic": "edi-data-plane-topic",
+      "queue": "edi-deliver",
+      "filterPolicy": {
+        "event_type": ["EXECUTE_DELIVERY_COMMAND"]
+      }
+    },
+    {
+      "topic": "platform-events-topic",
+      "queue": "edi-config-sync-queue",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "webhook." }, { "prefix": "edi." }]
+      }
+    }
+  ],
+  "buckets": [{ "name": "observability-data" }],
+  "secrets": [
+    {
+      "name": "edi/edi-shard-db-credentials",
+      "mockValue": "{\"host\":\"postgres-global\",\"port\":5432,\"username\":\"postgres\",\"password\":\"postgres\",\"dbname\":\"edi_shard\"}"
+    },
+    { "name": "edi/as2-certificates", "mockValue": "{}" }
+  ]
+}

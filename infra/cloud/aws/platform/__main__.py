@@ -158,7 +158,6 @@ db_secret = aws.secretsmanager.Secret(
     name=f"edi/{_prefix}global-db-credentials",
     tags=_TAGS,
 )
-
 aws.secretsmanager.SecretVersion(
     f"{_prefix}global-db-secret-val",
     secret_id=db_secret.id,
@@ -170,6 +169,70 @@ aws.secretsmanager.SecretVersion(
                 "username": DatabaseConstants.MASTER_USERNAME,
                 "password": args[2],
                 "dbname": DatabaseConstants.GLOBAL_DB_NAME,
+            }
+        )
+    ),
+)
+
+# ── EDI Shard PostgreSQL Database ─────────────────────────────────────────────
+edi_db_password = random.RandomPassword(
+    "edi-shard-db-password",
+    length=32,
+    override_special="!#$%^&*()-_=+[]{}|;:,.<>?",
+)
+
+# Custom Parameter Group for Debezium Logical Replication
+edi_db_parameter_group = aws.rds.ParameterGroup(
+    f"{_prefix}edi-shard-db-pg",
+    family="postgres15",
+    parameters=[
+        aws.rds.ParameterGroupParameterArgs(
+            name="rds.logical_replication",
+            value="1",
+            apply_method="pending-reboot",
+        )
+    ],
+    tags=_TAGS,
+)
+
+edi_shard_db = aws.rds.Instance(
+    f"{_prefix}edi-shard-db",
+    identifier=f"{_prefix}edi-shard-db",
+    engine=DatabaseConstants.ENGINE,
+    engine_version=DatabaseConstants.ENGINE_VERSION,
+    instance_class=instance_class,
+    allocated_storage=allocated_storage,
+    db_name="edi_shard",
+    username=DatabaseConstants.MASTER_USERNAME,
+    password=edi_db_password.result,
+    vpc_security_group_ids=[db_sg_id],
+    db_subnet_group_name=db_subnet_group.name,
+    parameter_group_name=edi_db_parameter_group.name,
+    skip_final_snapshot=False,
+    final_snapshot_identifier=f"{_prefix}edi-shard-db-final-snapshot",
+    publicly_accessible=False,
+    tags=_TAGS,
+)
+
+edi_db_secret = aws.secretsmanager.Secret(
+    f"{_prefix}edi-shard-db-secret",
+    name=f"edi/{_prefix}edi-shard-db-credentials",
+    tags=_TAGS,
+)
+
+aws.secretsmanager.SecretVersion(
+    f"{_prefix}edi-shard-db-secret-val",
+    secret_id=edi_db_secret.id,
+    secret_string=pulumi.Output.all(
+        edi_shard_db.address, edi_shard_db.port, edi_db_password.result
+    ).apply(
+        lambda args: json.dumps(
+            {
+                "host": args[0],
+                "port": args[1],
+                "username": DatabaseConstants.MASTER_USERNAME,
+                "password": args[2],
+                "dbname": "edi_shard",
             }
         )
     ),
@@ -360,6 +423,8 @@ pulumi.export("ecs_cluster_arn", ecs_cluster.arn)
 pulumi.export("ecs_cluster_name", ecs_cluster.name)
 pulumi.export("global_db_endpoint", global_db.endpoint)
 pulumi.export("global_db_secret_arn", db_secret.arn)
+pulumi.export("edi_shard_db_endpoint", edi_shard_db.endpoint)
+pulumi.export("edi_shard_db_secret_arn", edi_db_secret.arn)
 pulumi.export("zitadel_service_name", zitadel_svc.name)
 pulumi.export("main_alb_listener_arn", main_listener.arn)
 pulumi.export("main_alb_obs_listener_arn", obs_listener.arn)
@@ -446,10 +511,11 @@ if enable_observability:
 
 # ── Universal Event Bus (Messaging) ───────────────────────────────────────────
 platform_events_topic = aws.sns.Topic(
-    f"{_prefix}events",
-    name=f"{_prefix}events.fifo",
+    f"{_prefix}platform-events-topic",
+    name=f"{_prefix}platform-events-topic.fifo",
     fifo_topic=True,
     content_based_deduplication=True,
     tags=_TAGS,
+    opts=pulumi.ResourceOptions(retain_on_delete=True),
 )
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)

@@ -10,42 +10,45 @@ The codebase is divided into three distinct domain pillars:
 - **`ucp/`**: The Unified Control Plane. The global management layer handling Tenants, Users, Billing, and global configuration.
 - **`edi/`**: The Data Plane. Handles B2B EDI processing, executing inside isolated Tenant shards.
 
-## 🚀 Getting Started
+## 🚀 Getting Started (Frictionless Startup Guide)
 
-Follow these steps to set up your local development environment.
+Follow these 4 simple steps to set up your local development environment from scratch:
 
 ### 1. Environment Setup
-
-Create a `.env` file at the root of the repository:
-
-```env
-# Postgres Defaults
-POSTGRES_USER=zitadel
-POSTGRES_PASSWORD=zitadel
-POSTGRES_DB=zitadel
-
-# Zitadel IAM
-ZITADEL_MASTERKEY=a-32-byte-long-secret-key-for-zi
-ZITADEL_MACHINE_KEY='<machine-key-json>'
-ZITADEL_API_URL=http://ucp.localhost:8080
-
-# Database Connections
-DATABASE_URL=postgresql://ucp_admin:ucp_password@localhost:5434/ucp_global
+Copy the template environment file to create your local `.env`.
+```bash
+cp .env.example .env
 ```
-
-*Note: Docker compose will automatically use this file. The `.env` file is also symmetrically required in the `ucp/` folder for Docker's `env_file` directive.*
 
 ### 2. Install Dependencies
-
 We use `pnpm` workspaces to manage dependencies across all domains.
-
 ```bash
-# Install node_modules across all apps and packages
 pnpm install
+```
 
-# Build all local packages (crucial for inter-workspace dependencies like @soopa/edi-ui)
+### 3. Build Shared Packages
+Build all local packages (crucial for inter-workspace dependencies).
+```bash
 pnpm build
 ```
+
+### 4. Bootstrap Infrastructure
+*(Make sure Docker Desktop is running first!)*
+Start Zitadel, auto-generate machine tokens, provision Terraform, sync secrets to `.env`, start Postgres/LocalStack, and seed the databases — all in one command!
+```bash
+pnpm infra:bootstrap
+```
+
+### 5. Access the Application
+Once the infrastructure is up, start the frontend and backend servers with `pnpm dev`. You can then log in using the default seeded accounts!
+
+- **UCP Dashboard**: [http://localhost:5173](http://localhost:5173)
+- **Zitadel IAM Console**: [http://ucp.localhost:8080/ui/console](http://ucp.localhost:8080/ui/console)
+
+**Default Seeded Credentials**:
+- **Platform Admin Username**: `platform.admin@flowwolf.local` (or `@soopa.local`)
+- **Tenant Admin Username**: `admin@acmecorp.local`
+- **Password (All Users)**: `Password1!`
 
 ## 🛠️ Developer Commands
 
@@ -55,7 +58,10 @@ We use Turborepo to orchestrate commands across the monorepo. Here are the essen
 
 | Command | Description |
 |---|---|
-| **`pnpm infra-reset`** | ⚠️ **First-Time Setup & Schema Changes.** The canonical command to run when setting up a fresh environment or after any schema change. Tears down all Docker volumes, recreates containers, runs ALL Drizzle migrations (`pnpm db:migrate`), seeds the database, and initialises EDI infra. **Always run this if you see `relation "..." does not exist` errors.** |
+| **`pnpm infra:bootstrap`** | ⚠️ **First-Time Developer Setup.** Run this ONLY on your very first day to start Zitadel, automatically generate your Machine PATs, run Terraform to create organizations/projects, sync secrets to `.env`, start ALL other infrastructure containers, and seed the local databases. |
+| **`pnpm infra:up`** | **Start the Environment.** Non-destructively starts Postgres, LocalStack, and Zitadel, applies pending migrations, and seeds missing data. |
+| **`pnpm infra:down`** | **Stop the Environment.** Safely stops all local infrastructure containers without deleting any volumes. |
+| **`pnpm infra-reset`** | ⚠️ **Clean Slate Reset.** The canonical command for a fresh database or schema change. Safely uses the API to delete your app tenants in Zitadel (leaving the core Platform untouched), obliterates Postgres/LocalStack volumes, and runs `infra:up` to give you a pristine environment in seconds. **Always run this if you see `relation "..." does not exist` errors.** |
 | **`pnpm ucp-reset`** | Like `infra-reset` but skips the EDI-specific `db-init`/`sqs-purge` steps. Use when working on UCP only. |
 | **`pnpm dev`** | **Start the World.** Boots the UCP Dashboard UI, UCP API, EDI API, and EDI Worker all in parallel with hot-module reloading. |
 
@@ -86,15 +92,13 @@ Once `pnpm dev` is running, you can access the UCP Dashboard at:
 
 ### Infrastructure & IAM (Zitadel)
 
-The root Platform Organization and initial Projects are managed via Terraform in the `ucp/infra/zitadel` directory.
+The root Platform Organization and initial Projects are managed via Terraform in the `infra/cloud/zitadel` directory.
 
-To apply IAM changes or extract outputs into your `.env` file:
+To apply IAM changes or extract outputs into your `.env` file, simply run:
 ```bash
-cd ucp/infra/zitadel
-terraform init
-terraform apply
-terraform output -json
+pnpm infra:bootstrap-identity
 ```
+*(This automatically handles temporary PAT generation, Terraform initialization, apply, and `.env` synchronization).*
 
 ---
 

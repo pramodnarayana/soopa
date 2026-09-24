@@ -46,6 +46,7 @@ def provision_fargate_service(
     desired_count: int = 1,
     obs_user_secret_arn: str = None,
     obs_password_secret_arn: str = None,
+    secrets: list = None,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
@@ -79,11 +80,13 @@ def provision_fargate_service(
         aws.iam.RolePolicy(
             f"{name}-task-policy",
             role=task_role.id,
-            policy=json.dumps(
-                {
-                    "Version": "2012-10-17",
-                    "Statement": base_statements,
-                }
+            policy=pulumi.Output.from_input(base_statements).apply(
+                lambda resolved_statements: json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": resolved_statements,
+                    }
+                )
             ),
         )
 
@@ -122,6 +125,7 @@ def provision_fargate_service(
         fl_end = args[2]
         obs_user_arn = args[3]
         obs_pass_arn = args[4]
+        sec = args[5]
 
         main_log_config = {
             "logDriver": "awslogs",
@@ -165,6 +169,7 @@ def provision_fargate_service(
                 "essential": True,
                 "portMappings": port_mappings,
                 "environment": env,
+                "secrets": sec or [],
                 "mountPoints": app_mount_points or [],
                 "dependsOn": app_depends_on or [],
                 "logConfiguration": main_log_config,
@@ -191,6 +196,7 @@ def provision_fargate_service(
             firelens_endpoint or "",
             obs_user_secret_arn or "",
             obs_password_secret_arn or "",
+            secrets or [],
         ).apply(make_container_defs),
         volumes=volumes,
         tags=tags,

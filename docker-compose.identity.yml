@@ -19,7 +19,7 @@ services:
   zitadel:
     image: ghcr.io/zitadel/zitadel:v3.4.12
     restart: unless-stopped
-    command: start-from-init --config /zitadel-first-instance.yaml --masterkey "${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY must be set (32 bytes)}" --tlsMode disabled
+    command: start-from-init --steps /zitadel-first-instance.yaml --masterkey "${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY must be set (32 bytes)}" --tlsMode disabled
     environment:
       ZITADEL_PORT: 8080
       ZITADEL_EXTERNALDOMAIN: ucp.localhost
@@ -37,12 +37,11 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./zitadel-first-instance.yaml:/zitadel-first-instance.yaml:ro
-      - zitadel_machinekey:/machinekey
+      - ./core/ucp/zitadel-first-instance.yaml:/zitadel-first-instance.yaml:ro
+      - ./infra/cloud/zitadel/machinekey:/machinekey
     depends_on:
       zitadel_postgres:
         condition: service_healthy
 
 volumes:
   zitadel_data:
-  zitadel_machinekey:
