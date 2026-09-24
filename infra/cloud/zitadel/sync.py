@@ -1,4 +1,4 @@
-# ruff: noqa: S607, G004, TRY401, T201
+# ruff: noqa: S607, T201
 """
 Syncs Zitadel Terraform outputs to the root .env file.
 
@@ -53,7 +53,9 @@ def _sanitize_env_value(value: str) -> str:
     Escapes actual newline (LF) and carriage return (CR) characters to their
     two-character literal representations so parsers do not break mid-line.
     """
-    return value.replace("\r", "").replace("\n", "\\n")
+    safe_value = value.replace("\\", "\\\\").replace('"', '\\"')
+    safe_value = safe_value.replace("\r", "").replace("\n", "\\n")
+    return safe_value
 
 
 def _update_env_file(env_path: Path, updates: dict[str, str]) -> None:
@@ -72,9 +74,9 @@ def _update_env_file(env_path: Path, updates: dict[str, str]) -> None:
         for key in updates:
             if line.startswith(f"{key}="):
                 safe_value = _sanitize_env_value(updates[key])
-                lines[i] = f"{key}={safe_value}\n"
+                lines[i] = f'{key}="{safe_value}"\n'
                 updated_keys.add(key)
-                logger.info(f"  Updated  {key}")
+                logger.info("Updated key", key=key)
                 break
 
     # Pass 2: append keys that are not yet present in the file
@@ -83,8 +85,8 @@ def _update_env_file(env_path: Path, updates: dict[str, str]) -> None:
             safe_value = _sanitize_env_value(value)
             if lines and not lines[-1].endswith("\n"):
                 lines.append("\n")
-            lines.append(f"{key}={safe_value}\n")
-            logger.info(f"  Added    {key}")
+            lines.append(f'{key}="{safe_value}"\n')
+            logger.info("Added key", key=key)
 
     env_path.write_text("".join(lines), encoding="utf-8")
 
@@ -138,8 +140,8 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except OSError as e:
-        logger.exception(f"ERROR: File I/O error: {e}")
+    except OSError:
+        logger.exception("File I/O error")
         sys.exit(1)
     except KeyboardInterrupt:
         logger.exception("\nSync cancelled.")

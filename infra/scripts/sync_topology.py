@@ -1,4 +1,3 @@
-# ruff: noqa: G004
 import json
 import re
 import sys
@@ -18,11 +17,11 @@ def main():
     topology_path = root_dir / "infra" / "topology.json"
 
     if not topology_path.exists():
-        logger.error(f"ERROR: topology.json not found at {topology_path}")
+        logger.error("ERROR: topology.json not found", topology_path=str(topology_path))
         sys.exit(1)
 
     if not env_path.exists():
-        logger.error(f"ERROR: .env file not found at {env_path}")
+        logger.error("ERROR: .env file not found", env_path=str(env_path))
         sys.exit(1)
 
     topology = json.loads(topology_path.read_text(encoding="utf-8"))
@@ -56,12 +55,12 @@ def main():
         pattern = re.compile(rf"^{key}=.*$", re.MULTILINE)
         if pattern.search(env_content):
             env_content = pattern.sub(f"{key}={value}", env_content)
-            logger.info(f"Updated {key}")
+            logger.info("Updated key", key=key)
         else:
             if not env_content.endswith("\n"):
                 env_content += "\n"
             env_content += f"{key}={value}\n"
-            logger.info(f"Added {key}")
+            logger.info("Added key", key=key)
 
     env_path.write_text(env_content, encoding="utf-8")
     logger.info("Successfully synchronized Topology URLs to root .env")

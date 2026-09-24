@@ -177,6 +177,8 @@ def provision_compute(
 
     # Extract the data plane topic for Debezium sink explicitly (it specifically requires it)
     data_plane_events_topic = topics.get("edi-data-plane-topic")
+    if not data_plane_events_topic:
+        raise ValueError("Missing required topic: 'edi-data-plane-topic' must be provisioned.")
 
     # 1. Debezium CDC Server
     debezium_server = make_service(
@@ -188,7 +190,7 @@ def provision_compute(
             {"name": "DEBEZIUM_SINK_TYPE", "value": "sns"},
             {
                 "name": "DEBEZIUM_SINK_SNS_TOPIC_ARN",
-                "value": data_plane_events_topic.arn if data_plane_events_topic else "",
+                "value": data_plane_events_topic.arn,
             },
             {
                 "name": "DEBEZIUM_SOURCE_DATABASE_HOSTNAME",
@@ -216,6 +218,12 @@ def provision_compute(
                 "name": "DEBEZIUM_SOURCE_OFFSET_STORAGE",
                 "value": "io.debezium.storage.jdbc.offset.JdbcOffsetBackingStore",
             },
+            {
+                "name": "DEBEZIUM_SOURCE_OFFSET_STORAGE_JDBC_URL",
+                "value": pulumi.Output.all(edi_shard_db_endpoint).apply(
+                    lambda args: f"jdbc:postgresql://{args[0]}/edi_shard"
+                ),
+            },
         ],
         secrets=[
             {
@@ -224,6 +232,14 @@ def provision_compute(
             },
             {
                 "name": "DEBEZIUM_SOURCE_DATABASE_PASSWORD",
+                "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":password::"),
+            },
+            {
+                "name": "DEBEZIUM_SOURCE_OFFSET_STORAGE_JDBC_USER",
+                "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":username::"),
+            },
+            {
+                "name": "DEBEZIUM_SOURCE_OFFSET_STORAGE_JDBC_PASSWORD",
                 "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":password::"),
             },
         ],

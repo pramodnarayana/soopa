@@ -60,5 +60,10 @@ variable "dev_mode" {
 variable "zitadel_token" {
   description = "Temporary PAT used for automated initial bootstrapping. Injected at apply-time via TF_VAR_zitadel_token."
   type        = string
-  default     = ""
+  sensitive   = true
+
+  validation {
+    condition     = length(var.zitadel_token) > 0
+    error_message = "The zitadel_token must not be empty. It must be provided via TF_VAR_zitadel_token."
+  }
 }

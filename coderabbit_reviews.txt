@@ -1,0 +1,69 @@
+In `@core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py`:
+- Line 34: Validate each worker’s queue URL once before constructing jobs, using
+os.environ.get; log an error and exit with status 1 when it is empty, then
+derive and reuse target_queue. In
+core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py, apply this at
+lines 34 and 44; in
+core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py, apply it at
+lines 34-36 and reuse target_queue at lines 46-48.
+
+In `@infra/cloud/aws/apps/edi/compute.py`:
+- Around line 215-218: Update the task configuration containing
+DEBEZIUM_SOURCE_OFFSET_STORAGE to provide the Debezium 3.6 JDBC offset-storage
+connection settings and required credentials through secrets, using an image
+with the JDBC storage module. Also validate that edi-data-plane-topic exists
+before setting DEBEZIUM_SINK_SNS_TOPIC_ARN, and fail deployment if it is
+missing.
+
+In `@infra/cloud/aws/apps/edi/messaging.py`:
+- Around line 16-20: Remove the duplicate topology file loading from
+provision_messaging and accept the parsed topology as an argument; update the
+provision_messaging call in __main__.py to pass the topology already loaded
+there, preserving the existing external_topics argument behavior.
+- Around line 36-74: Update the queue loop in the EDI provisioning flow so it
+skips every queue whose name does not start with “edi-”. Remove the no-op
+conditional and ensure only EDI-owned queues are provisioned and added to queues
+for subscription handling.
+
+In `@infra/cloud/aws/platform/__main__.py`:
+- Around line 514-515: Update the platform events topic replacement and ARN
+rollout so publishers and subscribers switch to the new
+`platform-events-topic.fifo` ARN before the old topic is deleted; coordinate
+redeployment of all dependent stacks and services using
+`sns_platform_events_topic_arn`.
+
+In `@infra/cloud/zitadel/bootstrap.py`:
+- Line 17: Replace f-string arguments in the structlog calls with static
+messages and structured fields, and remove the G004 suppression from both
+scripts. In infra/cloud/zitadel/bootstrap.py, update lines 17 and 57 to pass
+file_path and state_file as fields, and use static exception messages at lines
+175 and 178; in infra/cloud/zitadel/sync.py, pass key as a field at lines 77 and
+87, and use a static exception message at line 142. Retain structlog and do not
+introduce standard logging.
+- Around line 149-153: Place the `pat_key_path` cleanup in a `finally` block
+covering the Terraform and `_sync_outputs_to_env` steps, so the local PAT file
+is removed whether bootstrap succeeds or fails. Describe this as local file
+cleanup, not server-side PAT revocation.
+
+In `@infra/cloud/zitadel/sync.py`:
+- Around line 50-56: Update _sanitize_env_value to escape existing backslashes
+and double quotes before escaping carriage returns and newlines. In
+_update_env_file, wrap the sanitized value in double quotes in both the
+existing-key update and new-key append paths.
+
+In `@infra/cloud/zitadel/variables.tf`:
+- Around line 61-63: Update the zitadel_token variable declaration so callers
+must provide a non-empty token instead of receiving an empty default, and mark
+the value sensitive so Terraform redacts it. Use variable validation to report a
+clear error when the supplied token is empty.
+
+In `@infra/local/localstack-setup.sh`:
+- Around line 135-139: Update the subscription log in the loop to use
+physical_queue_name and physical_topic_name instead of queue_name and
+topic_name. Leave the subscription command and filter-policy handling unchanged.
+
+In `@infra/scripts/sync_topology.py`:
+- Line 1: Remove the G004 suppression and update the logger calls in the
+topology and env-file error paths and the Updated/Added branches to use
+structlog key-value arguments instead of f-strings. Preserve the existing
+messages and include the relevant path or key as structured context.

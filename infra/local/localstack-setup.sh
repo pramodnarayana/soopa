@@ -134,7 +134,7 @@ for row in $(parse_json "subscriptions"); do
     # We must properly escape the filter_policy JSON for AWS CLI
     escaped_filter_policy=$(echo $filter_policy | sed 's/"/\\"/g')
 
-    echo "Subscribing $queue_name to $topic_name..."
+    echo "Subscribing $physical_queue_name to $physical_topic_name..."
     awslocal sns subscribe --topic-arn "$topic_arn" --protocol sqs --notification-endpoint "$queue_arn" \
         --attributes "{\"FilterPolicy\": \"$escaped_filter_policy\", \"RawMessageDelivery\": \"true\"}"
 done

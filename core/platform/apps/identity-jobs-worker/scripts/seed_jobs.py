@@ -25,13 +25,19 @@ async def main() -> None:
     database_url = normalize_to_asyncpg(database_url)
     engine = create_async_engine(database_url)
 
+    queue_url = os.environ.get("SQS_IDENTITY_JOBS_QUEUE_URL", "")
+    if not queue_url:
+        logger.error("SQS_IDENTITY_JOBS_QUEUE_URL environment variable is not set or is empty.")
+        sys.exit(1)
+    target_queue = queue_url.rstrip("/").split("/")[-1]
+
     jobs = [
         {
             "name": IdentityJobName.IDENTITY_OUTBOX_SWEEPER.value,
             "payload": {},
             "status": "PENDING",
             "cron_expression": "* * * * *",
-            "target_queue": os.environ["SQS_IDENTITY_JOBS_QUEUE_URL"].rstrip("/").split("/")[-1],
+            "target_queue": target_queue,
             "retry_count": 0,
             "max_retries": 3,
             "next_run_at": datetime.now(UTC),
@@ -41,7 +47,7 @@ async def main() -> None:
             "payload": {},
             "status": "PENDING",
             "cron_expression": "* * * * *",
-            "target_queue": os.environ["SQS_IDENTITY_JOBS_QUEUE_URL"].rstrip("/").split("/")[-1],
+            "target_queue": target_queue,
             "retry_count": 0,
             "max_retries": 3,
             "next_run_at": datetime.now(UTC),

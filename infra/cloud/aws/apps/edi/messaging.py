@@ -1,6 +1,3 @@
-import json
-import os
-
 import pulumi_aws as aws
 from seedwork.messaging import (
     provision_fifo_queue_pair,
@@ -9,15 +6,9 @@ from seedwork.messaging import (
 )
 
 
-def provision_messaging(prefix: str, tags: dict, external_topics: dict = None):
+def provision_messaging(prefix: str, tags: dict, topology: dict, external_topics: dict = None):
     queues = {}
     topics = {}
-
-    topology_path = os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "../../../../../topology.json")
-    )
-    with open(topology_path) as f:
-        topology = json.load(f)
 
     # ── Topics ──
     for topic in topology.get("topics", []):
@@ -36,11 +27,8 @@ def provision_messaging(prefix: str, tags: dict, external_topics: dict = None):
     for queue_conf in topology.get("queues", []):
         # For EDI context, we only provision queues starting with "edi-"
         name = queue_conf["name"]
-        if not name.startswith("edi-") and not name.startswith("email-"):
-            # skip identity and ucp queues, they belong elsewhere (or we provision them all here for simplicity)
-            # Actually, to make it simple and fully mirror localstack, we will provision ALL of them here
-            # because we don't have separate Pulumi stacks for Identity/UCP right now.
-            pass
+        if not name.startswith("edi-"):
+            continue
 
         prefixed_name = f"{prefix}{name}"
         if queue_conf.get("fifo"):

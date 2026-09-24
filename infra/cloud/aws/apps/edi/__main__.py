@@ -79,6 +79,7 @@ storage = provision_storage(_prefix, _TAGS)
 messaging = provision_messaging(
     _prefix,
     _TAGS,
+    topology=topology,
     external_topics=external_topics,
 )
 

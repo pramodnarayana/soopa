@@ -516,5 +516,6 @@ platform_events_topic = aws.sns.Topic(
     fifo_topic=True,
     content_based_deduplication=True,
     tags=_TAGS,
+    opts=pulumi.ResourceOptions(retain_on_delete=True),
 )
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)
