@@ -1,0 +1,4 @@
+encryptionsalt: v1:XAOUtMRV3bk=:v1:vMeiNOmCJtDB7aON:NWtt0s6b3k9pWR2Ful3K8H6WRhrdsQ==
+config:
+  platform:root_domain: flowwolf.io
+  platform:staging_domain: staging.flowwolf.io

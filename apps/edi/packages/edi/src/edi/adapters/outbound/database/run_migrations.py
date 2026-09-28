@@ -21,16 +21,14 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
     If none exist (e.g., initial bootstrap), fallback to defaults.
     """
     engine = get_async_engine(global_url)
-    urls = []
+    shard_map: dict[str, str] = {}
     try:
         async with engine.connect() as conn:
             # We don't use ORM here to keep migration runner simple and resilient
             result = await conn.execute(text("SELECT id, dsn FROM ucp.database_shards"))
             for row in result.fetchall():
                 shard_id, dsn = row
-                if shard_id in overrides:
-                    dsn = overrides[shard_id]
-                urls.append(dsn)
+                shard_map[shard_id] = dsn
     except Exception as e:
         # Check for SQLSTATE codes indicating missing database objects:
         # 42P01 = undefined_table, 3F000 = invalid_schema_name
@@ -44,17 +42,18 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
     finally:
         await engine.dispose()
 
-    if not urls:
-        if overrides:
-            logger.info(
-                "ucp.database_shards is empty, but shard_overrides are provided. Falling back to overrides."
-            )
-            urls = list(overrides.values())
-        else:
-            logger.info(
-                "No shards found in Global DB and no overrides provided. Skipping tenant migrations."
-            )
-    return urls
+    # Merge overrides (they take precedence and add new ones like edi_shard_1)
+    if overrides:
+        for shard_id, dsn in overrides.items():
+            shard_map[shard_id] = dsn
+
+    if not shard_map:
+        logger.info(
+            "No shards found in Global DB and no overrides provided. Skipping tenant migrations."
+        )
+
+    # Deduplicate URLs in case multiple shard IDs point to the same database
+    return list(set(shard_map.values()))
 
 
 def run_migrations():

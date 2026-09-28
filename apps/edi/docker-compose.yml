@@ -27,8 +27,6 @@ services:
 
 
   debezium_shard:
-    env_file:
-      - ../../versions.env
     image: quay.io/debezium/server:${DEBEZIUM_VERSION}
     entrypoint: /debezium/validate-sns-config.sh
     environment:

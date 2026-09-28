@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "infra-seedwork"
+version = "0.1.0"
+description = "Reusable Pulumi infrastructure seedwork modules"
+dependencies = [
+    "pulumi",
+    "pulumi-aws"
+]
+
+[tool.setuptools]
+packages = ["infra_seedwork"]

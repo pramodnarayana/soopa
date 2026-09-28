@@ -1,0 +1,222 @@
+"""
+Application Layer (Layer 3) - EDI Bounded Context: DP Workers
+==============================================================
+Provisions the EDI Data Plane (DP) ECS Fargate workers:
+  - edi-orchestrator-worker
+  - edi-compute-worker
+  - edi-delivery-worker
+  - edi-dp-jobs-worker
+
+Environment variable injection is driven entirely by the ``queue_env_vars``
+export from the edi/messaging stack. No manual per-queue env-var mapping
+exists here — adding a queue to topology.json is sufficient.
+
+Tier 6: High-volume data plane processing. Deployed on code push.
+Separate from CP workers to allow independent horizontal scaling.
+Depends on: edi/messaging (queue_env_vars), platform (cluster, ECR), data (DB).
+"""
+
+import json
+
+import pulumi
+import pulumi_aws as aws
+from infra_seedwork.ecs import provision_fargate_service
+from infra_seedwork.env import queue_env_vars_to_ecs_format
+
+_env = pulumi.get_stack()
+_prefix = f"{_env}-edi-"
+_TAGS = {"ManagedBy": "pulumi", "Component": "edi-dp-workers", "Environment": _env}
+
+# ── Stack References ──────────────────────────────────────────────────────────
+config = pulumi.Config()
+foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
+platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
+data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
+messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messaging/{_env}"
+storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
+
+foundation = pulumi.StackReference(foundation_stack_ref)
+platform = pulumi.StackReference(platform_stack_ref)
+data = pulumi.StackReference(data_stack_ref)
+messaging = pulumi.StackReference(messaging_stack_ref)
+storage = pulumi.StackReference(storage_stack_ref)
+
+# ── Infrastructure Inputs ─────────────────────────────────────────────────────
+private_subnets = [
+    foundation.require_output("private_subnet_a_id"),
+    foundation.require_output("private_subnet_b_id"),
+]
+app_sg_id = foundation.require_output("app_sg_id")
+
+ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
+ecr_repository_url = platform.require_output("ecr_repository_url")
+staging_domain = platform.require_output("staging_domain")
+
+edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
+edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
+global_db_endpoint = data.require_output("global_db_endpoint")
+global_db_secret_arn = data.require_output("global_db_secret_arn")
+
+as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
+
+image_tag = config.get("image_tag") or "latest"
+enable_observability = config.get_bool("enable_observability")
+firelens_endpoint = (
+    platform.require_output("openobserve_endpoint") if enable_observability else None
+)
+ecr_image_uri = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
+
+_region = aws.get_region()
+_identity = aws.get_caller_identity()
+
+# ── IAM Execution Role ────────────────────────────────────────────────────────
+execution_role = aws.iam.Role(
+    f"{_prefix}dp-workers-ecs-execution-role",
+    assume_role_policy=json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                }
+            ],
+        }
+    ),
+    tags=_TAGS,
+)
+aws.iam.RolePolicyAttachment(
+    f"{_prefix}dp-workers-ecs-exec-role-attach",
+    role=execution_role.name,
+    policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+)
+aws.iam.RolePolicy(
+    f"{_prefix}dp-workers-ecs-exec-role-policy",
+    role=execution_role.id,
+    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
+        lambda args: json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": ["secretsmanager:GetSecretValue"],
+                        "Resource": [args[0], args[1]],
+                    },
+                    {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
+                ],
+            }
+        )
+    ),
+)
+
+# ── EDI Secrets Sidecar ───────────────────────────────────────────────────────
+sidecar = {
+    "name": "edi-secrets-sidecar",
+    "command": ["python", "/app/apps/edi/apps/edi-secrets-sidecar/main.py"],
+    "essential": True,
+    "environment": [{"name": "SECRETS_MOUNT_PATH", "value": "/mnt/secrets"}],
+    "mountPoints": [
+        {"sourceVolume": "secrets", "containerPath": "/mnt/secrets", "readOnly": False}
+    ],
+    "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+            "awslogs-group": f"/ecs/{_prefix}dp-workers-sidecar",
+            "awslogs-region": _region.name,
+            "awslogs-stream-prefix": "sidecar",
+            "awslogs-create-group": "true",
+        },
+    },
+}
+app_mount_points = [{"sourceVolume": "secrets", "containerPath": "/mnt/secrets", "readOnly": True}]
+app_depends_on = [{"containerName": "edi-secrets-sidecar", "condition": "START"}]
+volumes = [aws.ecs.TaskDefinitionVolumeArgs(name="secrets")]
+
+# ── Environment Variables — Topology-Driven ───────────────────────────────────
+# The edi/messaging stack exports ``queue_env_vars``: a structured map of
+# { "SQS_ORCHESTRATOR_QUEUE_URL": "https://...", ... } for every EDI queue
+# and topic that declares an env_var in topology.json.
+#
+# We merge this with static platform env vars and convert to ECS format.
+# No per-queue manual mapping ever needed here.
+
+dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
+    queue_env_vars=messaging.require_output("queue_env_vars"),
+    global_db_host=global_db_endpoint,
+    edi_db_host=edi_shard_db_endpoint,
+    public_base_url=pulumi.Output.concat("https://api.", staging_domain),
+    identity_issuer=pulumi.Output.concat("https://identity.", staging_domain),
+    s3_bucket=as2_payloads_bucket_name,
+).apply(
+    lambda args: queue_env_vars_to_ecs_format(
+        queue_env_vars=args["queue_env_vars"],
+        static_vars={
+            "ENVIRONMENT": _env,
+            "GLOBAL_DB_HOST": args["global_db_host"],
+            "EDI_DB_HOST": args["edi_db_host"],
+            "PUBLIC_BASE_URL": args["public_base_url"],
+            "IDENTITY_ISSUER": args["identity_issuer"],
+            "S3_BUCKET": args["s3_bucket"],
+            "WORKER_MODULES": "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker",
+        },
+    )
+)
+
+# ── DP Workers ECS Service ────────────────────────────────────────────────────
+provision_fargate_service(
+    name=f"{_prefix}dp-workers",
+    command=["python", "-m", "unified_worker.main"],
+    cluster_arn=ecs_cluster_arn,
+    execution_role_arn=execution_role.arn,
+    ecr_image_uri=ecr_image_uri,
+    subnets=private_subnets,
+    security_group_id=app_sg_id,
+    tags=_TAGS,
+    environment_vars=dp_worker_env_vars,
+    sidecar_container=sidecar,
+    volumes=volumes,
+    app_mount_points=app_mount_points,
+    app_depends_on=app_depends_on,
+    firelens_endpoint=firelens_endpoint,
+    secrets=[
+        {
+            "name": "GLOBAL_DATABASE_URL",
+            "valueFrom": pulumi.Output.concat(global_db_secret_arn, ":url::"),
+        },
+        {"name": "DATABASE_URL", "valueFrom": pulumi.Output.concat(global_db_secret_arn, ":url::")},
+        {
+            "name": "EDI_DATABASE_URL",
+            "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
+        },
+        {
+            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
+        },
+    ],
+    extra_task_policy_statements=[
+        {
+            "Effect": "Allow",
+            "Action": ["secretsmanager:GetSecretValue"],
+            "Resource": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:edi/*",
+        },
+        {"Effect": "Allow", "Action": ["secretsmanager:ListSecrets"], "Resource": "*"},
+        {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": "*"},
+        {
+            "Effect": "Allow",
+            "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
+            "Resource": "*",
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes",
+                "sqs:ChangeMessageVisibility",
+            ],
+            "Resource": f"arn:aws:sqs:{_region.name}:{_identity.account_id}:*",
+        },
+    ],
+)

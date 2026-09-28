@@ -62,8 +62,10 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
             max_overflow=settings.database.max_overflow,
             shard_overrides=settings.database.shard_overrides,
         )
-        yield
-        await shutdown()
+        try:
+            yield
+        finally:
+            await shutdown()
 
     app = FastAPI(
         title="EDI AS2 Platform API",

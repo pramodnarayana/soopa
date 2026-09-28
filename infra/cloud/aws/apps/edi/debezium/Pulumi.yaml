@@ -1,0 +1,6 @@
+name: edi-debezium
+runtime:
+  name: python
+  options:
+    virtualenv: ../../../.venv
+description: "EDI Bounded Context: Debezium CDC ECS Compute. Tier 5 — deploy on DEBEZIUM_VERSION bump."

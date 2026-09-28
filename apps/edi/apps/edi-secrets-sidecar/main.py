@@ -11,6 +11,8 @@ logger = structlog.get_logger(__name__)
 
 SECRETS_MOUNT_PATH = os.environ.get("SECRETS_MOUNT_PATH", "/mnt/secrets")
 POLL_INTERVAL_SECONDS = int(os.environ.get("SECRETS_SYNC_INTERVAL_SECONDS", "300"))
+if POLL_INTERVAL_SECONDS <= 0:
+    raise ValueError("SECRETS_SYNC_INTERVAL_SECONDS must be strictly positive.")
 
 
 class SecretsManagerClient(Protocol):
