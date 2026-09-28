@@ -7,6 +7,8 @@ dependencies = [
     "pulumi>=3.258.0,<4.0.0",
     "pulumi-aws>=6.83.4,<7.0.0",
     "pulumi-policy>=1.15.0",
+    "pulumi-random>=4.21.2",
+    "infra-seedwork",
 ]
 
 [dependency-groups]
@@ -14,3 +16,10 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.5",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = []
+
+[tool.uv.sources]
+infra-seedwork = { workspace = true }

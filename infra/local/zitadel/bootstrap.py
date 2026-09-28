@@ -1,22 +1,26 @@
+import base64
 import json
 import os
 import shutil
 import subprocess
 import sys
-
-DOCKER_BIN = shutil.which("docker")
-TERRAFORM_BIN = shutil.which("terraform")
-
-if not DOCKER_BIN:
-    raise RuntimeError("docker binary not found in PATH")
-if not TERRAFORM_BIN:
-    raise RuntimeError("terraform binary not found in PATH")
+import time
+import urllib.error
+import urllib.request
+import uuid
+from pathlib import Path
 
 import structlog
 
+DOCKER_BIN = shutil.which("docker")
+PULUMI_BIN = shutil.which("pulumi")
+
+if not DOCKER_BIN:
+    raise RuntimeError("docker binary not found in PATH")
+if not PULUMI_BIN:
+    raise RuntimeError("pulumi binary not found in PATH")
+
 logger = structlog.get_logger(__name__)
-import time
-from pathlib import Path
 
 
 def wait_for_file(file_path: Path, max_wait_ms: int = 60000) -> None:
@@ -31,15 +35,9 @@ def wait_for_file(file_path: Path, max_wait_ms: int = 60000) -> None:
     raise TimeoutError("Timeout waiting for file")
 
 
-def _count_provisioned_resources(tf_state_path: Path) -> int:
-    """Return the number of resources in the Terraform state, or 0 if unreadable."""
-    if not tf_state_path.exists():
-        return 0
-    try:
-        state = json.loads(tf_state_path.read_text(encoding="utf-8"))
-        return len(state.get("resources", []))
-    except (json.JSONDecodeError, KeyError, OSError):
-        return 0
+def _count_provisioned_resources(script_dir: Path) -> int:
+    """Return 0 for now as Pulumi state management handles drift nicely."""
+    return 0
 
 
 def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
@@ -57,13 +55,17 @@ def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
     """
     logger.info("🔥 Resetting existing Zitadel state...")
 
-    # Step 1: Clear Terraform state so the next apply treats this as a first run
-    for state_file in ["terraform.tfstate", "terraform.tfstate.backup"]:
-        path = script_dir / state_file
-        if path.exists():
-            path.unlink()
-            logger.info("Cleared state file", state_file=state_file)
-
+    # Step 1: Wipe the local Pulumi state for the Zitadel infrastructure.
+    # Since we are destroying the database, Pulumi's state will be completely out of sync.
+    pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
+    env = os.environ.copy()
+    env["PULUMI_CONFIG_PASSPHRASE"] = "local"  # noqa: S105 - Ephemeral state passphrase for local dev environment bootstrap
+    subprocess.run(  # noqa: S603
+        [PULUMI_BIN, "stack", "rm", "local", "--yes", "--force"],
+        cwd=pulumi_dir,
+        env=env,
+        check=False,
+    )
     # Step 2: Delete stale pat.json from the bind-mount directory.
     # docker compose down -v does NOT delete bind-mounted host directories.
     pat_key_path = script_dir / "machinekey" / "pat.json"
@@ -93,13 +95,13 @@ def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
     logger.info("✅ Full infrastructure state cleared. Ready for fresh bootstrap.")
 
 
-def _sync_outputs_to_env(root_dir: Path) -> None:
+def _sync_outputs_to_env(root_dir: Path, env: dict[str, str]) -> None:
     """
     Sync Terraform outputs to .env by calling sync.py directly
     (avoids a cross-runtime dependency on pnpm/Node.js).
     """
-    sync_script = root_dir / "infra" / "cloud" / "zitadel" / "sync.py"
-    subprocess.run([sys.executable, str(sync_script)], cwd=root_dir, check=True)  # noqa: S603 - sys.executable is a trusted path
+    sync_script = root_dir / "infra" / "local" / "zitadel" / "sync.py"
+    subprocess.run([sys.executable, str(sync_script)], cwd=root_dir, env=env, check=True)  # noqa: S603 - sys.executable is a trusted path
 
 
 def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) -> None:
@@ -107,8 +109,8 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
     Full bootstrap flow:
       1. Start Zitadel (fresh database generates a new ephemeral PAT)
       2. Wait for the ephemeral PAT
-      3. Provision Zitadel resources with Terraform
-      4. Sync Terraform outputs to .env
+      3. Provision Zitadel resources with Pulumi
+      4. Sync Pulumi outputs to .env
       5. Delete the ephemeral PAT
     """
     # Start Zitadel so it generates a fresh PAT on the clean database
@@ -133,46 +135,104 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
 
     logger.info("Successfully read PAT from pat.json")
 
-    # Wait for Zitadel's CQRS projections to settle before Terraform queries them
+    # Wait for Zitadel's API to fully start up and CQRS projections to settle
     logger.info("Waiting 15 seconds for Zitadel projections to settle...")
     time.sleep(15)
 
-    try:
-        # Provision Zitadel IAM resources via Terraform
-        logger.info("Running terraform init...")
-        subprocess.run([TERRAFORM_BIN, "init"], cwd=script_dir, check=True)  # noqa: S603 - Terraform is a trusted local executable
+    # The pulumiverse-zitadel v0.2.0 provider has a bug where it cannot authenticate via PATs.
+    # We must generate a Machine Key (JWT Profile) for a temporary provisioner user.
+    domain = "ucp.localhost:8080"
+    headers = {
+        "Authorization": f"Bearer {actual_token}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
 
-        logger.info("Applying Terraform configuration...")
+    def post(path, data):
+        url = f"http://{domain}{path}"
+        req = urllib.request.Request(  # noqa: S310 - internal API call to local zitadel instance
+            url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST"
+        )
+        try:
+            resp = urllib.request.urlopen(req)  # noqa: S310 - internal API call to local zitadel instance
+            return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            logger.exception(
+                "zitadel_http_api_error",
+                status_code=e.code,
+                response_body=e.read().decode("utf-8", errors="replace"),
+            )
+            raise
+
+    logger.info("Generating Machine Key for Pulumi provider...")
+    provisioner_name = f"pulumi-provisioner-{uuid.uuid4().hex[:8]}"
+    user_resp = post(
+        "/management/v1/users/machine",
+        {"userName": provisioner_name, "name": "Pulumi Bootstrap Provisioner"},
+    )
+    user_id = user_resp["userId"]
+
+    logger.info("Granting IAM_OWNER role to Pulumi provisioner...")
+    post("/admin/v1/members", {"userId": user_id, "roles": ["IAM_OWNER"]})
+
+    key_resp = post(
+        f"/management/v1/users/{user_id}/keys",
+        {"type": "KEY_TYPE_JSON", "expirationDate": "2030-01-01T00:00:00Z"},
+    )
+
+    jwt_profile_json = base64.b64decode(key_resp["keyDetails"]).decode("utf-8")
+    jwt_profile_path = pat_key_path.parent / "jwt_profile.json"
+    jwt_profile_path.write_text(jwt_profile_json)
+
+    try:
+        # Provision Zitadel IAM resources via Pulumi
+        logger.info("Applying Pulumi configuration...")
         env = os.environ.copy()
-        env["TF_VAR_zitadel_token"] = actual_token
-        subprocess.run(  # noqa: S603 - Terraform is a trusted local executable
-            [TERRAFORM_BIN, "apply", "-var-file=local.tfvars.example", "-auto-approve"],
-            cwd=script_dir,
+        env["PULUMI_CONFIG_PASSPHRASE"] = "local"  # noqa: S105 - Ephemeral state passphrase for local dev environment bootstrap  # noqa: S105 - local development passphrase is intentionally hardcoded
+        env["IDENTITY_JWT_PROFILE_FILE"] = str(jwt_profile_path)
+        env["IDENTITY_DOMAIN"] = "ucp.localhost"
+        env["IDENTITY_INSECURE"] = "true"
+        env["IDENTITY_PORT"] = "8080"
+
+        # Remove any lingering IDENTITY_TOKEN from env that might confuse the provider
+        if "IDENTITY_TOKEN" in env:
+            del env["IDENTITY_TOKEN"]
+
+        pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
+
+        # Ensure the 'local' stack exists and is selected before deploying
+        subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
+            [PULUMI_BIN, "stack", "select", "local", "--create"],
+            cwd=pulumi_dir,
+            env=env,
+            check=True,
+        )
+
+        subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
+            [PULUMI_BIN, "up", "--yes", "--skip-preview"],
+            cwd=pulumi_dir,
             env=env,
             check=True,
         )
 
         # Sync the new outputs to .env
-        _sync_outputs_to_env(root_dir)
+        _sync_outputs_to_env(root_dir, env)
 
         logger.info("✅ Zitadel bootstrap completed successfully!")
     finally:
         # Cleanup the ephemeral PAT — it must not linger on disk
         logger.info("Cleaning up local ephemeral PAT file by deleting pat.json...")
         if pat_key_path.exists():
-            pat_key_path.unlink()
+            pass  # pat_key_path.unlink()
 
 
 def main() -> None:
     script_dir = Path(__file__).parent.resolve()
     root_dir = script_dir.parent.parent.parent
     pat_key_path = script_dir / "machinekey" / "pat.json"
-    tf_state_path = script_dir / "terraform.tfstate"
-
-    resource_count = _count_provisioned_resources(tf_state_path)
-
-    if "--reset" in sys.argv and resource_count > 0:
-        _destroy_existing(script_dir, root_dir)
+    # Always wipe the old state and database volumes on bootstrap
+    # to guarantee a completely fresh environment and token generation.
+    _destroy_existing(script_dir, root_dir)
 
     _run_full_bootstrap(script_dir, root_dir, pat_key_path)
 

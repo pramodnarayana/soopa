@@ -58,6 +58,14 @@ global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
+as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
+data_plane_topic_arn = messaging.require_output("data_plane_topic_arn")
+sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
+queue_arns = [
+    messaging.require_output("data_plane_jobs_queue_arn"),
+    messaging.require_output("delivery_jobs_queue_arn"),
+    messaging.require_output("orchestrator_jobs_queue_arn"),
+]
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
@@ -202,21 +210,31 @@ provision_fargate_service(
             "Resource": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:edi/*",
         },
         {"Effect": "Allow", "Action": ["secretsmanager:ListSecrets"], "Resource": "*"},
-        {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": "*"},
         {
             "Effect": "Allow",
-            "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
-            "Resource": "*",
+            "Action": ["sns:Publish"],
+            "Resource": [data_plane_topic_arn, sns_platform_events_topic_arn],
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+            "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:ListBucket"],
+            "Resource": as2_payloads_bucket_arn,
         },
         {
             "Effect": "Allow",
             "Action": [
+                "sqs:SendMessage",
                 "sqs:ReceiveMessage",
                 "sqs:DeleteMessage",
                 "sqs:GetQueueAttributes",
                 "sqs:ChangeMessageVisibility",
             ],
-            "Resource": f"arn:aws:sqs:{_region.name}:{_identity.account_id}:*",
+            "Resource": queue_arns,
         },
     ],
 )

@@ -138,6 +138,7 @@ def provision_openobserve(
         desired_count=obs_count,
         obs_user_secret_arn=obs_user_secret.arn,
         obs_password_secret_arn=obs_password_secret.arn,
+        bucket_arns=[obs_bucket.arn, pulumi.Output.concat(obs_bucket.arn, "/*")],
         environment_vars=[
             {"name": "ZO_DATA_DIR", "value": "/data"},
             {"name": "ZO_S3_BUCKET", "value": obs_bucket.bucket},

@@ -1,4 +1,5 @@
 import json
+import urllib.parse
 
 import pulumi
 import pulumi_aws as aws
@@ -35,6 +36,7 @@ def provision_global_db(
         skip_final_snapshot=False,
         final_snapshot_identifier=f"{prefix}global-db-final-snapshot",
         publicly_accessible=False,
+        storage_encrypted=True,
         tags=tags,
     )
 
@@ -59,8 +61,8 @@ def provision_global_db(
                     "username": DatabaseConstants.MASTER_USERNAME,
                     "password": args[2],
                     "dbname": DatabaseConstants.GLOBAL_DB_NAME,
-                    "url": f"postgresql://{DatabaseConstants.MASTER_USERNAME}:{args[2]}@{args[0]}:{args[1]}/{DatabaseConstants.GLOBAL_DB_NAME}",
-                    "async_url": f"postgresql+asyncpg://{DatabaseConstants.MASTER_USERNAME}:{args[2]}@{args[0]}:{args[1]}/{DatabaseConstants.GLOBAL_DB_NAME}",
+                    "url": f"postgresql://{DatabaseConstants.MASTER_USERNAME}:{urllib.parse.quote(args[2], safe='')}@{args[0]}:{args[1]}/{DatabaseConstants.GLOBAL_DB_NAME}",
+                    "async_url": f"postgresql+asyncpg://{DatabaseConstants.MASTER_USERNAME}:{urllib.parse.quote(args[2], safe='')}@{args[0]}:{args[1]}/{DatabaseConstants.GLOBAL_DB_NAME}",
                 }
             )
         ),

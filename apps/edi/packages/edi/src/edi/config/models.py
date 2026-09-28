@@ -139,12 +139,13 @@ class CommonSettings(BaseSettings):
 
             try:
                 ip = ipaddress.ip_address(host)
-                if ip.is_loopback or ip.is_unspecified:
-                    raise ValueError(
-                        "base_url must not be a loopback address in non-development environments"
-                    )
             except ValueError:
-                pass
+                ip = None
+
+            if ip and (ip.is_loopback or ip.is_unspecified):
+                raise ValueError(
+                    "base_url must not be a loopback address in non-development environments"
+                )
 
         return self
 

@@ -96,7 +96,6 @@ aws.iam.RolePolicy(
                         "Resource": [args[0]],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
-                    {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": [args[1]]},
                 ],
             }
         )
@@ -113,6 +112,9 @@ debezium_server = provision_fargate_service(
     subnets=private_subnets,
     security_group_id=app_sg_id,
     tags=_TAGS,
+    extra_task_policy_statements=[
+        {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": data_plane_topic_arn}
+    ],
     firelens_endpoint=firelens_endpoint,
     environment_vars=[
         {"name": "AWS_REGION", "value": _region.name},

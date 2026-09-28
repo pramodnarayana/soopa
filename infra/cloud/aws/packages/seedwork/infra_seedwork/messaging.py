@@ -141,26 +141,6 @@ def subscribe_queue(
             f"got {type(filter_policy).__name__!r}. "
             "Do not pre-serialize with json.dumps() — this function handles serialization internally."
         )
-    aws.sqs.QueuePolicy(
-        f"{subscription_name}-policy",
-        queue_url=queue.url,
-        policy=pulumi.Output.all(topic_arn, queue.arn).apply(
-            lambda args: json.dumps(
-                {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Principal": {"Service": "sns.amazonaws.com"},
-                            "Action": "sqs:SendMessage",
-                            "Resource": args[1],
-                            "Condition": {"ArnEquals": {"aws:SourceArn": args[0]}},
-                        }
-                    ],
-                }
-            )
-        ),
-    )
 
     return aws.sns.TopicSubscription(
         subscription_name,
@@ -277,17 +257,47 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
         **external_topic_arns,
         **{k: v.arn for k, v in topics.items()},
     }
+    # Keep track of topic ARNs subscribed to each queue for policy generation
+    queue_subscriptions: dict[str, list[pulumi.Input[str]]] = {q_name: [] for q_name in queues}
+
     for sub in topology.get("subscriptions", []):
         topic_name = sub["topic"]
         queue_name = sub["queue"]
         topic_arn = available_topics.get(topic_name)
         if topic_arn and queue_name in queues:
             subscribe_queue(
-                f"{prefix}{queue_name}-sub",
+                f"{prefix}{queue_name}-{topic_name}-sub",
                 topic_arn,
                 queues[queue_name],
                 sub.get("filterPolicy"),
             )
+            queue_subscriptions[queue_name].append(topic_arn)
+
+    # ── Create aggregated Queue Policies ──────────────────────────────────────
+    for queue_name, topic_arns in queue_subscriptions.items():
+        if not topic_arns:
+            continue
+
+        aws.sqs.QueuePolicy(
+            f"{prefix}{queue_name}-policy",
+            queue_url=queues[queue_name].url,
+            policy=pulumi.Output.all(queues[queue_name].arn, *topic_arns).apply(
+                lambda args: json.dumps(
+                    {
+                        "Version": "2012-10-17",
+                        "Statement": [
+                            {
+                                "Effect": "Allow",
+                                "Principal": {"Service": "sns.amazonaws.com"},
+                                "Action": "sqs:SendMessage",
+                                "Resource": args[0],
+                                "Condition": {"ArnEquals": {"aws:SourceArn": list(args[1:])}},
+                            }
+                        ],
+                    }
+                )
+            ),
+        )
 
     # ── Build the env-var output map ─────────────────────────────────────────
     # Collect every (env_var, Pulumi.Output[url/arn]) pair declared in topology.

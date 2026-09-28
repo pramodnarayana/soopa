@@ -196,11 +196,16 @@ as2_server = provision_fargate_service(
             "Resource": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:edi/*",
         },
         {"Effect": "Allow", "Action": ["secretsmanager:ListSecrets"], "Resource": "*"},
-        {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": "*"},
+        {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": sns_platform_events_topic_arn},
         {
             "Effect": "Allow",
-            "Action": ["s3:PutObject", "s3:GetObject", "s3:ListBucket", "s3:DeleteObject"],
-            "Resource": "*",
+            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+            "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:ListBucket"],
+            "Resource": as2_payloads_bucket_arn,
         },
     ],
 )

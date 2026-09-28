@@ -10,10 +10,15 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
 # Parse the golden source of truth (versions.env)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 set -a
-source ../../../../versions.env
+source "$SCRIPT_DIR/../../../../versions.env"
 set +a
 
+if [ -z "$IDENTITY_VERSION" ] || [ -z "$DEBEZIUM_VERSION" ]; then
+    echo "ERROR: IDENTITY_VERSION or DEBEZIUM_VERSION is unset in versions.env"
+    exit 1
+fi
 # Define images to sync. Format: "source_image|target_ecr_repo"
 IMAGES=(
   "ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}|staging-zitadel-image"

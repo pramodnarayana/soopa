@@ -20,11 +20,9 @@ def test_api_starts_and_serves_health_without_sqs_vars():
     We use `subprocess` to guarantee a clean environment unpolluted by Pytest's
     own imports or the developer's monolithic `.env`.
     """
-    # 1. Clean the environment of all "superset" variables
-    env = os.environ.copy()
-    keys_to_delete = [k for k in env if k.startswith("SQS_")]
-    for k in keys_to_delete:
-        del env[k]
+    # 1. Start with an explicit allowlist of safe system variables, ignoring inherited .env
+    allowed_keys = {"PATH", "PYTHONPATH", "LANG", "LC_ALL", "PYTEST_CURRENT_TEST"}
+    env = {k: v for k, v in os.environ.items() if k in allowed_keys}
 
     # 2. Inject ONLY the strict subset required by the unified-api process
     env["DATABASE_URL"] = "postgresql+asyncpg://postgres:password@localhost/test"
@@ -49,6 +47,8 @@ def test_api_starts_and_serves_health_without_sqs_vars():
         max_retries = 20
         for _ in range(max_retries):
             try:
+                if process.poll() is not None:
+                    break
                 resp = requests.get("http://localhost:8085/health", timeout=1)
                 # Catch the exact Starlette route ordering bug we fixed
                 if resp.status_code == 200:

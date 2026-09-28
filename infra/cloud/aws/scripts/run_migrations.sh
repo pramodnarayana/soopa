@@ -16,13 +16,20 @@ CLUSTER="${ENV}-cluster"
 
 # 2. Trigger the migration ECS Task
 echo "Triggering ECS Task: $TASK_DEF on cluster $CLUSTER..."
-TASK_ARN=$(aws ecs run-task \
+RUN_TASK_OUTPUT=$(aws ecs run-task \
   --cluster "$CLUSTER" \
   --task-definition "$TASK_DEF" \
   --launch-type FARGATE \
   --network-configuration "$NETWORK_CONFIG" \
-  --query "tasks[0].taskArn" \
-  --output text)
+  --query '{taskArn: tasks[0].taskArn, failures: failures}')
+
+TASK_ARN=$(echo "$RUN_TASK_OUTPUT" | grep -Eo '"taskArn":\s*"[^"]+"' | cut -d'"' -f4 || echo "")
+
+if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "null" ] || [ "$TASK_ARN" = "None" ]; then
+    echo "❌ Failed to start migration task. AWS failures:" >&2
+    echo "$RUN_TASK_OUTPUT" >&2
+    exit 1
+fi
 
 echo "Started Migration Task: $TASK_ARN"
 
@@ -42,11 +49,11 @@ if [ "$EXIT_CODE" = "0" ]; then
 
     # Let's fetch the last few lines of the logs to show success
     echo "--- Migration Logs ---"
-    aws logs tail /ecs/${ENV}-migrator-migrator --format short | tail -n 15
+    aws logs tail /ecs/${ENV}-migrator --format short | tail -n 15
     exit 0
 else
     echo "❌ Migrations failed with exit code $EXIT_CODE."
     echo "--- Error Logs ---"
-    aws logs tail /ecs/${ENV}-migrator-migrator --format short | tail -n 30
+    aws logs tail /ecs/${ENV}-migrator --format short | tail -n 30
     exit 1
 fi

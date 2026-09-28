@@ -41,3 +41,5 @@ pulumi.export("queue_env_vars", result.queue_env_vars)
 # Granular exports for stacks still using individual require_output() calls.
 pulumi.export("ucp_events_topic_arn", platform_events_topic_arn)
 pulumi.export("ucp_jobs_queue_url", result.queues["ucp-jobs"].url)
+pulumi.export("ucp_jobs_queue_arn", result.queues["ucp-jobs"].arn)
+pulumi.export("ucp_events_queue_arn", result.queues["ucp-events"].arn)

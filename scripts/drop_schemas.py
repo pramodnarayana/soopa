@@ -41,7 +41,7 @@ async def main():
 
     # 2. Drop EDI Schema
     # Since this is purely for local dev test resets, we use the local docker exposed port (5433).
-    edi_dsn = "postgresql://edi:edi_password@localhost:5433/edi_shard_1"
+    edi_dsn = "postgresql://edi:edi_password@localhost:5433/edi_shard"
     await drop_public_schema(edi_dsn, "EDI Shard 1")
 
     logger.info("Local databases are perfectly clean. Ready for db:migrate!")

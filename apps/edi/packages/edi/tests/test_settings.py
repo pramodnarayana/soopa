@@ -1,5 +1,4 @@
 import typing
-from functools import lru_cache
 
 from pydantic import Field
 from seedwork.infra.config import load_settings_safely
@@ -13,7 +12,7 @@ from edi.config.models import (
 )
 
 
-class TestSettings(CommonSettings):
+class EdiTestSettings(CommonSettings):
     identity: PlatformIdentitySettings = Field(
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
@@ -22,9 +21,8 @@ class TestSettings(CommonSettings):
     secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
 
 
-@lru_cache
 def get_test_settings():
-    return load_settings_safely(TestSettings)
+    return load_settings_safely(EdiTestSettings)
 
 
 def test_settings_load_without_provisioning_password(monkeypatch):

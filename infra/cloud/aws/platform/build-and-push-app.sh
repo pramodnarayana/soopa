@@ -12,8 +12,11 @@ echo "----------------------------------------"
 echo "Building and Pushing: $TARGET_IMAGE"
 echo "----------------------------------------"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+
 echo "[1/3] Building image from root directory..."
-docker build --platform linux/amd64 -t staging-app-image:latest ../../../../
+docker build --platform linux/amd64 -t staging-app-image:latest "$REPO_ROOT"
 
 echo "[2/3] Tagging for ECR..."
 docker tag staging-app-image:latest "${TARGET_IMAGE}"

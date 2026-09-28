@@ -1,3 +1,0 @@
-"""
-Seedwork (IaC Core Primitives)
-"""

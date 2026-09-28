@@ -21,6 +21,7 @@ members = [
     "identity-jobs-worker",
     "identity-worker",
     "infra-aws",
+    "infra-seedwork",
     "modular-monolith",
     "notification",
     "notification-channel-worker",
@@ -1766,9 +1767,11 @@ name = "infra-aws"
 version = "0.1.0"
 source = { virtual = "infra/cloud/aws" }
 dependencies = [
+    { name = "infra-seedwork" },
     { name = "pulumi" },
     { name = "pulumi-aws" },
     { name = "pulumi-policy" },
+    { name = "pulumi-random" },
 ]
 
 [package.dev-dependencies]
@@ -1779,15 +1782,32 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "infra-seedwork", editable = "infra/cloud/aws/packages/seedwork" },
     { name = "pulumi", specifier = ">=3.258.0,<4.0.0" },
     { name = "pulumi-aws", specifier = ">=6.83.4,<7.0.0" },
     { name = "pulumi-policy", specifier = ">=1.15.0" },
+    { name = "pulumi-random", specifier = ">=4.21.2" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.5" },
+]
+
+[[package]]
+name = "infra-seedwork"
+version = "0.1.0"
+source = { editable = "infra/cloud/aws/packages/seedwork" }
+dependencies = [
+    { name = "pulumi" },
+    { name = "pulumi-aws" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "pulumi" },
+    { name = "pulumi-aws" },
 ]
 
 [[package]]
@@ -2106,6 +2126,7 @@ dependencies = [
     { name = "cryptography" },
     { name = "endesive" },
     { name = "jsonpath-ng" },
+    { name = "pulumiverse-zitadel" },
 ]
 
 [package.dev-dependencies]
@@ -2115,6 +2136,8 @@ dev = [
     { name = "mypy" },
     { name = "pip-audit" },
     { name = "pre-commit" },
+    { name = "pulumi" },
+    { name = "pulumiverse-zitadel" },
     { name = "pytest" },
     { name = "pytest-archon" },
     { name = "pytest-asyncio" },
@@ -2122,6 +2145,7 @@ dev = [
     { name = "python-dotenv" },
     { name = "ruff" },
     { name = "semgrep" },
+    { name = "setuptools" },
     { name = "tach" },
     { name = "types-paramiko" },
     { name = "vulture" },
@@ -2132,6 +2156,7 @@ requires-dist = [
     { name = "cryptography", specifier = ">=49.0.0" },
     { name = "endesive", specifier = ">=2.19.3" },
     { name = "jsonpath-ng", specifier = ">=1.8.0" },
+    { name = "pulumiverse-zitadel", specifier = ">=0.2.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -2141,6 +2166,8 @@ dev = [
     { name = "mypy", specifier = ">=1.9.0" },
     { name = "pip-audit", specifier = ">=2.10.1" },
     { name = "pre-commit", specifier = ">=3.7.0" },
+    { name = "pulumi", specifier = ">=3.0.0" },
+    { name = "pulumiverse-zitadel", specifier = ">=0.1.0" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-archon", specifier = ">=0.0.6" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
@@ -2148,6 +2175,7 @@ dev = [
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "ruff", specifier = ">=0.4.0" },
     { name = "semgrep", specifier = ">=1.0.0" },
+    { name = "setuptools", specifier = ">=84.0.0" },
     { name = "tach", specifier = ">=0.14.0" },
     { name = "types-paramiko", specifier = ">=3.3.0" },
     { name = "vulture", specifier = ">=2.16" },
@@ -3216,6 +3244,34 @@ dependencies = [
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/43/e6/afc262c4cb76262c188ab8c0f017925593c681b8af09baee784f5c7f61fa/pulumi_policy-1.21.0-py2.py3-none-any.whl", hash = "sha256:4bdebe88c747a23c1894d696e7e46e8a371920d7d17c333a33a316974dab0d35", size = 20698, upload-time = "2026-05-20T11:13:29.179Z" },
+]
+
+[[package]]
+name = "pulumi-random"
+version = "4.21.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "parver" },
+    { name = "pulumi" },
+    { name = "semver" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/80/69/8788f884a4fcffa72ee29376db688890c6a5040f8d04d57109d4b5d32c60/pulumi_random-4.21.2.tar.gz", hash = "sha256:90ebcab17de5401b8c5dabfef6349d0d9ed0e32be4598dd147b627fe4722f01d", size = 22763, upload-time = "2026-09-17T11:21:56.149Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/89/71b35c6fecb31e5ec4bb71bfe40df0525dd8e7ae5ca43289bb15517fa7ee/pulumi_random-4.21.2-py3-none-any.whl", hash = "sha256:d070453fc962217866a6bbfc8f19d59ec127b24dede3376beaab6eae5cbc1294", size = 36074, upload-time = "2026-09-17T11:21:54.808Z" },
+]
+
+[[package]]
+name = "pulumiverse-zitadel"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "parver" },
+    { name = "pulumi" },
+    { name = "semver" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/ab/8584cbe3540c7ba92bab64e6bdf84b86f8c23930391948b84514436e3f71/pulumiverse_zitadel-0.2.0.tar.gz", hash = "sha256:33549b5030358bad436065883531d93fa8d5657f2b87b9c5d962914a8ff14f30", size = 137082, upload-time = "2025-03-25T20:22:25.466Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/ce/3f820c832e2f5a84ef8e0cedf64465bd296d4a20a3e7f85f2be061b273bd/pulumiverse_zitadel-0.2.0-py3-none-any.whl", hash = "sha256:5cc491c82628d18f8a988a7cf73354ea4c10c6ec0c0615b5c2cb0c51967f1822", size = 273128, upload-time = "2025-03-25T20:22:24.154Z" },
 ]
 
 [[package]]

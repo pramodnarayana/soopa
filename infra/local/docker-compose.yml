@@ -4,14 +4,14 @@ services:
     environment:
       POSTGRES_USER: ucp_admin
       POSTGRES_PASSWORD: ucp_password
-      POSTGRES_DB: ucp_global
+      POSTGRES_DB: global_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_global_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ucp_admin -d ucp_global"]
+      test: ["CMD-SHELL", "pg_isready -U ucp_admin -d global_db"]
       interval: 5s
       timeout: 5s
       retries: 5

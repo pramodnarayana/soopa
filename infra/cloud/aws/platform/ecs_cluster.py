@@ -9,7 +9,7 @@ def provision_cluster(prefix: str, tags: dict):
         tags=tags,
     )
 
-    # Enable Container Insights
+    # Configure Fargate Capacity Providers
     aws.ecs.ClusterCapacityProviders(
         f"{prefix}cluster-cp",
         cluster_name=ecs_cluster.name,

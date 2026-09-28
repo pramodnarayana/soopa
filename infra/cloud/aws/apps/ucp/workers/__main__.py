@@ -59,6 +59,10 @@ edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
+ucp_jobs_queue_arn = ucp.require_output("ucp_jobs_queue_arn")
+ucp_events_queue_arn = ucp.require_output("ucp_events_queue_arn")
+sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
+
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
 firelens_endpoint = (
@@ -166,13 +170,13 @@ extra_task_policy_statements = [
             "sqs:ChangeMessageVisibility",
             "sqs:SendMessage",
         ],
-        "Resource": f"arn:aws:sqs:{_region.name}:{_identity.account_id}:*",
+        "Resource": [ucp_jobs_queue_arn, ucp_events_queue_arn],
     },
     {
         "Sid": "SnsPermissions",
         "Effect": "Allow",
         "Action": ["sns:Publish"],
-        "Resource": "*",
+        "Resource": sns_platform_events_topic_arn,
     },
 ]
 
