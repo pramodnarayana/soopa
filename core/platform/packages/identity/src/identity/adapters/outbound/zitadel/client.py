@@ -38,9 +38,9 @@ class ZitadelClient:
 
     def _assert_config(self) -> None:
         if not self.machine_key:
-            raise ValueError("ZITADEL_MACHINE_KEY is not configured")
+            raise ValueError("IDENTITY_MACHINE_KEY is not configured")
         if not self.api_url.startswith("https://") and not self.api_url.startswith("http://"):
-            raise ValueError("ZITADEL_API_URL must use HTTP or HTTPS scheme")
+            raise ValueError("IDENTITY_API_URL must use HTTP or HTTPS scheme")
 
     def _get_client(self) -> httpx.AsyncClient:
         """Get or create a persistent AsyncClient with timeout configuration."""

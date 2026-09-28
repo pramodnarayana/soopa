@@ -5,13 +5,13 @@ import { AuthProvider } from 'react-oidc-context';
 
 const queryClient = new QueryClient();
 
-const authority = (import.meta.env as unknown as Record<string, string>).ZITADEL_API_URL;
-const clientId = (import.meta.env as unknown as Record<string, string>).ZITADEL_UCP_WEB_CLIENT_ID;
-const projectId = (import.meta.env as unknown as Record<string, string>).ZITADEL_UCP_PROJECT_ID;
+const authority = (import.meta.env as unknown as Record<string, string>).IDENTITY_API_URL;
+const clientId = (import.meta.env as unknown as Record<string, string>).IDENTITY_UCP_WEB_CLIENT_ID;
+const projectId = (import.meta.env as unknown as Record<string, string>).IDENTITY_UCP_PROJECT_ID;
 
 if (!authority || !clientId || !projectId) {
   throw new Error(
-    'FATAL: Missing required Zitadel environment variables (ZITADEL_API_URL, ZITADEL_UCP_WEB_CLIENT_ID, ZITADEL_UCP_PROJECT_ID). Check the root .env file.',
+    'FATAL: Missing required Identity environment variables (IDENTITY_API_URL, IDENTITY_UCP_WEB_CLIENT_ID, IDENTITY_UCP_PROJECT_ID). Check the root .env file.',
   );
 }
 

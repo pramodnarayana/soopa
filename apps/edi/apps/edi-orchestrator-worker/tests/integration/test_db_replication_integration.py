@@ -1,4 +1,6 @@
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalAS2Partner
 from edi.adapters.outbound.database.models.control_plane import InboundRoute as GlobalInboundRoute
@@ -27,8 +29,6 @@ def fake_tenant_port() -> FakeTenantPort:
     return FakeTenantPort()
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_replicate_as2_partner(
     db_router: TransactionalTestRouter, fake_tenant_port: FakeTenantPort
 ) -> None:
@@ -78,8 +78,6 @@ async def test_replicate_as2_partner(
         assert tenant_partner.url == "http://test.com/as2"
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_replicate_inbound_route_with_dependency(
     db_router: TransactionalTestRouter, fake_tenant_port: FakeTenantPort
 ) -> None:
@@ -146,8 +144,6 @@ async def test_replicate_inbound_route_with_dependency(
         assert tenant_partner.name == "Dep Partner"
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_replicate_tenant_configuration_full_sync(
     db_router: TransactionalTestRouter, fake_tenant_port: FakeTenantPort
 ) -> None:
@@ -209,8 +205,6 @@ async def test_replicate_tenant_configuration_full_sync(
         assert stale_res.scalars().first() is None
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_delete_granular(
     db_router: TransactionalTestRouter, fake_tenant_port: FakeTenantPort
 ) -> None:

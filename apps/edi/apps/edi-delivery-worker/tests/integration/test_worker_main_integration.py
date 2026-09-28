@@ -3,11 +3,11 @@ import contextlib
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+
 from edi_delivery_worker.main import main
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_worker_main_boot_and_shutdown() -> None:
     """
     Test that the root worker boot script initializes observability

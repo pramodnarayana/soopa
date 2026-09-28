@@ -4,6 +4,8 @@ import uuid
 import aioboto3
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+
 from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
 
 
@@ -34,8 +36,6 @@ async def storage() -> "aioboto3.Session":
         await s3.delete_bucket(Bucket=bucket_name)
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_aioboto3_payload_storage_upload(storage: Aioboto3PayloadStorage) -> None:
     result = await storage.upload(tenant_id=1, message_id="msg-123", payload=b"payload_data")
     assert result == f"s3://{storage.bucket}/tenants/1/inbound/msg-123.bin"
@@ -45,16 +45,12 @@ async def test_aioboto3_payload_storage_upload(storage: Aioboto3PayloadStorage) 
     assert data == b"payload_data"
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_aioboto3_payload_storage_download_valid(storage: Aioboto3PayloadStorage) -> None:
     uri = await storage.upload(tenant_id=1, message_id="msg-123", payload=b"downloaded_data")
     result = await storage.download(uri)
     assert result == b"downloaded_data"
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_aioboto3_payload_storage_download_invalid_uri(
     storage: Aioboto3PayloadStorage,
 ) -> None:
@@ -62,8 +58,6 @@ async def test_aioboto3_payload_storage_download_invalid_uri(
     assert result is None
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_aioboto3_payload_storage_generate_presigned_url(
     storage: Aioboto3PayloadStorage,
 ) -> None:
@@ -79,8 +73,6 @@ async def test_aioboto3_payload_storage_generate_presigned_url(
     assert "response-content-disposition=attachment" in result
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_aioboto3_payload_storage_generate_presigned_url_invalid_uri(
     storage: Aioboto3PayloadStorage,
 ) -> None:

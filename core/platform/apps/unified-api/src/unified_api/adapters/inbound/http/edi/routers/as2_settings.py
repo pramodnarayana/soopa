@@ -1,8 +1,9 @@
 from typing import Any
 
-from edi.config.settings import get_settings
 from fastapi import APIRouter
 from pydantic import BaseModel
+
+from unified_api.settings import get_settings
 
 router = APIRouter(tags=["Platform Settings"])
 

@@ -4,7 +4,7 @@ import hashlib
 Seed Script — Bootstraps the platform Sentinel Tenant into the database.
 
 This runs as part of infra-reset (pnpm infra:phase3-bootstrap) after migrations.
-It reads ZITADEL_PLATFORM_ORG_ID from the environment and inserts/upserts
+It reads IDENTITY_PLATFORM_ORG_ID from the environment and inserts/upserts
 the canonical platform tenant record so the platform admin can log in.
 """
 
@@ -41,10 +41,10 @@ async def main() -> None:
     if database_url:
         database_url = normalize_to_asyncpg(database_url)
 
-    platform_org_id = os.environ.get("ZITADEL_PLATFORM_ORG_ID", "")
-    platform_admin_id = os.environ.get("ZITADEL_PLATFORM_ADMIN_ID", "")
+    platform_org_id = os.environ.get("IDENTITY_PLATFORM_ORG_ID", "")
+    platform_admin_id = os.environ.get("IDENTITY_PLATFORM_ADMIN_ID", "")
     if not platform_admin_id:
-        logger.error("ZITADEL_PLATFORM_ADMIN_ID environment variable is not set.")
+        logger.error("IDENTITY_PLATFORM_ADMIN_ID environment variable is not set.")
         sys.exit(1)
 
     shard_db_url = os.environ.get("SHARD_OVERRIDES__EDI_SHARD_1", "")
@@ -52,9 +52,9 @@ async def main() -> None:
         logger.error("SHARD_OVERRIDES__EDI_SHARD_1 environment variable is not set.")
         sys.exit(1)
 
-    edi_project_id = os.environ.get("ZITADEL_EDI_PROJECT_ID", "")
+    edi_project_id = os.environ.get("IDENTITY_EDI_PROJECT_ID", "")
     if not edi_project_id:
-        logger.error("ZITADEL_EDI_PROJECT_ID environment variable is not set.")
+        logger.error("IDENTITY_EDI_PROJECT_ID environment variable is not set.")
         sys.exit(1)
 
     engine = create_async_engine(database_url)

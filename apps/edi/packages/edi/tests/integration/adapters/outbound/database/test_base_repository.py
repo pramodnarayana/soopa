@@ -1,4 +1,6 @@
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
@@ -17,8 +19,6 @@ class EventAggregate:
         self.domain_events.clear()
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_drain_events_prefers_explicit_event_idempotency_key(
     db_session: AsyncSession,
 ) -> None:

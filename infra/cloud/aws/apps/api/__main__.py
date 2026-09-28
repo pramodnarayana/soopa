@@ -2,28 +2,25 @@
 Application Layer (Layer 3) - Unified API
 """
 
-import ipaddress
 import json
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath("../../packages"))
 
 import pulumi
 import pulumi_aws as aws
-from seedwork.ecs import provision_fargate_service
-from seedwork.network import provision_target_group_and_rule
+from infra_seedwork.ecs import provision_fargate_service
+from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-api-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "api", "Environment": _env}
 
 config = pulumi.Config()
-foundation_stack_ref = config.get("foundation_stack") or f"foundation/{_env}"
-platform_stack_ref = config.get("platform_stack") or f"platform/{_env}"
+foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
+platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
+data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
+data = pulumi.StackReference(data_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -35,6 +32,12 @@ app_sg_id = foundation.require_output("app_sg_id")
 ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 ecr_repository_url = platform.require_output("ecr_repository_url")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
+staging_domain = platform.require_output("staging_domain")
+
+edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
+edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
+global_db_endpoint = data.require_output("global_db_endpoint")
+global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
@@ -59,6 +62,30 @@ execution_role = aws.iam.Role(
     ),
     tags=_TAGS,
 )
+
+aws.iam.RolePolicy(
+    f"{_prefix}ecs-exec-role-secrets-policy",
+    role=execution_role.id,
+    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
+        lambda args: json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": ["secretsmanager:GetSecretValue"],
+                        "Resource": [args[0], args[1]],
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": ["logs:CreateLogGroup"],
+                        "Resource": "*",
+                    },
+                ],
+            }
+        )
+    ),
+)
 aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",
     role=execution_role.name,
@@ -77,14 +104,7 @@ api_tg = provision_target_group_and_rule(
 
 api_service = provision_fargate_service(
     name=f"{_prefix}server",
-    command=[
-        "uvicorn",
-        "unified_api.main:app",
-        "--host",
-        str(ipaddress.IPv4Address(0)),
-        "--port",
-        "8000",
-    ],
+    command=["uvicorn", "unified_api.main:app", "--host", "0.0.0.0", "--port", "8000"],  # noqa: S104 - Fargate container must bind to all interfaces to receive ALB traffic
     cluster_arn=ecs_cluster_arn,
     execution_role_arn=execution_role.arn,
     ecr_image_uri=placeholder_image,
@@ -94,4 +114,35 @@ api_service = provision_fargate_service(
     firelens_endpoint=firelens_endpoint,
     port=8000,
     target_group_arn=api_tg.arn,
+    environment_vars=[
+        {"name": "ENVIRONMENT", "value": "staging"},
+        {
+            "name": "GLOBAL_DB_HOST",
+            "value": pulumi.Output.all(global_db_endpoint).apply(lambda args: args[0]),
+        },
+        {
+            "name": "EDI_DB_HOST",
+            "value": pulumi.Output.all(edi_shard_db_endpoint).apply(lambda args: args[0]),
+        },
+        {"name": "PUBLIC_BASE_URL", "value": pulumi.Output.concat("https://api.", staging_domain)},
+        {
+            "name": "IDENTITY_ISSUER",
+            "value": pulumi.Output.concat("https://identity.", staging_domain),
+        },
+    ],
+    secrets=[
+        {
+            "name": "GLOBAL_DATABASE_URL",
+            "valueFrom": pulumi.Output.concat(global_db_secret_arn, ":url::"),
+        },
+        {"name": "DATABASE_URL", "valueFrom": pulumi.Output.concat(global_db_secret_arn, ":url::")},
+        {
+            "name": "EDI_DATABASE_URL",
+            "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
+        },
+        {
+            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
+        },
+    ],
 )

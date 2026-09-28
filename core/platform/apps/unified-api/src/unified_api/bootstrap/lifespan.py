@@ -30,6 +30,8 @@ from fastapi import FastAPI
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
+from unified_api.settings import get_settings
+
 logger = structlog.get_logger(__name__)
 
 
@@ -83,7 +85,14 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await notification_startup()
         try:
             logger.info("Shell startup: initializing EDI domain infrastructure.")
-            await edi_startup(edi_app)
+            edi_settings = get_settings()
+            await edi_startup(
+                edi_app,
+                global_db_url=str(edi_settings.database.global_url),
+                pool_size=edi_settings.database.pool_size,
+                max_overflow=edi_settings.database.max_overflow,
+                shard_overrides=edi_settings.database.shard_overrides,
+            )
             try:
                 # Normal operation
                 yield

@@ -15,7 +15,7 @@ from edi.ports.outbound.transaction_repository import (
 )
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 async def test_edi_json_submission_and_thread(client: AsyncClient):

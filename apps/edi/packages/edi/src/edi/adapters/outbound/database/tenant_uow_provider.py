@@ -1,4 +1,5 @@
 import contextlib
+import typing
 from collections.abc import AsyncGenerator, Callable
 from typing import cast
 
@@ -6,7 +7,6 @@ from database.router import DatabaseRouter
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
-from edi.config.settings import AppSettings
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 
@@ -21,7 +21,7 @@ class TenantUowProvider:
         self,
         resolver: TenantResolver,
         db_router: DatabaseRouter,
-        settings: AppSettings,
+        settings: typing.Any,
         s3_bucket: str,
         aws_endpoint: str | None,
     ) -> None:

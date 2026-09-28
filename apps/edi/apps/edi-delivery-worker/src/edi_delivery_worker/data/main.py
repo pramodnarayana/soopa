@@ -23,7 +23,6 @@ from edi.application.use_cases.pipeline.execute_delivery_use_case import (
     ExecuteDeliveryCommand,
     ExecuteDeliveryUseCase,
 )
-from edi.config.settings import AppSettings, get_settings
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
@@ -43,6 +42,7 @@ from edi_delivery_worker.adapters.inbound.workers.edi_data_plane_event_dispatche
     EdiDataPlaneEventMessage,
 )
 from edi_delivery_worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
+from edi_delivery_worker.settings import WorkerSettings, get_settings
 
 UowFactory = Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]
 
@@ -51,7 +51,7 @@ logger = structlog.get_logger(__name__)
 
 
 def _setup_registry(
-    settings: AppSettings,
+    settings: WorkerSettings,
     uow_provider: TenantUowProvider,
     http_delivery: HttpDeliveryPort,
     sftp_delivery: SftpDeliveryPort,

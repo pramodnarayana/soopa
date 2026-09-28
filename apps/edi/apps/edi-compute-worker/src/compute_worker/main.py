@@ -18,13 +18,13 @@ from edi.application.use_cases.pipeline.compute_outbound_transform_use_case impo
     ComputeOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
-from edi.config.settings import get_settings
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
+from compute_worker.settings import get_settings
 
 # Configure logging so it prints beautifully to the terminal
 logger = structlog.get_logger("worker_runner")

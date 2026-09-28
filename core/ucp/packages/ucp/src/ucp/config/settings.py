@@ -45,6 +45,12 @@ class AppSettings(BaseSettings):
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
 
+    zitadel_api_url_value: str = Field(validation_alias="IDENTITY_API_URL", default="")
+    zitadel_machine_key_value: str = Field(validation_alias="IDENTITY_MACHINE_KEY", default="")
+    zitadel_default_user_password_value: str = Field(
+        validation_alias="IDENTITY_DEFAULT_USER_PASSWORD", default=""
+    )
+
     @property
     def database_url(self) -> str:
         return self.database.global_url
@@ -79,11 +85,11 @@ class AppSettings(BaseSettings):
 
     @property
     def zitadel_api_url(self) -> str:
-        return self.identity.api_url
+        return self.zitadel_api_url_value
 
     @property
     def zitadel_machine_key(self) -> str:
-        return self.identity.machine_key
+        return self.zitadel_machine_key_value
 
     @property
     def zitadel_ucp_project_id(self) -> str:
@@ -103,7 +109,7 @@ class AppSettings(BaseSettings):
 
     @property
     def zitadel_default_user_password(self) -> str:
-        return self.identity.default_user_password
+        return self.zitadel_default_user_password_value
 
 
 @lru_cache

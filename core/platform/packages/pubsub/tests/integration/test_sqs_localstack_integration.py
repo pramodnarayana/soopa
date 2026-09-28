@@ -4,6 +4,8 @@ from collections.abc import AsyncGenerator
 
 import boto3
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 from pubsub.message import AckableMessage
@@ -48,8 +50,6 @@ def localstack_sqs() -> dict[str, str]:
     sqs_client.delete_queue(QueueUrl=queue_url)
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_sqs_pubsub_integration_via_localstack(
     localstack_sqs: dict[str, str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

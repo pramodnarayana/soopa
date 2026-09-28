@@ -1,13 +1,13 @@
 import asyncio
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.router import DatabaseRouterPort
 
 from edi_cp_jobs_worker.bootstrap.container import WorkerContainer
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_edi_cp_worker_boots_and_shuts_down_gracefully(
     db_router: DatabaseRouterPort,
 ) -> None:

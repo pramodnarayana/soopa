@@ -1,13 +1,16 @@
 import asyncio
+import os
 from pathlib import Path
 
 import structlog
 from alembic import command
 from alembic.config import Config
+from dotenv import load_dotenv
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 
 from database.provider import get_async_engine
-from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
@@ -42,7 +45,15 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
         await engine.dispose()
 
     if not urls:
-        logger.info("No shards found in Global DB. Skipping tenant migrations.")
+        if overrides:
+            logger.info(
+                "ucp.database_shards is empty, but shard_overrides are provided. Falling back to overrides."
+            )
+            urls = list(overrides.values())
+        else:
+            logger.info(
+                "No shards found in Global DB and no overrides provided. Skipping tenant migrations."
+            )
     return urls
 
 
@@ -51,14 +62,21 @@ def run_migrations():
     Runs the Global Control Plane migration, then iterates dynamically
     to apply Tenant schema migrations across all database shards.
     """
-    settings = get_settings()
+    # Dynamically resolve paths relative to this script's location
+    base_dir = Path(__file__).resolve().parent
+    package_root = base_dir.parents[4]  # apps/edi/packages/edi/
+    monorepo_root = package_root.parents[3]  # /
+    load_dotenv(monorepo_root / ".env")
+
+    settings = load_settings_safely(PlatformDatabaseSettings)
+
+    # In hybrid multi-tenancy, the migrator container receives EDI_DATABASE_URL directly
+
+    edi_db_url = os.environ.get("EDI_DATABASE_URL")
+    if edi_db_url:
+        settings.shard_overrides["edi_shard_1"] = edi_db_url
 
     # We assume the runner is executed from the repo root
-
-    # Dynamically resolve paths relative to this script's location
-    # __file__ is apps/edi/packages/edi/src/edi/adapters/outbound/database/run_migrations.py
-    base_dir = Path(__file__).resolve().parent
-    package_root = base_dir.parents[4]  # Go up 5 levels to apps/edi/packages/edi/
 
     # 1. Run Global Migrations
     logger.info("--- Applying GLOBAL DB Migrations ---")
@@ -69,9 +87,7 @@ def run_migrations():
 
     # 2. Fetch Shards dynamically
     logger.info("--- Fetching Tenant Shards ---")
-    shard_urls = asyncio.run(
-        fetch_tenant_shard_urls(settings.database.global_url, settings.database.shard_overrides)
-    )
+    shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.global_url, settings.shard_overrides))
     logger.info("Found {len(shard_urls)} shard(s) to migrate", val_0=len(shard_urls))
 
     # 3. Run Tenant Migrations per shard
@@ -92,7 +108,7 @@ def run_migrations():
         )
         tenant_cfg = Config(str(package_root / "alembic.tenant.ini"))
         tenant_cfg.set_main_option("script_location", str(base_dir / "migrations" / "tenant"))
-        tenant_cfg.set_main_option("sqlalchemy.url", url)
+        tenant_cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
         # We no longer create 'edi' schema here because tenant databases should use the 'public' schema
         # asyncio.run(ensure_schema_exists(url, "edi"))

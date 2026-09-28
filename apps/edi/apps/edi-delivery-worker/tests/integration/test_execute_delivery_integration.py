@@ -1,15 +1,17 @@
 import contextlib
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
-from edi.config.settings import get_settings
 from pytest_httpserver import HTTPServer
 from seedwork import generate_random_hex
 from sqlalchemy import text
 
 from edi_delivery_worker.data.main import _setup_registry
+from edi_delivery_worker.settings import get_settings
 
 
 class FakeSftpDeliveryClient:
@@ -44,8 +46,6 @@ class FakeTenantUowProvider:
         return factory
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_execute_delivery_integration(
     db_router: TransactionalTestRouter, httpserver: HTTPServer
 ) -> None:

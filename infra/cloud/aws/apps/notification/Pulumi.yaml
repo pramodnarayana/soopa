@@ -1,6 +1,0 @@
-name: notification
-runtime:
-  name: python
-  options:
-    virtualenv: ../../.venv
-description: Application Layer (Layer 3) - Notification Bounded Context infrastructure.

@@ -16,6 +16,27 @@ class IdentityAwsSettings(PlatformAwsSettings):
     )
 
 
+class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
+    """
+    Settings required for mutating Zitadel (used ONLY by Identity Worker).
+    """
+
+    api_url: str = Field(
+        validation_alias="IDENTITY_API_URL",
+        description="The base URL of the Zitadel API.",
+        default="",
+    )
+    machine_key: str = Field(
+        validation_alias="IDENTITY_MACHINE_KEY",
+        default="",
+        description="JSON Service Account Key for authenticating as a machine user.",
+    )
+    default_user_password: str = Field(
+        validation_alias="IDENTITY_DEFAULT_USER_PASSWORD",
+        description="Default password for seeded/synced users.",
+    )
+
+
 class SqsSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     identity_sync_queue_url: str = Field(validation_alias="SQS_IDENTITY_SYNC_QUEUE_URL", default="")
@@ -29,7 +50,9 @@ class AppSettings(BaseSettings):
     database: PlatformDatabaseSettings = Field(default_factory=lambda: PlatformDatabaseSettings())
     aws: IdentityAwsSettings = Field(default_factory=lambda: IdentityAwsSettings())
     sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
-    identity: PlatformIdentitySettings = Field(default_factory=lambda: PlatformIdentitySettings())
+    identity: PlatformIdentityProvisioningSettings = Field(
+        default_factory=lambda: PlatformIdentityProvisioningSettings()
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -13,8 +13,10 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from edi.adapters.outbound.database.models import edi_settings
 
 _ = edi_settings
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
+
 from edi.adapters.outbound.database.models.base import EdiGlobalBase
-from edi.config.settings import get_settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -37,7 +39,7 @@ target_metadata = EdiGlobalBase.registry.metadata
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode."""
-    url = get_settings().database.global_url
+    url = load_settings_safely(PlatformDatabaseSettings).global_url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -83,9 +85,9 @@ async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    settings = get_settings()
+    settings = load_settings_safely(PlatformDatabaseSettings)
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.database.global_url
+    configuration["sqlalchemy.url"] = settings.global_url
 
     connectable = async_engine_from_config(
         configuration,

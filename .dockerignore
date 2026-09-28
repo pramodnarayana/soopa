@@ -31,3 +31,5 @@ coverage.xml
 **/coverage.xml
 .pulumi
 **/.pulumi
+.file
+**/.file

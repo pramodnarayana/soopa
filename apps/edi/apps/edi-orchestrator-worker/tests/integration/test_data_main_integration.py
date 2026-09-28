@@ -1,13 +1,13 @@
 import asyncio
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from pydantic import ValidationError
 
 from worker.data.main import main
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_data_main_boot_and_shutdown() -> None:
     """
     Test that the data worker boots successfully, wires all dependencies,

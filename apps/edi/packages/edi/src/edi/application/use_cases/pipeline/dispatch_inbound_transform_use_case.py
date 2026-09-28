@@ -1,3 +1,4 @@
+import typing
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
@@ -5,7 +6,6 @@ import structlog
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
-from edi.config.settings import AppSettings
 from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -22,7 +22,7 @@ class DispatchInboundTransformUseCase:
         self,
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
-        settings: AppSettings,
+        settings: typing.Any,
     ) -> None:
         self.uow_factory = uow_factory
         self.transformer = transformer

@@ -4,11 +4,12 @@ from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
-from edi.config.settings import get_settings
 from seedwork import generate_id
 from sqlalchemy import select, text
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
+
+from config_sync_worker.provision.settings import get_settings
 
 
 @pytest.mark.integration

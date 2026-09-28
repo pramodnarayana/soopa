@@ -2,6 +2,8 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.models.identity import Tenant
 from database.models.notifications import NotificationOutbox
 from outbox.domain.constants import OutboxStatus
@@ -9,8 +11,6 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_outbox_sweeper_concurrency(db_session_factory):
     """
     Regression test: Ensure that if a sweeper reads a row in its inner CTE, but before

@@ -31,3 +31,4 @@ config:
   edi-platform:orchestrator_worker_memory: "512"
   edi-platform:config_sync_worker_cpu: "256"
   edi-platform:config_sync_worker_memory: "512"
+encryptionsalt: v1:Ogwj2y1RAAQ=:v1:PH7TlLpHVBMMeniq:Sf9mwmNq11Pq5ffP2dN8t9Z4PeM8Yw==

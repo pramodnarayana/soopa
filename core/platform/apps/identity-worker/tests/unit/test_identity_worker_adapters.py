@@ -15,9 +15,9 @@ async def test_user_role_payload_accepts_missing_idp_mapping():
 
 
 async def test_zitadel_default_password_is_required(monkeypatch):
-    monkeypatch.delenv("ZITADEL_DEFAULT_USER_PASSWORD", raising=False)
+    monkeypatch.delenv("IDENTITY_DEFAULT_USER_PASSWORD", raising=False)
 
-    with pytest.raises(ValidationError, match="ZITADEL_DEFAULT_USER_PASSWORD"):
+    with pytest.raises(ValidationError, match="IDENTITY_DEFAULT_USER_PASSWORD"):
         AppSettings(_env_file=None)
 
 

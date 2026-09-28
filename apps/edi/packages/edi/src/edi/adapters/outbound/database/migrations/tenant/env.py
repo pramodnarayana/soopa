@@ -8,12 +8,13 @@ from alembic import context
 from alembic.autogenerate.api import AutogenContext
 from database.testing import get_test_shard_url_sync
 from database.utils import normalize_to_asyncpg, shard_connect_args
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from edi.adapters.outbound.database.models.data_plane import SanitizedText, TenantBase
-from edi.config.settings import get_settings
 
 config = context.config
 
@@ -27,7 +28,7 @@ _ini_url = config.get_main_option("sqlalchemy.url")
 if _ini_url:
     TENANT_DB_URL = _ini_url
 else:
-    global_url = str(get_settings().database.global_url)
+    global_url = str(load_settings_safely(PlatformDatabaseSettings).global_url)
     TENANT_DB_URL = get_test_shard_url_sync(global_url)
 
 

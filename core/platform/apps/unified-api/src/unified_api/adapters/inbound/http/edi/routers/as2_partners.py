@@ -16,7 +16,6 @@ from edi.application.use_cases.as2_partners.update_as2_partner_use_case import (
     UpdateAS2TradingPartnerCmd,
 )
 from edi.config.constants import SecretCategory
-from edi.config.settings import get_settings
 from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.exceptions import (
     IdempotencyConflictError,
@@ -42,6 +41,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     RotateCertificateRequest,
     UpdateAS2TradingPartnerRequest,
 )
+from unified_api.settings import get_settings
 
 router = APIRouter(tags=["Partners - AS2"])
 

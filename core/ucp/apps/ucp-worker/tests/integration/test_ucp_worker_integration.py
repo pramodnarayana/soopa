@@ -5,6 +5,8 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.provider import get_async_engine
 from seedwork import generate_random_hex
 from sqlalchemy import text
@@ -50,8 +52,6 @@ async def db_session_factory(db_connection) -> AsyncGenerator[async_sessionmaker
     yield factory
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_ucp_worker_handles_tenant_deleted_event(
     db_connection: Any, db_session_factory: async_sessionmaker
 ) -> None:
