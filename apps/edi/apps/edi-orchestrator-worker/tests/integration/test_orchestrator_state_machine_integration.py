@@ -3,6 +3,8 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
@@ -10,7 +12,6 @@ from edi.application.use_cases.pipeline.delivery_router_use_case import Delivery
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
     DispatchInboundTransformUseCase,
 )
-from edi.config.settings import get_settings
 from edi.domain.enums import PipelineEventType
 from seedwork import generate_random_hex
 from sqlalchemy import text
@@ -20,10 +21,9 @@ from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventMessage,
 )
 from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
+from worker.settings import get_settings
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_inbound_routing_state_machine_transition(db_router: TransactionalTestRouter) -> None:
     # 1. Setup DB Data
     tenant_id = f"ten_orch_{generate_random_hex(6)}"
@@ -111,8 +111,6 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     assert payload["tenant_id"] == tenant_id
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestRouter) -> None:
     # 1. Setup DB Data
     tenant_id = f"ten_orch_web_{generate_random_hex(6)}"

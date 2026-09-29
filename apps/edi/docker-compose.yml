@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_USER: edi
       POSTGRES_PASSWORD: edi_password
-      POSTGRES_DB: edi_shard_1
+      POSTGRES_DB: edi_shard
     command:
     - postgres
     - -c
@@ -19,7 +19,7 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - pg_isready -U edi -d edi_shard_1
+      - pg_isready -U edi -d edi_shard
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,14 +27,14 @@ services:
 
 
   debezium_shard:
-    image: quay.io/debezium/server:3.6.0.Final
+    image: quay.io/debezium/server:${DEBEZIUM_VERSION:?DEBEZIUM_VERSION must be set in versions.env}
     entrypoint: /debezium/validate-sns-config.sh
     environment:
     - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard
     - DEBEZIUM_SOURCE_DATABASE_PORT=5432
     - DEBEZIUM_SOURCE_DATABASE_USER=edi
     - DEBEZIUM_SOURCE_DATABASE_PASSWORD=edi_password
-    - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard_1
+    - DEBEZIUM_SOURCE_DATABASE_DBNAME=edi_shard
     - AWS_REGION=${AWS_REGION:-us-east-1}
     - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-test}
     - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-test}

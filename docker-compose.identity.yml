@@ -17,10 +17,11 @@ services:
       - zitadel_data:/var/lib/postgresql/data:rw
 
   zitadel:
-    image: ghcr.io/zitadel/zitadel:v3.4.12
+    image: ghcr.io/zitadel/zitadel:${IDENTITY_VERSION:?IDENTITY_VERSION must be set in versions.env}
     restart: unless-stopped
-    command: start-from-init --steps /zitadel-first-instance.yaml --masterkey "${ZITADEL_MASTERKEY:?ZITADEL_MASTERKEY must be set (32 bytes)}" --tlsMode disabled
+    command: start-from-init --steps /zitadel-first-instance.yaml --masterkeyFromEnv --tlsMode disabled
     environment:
+      ZITADEL_MASTERKEY: ${IDENTITY_MASTERKEY:?IDENTITY_MASTERKEY must be set (32 bytes)}
       ZITADEL_PORT: 8080
       ZITADEL_EXTERNALDOMAIN: ucp.localhost
       ZITADEL_EXTERNALPORT: 8080

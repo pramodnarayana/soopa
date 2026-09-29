@@ -1,4 +1,5 @@
 import dataclasses
+import typing
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
@@ -7,7 +8,6 @@ from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 from seedwork.utils import generate_deterministic_id, generate_id
 
-from edi.config.settings import AppSettings
 from edi.core.pipeline.connection_type_resolver import ConnectionTypeResolver
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
 from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
@@ -41,7 +41,7 @@ class DispatchOutboundTransformUseCase:
         self,
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
-        settings: AppSettings,
+        settings: typing.Any,
     ) -> None:
         self.uow_factory = uow_factory
         self.transformer = transformer

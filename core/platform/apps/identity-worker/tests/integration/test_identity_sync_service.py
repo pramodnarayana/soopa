@@ -30,10 +30,10 @@ from seedwork import generate_id
 pytestmark = [
     pytest.mark.asyncio,
     pytest.mark.skipif(
-        not os.environ.get("ZITADEL_MACHINE_KEY")
-        or "test-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", "")
-        or "fake-private-key" in os.environ.get("ZITADEL_MACHINE_KEY", ""),
-        reason="ZITADEL_MACHINE_KEY is not set or is a dummy key",
+        not os.environ.get("IDENTITY_MACHINE_KEY")
+        or "test-private-key" in os.environ.get("IDENTITY_MACHINE_KEY", "")
+        or "fake-private-key" in os.environ.get("IDENTITY_MACHINE_KEY", ""),
+        reason="IDENTITY_MACHINE_KEY is not set or is a dummy key",
     ),
 ]
 

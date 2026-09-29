@@ -4,12 +4,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from edi.module import create_edi_app
+from tests.test_settings import get_test_settings
 
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
-    app = create_edi_app()
+    app = create_edi_app(settings=get_test_settings())
     return TestClient(app)
 
 

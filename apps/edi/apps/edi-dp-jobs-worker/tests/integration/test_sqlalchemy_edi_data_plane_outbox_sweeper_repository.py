@@ -1,6 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.router import DatabaseRouter
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox, ProcessedEvent
 from edi.domain.enums import PipelineEventType
@@ -15,8 +17,6 @@ async def sweeper_repo(db_router: DatabaseRouter) -> SqlAlchemyEdiDataPlaneOutbo
     return SqlAlchemyEdiDataPlaneOutboxSweeperRepository(db_router)
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_fetch_stranded_outbox_events(
     sweeper_repo: SqlAlchemyEdiDataPlaneOutboxSweeperRepository,
     db_router: DatabaseRouter,

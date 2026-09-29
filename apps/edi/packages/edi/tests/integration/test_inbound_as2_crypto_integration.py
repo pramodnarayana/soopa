@@ -3,6 +3,8 @@ import functools
 
 import httpx
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -58,8 +60,6 @@ def generate_self_signed_cert() -> tuple[bytes, bytes]:
     return private_bytes, cert_bytes
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_inbound_as2_crypto_integration(
     db_session, tenant_db_session, client: httpx.AsyncClient, override_get_secret_store
 ) -> None:

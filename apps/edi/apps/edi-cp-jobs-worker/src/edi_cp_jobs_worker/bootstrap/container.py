@@ -3,7 +3,6 @@ from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_ou
     PostgresEdiControlPlaneOutboxRepository,
 )
 from database.router import DatabaseRouter
-from edi.config.settings import get_settings
 from edi.domain.enums import EdiConstants, EdiJobName
 from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
@@ -24,6 +23,7 @@ from edi_cp_jobs_worker.adapters.inbound.jobs.edi_control_plane_outbox_sweeper_j
 from edi_cp_jobs_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_cleanup_repository import (
     SqlAlchemyEdiControlPlaneOutboxCleanupRepository,
 )
+from edi_cp_jobs_worker.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 

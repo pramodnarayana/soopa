@@ -10,6 +10,7 @@ dependencies = [
     "cryptography>=49.0.0",
     "endesive>=2.19.3",
     "jsonpath-ng>=1.8.0",
+    "pulumiverse-zitadel>=0.2.0",
 ]
 
 [tool.uv]
@@ -46,6 +47,7 @@ members = [
     "core/platform/apps/identity-jobs-worker",
     "core/platform/apps/notification-worker",
     "core/platform/apps/notification-channel-worker",
+    "infra/cloud/aws/packages/seedwork",
     "core/platform/apps/notification-jobs-worker",
     "core/platform/apps/unified-api",
     "core/platform/apps/unified-worker",
@@ -96,6 +98,9 @@ dev = [
     "pip-audit>=2.10.1",
     "types-paramiko>=3.3.0",
     "semgrep>=1.0.0",
+    "pulumi>=3.0.0",
+    "pulumiverse-zitadel>=0.1.0",
+    "setuptools>=84.0.0",
 ]
 
 [tool.mypy]

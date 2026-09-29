@@ -4,10 +4,10 @@ include:
   - apps/edi/docker-compose.yml
 
 x-base-env: &base-env
-  DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
-  GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
-  EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
-  SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
+  DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
+  GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
+  EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard
+  SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
   AWS_ENDPOINT_URL: http://localstack:4566
   AWS_REGION: us-east-1
 
@@ -47,8 +47,8 @@ services:
     extra_hosts:
       - "ucp.localhost:host-gateway"
     environment:
-      DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/ucp_global
-      SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard_1
+      DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
+      SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
     command:
       - sh
       - -c

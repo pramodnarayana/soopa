@@ -6,13 +6,13 @@ from typing import Any, Protocol, cast
 import boto3
 import structlog
 from edi.config.constants import SecretCategory
-from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
-settings = get_settings()
-SECRETS_MOUNT_PATH = settings.secrets.mount_path
-POLL_INTERVAL_SECONDS = settings.secrets.sync_interval_seconds
+SECRETS_MOUNT_PATH = os.environ.get("SECRETS_MOUNT_PATH", "/mnt/secrets")
+POLL_INTERVAL_SECONDS = int(os.environ.get("SECRETS_SYNC_INTERVAL_SECONDS", "300"))
+if POLL_INTERVAL_SECONDS <= 0:
+    raise ValueError("SECRETS_SYNC_INTERVAL_SECONDS must be strictly positive.")
 
 
 class SecretsManagerClient(Protocol):
@@ -58,8 +58,8 @@ def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str
 
     parts = secret_name.split("/")
     if len(parts) != 3:
-        logger.warning(
-            "invalid_secret_name_format",
+        logger.debug(
+            "ignoring_non_certificate_secret",
             secret_name=secret_name,
             parts_count=len(parts),
         )

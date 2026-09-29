@@ -1,0 +1,6 @@
+config:
+  ucp-workers:worker_groups:
+    - name: "workers"
+      modules: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker"
+  # dp-workers have been moved to apps/edi/workers — pure EDI data plane, independently scalable
+encryptionsalt: v1:vSXz8MKiYQw=:v1:sAOJLmeVSWPHsPUr:QSUsSJEYnE/Q4+L3FI4uDhG8iqQBOA==

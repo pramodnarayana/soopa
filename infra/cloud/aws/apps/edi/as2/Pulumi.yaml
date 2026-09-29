@@ -1,0 +1,6 @@
+name: edi-as2
+runtime:
+  name: python
+  options:
+    virtualenv: ../../../.venv
+description: "EDI Bounded Context: AS2 Server ECS Compute. Tier 6 — deploy on every code push."

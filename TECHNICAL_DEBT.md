@@ -467,3 +467,30 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The `ci:verify` script fails because `@soopa/compute-worker` is currently sitting at ~35% test coverage, dropping below the enforced 80% threshold. This is likely due to untested logic introduced in recent code additions (e.g. from CodeRabbit automated reviews).
 - **Action Item**: Write missing unit/integration tests for the `compute-worker` module (specifically covering `src/compute_worker/main.py` and `compute_dispatcher.py`) to raise coverage back above 80% so the global `ci:verify` pipeline can pass fully.
+
+## [Architecture] Identity Vendor Leakage in Global Configuration
+
+- **Date Added**: 2026-09-26
+- **Status**: TO DO
+- **Description**: The global `PlatformIdentitySettings` Pydantic model (`core/platform/packages/seedwork/src/seedwork/infra/config_models.py`) explicitly hardcodes infrastructure vendor aliases (e.g., `ZITADEL_DEFAULT_USER_PASSWORD`). This violates the Enterprise Architecture Hexagonal Domain rules which state that domain capabilities must be agnostic of implementation details.
+- **Action Item**: Refactor the Pydantic validation aliases in `PlatformIdentitySettings` from `ZITADEL_*` to `IDENTITY_*` across the monorepo. This abstracts the underlying provider, ensuring that future migrations (e.g., from Zitadel to Keycloak) do not require broad refactoring of environment variables and application configurations.
+
+## [Architecture] Strict Process-Boundary Decoupling in Pydantic Settings
+
+- **Date Added**: 2026-09-26
+- **Status**: TO DO
+- **Description**: The monolithic `AppSettings` Pydantic model requires configuration variables across the entire system (DB, Identity, SQS, S3). Because the local development environment uses a single monolithic `.env` file containing all these variables, Pydantic validation silently passes locally even when API containers inadvertently import worker configurations. This tight coupling caused the API container to crash in ECS (where the `.env` superset does not exist and only API variables are injected).
+- **Root Cause**: Modules such as `edi/bootstrap/lifespan.py` and `edi/module.py` load `get_settings()` (the full `AppSettings` model). When the `unified-api` container boots, these modules evaluate and require SQS variables that the API container physically does not have.
+- **Action Item**:
+  1. Retain the single monolithic `.env` as the Single Source of Truth for local development (splitting `.env` into multiple files is an anti-pattern that violates DRY).
+  2. Audit all Pydantic `Settings` classes. Split the massive `AppSettings` into highly specific models tailored strictly to the execution context (e.g., `ApiSettings`, `As2ServerSettings`, `SqsWorkerSettings`, `SidecarSettings`).
+  3. Refactor Dependency Injection (Composition Roots like `main.py` and `lifespan.py`) so that the Web API only instantiates `ApiSettings` and is completely blind to any SQS variables present in the environment.
+
+## [Local Dev Parity] docker-compose Process Topology Must Mirror ECS
+
+- **Date Added**: 2026-09-26
+- **Status**: TO DO
+- **Description**: The `docker-compose.yml` does not completely mirror the actual ECS deployment topology. In ECS, the `edi-secrets-sidecar` is a dedicated container that runs alongside the app container and writes to a shared volume. Locally, the sidecar does not exist in docker-compose at all — secrets are just implicitly loaded. This meant the sidecar's misconfiguration (importing the full `AppSettings`) was completely invisible until it ran in Fargate.
+- **Action Item**:
+  1. Add the `edi-secrets-sidecar` as an explicit service in `docker-compose.yml` to exactly replicate the Fargate sidecar pattern.
+  2. Create a `shared_secrets` Docker volume. Ensure the sidecar writes to it, and both the `unified-api` and `edi-as2-server` mount it, perfectly matching ECS shared-file mounts.

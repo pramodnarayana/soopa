@@ -8,6 +8,8 @@ from typing import Any
 
 import aioboto3
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
@@ -140,7 +142,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
                 shard = DatabaseShard(
                     id="edi_shard_1",
                     name="EDI Primary Shard",
-                    dsn="postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard_1",
+                    dsn=os.environ["TEST_SHARD_DB_URL"],
                     status="active",
                 )
                 await session.merge(shard)
@@ -194,8 +196,6 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
                 await sqs.delete_queue(QueueUrl=queue_url)
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def wait_for_process(service, max_retries=10):
     for _ in range(max_retries):
         if await service.process_next_event():
@@ -205,8 +205,6 @@ async def wait_for_process(service, max_retries=10):
     return False
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
     """
     Tests the full replication flow:
@@ -254,8 +252,6 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
         assert replicated_partner.as2_id == "INT_TEST_AS2"
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_negative_unregistered_event_dropped(
     e2e_context: dict[str, Any],
 ) -> None:
@@ -286,8 +282,6 @@ async def test_provisioning_negative_unregistered_event_dropped(
     assert processed is True
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_webhook_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
     db_router = e2e_context["db_router"]
     tenant_id = e2e_context["tenant_id"]
@@ -342,8 +336,6 @@ async def test_webhook_replication_e2e_flow(e2e_context: dict[str, Any]) -> None
         assert tenant_webhook.url == "https://example.com/webhook"
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_outbound_route_replication_e2e_flow(e2e_context: dict[str, Any]) -> None:
     """
     Simulates the global control plane dropping an 'edi_outbound_route_created' event
@@ -408,8 +400,6 @@ async def test_outbound_route_replication_e2e_flow(e2e_context: dict[str, Any]) 
         assert tenant_route.connection_type == EdiConnectionType.AS2.value
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, Any]) -> None:
     """
     Tests that if a malformed event (missing required fields) is sent, the orchestrator
@@ -441,8 +431,6 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
     assert processed is False
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     """
     Tests that delivering the exact same event multiple times does not crash the orchestrator
@@ -497,8 +485,6 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
         assert replicated_partner is not None
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
     """
     Tests that delivering a deleted event successfully deletes the entity from the tenant shard.
@@ -552,8 +538,6 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
         assert replicated_partner is None
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_full_state_sync(e2e_context: dict[str, Any]) -> None:
     """
     Tests the full state topological sync directly.
@@ -595,8 +579,6 @@ async def test_provisioning_full_state_sync(e2e_context: dict[str, Any]) -> None
         assert res.scalars().first() is not None
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_provisioning_broadcast_event(e2e_context: dict[str, Any]) -> None:
     """
     Tests that delivering an event with PLATFORM_TENANT_ID broadcasts to all tenants.

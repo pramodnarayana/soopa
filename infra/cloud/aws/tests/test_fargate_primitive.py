@@ -1,12 +1,8 @@
 import json
-import os
-import sys
 
 import pulumi
 import pytest
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "packages")))
-from seedwork.ecs import provision_fargate_service
+from infra_seedwork.ecs import provision_fargate_service
 
 captured_task_defs = []
 

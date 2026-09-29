@@ -6,7 +6,7 @@ import pytest
 from httpx import AsyncClient
 from seedwork import generate_id
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 
 async def test_as2_partnership_lifecycle(platform_client: AsyncClient):

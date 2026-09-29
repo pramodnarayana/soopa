@@ -1,6 +1,5 @@
 import typing
 
-from edi.config.settings import AppSettings
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 """
@@ -47,7 +46,7 @@ async def test_transform_edi_to_json_success() -> None:
 
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, uow)
 
-    settings_casted = typing.cast(AppSettings, settings)
+    settings_casted = settings
 
     @contextlib.asynccontextmanager
     async def fake_uow_factory():
@@ -77,7 +76,7 @@ async def test_transform_missing_message_raises_error() -> None:
 
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, uow)
 
-    settings_casted = typing.cast(AppSettings, settings)
+    settings_casted = settings
 
     @contextlib.asynccontextmanager
     async def fake_uow_factory():

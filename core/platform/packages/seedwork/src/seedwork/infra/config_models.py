@@ -68,31 +68,17 @@ class PlatformOtelSettings(BaseSettings):
 
 class PlatformIdentitySettings(BaseSettings):
     """
-    Centralized model for Identity Provider Configuration (Zitadel).
+    Centralized model for Identity Provider Configuration (Auth verification).
     """
 
     model_config = SettingsConfigDict(extra="ignore")
 
-    api_url: str = Field(
-        validation_alias="ZITADEL_API_URL",
-        description="The base URL of the Zitadel API.",
-        default="",
-    )
-    machine_key: str = Field(
-        validation_alias="ZITADEL_MACHINE_KEY",
-        default="",
-        description="JSON Service Account Key for authenticating as a machine user.",
-    )
     ucp_project_id: str = Field(
-        validation_alias="ZITADEL_UCP_PROJECT_ID",
+        validation_alias="IDENTITY_UCP_PROJECT_ID",
         default="",
         description="The Project ID representing the UCP.",
     )
-    default_user_password: str = Field(
-        validation_alias="ZITADEL_DEFAULT_USER_PASSWORD",
-        description="Default password for seeded/synced users.",
-    )
-    tenant_role_group: str = Field(validation_alias="ZITADEL_TENANT_ROLE_GROUP", default="Tenant")
-    platform_org_id: str = Field(validation_alias="ZITADEL_PLATFORM_ORG_ID", default="")
-    issuer: str = Field(validation_alias="ZITADEL_ISSUER", default="")
-    oauth_client_id: str = Field(validation_alias="ZITADEL_OAUTH_CLIENT_ID", default="")
+    tenant_role_group: str = Field(validation_alias="IDENTITY_TENANT_ROLE_GROUP", default="Tenant")
+    platform_org_id: str = Field(validation_alias="IDENTITY_PLATFORM_ORG_ID", default="")
+    issuer: str = Field(validation_alias="IDENTITY_ISSUER", default="")
+    oauth_client_id: str = Field(validation_alias="IDENTITY_OAUTH_CLIENT_ID", default="")

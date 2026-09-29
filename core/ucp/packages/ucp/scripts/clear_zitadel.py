@@ -7,7 +7,7 @@ Run as part of infra-reset (pnpm infra:phase1-cleanup) BEFORE tearing down
 the main database.
 
 Strategy: Query Zitadel directly for all organisations. Skip the platform
-org (identified by ZITADEL_PLATFORM_ORG_ID) and the built-in ZITADEL system
+org (identified by IDENTITY_PLATFORM_ORG_ID) and the built-in ZITADEL system
 org. Delete everything else. This handles the case where the local DB was
 already wiped but Zitadel still has orphaned orgs.
 
@@ -38,7 +38,7 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 # The built-in Zitadel system org — never delete this.
-ZITADEL_SYSTEM_ORG_NAME = "ZITADEL"
+IDENTITY_SYSTEM_ORG_NAME = "ZITADEL"
 
 
 async def list_all_orgs(
@@ -118,15 +118,15 @@ async def delete_org_from_zitadel(
 
 
 async def main() -> None:
-    zitadel_url = os.environ.get("ZITADEL_API_URL", "http://ucp.localhost:8080")
-    machine_key = os.environ.get("ZITADEL_MACHINE_KEY", "")
-    platform_org_id = os.environ.get("ZITADEL_PLATFORM_ORG_ID", "")
+    zitadel_url = os.environ.get("IDENTITY_API_URL", "http://ucp.localhost:8080")
+    machine_key = os.environ.get("IDENTITY_MACHINE_KEY", "")
+    platform_org_id = os.environ.get("IDENTITY_PLATFORM_ORG_ID", "")
 
     if not machine_key:
-        logger.error("ZITADEL_MACHINE_KEY environment variable is not set.")
+        logger.error("IDENTITY_MACHINE_KEY environment variable is not set.")
         sys.exit(1)
     if not platform_org_id:
-        logger.error("ZITADEL_PLATFORM_ORG_ID environment variable is not set.")
+        logger.error("IDENTITY_PLATFORM_ORG_ID environment variable is not set.")
         sys.exit(1)
 
     # --- Step 1: Query Zitadel directly for all orgs ---
@@ -138,7 +138,7 @@ async def main() -> None:
         tenant_orgs = [
             org
             for org in all_orgs
-            if org["id"] != platform_org_id and org.get("name") != ZITADEL_SYSTEM_ORG_NAME
+            if org["id"] != platform_org_id and org.get("name") != IDENTITY_SYSTEM_ORG_NAME
         ]
 
         if not tenant_orgs:

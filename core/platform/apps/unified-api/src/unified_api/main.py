@@ -47,6 +47,7 @@ from unified_api.bootstrap.exceptions import setup_shell_exception_handlers
 from unified_api.bootstrap.lifespan import shell_lifespan
 from unified_api.bootstrap.middleware import AuthenticationMiddleware, TenantContextMiddleware
 from unified_api.bootstrap.observability import setup_observability
+from unified_api.settings import get_settings
 
 # ---------------------------------------------------------------------------
 # Shell (Host) Application
@@ -185,6 +186,17 @@ def get_edi_service() -> EdiServicePort:
 
 app.dependency_overrides[EdiServicePort] = get_edi_service
 
+
+# ---------------------------------------------------------------------------
+# Health Check (must be registered BEFORE the EDI catch-all mount)
+# Starlette evaluates routes in registration order. app.mount("/", ...) is a
+# catch-all that intercepts ALL paths — including /health — if registered first.
+# ---------------------------------------------------------------------------
+@app.get("/health", tags=["System"])
+def health_check() -> dict[str, str]:
+    return {"status": "ok", "architecture": "modular_monolith"}
+
+
 # ---------------------------------------------------------------------------
 # EDI Domain — sub-application mounted at root
 #
@@ -194,10 +206,5 @@ app.dependency_overrides[EdiServicePort] = get_edi_service
 # EDI is mounted AFTER UCP routers are registered so Starlette resolves
 # explicit UCP paths first and delegates all unmatched paths to EDI.
 # ---------------------------------------------------------------------------
-edi_app = create_edi_app()
+edi_app = create_edi_app(settings=get_settings())
 app.mount("/", edi_app)
-
-
-@app.get("/health", tags=["System"])
-def health_check() -> dict[str, str]:
-    return {"status": "ok", "architecture": "modular_monolith"}

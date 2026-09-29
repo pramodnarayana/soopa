@@ -3,7 +3,7 @@ import asyncio
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.config.settings import get_settings
+from edi.config.models import get_worker_settings
 from edi.domain.enums import PipelineEventType
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
@@ -16,7 +16,7 @@ logger = structlog.get_logger(__name__)
 async def reprocess_stranded_messages() -> None:
     """Finds EDI messages stuck in PENDING_DELIVERY and injects a DELIVERY_REQUESTED into the outbox."""
     logger.info("Starting reprocessing of stranded EDI messages...")
-    settings = get_settings()
+    settings = get_worker_settings()
 
     db_router = DatabaseRouter(
         global_db_url=settings.database.global_url,

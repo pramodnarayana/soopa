@@ -6,7 +6,7 @@ import { defineConfig, loadEnv } from 'vite';
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
-  const env = loadEnv(mode, '../../../../', ['VITE_', 'ZITADEL_']);
+  const env = loadEnv(mode, '../../../../', ['VITE_', 'IDENTITY_']);
   const proxyTarget = env.VITE_API_PROXY_TARGET;
 
   if (command === 'serve' && !proxyTarget) {
@@ -17,7 +17,7 @@ export default defineConfig(({ command, mode }) => {
 
   return {
     envDir: '../../../../',
-    envPrefix: ['VITE_', 'ZITADEL_'],
+    envPrefix: ['VITE_', 'IDENTITY_'],
     plugins: [TanStackRouterVite(), react(), tailwindcss()],
     resolve: {
       alias: {

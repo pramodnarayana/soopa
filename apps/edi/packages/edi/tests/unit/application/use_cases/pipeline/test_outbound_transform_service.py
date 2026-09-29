@@ -13,7 +13,6 @@ import pytest
 from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case import (
     DispatchOutboundTransformUseCase,
 )
-from edi.config.settings import AppSettings
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.domain.exceptions import OutboundRouteNotFoundError, TransactionNotFoundError
 from edi.ports.outbound.transaction_repository import CreateEdiJsonCommand
@@ -28,10 +27,14 @@ pytestmark = pytest.mark.asyncio
 import typing
 
 
-class FakeSettings(AppSettings):
+class FakeSettings:
+    def __init__(self, edi_environment="T", enable_heavy_compute_queue=False):
+        self.edi_environment = edi_environment
+        self.enable_heavy_compute_queue = enable_heavy_compute_queue
+
     @classmethod
     def create(cls, env="T", heavy_compute=False) -> "FakeSettings":
-        return cls.model_construct(
+        return cls(
             edi_environment=env,
             enable_heavy_compute_queue=heavy_compute,
         )
@@ -47,7 +50,7 @@ def make_use_case(
     uow_casted = typing.cast(DataPlaneUnitOfWorkPort, u)
     t = transformer or FakeTransformerAdapter()
     s = settings or FakeSettings.create()
-    s_casted = typing.cast(AppSettings, s)
+    s_casted = s
 
     @contextlib.asynccontextmanager
     async def fake_uow_factory():

@@ -1,0 +1,6 @@
+name: edi-storage
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: EDI Storage Stack

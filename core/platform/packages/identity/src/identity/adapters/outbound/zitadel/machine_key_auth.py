@@ -24,12 +24,12 @@ class ZitadelMachineKey:
             raw: object = json.loads(value)
         except json.JSONDecodeError as exc:
             raise ZitadelMachineAuthenticationError(
-                f"ZITADEL_MACHINE_KEY must be valid JSON, failed to parse: {exc}"
+                f"IDENTITY_MACHINE_KEY must be valid JSON, failed to parse: {exc}"
             ) from exc
 
         if not isinstance(raw, dict):
             raise ZitadelMachineAuthenticationError(
-                "ZITADEL_MACHINE_KEY must contain a JSON object"
+                "IDENTITY_MACHINE_KEY must contain a JSON object"
             )
 
         details: Mapping[object, object] = raw
@@ -44,7 +44,7 @@ def _required_string(details: Mapping[object, object], field: str) -> str:
     value = details.get(field)
     if not isinstance(value, str) or not value:
         raise ZitadelMachineAuthenticationError(
-            f"ZITADEL_MACHINE_KEY is missing required field {field}"
+            f"IDENTITY_MACHINE_KEY is missing required field {field}"
         )
     return value
 
@@ -60,7 +60,7 @@ class ZitadelMachineTokenProvider:
     def __init__(self, api_url: str, machine_key: str) -> None:
         self._api_url = api_url.rstrip("/")
         if not self._api_url:
-            raise ZitadelMachineAuthenticationError("ZITADEL_API_URL is required")
+            raise ZitadelMachineAuthenticationError("IDENTITY_API_URL is required")
         self._machine_key = ZitadelMachineKey.from_json(machine_key)
         self._cached_token: str | None = None
         self._refresh_at = 0.0
@@ -99,7 +99,7 @@ class ZitadelMachineTokenProvider:
             )
         except (jwt.PyJWTError, TypeError, ValueError) as exc:
             raise ZitadelMachineAuthenticationError(
-                "ZITADEL_MACHINE_KEY could not sign an authentication assertion"
+                "IDENTITY_MACHINE_KEY could not sign an authentication assertion"
             ) from exc
 
         try:

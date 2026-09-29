@@ -1,4 +1,5 @@
 import os
+import typing
 
 import structlog
 from dotenv import load_dotenv
@@ -42,21 +43,35 @@ from unified_api.adapters.inbound.http.edi.routers.tenant import dashboard
 from unified_api.adapters.inbound.http.edi.routers.trading_partners import as2_receive
 
 from edi.bootstrap.container import Container
-from edi.bootstrap.lifespan import edi_lifespan
-from edi.config.settings import get_settings
+from edi.bootstrap.lifespan import shutdown, startup
 from edi.domain.exceptions import OrchestrationError, VaultError
 
 logger = structlog.get_logger(__name__)
 
 
-def create_edi_app() -> FastAPI:
-    settings = get_settings()
+def create_edi_app(settings: typing.Any = None) -> FastAPI:
+    if settings is None:
+        raise ValueError("Settings must be injected into create_edi_app")
+
+    @fastapi.concurrency.asynccontextmanager
+    async def app_lifespan(app: FastAPI):
+        await startup(
+            app,
+            global_db_url=str(settings.database.global_url),
+            pool_size=settings.database.pool_size,
+            max_overflow=settings.database.max_overflow,
+            shard_overrides=settings.database.shard_overrides,
+        )
+        try:
+            yield
+        finally:
+            await shutdown()
 
     app = FastAPI(
         title="EDI AS2 Platform API",
         description="Main gateway for the EDI AS2 Platform",
         version="1.0.0",
-        lifespan=edi_lifespan,
+        lifespan=app_lifespan,
         swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
         swagger_ui_init_oauth={
             "clientId": settings.identity.oauth_client_id,

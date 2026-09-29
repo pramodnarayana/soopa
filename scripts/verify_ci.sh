@@ -6,9 +6,6 @@ find . -name '.pytest_cache' -type d -exec rm -rf {} +
 find . -name '.ruff_cache' -type d -exec rm -rf {} +
 find . -name '.mypy_cache' -type d -exec rm -rf {} +
 
-echo "🔄 Ensuring infrastructure is running (Non-Destructive)..."
-pnpm infra:up
-
 echo "🔒 Hiding .env and injecting .env.example to simulate strict CI environment..."
 
 ENV_BACKED_UP=0
@@ -28,6 +25,9 @@ if [ -f .env.example ]; then
   echo "🔌 Injecting Dynamic Topology Configuration into CI .env..."
   pnpm infra:sync-topology
 fi
+
+echo "🔄 Ensuring infrastructure is running (Non-Destructive)..."
+pnpm infra:up
 
 echo "✅ Running Architectural Semgrep Checks..."
 uv run semgrep --config=semgrep-architecture.yml --error apps core

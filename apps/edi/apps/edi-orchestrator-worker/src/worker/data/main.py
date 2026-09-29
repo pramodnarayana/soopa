@@ -23,7 +23,6 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.config.settings import AppSettings, get_settings
 from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -35,6 +34,7 @@ from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventMessage,
 )
 from worker.domain.edi_data_plane_route_registry import EdiDataPlaneRouteRegistry
+from worker.settings import WorkerSettings, get_settings
 
 UowFactory = Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]
 
@@ -44,7 +44,7 @@ logger = structlog.get_logger(__name__)
 
 def _setup_registry(
     transformer: TransformerPort,
-    settings: AppSettings,
+    settings: WorkerSettings,
     uow_provider: TenantUowProvider,
 ) -> EdiDataPlaneEventDispatcher:
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:

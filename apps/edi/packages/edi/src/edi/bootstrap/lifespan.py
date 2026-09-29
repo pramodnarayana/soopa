@@ -15,39 +15,43 @@ Architecture note:
   - No business logic belongs here — only infrastructure wiring.
 """
 
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-
 import structlog
 from database.router import DatabaseRouter
 from dependency_injector import providers
 from fastapi import FastAPI
 
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 
 _db_router: DatabaseRouter | None = None
 
 
-async def startup(app: FastAPI) -> None:
+async def startup(
+    app: FastAPI,
+    *,
+    global_db_url: str,
+    pool_size: int = 10,
+    max_overflow: int = 20,
+    shard_overrides: dict | None = None,
+) -> None:
     """
     Initializes the EDI DatabaseRouter and attaches it to the EDI sub-app's state.
 
     ``app`` MUST be the EDI sub-app instance (not the Shell), because
     ``request.app`` inside EDI route handlers resolves to the sub-app.
-    The Shell calls this with the ``edi_app`` object it created.
+    The Shell calls this with the ``edi_app`` object it created, passing
+    all database configuration as explicit keyword arguments (Dependency Inversion).
+    The Shell is the sole composition root responsible for reading configuration.
     """
     global _db_router
 
-    settings = get_settings()
     logger.info("EDI: Initializing DatabaseRouter.")
     _db_router = DatabaseRouter(
-        global_db_url=settings.database.global_url,
-        pool_size=settings.database.pool_size,
-        max_overflow=settings.database.max_overflow,
-        shard_overrides=settings.database.shard_overrides,
+        global_db_url=global_db_url,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        shard_overrides=shard_overrides or {},
     )
     app.state.db_router = _db_router
 
@@ -71,16 +75,3 @@ async def shutdown() -> None:
         logger.info("EDI: Shutting down DatabaseRouter.")
         await _db_router.close_all()
         _db_router = None
-
-
-@asynccontextmanager
-async def edi_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Standalone lifespan context manager for the EDI application.
-    This is used when the EDI app is run independently (or tested via TestClient).
-    When mounted as a sub-app in the Modular Monolith, Starlette ignores this,
-    and the Shell's lifespan calls the startup/shutdown hooks directly.
-    """
-    await startup(app)
-    yield
-    await shutdown()

@@ -1,0 +1,14 @@
+encryptionsalt: v1:erHcCf4GEgE=:v1:huN1yH3g2CX5XdOm:HsAuRCKR09SrUW1YtgVoG3C9Ft9k2g==
+config:
+  zitadel-infrastructure:company_name: Flowwolf
+  zitadel-infrastructure:company_domain: flowwolf.io
+  zitadel-infrastructure:ucp_project_name: UCP
+  zitadel-infrastructure:edi_project_name: EDI
+  zitadel-infrastructure:idp_project_name: IDP
+  zitadel-infrastructure:dev_mode: "false"
+  zitadel-infrastructure:ucp_web_dashboard_redirect_uris:
+    - https://dashboard.staging.flowwolf.io/callback
+  zitadel-infrastructure:ucp_web_dashboard_post_logout_redirect_uris:
+    - https://dashboard.staging.flowwolf.io
+  zitadel-infrastructure:insecure: "false"
+  zitadel-infrastructure:port: "443"

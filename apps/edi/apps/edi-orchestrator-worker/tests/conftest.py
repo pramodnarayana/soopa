@@ -1,7 +1,8 @@
 from collections.abc import AsyncGenerator
 
 from dotenv import load_dotenv
-from edi.config.settings import get_settings
+
+from worker.settings import get_settings
 
 load_dotenv()
 

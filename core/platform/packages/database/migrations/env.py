@@ -30,7 +30,7 @@ target_metadata = GlobalRegistry.metadata
 database_url = os.environ.get("DATABASE_URL")
 if database_url:
     database_url = normalize_to_asyncpg(database_url)
-config.set_main_option("sqlalchemy.url", database_url or "")
+config.set_main_option("sqlalchemy.url", (database_url or "").replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

@@ -4,9 +4,19 @@
     { "name": "edi-data-plane-topic", "fifo": false, "env_var": "SNS_EDI_DATA_PLANE_TOPIC_ARN" }
   ],
   "queues": [
-    { "name": "ucp-jobs", "fifo": true, "dlq": true },
-    { "name": "notification-jobs", "fifo": true, "dlq": true },
-    { "name": "identity-jobs", "fifo": true, "dlq": true },
+    { "name": "ucp-jobs", "fifo": true, "dlq": true, "env_var": "SQS_UCP_JOBS_QUEUE_URL" },
+    {
+      "name": "notification-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_NOTIFICATION_JOBS_QUEUE_URL"
+    },
+    {
+      "name": "identity-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_IDENTITY_JOBS_QUEUE_URL"
+    },
     {
       "name": "ucp-events",
       "fifo": true,
@@ -18,6 +28,12 @@
       "fifo": true,
       "dlq": true,
       "env_var": "SQS_IDENTITY_SYNC_QUEUE_URL"
+    },
+    {
+      "name": "email-channel",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_EMAIL_CHANNEL_QUEUE_URL"
     },
     {
       "name": "edi-config-sync-queue",
@@ -50,8 +66,7 @@
       "fifo": true,
       "dlq": true,
       "env_var": "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL"
-    },
-    { "name": "email-channel", "fifo": true, "dlq": true }
+    }
   ],
   "subscriptions": [
     {

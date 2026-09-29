@@ -34,8 +34,9 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 
 from edi.module import create_edi_app
 from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
+from tests.test_settings import get_test_settings
 
-app = create_edi_app()
+app = create_edi_app(settings=get_test_settings())
 
 # ---------------------------------------------------------------------------
 # Fakes

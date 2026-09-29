@@ -31,8 +31,8 @@ async def test_client_authenticates_when_only_machine_key_is_configured(
     monkeypatch: pytest.MonkeyPatch,
     httpserver: HTTPServer,
 ) -> None:
-    monkeypatch.setenv("ZITADEL_MACHINE_KEY", _machine_key_json())
-    monkeypatch.setenv("ZITADEL_API_URL", httpserver.url_for("/"))
+    monkeypatch.setenv("IDENTITY_MACHINE_KEY", _machine_key_json())
+    monkeypatch.setenv("IDENTITY_API_URL", httpserver.url_for("/"))
     get_settings.cache_clear()
 
     def zitadel_token(request) -> Response:

@@ -8,7 +8,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
-from edi.config.settings import get_settings
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
@@ -16,6 +15,8 @@ from observability import (
     OtelTracer,
     StructlogLogger,
 )
+
+from as2_server.settings import get_settings
 
 from .adapters.inbound.http.routers import as2, ops
 

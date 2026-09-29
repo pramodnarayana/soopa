@@ -5,9 +5,10 @@ import structlog
 from database.models.identity import Tenant
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.config.settings import get_settings
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy.future import select
+
+from as2_server.settings import get_settings as get_worker_settings
 
 load_dotenv()
 
@@ -17,7 +18,7 @@ logger = structlog.get_logger(__name__)
 async def seed_database() -> None:
     """Seeds the database with required initial infrastructure and default Tenant 0."""
     logger.info("Starting database seed...")
-    settings = get_settings()
+    settings = get_worker_settings()
 
     db_router = DatabaseRouter(settings.database.global_url)
 

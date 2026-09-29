@@ -1,6 +1,8 @@
 from collections.abc import Sequence
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.models.identity import Tenant
 from database.models.notifications import NotificationOutbox
 from notification.adapters.outbound.database.postgres_outbox_repository import (
@@ -33,8 +35,6 @@ class FakeDispatcher:
         return successful_ids
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_outbox_sweeper_integration(db_session_factory):
     """
     A High-Quality Narrow Integration Test that uses a real Postgres database

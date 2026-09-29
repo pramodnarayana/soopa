@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from scheduler_worker.bootstrap.container import Container
 from scheduler_worker.config.settings import get_settings
 
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+
 
 @pytest.fixture(scope="session")
 def event_loop() -> AsyncGenerator[asyncio.AbstractEventLoop]:
@@ -86,8 +88,6 @@ async def clear_jobs_table(db_connection: Any) -> None:
     await db_connection.execute(text("DELETE FROM scheduling.scheduled_jobs"))
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_scheduler_worker_claims_and_dispatches_job(
     db_connection: Any,
     db_session_factory: async_sessionmaker,

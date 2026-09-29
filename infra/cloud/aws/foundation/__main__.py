@@ -31,20 +31,20 @@ igw = aws.ec2.InternetGateway(
 
 # ── Public subnets ────────────────────────────────────────────────────────────
 public_subnet_a = aws.ec2.Subnet(
-    f"{_prefix}public-subnet-a",
+    f"{_prefix}ingress-public-subnet-a",
     vpc_id=vpc.id,
     cidr_block="10.0.0.0/24",
     availability_zone=f"{_region.name}a",
     map_public_ip_on_launch=True,
-    tags={**_TAGS, "Name": f"{_prefix}public-a"},
+    tags={**_TAGS, "Name": f"{_prefix}ingress-public-a"},
 )
 public_subnet_b = aws.ec2.Subnet(
-    f"{_prefix}public-subnet-b",
+    f"{_prefix}ingress-public-subnet-b",
     vpc_id=vpc.id,
     cidr_block="10.0.1.0/24",
     availability_zone=f"{_region.name}b",
     map_public_ip_on_launch=True,
-    tags={**_TAGS, "Name": f"{_prefix}public-b"},
+    tags={**_TAGS, "Name": f"{_prefix}ingress-public-b"},
 )
 
 public_rt = aws.ec2.RouteTable(
@@ -71,30 +71,21 @@ nat_gw_a = aws.ec2.NatGateway(
     tags={**_TAGS, "Name": f"{_prefix}nat-gw-a"},
 )
 
-eip_b = aws.ec2.Eip(
-    f"{_prefix}nat-eip-b", domain="vpc", tags={**_TAGS, "Name": f"{_prefix}nat-eip-b"}
-)
-nat_gw_b = aws.ec2.NatGateway(
-    f"{_prefix}nat-gw-b",
-    subnet_id=public_subnet_b.id,
-    allocation_id=eip_b.id,
-    tags={**_TAGS, "Name": f"{_prefix}nat-gw-b"},
-)
 
 # ── Private subnets ───────────────────────────────────────────────────────────
 private_subnet_a = aws.ec2.Subnet(
-    f"{_prefix}private-subnet-a",
+    f"{_prefix}backend-private-subnet-a",
     vpc_id=vpc.id,
     cidr_block="10.0.10.0/24",
     availability_zone=f"{_region.name}a",
-    tags={**_TAGS, "Name": f"{_prefix}private-a"},
+    tags={**_TAGS, "Name": f"{_prefix}backend-private-a"},
 )
 private_subnet_b = aws.ec2.Subnet(
-    f"{_prefix}private-subnet-b",
+    f"{_prefix}backend-private-subnet-b",
     vpc_id=vpc.id,
     cidr_block="10.0.11.0/24",
     availability_zone=f"{_region.name}b",
-    tags={**_TAGS, "Name": f"{_prefix}private-b"},
+    tags={**_TAGS, "Name": f"{_prefix}backend-private-b"},
 )
 
 private_rt_a = aws.ec2.RouteTable(
@@ -110,7 +101,8 @@ aws.ec2.RouteTableAssociation(
 private_rt_b = aws.ec2.RouteTable(
     f"{_prefix}private-rt-b",
     vpc_id=vpc.id,
-    routes=[aws.ec2.RouteTableRouteArgs(cidr_block="0.0.0.0/0", nat_gateway_id=nat_gw_b.id)],
+    # Staging optimization: Route AZ B traffic through AZ A's NAT Gateway to save $32/mo
+    routes=[aws.ec2.RouteTableRouteArgs(cidr_block="0.0.0.0/0", nat_gateway_id=nat_gw_a.id)],
     tags={**_TAGS, "Name": f"{_prefix}private-rt-b"},
 )
 aws.ec2.RouteTableAssociation(
@@ -167,6 +159,13 @@ main_alb_sg = aws.ec2.SecurityGroup(
             protocol="tcp",
             cidr_blocks=["10.0.0.0/16"],
         ),
+        aws.ec2.SecurityGroupEgressArgs(
+            description="Forward to ECS containers on app port 8001 (AS2)",
+            from_port=8001,
+            to_port=8001,
+            protocol="tcp",
+            cidr_blocks=["10.0.0.0/16"],
+        ),
     ],
     tags={**_TAGS, "Name": f"{_prefix}main-alb-sg"},
 )
@@ -181,26 +180,33 @@ app_sg = aws.ec2.SecurityGroup(
             from_port=8000,
             to_port=8000,
             protocol="tcp",
-            source_security_group_id=main_alb_sg.id,
+            security_groups=[main_alb_sg.id],
         ),
         aws.ec2.SecurityGroupIngressArgs(
             description="Traffic from ALB only (OpenObserve)",
             from_port=5080,
             to_port=5080,
             protocol="tcp",
-            source_security_group_id=main_alb_sg.id,
+            security_groups=[main_alb_sg.id],
         ),
         aws.ec2.SecurityGroupIngressArgs(
             description="Traffic from ALB only (Zitadel)",
             from_port=8080,
             to_port=8080,
             protocol="tcp",
-            source_security_group_id=main_alb_sg.id,
+            security_groups=[main_alb_sg.id],
+        ),
+        aws.ec2.SecurityGroupIngressArgs(
+            description="Traffic from ALB only (AS2)",
+            from_port=8001,
+            to_port=8001,
+            protocol="tcp",
+            security_groups=[main_alb_sg.id],
         ),
     ],
     egress=[
         aws.ec2.SecurityGroupEgressArgs(
-            description="All outbound — SQS/SNS/ECR/SecretsManager via NAT Gateway",
+            description="All outbound - SQS/SNS/ECR/SecretsManager via NAT Gateway",
             from_port=0,
             to_port=0,
             protocol="-1",
@@ -220,11 +226,23 @@ db_sg = aws.ec2.SecurityGroup(
             from_port=5432,
             to_port=5432,
             protocol="tcp",
-            source_security_group_id=app_sg.id,
+            security_groups=[app_sg.id],
         )
     ],
     egress=[],
     tags={**_TAGS, "Name": f"{_prefix}db-sg"},
+)
+# ── VPC Endpoints (Cost Optimization) ─────────────────────────────────────────
+# S3 Gateway Endpoints are 100% FREE. They prevent traffic bound for S3
+# (like ECR Docker image layers) from going through the NAT Gateway,
+# saving $0.045/GB on NAT Data Processing fees.
+s3_endpoint = aws.ec2.VpcEndpoint(
+    f"{_prefix}s3-endpoint",
+    vpc_id=vpc.id,
+    service_name=f"com.amazonaws.{_region.name}.s3",
+    vpc_endpoint_type="Gateway",
+    route_table_ids=[private_rt_a.id, private_rt_b.id],
+    tags={**_TAGS, "Name": f"{_prefix}s3-gateway"},
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────

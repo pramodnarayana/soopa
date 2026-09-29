@@ -10,7 +10,7 @@ import os
 from typing import Any
 
 os.environ.setdefault(
-    "ZITADEL_MACHINE_KEY",
+    "IDENTITY_MACHINE_KEY",
     '{"keyId":"fake-key","key":"fake-private-key","userId":"fake-user"}',
 )
 import asyncio
@@ -147,7 +147,7 @@ def localstack_container(request) -> "Any":
 @pytest_asyncio.fixture(scope="function")
 async def db_engine() -> "Any":
     db_url = os.getenv(
-        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/ucp_global"
+        "DATABASE_URL", "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432/global_db"
     )
     if db_url.startswith("postgresql://"):
         db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")

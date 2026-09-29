@@ -1,7 +1,6 @@
 import structlog
 from database.router import DatabaseRouter
 from edi.adapters.outbound.pubsub.routing_sqs_publisher import RoutingSqsPublisher
-from edi.config.settings import get_settings
 from edi.domain.enums import EdiJobName, PipelineEventType
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
@@ -33,6 +32,7 @@ from edi_dp_jobs_worker.application.use_cases.edi_data_plane_outbox_sweeper_use_
 from edi_dp_jobs_worker.application.use_cases.edi_data_retention_cleanup_use_case import (
     EdiDataRetentionCleanupUseCase,
 )
+from edi_dp_jobs_worker.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 

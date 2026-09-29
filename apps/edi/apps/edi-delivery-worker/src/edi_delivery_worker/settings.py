@@ -1,0 +1,37 @@
+import typing
+from functools import lru_cache
+from typing import Literal
+
+from edi.config.models import (
+    CommonSettings,
+    EdiAwsSettings,
+    EdiDataPlaneSqsSettings,
+    S3Settings,
+    SecretsSettings,
+)
+from pydantic import Field
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformIdentitySettings
+
+
+class WorkerSettings(CommonSettings):
+    storage_backend: Literal["postgres", "s3"] = Field(
+        validation_alias="STORAGE_BACKEND", default="postgres"
+    )
+    enable_heavy_compute_queue: bool = Field(
+        validation_alias="ENABLE_HEAVY_COMPUTE_QUEUE", default=False
+    )
+    s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
+    aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
+    identity: PlatformIdentitySettings = Field(
+        default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
+    )
+    secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
+    sqs: EdiDataPlaneSqsSettings = Field(
+        default_factory=lambda: typing.cast(EdiDataPlaneSqsSettings, {})
+    )
+
+
+@lru_cache
+def get_settings() -> WorkerSettings:
+    return load_settings_safely(WorkerSettings)

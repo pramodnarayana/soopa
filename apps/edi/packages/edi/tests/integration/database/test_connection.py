@@ -2,6 +2,8 @@ import contextlib
 from collections.abc import AsyncGenerator
 
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.router import DatabaseRouter
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
@@ -26,9 +28,6 @@ async def router() -> AsyncGenerator[DatabaseRouter, None]:
     await db_router.close_all()
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
-@pytest.mark.integration
 async def test_global_session_connection(router: DatabaseRouter) -> None:
     """
     Test that the DatabaseRouter can successfully yield a session
@@ -45,9 +44,6 @@ async def test_global_session_connection(router: DatabaseRouter) -> None:
             await async_gen.__anext__()
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
-@pytest.mark.integration
 async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     """
     Test that yielding a tenant session dynamically connects to the correct shard

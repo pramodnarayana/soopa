@@ -4,6 +4,8 @@ import datetime
 
 import httpx
 import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 import structlog
 from aiohttp import web
 from cryptography import x509
@@ -80,8 +82,6 @@ EDI_PAYLOAD = b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER  
 
 
 @pytest.mark.skip(reason="Needs real DB fixtures for E2E")
-@pytest.mark.integration
-@pytest.mark.asyncio
 async def test_inbound_flow_e2e(
     session: AsyncSession,
     global_session: AsyncSession,

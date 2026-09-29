@@ -1,0 +1,6 @@
+name: edi-messaging
+runtime:
+  name: python
+  options:
+    virtualenv: ../../../.venv
+description: "EDI Bounded Context: Messaging Infrastructure (SQS, SNS, S3). Tier 4 — deploy on topology changes."

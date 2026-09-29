@@ -2,11 +2,11 @@ import asyncio
 
 import pytest
 
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+
 from notification_jobs_worker.main import main
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_main_execution():
     """
     Test the main worker boot sequence without mocks to satisfy coverage and enterprise standards.

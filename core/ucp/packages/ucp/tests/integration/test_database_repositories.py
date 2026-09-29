@@ -13,8 +13,6 @@ from ucp.domain.constants import LifecycleStatus
 from ucp.domain.models.tenant import Tenant
 
 
-@pytest.mark.asyncio
-@pytest.mark.integration
 async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None:
     """
     Narrow integration test for TenantRepository.

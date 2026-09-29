@@ -5,7 +5,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.config.settings import get_settings
+from tests.test_settings import get_test_settings
 
 load_dotenv()
 
@@ -48,7 +48,7 @@ def event_loop():
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
     """Create an async SQLAlchemy engine pointing to the test database."""
-    db_url = get_settings().database.global_url
+    db_url = get_test_settings().database.global_url
     engine = get_async_engine(db_url)
     yield engine
     await engine.dispose()
@@ -68,7 +68,7 @@ async def db_connection(db_engine):
 async def tenant_db_engine():
     """Create an async SQLAlchemy engine pointing to the tenant shard test database."""
 
-    global_url = get_settings().database.global_url
+    global_url = get_test_settings().database.global_url
     db_url = await get_test_shard_url_async(global_url)
     engine = get_async_engine(db_url)
     yield engine
@@ -201,7 +201,7 @@ async def client(
     override_get_global_session, override_get_tenant_session, override_get_secret_store
 ):
 
-    app = create_edi_app()
+    app = create_edi_app(settings=get_test_settings())
 
     app.state.db_router = None
     app.state.tenant_resolver = None
@@ -266,7 +266,7 @@ async def platform_client(
     override_get_global_session, override_get_tenant_session, override_get_secret_store
 ):
 
-    app = create_edi_app()
+    app = create_edi_app(settings=get_test_settings())
 
     app.state.db_router = None
     app.state.tenant_resolver = None
