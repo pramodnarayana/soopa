@@ -27,7 +27,7 @@ services:
 
 
   debezium_shard:
-    image: quay.io/debezium/server:${DEBEZIUM_VERSION}
+    image: quay.io/debezium/server:${DEBEZIUM_VERSION:?DEBEZIUM_VERSION must be set in versions.env}
     entrypoint: /debezium/validate-sns-config.sh
     environment:
     - DEBEZIUM_SOURCE_DATABASE_HOSTNAME=edi_postgres_shard

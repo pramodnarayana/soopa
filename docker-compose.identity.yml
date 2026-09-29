@@ -17,7 +17,7 @@ services:
       - zitadel_data:/var/lib/postgresql/data:rw
 
   zitadel:
-    image: ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}
+    image: ghcr.io/zitadel/zitadel:${IDENTITY_VERSION:?IDENTITY_VERSION must be set in versions.env}
     restart: unless-stopped
     command: start-from-init --steps /zitadel-first-instance.yaml --masterkeyFromEnv --tlsMode disabled
     environment:
