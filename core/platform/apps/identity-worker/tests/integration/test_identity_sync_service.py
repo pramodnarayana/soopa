@@ -28,6 +28,7 @@ from identity_worker.config.settings import get_settings
 from seedwork import generate_id
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.asyncio,
     pytest.mark.skipif(
         not os.environ.get("IDENTITY_MACHINE_KEY")
@@ -117,7 +118,9 @@ async def test_identity_sync_service_user_created(
 ):
     # 1. Setup DbTenant and fully provision it
     tenant_id = generate_id("id")
-    org_id, _ = await zitadel_orgs_adapter.create_organization("Test Sync Service User Org")
+    org_id, _ = await zitadel_orgs_adapter.create_organization(
+        tenant_id, "Test Sync Service User Org"
+    )
 
     try:
         user_id = generate_id("id")
@@ -176,7 +179,7 @@ async def test_identity_sync_service_app_subscribed_and_unsubscribed(
     zitadel_projects_adapter: ZitadelProjectsAdapter,
 ):
     tenant_id = generate_id("id")
-    org_id, _ = await zitadel_orgs_adapter.create_organization("Test Sync App Sub Org")
+    org_id, _ = await zitadel_orgs_adapter.create_organization(tenant_id, "Test Sync App Sub Org")
 
     try:
         async with db_session_factory() as session:

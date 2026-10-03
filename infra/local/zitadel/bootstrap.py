@@ -68,7 +68,7 @@ def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
     )
     # Step 2: Delete stale pat.json from the bind-mount directory.
     # docker compose down -v does NOT delete bind-mounted host directories.
-    pat_key_path = script_dir / "machinekey" / "pat.json"
+    pat_key_path = script_dir.parent.parent / "cloud" / "zitadel" / "machinekey" / "pat.json"
     if pat_key_path.exists():
         pat_key_path.unlink()
         logger.info("  Cleared: machinekey/pat.json (stale token for wiped database)")
@@ -209,6 +209,25 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
         )
 
         subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
+            [PULUMI_BIN, "config", "set", "insecure", "true"],
+            cwd=pulumi_dir,
+            env=env,
+            check=True,
+        )
+        subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
+            [PULUMI_BIN, "config", "set", "port", "8080"],
+            cwd=pulumi_dir,
+            env=env,
+            check=True,
+        )
+        subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
+            [PULUMI_BIN, "config", "set", "--secret", "platform_admin_password", "Password1!"],
+            cwd=pulumi_dir,
+            env=env,
+            check=True,
+        )
+
+        subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
             [PULUMI_BIN, "up", "--yes", "--skip-preview"],
             cwd=pulumi_dir,
             env=env,
@@ -220,16 +239,17 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
 
         logger.info("✅ Zitadel bootstrap completed successfully!")
     finally:
-        # Cleanup the ephemeral PAT — it must not linger on disk
-        logger.info("Cleaning up local ephemeral PAT file by deleting pat.json...")
-        if pat_key_path.exists():
-            pass  # pat_key_path.unlink()
+        # Cleanup the ephemeral PAT and generated jwt_profile — they must not linger on disk
+        logger.info("Cleaning up local ephemeral credentials...")
+        pat_key_path.unlink(missing_ok=True)
+        jwt_profile_path = pat_key_path.parent / "jwt_profile.json"
+        jwt_profile_path.unlink(missing_ok=True)
 
 
 def main() -> None:
     script_dir = Path(__file__).parent.resolve()
     root_dir = script_dir.parent.parent.parent
-    pat_key_path = script_dir / "machinekey" / "pat.json"
+    pat_key_path = script_dir.parent.parent / "cloud" / "zitadel" / "machinekey" / "pat.json"
     # Always wipe the old state and database volumes on bootstrap
     # to guarantee a completely fresh environment and token generation.
     _destroy_existing(script_dir, root_dir)

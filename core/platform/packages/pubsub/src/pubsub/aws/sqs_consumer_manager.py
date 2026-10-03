@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import os
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -33,6 +34,7 @@ class SqsConsumerManager:
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
         error_handler: ConsumerErrorHandlerPort | None = None,
+        on_fatal_error: Callable[[BaseException], None] | None = None,
     ):
         self.consumer = consumer
         self.handler = handler
@@ -40,6 +42,7 @@ class SqsConsumerManager:
         self.queue_name = queue_name
         self.poll_sleep_seconds = poll_sleep_seconds
         self.error_sleep_seconds = error_sleep_seconds
+        self.on_fatal_error = on_fatal_error
 
         # Use injected strategy or fallback to default resilient strategy
         self.error_handler = error_handler or DefaultConsumerErrorHandler(error_sleep_seconds)
@@ -52,10 +55,25 @@ class SqsConsumerManager:
         """Returns the internal asyncio task for the consumer loop."""
         return self._task
 
+    def _on_task_done(self, task: asyncio.Task[None]) -> None:
+        if not task.cancelled() and task.exception():
+            exc = task.exception()
+            if exc:
+                logger.error(
+                    "sqs_consumer_manager_background_task_crashed",
+                    queue=self.queue_name,
+                    exc_info=exc,
+                )
+                if self.on_fatal_error:
+                    self.on_fatal_error(exc)
+                else:
+                    os._exit(1)
+
     def start(self) -> None:
         if not self.is_running:
             self.is_running = True
             self._task = asyncio.create_task(self._run_loop())
+            self._task.add_done_callback(self._on_task_done)
             logger.info("sqs_consumer_manager_started", queue=self.queue_name)
 
     async def stop(self) -> None:

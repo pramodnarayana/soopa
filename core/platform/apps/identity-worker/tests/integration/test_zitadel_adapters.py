@@ -19,9 +19,11 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_projects_adapte
 from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter import (
     ZitadelUsersAdapter,
 )
+from identity_worker.domain.exceptions import IdentityProviderPortError
 from seedwork import generate_id
 
 pytestmark = [
+    pytest.mark.integration,
     pytest.mark.asyncio,
     pytest.mark.skipif(
         not os.environ.get("IDENTITY_MACHINE_KEY")
@@ -80,9 +82,12 @@ async def test_full_zitadel_lifecycle(
     This creates an organization, provisions users, assigns roles, updates them, and then deletes the organization.
     """
     # 1. Test Organization Creation
-    test_org_name = f"Test Integration Org {uuid.uuid4()}"
-    org_id, grant_succeeded = await zitadel_orgs_adapter.create_organization(test_org_name)
-    assert org_id is not None
+    test_tenant_id = generate_id("ten")
+    test_org_name = f"Test Integration Org {test_tenant_id}"
+    org_id, grant_succeeded = await zitadel_orgs_adapter.create_organization(
+        test_tenant_id, test_org_name
+    )
+    assert org_id == test_tenant_id
     assert grant_succeeded is True, "Project grant should be successful"
 
     try:
@@ -93,14 +98,16 @@ async def test_full_zitadel_lifecycle(
         assert "PlatformAdmin" in role_keys or "TenantAdmin" in role_keys
 
         # 3. Test Create User
-        test_email = f"testuser_{uuid.uuid4()}@example.com"
+        test_email = f"testuser_{generate_id('usr')}@example.com"
+        test_user_id = generate_id("usr")
         user_id, _ = await zitadel_users_adapter.create_user(
             org_id=org_id,
+            user_id=test_user_id,
             email=test_email,
             first_name="Integration",
             last_name="TestUser",
         )
-        assert user_id is not None
+        assert user_id == test_user_id
 
         # 4. Test Update User Profile
         await zitadel_users_adapter.update_user_profile(
@@ -162,8 +169,9 @@ async def test_full_zitadel_lifecycle(
 
 
 async def test_update_organization_name(zitadel_orgs_adapter: ZitadelOrganizationsAdapter):
-    test_org_name = f"Test Update Org {uuid.uuid4()}"
-    org_id, _ = await zitadel_orgs_adapter.create_organization(test_org_name)
+    test_tenant_id = generate_id("ten")
+    test_org_name = f"Test Update Org {test_tenant_id}"
+    org_id, _ = await zitadel_orgs_adapter.create_organization(test_tenant_id, test_org_name)
     try:
         await zitadel_orgs_adapter.update_organization_name(org_id, test_org_name + " Updated")
     finally:
@@ -171,8 +179,9 @@ async def test_update_organization_name(zitadel_orgs_adapter: ZitadelOrganizatio
 
 
 async def test_toggle_organization_status(zitadel_orgs_adapter: ZitadelOrganizationsAdapter):
-    test_org_name = f"Test Toggle Org {uuid.uuid4()}"
-    org_id, _ = await zitadel_orgs_adapter.create_organization(test_org_name)
+    test_tenant_id = generate_id("ten")
+    test_org_name = f"Test Toggle Org {test_tenant_id}"
+    org_id, _ = await zitadel_orgs_adapter.create_organization(test_tenant_id, test_org_name)
     try:
         await zitadel_orgs_adapter.toggle_organization_status(org_id, active=False)
         await zitadel_orgs_adapter.toggle_organization_status(org_id, active=True)
@@ -217,3 +226,29 @@ async def test_sync_tenant_already_synced(
 
     provider = ZitadelIdentityProviderPort(zitadel_orgs_adapter, db_session_factory)
     await provider.sync_tenant(tenant_id)
+
+
+async def test_idempotent_organization_creation_recovery(
+    zitadel_orgs_adapter: ZitadelOrganizationsAdapter,
+):
+    test_tenant_id = generate_id("ten")
+    test_org_name = f"Test Idempotent Org {test_tenant_id}"
+
+    # 1. Create it for the first time
+    org_id_1, _ = await zitadel_orgs_adapter.create_organization(test_tenant_id, test_org_name)
+    assert org_id_1 == test_tenant_id
+
+    try:
+        # 2. Simulate Split Brain (Call create again with the exact same ID and Name)
+        # Zitadel will throw 409, but our adapter should catch it, query by test_tenant_id, and seamlessly recover!
+        org_id_2, _ = await zitadel_orgs_adapter.create_organization(test_tenant_id, test_org_name)
+        assert org_id_2 == test_tenant_id
+
+        # 3. Simulate Genuine Duplicate Name (Different ID, Same Name)
+        # Zitadel throws 409. We query our NEW ID, find nothing, and throw GenuineDuplicateError.
+        new_tenant_id = generate_id("ten")
+        with pytest.raises(IdentityProviderPortError, match="taken by another tenant"):
+            await zitadel_orgs_adapter.create_organization(new_tenant_id, test_org_name)
+
+    finally:
+        await zitadel_orgs_adapter.delete_organization(test_tenant_id)

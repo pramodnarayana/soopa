@@ -110,7 +110,7 @@ async def main() -> None:
             await conn.execute(
                 update(User)
                 .where(
-                    func.lower(User.email) == "admin@soopa.io",
+                    func.lower(User.email) == "admin@flowwolf.io",
                     User.idp_user_id != platform_admin_id,
                 )
                 .values(idp_user_id=platform_admin_id)
@@ -121,14 +121,14 @@ async def main() -> None:
                 .values(
                     id=platform_user_id,
                     idp_user_id=platform_admin_id,
-                    email="admin@soopa.io",
+                    email="admin@flowwolf.io",
                     name="Platform Admin",
                     status="active",
                 )
                 .on_conflict_do_update(
                     index_elements=[User.idp_user_id],
                     set_={
-                        "email": "admin@soopa.io",
+                        "email": "admin@flowwolf.io",
                         "name": "Platform Admin",
                         "status": "active",
                     },

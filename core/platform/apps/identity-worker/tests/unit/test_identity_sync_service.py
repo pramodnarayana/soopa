@@ -16,7 +16,7 @@ from identity_worker.ports.outbound.identity_provider_port import IdentityProvid
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 from seedwork import generate_id
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
 
 
 class FakeIdentityProvider(IdentityProviderPort):
@@ -37,11 +37,11 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
     async def create_user(
         self,
         org_id: str,
+        user_id: str,
         email: str,
         first_name: str,
         last_name: str,
     ) -> tuple[str, bool]:
-        user_id = f"idp_{uuid.uuid4()}"
         self.users[user_id] = {
             "org_id": org_id,
             "email": email,
@@ -258,7 +258,7 @@ async def test_handle_user_updated(fakes, uow_factory, setup_db):
 
     # Pre-populate fake user
     idp_user_id, _ = await user_idp.create_user(
-        setup_db["idp_tenant_id"], "old@test.com", "Old", "Name"
+        setup_db["idp_tenant_id"], f"idp_{uuid.uuid4()}", "old@test.com", "Old", "Name"
     )
 
     await service.handle_user_updated(
@@ -278,7 +278,7 @@ async def test_handle_user_status_toggled(fakes, uow_factory, setup_db):
     service = IdentitySyncService(idp, user_idp, uow_factory)
 
     idp_user_id, _ = await user_idp.create_user(
-        setup_db["idp_tenant_id"], "test@test.com", "F", "L"
+        setup_db["idp_tenant_id"], f"idp_{uuid.uuid4()}", "test@test.com", "F", "L"
     )
     assert user_idp.user_status[idp_user_id] == "active"
 
@@ -294,7 +294,7 @@ async def test_handle_user_deleted(fakes, uow_factory, setup_db):
     service = IdentitySyncService(idp, user_idp, uow_factory)
 
     idp_user_id, _ = await user_idp.create_user(
-        setup_db["idp_tenant_id"], "test@test.com", "F", "L"
+        setup_db["idp_tenant_id"], f"idp_{uuid.uuid4()}", "test@test.com", "F", "L"
     )
     assert idp_user_id in user_idp.users
 

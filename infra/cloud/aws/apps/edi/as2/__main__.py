@@ -55,7 +55,15 @@ as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-firelens_endpoint = None
+firelens_endpoint = (
+    platform.require_output("openobserve_endpoint") if enable_observability else None
+)
+obs_user_arn = (
+    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
+)
+obs_pass_arn = (
+    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+)
 ecr_image_uri = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
 _region = aws.get_region()
@@ -86,7 +94,9 @@ aws.iam.RolePolicyAttachment(
 aws.iam.RolePolicy(
     f"{_prefix}as2-ecs-exec-role-secrets-policy",
     role=execution_role.id,
-    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
+    policy=pulumi.Output.all(
+        edi_shard_db_secret_arn, global_db_secret_arn, obs_user_arn, obs_pass_arn
+    ).apply(
         lambda args: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -94,7 +104,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1]],
+                        "Resource": [args[0], args[1], args[2], args[3]],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],

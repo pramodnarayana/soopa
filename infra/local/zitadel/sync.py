@@ -40,17 +40,20 @@ def _read_pulumi_outputs(script_dir: Path) -> dict[str, str]:
     if not pulumi_bin:
         raise RuntimeError("pulumi binary not found in PATH")
 
-    pulumi_dir = script_dir.parent / "zitadel_pulumi"
+    pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
 
     result = subprocess.run(  # noqa: S603
-        [pulumi_bin, "stack", "output", "--json", "--show-secrets"],
+        [pulumi_bin, "stack", "output", "--json", "--show-secrets", "-s", "local"],
         cwd=pulumi_dir,
         capture_output=True,
         text=True,
         check=True,
     )
     pulumi_output: dict = json.loads(result.stdout)
-    return {key: str(value) for key, value in pulumi_output.items()}
+    return {
+        key: (json.dumps(value) if isinstance(value, (dict, list)) else str(value))
+        for key, value in pulumi_output.items()
+    }
 
 
 def _sanitize_env_value(value: str) -> str:
@@ -60,9 +63,8 @@ def _sanitize_env_value(value: str) -> str:
     prevent standard dotenv parsers from misinterpreting internal quotes or backslashes.
     """
     if value.startswith("{") and value.endswith("}"):
-        # It's a JSON string. Do not wrap in quotes and do not escape.
-        # This perfectly matches the .env.example format.
-        return value
+        # It's a JSON string. Wrap in single quotes so bash `source .env` doesn't strip double quotes.
+        return f"'{value}'"
 
     safe_value = value.replace("\\", "\\\\").replace('"', '\\"')
     safe_value = safe_value.replace("\r", "").replace("\n", "\\n")

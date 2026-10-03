@@ -53,5 +53,6 @@ pulumi.export("queue_env_vars", result.queue_env_vars)
 # be removed once all consumers migrate to queue_env_vars.
 for queue_name, queue in result.queues.items():
     pulumi.export(f"sqs_{queue_name.replace('-', '_')}_url", queue.url)
+    pulumi.export(f"sqs_{queue_name.replace('-', '_')}_arn", queue.arn)
 for topic_name, topic in result.topics.items():
     pulumi.export(f"sns_{topic_name.replace('-', '_')}_arn", topic.arn)

@@ -41,4 +41,6 @@ pulumi.export("queue_env_vars", result.queue_env_vars)
 
 # Granular exports for stacks still using individual require_output() calls.
 pulumi.export("email_channel_queue_url", result.queues["email-channel"].url)
+pulumi.export("email_channel_queue_arn", result.queues["email-channel"].arn)
 pulumi.export("notification_jobs_queue_url", result.queues["notification-jobs"].url)
+pulumi.export("notification_jobs_queue_arn", result.queues["notification-jobs"].arn)

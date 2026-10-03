@@ -5,6 +5,7 @@ class UserIdentityProviderPort(Protocol):
     async def create_user(
         self,
         org_id: str,
+        user_id: str,
         email: str,
         first_name: str,
         last_name: str,

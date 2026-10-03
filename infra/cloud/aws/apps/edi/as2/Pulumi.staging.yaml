@@ -1,3 +1,4 @@
 encryptionsalt: v1:fxQwV+mUQL4=:v1:IoFRTNEjLriP7hZ3:H9rIlDXMRMPo5lhZjNmEoUdFtEwWdQ==
 config:
+  edi-as2:enable_observability: 'true'
   edi-as2:image_tag: latest

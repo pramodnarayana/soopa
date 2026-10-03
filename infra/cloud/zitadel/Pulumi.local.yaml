@@ -1,7 +1,6 @@
-encryptionsalt: v1:lgr6+uEmdTM=:v1:95GgFDzj6NmSyBEI:8UqKXlaHFnZl3w3dHZP3ebMyGn+DyQ==
+encryptionsalt: v1:xDorJiTx8yw=:v1:WKYbdgfytKHfqLPL:3UdMPjc7L8k+2egxLEaqaFNECuSd7w==
 config:
-  zitadel-infrastructure:dev_mode: "true"
-  zitadel-infrastructure:ucp_web_dashboard_redirect_uris:
-    - http://localhost:5173/callback
-  zitadel-infrastructure:ucp_web_dashboard_post_logout_redirect_uris:
-    - http://localhost:5173
+  zitadel-infrastructure:insecure: "true"
+  zitadel-infrastructure:port: "8080"
+  zitadel-infrastructure:platform_admin_password:
+    secure: v1:kB3N22XNxvRZYnGm:nBjRZH0lFvFP2fB4YA8GT0tXCUPivgXjEhQ=

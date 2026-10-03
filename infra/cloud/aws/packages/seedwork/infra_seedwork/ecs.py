@@ -4,6 +4,24 @@ import pulumi
 import pulumi_aws as aws
 
 
+class EcsConstants:
+    LOG_DRIVER_AWSLOGS = "awslogs"
+    LOG_DRIVER_FIRELENS = "awsfirelens"
+    FIRELENS_TYPE = "fluentbit"
+    CONTAINER_NAME_APP = "app"
+    CONTAINER_NAME_LOG_ROUTER = "log_router"
+    TRUE_STR = "true"
+
+
+class ObservabilityConstants:
+    DEFAULT_FLUENTBIT_IMAGE = "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable"
+    HTTP_OUTPUT_PLUGIN = "http"
+    JSON_FORMAT = "json"
+    OPENOBSERVE_URI = "/api/default/default/_json"
+    DEFAULT_PORT = "80"
+    TLS_ON = "off"
+
+
 def _build_base_statements(
     queue_arns: list, topic_arns: list, bucket_arns: list, extra_statements: list
 ) -> list:
@@ -17,6 +35,58 @@ def _build_base_statements(
     if extra_statements:
         statements.extend(extra_statements)
     return statements
+
+
+def build_firelens_sidecar(
+    group_name: str,
+    region_name: str,
+    fluentbit_image_uri: str = ObservabilityConstants.DEFAULT_FLUENTBIT_IMAGE,
+) -> dict:
+    return {
+        "name": EcsConstants.CONTAINER_NAME_LOG_ROUTER,
+        "image": fluentbit_image_uri,
+        "essential": True,
+        "firelensConfiguration": {
+            "type": EcsConstants.FIRELENS_TYPE,
+            "options": {"enable-ecs-log-metadata": EcsConstants.TRUE_STR},
+        },
+        "logConfiguration": {
+            "logDriver": EcsConstants.LOG_DRIVER_AWSLOGS,
+            "options": {
+                "awslogs-group": f"{group_name}-{EcsConstants.FIRELENS_TYPE}",
+                "awslogs-region": region_name,
+                "awslogs-stream-prefix": EcsConstants.FIRELENS_TYPE,
+                "awslogs-create-group": EcsConstants.TRUE_STR,
+            },
+        },
+    }
+
+
+def build_firelens_log_config(
+    fl_end: str, obs_user_arn: str = None, obs_pass_arn: str = None
+) -> dict:
+    host = fl_end.split(":")[0]
+    fl_port = fl_end.split(":")[1] if ":" in fl_end else ObservabilityConstants.DEFAULT_PORT
+    main_log_config = {
+        "logDriver": EcsConstants.LOG_DRIVER_FIRELENS,
+        "options": {
+            "Name": ObservabilityConstants.HTTP_OUTPUT_PLUGIN,
+            "Host": host,
+            "Port": fl_port,
+            "URI": ObservabilityConstants.OPENOBSERVE_URI,
+            "Format": ObservabilityConstants.JSON_FORMAT,
+        },
+    }
+    if obs_user_arn and obs_pass_arn:
+        main_log_config["secretOptions"] = [
+            {"name": "http_user", "valueFrom": obs_user_arn},
+            {"name": "http_passwd", "valueFrom": obs_pass_arn},
+        ]
+    elif obs_user_arn or obs_pass_arn:
+        raise ValueError(
+            "Both obs_user_secret_arn and obs_password_secret_arn must be provided together."
+        )
+    return main_log_config
 
 
 def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyclomatic complexity to assemble all AWS ECS primitives in a single atomic transaction
@@ -42,6 +112,7 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
     extra_ports: list = None,
     extra_target_groups: list = None,
     firelens_endpoint: str = None,  # If provided, injects FluentBit sidecar
+    fluentbit_image_uri: str = ObservabilityConstants.DEFAULT_FLUENTBIT_IMAGE,
     queue_arns: list = None,
     topic_arns: list = None,
     bucket_arns: list = None,
@@ -49,6 +120,7 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
     obs_user_secret_arn: str = None,
     obs_password_secret_arn: str = None,
     secrets: list = None,
+    enable_execute_command: bool = False,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
@@ -78,6 +150,21 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
         queue_arns, topic_arns, bucket_arns, extra_task_policy_statements
     )
 
+    if enable_execute_command:
+        base_statements.append(
+            {
+                "Sid": "ExecuteCommand",
+                "Effect": "Allow",
+                "Action": [
+                    "ssmmessages:CreateControlChannel",
+                    "ssmmessages:CreateDataChannel",
+                    "ssmmessages:OpenControlChannel",
+                    "ssmmessages:OpenDataChannel",
+                ],
+                "Resource": "*",
+            }
+        )
+
     if base_statements:
         aws.iam.RolePolicy(
             f"{name}-task-policy",
@@ -100,24 +187,11 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
     sidecars = []
     if firelens_endpoint:
         sidecars.append(
-            {
-                "name": "log_router",
-                "image": "public.ecr.aws/aws-observability/aws-for-fluent-bit:stable",
-                "essential": True,
-                "firelensConfiguration": {
-                    "type": "fluentbit",
-                    "options": {"enable-ecs-log-metadata": "true"},
-                },
-                "logConfiguration": {
-                    "logDriver": "awslogs",
-                    "options": {
-                        "awslogs-group": f"/ecs/{name}-firelens",
-                        "awslogs-region": _region.name,
-                        "awslogs-stream-prefix": "fluentbit",
-                        "awslogs-create-group": "true",
-                    },
-                },
-            }
+            build_firelens_sidecar(
+                group_name=f"/ecs/{name}",
+                region_name=_region.name,
+                fluentbit_image_uri=fluentbit_image_uri,
+            )
         )
 
     if sidecar_container:
@@ -131,43 +205,22 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
         obs_pass_arn = args[4]
         sec = args[5]
 
-        main_log_config = {
-            "logDriver": "awslogs",
-            "options": {
-                "awslogs-group": f"/ecs/{name}",
-                "awslogs-region": _region.name,
-                "awslogs-stream-prefix": "app",
-                "awslogs-create-group": "true",
-            },
-        }
-
         if fl_end:
-            host = fl_end.split(":")[0]
-            fl_port = fl_end.split(":")[1] if ":" in fl_end else "80"
+            main_log_config = build_firelens_log_config(fl_end, obs_user_arn, obs_pass_arn)
+        else:
             main_log_config = {
-                "logDriver": "awsfirelens",
+                "logDriver": EcsConstants.LOG_DRIVER_AWSLOGS,
                 "options": {
-                    "Name": "http",
-                    "Host": host,
-                    "Port": fl_port,
-                    "URI": "/api/default/default/_json",
-                    "Format": "json",
-                    "tls": "on",
+                    "awslogs-group": f"/ecs/{name}",
+                    "awslogs-region": _region.name,
+                    "awslogs-stream-prefix": EcsConstants.CONTAINER_NAME_APP,
+                    "awslogs-create-group": EcsConstants.TRUE_STR,
                 },
             }
-            if obs_user_arn and obs_pass_arn:
-                main_log_config["secretOptions"] = [
-                    {"name": "HTTP_User", "valueFrom": obs_user_arn},
-                    {"name": "HTTP_Passwd", "valueFrom": obs_pass_arn},
-                ]
-            elif obs_user_arn or obs_pass_arn:
-                raise ValueError(
-                    "Both obs_user_secret_arn and obs_password_secret_arn must be provided together."
-                )
 
         containers = [
             {
-                "name": "app",
+                "name": EcsConstants.CONTAINER_NAME_APP,
                 "image": image,
                 "command": command,
                 "essential": True,
@@ -238,6 +291,7 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
             assign_public_ip=is_public,
         ),
         load_balancers=lbs if lbs else None,
+        enable_execute_command=enable_execute_command,
         tags=tags,
     )
 

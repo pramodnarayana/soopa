@@ -48,6 +48,12 @@ enable_observability = config.get_bool("enable_observability")
 firelens_endpoint = (
     platform.require_output("openobserve_endpoint") if enable_observability else None
 )
+obs_user_arn = (
+    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
+)
+obs_pass_arn = (
+    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+)
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -85,7 +91,7 @@ aws.iam.RolePolicyAttachment(
 aws.iam.RolePolicy(
     f"{_prefix}debezium-ecs-exec-role-policy",
     role=execution_role.id,
-    policy=pulumi.Output.all(edi_shard_db_secret_arn, data_plane_topic_arn).apply(
+    policy=pulumi.Output.all(edi_shard_db_secret_arn, obs_user_arn, obs_pass_arn).apply(
         lambda args: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -93,7 +99,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0]],
+                        "Resource": [args[0], args[1], args[2]],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -116,6 +122,8 @@ debezium_server = provision_fargate_service(
         {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": data_plane_topic_arn}
     ],
     firelens_endpoint=firelens_endpoint,
+    obs_user_secret_arn=obs_user_arn,
+    obs_password_secret_arn=obs_pass_arn,
     environment_vars=[
         {"name": "AWS_REGION", "value": _region.name},
         {"name": "DEBEZIUM_SINK_SNS_REGION", "value": _region.name},
@@ -143,6 +151,10 @@ debezium_server = provision_fargate_service(
             "value": pulumi.Output.all(edi_shard_db_endpoint).apply(
                 lambda args: f"jdbc:postgresql://{args[0]}/edi_shard"
             ),
+        },
+        {
+            "name": "DEBEZIUM_SOURCE_MAX_BATCH_SIZE",
+            "value": "10",
         },
     ],
     secrets=[
