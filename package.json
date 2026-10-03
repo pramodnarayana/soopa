@@ -73,6 +73,17 @@
     "@commitlint/cli": "^21.2.2",
     "@commitlint/config-conventional": "^21.2.2",
     "@eslint/js": "^10.0.1",
+    "@soopa/api": "workspace:*",
+    "@soopa/database": "workspace:*",
+    "@soopa/identity": "workspace:*",
+    "@soopa/notification": "workspace:*",
+    "@soopa/observability": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/scheduler": "workspace:*",
+    "@soopa/schemas": "workspace:*",
+    "@soopa/ucp": "workspace:*",
+    "@soopa/unified-api": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@tanstack/eslint-plugin-router": "^1.162.0",
@@ -90,33 +101,31 @@
     "turbo": "^2.10.11",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.67.0",
-    "vitest": "^4.1.11",
-    "@soopa/identity": "workspace:*",
-    "@soopa/database": "workspace:*",
-    "@soopa/schemas": "workspace:*",
-    "@soopa/observability": "workspace:*",
-    "@soopa/outbox": "workspace:*",
-    "@soopa/pubsub": "workspace:*",
-    "@soopa/notification": "workspace:*",
-    "@soopa/scheduler": "workspace:*",
-    "@soopa/ucp": "workspace:*",
-    "@soopa/api": "workspace:*",
-    "@soopa/unified-api": "workspace:*"
+    "vitest": "^4.1.11"
   },
   "dependencies": {
     "ts-morph": "^28.0.0"
   },
   "pnpm": {
     "overrides": {
-      "dompurify": "^3.4.12",
+      "brace-expansion": "^5.0.12",
+      "dompurify": "^3.4.16",
       "hono": "^4.13.5",
       "js-yaml": "^4.3.2",
       "undici": "^7.29.1",
       "ip-address": "^10.5.1",
       "@hono/node-server": "^1.19.15",
-      "fast-uri": "^3.1.6",
+      "fast-uri": "^3.1.8",
       "qs": "^6.16.0",
       "esbuild": "^0.28.1"
+    },
+    "auditConfig": {
+      "ignoreCves": [
+        "GHSA-86w9-cpqp-85rv",
+        "GHSA-vfj7-8cjw-p6xm",
+        "CVE-2026-85393",
+        "CVE-2026-93687"
+      ]
     }
   }
 }

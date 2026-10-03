@@ -99,7 +99,7 @@ dev = [
     "types-paramiko>=3.3.0",
     "semgrep>=1.0.0",
     "pulumi>=3.0.0",
-    "pulumiverse-zitadel>=0.1.0",
+    "pulumiverse-zitadel>=0.2.0",
     "setuptools>=84.0.0",
 ]
 

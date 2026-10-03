@@ -110,13 +110,15 @@ def provision_target_group_and_rule(
     port: int = 8000,
     health_check_path: str = "/health",
     protocol_version: str = "HTTP1",
+    http_header_name: str = None,
+    http_header_values: list = None,
+    health_check_matcher: str = "200",
 ) -> aws.lb.TargetGroup:
     """
     Provisions a Target Group for ECS Fargate and attaches it to the Listener with a path rule.
     """
     tg = aws.lb.TargetGroup(
         f"{name}-tg",
-        name=name,
         port=port,
         protocol="HTTP",
         protocol_version=protocol_version,
@@ -128,6 +130,7 @@ def provision_target_group_and_rule(
             timeout=5,
             healthy_threshold=2,
             unhealthy_threshold=3,
+            matcher=health_check_matcher,
         ),
         tags=tags,
     )
@@ -146,6 +149,15 @@ def provision_target_group_and_rule(
             aws.lb.ListenerRuleConditionArgs(
                 host_header=aws.lb.ListenerRuleConditionHostHeaderArgs(
                     values=[host_header],
+                )
+            )
+        )
+    if http_header_name and http_header_values:
+        conditions.append(
+            aws.lb.ListenerRuleConditionArgs(
+                http_header=aws.lb.ListenerRuleConditionHttpHeaderArgs(
+                    http_header_name=http_header_name,
+                    values=http_header_values,
                 )
             )
         )

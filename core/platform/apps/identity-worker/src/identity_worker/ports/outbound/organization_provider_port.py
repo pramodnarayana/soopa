@@ -2,7 +2,7 @@ from typing import Protocol
 
 
 class OrganizationProviderPort(Protocol):
-    async def create_organization(self, name: str) -> tuple[str, bool]:
+    async def create_organization(self, tenant_id: str, name: str) -> tuple[str, bool]:
         """Creates an organization and returns (org_id, grant_succeeded)"""
         ...
 

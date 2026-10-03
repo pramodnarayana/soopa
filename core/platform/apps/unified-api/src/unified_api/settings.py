@@ -18,6 +18,7 @@ class ApiSettings(CommonSettings):
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
     secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
+    cors_allowed_origins: list[str] = Field(validation_alias="CORS_ALLOWED_ORIGINS")
 
 
 @lru_cache

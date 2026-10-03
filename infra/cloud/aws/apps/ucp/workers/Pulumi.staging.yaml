@@ -1,4 +1,5 @@
 config:
+  ucp-workers:enable_observability: 'true'
   ucp-workers:worker_groups:
     - name: "workers"
       modules: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker"

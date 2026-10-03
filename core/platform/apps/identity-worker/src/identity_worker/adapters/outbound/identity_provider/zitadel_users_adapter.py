@@ -1,4 +1,3 @@
-import asyncio
 from typing import Literal
 
 import structlog
@@ -10,7 +9,6 @@ from identity.adapters.outbound.zitadel.exceptions import (
 
 from identity_worker.adapters.outbound.identity_provider.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
-    ZitadelUser,
 )
 from identity_worker.config.settings import get_settings
 from identity_worker.domain.exceptions import IdentityProviderPortError
@@ -41,6 +39,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
     async def create_user(
         self,
         org_id: str,
+        user_id: str,
         email: str,
         first_name: str,
         last_name: str,
@@ -49,64 +48,65 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             "creating_user_in_zitadel",
             email=self._mask_email(email),
             org_id=org_id,
+            user_id=user_id,
         )
         try:
-            user_res = await self.fetch_with_auth(
-                endpoint="/management/v1/users/human",
+            await self.fetch_with_auth(
+                endpoint="/v2/users/human",
                 method="POST",
                 headers={"x-zitadel-orgid": org_id},
                 json={
-                    "userName": email,
+                    "userId": user_id,
+                    "username": email,
                     "profile": {
-                        "firstName": first_name,
-                        "lastName": last_name,
-                        "displayName": f"{first_name} {last_name}",
-                        "preferredLanguage": "en",
+                        "givenName": first_name,
+                        "familyName": last_name,
                     },
                     "email": {
                         "email": email,
-                        "isEmailVerified": True,
+                        "isVerified": True,
                     },
-                    "initialPassword": self.default_user_password,
+                    "password": {
+                        "password": self.default_user_password,
+                        "changeRequired": False,
+                    },
                 },
             )
-
-            data = user_res.json()
-            user_data = ZitadelUser.model_validate(data)
-            user_id = user_data.user_id or user_data.id
-            if not user_id:
-                raise ValueError("User ID not returned from Zitadel")
 
             logger.info("successfully_created_user_in_zitadel", user_id=user_id, org_id=org_id)
             return user_id, True
 
         except ZitadelHttpConflictError:
-            logger.info(
-                "user_already_exists_in_idp_reconciling",
+            logger.warning(
+                "user_conflict_attempting_deterministic_recovery",
                 email=self._mask_email(email),
                 org_id=org_id,
+                user_id=user_id,
             )
-            # Zitadel is eventually consistent. The user might exist in the event log (causing 409)
-            # but not yet be visible in the search projection. We must retry.
-            for attempt in range(5):
-                existing_user_id = await self.get_user_by_email(org_id=org_id, email=email)
-                if existing_user_id:
-                    return existing_user_id, False
-                logger.info(
-                    "user_not_in_projection_yet_retrying",
-                    attempt=attempt,
+            try:
+                # Deterministic idempotency: Verify if user exists with OUR specific UUID
+                # Management API v1 GET user works well for this and is instantly consistent
+                await self.fetch_with_auth(
+                    endpoint=f"/management/v1/users/{user_id}",
+                    method="GET",
+                    headers={"x-zitadel-orgid": org_id},
+                )
+                logger.info("recovered_existing_user_from_zitadel", user_id=user_id)
+                return user_id, False
+            except ZitadelHttpNotFoundError:
+                logger.exception(
+                    "genuine_duplicate_user_email",
                     email=self._mask_email(email),
                 )
-                # Exponential backoff: 0.5s, 1.0s, 2.0s, 4.0s, 8.0s
-                if attempt < 4:
-                    await asyncio.sleep(0.5 * (2**attempt))
+                raise IdentityProviderPortError(f"Email '{email}' is already taken.")
+            except Exception as search_err:
+                logger.exception(
+                    "failed_to_recover_existing_user",
+                    email=self._mask_email(email),
+                    user_id=user_id,
+                )
+                raise IdentityProviderPortError("Failed to recover existing user") from search_err
 
-            raise IdentityProviderPortError(
-                "User supposedly exists in IDP but could not be found by email even after retries"
-            )
-
-        except IdentityProviderPortError:
-            raise
         except Exception as e:
             logger.exception(
                 "error_creating_user_in_zitadel",

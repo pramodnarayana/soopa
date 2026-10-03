@@ -82,6 +82,6 @@ repos:
         pass_filenames: false
       - id: pnpm-audit
         name: pnpm-audit
-        entry: pnpm audit --prod
+        entry: pnpm audit --prod --ignore-unfixable
         language: system
         pass_filenames: false

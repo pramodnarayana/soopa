@@ -10,6 +10,7 @@ echo "=== Dynamically Fetching Configuration from Pulumi (The Advanced Enterpris
 cd "$REPO_ROOT/infra/cloud/aws/platform"
 ALB_DOMAIN=$(pulumi stack output staging_domain -s staging)
 export VITE_API_PROXY_TARGET="https://api.${ALB_DOMAIN}"
+export VITE_UCP_API_URL="https://api.${ALB_DOMAIN}"
 export IDENTITY_API_URL="https://identity.${ALB_DOMAIN}"
 
 # 2. Fetch Client and Project IDs from Zitadel Config Stack
@@ -33,9 +34,13 @@ pnpm run build
 echo "=== Fetching Dashboard S3 Bucket from Pulumi ==="
 cd "$SCRIPT_DIR"
 BUCKET_NAME=$(pulumi stack output dashboard_s3_bucket -s staging)
+CLOUDFRONT_ID=$(pulumi stack output dashboard_cloudfront_id -s staging)
 
 echo "=== Syncing static files to S3 ($BUCKET_NAME) ==="
-aws s3 sync "$REPO_ROOT/core/ucp/apps/dashboard/dist/" s3://$BUCKET_NAME/ --delete
+aws s3 sync "$REPO_ROOT/core/ucp/apps/dashboard/dist/" "s3://$BUCKET_NAME/" --delete
+
+echo "=== Invalidating CloudFront Cache ($CLOUDFRONT_ID) ==="
+aws cloudfront create-invalidation --distribution-id "$CLOUDFRONT_ID" --paths "/*"
 
 echo "=== Dashboard Deployment Complete ==="
 DASHBOARD_URL=$(pulumi stack output dashboard_url -s staging)

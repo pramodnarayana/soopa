@@ -1,11 +1,12 @@
 import os
+from pathlib import Path
 
 import pulumi
 import pulumiverse_zitadel as zitadel
 from dotenv import load_dotenv
 
 # Load the root .env file as the Single Source of Truth
-load_dotenv("../../.env")
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 config = pulumi.Config()
 company_name = os.environ.get("COMPANY_NAME", "FlowWolf")
@@ -33,7 +34,8 @@ else:
     secret_value = aws.secretsmanager.get_secret_version(secret_id=secret_meta.arns[0])
 
     # 3. We dynamically fetch the master domain from the platform stack
-    platform = pulumi.StackReference(f"organization/platform/{_env}")
+    org = config.require("organization")
+    platform = pulumi.StackReference(f"{org}/platform/{_env}")
     zitadel_domain = platform.require_output("staging_domain")
 
     jwt_profile_file = None
@@ -80,13 +82,13 @@ iam_manager_sa_key = zitadel.MachineKey(
 platform_admin = zitadel.HumanUser(
     "platform-admin",
     org_id=platform_org.id,
-    user_name=f"platform.admin@{company_domain}",
+    user_name=f"admin@{company_domain}",
     first_name="Platform",
     last_name="Admin",
     display_name=f"{company_name} Platform Admin",
-    email=f"platform.admin@{company_domain}",
+    email=f"admin@{company_domain}",
     is_email_verified=True,
-    initial_password="Password1!",  # noqa: S106 - Hardcoded baseline password for local staging environment bootstrap
+    initial_password=config.require_secret("platform_admin_password"),
     opts=pulumi.ResourceOptions(provider=zitadel_provider),
 )
 

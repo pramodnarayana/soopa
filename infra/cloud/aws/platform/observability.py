@@ -11,7 +11,6 @@ _WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../..
 load_dotenv(os.path.join(_WORKSPACE_ROOT, "versions.env"))
 
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.network import provision_target_group_and_rule
 
 
 def provision_openobserve(
@@ -21,6 +20,7 @@ def provision_openobserve(
     private_subnets: list,
     app_sg_id: str,
     ecs_cluster_arn: str,
+    main_listener_arn: str,
     obs_listener_arn: str,
     obs_count: int,
 ):
@@ -31,20 +31,59 @@ def provision_openobserve(
         tags=tags,
     )
 
-    obs_tg = provision_target_group_and_rule(
-        name=f"{prefix}openobserve",
-        vpc_id=vpc_id,
-        listener_arn=obs_listener_arn,
-        priority=100,
-        path_pattern="/*",
-        tags=tags,
+    obs_tg = aws.lb.TargetGroup(
+        f"{prefix}openobserve-tg",
         port=5080,
+        protocol="HTTP",
+        vpc_id=vpc_id,
+        target_type="ip",
+        health_check=aws.lb.TargetGroupHealthCheckArgs(
+            path="/healthz",
+            protocol="HTTP",
+            interval=30,
+            timeout=5,
+            healthy_threshold=2,
+            unhealthy_threshold=2,
+        ),
+        tags=tags,
+    )
+
+    # Rule for port 5080 (Internal FireLens HTTP traffic)
+    aws.lb.ListenerRule(
+        f"{prefix}openobserve-obs-rule",
+        listener_arn=obs_listener_arn,
+        priority=105,
+        actions=[aws.lb.ListenerRuleActionArgs(type="forward", target_group_arn=obs_tg.arn)],
+        conditions=[
+            aws.lb.ListenerRuleConditionArgs(
+                path_pattern=aws.lb.ListenerRuleConditionPathPatternArgs(values=["/*"])
+            )
+        ],
+    )
+
+    # Rule for port 443 (Human HTTPS UI traffic)
+    aws.lb.ListenerRule(
+        f"{prefix}openobserve-main-rule",
+        listener_arn=main_listener_arn,
+        priority=110,
+        actions=[aws.lb.ListenerRuleActionArgs(type="forward", target_group_arn=obs_tg.arn)],
+        conditions=[
+            aws.lb.ListenerRuleConditionArgs(
+                host_header=aws.lb.ListenerRuleConditionHostHeaderArgs(
+                    values=[
+                        pulumi.Output.concat(
+                            "observability.", pulumi.Config().require("staging_domain")
+                        )
+                    ]
+                )
+            )
+        ],
     )
 
     obs_user_password = random.RandomPassword(
         "openobserve-password",
         length=32,
-        special=True,
+        special=False,
     )
 
     is_prod = pulumi.get_stack() == "production"
@@ -150,4 +189,4 @@ def provision_openobserve(
         ],
     )
 
-    return obs_svc
+    return obs_svc, obs_user_secret.arn, obs_password_secret.arn

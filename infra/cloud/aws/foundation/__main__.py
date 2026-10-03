@@ -197,6 +197,13 @@ app_sg = aws.ec2.SecurityGroup(
             security_groups=[main_alb_sg.id],
         ),
         aws.ec2.SecurityGroupIngressArgs(
+            description="Internal VPC Service Discovery Traffic (Self)",
+            from_port=0,
+            to_port=0,
+            protocol="-1",
+            self=True,
+        ),
+        aws.ec2.SecurityGroupIngressArgs(
             description="Traffic from ALB only (AS2)",
             from_port=8001,
             to_port=8001,

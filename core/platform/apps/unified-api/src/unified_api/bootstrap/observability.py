@@ -9,7 +9,6 @@ import os
 
 from fastapi import FastAPI
 from observability import NoOpMetrics, ObservabilityProvider, OtelTracer, StructlogLogger
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 
 def setup_observability(app: FastAPI) -> None:
@@ -35,7 +34,8 @@ def setup_observability(app: FastAPI) -> None:
     )
 
     # 3. Instrument the FastAPI application to automatically generate traces for HTTP requests
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer.trace_provider)
+    # FIXME: Temporarily disabled because opentelemetry-instrumentation-fastapi crashes on OPTIONS requests with Starlette _IncludedRouter bug
+    # FastAPIInstrumentor.instrument_app(app, tracer_provider=tracer.trace_provider)
 
     # Let the log system know we started
     ObservabilityProvider.logger(__name__).info(

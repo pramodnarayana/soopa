@@ -9,7 +9,7 @@ ENV=${1:-staging}
 echo "Deploying migrations for environment: $ENV"
 
 # 1. Fetch AWS network configuration and task definition from Pulumi stack outputs
-cd "$(dirname "$0")/../apps/migrator"
+cd "$(dirname "$0")/../cloud/aws/apps/migrator"
 NETWORK_CONFIG=$(pulumi stack output cli_network_configuration --stack $ENV)
 TASK_DEF=$(pulumi stack output task_definition_family --stack $ENV)
 CLUSTER="${ENV}-cluster"
@@ -49,11 +49,11 @@ if [ "$EXIT_CODE" = "0" ]; then
 
     # Let's fetch the last few lines of the logs to show success
     echo "--- Migration Logs ---"
-    aws logs tail /ecs/${ENV}-migrator --format short | tail -n 15
+    aws logs tail /ecs/${ENV}-migrator-migrator --format short | tail -n 15
     exit 0
 else
     echo "❌ Migrations failed with exit code $EXIT_CODE."
     echo "--- Error Logs ---"
-    aws logs tail /ecs/${ENV}-migrator --format short | tail -n 30
+    aws logs tail /ecs/${ENV}-migrator-migrator --format short | tail -n 30
     exit 1
 fi

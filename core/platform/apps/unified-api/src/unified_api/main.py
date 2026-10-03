@@ -120,11 +120,7 @@ app.add_middleware(
 # Layer 1 — CORS (outermost, handles all browser preflight requests)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",  # Vite dev server (UCP dashboard)
-        "http://localhost:3001",  # EDI UI dev server (alternative port)
-        "http://localhost:3000",  # Fallback / legacy
-    ],
+    allow_origins=get_settings().cors_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

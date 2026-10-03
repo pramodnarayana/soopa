@@ -9,8 +9,6 @@ from infra_seedwork.storage import provision_secure_bucket
 # Payloads bucket
 payloads_bucket = provision_secure_bucket(
     name=f"{_prefix}as2-payloads",
-    bucket=f"{_prefix}as2-payloads",
-    force_destroy=True,
     tags=_TAGS,
 )
 

@@ -28,11 +28,19 @@ _TAGS = {"ManagedBy": "pulumi", "Component": "ucp-workers", "Environment": _env}
 config = pulumi.Config()
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
+
+zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
+zitadel = pulumi.StackReference(zitadel_stack_ref)
+identity_platform_org_id = zitadel.require_output("platform_org_id")
+identity_ucp_project_id = zitadel.require_output("ucp_project_id")
+identity_oauth_client_id = zitadel.require_output("ucp_web_client_id")
+identity_platform_admin_id = zitadel.require_output("platform_admin_id")
 edi_messaging_stack_ref = config.get("edi_messaging_stack") or f"organization/edi-messaging/{_env}"
 notification_stack_ref = config.get("notification_stack") or f"organization/notification/{_env}"
 identity_stack_ref = config.get("identity_stack") or f"organization/identity/{_env}"
 ucp_stack_ref = config.get("ucp_stack") or f"organization/ucp/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
+aws_zitadel_stack_ref = config.get("aws_zitadel_stack") or f"organization/zitadel/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
@@ -41,6 +49,8 @@ notification = pulumi.StackReference(notification_stack_ref)
 identity = pulumi.StackReference(identity_stack_ref)
 ucp = pulumi.StackReference(ucp_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
+aws_zitadel = pulumi.StackReference(aws_zitadel_stack_ref)
+machinekey_secret_arn = aws_zitadel.require_output("machinekey_secret_arn")
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
 private_subnets = [
@@ -68,6 +78,12 @@ enable_observability = config.get_bool("enable_observability")
 firelens_endpoint = (
     platform.require_output("openobserve_endpoint") if enable_observability else None
 )
+obs_user_arn = (
+    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
+)
+obs_pass_arn = (
+    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+)
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
 _region = aws.get_region()
@@ -94,7 +110,12 @@ aws.iam.RolePolicy(
     f"{_prefix}ecs-exec-role-secrets-policy",
     role=execution_role.id,
     policy=pulumi.Output.all(
-        edi_shard_db_secret_arn, global_db_secret_arn, app_defaults_secret_arn
+        edi_shard_db_secret_arn,
+        global_db_secret_arn,
+        app_defaults_secret_arn,
+        machinekey_secret_arn,
+        obs_user_arn,
+        obs_pass_arn,
     ).apply(
         lambda args: json.dumps(
             {
@@ -103,7 +124,15 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1], args[2]],
+                        "Resource": [
+                            args[0],
+                            args[1],
+                            args[2],
+                            args[3],
+                            args[4],
+                            args[5],
+                            f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:identity/{_prefix}iam-manager-sa-key-*",
+                        ],
                     },
                     {
                         "Effect": "Allow",
@@ -119,6 +148,19 @@ aws.iam.RolePolicyAttachment(
     f"{_prefix}ecs-exec-role-attach",
     role=execution_role.name,
     policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+)
+
+# ── IAM Manager Secret ────────────────────────────────────────────────────────
+iam_manager_sa_secret = aws.secretsmanager.Secret(
+    f"{_prefix}iam-manager-sa-key",
+    name_prefix=f"identity/{_prefix}iam-manager-sa-key-",
+    tags=_TAGS,
+)
+
+aws.secretsmanager.SecretVersion(
+    f"{_prefix}iam-manager-sa-key-val",
+    secret_id=iam_manager_sa_secret.id,
+    secret_string=zitadel.require_output("iam_manager_sa_key"),
 )
 
 # ── EDI Secrets Sidecar ───────────────────────────────────────────────────────
@@ -170,7 +212,21 @@ extra_task_policy_statements = [
             "sqs:ChangeMessageVisibility",
             "sqs:SendMessage",
         ],
-        "Resource": [ucp_jobs_queue_arn, ucp_events_queue_arn],
+        "Resource": [
+            ucp_jobs_queue_arn,
+            ucp_events_queue_arn,
+            identity.require_output("identity_events_queue_arn"),
+            identity.require_output("identity_jobs_queue_arn"),
+            edi.require_output("sqs_edi_compute_arn"),
+            edi.require_output("sqs_edi_config_sync_queue_arn"),
+            edi.require_output("sqs_edi_control_plane_jobs_arn"),
+            edi.require_output("sqs_edi_data_plane_jobs_arn"),
+            edi.require_output("sqs_edi_deliver_arn"),
+            edi.require_output("sqs_edi_orchestrator_arn"),
+            edi.require_output("sqs_edi_priority_notifications_arn"),
+            notification.require_output("email_channel_queue_arn"),
+            notification.require_output("notification_jobs_queue_arn"),
+        ],
     },
     {
         "Sid": "SnsPermissions",
@@ -221,6 +277,9 @@ base_env_vars: pulumi.Output = pulumi.Output.all(
     edi_db_host=edi_shard_db_endpoint,
     public_base_url=pulumi.Output.concat("https://api.", staging_domain),
     identity_issuer=pulumi.Output.concat("https://identity.", staging_domain),
+    identity_api_url=pulumi.Output.concat("https://identity.", staging_domain),
+    identity_ucp_project_id=identity_ucp_project_id,
+    identity_platform_org_id=identity_platform_org_id,
 ).apply(
     lambda args: queue_env_vars_to_ecs_format(
         queue_env_vars=args["queue_env_vars"],
@@ -230,6 +289,9 @@ base_env_vars: pulumi.Output = pulumi.Output.all(
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
             "IDENTITY_ISSUER": args["identity_issuer"],
+            "IDENTITY_API_URL": args["identity_api_url"],
+            "IDENTITY_UCP_PROJECT_ID": args["identity_ucp_project_id"],
+            "IDENTITY_PLATFORM_ORG_ID": args["identity_platform_org_id"],
         },
     )
 )
@@ -261,6 +323,8 @@ for group in worker_groups:
         app_depends_on=app_depends_on,
         extra_task_policy_statements=extra_task_policy_statements,
         firelens_endpoint=firelens_endpoint,
+        obs_user_secret_arn=obs_user_arn,
+        obs_password_secret_arn=obs_pass_arn,
         secrets=[
             {
                 "name": "GLOBAL_DATABASE_URL",
@@ -283,6 +347,10 @@ for group in worker_groups:
                 "valueFrom": pulumi.Output.concat(
                     app_defaults_secret_arn, ":identity_default_user_password::"
                 ),
+            },
+            {
+                "name": "IDENTITY_MACHINE_KEY",
+                "valueFrom": iam_manager_sa_secret.arn,
             },
         ],
     )
