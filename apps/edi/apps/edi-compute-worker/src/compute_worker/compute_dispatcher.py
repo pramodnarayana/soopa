@@ -10,7 +10,7 @@ from edi.application.use_cases.pipeline.compute_transform_use_case import (
     ComputeTransformCommand,
     ComputeTransformUseCase,
 )
-from edi.domain.enums import EdiDirection
+from edi.domain.enums import EdiDirection, EdiStandard
 from edi.domain.exceptions import InvalidMessageError
 from edi.domain.models.headers import EdiEnvelopeHeaders
 from pubsub.exceptions import ConsumerTerminalError
@@ -97,7 +97,7 @@ class EdiComputeDispatcher:
             "trace_id": str(trace_id),
             "tenant_id": str(tenant_id),
             "idempotency_key": idempotency_key,
-            "standard": str(standard_val),
+            "standard": str(standard_val) if standard_val else EdiStandard.X12.value,
         }
 
         if direction == EdiDirection.INBOUND.value:

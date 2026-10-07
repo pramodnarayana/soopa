@@ -1,5 +1,4 @@
 import typing
-import uuid
 from typing import Any
 
 from database.outbox_serializer import serialize_domain_event
@@ -8,7 +7,7 @@ from edi.domain.enums import EdiOutboxSource
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
 from seedwork.events import EventEnvelope
-from seedwork.id_registry import DomainIdPrefix
+from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if typing.TYPE_CHECKING:
@@ -38,7 +37,7 @@ class EdiMessageRepositoryAdapter:
         for event in aggregate.domain_events:
             payload_json = serialize_domain_event(event)
             event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX)
-            ik = getattr(event, "trace_id", None) or str(uuid.uuid4())
+            ik = event.idempotency_key or generate_id(SystemIdPrefix.IDEMPOTENCY)
             outbox_record = DataPlaneOutbox(
                 id=event_id,
                 tenant_id=aggregate.tenant_id,

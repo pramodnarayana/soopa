@@ -134,25 +134,11 @@ bucket_policy = aws.s3.BucketPolicy(
     opts=pulumi.ResourceOptions(depends_on=[public_access_block]),
 )
 
-# 5. Route53 DNS Record for Dashboard
-hosted_zone = aws.route53.get_zone_output(name=staging_domain)
-
-dns_record = aws.route53.Record(
-    f"{_prefix}dashboard-dns",
-    zone_id=hosted_zone.id,
-    name=dashboard_domain,
-    type="A",
-    aliases=[
-        aws.route53.RecordAliasArgs(
-            name=distribution.domain_name,
-            zone_id=distribution.hosted_zone_id,
-            evaluate_target_health=False,
-        )
-    ],
-)
+# DNS Record moved to routing stack
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("dashboard_s3_bucket", bucket.id)
 pulumi.export("dashboard_cloudfront_id", distribution.id)
 pulumi.export("dashboard_cloudfront_domain", distribution.domain_name)
+pulumi.export("dashboard_cloudfront_zone_id", distribution.hosted_zone_id)
 pulumi.export("dashboard_url", dashboard_domain.apply(lambda d: f"https://{d}"))

@@ -9,3 +9,4 @@ class DatabaseConstants:
     MASTER_USERNAME: str = "postgres"
     DEFAULT_INSTANCE_CLASS: str = "db.t3.micro"
     DEFAULT_ALLOCATED_STORAGE_GB: int = 20
+    MAX_SLOT_WAL_KEEP_SIZE_MB: str = "5120"

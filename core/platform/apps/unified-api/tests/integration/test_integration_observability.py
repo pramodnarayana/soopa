@@ -62,9 +62,9 @@ async def test_observability_does_not_cause_500_on_ucp_routes(app):
         response = await client.get("/api/v1/auth/me")
 
     # 200 (unauthenticated) or 401 are both correct — 500 is the OTel failure signal
-    assert response.status_code != 500, (
-        f"Expected 200 or 401 from /api/v1/auth/me, got 500. "
-        f"This indicates OTel middleware crashed during request dispatch. "
+    assert response.status_code in (200, 401), (
+        f"Expected 200 or 401 from /api/v1/auth/me, got {response.status_code}. "
+        f"This ensures the intended router was exercised without an OTel crash. "
         f"Body: {response.text}"
     )
 
@@ -88,8 +88,8 @@ async def test_observability_does_not_cause_500_across_router_boundaries(app):
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         for route in routes_under_test:
             response = await client.get(route)
-            assert response.status_code != 500, (
-                f"Route {route!r} returned HTTP 500. "
-                f"This likely indicates an OTel instrumentation crash on an _IncludedRouter. "
+            assert response.status_code in (200, 401), (
+                f"Route {route!r} returned {response.status_code} (expected 200 or 401). "
+                f"This likely indicates an OTel instrumentation crash or missing route. "
                 f"Body: {response.text}"
             )

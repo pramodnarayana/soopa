@@ -2,6 +2,7 @@ import pytest
 
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload, TransactionSet
+from edi.domain.models.headers import EdiEnvelopeHeaders
 
 pytestmark = pytest.mark.asyncio
 
@@ -51,7 +52,13 @@ async def test_bots_transformer_json_to_edi_success() -> None:
     fake_adapter = FakeBotsEDIAdapter()
     adapter = BotsTransformerAdapter(adapter=fake_adapter)
 
-    result = await adapter.transform_json_to_edi(
-        {"foo": "bar"}, "X12", "850", {"isa_sender_id": "SENDER", "isa_receiver_id": "RECEIVER"}
+    headers = EdiEnvelopeHeaders(
+        isa_sender_id="SENDER",
+        isa_receiver_id="RECEIVER",
+        gs_sender_id="GS_SENDER",
+        gs_receiver_id="GS_RECEIVER",
+        isa_usage_indicator="T",
+        transaction_type="850",
     )
+    result = await adapter.transform_json_to_edi({"foo": "bar"}, "X12", "850", headers)
     assert result == b"ISA*...~"

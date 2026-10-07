@@ -6,10 +6,12 @@ from edi.application.use_cases.process_api_edi_json_use_case import (
 )
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, status
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import JsonValue
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_data_plane_uow
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     OutboundMessageRequest,
     OutboundMessageResponse,
@@ -27,6 +29,7 @@ router = APIRouter(prefix="/api/v1/edi_json", tags=["EDI JSON"])
 async def submit_outbound_message(
     request: OutboundMessageRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> OutboundMessageResponse:
@@ -36,7 +39,7 @@ async def submit_outbound_message(
     Authentication: Single API Token via Bearer Authorization
       Authorization: Bearer <client_id>_<client_secret>
     """
-    service = ProcessApiEdiJsonUseCase(uow=uow)
+    service = ProcessApiEdiJsonUseCase(uow=uow, publisher=publisher)
 
     trace_id = await service.process_api_edi_json(
         ProcessApiEdiJsonCommand(

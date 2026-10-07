@@ -16,7 +16,7 @@ from identity_worker.ports.outbound.identity_provider_port import IdentityProvid
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 from seedwork import generate_id
 
-pytestmark = [pytest.mark.asyncio, pytest.mark.integration]
+pytestmark = [pytest.mark.asyncio]
 
 
 class FakeIdentityProvider(IdentityProviderPort):

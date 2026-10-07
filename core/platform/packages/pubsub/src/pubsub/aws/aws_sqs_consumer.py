@@ -1,15 +1,21 @@
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
 import aioboto3
 import structlog
 from botocore.exceptions import BotoCoreError, ClientError
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
-from pubsub.message import AckableMessage, SqsMessagePayload
+from pubsub.message import AckableMessage
+from seedwork.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
+
+
+class _SqsClientProtocol(Protocol):
+    async def receive_message(self, **kwargs: Any) -> JsonDict: ...
+    async def delete_message(self, **kwargs: Any) -> None: ...
 
 
 class AwsSqsConsumer:
@@ -35,8 +41,8 @@ class AwsSqsConsumer:
         self.region_name = region_name
         self.endpoint_url = endpoint_url
         self.session = aioboto3.Session()
-        self._client: Any = None
-        self._client_context: Any = None
+        self._client: _SqsClientProtocol | None = None
+        self._client_context: Any | None = None
 
     async def __aenter__(self) -> "AwsSqsConsumer":
         """Allows using the listener as a context manager for continuous polling with connection reuse."""
@@ -73,7 +79,7 @@ class AwsSqsConsumer:
                 yield event
 
     @staticmethod
-    def _extract_event_payload(body_str: str) -> dict[str, Any]:
+    def _extract_event_payload(body_str: str) -> JsonDict:
         """Parses the raw SQS body and unwraps the SNS envelope if present."""
         raw_body = json.loads(body_str)
 
@@ -103,15 +109,16 @@ class AwsSqsConsumer:
             raise ConsumerTerminalError(str(e)) from e
         raise ConsumerTransientError(str(e)) from e
 
-    async def _receive_single_message(self, sqs_client: Any) -> dict[str, Any] | None:
+    async def _receive_single_message(self, sqs_client: _SqsClientProtocol) -> JsonDict | None:
         try:
             logger.debug("sqs_consumer_polling_started", queue_url=self.queue_url)
             response = await sqs_client.receive_message(
                 QueueUrl=self.queue_url,
                 MaxNumberOfMessages=1,
                 WaitTimeSeconds=5,
+                MessageAttributeNames=["All"],
             )
-            messages = cast(list[dict[str, Any]], response.get("Messages", []))
+            messages = cast(list[JsonDict], response.get("Messages", []))
             if not messages:
                 logger.debug("sqs_consumer_polling_empty", queue_url=self.queue_url)
                 return None
@@ -122,7 +129,7 @@ class AwsSqsConsumer:
         except BotoCoreError as e:
             raise ConsumerTransientError(str(e)) from e
 
-    async def _delete_message(self, sqs_client: Any, receipt_handle: str) -> None:
+    async def _delete_message(self, sqs_client: _SqsClientProtocol, receipt_handle: str) -> None:
         try:
             await sqs_client.delete_message(QueueUrl=self.queue_url, ReceiptHandle=receipt_handle)
         except ClientError as e:
@@ -132,16 +139,16 @@ class AwsSqsConsumer:
 
     @asynccontextmanager
     async def _process_with_client(
-        self, sqs_client: Any
+        self, sqs_client: _SqsClientProtocol
     ) -> AsyncGenerator[AckableMessage | None, None]:
         msg = await self._receive_single_message(sqs_client)
         if not msg:
             yield None
             return
 
-        message_id = msg["MessageId"]
-        receipt_handle = msg["ReceiptHandle"]
-        body_str = msg["Body"]
+        message_id = cast(str, msg.get("MessageId", ""))
+        receipt_handle = cast(str, msg.get("ReceiptHandle", ""))
+        body_str = cast(str, msg.get("Body", ""))
 
         logger.info(
             "sqs_consumer_received_raw_boto_message",
@@ -161,16 +168,7 @@ class AwsSqsConsumer:
                 pass
 
             yielded = True
-
-            payload_dto = SqsMessagePayload(
-                idempotency_key=event_data.get("idempotency_key"),
-                tenant_id=event_data.get("tenant_id"),
-                event_type=event_data.get("event_type"),
-                raw_data=event_data,
-            )
-
-            # Yield the ackable message
-            yield AckableMessage(payload=payload_dto, ack=ack, nack=nack)
+            payload_dto = event_data
 
         except (json.JSONDecodeError, ValueError):
             logger.exception(
@@ -179,8 +177,12 @@ class AwsSqsConsumer:
                 payload_length=len(body_str),
             )
             await self._delete_message(sqs_client, receipt_handle)
-            if not yielded:
-                yield None
+            yield None
+            return
+
+        try:
+            # Yield the ackable message
+            yield AckableMessage(payload=payload_dto, ack=ack, nack=nack)
         except Exception as e:
             # We MUST raise the exception to satisfy the 'No Silenced Failures' enterprise rule.
             # The upstream consumer manager is responsible for catching and handling this properly.

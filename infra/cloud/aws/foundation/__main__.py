@@ -166,6 +166,13 @@ main_alb_sg = aws.ec2.SecurityGroup(
             protocol="tcp",
             cidr_blocks=["10.0.0.0/16"],
         ),
+        aws.ec2.SecurityGroupEgressArgs(
+            description="Forward to ECS containers on app port 10080 (OpenAS2)",
+            from_port=10080,
+            to_port=10080,
+            protocol="tcp",
+            cidr_blocks=["10.0.0.0/16"],
+        ),
     ],
     tags={**_TAGS, "Name": f"{_prefix}main-alb-sg"},
 )
@@ -197,16 +204,30 @@ app_sg = aws.ec2.SecurityGroup(
             security_groups=[main_alb_sg.id],
         ),
         aws.ec2.SecurityGroupIngressArgs(
-            description="Internal VPC Service Discovery Traffic (Self)",
-            from_port=0,
-            to_port=0,
-            protocol="-1",
+            description="Internal VPC Service Discovery Traffic (Self, API)",
+            from_port=8080,
+            to_port=8080,
+            protocol="tcp",
+            self=True,
+        ),
+        aws.ec2.SecurityGroupIngressArgs(
+            description="Internal VPC Service Discovery Traffic (Self, OpenObserve)",
+            from_port=5080,
+            to_port=5080,
+            protocol="tcp",
             self=True,
         ),
         aws.ec2.SecurityGroupIngressArgs(
             description="Traffic from ALB only (AS2)",
             from_port=8001,
             to_port=8001,
+            protocol="tcp",
+            security_groups=[main_alb_sg.id],
+        ),
+        aws.ec2.SecurityGroupIngressArgs(
+            description="Traffic from ALB only (OpenAS2)",
+            from_port=10080,
+            to_port=10080,
             protocol="tcp",
             security_groups=[main_alb_sg.id],
         ),
@@ -251,6 +272,36 @@ s3_endpoint = aws.ec2.VpcEndpoint(
     route_table_ids=[private_rt_a.id, private_rt_b.id],
     tags={**_TAGS, "Name": f"{_prefix}s3-gateway"},
 )
+
+endpoints_sg = aws.ec2.SecurityGroup(
+    f"{_prefix}endpoints-sg",
+    vpc_id=vpc.id,
+    description="VPC Endpoints: accepts HTTPS from app containers",
+    ingress=[
+        aws.ec2.SecurityGroupIngressArgs(
+            description="HTTPS from app SG",
+            from_port=443,
+            to_port=443,
+            protocol="tcp",
+            security_groups=[app_sg.id],
+        )
+    ],
+    egress=[],
+    tags={**_TAGS, "Name": f"{_prefix}endpoints-sg"},
+)
+
+# AWS PrivateLink Interface Endpoints
+for service in ["sns", "sqs", "logs", "secretsmanager"]:
+    aws.ec2.VpcEndpoint(
+        f"{_prefix}{service}-endpoint",
+        vpc_id=vpc.id,
+        service_name=f"com.amazonaws.{_region.name}.{service}",
+        vpc_endpoint_type="Interface",
+        subnet_ids=[private_subnet_a.id],
+        security_group_ids=[endpoints_sg.id],
+        private_dns_enabled=True,
+        tags={**_TAGS, "Name": f"{_prefix}{service}-endpoint"},
+    )
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("vpc_id", vpc.id)

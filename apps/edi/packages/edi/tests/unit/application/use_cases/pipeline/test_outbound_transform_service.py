@@ -1,4 +1,5 @@
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 
 """
 Unit tests for the OutboundTransformUseCase.
@@ -28,15 +29,13 @@ import typing
 
 
 class FakeSettings:
-    def __init__(self, edi_environment="T", enable_heavy_compute_queue=False):
+    def __init__(self, edi_environment="T"):
         self.edi_environment = edi_environment
-        self.enable_heavy_compute_queue = enable_heavy_compute_queue
 
     @classmethod
-    def create(cls, env="T", heavy_compute=False) -> "FakeSettings":
+    def create(cls, env="T") -> "FakeSettings":
         return cls(
             edi_environment=env,
-            enable_heavy_compute_queue=heavy_compute,
         )
 
 
@@ -60,6 +59,7 @@ def make_use_case(
         uow_factory=fake_uow_factory,
         transformer=t,
         settings=s_casted,
+        publisher=FakeOutboxPublisher(),
     )
 
 
@@ -100,18 +100,15 @@ async def test_outbound_transform_success(payload: dict[str, str] | list[dict[st
     await use_case.execute(trace_id, idempotency_key="test-key")
 
     # Assertions
-    saved_edi = uow.repository.edi_messages.get(trace_id)
-    assert saved_edi is not None
-    assert saved_edi["direction"] == EdiDirection.OUTBOUND
-    assert saved_edi["status"] == MessageStatus.PENDING_DELIVERY
-    assert saved_edi["trading_partner_id"] == "tp1"
-    assert saved_edi["connection_type"] == "AS2"
-    assert saved_edi["sender_id"] == "SENDER1"
+    assert trace_id not in uow.repository.edi_messages
 
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.TRANSFORMATION_SUCCESSFUL.value
+    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value
     assert event["payload"]["trace_id"] == trace_id
+    assert event["payload"]["transaction_type"] == "850"
+    assert event["payload"]["isa_sender_id"] == "SENDER1"
+    assert event["payload"]["isa_receiver_id"] == "RECEIVER1"
 
 
 async def test_outbound_transform_rejects_list_with_non_ast_node() -> None:
@@ -160,7 +157,7 @@ async def test_pipeline_fake_preserves_saved_edi_json_payload() -> None:
 async def test_outbound_transform_heavy_compute_offload() -> None:
     uow = FakeDataPlaneUnitOfWork()
     transformer = FakeTransformerAdapter()
-    settings = FakeSettings.create(heavy_compute=True)
+    settings = FakeSettings.create()
     trace_id = "trace-456"
 
     # Seed data
@@ -184,6 +181,10 @@ async def test_outbound_transform_heavy_compute_offload() -> None:
     uow.repository.outbound_edi_headers["tp2"] = {
         "trading_partner_id": "tp2",
         "default_standard": "EDIFACT",
+        "isa_sender_id": "SENDER2",
+        "isa_receiver_id": "RECEIVER2",
+        "gs_sender_id": "GS_SENDER2",
+        "gs_receiver_id": "GS_RECEIVER2",
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer, settings=settings)
@@ -195,7 +196,7 @@ async def test_outbound_transform_heavy_compute_offload() -> None:
     # But it should append to outbox
     assert len(uow.outbox.events) == 1
     event = uow.outbox.events[0]
-    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND
+    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value
     assert event["payload"]["trace_id"] == trace_id
 
 
@@ -250,12 +251,18 @@ async def test_outbound_transform_resolves_partner_from_routing_meta() -> None:
 
     uow.repository.outbound_edi_headers["tp-meta"] = {
         "trading_partner_id": "tp-meta",
+        "isa_sender_id": "SENDER_META",
+        "isa_receiver_id": "RECEIVER_META",
+        "gs_sender_id": "GS_SENDER_META",
+        "gs_receiver_id": "GS_RECEIVER_META",
     }
 
     use_case = make_use_case(uow=uow, transformer=transformer)
     await use_case.execute(trace_id, idempotency_key="test-key")
 
-    saved_edi = uow.repository.edi_messages.get(trace_id)
-    assert saved_edi is not None
-    assert saved_edi["trading_partner_id"] == "tp-meta"
-    assert saved_edi["connection_type"] == "AS2"
+    assert trace_id not in uow.repository.edi_messages
+
+    assert len(uow.outbox.events) == 1
+    event = uow.outbox.events[0]
+    assert event["event_type"] == PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value
+    assert event["payload"]["trace_id"] == trace_id

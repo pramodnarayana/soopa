@@ -1,6 +1,7 @@
 import typing
 
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 
 """
 Unit tests for InboundTransformUseCase — verifies inbound EDI→JSON transformation.
@@ -17,7 +18,6 @@ from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork, FakeTransf
 
 class FakeSettings:
     edi_aws_bucket_name = "test-bucket"
-    enable_heavy_compute_queue = False
 
 
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
@@ -53,7 +53,10 @@ async def test_transform_edi_to_json_success() -> None:
         yield uow_casted
 
     use_case = DispatchInboundTransformUseCase(
-        uow_factory=fake_uow_factory, transformer=transformer, settings=settings_casted
+        uow_factory=fake_uow_factory,
+        transformer=transformer,
+        settings=settings_casted,
+        publisher=FakeOutboxPublisher(),
     )
     await use_case.execute(trace_id, idempotency_key="test-key")
 
@@ -83,7 +86,10 @@ async def test_transform_missing_message_raises_error() -> None:
         yield uow_casted
 
     use_case = DispatchInboundTransformUseCase(
-        uow_factory=fake_uow_factory, transformer=transformer, settings=settings_casted
+        uow_factory=fake_uow_factory,
+        transformer=transformer,
+        settings=settings_casted,
+        publisher=FakeOutboxPublisher(),
     )
 
     with pytest.raises(ValueError, match="No EDI message found for trace_id=invalid-trace"):

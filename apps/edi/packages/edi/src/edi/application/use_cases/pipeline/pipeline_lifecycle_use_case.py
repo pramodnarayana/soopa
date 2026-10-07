@@ -115,7 +115,13 @@ class PipelineLifecycleUseCase:
             )
             await uow.commit()
 
-        await self.publisher.publish(envelope)
+        try:
+            await self.publisher.publish(envelope)
+            async with self.uow_factory() as uow, uow:
+                await uow.outbox.mark_completed(envelope.id)
+                await uow.commit()
+        except Exception as e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
         logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
     async def handle_transform_failed(

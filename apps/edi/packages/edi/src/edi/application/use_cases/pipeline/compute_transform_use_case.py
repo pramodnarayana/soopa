@@ -110,23 +110,42 @@ class ComputeTransformUseCase:
                 )
 
             logger.info("compute_transform.completed", trace_id=trace_id)
+        except ValueError as e:
+            await self._handle_permanent_failure(trace_id, command.tenant_id, e)
         except Exception as e:
-            logger.exception("compute_transform.failed", trace_id=trace_id, error=str(e))
+            logger.exception("compute_transform.transient_failure", trace_id=trace_id, error=str(e))
+            raise
 
-            # Emit failure domain event in a separate transaction
-            async with self.uow_factory() as failure_uow, failure_uow:
-                edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
-                if edi_msg_fallback:
-                    edi_msg_fallback.add_domain_event(
-                        TransformFailed(
-                            trace_id=trace_id,
-                            tenant_id=edi_msg_fallback.tenant_id or command.tenant_id,
-                            direction=EdiDirection.INBOUND.value,
-                            failure_reason=str(e),
-                        )
+    async def _handle_permanent_failure(
+        self, trace_id: str, tenant_id: str, error: ValueError
+    ) -> None:
+        logger.exception("compute_transform.permanent_failure", trace_id=trace_id, error=str(error))
+        # Emit failure domain event in a separate transaction
+        async with self.uow_factory() as failure_uow, failure_uow:
+            edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
+            if edi_msg_fallback:
+                edi_msg_fallback.add_domain_event(
+                    TransformFailed(
+                        trace_id=trace_id,
+                        tenant_id=edi_msg_fallback.tenant_id or tenant_id,
+                        direction=EdiDirection.INBOUND.value,
+                        failure_reason=str(error),
                     )
-                    await failure_uow.transactions.flush_events(edi_msg_fallback)
-                    await failure_uow.commit()
+                )
+                failure_envelopes = await failure_uow.transactions.flush_events(edi_msg_fallback)
+                await failure_uow.commit()
+
+                try:
+                    for failure_env in failure_envelopes:
+                        await self.publisher.publish(failure_env)
+                    async with self.uow_factory() as ack_uow, ack_uow:
+                        for failure_env in failure_envelopes:
+                            await ack_uow.outbox.mark_completed(failure_env.id)
+                        await ack_uow.commit()
+                except Exception as sync_e:
+                    logger.exception(
+                        "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
+                    )
 
     async def _process_transformed_transactions(
         self, trace_id, standard, edi_msg, transformed_txns, uow
@@ -218,9 +237,13 @@ class ComputeTransformUseCase:
             event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
         )
 
-        for env in envelopes:
-            await uow.outbox.mark_completed(env.id)
-
         await uow.commit()
-        for env in envelopes:
-            await self.publisher.publish(env)
+        try:
+            for env in envelopes:
+                await self.publisher.publish(env)
+            async with self.uow_factory() as ack_uow, ack_uow:
+                for env in envelopes:
+                    await ack_uow.outbox.mark_completed(env.id)
+                await ack_uow.commit()
+        except Exception as sync_e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e))

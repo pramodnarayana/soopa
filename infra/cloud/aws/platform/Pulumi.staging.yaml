@@ -1,5 +1,5 @@
-encryptionsalt: v1:XAOUtMRV3bk=:v1:vMeiNOmCJtDB7aON:NWtt0s6b3k9pWR2Ful3K8H6WRhrdsQ==
 config:
   platform:enable_observability: 'true'
   platform:root_domain: flowwolf.io
   platform:staging_domain: staging.flowwolf.io
+encryptionsalt: v1:YCoI6FcgcL8=:v1:Rr17P4iSYGtwL1vY:WaKf2ZY71abSRgwZ8CsV5M8cdlzKxw==

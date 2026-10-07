@@ -1,9 +1,11 @@
 import dataclasses
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
 import pytest
+from seedwork.events import EventEnvelope
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
@@ -25,6 +27,7 @@ from edi.domain.enums import TransactionEntityType
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 
 
 @dataclass
@@ -118,7 +121,7 @@ class FakeEdiMessageRepository:
     async def create_api_gateway(self, command: Any) -> str:
         return "fake_api_gateway_id"
 
-    async def save(self, model: Any) -> None:
+    async def save(self, model: Any) -> list:
         for e in model.domain_events:
             event_type = getattr(e, "event_name", getattr(e, "event_type", "unknown"))
             payload = dataclasses.asdict(e) if dataclasses.is_dataclass(e) else vars(e)
@@ -132,10 +135,36 @@ class FakeEdiMessageRepository:
                 }
             )
         model.clear_domain_events()
+        return []
 
-    async def save_all(self, models: list[Any]) -> None:
+    async def flush_events(self, aggregate: Any) -> list[Any]:
+
+        envelopes = []
+        for e in aggregate.domain_events:
+            env = EventEnvelope(
+                id=str(uuid.uuid4()),
+                source="test",
+                tenant_id=aggregate.tenant_id,
+                event_type=getattr(e, "event_name", getattr(e, "event_type", "unknown")),
+                payload=dataclasses.asdict(e) if dataclasses.is_dataclass(e) else vars(e),
+                idempotency_key=e.idempotency_key,
+            )
+            envelopes.append(env)
+            self.outbox_events.append(
+                {
+                    "tenant_id": aggregate.tenant_id,
+                    "event_type": env.event_type,
+                    "payload": env.payload,
+                    "key": env.idempotency_key,
+                }
+            )
+        aggregate.clear_domain_events()
+        return envelopes
+
+    async def save_all(self, models: list[Any]) -> list:
         for model in models:
             await self.save(model)
+        return []
 
     async def get_edi_messages_by_traces(
         self, tenant_id: str, trace_ids: list[str]
@@ -157,11 +186,17 @@ class FakeEdiMessageRepository:
         pass
 
 
+class FakeOutboxRepo:
+    async def mark_completed(self, event_id: str) -> None:
+        pass
+
+
 class FakeDataPlaneUnitOfWork:
     def __init__(self, trace_repo: FakeTraceRepository, message_repo: FakeEdiMessageRepository):
         self.traces = trace_repo
         self.edi_messages = message_repo
         self.transactions = message_repo  # for compatibility with old uses
+        self.outbox = FakeOutboxRepo()
         self.committed = False
 
     async def __aenter__(self):
@@ -215,7 +250,7 @@ class TestReplayTransactionUseCase:
         self.trace_repo = FakeTraceRepository()
         self.msg_repo = FakeEdiMessageRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.trace_repo, self.msg_repo)
-        self.use_case = ReplayTransactionUseCase(uow=self.uow)
+        self.use_case = ReplayTransactionUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
         self.tenant_id = generate_id(DomainIdPrefix.TENANT)
 
     @pytest.mark.asyncio
@@ -308,9 +343,9 @@ async def test_bulk_replay_commits_after_saving_events():
         tenant_id, "trace-1", EdiTraceDTO(edi_message=msg_dto, edi_jsons=[], api_gateways=[])
     )
 
-    count = await BulkReplayTransactionsUseCase(uow).bulk_retry_transform(
-        tenant_id, ["trace-1"], "USER", command_key="request-1"
-    )
+    count = await BulkReplayTransactionsUseCase(
+        uow, publisher=FakeOutboxPublisher()
+    ).bulk_retry_transform(tenant_id, ["trace-1"], "USER", command_key="request-1")
 
     assert count == 1
     assert uow.committed is True

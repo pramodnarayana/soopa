@@ -21,6 +21,19 @@ def provision_global_db(
         override_special="!#*_-=",
     )
 
+    global_db_parameter_group = aws.rds.ParameterGroup(
+        f"{prefix}global-db-pg",
+        family="postgres15",
+        parameters=[
+            aws.rds.ParameterGroupParameterArgs(
+                name="idle_in_transaction_session_timeout",
+                value="300000",
+                apply_method="immediate",
+            ),
+        ],
+        tags=tags,
+    )
+
     global_db = aws.rds.Instance(
         f"{prefix}global-db",
         identifier=f"{prefix}global-db",
@@ -33,6 +46,7 @@ def provision_global_db(
         password=db_password.result,
         vpc_security_group_ids=[db_sg_id],
         db_subnet_group_name=db_subnet_group_name,
+        parameter_group_name=global_db_parameter_group.name,
         skip_final_snapshot=False,
         final_snapshot_identifier=f"{prefix}global-db-final-snapshot",
         publicly_accessible=False,

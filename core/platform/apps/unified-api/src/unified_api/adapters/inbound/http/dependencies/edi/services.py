@@ -1,16 +1,17 @@
+from functools import lru_cache
 from typing import Annotated, Any, cast
 
 from database.types import GlobalSession
 from dependency_injector.wiring import Provide, inject
 from edi.adapters.outbound.database.session import get_global_session
-from edi.application.use_cases.process_inbound_as2_message_use_case import (
-    ProcessInboundAs2MessageUseCase as ProcessInboundAS2MessageUseCase,
-)
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
 from edi.bootstrap.container import Container
+from edi.config.models import EdiAwsSettings, EdiDataPlaneSqsSettings
 from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.sftp_tester import SftpTesterPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
-from fastapi import Depends, Request
+from fastapi import Depends
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from secret_store.ports.secret_store_port import SecretStorePort
 
 
@@ -39,22 +40,16 @@ def get_tenant_repo(
     return cast(TenantRepositoryPort, tenant_repo_factory(session=session))
 
 
-@inject
-def get_as2_receiver_service(
-    request: Request,
-    global_session: Annotated[GlobalSession, Depends(get_global_session)],
-    service_factory: Any = Depends(Provide[Container.as2_receiver_service.provider]),
-    cp_uow_factory: Any = Depends(Provide[Container.cp_uow.provider]),
-    dp_factory_provider: Any = Depends(Provide[Container.dp_factory.provider]),
-) -> ProcessInboundAS2MessageUseCase:
-    control_plane_uow = cp_uow_factory(global_session=global_session)
-    dp_factory = dp_factory_provider(
-        resolver=request.app.state.tenant_resolver, db_router=request.app.state.db_router
+@lru_cache
+def get_outbox_publisher() -> OutboxPublisherPort:
+    kwargs: dict[str, Any] = {}
+    sqs = EdiDataPlaneSqsSettings(**kwargs)
+    aws = EdiAwsSettings(**kwargs)
+    publisher = create_edi_pipeline_publisher(
+        compute_queue_url=sqs.compute_queue_url,
+        orchestrator_queue_url=sqs.orchestrator_queue_url,
+        deliver_queue_url=sqs.deliver_queue_url,
+        region_name=aws.resolved_region,
+        endpoint_url=aws.endpoint_url,
     )
-    return cast(
-        ProcessInboundAS2MessageUseCase,
-        service_factory(
-            control_plane_uow=control_plane_uow,
-            dp_factory=dp_factory,
-        ),
-    )
+    return publisher

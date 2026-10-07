@@ -14,10 +14,12 @@ from edi.application.use_cases.edi_headers.update_outbound_edi_header_use_case i
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pydantic import BaseModel, ConfigDict
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     CreateOutboundEdiHeaderRequest,
     UpdateOutboundEdiHeaderRequest,
@@ -48,6 +50,7 @@ class OutboundEdiHeaderItem(BaseModel):
 @router.get("", response_model=list[OutboundEdiHeaderItem], status_code=status.HTTP_200_OK)
 async def list_edi_headers(
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[OutboundEdiHeaderItem]:
     """
@@ -63,6 +66,7 @@ async def list_edi_headers(
 async def create_edi_header(
     request: CreateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
     """
@@ -99,6 +103,7 @@ async def update_edi_header(
     header_id: str,
     request: UpdateOutboundEdiHeaderRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
     """
@@ -123,6 +128,7 @@ async def update_edi_header(
 async def delete_edi_header(
     header_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
     """

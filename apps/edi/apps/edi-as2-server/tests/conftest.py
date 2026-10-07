@@ -20,10 +20,6 @@ import datetime
 import os
 import subprocess
 import tempfile
-
-from dotenv import load_dotenv
-
-load_dotenv()
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 
@@ -41,6 +37,7 @@ from edi.adapters.outbound.database.models.control_plane import (
     AS2Partnership,
     InboundRoute,
 )
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from httpx import ASGITransport, AsyncClient
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import NoOpLogger, NoOpMetrics, NoOpTracer, ObservabilityProvider
@@ -342,6 +339,39 @@ class FakeTenantResolver:
         return self._shard_dsn
 
 
+class FakeS3Storage:
+    async def upload(self, tenant_id: int, message_id: str, payload: bytes) -> str:
+        return f"s3://test-bucket/tenants/{tenant_id}/{message_id}.bin"
+
+    async def download(self, storage_uri: str) -> bytes:
+        return b""
+
+
+class FakeHostVault:
+    def __init__(self, private_key_pem: bytes):
+        self.private_key_pem = private_key_pem
+
+    async def retrieve_private_key(self, vault_ref: str) -> bytes:
+        return self.private_key_pem
+
+    async def get_secret(self, vault_ref: str) -> str:
+        return self.private_key_pem.decode("utf-8")
+
+    async def store_private_key(self, private_key_pem: bytes, category=None) -> str:
+        return "fake-vault-ref"
+
+    async def retrieve_secret(self, vault_ref: str) -> bytes:
+        return self.private_key_pem
+
+    async def delete_secret(self, vault_ref: str) -> None:
+        pass
+
+
+class FakePublisher:
+    async def publish(self, event):
+        pass
+
+
 @pytest_asyncio.fixture
 async def as2_client(
     sender_keypair: KeyPair,
@@ -363,14 +393,6 @@ async def as2_client(
         metrics=NoOpMetrics(),
         logger=NoOpLogger(),
     )
-
-    # Fake the S3 storage so tests don't try to connect to LocalStack
-    class FakeS3Storage:
-        async def upload(self, tenant_id: int, message_id: str, payload: bytes) -> str:
-            return f"s3://test-bucket/tenants/{tenant_id}/{message_id}.bin"
-
-        async def download(self, storage_uri: str) -> bytes:
-            return b""
 
     # Seed the AS2 Keypair into the global_db_session
     tenant_id = PLATFORM_TENANT_ID
@@ -427,23 +449,9 @@ async def as2_client(
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_global_session] = override_get_global_session
 
-    class FakeHostVault:
-        async def retrieve_private_key(self, vault_ref: str) -> bytes:
-            return receiver_keypair.private_key_pem
-
-        async def get_secret(self, vault_ref: str) -> str:
-            return receiver_keypair.private_key_pem.decode("utf-8")
-
-        async def store_private_key(self, private_key_pem: bytes, category=None) -> str:
-            return "fake-vault-ref"
-
-        async def retrieve_secret(self, vault_ref: str) -> bytes:
-            return receiver_keypair.private_key_pem
-
-        async def delete_secret(self, vault_ref: str) -> None:
-            pass
-
-    app.dependency_overrides[get_vault_service] = lambda: FakeHostVault()
+    app.dependency_overrides[get_vault_service] = lambda: FakeHostVault(
+        receiver_keypair.private_key_pem
+    )
 
     # Provide the fake db router and tenant resolver
     shard_dsn = str(tenant_db_engine.url)
@@ -451,6 +459,9 @@ async def as2_client(
         global_session=global_db_session, tenant_session=tenant_db_session
     )
     app.state.tenant_resolver = FakeTenantResolver(shard_dsn=shard_dsn)
+
+    app.state.publisher = FakePublisher()
+    app.state.crypto_service = SmimeCryptoService()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Attach the config to the client so tests can modify it

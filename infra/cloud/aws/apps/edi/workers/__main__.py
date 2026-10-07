@@ -70,8 +70,9 @@ queue_arns = [
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
-    platform.require_output("openobserve_endpoint") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
 obs_user_arn = (
     platform.require_output("openobserve_user_secret_arn") if enable_observability else None
@@ -119,7 +120,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1], args[2], args[3]],
+                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -133,6 +134,7 @@ sidecar = {
     "name": "edi-secrets-sidecar",
     "command": ["python", "/app/apps/edi/apps/edi-secrets-sidecar/main.py"],
     "essential": True,
+    "user": "0",
     "environment": [{"name": "SECRETS_MOUNT_PATH", "value": "/mnt/secrets"}],
     "mountPoints": [
         {"sourceVolume": "secrets", "containerPath": "/mnt/secrets", "readOnly": False}
@@ -214,7 +216,7 @@ provision_fargate_service(
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
         },
         {
-            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
         },
     ],

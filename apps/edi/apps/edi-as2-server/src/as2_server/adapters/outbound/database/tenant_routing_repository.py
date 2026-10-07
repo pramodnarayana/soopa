@@ -40,7 +40,12 @@ class AS2TenantRepositoryAdapter:
         if transaction_type:
             conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
 
-        stmt = sql_select(InboundRoute.tenant_id).where(*conditions)
+        stmt = (
+            sql_select(InboundRoute.tenant_id)
+            .join(GlobalTradingPartner, InboundRoute.as2_partner_id == GlobalTradingPartner.id)
+            .where(*conditions)
+            .where(GlobalTradingPartner.as2_id == as2_peer_id)
+        )
         result = await self.session.execute(stmt)
         tenant_rows = result.fetchall()
         if len(tenant_rows) > 1:

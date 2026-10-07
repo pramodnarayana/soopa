@@ -21,20 +21,6 @@ def provision_edi_db(
         override_special="!#$%^&*()-_=+[]{}|;:,.<>?",
     )
 
-    # Custom Parameter Group for Debezium Logical Replication
-    edi_db_parameter_group = aws.rds.ParameterGroup(
-        f"{prefix}edi-shard-db-pg",
-        family="postgres15",
-        parameters=[
-            aws.rds.ParameterGroupParameterArgs(
-                name="rds.logical_replication",
-                value="1",
-                apply_method="pending-reboot",
-            )
-        ],
-        tags=tags,
-    )
-
     edi_shard_db = aws.rds.Instance(
         f"{prefix}edi-shard-db",
         identifier=f"{prefix}edi-shard-db",
@@ -47,7 +33,6 @@ def provision_edi_db(
         password=edi_db_password.result,
         vpc_security_group_ids=[db_sg_id],
         db_subnet_group_name=db_subnet_group_name,
-        parameter_group_name=edi_db_parameter_group.name,
         skip_final_snapshot=False,
         final_snapshot_identifier=f"{prefix}edi-shard-db-final-snapshot",
         publicly_accessible=False,

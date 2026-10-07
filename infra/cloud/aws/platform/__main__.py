@@ -7,17 +7,20 @@ Provisions core components used by all bounded contexts:
 - Observability (CloudWatch, OpenObserve)
 """
 
+import json
+
 import pulumi
 import pulumi_aws as aws
 from alb import provision_load_balancer
 from ecr import provision_ecr
 from ecs_cluster import provision_cluster
 from event_bus import provision_event_bus
-from observability import provision_openobserve
+from observability import provision_openobserve_foundations
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "platform", "Environment": _env}
+is_prod = _env == "production"
 
 # ── Stack Reference to Foundation ─────────────────────────────────────────────
 config = pulumi.Config()
@@ -59,17 +62,9 @@ ecs_cluster, cloud_map_namespace = provision_cluster(prefix=_prefix, tags=_TAGS,
 # ── Observability ─────────────────────────────────────────────────────────────
 enable_observability = config.get_bool("enable_observability")
 if enable_observability:
-    obs_count = config.get_int("openobserve_desired_count") or 1
-    obs_svc, obs_user_arn, obs_pass_arn = provision_openobserve(
+    obs_bucket, obs_user_arn, obs_pass_arn = provision_openobserve_foundations(
         prefix=_prefix,
         tags=_TAGS,
-        vpc_id=vpc_id,
-        private_subnets=private_subnets,
-        app_sg_id=app_sg_id,
-        ecs_cluster_arn=ecs_cluster.arn,
-        main_listener_arn=main_listener.arn,
-        obs_listener_arn=obs_listener.arn,
-        obs_count=obs_count,
     )
 
     hosted_zone = aws.route53.get_zone_output(name=staging_domain)
@@ -91,7 +86,7 @@ if enable_observability:
 platform_events_topic = provision_event_bus(prefix=_prefix, tags=_TAGS)
 
 # ── Container Registries ──────────────────────────────────────────────────────
-zitadel_ecr_repo, app_ecr_repo, debezium_ecr_repo = provision_ecr(prefix=_prefix, tags=_TAGS)
+zitadel_ecr_repo, app_ecr_repo = provision_ecr(prefix=_prefix, tags=_TAGS)
 
 # ── App Defaults Secret ───────────────────────────────────────────────────────
 # Stores application-level shared credentials that must NOT be injected as
@@ -108,11 +103,6 @@ identity_pwd_param = aws.ssm.get_parameter_output(
     with_decryption=True,
 )
 identity_default_user_password = pulumi.Output.secret(identity_pwd_param.value)
-
-
-import json
-
-is_prod = pulumi.get_stack() == "production"
 
 app_defaults_secret = aws.secretsmanager.Secret(
     f"{_prefix}app-defaults",
@@ -138,17 +128,20 @@ pulumi.export("ecs_cluster_arn", ecs_cluster.arn)
 pulumi.export("ecs_cluster_name", ecs_cluster.name)
 pulumi.export("cloud_map_namespace_id", cloud_map_namespace.id)
 pulumi.export("cloud_map_namespace_arn", cloud_map_namespace.arn)
+pulumi.export("cloud_map_namespace_name", cloud_map_namespace.name)
 pulumi.export("main_alb_listener_arn", main_listener.arn)
 pulumi.export("main_alb_obs_listener_arn", obs_listener.arn)
 pulumi.export("main_alb_dns_name", main_alb.dns_name)
 pulumi.export("main_alb_zone_id", main_alb.zone_id)
 pulumi.export("staging_domain", staging_domain)
 if enable_observability:
-    pulumi.export("openobserve_endpoint", obs_dns_record.name.apply(lambda dns: f"{dns}:5080"))
+    pulumi.export("openobserve_endpoint", obs_dns_record.name.apply(lambda dns: f"{dns}:443"))
     pulumi.export("openobserve_user_secret_arn", obs_user_arn)
     pulumi.export("openobserve_password_secret_arn", obs_pass_arn)
+    pulumi.export("openobserve_bucket_name", obs_bucket.bucket)
+    pulumi.export("openobserve_bucket_arn", obs_bucket.arn)
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)
 pulumi.export("zitadel_ecr_repo_url", zitadel_ecr_repo.repository_url)
 pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)
-pulumi.export("debezium_ecr_repo_url", debezium_ecr_repo.repository_url)
+
 pulumi.export("app_defaults_secret_arn", app_defaults_secret.arn)

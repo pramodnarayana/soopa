@@ -80,6 +80,10 @@ def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
         [
             DOCKER_BIN,
             "compose",
+            "--env-file",
+            ".env",
+            "--env-file",
+            "versions.env",
             "-f",
             "docker-compose.yml",
             "-f",
@@ -115,7 +119,18 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
     """
     # Start Zitadel so it generates a fresh PAT on the clean database
     subprocess.run(  # noqa: S603 - Docker compose is a trusted local executable
-        [DOCKER_BIN, "compose", "-f", "docker-compose.identity.yml", "up", "-d"],
+        [
+            DOCKER_BIN,
+            "compose",
+            "--env-file",
+            ".env",
+            "--env-file",
+            "versions.env",
+            "-f",
+            "docker-compose.identity.yml",
+            "up",
+            "-d",
+        ],
         cwd=root_dir,
         check=True,
     )
@@ -220,8 +235,11 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
             env=env,
             check=True,
         )
+
+        # Use a consistent known password for local development instead of auto-generating
+        secure_password = "FlowwolfLocal123!"  # noqa: S105 - Local development bootstrap password
         subprocess.run(  # noqa: S603 - Pulumi is a trusted local executable
-            [PULUMI_BIN, "config", "set", "--secret", "platform_admin_password", "Password1!"],
+            [PULUMI_BIN, "config", "set", "--secret", "platform_admin_password", secure_password],
             cwd=pulumi_dir,
             env=env,
             check=True,

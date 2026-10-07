@@ -110,7 +110,7 @@ async def main() -> None:
             await conn.execute(
                 update(User)
                 .where(
-                    func.lower(User.email) == "admin@flowwolf.io",
+                    func.lower(User.email).in_(["admin@flowwolf.io", "admin@soopa.ai"]),
                     User.idp_user_id != platform_admin_id,
                 )
                 .values(idp_user_id=platform_admin_id)

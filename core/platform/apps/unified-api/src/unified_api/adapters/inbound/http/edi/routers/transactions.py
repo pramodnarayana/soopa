@@ -26,6 +26,7 @@ from edi.domain.enums import ReplayCheckpoint
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +36,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.database import (
     get_global_session,
     get_tenant_session,
 )
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
 
 logger = structlog.get_logger(__name__)
 
@@ -101,6 +103,7 @@ async def modify_and_replay_transaction(
     trace_id: str,
     request: ModifyAndReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> ModifyAndReplayResponse:
     actor = "USER"
@@ -108,7 +111,7 @@ async def modify_and_replay_transaction(
     log.info("modify_and_replay_transaction.received")
     async with uow:
         try:
-            use_case = ModifyAndReplayTransactionUseCase(uow)
+            use_case = ModifyAndReplayTransactionUseCase(uow, publisher=publisher)
             new_trace_id = await use_case.execute(
                 tenant_id, trace_id, request.modified_payload, actor
             )
@@ -127,6 +130,7 @@ async def modify_and_replay_transaction(
 @router.get("/messages", response_model=EdiMessageListResponse)
 async def list_edi_messages(
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -158,6 +162,7 @@ async def list_edi_json(
     key: str = Query(..., description="Business metadata key (e.g. shipment_id)"),
     value: str = Query(..., description="Business metadata value (e.g. 12345)"),
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> EdiJsonListResponse:
     """
@@ -173,6 +178,7 @@ async def list_edi_json(
 async def get_edi_trace(
     trace_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     global_session: AsyncSession = Depends(get_global_session),
     tenant_session: AsyncSession = Depends(get_tenant_session),
@@ -218,6 +224,7 @@ async def replay_transaction(
     trace_id: str,
     request: ReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> ReplayResponse:
     actor = "USER"  # TODO: extract from token
@@ -225,7 +232,7 @@ async def replay_transaction(
     log.info("replay_transaction.received")
     async with uow:
         try:
-            use_case = ReplayTransactionUseCase(uow)
+            use_case = ReplayTransactionUseCase(uow, publisher=publisher)
             match request.checkpoint:
                 case ReplayCheckpoint.TRANSFORM:
                     replay_trace_id = await use_case.retry_transform(tenant_id, trace_id, actor)
@@ -242,6 +249,7 @@ async def replay_transaction(
 async def bulk_replay(
     request: BulkReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
+    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> BulkReplayResponse:
@@ -252,7 +260,7 @@ async def bulk_replay(
     log.info("bulk_replay_transaction.received")
     async with uow:
         try:
-            use_case = BulkReplayTransactionsUseCase(uow)
+            use_case = BulkReplayTransactionsUseCase(uow, publisher=publisher)
             match request.checkpoint:
                 case ReplayCheckpoint.TRANSFORM:
                     processed = await use_case.bulk_retry_transform(

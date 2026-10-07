@@ -98,7 +98,9 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
                     "genuine_duplicate_user_email",
                     email=self._mask_email(email),
                 )
-                raise IdentityProviderPortError(f"Email '{email}' is already taken.")
+                raise IdentityProviderPortError(
+                    f"Email '{self._mask_email(email)}' is already taken."
+                ) from None
             except Exception as search_err:
                 logger.exception(
                     "failed_to_recover_existing_user",

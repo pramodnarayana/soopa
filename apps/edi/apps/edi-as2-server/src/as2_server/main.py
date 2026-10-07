@@ -8,6 +8,8 @@ Production-ready FastAPI application for the EDI AS2 Server.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
@@ -39,6 +41,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     s3_storage = StorageProvider.create_payload_storage()
     app.state.s3_storage = s3_storage
+
+    publisher = create_edi_pipeline_publisher(
+        compute_queue_url=settings.sqs.compute_queue_url,
+        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+        deliver_queue_url=settings.sqs.deliver_queue_url,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+    app.state.publisher = publisher
+    app.state.crypto_service = SmimeCryptoService()
 
     logger = ObservabilityProvider.logger(__name__)
 

@@ -1,14 +1,13 @@
 import asyncio
 import contextlib
-import os
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 import structlog
 from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
 from pubsub.ports.consumer_error_handler_port import ConsumerErrorHandlerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
+from seedwork.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
 
@@ -29,7 +28,7 @@ class SqsConsumerManager:
     def __init__(
         self,
         consumer: MessageConsumerPort,
-        handler: Callable[[dict[str, Any]], Awaitable[None]],
+        handler: Callable[[JsonDict], Awaitable[None]],
         queue_name: str = "",
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
@@ -56,7 +55,7 @@ class SqsConsumerManager:
         return self._task
 
     def _on_task_done(self, task: asyncio.Task[None]) -> None:
-        if not task.cancelled() and task.exception():
+        if not task.cancelled():
             exc = task.exception()
             if exc:
                 logger.error(
@@ -67,7 +66,8 @@ class SqsConsumerManager:
                 if self.on_fatal_error:
                     self.on_fatal_error(exc)
                 else:
-                    os._exit(1)
+                    loop = asyncio.get_event_loop()
+                    loop.call_soon_threadsafe(loop.stop)
 
     def start(self) -> None:
         if not self.is_running:
@@ -115,13 +115,17 @@ class SqsConsumerManager:
                     # Dispatch to the pure callback handler.
                     # A raised exception here means we skip the ack(),
                     # and it will be visible again in SQS after visibility timeout.
+                    keys = []
+                    if isinstance(ackable_msg.payload, dict):
+                        keys = list(ackable_msg.payload.keys())
+
                     logger.info(
                         "sqs_consumer_manager_received_message",
                         queue=self.queue_name,
-                        payload_keys=list(ackable_msg.payload.raw_data.keys()),
+                        payload_keys=keys,
                     )
 
-                    await self.handler(ackable_msg.payload.raw_data)
+                    await self.handler(ackable_msg.payload)
                     await ackable_msg.ack()
             except asyncio.CancelledError:
                 break

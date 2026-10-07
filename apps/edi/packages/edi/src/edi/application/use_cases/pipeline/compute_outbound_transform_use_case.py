@@ -202,9 +202,19 @@ class ComputeOutboundTransformUseCase:
 
                 await uow.commit()
 
-                for env in envelopes:
-                    await self.publisher.publish(env)
-                await self.publisher.publish(envelope)
+                try:
+                    for env in envelopes:
+                        await self.publisher.publish(env)
+                    await self.publisher.publish(envelope)
+                    async with self.uow_factory() as ack_uow, ack_uow:
+                        for env in envelopes:
+                            await ack_uow.outbox.mark_completed(env.id)
+                        await ack_uow.outbox.mark_completed(envelope.id)
+                        await ack_uow.commit()
+                except Exception as sync_e:
+                    logger.exception(
+                        "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
+                    )
 
             logger.info("compute_outbound_transform.completed", trace_id=trace_id)
         except Exception as e:
@@ -227,4 +237,12 @@ class ComputeOutboundTransformUseCase:
                         },
                     )
                     await failure_uow.commit()
-                    await self.publisher.publish(failure_envelope)
+                    try:
+                        await self.publisher.publish(failure_envelope)
+                        async with self.uow_factory() as ack_uow, ack_uow:
+                            await ack_uow.outbox.mark_completed(failure_envelope.id)
+                            await ack_uow.commit()
+                    except Exception as sync_e:
+                        logger.exception(
+                            "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
+                        )

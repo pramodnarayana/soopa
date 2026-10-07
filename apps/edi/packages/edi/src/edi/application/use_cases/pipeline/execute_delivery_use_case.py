@@ -96,19 +96,14 @@ class ExecuteDeliveryUseCase:
                 partner_id=command.partner_id,
             )
         except Exception as e:
-            status = MessageStatus.FAILED
-            domain_event = DeliveryFailed(
-                trace_id=command.trace_id,
-                tenant_id=command.tenant_id,
-                direction=edi_msg.direction,
-                failure_reason=f"Unexpected error: {e!s}",
-            )
             logger.exception(
                 "delivery_worker.delivery_failed_unexpected",
                 trace_id=command.trace_id,
                 strategy=command.strategy_type,
                 partner_id=command.partner_id,
+                error=str(e),
             )
+            raise
 
         # 3. Record final outcome and lock idempotency in a single transaction
         await self._record_delivery_outcome(command, idempotency_key, edi_msg, status, domain_event)
@@ -142,11 +137,9 @@ class ExecuteDeliveryUseCase:
 
             envelopes = await uow.transactions.flush_events(edi_msg)
 
-            for env in envelopes:
-                await uow.outbox.mark_completed(env.id)
-
             await uow.commit()
 
+        try:
             for env in envelopes:
                 await self.publisher.publish(env)
                 logger.info(
@@ -155,3 +148,9 @@ class ExecuteDeliveryUseCase:
                     event_type=env.event_type,
                     trace_id=command.trace_id,
                 )
+            async with self.uow_factory() as ack_uow, ack_uow:
+                for env in envelopes:
+                    await ack_uow.outbox.mark_completed(env.id)
+                await ack_uow.commit()
+        except Exception as sync_e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e))

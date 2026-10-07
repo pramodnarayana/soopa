@@ -18,11 +18,13 @@ foundation_stack_ref = config.get("foundation_stack") or f"organization/foundati
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
+storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 zitadel = pulumi.StackReference(zitadel_stack_ref)
+storage = pulumi.StackReference(storage_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -41,10 +43,14 @@ edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
+as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
+as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
+
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
-    platform.require_output("openobserve_endpoint") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
 obs_user_arn = (
     platform.require_output("openobserve_user_secret_arn") if enable_observability else None
@@ -84,7 +90,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1], args[2], args[3]],
+                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
                     },
                     {
                         "Effect": "Allow",
@@ -138,6 +144,10 @@ api_service = provision_fargate_service(
         },
         {"name": "PUBLIC_BASE_URL", "value": pulumi.Output.concat("https://api.", staging_domain)},
         {
+            "name": "AS2_RECEIVE_URL",
+            "value": pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
+        },
+        {
             "name": "IDENTITY_ISSUER",
             "value": pulumi.Output.concat("https://identity.", staging_domain),
         },
@@ -161,6 +171,7 @@ api_service = provision_fargate_service(
             "name": "CORS_ALLOWED_ORIGINS",
             "value": staging_domain.apply(lambda d: f'["https://dashboard.{d}"]'),
         },
+        {"name": "S3_BUCKET", "value": as2_payloads_bucket_name},
     ],
     secrets=[
         {
@@ -173,7 +184,7 @@ api_service = provision_fargate_service(
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
         },
         {
-            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
         },
     ],
@@ -195,27 +206,14 @@ api_service = provision_fargate_service(
                 aws.get_caller_identity().account_id,
                 ":secret:edi/as2_key/*",
             ),
-        }
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:GetObject"],
+            "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
+        },
     ],
 )
 
-# ── DNS Record ────────────────────────────────────────────────────────────────
-hosted_zone = aws.route53.get_zone_output(name=staging_domain)
-main_alb_dns_name = platform.require_output("main_alb_dns_name")
-main_alb_zone_id = platform.require_output("main_alb_zone_id")
-
-api_dns_record = aws.route53.Record(
-    f"{_prefix}api-dns",
-    zone_id=hosted_zone.id,
-    name=pulumi.Output.concat("api.", staging_domain),
-    type="A",
-    aliases=[
-        aws.route53.RecordAliasArgs(
-            name=main_alb_dns_name,
-            zone_id=main_alb_zone_id,
-            evaluate_target_health=False,
-        )
-    ],
-)
-
-pulumi.export("api_domain", api_dns_record.name)
+# DNS Record moved to routing stack
+pulumi.export("api_domain", pulumi.Output.concat("api.", staging_domain))

@@ -1,6 +1,7 @@
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import EdiJsonDomainModel
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 
 """
 Layer 2 — Application Use Case Tests: ProcessApiEdiJsonUseCase.
@@ -41,7 +42,7 @@ class FakeTransactionRepository:
         self.created_edi_jsons: list[dict[str, Any]] = []
         self.outbox_events: list[dict[str, Any]] = []
 
-    async def save_json(self, aggregate: Any) -> None:
+    async def save_json(self, aggregate: Any) -> list:
         self.created_edi_jsons.append(
             {
                 "tenant_id": aggregate.tenant_id,
@@ -69,6 +70,7 @@ class FakeTransactionRepository:
                 }
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeTraceRepository:
@@ -106,7 +108,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     def setup_method(self):
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
-        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow)
+        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
 
     @pytest.mark.asyncio
     async def test_returns_a_trace_id_string(self):
@@ -223,7 +225,7 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
     def setup_method(self):
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
-        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow)
+        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
 
     @pytest.mark.asyncio
     async def test_uses_explicit_transaction_type_from_command(self):
@@ -335,7 +337,7 @@ class TestProcessApiEdiJsonUseCaseListPayload:
     def setup_method(self):
         self.repo = FakeTransactionRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
-        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow)
+        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
 
     @pytest.mark.asyncio
     async def test_handles_list_payload_with_multiple_items(self):

@@ -37,6 +37,7 @@ from unified_api.adapters.inbound.http.identity.routers import (
     tokens_router,
 )
 from unified_api.adapters.inbound.http.middleware.authentication import _PUBLIC_PATHS
+from unified_api.adapters.inbound.http.middleware.tenant_context import _TENANT_EXEMPT_PATHS
 from unified_api.adapters.inbound.http.ucp.routers import (
     apps_router,
     tenants_router,
@@ -72,7 +73,11 @@ setup_observability(app)
 # Layer 3 — Tenant Context Resolution
 # Once authenticated, this middleware explicitly resolves the active Tenant ID
 # for the request and validates authorization against the IdentityContext.
-app.add_middleware(TenantContextMiddleware, public_paths=_PUBLIC_PATHS)
+app.add_middleware(
+    TenantContextMiddleware,
+    public_paths=_PUBLIC_PATHS,
+    tenant_exempt_paths=_TENANT_EXEMPT_PATHS,
+)
 
 
 # Layer 2 — Perimeter Authentication

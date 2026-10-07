@@ -13,11 +13,6 @@ class DatabaseConstants:
 
 import os
 
-from dotenv import load_dotenv
-
-_WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-load_dotenv(os.path.join(_WORKSPACE_ROOT, "versions.env"))
-
 
 @dataclass(frozen=True)
 class ZitadelConstants:

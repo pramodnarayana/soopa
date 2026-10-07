@@ -6,6 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, TypeVar
 
+from database.outbox_serializer import serialize_domain_event
 from seedwork.domain.types import JsonValue
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
@@ -248,6 +249,28 @@ class InMemoryRepositoryAdapter:
             "status_message": command.status_message,
         }
         return trace_id
+
+    async def flush_events(self, aggregate: EdiMessageDomainModel) -> list[EventEnvelope]:
+        envelopes = []
+        for event in aggregate.domain_events:
+            payload_json = serialize_domain_event(event)
+            if self.outbox_repo:
+                envelope = await self.outbox_repo.append_event(
+                    tenant_id=aggregate.tenant_id or "",
+                    event_type=event.__class__.__name__,
+                    payload=payload_json,
+                    idempotency_key=event.idempotency_key,
+                )
+                if envelope:
+                    envelopes.append(envelope)
+        aggregate.clear_domain_events()
+        return envelopes
+
+    async def update_outbound_delivery_metadata(self, aggregate: EdiMessageDomainModel) -> None:
+        trace_id = aggregate.trace_id
+        if trace_id in self.edi_messages:
+            self.edi_messages[trace_id]["status"] = aggregate.status
+            self.edi_messages[trace_id]["connection_type"] = aggregate.connection_type
 
     async def save(self, aggregate: EdiMessageDomainModel) -> list:
         trace_id = aggregate.trace_id
@@ -670,15 +693,40 @@ class FakeDataPlaneOutboxRepository:
         event_type: str,
         payload: dict[str, JsonValue],
         idempotency_key: str | None = None,
-    ) -> None:
+    ) -> EventEnvelope:
         # Only deduplicate when idempotency_key is explicitly provided (not None)
         if idempotency_key is not None:
             for existing in self.events:
                 if existing["idempotency_key"] == idempotency_key:
-                    return
+                    return EventEnvelope(
+                        id=str(existing.get("id", generate_id(SystemIdPrefix.EVENT))),
+                        source="edi",
+                        event_type=event_type,
+                        payload=payload,
+                        idempotency_key=idempotency_key,
+                        tenant_id=tenant_id,
+                    )
+
+        event_id = generate_id(SystemIdPrefix.EVENT)
         self.events.append(
-            {"idempotency_key": idempotency_key, "event_type": event_type, "payload": payload}
+            {
+                "id": event_id,
+                "idempotency_key": idempotency_key,
+                "event_type": event_type,
+                "payload": payload,
+            }
         )
+        return EventEnvelope(
+            id=event_id,
+            source="edi",
+            event_type=event_type,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            tenant_id=tenant_id,
+        )
+
+    async def mark_completed(self, event_id: str, worker_id: str | None = None) -> None:
+        self.processed.add(event_id)
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
         if key_str in self.processed or key_str in self.leased:

@@ -75,6 +75,7 @@ def build_firelens_log_config(
             "Port": fl_port,
             "URI": ObservabilityConstants.OPENOBSERVE_URI,
             "Format": ObservabilityConstants.JSON_FORMAT,
+            "tls": "off",
         },
     }
     if obs_user_arn and obs_pass_arn:
@@ -121,6 +122,7 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
     obs_password_secret_arn: str = None,
     secrets: list = None,
     enable_execute_command: bool = False,
+    service_registry_arn: str = None,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
@@ -278,7 +280,6 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
                 )
             )
 
-    # Service
     svc = aws.ecs.Service(
         f"{name}-svc",
         cluster=cluster_arn,
@@ -291,6 +292,12 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
             assign_public_ip=is_public,
         ),
         load_balancers=lbs if lbs else None,
+        health_check_grace_period_seconds=120 if lbs else None,
+        service_registries=aws.ecs.ServiceServiceRegistriesArgs(
+            registry_arn=service_registry_arn,
+        )
+        if service_registry_arn
+        else None,
         enable_execute_command=enable_execute_command,
         tags=tags,
     )

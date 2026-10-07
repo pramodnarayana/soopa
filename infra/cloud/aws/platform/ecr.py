@@ -23,15 +23,4 @@ def provision_ecr(prefix: str, tags: dict):
         tags=tags,
     )
 
-    # ECR Repository for Debezium Mirror
-    debezium_ecr_repo = aws.ecr.Repository(
-        f"{prefix}debezium-mirror",
-        name=f"{prefix}debezium-mirror",
-        image_scanning_configuration=aws.ecr.RepositoryImageScanningConfigurationArgs(
-            scan_on_push=True,
-        ),
-        force_delete=True,
-        tags=tags,
-    )
-
-    return zitadel_ecr_repo, app_ecr_repo, debezium_ecr_repo
+    return zitadel_ecr_repo, app_ecr_repo

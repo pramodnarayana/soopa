@@ -77,7 +77,7 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(OutboxRepositoryPort):
                             owner_token = :worker_id
                         WHERE id IN (
                             SELECT id FROM outbox
-                            WHERE (status = :status_pending OR (status = :status_processing AND lease_expires_at < NOW()))
+                            WHERE ((status = :status_pending AND created_at < NOW() - interval '60 seconds') OR (status = :status_processing AND lease_expires_at < NOW()))
                             ORDER BY created_at ASC
                             LIMIT :limit
                             FOR UPDATE SKIP LOCKED

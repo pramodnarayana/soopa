@@ -155,7 +155,10 @@ migrator_task = aws.ecs.TaskDefinition(
                         {"name": "GLOBAL_DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
                         {"name": "DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
                         {"name": "EDI_DATABASE_URL", "valueFrom": f"{args[2]}:url::"},
-                        {"name": "SHARD_OVERRIDES__EDI_SHARD_1", "valueFrom": f"{args[2]}:url::"},
+                        {
+                            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
+                            "valueFrom": f"{args[2]}:url::",
+                        },
                     ],
                     "logConfiguration": {
                         "logDriver": "awslogs",

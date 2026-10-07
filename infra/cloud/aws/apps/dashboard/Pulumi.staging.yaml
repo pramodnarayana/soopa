@@ -1,4 +1,4 @@
 config:
   aws:region: us-east-1
   dashboard:platform_stack: organization/platform/staging
-encryptionsalt: v1:0wjPGxNfQQA=:v1:ia+lG6QMIp5+HJCb:bir2u45IHx8v3b/AHBTu9lQaD6PX7A==
+encryptionsalt: v1:LpYyJwSdKpA=:v1:FbQraaNciIrk3rvu:aORcqhDNcQYhI0IJKt8Np2WsH7IK8w==

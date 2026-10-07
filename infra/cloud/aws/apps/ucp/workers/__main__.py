@@ -75,8 +75,9 @@ sns_platform_events_topic_arn = platform.require_output("sns_platform_events_top
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
-    platform.require_output("openobserve_endpoint") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
 obs_user_arn = (
     platform.require_output("openobserve_user_secret_arn") if enable_observability else None
@@ -125,12 +126,18 @@ aws.iam.RolePolicy(
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
                         "Resource": [
-                            args[0],
-                            args[1],
-                            args[2],
-                            args[3],
-                            args[4],
-                            args[5],
+                            arn
+                            for arn in [
+                                args[0],
+                                args[1],
+                                args[2],
+                                args[3],
+                                args[4],
+                                args[5],
+                            ]
+                            if arn
+                        ]
+                        + [
                             f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:identity/{_prefix}iam-manager-sa-key-*",
                         ],
                     },
@@ -154,6 +161,7 @@ aws.iam.RolePolicyAttachment(
 iam_manager_sa_secret = aws.secretsmanager.Secret(
     f"{_prefix}iam-manager-sa-key",
     name_prefix=f"identity/{_prefix}iam-manager-sa-key-",
+    recovery_window_in_days=30 if _env == "production" else 0,
     tags=_TAGS,
 )
 
@@ -168,6 +176,7 @@ sidecar = {
     "name": "edi-secrets-sidecar",
     "command": ["python", "/app/apps/edi/apps/edi-secrets-sidecar/main.py"],
     "essential": True,
+    "user": "0",
     "environment": [
         {"name": "SECRETS_MOUNT_PATH", "value": "/mnt/secrets"},
     ],
@@ -339,7 +348,7 @@ for group in worker_groups:
                 "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
             },
             {
-                "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+                "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
                 "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
             },
             {
