@@ -15,7 +15,6 @@ from alb import provision_load_balancer
 from ecr import provision_ecr
 from ecs_cluster import provision_cluster
 from event_bus import provision_event_bus
-from observability import provision_openobserve_foundations
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
@@ -59,36 +58,6 @@ main_alb, main_listener, obs_listener = provision_load_balancer(
 # ── ECS Cluster ───────────────────────────────────────────────────────────────
 ecs_cluster, cloud_map_namespace = provision_cluster(prefix=_prefix, tags=_TAGS, vpc_id=vpc_id)
 
-# ── Observability ─────────────────────────────────────────────────────────────
-enable_observability = config.get_bool("enable_observability")
-if enable_observability:
-    obs_bucket, obs_user_arn, obs_pass_arn = provision_openobserve_foundations(
-        prefix=_prefix,
-        tags=_TAGS,
-        vpc_id=vpc_id,
-        private_subnets=private_subnets,
-        app_sg_id=app_sg_id,
-        ecs_cluster_arn=ecs_cluster.arn,
-        main_listener_arn=main_listener.arn,
-        obs_listener_arn=obs_listener.arn,
-        staging_domain=staging_domain,
-        cloud_map_namespace_id=cloud_map_namespace.id,
-    )
-
-    hosted_zone = aws.route53.get_zone_output(name=staging_domain)
-    obs_dns_record = aws.route53.Record(
-        f"{_prefix}observability-dns",
-        zone_id=hosted_zone.id,
-        name=pulumi.Output.concat("observability.", staging_domain),
-        type="A",
-        aliases=[
-            aws.route53.RecordAliasArgs(
-                name=main_alb.dns_name,
-                zone_id=main_alb.zone_id,
-                evaluate_target_health=False,
-            )
-        ],
-    )
 
 # ── Universal Event Bus (Messaging) ───────────────────────────────────────────
 platform_events_topic = provision_event_bus(prefix=_prefix, tags=_TAGS)
@@ -142,12 +111,7 @@ pulumi.export("main_alb_obs_listener_arn", obs_listener.arn)
 pulumi.export("main_alb_dns_name", main_alb.dns_name)
 pulumi.export("main_alb_zone_id", main_alb.zone_id)
 pulumi.export("staging_domain", staging_domain)
-if enable_observability:
-    pulumi.export("openobserve_endpoint", obs_dns_record.name.apply(lambda dns: f"{dns}:443"))
-    pulumi.export("openobserve_user_secret_arn", obs_user_arn)
-    pulumi.export("openobserve_password_secret_arn", obs_pass_arn)
-    pulumi.export("openobserve_bucket_name", obs_bucket.bucket)
-    pulumi.export("openobserve_bucket_arn", obs_bucket.arn)
+
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)
 pulumi.export("zitadel_ecr_repo_url", zitadel_ecr_repo.repository_url)
 pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)

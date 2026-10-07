@@ -27,8 +27,3 @@ class ZitadelConstants:
 class EcsConstants:
     CAPACITY_PROVIDER: str = "FARGATE"
     LOG_DRIVER: str = "awslogs"
-
-
-@dataclass(frozen=True)
-class OpenObserveConstants:
-    DEFAULT_ADMIN_EMAIL: str = "admin@example.com"

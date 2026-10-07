@@ -82,10 +82,8 @@ jobs:
 
       - name: Start Database & Infrastructure
         run: |
-          docker compose --env-file .env --env-file versions.env up -d postgres_global edi_postgres_shard localstack debezium_shard otel-collector sftp --wait
-          pnpm db:migrate:platform
-          pnpm db:seed
-          pnpm db:migrate:edi
+          cp .env.example .env
+          pnpm infra:up
 
       - name: Test (Integration)
         run: COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration

@@ -41,7 +41,7 @@ deploy_stack() {
 
 # 1. Platform Foundation
 deploy_stack "infra/cloud/aws/platform" "Platform"
-deploy_stack "infra/cloud/aws/apps/openobserve" "OpenObserve"
+deploy_stack "infra/cloud/aws/openobserve" "OpenObserve"
 
 # 2. Core Identity
 deploy_stack "infra/cloud/aws/zitadel" "Zitadel Identity"
@@ -55,7 +55,6 @@ deploy_stack "infra/cloud/aws/apps/edi/workers" "EDI Workers"
 
 # 5. EDI Transports & CDC
 deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server"
-deploy_stack "infra/cloud/aws/apps/edi/debezium" "Debezium CDC"
 
 # 6. Tools
 deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner"

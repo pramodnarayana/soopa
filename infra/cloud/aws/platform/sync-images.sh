@@ -15,14 +15,13 @@ set -a
 source "$SCRIPT_DIR/../../../../versions.env"
 set +a
 
-if [ -z "$IDENTITY_VERSION" ] || [ -z "$DEBEZIUM_VERSION" ]; then
-    echo "ERROR: IDENTITY_VERSION or DEBEZIUM_VERSION is unset in versions.env"
+if [ -z "$IDENTITY_VERSION" ]; then
+    echo "ERROR: IDENTITY_VERSION is unset in versions.env"
     exit 1
 fi
 # Define images to sync. Format: "source_image|target_ecr_repo"
 IMAGES=(
   "ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}|staging-zitadel-image"
-  "quay.io/debezium/server:${DEBEZIUM_VERSION}|staging-debezium-mirror"
 )
 
 for ENTRY in "${IMAGES[@]}"; do

@@ -57,11 +57,6 @@ db-init:
 	cd apps/edi-as2-server && uv run python scripts/seed.py
 
 db-reset:
-	@echo "Restarting Debezium..."
-	docker compose stop debezium_shard_1
-	docker compose rm -f -v debezium_shard_1
-	-docker volume rm apps_edi_debezium_data 2>/dev/null || true
-	docker compose up -d debezium_shard_1
 	@echo "Re-running migrations and seeding..."
 	$(MAKE) db-init
 
