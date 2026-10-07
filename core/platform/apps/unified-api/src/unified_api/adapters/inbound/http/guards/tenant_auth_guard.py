@@ -78,6 +78,8 @@ async def require_tenant_member(
         tenant_caps = await role_repo.get_user_capabilities(
             tenant_id=canonical_tenant_id, user_id=identity.subject
         )
+        identity.capabilities.clear()
+        identity.capabilities.update(identity.permissions)
         identity.capabilities.update(tenant_caps)
 
         request.state.identity = identity
@@ -93,6 +95,8 @@ async def require_tenant_member(
         tenant_caps = await role_repo.get_user_capabilities(
             tenant_id=canonical_tenant_id, user_id=identity.subject
         )
+        identity.capabilities.clear()
+        identity.capabilities.update(identity.permissions)
         identity.capabilities.update(tenant_caps)
 
         request.state.identity = identity

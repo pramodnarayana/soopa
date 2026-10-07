@@ -7,6 +7,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
+from infra_seedwork.env import queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -19,12 +20,14 @@ platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_e
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
 storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
+messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messaging/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 zitadel = pulumi.StackReference(zitadel_stack_ref)
 storage = pulumi.StackReference(storage_stack_ref)
+messaging = pulumi.StackReference(messaging_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -172,6 +175,7 @@ api_service = provision_fargate_service(
             "value": staging_domain.apply(lambda d: f'["https://dashboard.{d}"]'),
         },
         {"name": "S3_BUCKET", "value": as2_payloads_bucket_name},
+        *queue_env_vars_to_ecs_format(messaging.require_output("queue_env_vars")),
     ],
     secrets=[
         {

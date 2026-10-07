@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<partnerships>
+    <!-- OpenAS2 acting as the remote/test sender (Shared across environments) -->
+    <partner name="OPENAS2"
+             as2_id="OPEN_AS2"
+             x509_alias="openas2b_alias"
+             email="as2@openas2.local"/>
+
+    <!-- ========================================== -->
+    <!--            LOCAL ENVIRONMENT               -->
+    <!-- ========================================== -->
+    <partner name="FLOWWOLF_LOCAL"
+             as2_id="FLOWWOLF_LOCAL_AS2"
+             x509_alias="flowwolf_as2_alias"
+             email="as2@local.flowwolfedi.local"/>
+
+    <!-- OUTBOUND: OpenAS2 -> FlowwolfEDI (Local) -->
+    <partnership name="OPENAS2-to-FLOWWOLF-LOCAL">
+        <sender name="OPENAS2"/>
+        <receiver name="FLOWWOLF_LOCAL"/>
+        <pollerConfig enabled="true"/>
+        <attribute name="protocol"                         value="as2"/>
+        <attribute name="content_transfer_encoding"        value="binary"/>
+        <attribute name="subject"                          value="Inbound test from OPEN_AS2 to FLOWWOLF_LOCAL_AS2"/>
+        <attribute name="as2_url"                          value="http://host.docker.internal:8001/as2/inbox"/>
+        <attribute name="as2_mdn_to"                       value="as2@openas2.local"/>
+        <attribute name="as2_mdn_options"                  value="signed-receipt-protocol=optional, pkcs7-signature; signed-receipt-micalg=optional, sha256"/>
+        <attribute name="encrypt"                          value="3DES"/>
+        <attribute name="sign"                             value="SHA-256"/>
+        <attribute name="resend_max_retries"               value="3"/>
+    </partnership>
+
+    <!-- INBOUND: FlowwolfEDI (Local) -> OpenAS2 -->
+    <partnership name="FLOWWOLF-LOCAL-to-OPENAS2">
+        <sender name="FLOWWOLF_LOCAL"/>
+        <receiver name="OPENAS2"/>
+        <attribute name="reject_unsigned_messages" value="false"/>
+    </partnership>
+
+    <!-- ========================================== -->
+    <!--             AWS ENVIRONMENT                -->
+    <!-- ========================================== -->
+    <partner name="FLOWWOLF_AWS"
+             as2_id="FLOWWOLF_AWS_AS2"
+             x509_alias="flowwolf_as2_alias"
+             email="as2@aws.flowwolfedi.local"/>
+
+    <!-- OUTBOUND: OpenAS2 -> FlowwolfEDI (AWS) -->
+    <partnership name="OPENAS2-to-FLOWWOLF-AWS">
+        <sender name="OPENAS2"/>
+        <receiver name="FLOWWOLF_AWS"/>
+        <pollerConfig enabled="true"/>
+        <attribute name="protocol"                         value="as2"/>
+        <attribute name="content_transfer_encoding"        value="binary"/>
+        <attribute name="subject"                          value="Inbound test from OPEN_AS2 to FLOWWOLF_AWS_AS2"/>
+        <attribute name="as2_url"                          value="https://edi.staging.flowwolf.io/as2/inbox"/>
+        <attribute name="as2_mdn_to"                       value="as2@openas2.local"/>
+        <attribute name="as2_mdn_options"                  value="signed-receipt-protocol=optional, pkcs7-signature; signed-receipt-micalg=optional, sha256"/>
+        <attribute name="encrypt"                          value="3DES"/>
+        <attribute name="sign"                             value="SHA-256"/>
+        <attribute name="resend_max_retries"               value="3"/>
+    </partnership>
+
+    <!-- INBOUND: FlowwolfEDI (AWS) -> OpenAS2 -->
+    <partnership name="FLOWWOLF-AWS-to-OPENAS2">
+        <sender name="FLOWWOLF_AWS"/>
+        <receiver name="OPENAS2"/>
+        <attribute name="reject_unsigned_messages" value="false"/>
+    </partnership>
+</partnerships>

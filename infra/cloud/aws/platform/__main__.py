@@ -65,6 +65,14 @@ if enable_observability:
     obs_bucket, obs_user_arn, obs_pass_arn = provision_openobserve_foundations(
         prefix=_prefix,
         tags=_TAGS,
+        vpc_id=vpc_id,
+        private_subnets=private_subnets,
+        app_sg_id=app_sg_id,
+        ecs_cluster_arn=ecs_cluster.arn,
+        main_listener_arn=main_listener.arn,
+        obs_listener_arn=obs_listener.arn,
+        staging_domain=staging_domain,
+        cloud_map_namespace_id=cloud_map_namespace.id,
     )
 
     hosted_zone = aws.route53.get_zone_output(name=staging_domain)

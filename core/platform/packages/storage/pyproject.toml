@@ -1,0 +1,22 @@
+[project]
+name = "storage"
+version = "0.1.0"
+description = "Centralized Storage Adapters"
+authors = [
+    { name = "Platform Team" }
+]
+dependencies = [
+    "aioboto3>=13.1.0",
+    "seedwork",
+]
+requires-python = ">=3.12"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv.sources]
+seedwork = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/storage"]

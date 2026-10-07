@@ -17,13 +17,11 @@ from edi.application.use_cases.inbound_routes.update_inbound_route_use_case impo
 from edi.domain.models.inbound_routes import InboundRouteDomainModel
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
-from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.headers import get_idempotency_key
-from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     CreateInboundRouteRequest,
     InboundRouteItem,
@@ -81,7 +79,6 @@ def _to_dto(domain: InboundRouteDomainModel) -> dict[str, Any]:
 @router.get("", response_model=list[InboundRouteItem], status_code=status.HTTP_200_OK)
 async def list_inbound_routes(
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[InboundRouteItem]:
     """
@@ -97,7 +94,6 @@ async def list_inbound_routes(
 async def create_inbound_route(
     request: CreateInboundRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> RouteResponse:
@@ -134,7 +130,6 @@ async def update_inbound_route(
     route_id: str,
     request: UpdateRouteRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
@@ -173,7 +168,6 @@ async def update_inbound_route(
 async def delete_inbound_route(
     route_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:

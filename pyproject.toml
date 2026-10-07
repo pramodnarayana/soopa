@@ -26,6 +26,7 @@ members = [
     "core/platform/packages/pubsub",
     "core/platform/packages/seedwork",
     "core/platform/packages/secret_store",
+    "core/platform/packages/storage",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",

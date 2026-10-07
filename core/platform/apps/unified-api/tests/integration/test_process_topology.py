@@ -29,6 +29,7 @@ def test_api_starts_and_serves_health_without_sqs_vars():
     env["IDENTITY_DEFAULT_USER_PASSWORD"] = "dummy_password"  # noqa: S105 - Dummy password for integration test isolation
     env["PUBLIC_BASE_URL"] = "http://localhost:8000"
     env["CORS_ALLOWED_ORIGINS"] = '["http://localhost:3000"]'
+    env["AS2_RECEIVE_URL"] = "http://localhost:8000/as2/inbox"
 
     # Optional OTel suppression to keep logs clean during test
     env["OTEL_ENABLED"] = "false"

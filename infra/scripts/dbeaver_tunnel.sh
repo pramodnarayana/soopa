@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-# Unset LocalStack endpoints and dummy credentials if present in the user's environment
+# Unset LocalStack endpoints if present in the user's environment
 unset AWS_ENDPOINT_URL
 unset AWS_ENDPOINT_URL_ECS
-unset AWS_ACCESS_KEY_ID
-unset AWS_SECRET_ACCESS_KEY
-unset AWS_SESSION_TOKEN
 
 # Usage: ./dbeaver_tunnel.sh [global|edi]
 TARGET_DB=${1:-global}
