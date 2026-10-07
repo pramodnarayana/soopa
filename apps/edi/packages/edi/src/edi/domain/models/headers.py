@@ -30,3 +30,29 @@ class OutboundEdiHeaderDomainModel(AggregateRoot):
     segment_terminator: str | None = None
     element_separator: str | None = None
     subelement_separator: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class EdiEnvelopeHeaders:
+    """Domain Value Object representing the resolved EDI envelope parameters.
+
+    This is the minimal, immutable set of X12/EDIFACT segment fields required
+    to physically construct an ISA/GS (X12) or UNB (EDIFACT) interchange envelope.
+
+    It is NOT a database model. It is produced by a use case after resolving the
+    full OutboundEdiHeaderDomainModel for a trading partner, and is passed into
+    the TransformerPort to drive envelope generation.
+    """
+
+    isa_sender_id: str
+    isa_receiver_id: str
+    transaction_type: str
+    gs_sender_id: str | None = None
+    gs_receiver_id: str | None = None
+    isa_usage_indicator: str | None = None
+    isa_sender_qualifier: str | None = None
+    isa_receiver_qualifier: str | None = None
+    default_version: str | None = None
+    segment_terminator: str | None = None
+    element_separator: str | None = None
+    subelement_separator: str | None = None

@@ -14,6 +14,7 @@ from edi.adapters.outbound.database.tenant_uow_provider import (
     TenantUowProvider,
 )
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
@@ -26,8 +27,8 @@ from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import Pipel
 from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.provider import PubSubProvider
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -47,46 +48,54 @@ def _setup_registry(
     settings: WorkerSettings,
     uow_provider: TenantUowProvider,
 ) -> EdiDataPlaneEventDispatcher:
+    publisher = create_edi_pipeline_publisher(
+        compute_queue_url=settings.sqs.compute_queue_url,
+        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+        deliver_queue_url=settings.sqs.deliver_queue_url,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
-        return DeliveryRouterUseCase(uow_factory=uow_fact)
+        return DeliveryRouterUseCase(uow_factory=uow_fact, publisher=publisher)
 
     registry = EdiDataPlaneRouteRegistry()
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        await DispatchInboundTransformUseCase(uow_fact, transformer, settings).execute(
-            e.trace_id, idempotency_key=e.idempotency_key
-        )
+        await DispatchInboundTransformUseCase(
+            uow_fact, transformer, settings, publisher=publisher
+        ).execute(e.trace_id, idempotency_key=e.idempotency_key)
 
     async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
-        await DispatchOutboundTransformUseCase(uow_fact, transformer, settings).execute(
-            e.trace_id, idempotency_key=e.idempotency_key
-        )
+        await DispatchOutboundTransformUseCase(
+            uow_fact, transformer, settings, publisher=publisher
+        ).execute(e.trace_id, idempotency_key=e.idempotency_key)
 
     async def run_transform_successful(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        await PipelineLifecycleUseCase(uow_fact).handle_transform_successful(
+        await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_transform_successful(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
     async def run_transform_failed(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        await PipelineLifecycleUseCase(uow_fact).handle_transform_failed(
+        await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_transform_failed(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
     async def run_delivery_successful(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        await PipelineLifecycleUseCase(uow_fact).handle_delivery_successful(
+        await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_delivery_successful(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
     async def run_delivery_failed(
         e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
     ) -> None:
-        await PipelineLifecycleUseCase(uow_fact).handle_delivery_failed(
+        await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_delivery_failed(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
@@ -170,15 +179,11 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
 
         consumer = _setup_registry(transformer, settings, uow_provider)
 
-        orchestrator_consumer = AwsSqsConsumer(
+        self.orchestrator_manager = PubSubProvider.create_consumer_manager(
             queue_url=settings.sqs.orchestrator_queue_url,
+            handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
-        )
-        self.orchestrator_manager = SqsConsumerManager(
-            consumer=orchestrator_consumer,
-            queue_name=settings.sqs.orchestrator_queue_url.rsplit("/", 1)[-1],
-            handler=consumer.handle,
         )
         assert self.orchestrator_manager is not None
         self.orchestrator_manager.start()

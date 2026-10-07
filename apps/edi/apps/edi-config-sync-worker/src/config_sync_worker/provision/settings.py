@@ -18,9 +18,6 @@ class WorkerSettings(CommonSettings):
     storage_backend: Literal["postgres", "s3"] = Field(
         validation_alias="STORAGE_BACKEND", default="postgres"
     )
-    enable_heavy_compute_queue: bool = Field(
-        validation_alias="ENABLE_HEAVY_COMPUTE_QUEUE", default=False
-    )
     s3: S3Settings = Field(default_factory=lambda: typing.cast(S3Settings, {}))
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     identity: PlatformIdentitySettings = Field(

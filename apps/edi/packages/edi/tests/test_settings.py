@@ -13,6 +13,7 @@ from edi.config.models import (
 
 
 class EdiTestSettings(CommonSettings):
+    edi_environment: typing.Literal["P", "T", "I"] = Field(default="T")
     identity: PlatformIdentitySettings = Field(
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )

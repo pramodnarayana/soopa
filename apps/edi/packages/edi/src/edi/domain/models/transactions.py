@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from seedwork.models import AggregateRoot
 
 from edi.domain.enums import EdiDirection, MessageStatus
+from edi.domain.events import TransformRequestedEvent
 from edi.domain.models.base import EdiRecordBase
 from edi.domain.types import JsonValue
 
@@ -30,9 +31,16 @@ class EdiMessageDomainModel(EdiRecordBase):
     as2_sender_id: str | None = None
     as2_receiver_id: str | None = None
     message_id: str | None = None
+    mdn_id: str | None = None
     mdn_mode: str | None = None
+    mdn_response: str | None = None
+    file_name: str | None = None
+    content_type: str | None = None
     signature_algorithm: str | None = None
     encryption_algorithm: str | None = None
+    status_message: str | None = None
+    state: str | None = None
+    msg_headers: str | None = None
     edi_data: str | None = None
     response: str | None = None
     headers: dict[str, JsonValue] | None = None
@@ -44,7 +52,6 @@ class EdiMessageDomainModel(EdiRecordBase):
         edi_data: str,
         format_standard: str,
         transaction_type: str,
-        connection_type: str,
         sender_id: str,
         receiver_id: str,
         gs_sender_id: str | None,
@@ -61,7 +68,6 @@ class EdiMessageDomainModel(EdiRecordBase):
         self.format_standard = format_standard
         self.transaction_type = transaction_type
         self.status = MessageStatus.PENDING_DELIVERY
-        self.connection_type = connection_type
         self.sender_id = sender_id
         self.receiver_id = receiver_id
         self.gs_sender_id = gs_sender_id
@@ -81,7 +87,6 @@ class EdiMessageDomainModel(EdiRecordBase):
         edi_data: str,
         format_standard: str,
         transaction_type: str,
-        connection_type: str,
         sender_id: str,
         receiver_id: str,
         gs_sender_id: str | None,
@@ -109,13 +114,54 @@ class EdiMessageDomainModel(EdiRecordBase):
             edi_data=edi_data,
             format_standard=format_standard,
             transaction_type=transaction_type,
-            connection_type=connection_type,
             sender_id=sender_id,
             receiver_id=receiver_id,
             gs_sender_id=gs_sender_id,
             gs_receiver_id=gs_receiver_id,
             trading_partner_id=trading_partner_id,
         )
+        return instance
+
+    @classmethod
+    def create_inbound(
+        cls,
+        *,
+        id: str,
+        trace_id: str,
+        tenant_id: str,
+        edi_data: str,
+        status: str,
+        trading_partner_id: str,
+        sender_id: str,
+        receiver_id: str,
+        connection_type: str,
+        as2_message_id: str | None = None,
+    ) -> "EdiMessageDomainModel":
+        instance = cls(
+            id=id,
+            trace_id=trace_id,
+            tenant_id=tenant_id,
+            direction=EdiDirection.INBOUND,
+            status=MessageStatus(status),
+            edi_data=edi_data,
+            trading_partner_id=trading_partner_id,
+            sender_id=sender_id,
+            receiver_id=receiver_id,
+            connection_type=connection_type,
+            message_id=as2_message_id,
+        )
+        if status == MessageStatus.RECEIVED.value:
+            instance.add_domain_event(
+                TransformRequestedEvent(
+                    trace_id=trace_id,
+                    tenant_id=tenant_id,
+                    trading_partner_id=trading_partner_id,
+                    sender_id=sender_id,
+                    receiver_id=receiver_id,
+                    direction="INBOUND",
+                    edi_message_id=as2_message_id,
+                )
+            )
         return instance
 
 

@@ -309,14 +309,33 @@ def upgrade() -> None:
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
+        sa.Column("status", sa.String(length=50), nullable=False),
+        sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("error_reason", sa.String(), nullable=True),
+        sa.Column("owner_token", sa.String(length=128), nullable=True),
+        sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
             server_default=sa.text("now()"),
             nullable=False,
         ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("idempotency_key"),
+    )
+    op.create_index(
+        "ix_dp_outbox_pending",
+        "outbox",
+        ["status", "created_at"],
+        unique=False,
+        postgresql_where=sa.text("status = 'PENDING'"),
     )
     op.create_index(op.f("ix_outbox_tenant_id"), "outbox", ["tenant_id"], unique=False)
     op.create_table(

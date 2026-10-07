@@ -16,6 +16,8 @@ from seedwork import generate_id
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import DomainIdPrefix
 
+from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
+
 
 class SqsTestPublisher:
     def __init__(self, endpoint_url: str):
@@ -99,7 +101,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
         # 2. Initialize the dispatcher with the translator
         translator = DefaultEventTranslator()
         dispatcher = EdiConfigSyncSqsDispatcher(
-            domain_service=worker_service, translator_port=translator
+            domain_service=worker_service, transformer_port=translator
         )
 
         # 3. Create a raw consumer so tests can manually poll and dispatch exactly once
@@ -114,10 +116,10 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
             async with test_consumer.poll_raw_message() as ackable_msg:
                 if ackable_msg:
                     try:
-                        await dispatcher.dispatch_raw(ackable_msg.payload.raw_data)
+                        await dispatcher.dispatch_raw(ackable_msg.payload)
                         await ackable_msg.ack()
                         return True
-                    except Exception:  # noqa: BLE001
+                    except (PermanentProvisioningError, TransientProvisioningError):
                         await ackable_msg.nack()
                         return False
             return False

@@ -1,14 +1,23 @@
-import uuid
+import typing
 from typing import Protocol
+
+if typing.TYPE_CHECKING:
+    from edi.domain.models.transactions import EdiMessageDomainModel
+    from seedwork.events import EventEnvelope
 
 
 class PartnerEntity:
     def __init__(
-        self, as2_id: str, public_cert_pem: str | None = None, active: bool = False
+        self,
+        as2_id: str,
+        public_cert_pem: str | None = None,
+        active: bool = False,
+        private_key_vault_ref: str | None = None,
     ) -> None:
         self.as2_id = as2_id
         self.public_cert_pem = public_cert_pem
         self.active = active
+        self.private_key_vault_ref = private_key_vault_ref
 
 
 class TradingPartnerRepositoryPort(Protocol):
@@ -16,18 +25,7 @@ class TradingPartnerRepositoryPort(Protocol):
 
 
 class EdiMessageRepositoryPort(Protocol):
-    async def save_message(
-        self,
-        tenant_id: str,
-        trace_id: uuid.UUID | str,
-        direction: str,
-        connection_type: str,
-        sender_id: str,
-        receiver_id: str,
-        edi_data: str,
-        status: str,
-        as2_message_id: str,
-    ) -> None: ...
+    async def save_message(self, aggregate: "EdiMessageDomainModel") -> list["EventEnvelope"]: ...
 
 
 class AS2TenantRepositoryPort(Protocol):

@@ -19,7 +19,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
 
-from database.models.common import TimestampMixin
+from database.models.common import OutboxMixin, TimestampMixin
 from edi.domain.enums import MessageStatus
 
 from .mixins import (
@@ -322,8 +322,8 @@ class Job(TenantBase, TenantAwareMixin, TimestampMixin):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
-class DataPlaneOutbox(TenantBase, TenantAwareMixin):
-    """Lightweight CDC signal table — read by Debezium, NOT polled by a sweeper."""
+class DataPlaneOutbox(TenantBase, TenantAwareMixin, OutboxMixin):
+    """Data plane outbox for Sync-Dispatch + Sweeper pattern."""
 
     __tablename__ = "outbox"
 
@@ -334,11 +334,14 @@ class DataPlaneOutbox(TenantBase, TenantAwareMixin):
         primary_key=True,
         default=lambda: generate_id(DataPlaneOutbox.ID_PREFIX),
     )
-    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
-    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()"), default=lambda: datetime.now(UTC)
+
+    __table_args__ = (
+        Index(
+            "ix_dp_outbox_pending",
+            "status",
+            "created_at",
+            postgresql_where=text("status = 'PENDING'"),
+        ),
     )
 
 

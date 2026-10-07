@@ -50,7 +50,7 @@ class RoutingResolutionUseCase:
                 return await self._resolve_outbound_routing(msg, edi_jsons)
             return await self._resolve_inbound_routing(msg, edi_jsons)
 
-        if msg.trading_partner_id or msg.direction == EdiDirection.OUTBOUND:
+        if msg.direction == EdiDirection.OUTBOUND:
             return await self._resolve_outbound_routing(msg, edi_jsons)
         return await self._resolve_inbound_routing(msg, edi_jsons)
 

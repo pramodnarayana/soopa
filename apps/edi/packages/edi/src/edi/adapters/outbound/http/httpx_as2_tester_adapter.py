@@ -110,8 +110,8 @@ class HttpxAS2TesterAdapter:
                         content=as2_msg.body,
                         headers=as2_msg.headers,
                     )
-        except ValueError:
-            return False, "SSRF validation failed for destination URL", payload_str, None
+        except ValueError as e:
+            return False, f"SSRF validation failed for destination URL: {e}", payload_str, None
         except httpx.ConnectError as e:
             return False, f"Connection refused: {e}", payload_str, None
         except httpx.TimeoutException:

@@ -494,3 +494,10 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Action Item**:
   1. Add the `edi-secrets-sidecar` as an explicit service in `docker-compose.yml` to exactly replicate the Fargate sidecar pattern.
   2. Create a `shared_secrets` Docker volume. Ensure the sidecar writes to it, and both the `unified-api` and `edi-as2-server` mount it, perfectly matching ECS shared-file mounts.
+
+## [Architecture] Replace Environment Variable Shard Overrides with Enterprise Catalog Routing
+
+- **Date Added**: 2026-10-04
+- **Status**: TO DO
+- **Description**: The system currently relies on injecting `DATABASE__SHARD_OVERRIDES__*` environment variables into container tasks to map shard connection strings. This breaks at scale due to ECS environment variable limits (~64KB) and couples the infrastructure topology to the data layer. Furthermore, the `DatabaseShard` table is currently seeded with temporary `localhost` DSNs rather than canonical internal DNS hostnames.
+- **Action Item**: Transition to a true enterprise-grade dynamic catalog. Ensure the Global Database stores canonical internal AWS hostnames (not full DSNs/passwords). Refactor the `DatabaseRouter` to use AWS IAM Database Authentication (or fetch credentials dynamically via Secrets Manager) and construct connection strings entirely in memory. Reserve environment variable overrides strictly for local development or emergency break-glass scenarios.

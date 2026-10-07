@@ -2,6 +2,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
@@ -23,9 +24,12 @@ class PipelineLifecycleUseCase:
     """
 
     def __init__(
-        self, uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]]
+        self,
+        uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
+        self.publisher = publisher
 
     async def handle_transform_successful(
         self, tenant_id: str, idempotency_key: str | None, payload: JsonDict
@@ -100,13 +104,18 @@ class PipelineLifecycleUseCase:
             deliver_idempotency_key = generate_deterministic_id(
                 SystemIdPrefix.IDEMPOTENCY, deliver_key_seed, "DELIVER"
             )
-            await uow.outbox.append_event(
+            envelope = await uow.outbox.append_event(
+                tenant_id=tenant_id,
                 idempotency_key=deliver_idempotency_key,
-                event_type=PipelineEventType.DELIVERY_REQUESTED,
-                payload={"trace_id": trace_id},
+                event_type=PipelineEventType.DELIVERY_REQUESTED.value,
+                payload={
+                    "trace_id": trace_id,
+                    "tenant_id": tenant_id,
+                },
             )
             await uow.commit()
 
+        await self.publisher.publish(envelope)
         logger.info("pipeline_lifecycle.deliver_event_triggered", trace_id=trace_id)
 
     async def handle_transform_failed(

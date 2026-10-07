@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from seedwork.domain.types import JsonValue
+from seedwork.events import EventEnvelope
 
 from edi.application.dtos.transactions import EdiJsonDTO, EdiMessageDTO
 from edi.domain.enums import (
@@ -150,21 +151,23 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
-    async def save(self, aggregate: EdiMessageDomainModel) -> None:
+    async def save(self, aggregate: EdiMessageDomainModel) -> Sequence[EventEnvelope]:
         """
         Persists the aggregate state and drains any domain events into the outbox
         within the same transaction. This is the DDD-compliant way to publish events.
         """
         ...
 
-    async def save_all(self, aggregates: Sequence[EdiMessageDomainModel]) -> None:
+    async def save_all(
+        self, aggregates: Sequence[EdiMessageDomainModel]
+    ) -> Sequence[EventEnvelope]:
         """
         Persists multiple aggregate states and drains their domain events into the outbox
         within the same transaction.
         """
         ...
 
-    async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
+    async def save_json(self, aggregate: EdiJsonDomainModel) -> Sequence[EventEnvelope]:
         """
         Persists the EdiJson aggregate state and drains any domain events into the outbox
         within the same transaction.
@@ -266,5 +269,20 @@ class TransactionRepositoryPort(Protocol):
     ) -> EdiJsonDTO | None:
         """
         Retrieves an EdiJson record by its idempotency key (stored in business_metadata).
+        """
+        ...
+
+    async def flush_events(self, aggregate: EdiMessageDomainModel) -> Sequence[EventEnvelope]:
+        """
+        Flushes and returns pending domain events from the repository for testing and orchestration.
+        """
+        ...
+
+    async def update_outbound_delivery_metadata(
+        self,
+        aggregate: EdiMessageDomainModel,
+    ) -> None:
+        """
+        Updates metadata fields on an existing outbound EdiMessage before delivery.
         """
         ...

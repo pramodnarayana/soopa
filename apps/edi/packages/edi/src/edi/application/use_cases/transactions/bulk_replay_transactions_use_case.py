@@ -1,6 +1,7 @@
 import asyncio
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 
@@ -14,8 +15,9 @@ logger = structlog.get_logger(__name__)
 
 
 class BulkReplayTransactionsUseCase:
-    def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
+    def __init__(self, uow: DataPlaneUnitOfWorkPort, publisher: OutboxPublisherPort) -> None:
         self.uow = uow
+        self.publisher = publisher
 
     async def bulk_retry_transform(
         self,
@@ -82,7 +84,7 @@ class BulkReplayTransactionsUseCase:
 
             await asyncio.sleep(0)  # Yield to event loop between iterations
 
-        await self.uow.transactions.save_all(list(originals))
+        envelopes = await self.uow.transactions.save_all(list(originals))
         await self.uow.transactions.save_all_trace_events(audit_events)
         await self.uow.transactions.increment_replay_count(
             tenant_id,
@@ -90,6 +92,10 @@ class BulkReplayTransactionsUseCase:
             [TransactionEntityType.EDI_MESSAGE, TransactionEntityType.EDI_JSON],
         )
         await self.uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)
+            # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
+            await self.uow.outbox.mark_completed(env.id)
 
         processed_count = len(originals)
         logger.info(
@@ -161,12 +167,16 @@ class BulkReplayTransactionsUseCase:
 
             await asyncio.sleep(0)
 
-        await self.uow.transactions.save_all(list(originals))
+        envelopes = await self.uow.transactions.save_all(list(originals))
         await self.uow.transactions.save_all_trace_events(audit_events)
         await self.uow.transactions.increment_replay_count(
             tenant_id, unique_trace_ids, [TransactionEntityType.EDI_MESSAGE]
         )
         await self.uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)
+            # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
+            await self.uow.outbox.mark_completed(env.id)
 
         processed_count = len(originals)
         logger.info(

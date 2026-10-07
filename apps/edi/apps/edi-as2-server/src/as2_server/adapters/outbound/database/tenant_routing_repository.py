@@ -1,9 +1,9 @@
 from database.models.identity import Tenant
-from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
 from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalTradingPartner
+from edi.adapters.outbound.database.models.control_plane import InboundRoute
 from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
-from ucp_models.sharding import DatabaseShard
+from ucp_models.sharding import DatabaseShard, ShardRegistry
 
 
 class AS2TenantRepositoryAdapter:
@@ -36,16 +36,11 @@ class AS2TenantRepositoryAdapter:
             InboundRoute.isa_sender_id == isa_sender,
             InboundRoute.isa_receiver_id == isa_receiver,
             InboundRoute.active.is_(True),
-            AS2Partner.as2_id == as2_peer_id,
         ]
         if transaction_type:
             conditions.append(InboundRoute.transaction_type.in_([transaction_type, "*"]))
 
-        stmt = (
-            sql_select(InboundRoute.tenant_id)
-            .join(AS2Partner, InboundRoute.as2_partner_id == AS2Partner.id)
-            .where(*conditions)
-        )
+        stmt = sql_select(InboundRoute.tenant_id).where(*conditions)
         result = await self.session.execute(stmt)
         tenant_rows = result.fetchall()
         if len(tenant_rows) > 1:
@@ -57,9 +52,14 @@ class AS2TenantRepositoryAdapter:
         return None
 
     async def get_tenant_shard_info(self, tenant_id: str) -> tuple[str, str, str] | None:
-        stmt = sql_select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == tenant_id)
+        stmt = (
+            sql_select(Tenant, DatabaseShard)
+            .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+            .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
+            .where(Tenant.id == tenant_id)
+        )
         row = (await self.session.execute(stmt)).first()
         if not row:
             return None
         tenant, shard = row
-        return str(tenant.id), str(shard.shard_key), str(shard.connection_url)
+        return str(tenant.id), str(shard.id), str(shard.dsn)

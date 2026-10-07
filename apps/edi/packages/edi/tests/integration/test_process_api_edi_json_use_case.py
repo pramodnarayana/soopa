@@ -1,5 +1,7 @@
 import pytest
 
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
+
 pytestmark = pytest.mark.integration
 
 import json
@@ -35,7 +37,7 @@ async def tenant_session(tenant_db_connection):
 @pytest.mark.asyncio
 async def test_process_api_edi_json_success(tenant_session):
     uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
-    svc = ProcessApiEdiJsonUseCase(uow)
+    svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     trace_id = await svc.process_api_edi_json(
@@ -78,7 +80,7 @@ async def test_process_api_edi_json_success(tenant_session):
 @pytest.mark.asyncio
 async def test_process_api_edi_json_heading(tenant_session):
     uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
-    svc = ProcessApiEdiJsonUseCase(uow)
+    svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
@@ -107,7 +109,7 @@ async def test_process_api_edi_json_heading(tenant_session):
 @pytest.mark.asyncio
 async def test_process_api_edi_json_st_segment(tenant_session):
     uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
-    svc = ProcessApiEdiJsonUseCase(uow)
+    svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     trace_id = await svc.process_api_edi_json(
         ProcessApiEdiJsonCommand(
@@ -130,7 +132,7 @@ async def test_process_api_edi_json_st_segment(tenant_session):
 @pytest.mark.asyncio
 async def test_process_api_edi_json_list_extraction(tenant_session):
     uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
-    svc = ProcessApiEdiJsonUseCase(uow)
+    svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     payload = [
         {"ST": {"ST01": "850"}, "BEG": {"BEG03": "123"}, "foo": "bar"},

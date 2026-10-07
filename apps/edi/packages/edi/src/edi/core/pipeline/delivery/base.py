@@ -34,16 +34,23 @@ class BaseDeliveryStrategy:
         self.secret_store = vault
 
     async def _emit_delivery_completed(
-        self, uow: DataPlaneUnitOfWorkPort, trace_id: str, direction: str, status: str
+        self,
+        uow: DataPlaneUnitOfWorkPort,
+        tenant_id: str,
+        trace_id: str,
+        direction: str,
+        status: str,
     ) -> None:
         event_key = generate_deterministic_id(
             SystemIdPrefix.IDEMPOTENCY, trace_id, f"DELIVERY_COMPLETED:{status}"
         )
         await uow.outbox.append_event(
+            tenant_id=tenant_id,
             idempotency_key=event_key,
-            event_type=PipelineEventType.DELIVERY_COMPLETED,
+            event_type=PipelineEventType.DELIVERY_COMPLETED.value,
             payload={
                 "trace_id": trace_id,
+                "tenant_id": tenant_id,
                 "direction": direction,
                 "status": status,
             },

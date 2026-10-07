@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import cast
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import JsonDict
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
@@ -46,9 +47,11 @@ class ComputeTransformUseCase:
         self,
         transformer: TransformerPort,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.transformer = transformer
         self.uow_factory = uow_factory
+        self.publisher = publisher
 
     async def execute(self, command: ComputeTransformCommand) -> None:
         """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORMATION_COMPLETED."""
@@ -102,101 +105,9 @@ class ComputeTransformUseCase:
                     transaction_count=len(transformed_txns),
                 )
 
-                # 2. Process each transaction
-                extractor = MetadataExtractorService()
-
-                json_payloads = []
-                gs_sender_global = None
-                gs_receiver_global = None
-
-                transaction_type_global = (
-                    transformed_txns[0].transaction_type
-                    if transformed_txns
-                    else edi_msg.transaction_type
+                await self._process_transformed_transactions(
+                    trace_id, standard, edi_msg, transformed_txns, uow
                 )
-                route = (
-                    await uow.inbound_routes.get_inbound_route(
-                        str(edi_msg.sender_id),
-                        str(edi_msg.receiver_id),
-                        str(edi_msg.tenant_id),
-                        str(transaction_type_global) if transaction_type_global else "",
-                    )
-                    if edi_msg.sender_id and edi_msg.receiver_id
-                    else None
-                )
-                partnership_id_str = route.trading_partner_id if route else None
-                logger.info(
-                    "compute_transform.route_resolved",
-                    trace_id=trace_id,
-                    partner_id=partnership_id_str,
-                    has_route=route is not None,
-                )
-
-                for txn in transformed_txns:
-                    txn_type = txn.transaction_type
-                    gs_sender = txn.gs_sender_id
-                    gs_receiver = txn.gs_receiver_id
-
-                    if not gs_sender_global and gs_sender:
-                        gs_sender_global = gs_sender
-                        gs_receiver_global = gs_receiver
-
-                    json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
-                    if isinstance(json_dict, dict):
-                        json_dict["transaction_type"] = txn_type
-                    business_metadata = extractor.extract(txn_type, json_dict)
-
-                    await uow.transactions.create_edi_json(
-                        command=CreateEdiJsonCommand(
-                            trace_id=trace_id,
-                            tenant_id=edi_msg.tenant_id,
-                            direction=EdiDirection.INBOUND,
-                            trading_partner_id=partnership_id_str,
-                            transaction_type=txn_type,
-                            standard=standard,
-                            business_metadata=cast(JsonDict, business_metadata),
-                            payload=cast(JsonDict, json_dict),
-                            status=MessageStatus.PARSED,
-                            replay_count=edi_msg.replay_count,
-                            parent_trace_id=edi_msg.parent_trace_id,
-                            original_trace_id=edi_msg.original_trace_id,
-                        )
-                    )
-                    logger.info(
-                        "compute_transform.edi_json_saved",
-                        trace_id=trace_id,
-                        transaction_type=txn_type,
-                    )
-                    json_payloads.append(json_dict)
-
-                # Metadata to emit in event
-                txn_type_for_parent = (
-                    transformed_txns[0].transaction_type if transformed_txns else None
-                )
-
-                # Payload construction and API Gateway logging are now completely decoupled
-                # and delegated strictly to the WebhookDeliveryWorker.
-                # 4. Record TRANSFORMATION_SUCCESSFUL on the aggregate — repository drains to outbox.
-                edi_msg.add_domain_event(
-                    TransformSuccessful(
-                        trace_id=trace_id,
-                        tenant_id=edi_msg.tenant_id or "",
-                        direction=EdiDirection.INBOUND.value,
-                        isa_sender_id=edi_msg.sender_id,
-                        isa_receiver_id=edi_msg.receiver_id,
-                        gs_sender_id=gs_sender_global,
-                        gs_receiver_id=gs_receiver_global,
-                        transaction_type=txn_type_for_parent,
-                    )
-                )
-                await uow.transactions.save(edi_msg)
-                logger.info(
-                    "compute_transform.outbox_event_dispatched",
-                    trace_id=trace_id,
-                    event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
-                )
-
-                await uow.commit()
 
             logger.info("compute_transform.completed", trace_id=trace_id)
         except Exception as e:
@@ -214,7 +125,102 @@ class ComputeTransformUseCase:
                             failure_reason=str(e),
                         )
                     )
-                    await failure_uow.transactions.save(edi_msg_fallback)
+                    await failure_uow.transactions.flush_events(edi_msg_fallback)
                     await failure_uow.commit()
 
-            raise
+    async def _process_transformed_transactions(
+        self, trace_id, standard, edi_msg, transformed_txns, uow
+    ):
+        extractor = MetadataExtractorService()
+
+        json_payloads = []
+        gs_sender_global = None
+        gs_receiver_global = None
+
+        transaction_type_global = (
+            transformed_txns[0].transaction_type if transformed_txns else edi_msg.transaction_type
+        )
+        route = (
+            await uow.inbound_routes.get_inbound_route(
+                str(edi_msg.sender_id),
+                str(edi_msg.receiver_id),
+                str(edi_msg.tenant_id),
+                str(transaction_type_global) if transaction_type_global else "",
+            )
+            if edi_msg.sender_id and edi_msg.receiver_id
+            else None
+        )
+        partnership_id_str = route.trading_partner_id if route else None
+        logger.info(
+            "compute_transform.route_resolved",
+            trace_id=trace_id,
+            partner_id=partnership_id_str,
+            has_route=route is not None,
+        )
+
+        for txn in transformed_txns:
+            txn_type = txn.transaction_type
+            gs_sender = txn.gs_sender_id
+            gs_receiver = txn.gs_receiver_id
+
+            if not gs_sender_global and gs_sender:
+                gs_sender_global = gs_sender
+                gs_receiver_global = gs_receiver
+
+            json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
+            if isinstance(json_dict, dict):
+                json_dict["transaction_type"] = txn_type
+            business_metadata = extractor.extract(txn_type, json_dict)
+
+            await uow.transactions.create_edi_json(
+                command=CreateEdiJsonCommand(
+                    trace_id=trace_id,
+                    tenant_id=edi_msg.tenant_id,
+                    direction=EdiDirection.INBOUND,
+                    trading_partner_id=partnership_id_str,
+                    transaction_type=txn_type,
+                    standard=standard,
+                    business_metadata=cast(JsonDict, business_metadata),
+                    payload=cast(JsonDict, json_dict),
+                    status=MessageStatus.PARSED,
+                    replay_count=edi_msg.replay_count,
+                    parent_trace_id=edi_msg.parent_trace_id,
+                    original_trace_id=edi_msg.original_trace_id,
+                )
+            )
+            logger.info(
+                "compute_transform.edi_json_saved",
+                trace_id=trace_id,
+                transaction_type=txn_type,
+            )
+            json_payloads.append(json_dict)
+
+        # Metadata to emit in event
+        txn_type_for_parent = transformed_txns[0].transaction_type if transformed_txns else None
+
+        # 4. Record TRANSFORMATION_SUCCESSFUL on the aggregate — repository drains to outbox.
+        edi_msg.add_domain_event(
+            TransformSuccessful(
+                trace_id=trace_id,
+                tenant_id=edi_msg.tenant_id or "",
+                direction=EdiDirection.INBOUND.value,
+                isa_sender_id=edi_msg.sender_id,
+                isa_receiver_id=edi_msg.receiver_id,
+                gs_sender_id=gs_sender_global,
+                gs_receiver_id=gs_receiver_global,
+                transaction_type=txn_type_for_parent,
+            )
+        )
+        envelopes = await uow.transactions.flush_events(edi_msg)
+        logger.info(
+            "compute_transform.outbox_event_dispatched",
+            trace_id=trace_id,
+            event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
+        )
+
+        for env in envelopes:
+            await uow.outbox.mark_completed(env.id)
+
+        await uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)

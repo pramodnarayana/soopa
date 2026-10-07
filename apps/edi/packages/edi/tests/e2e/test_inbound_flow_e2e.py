@@ -5,6 +5,8 @@ import datetime
 import httpx
 import pytest
 
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
+
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 import structlog
 from aiohttp import web
@@ -221,7 +223,9 @@ async def test_inbound_flow_e2e(
         uow = SqlAlchemyDataPlaneUnitOfWork(
             tenant_session=session, storage=S3StorageClient("test", None)
         )
-        translate_svc = ComputeTransformUseCase(uow, BotsTransformerAdapter())
+        translate_svc = ComputeTransformUseCase(
+            uow, BotsTransformerAdapter(), publisher=FakeOutboxPublisher()
+        )
 
         # Get trace_id from DB
         res = await session.execute(select(EdiMessage).where(EdiMessage.sender_id == "SENDER"))
@@ -250,7 +254,7 @@ async def test_inbound_flow_e2e(
                     local_uow, HttpxDeliveryClient(allow_private_ips=True)
                 )
             }
-            return DeliveryRouterUseCase(local_uow, strategies)
+            return DeliveryRouterUseCase(local_uow, strategies, publisher=FakeOutboxPublisher())
 
         deliver_svc = DeliveryUseCase(
             router_factory=real_router_factory,

@@ -3,7 +3,7 @@ import signal
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from functools import partial
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from database.router import DatabaseRouter
@@ -18,6 +18,7 @@ from edi.adapters.outbound.database.tenant_uow_provider import (
 from edi.adapters.outbound.pipeline.as2 import HttpxAS2DeliveryClient
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.sftp import ParamikoSftpClient
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
 from edi.adapters.outbound.security.network import validate_target_url
 from edi.application.use_cases.pipeline.execute_delivery_use_case import (
     ExecuteDeliveryCommand,
@@ -32,8 +33,8 @@ from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.provider import PubSubProvider
 from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
 from secret_store.ports.secret_store_port import SecretStorePort
 
@@ -59,6 +60,14 @@ def _setup_registry(
     vault: SecretStorePort,
 ) -> EdiDataPlaneEventDispatcher:
 
+    publisher = create_edi_pipeline_publisher(
+        compute_queue_url=settings.sqs.compute_queue_url,
+        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+        deliver_queue_url=settings.sqs.deliver_queue_url,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+
     registry = EdiDataPlaneRouteRegistry()
 
     def use_case_factory(uow_fact: UowFactory) -> ExecuteDeliveryUseCase:
@@ -67,7 +76,9 @@ def _setup_registry(
             "sftp_partner_id": SftpDeliveryStrategy(uow_fact, sftp_delivery, vault, db_encryption),
             "as2_partner_id": As2DeliveryStrategy(uow_fact, as2_delivery, vault),
         }
-        return ExecuteDeliveryUseCase(uow_factory=uow_fact, strategies=strategies)
+        return ExecuteDeliveryUseCase(
+            uow_factory=uow_fact, strategies=strategies, publisher=publisher
+        )
 
     async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         try:
@@ -78,10 +89,11 @@ def _setup_registry(
                 )
 
             command = ExecuteDeliveryCommand(
-                trace_id=e.payload["trace_id"],
+                trace_id=cast(str, e.payload["trace_id"]),
                 tenant_id=e.tenant_id,
-                partner_id=e.payload["partner_id"],
-                strategy_type=e.payload["strategy_type"],
+                partner_id=cast(str, e.payload["partner_id"]),
+                strategy_type=cast(str, e.payload["strategy_type"]),
+                connection_type=cast(str, e.payload["connection_type"]),
             )
         except KeyError as exc:
             raise InvalidMessageError(
@@ -145,15 +157,11 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
             settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
         )
 
-        deliver_consumer = AwsSqsConsumer(
+        self.deliver_manager = PubSubProvider.create_consumer_manager(
             queue_url=settings.sqs.deliver_queue_url,
+            handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
-        )
-        self.deliver_manager = SqsConsumerManager(
-            consumer=deliver_consumer,
-            queue_name=settings.sqs.deliver_queue_url.rsplit("/", 1)[-1],
-            handler=consumer.handle,
         )
         assert self.deliver_manager is not None
         self.deliver_manager.start()

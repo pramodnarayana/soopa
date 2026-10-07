@@ -1,8 +1,6 @@
 import asyncio
 from typing import cast
 
-from seedwork.domain.types import JsonValue
-
 from edi.adapters.outbound.transformer.domain.envelope.edifact import (
     EdifactEnvelopeBuilder,
 )
@@ -11,8 +9,9 @@ from edi.adapters.outbound.transformer.domain.exceptions import TransformationEr
 from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
 from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
 from edi.domain.enums import EdiStandard, EdiTransactionType
+from edi.domain.models.headers import EdiEnvelopeHeaders
 from edi.domain.types import AstNode
-from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
+from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
 
 
 class BotsTransformerAdapter(TransformerPort):
@@ -25,7 +24,7 @@ class BotsTransformerAdapter(TransformerPort):
 
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TransformedTransaction]:
+    ) -> list[ParsedEdiMessage]:
         """
         Transforms EDI to JSON using the wrapped BOTS facade.
         """
@@ -47,7 +46,7 @@ class BotsTransformerAdapter(TransformerPort):
                 or txn.transaction_type == transaction_type
             ):
                 transactions.append(
-                    TransformedTransaction(
+                    ParsedEdiMessage(
                         transaction_type=txn.transaction_type,
                         isa_sender_id=parsed_payload.sender_id,
                         isa_receiver_id=parsed_payload.receiver_id,
@@ -64,21 +63,20 @@ class BotsTransformerAdapter(TransformerPort):
         payload: AstNode | list[AstNode],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, JsonValue],
+        edi_headers: EdiEnvelopeHeaders,
     ) -> bytes:
         """
         Transforms JSON to EDI using the wrapped BOTS facade.
         """
-
         if isinstance(payload, dict) and (
             "interchange_ISA" in payload or "interchange_UNB" in payload
         ):
             ast_dict: AstNode = payload
         else:
             if standard.lower() == EdiStandard.X12:
-                ast_dict = X12EnvelopeBuilder.build(route_config, payload)
+                ast_dict = X12EnvelopeBuilder.build(edi_headers, payload)
             elif standard.lower() == EdiStandard.EDIFACT:
-                ast_dict = EdifactEnvelopeBuilder.build(route_config, payload)
+                ast_dict = EdifactEnvelopeBuilder.build(edi_headers, payload)
             else:
                 raise TransformationError(
                     message=f"Unsupported standard for envelope building: {standard}"

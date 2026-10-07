@@ -1,5 +1,7 @@
 import pytest
 
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
+
 pytestmark = pytest.mark.integration
 
 import json
@@ -51,7 +53,7 @@ async def test_replay_queues_validated_transaction(tenant_session):
         )
     )
 
-    service = ReplayTransactionUseCase(uow)
+    service = ReplayTransactionUseCase(uow, publisher=FakeOutboxPublisher())
     new_trace_id = await service.retry_transform(tenant_id, trace_id, "api-user")
 
     # Assert event in outbox
@@ -87,7 +89,7 @@ async def test_replay_deliver_queues_validated_transaction(tenant_session):
         )
     )
 
-    service = ReplayTransactionUseCase(uow)
+    service = ReplayTransactionUseCase(uow, publisher=FakeOutboxPublisher())
     new_trace_id = await service.retry_deliver(tenant_id, trace_id, "api-user")
 
     # Assert event in outbox
@@ -133,7 +135,7 @@ async def test_bulk_replay_queues_each_unique_validated_transaction(tenant_sessi
         )
     )
 
-    service = BulkReplayTransactionsUseCase(uow)
+    service = BulkReplayTransactionsUseCase(uow, publisher=FakeOutboxPublisher())
     command_key = f"cmd-{uuid.uuid4()}"
 
     count = await service.bulk_retry_transform(
