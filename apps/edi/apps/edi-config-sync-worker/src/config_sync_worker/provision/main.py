@@ -48,7 +48,7 @@ class EdiConfigSyncWorkerModule(LaunchableWorker):
         translator = DefaultEventTranslator()
         replication_service = ProvisioningWorkerService(tenant_adapter, replication_adapter)
         dispatcher = EdiConfigSyncSqsDispatcher(
-            domain_service=replication_service, translator_port=translator
+            domain_service=replication_service, transformer_port=translator
         )
 
         provisioning_consumer = AwsSqsConsumer(

@@ -1,4 +1,5 @@
 from database.router import DatabaseRouter
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 
 """
 Production-ready FastAPI application for the EDI AS2 Server.
@@ -7,7 +8,8 @@ Production-ready FastAPI application for the EDI AS2 Server.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
@@ -15,6 +17,7 @@ from observability import (
     OtelTracer,
     StructlogLogger,
 )
+from storage.provider import StorageProvider
 
 from as2_server.settings import get_settings
 
@@ -36,14 +39,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger=StructlogLogger(name="edi", log_level=settings.log_level),
     )
 
-    s3_storage = Aioboto3PayloadStorage(
-        bucket=settings.s3.bucket,
-        region=settings.s3.region,
-        endpoint_url=settings.s3.endpoint_url,
-        access_key_id=settings.s3.access_key_id,
-        secret_access_key=settings.s3.secret_access_key,
-    )
+    s3_storage = StorageProvider.create_payload_storage()
     app.state.s3_storage = s3_storage
+
+    publisher = create_edi_pipeline_publisher(
+        compute_queue_url=settings.sqs.compute_queue_url,
+        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+        deliver_queue_url=settings.sqs.deliver_queue_url,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+    app.state.publisher = publisher
+    app.state.crypto_service = SmimeCryptoService()
 
     logger = ObservabilityProvider.logger(__name__)
 
@@ -55,6 +62,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         max_overflow=settings.database.max_overflow,
     )
     app.state.db_router = db_router
+    app.state.tenant_resolver = TenantResolver(db_router=db_router)
     logger.info("as2_server_db_router_initialized")
 
     logger.info("as2_server_started", env=settings.env)

@@ -21,5 +21,8 @@ class TradingPartnerRepositoryAdapter:
         if not partner:
             return None
         return PartnerEntity(
-            as2_id=partner.as2_id, public_cert_pem=partner.public_cert_pem, active=partner.active
+            as2_id=partner.as2_id,
+            public_cert_pem=partner.public_cert_pem,
+            active=partner.active,
+            private_key_vault_ref=partner.private_key_vault_ref,
         )

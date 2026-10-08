@@ -1,3 +1,5 @@
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
+
 """
 Unit tests for the Outbound AS2 delivery path via As2DeliveryStrategy.
 
@@ -73,7 +75,7 @@ def make_use_case(
         yield u
 
     def router_factory() -> DeliveryRouterUseCase:
-        return DeliveryRouterUseCase(uow_factory)
+        return DeliveryRouterUseCase(uow_factory, publisher=FakeOutboxPublisher())
 
     return DeliveryUseCase(
         router_factory=router_factory,

@@ -41,3 +41,6 @@ You are a Senior DevOps Engineer. You bridge the gap between application develop
 - **CI Injection**: CI pipelines must dynamically copy `.env.example` to `.env` before running commands, guaranteeing that CI runs the exact same configuration logic as a local developer.
 
 - **Procedural Outbox Restriction**: DDD aggregate event recording (`add_domain_event()`) and repository-level draining (`_drain_events` or `_flush_events`) are mandatory. NEVER use direct `publish_outbox_event()` in application use cases.
+
+### Strict DTO Enforcement
+- **No Generic Dictionaries**: NEVER pass raw `dict` or `dict[str, Any]` into Application Use Cases or Command Objects. All JSON payloads from adapters (HTTP, SQS) MUST be strictly parsed into strongly-typed DTOs (Data Transfer Objects) at the boundary layer before proceeding.

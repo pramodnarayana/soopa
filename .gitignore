@@ -84,3 +84,6 @@ volume/
 .terraform.lock.hcl
 terraform-admin-key.json
 pat.json
+
+# OpenAS2 runtime data
+tools/openas2/data

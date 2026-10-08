@@ -3,13 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from seedwork.domain.types import JsonValue
-
+from edi.domain.models.headers import EdiEnvelopeHeaders
 from edi.domain.types import AstNode
 
 
 @dataclass(frozen=True)
-class TransformedTransaction:
+class ParsedEdiMessage:
     transaction_type: str
     payload: AstNode
     isa_sender_id: str | None = None
@@ -27,7 +26,7 @@ class TransformerPort(Protocol):
 
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TransformedTransaction]:
+    ) -> list[ParsedEdiMessage]:
         """Transforms raw EDI bytes into a Canonical JSON Dictionary."""
         ...
 
@@ -36,7 +35,7 @@ class TransformerPort(Protocol):
         payload: AstNode | list[AstNode],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, JsonValue],
+        edi_headers: EdiEnvelopeHeaders,
     ) -> bytes:
         """Transforms a Canonical JSON Dictionary into raw EDI bytes."""
         ...

@@ -15,8 +15,10 @@ from edi.application.use_cases.pipeline.compute_outbound_transform_use_case impo
     ComputeOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
-from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
+from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
+from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 from seedwork import generate_random_hex
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -32,9 +34,9 @@ from compute_worker.compute_dispatcher import EdiComputeDispatcher
 class FakeTransformerAdapter(TransformerPort):
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TransformedTransaction]:
+    ) -> list[ParsedEdiMessage]:
         return [
-            TransformedTransaction(
+            ParsedEdiMessage(
                 transaction_type="850",
                 isa_sender_id="SENDER123",
                 isa_receiver_id="RECEIVER123",
@@ -50,7 +52,7 @@ class FakeTransformerAdapter(TransformerPort):
         payload: dict[str, Any] | list[Any],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, Any],
+        edi_headers: EdiEnvelopeHeaders,
     ) -> bytes:
         return b"ISA*00*          *00*          *ZZ*SENDER123      *ZZ*RECEIVER123    *230101*1200*U*00401*000000001*0*T*:~"
 
@@ -106,7 +108,9 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
                 tenant_session=db_session_factory(), storage=InMemoryStorageAdapter()
             )
 
-        return ComputeTransformUseCase(uow_factory=fake_uow_factory, transformer=transformer)
+        return ComputeTransformUseCase(
+            uow_factory=fake_uow_factory, transformer=transformer, publisher=InMemoryEventBus()
+        )
 
     async def fake_outbound_use_case_factory(tenant_id: str):
         @contextlib.asynccontextmanager
@@ -117,7 +121,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
 
         # Technically we won't hit this for the inbound test, but we must provide it to the dispatcher.
         return ComputeOutboundTransformUseCase(
-            uow_factory=fake_uow_factory, transformer=transformer
+            uow_factory=fake_uow_factory, transformer=transformer, publisher=InMemoryEventBus()
         )
 
     dispatcher = EdiComputeDispatcher(

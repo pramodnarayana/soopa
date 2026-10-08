@@ -1,14 +1,14 @@
-import dataclasses
 import typing
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
 import structlog
-from seedwork.domain.types import JsonDict, JsonValue
-from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
-from seedwork.utils import generate_deterministic_id, generate_id
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from seedwork.domain.types import JsonValue
+from seedwork.events import EventEnvelope
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_deterministic_id
 
-from edi.core.pipeline.connection_type_resolver import ConnectionTypeResolver
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
 from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
 from edi.domain.enums import (
@@ -16,7 +16,6 @@ from edi.domain.enums import (
     EdiStandard,
     PipelineEventType,
 )
-from edi.domain.events import TransformSuccessful
 from edi.domain.exceptions import (
     OutboundRouteNotFoundError,
     TransactionNotFoundError,
@@ -24,8 +23,7 @@ from edi.domain.exceptions import (
 )
 from edi.domain.models.headers import OutboundEdiHeaderDomainModel
 from edi.domain.models.outbound_routes import OutboundRouteDomainModel
-from edi.domain.models.transactions import EdiJsonDomainModel, EdiMessageDomainModel
-from edi.domain.types import AstNode
+from edi.domain.models.transactions import EdiJsonDomainModel
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -42,10 +40,12 @@ class DispatchOutboundTransformUseCase:
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
         settings: typing.Any,
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
         self.transformer = transformer
         self._settings = settings
+        self.publisher = publisher
 
     async def _resolve_route_config(
         self, edi_json: EdiJsonDomainModel, trace_id: str, uow: DataPlaneUnitOfWorkPort
@@ -65,20 +65,20 @@ class DispatchOutboundTransformUseCase:
         if tenant_id is None:
             raise TransactionNotFoundError(trace_id)
 
-        route_config = await uow.edi_headers.get_outbound_edi_header_by_trading_partner_id(
+        edi_headers = await uow.edi_headers.get_outbound_edi_header_by_trading_partner_id(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
         )
         outbound_route = await uow.outbound_routes.get_outbound_route_by_trading_partner_id(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
         )
 
-        if not route_config or not outbound_route:
+        if not edi_headers or not outbound_route:
             raise OutboundRouteNotFoundError(
                 trading_partner_id=trading_partner_id,
                 tenant_id=tenant_id,
             )
 
-        return trading_partner_id, route_config, outbound_route
+        return trading_partner_id, edi_headers, outbound_route
 
     async def _offload_to_compute_queue(
         self,
@@ -86,10 +86,11 @@ class DispatchOutboundTransformUseCase:
         tenant_id: str,
         standard: str,
         transaction_type: str,
-        route_config: JsonDict,
+        edi_headers: OutboundEdiHeaderDomainModel,
         uow: DataPlaneUnitOfWorkPort,
+        trading_partner_id: str,
         idempotency_key: str | None = None,
-    ) -> None:
+    ) -> EventEnvelope:
         logger.info(
             "outbound_transform.offloaded_to_compute_queue",
             trace_id=trace_id,
@@ -100,7 +101,23 @@ class DispatchOutboundTransformUseCase:
         compute_key = generate_deterministic_id(
             SystemIdPrefix.IDEMPOTENCY, idempotency_key, "COMPUTE_TRANSFORMATION_COMMAND"
         )
-        await uow.outbox.append_event(
+        if not edi_headers.gs_sender_id or not edi_headers.gs_sender_id.strip():
+            raise ValueError(
+                f"Mandatory GS Sender ID is missing for trading partner {trading_partner_id}"
+            )
+        if not edi_headers.gs_receiver_id or not edi_headers.gs_receiver_id.strip():
+            raise ValueError(
+                f"Mandatory GS Receiver ID is missing for trading partner {trading_partner_id}"
+            )
+
+        isa_usage = edi_headers.isa_usage_indicator or self._settings.edi_environment
+        if not isa_usage or not isa_usage.strip():
+            raise ValueError(
+                f"Mandatory ISA Usage Indicator is missing for trading partner {trading_partner_id}"
+            )
+
+        return await uow.outbox.append_event(
+            tenant_id=tenant_id,
             idempotency_key=compute_key,
             event_type=PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value,
             payload={
@@ -109,19 +126,22 @@ class DispatchOutboundTransformUseCase:
                 "direction": EdiDirection.OUTBOUND.value,
                 "standard": standard,
                 "transaction_type": transaction_type,
-                "route_config": route_config,
+                "isa_sender_id": edi_headers.isa_sender_id,
+                "isa_receiver_id": edi_headers.isa_receiver_id,
+                "gs_sender_id": edi_headers.gs_sender_id,
+                "gs_receiver_id": edi_headers.gs_receiver_id,
+                "isa_usage_indicator": isa_usage,
             },
         )
 
     def _resolve_transaction_type(
         self,
-        route_config: JsonDict,
+        edi_headers: OutboundEdiHeaderDomainModel,
         edi_json: EdiJsonDomainModel,
         trace_id: str,
         trading_partner_id: str,
     ) -> str:
-        route_txn_type_raw = route_config.get("transaction_type")
-        route_txn_type = str(route_txn_type_raw) if route_txn_type_raw else None
+        route_txn_type = edi_headers.transaction_type
         if route_txn_type == WILDCARD_TRANSACTION_TYPE:
             route_txn_type = None
 
@@ -144,58 +164,6 @@ class DispatchOutboundTransformUseCase:
             )
         return transaction_type
 
-    async def _save_edi_message(
-        self,
-        uow: DataPlaneUnitOfWorkPort,
-        edi_json: EdiJsonDomainModel,
-        trace_id: str,
-        edi_str: str,
-        standard: str,
-        transaction_type: str,
-        connection_type: str,
-        route_config: JsonDict,
-        trading_partner_id: str | None,
-    ) -> EdiMessageDomainModel:
-        isa_sender_id = str(route_config.get("isa_sender_id") or "")
-        isa_receiver_id = str(route_config.get("isa_receiver_id") or "")
-        gs_sender_id_raw = route_config.get("gs_sender_id")
-        gs_sender_id = str(gs_sender_id_raw) if gs_sender_id_raw is not None else None
-        gs_receiver_id_raw = route_config.get("gs_receiver_id")
-        gs_receiver_id = str(gs_receiver_id_raw) if gs_receiver_id_raw is not None else None
-
-        edi_msg = await uow.transactions.get_edi_message(trace_id)
-        if edi_msg:
-            edi_msg.mark_outbound_pending_delivery(
-                edi_data=edi_str,
-                format_standard=standard,
-                transaction_type=transaction_type,
-                connection_type=connection_type,
-                sender_id=isa_sender_id,
-                receiver_id=isa_receiver_id,
-                gs_sender_id=gs_sender_id,
-                gs_receiver_id=gs_receiver_id,
-                trading_partner_id=trading_partner_id,
-            )
-        else:
-            edi_msg = EdiMessageDomainModel.create_outbound(
-                id=generate_id(DomainIdPrefix.EDI_MESSAGE.value),
-                trace_id=trace_id,
-                tenant_id=edi_json.tenant_id or "",
-                replay_count=edi_json.replay_count,
-                parent_trace_id=edi_json.parent_trace_id,
-                original_trace_id=edi_json.original_trace_id,
-                edi_data=edi_str,
-                format_standard=standard,
-                transaction_type=transaction_type,
-                connection_type=connection_type,
-                sender_id=isa_sender_id,
-                receiver_id=isa_receiver_id,
-                gs_sender_id=gs_sender_id,
-                gs_receiver_id=gs_receiver_id,
-                trading_partner_id=trading_partner_id,
-            )
-        return edi_msg
-
     def _validate_payload_exists(self, json_payload: JsonValue | None, trace_id: str) -> None:
         if not json_payload or not (
             isinstance(json_payload, dict)
@@ -205,17 +173,6 @@ class DispatchOutboundTransformUseCase:
             )
         ):
             raise TransactionNotFoundError(trace_id)
-
-    def _prepare_payload(self, json_payload: JsonValue | None) -> AstNode | list[AstNode]:
-        if isinstance(json_payload, dict):
-            return json_payload
-        if isinstance(json_payload, list):
-            if not all(isinstance(x, dict) for x in json_payload):
-                raise TypeError("If payload is a list, all items must be dictionaries.")
-            return [x for x in json_payload if isinstance(x, dict)]
-        raise TypeError(
-            f"Expected json_payload to be dict or list, got {type(json_payload).__name__}"
-        )
 
     # Extraction logic lives exclusively in TransactionTypeResolver (DRY).
     async def execute(self, trace_id: str, idempotency_key: str | None = None) -> None:
@@ -238,97 +195,35 @@ class DispatchOutboundTransformUseCase:
 
             (
                 trading_partner_id,
-                route_config_dto,
-                outbound_route_dto,
+                edi_headers,
+                _outbound_route,
             ) = await self._resolve_route_config(edi_json, trace_id, uow=uow)
 
-            route_config = dataclasses.asdict(route_config_dto)
-            outbound_route = dataclasses.asdict(outbound_route_dto)
-
-            raw_standard = route_config.get("default_standard")
-            standard = str(raw_standard) if raw_standard is not None else EdiStandard.X12.value
-
-            isa_sender_id = str(route_config.get("isa_sender_id") or "")
-            isa_receiver_id = str(route_config.get("isa_receiver_id") or "")
-
-            gs_sender_id_raw = route_config.get("gs_sender_id")
-            gs_sender_id = str(gs_sender_id_raw) if gs_sender_id_raw is not None else None
-
-            gs_receiver_id_raw = route_config.get("gs_receiver_id")
-            gs_receiver_id = str(gs_receiver_id_raw) if gs_receiver_id_raw is not None else None
+            standard = edi_headers.default_standard or EdiStandard.X12.value
             transaction_type = self._resolve_transaction_type(
-                route_config=route_config,
+                edi_headers=edi_headers,
                 edi_json=edi_json,
                 trace_id=trace_id,
                 trading_partner_id=trading_partner_id,
             )
-            route_config["transaction_type"] = transaction_type
 
-            if "environment" not in route_config:
-                route_config["environment"] = self._settings.edi_environment
-
-            connection_type = ConnectionTypeResolver.resolve(route_config, outbound_route)
-            route_config["connection_type"] = connection_type.value
-
-            if self._settings.enable_heavy_compute_queue:
-                await self._offload_to_compute_queue(
-                    trace_id,
-                    edi_json.tenant_id or "",
-                    standard,
-                    transaction_type,
-                    route_config,
-                    uow,
-                    idempotency_key,
-                )
-                await uow.commit()
-                return
-
-            edi_payload = self._prepare_payload(json_payload)
-
-            raw_edi_bytes = await self.transformer.transform_json_to_edi(
-                payload=edi_payload,
-                standard=standard,
-                transaction_type=transaction_type,
-                route_config=route_config,
+            envelope = await self._offload_to_compute_queue(
+                trace_id,
+                edi_json.tenant_id or "",
+                standard,
+                transaction_type,
+                edi_headers,
+                uow,
+                trading_partner_id,
+                idempotency_key,
             )
-
-            edi_str = raw_edi_bytes.decode("utf-8")
-
-            edi_msg = await self._save_edi_message(
-                uow=uow,
-                edi_json=edi_json,
-                trace_id=trace_id,
-                edi_str=edi_str,
-                standard=standard,
-                transaction_type=transaction_type,
-                connection_type=connection_type.value,
-                route_config=route_config,
-                trading_partner_id=trading_partner_id,
-            )
-
-            if not idempotency_key:
-                raise ValueError("idempotency_key is required for strict event chaining")
-
-            transform_completed_key = generate_deterministic_id(
-                SystemIdPrefix.IDEMPOTENCY, idempotency_key, "TRANSFORMATION_SUCCESSFUL"
-            )
-
-            edi_msg.add_domain_event(
-                TransformSuccessful(
-                    idempotency_key=transform_completed_key,
-                    trace_id=trace_id,
-                    tenant_id=edi_json.tenant_id or "",
-                    direction=EdiDirection.OUTBOUND.value,
-                    isa_sender_id=isa_sender_id,
-                    isa_receiver_id=isa_receiver_id,
-                    gs_sender_id=gs_sender_id,
-                    gs_receiver_id=gs_receiver_id,
-                    transaction_type=transaction_type,
-                )
-            )
-
-            await uow.transactions.save(edi_msg)
-
             await uow.commit()
 
+        try:
+            await self.publisher.publish(envelope)
+            async with self.uow_factory() as uow, uow:
+                await uow.outbox.mark_completed(envelope.id)
+                await uow.commit()
+        except Exception as e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
         logger.info("outbound_transform.completed", trace_id=trace_id)

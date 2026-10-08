@@ -99,7 +99,7 @@ class TenantRepository(TenantRepositoryPort):
         if db_tenant:
             db_tenant.name = tenant.name
             db_tenant.idp_tenant_id = tenant.idp_tenant_id
-            db_tenant.status = tenant.status
+            db_tenant.status = tenant.status.value
             # Slug is intentionally immutable — not updated on rename.
             # See TECHNICAL_DEBT.md: "Slug Redirect Trail for Self-Service Tenant Portals".
         else:
@@ -108,7 +108,7 @@ class TenantRepository(TenantRepositoryPort):
                 name=tenant.name,
                 slug=tenant.slug,
                 idp_tenant_id=tenant.idp_tenant_id,
-                status=tenant.status,
+                status=tenant.status.value,
                 created_at=tenant.created_at.replace(tzinfo=None),
                 updated_at=tenant.updated_at.replace(tzinfo=None),
             )

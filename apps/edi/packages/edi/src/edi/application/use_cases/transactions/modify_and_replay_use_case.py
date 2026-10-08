@@ -1,6 +1,7 @@
 import json
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 
@@ -19,8 +20,9 @@ logger = structlog.get_logger(__name__)
 
 
 class ModifyAndReplayTransactionUseCase:
-    def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
+    def __init__(self, uow: DataPlaneUnitOfWorkPort, publisher: OutboxPublisherPort) -> None:
         self.uow = uow
+        self.publisher = publisher
 
     async def execute(
         self,
@@ -122,7 +124,7 @@ class ModifyAndReplayTransactionUseCase:
             new_msg.add_domain_event(deliver_event)
             event_type = TraceEventType.MODIFY_AND_REPLAY_DELIVER.value
 
-        await self.uow.transactions.save(new_msg)
+        envelopes = await self.uow.transactions.save(new_msg)
 
         # Audit event on the OLD trace
         old_audit = TraceEventDomainModel(
@@ -147,6 +149,11 @@ class ModifyAndReplayTransactionUseCase:
         await self.uow.transactions.save_trace_event(new_audit)
 
         await self.uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)
+            # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
+            await self.uow.outbox.mark_completed(env.id)
+
         return new_trace_id
 
     async def _handle_edi_json(
@@ -202,7 +209,7 @@ class ModifyAndReplayTransactionUseCase:
             new_json.add_domain_event(deliver_event)
             event_type = TraceEventType.MODIFY_AND_REPLAY_DELIVER.value
 
-        await self.uow.transactions.save_json(new_json)
+        envelopes = await self.uow.transactions.save_json(new_json)
 
         old_audit = TraceEventDomainModel(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
@@ -225,4 +232,9 @@ class ModifyAndReplayTransactionUseCase:
         await self.uow.transactions.save_trace_event(new_audit)
 
         await self.uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)
+            # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
+            await self.uow.outbox.mark_completed(env.id)
+
         return new_trace_id

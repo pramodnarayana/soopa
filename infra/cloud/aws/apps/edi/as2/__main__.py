@@ -55,7 +55,16 @@ as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-firelens_endpoint = None
+namespace_name = platform.require_output("cloud_map_namespace_name")
+firelens_endpoint = (
+    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
+)
+obs_user_arn = (
+    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
+)
+obs_pass_arn = (
+    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+)
 ecr_image_uri = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
 _region = aws.get_region()
@@ -86,7 +95,9 @@ aws.iam.RolePolicyAttachment(
 aws.iam.RolePolicy(
     f"{_prefix}as2-ecs-exec-role-secrets-policy",
     role=execution_role.id,
-    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
+    policy=pulumi.Output.all(
+        edi_shard_db_secret_arn, global_db_secret_arn, obs_user_arn, obs_pass_arn
+    ).apply(
         lambda args: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -94,7 +105,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1]],
+                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -108,6 +119,7 @@ sidecar = {
     "name": "edi-secrets-sidecar",
     "command": ["python", "/app/apps/edi/apps/edi-secrets-sidecar/main.py"],
     "essential": True,
+    "user": "0",
     "environment": [{"name": "SECRETS_MOUNT_PATH", "value": "/mnt/secrets"}],
     "mountPoints": [
         {"sourceVolume": "secrets", "containerPath": "/mnt/secrets", "readOnly": False}
@@ -132,8 +144,8 @@ as2_tg = provision_target_group_and_rule(
     vpc_id=vpc_id,
     listener_arn=main_alb_listener_arn,
     priority=405,
-    path_pattern="/*",
-    host_header=pulumi.Output.concat("as2.", staging_domain),
+    path_pattern="/as2/*",
+    host_header=pulumi.Output.concat("edi.", staging_domain),
     port=8001,
     tags=_TAGS,
 )
@@ -155,6 +167,8 @@ as2_server = provision_fargate_service(
     app_mount_points=app_mount_points,
     app_depends_on=app_depends_on,
     firelens_endpoint=firelens_endpoint,
+    obs_user_secret_arn=obs_user_arn,
+    obs_password_secret_arn=obs_pass_arn,
     environment_vars=[
         {"name": "AWS_REGION", "value": _region.name},
         {"name": "ENVIRONMENT", "value": _env},
@@ -167,6 +181,10 @@ as2_server = provision_fargate_service(
             "value": pulumi.Output.all(edi_shard_db_endpoint).apply(lambda args: args[0]),
         },
         {"name": "PUBLIC_BASE_URL", "value": pulumi.Output.concat("https://api.", staging_domain)},
+        {
+            "name": "AS2_RECEIVE_URL",
+            "value": pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
+        },
         {
             "name": "IDENTITY_ISSUER",
             "value": pulumi.Output.concat("https://identity.", staging_domain),
@@ -185,7 +203,7 @@ as2_server = provision_fargate_service(
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
         },
         {
-            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
         },
     ],
@@ -209,3 +227,6 @@ as2_server = provision_fargate_service(
         },
     ],
 )
+
+# DNS Record moved to routing stack
+pulumi.export("edi_domain", pulumi.Output.concat("edi.", staging_domain))

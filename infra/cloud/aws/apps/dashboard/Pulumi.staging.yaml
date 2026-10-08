@@ -1,3 +1,4 @@
 config:
   aws:region: us-east-1
-  dashboard:platform_stack: soopa/platform/staging
+  dashboard:platform_stack: organization/platform/staging
+encryptionsalt: v1:LpYyJwSdKpA=:v1:FbQraaNciIrk3rvu:aORcqhDNcQYhI0IJKt8Np2WsH7IK8w==

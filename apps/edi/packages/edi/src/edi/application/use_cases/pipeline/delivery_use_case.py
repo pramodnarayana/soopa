@@ -17,10 +17,7 @@ class DeliveryUseCase:
     layer that delegates routing to DeliveryRouterUseCase.
     """
 
-    def __init__(
-        self,
-        router_factory: Callable[[], DeliveryRouterUseCase],
-    ) -> None:
+    def __init__(self, router_factory: Callable[[], DeliveryRouterUseCase]) -> None:
         self._router_factory = router_factory
 
     async def execute(self, trace_id: str, idempotency_key: str | None = None) -> None:

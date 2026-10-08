@@ -7,6 +7,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
+from infra_seedwork.env import queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -17,10 +18,16 @@ config = pulumi.Config()
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
+zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
+storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
+messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messaging/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
+zitadel = pulumi.StackReference(zitadel_stack_ref)
+storage = pulumi.StackReference(storage_stack_ref)
+messaging = pulumi.StackReference(messaging_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -39,10 +46,20 @@ edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
+as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
+as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
+
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
-    platform.require_output("openobserve_endpoint") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
+)
+obs_user_arn = (
+    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
+)
+obs_pass_arn = (
+    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
@@ -66,7 +83,9 @@ execution_role = aws.iam.Role(
 aws.iam.RolePolicy(
     f"{_prefix}ecs-exec-role-secrets-policy",
     role=execution_role.id,
-    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
+    policy=pulumi.Output.all(
+        edi_shard_db_secret_arn, global_db_secret_arn, obs_user_arn, obs_pass_arn
+    ).apply(
         lambda args: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -74,7 +93,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1]],
+                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
                     },
                     {
                         "Effect": "Allow",
@@ -112,6 +131,8 @@ api_service = provision_fargate_service(
     security_group_id=app_sg_id,
     tags=_TAGS,
     firelens_endpoint=firelens_endpoint,
+    obs_user_secret_arn=obs_user_arn,
+    obs_password_secret_arn=obs_pass_arn,
     port=8000,
     target_group_arn=api_tg.arn,
     environment_vars=[
@@ -126,9 +147,35 @@ api_service = provision_fargate_service(
         },
         {"name": "PUBLIC_BASE_URL", "value": pulumi.Output.concat("https://api.", staging_domain)},
         {
+            "name": "AS2_RECEIVE_URL",
+            "value": pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
+        },
+        {
             "name": "IDENTITY_ISSUER",
             "value": pulumi.Output.concat("https://identity.", staging_domain),
         },
+        {
+            "name": "IDENTITY_UCP_PROJECT_ID",
+            "value": zitadel.require_output("ucp_project_id"),
+        },
+        {
+            "name": "IDENTITY_OAUTH_CLIENT_ID",
+            "value": zitadel.require_output("ucp_web_client_id"),
+        },
+        {
+            "name": "IDENTITY_PLATFORM_ORG_ID",
+            "value": zitadel.require_output("platform_org_id"),
+        },
+        {
+            "name": "IDENTITY_API_URL",
+            "value": pulumi.Output.concat("https://identity.", staging_domain),
+        },
+        {
+            "name": "CORS_ALLOWED_ORIGINS",
+            "value": staging_domain.apply(lambda d: f'["https://dashboard.{d}"]'),
+        },
+        {"name": "S3_BUCKET", "value": as2_payloads_bucket_name},
+        *queue_env_vars_to_ecs_format(messaging.require_output("queue_env_vars")),
     ],
     secrets=[
         {
@@ -141,8 +188,36 @@ api_service = provision_fargate_service(
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
         },
         {
-            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
         },
     ],
+    extra_task_policy_statements=[
+        {
+            "Effect": "Allow",
+            "Action": [
+                "secretsmanager:CreateSecret",
+                "secretsmanager:GetSecretValue",
+                "secretsmanager:PutSecretValue",
+                "secretsmanager:DescribeSecret",
+                "secretsmanager:DeleteSecret",
+                "secretsmanager:UpdateSecret",
+            ],
+            "Resource": pulumi.Output.concat(
+                "arn:aws:secretsmanager:",
+                aws.get_region().name,
+                ":",
+                aws.get_caller_identity().account_id,
+                ":secret:edi/as2_key/*",
+            ),
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:GetObject"],
+            "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
+        },
+    ],
 )
+
+# DNS Record moved to routing stack
+pulumi.export("api_domain", pulumi.Output.concat("api.", staging_domain))

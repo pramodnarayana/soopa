@@ -108,14 +108,20 @@ def parse_mdn(headers: Mapping[str, str], raw_body: bytes) -> AS2MDN:
     )
 
 
-def generate_mdn(original_message: AS2Message, disposition: str, mic_alg: str = "sha256") -> AS2MDN:
+def generate_mdn(
+    original_message: AS2Message,
+    disposition: str,
+    mic_alg: str = "sha256",
+    mic_payload: bytes | None = None,
+) -> AS2MDN:
     """
     Generates an AS2MDN value object from the original inbound AS2Message.
     MIC is calculated over the original payload.
     """
     mic = None
-    if original_message.payload:
-        mic = calculate_mic(original_message.payload, mic_alg)
+    target_payload = mic_payload if mic_payload is not None else original_message.payload
+    if target_payload:
+        mic = calculate_mic(target_payload, mic_alg)
 
     mdn_headers = {
         "AS2-From": original_message.as2_to,  # Swap To/From

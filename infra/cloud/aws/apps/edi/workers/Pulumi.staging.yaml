@@ -1,3 +1,4 @@
-encryptionsalt: v1:fxQwV+mUQL4=:v1:IoFRTNEjLriP7hZ3:H9rIlDXMRMPo5lhZjNmEoUdFtEwWdQ==
 config:
+  edi-workers:enable_observability: 'true'
   edi-workers:image_tag: latest
+encryptionsalt: v1:U1HXC82pd6c=:v1:RwgYeyrhknv1y+I6:0OuTW6ZXcw3FDamWt69Hs7mPE2hX0A==

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import cast
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import JsonDict
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
@@ -46,9 +47,11 @@ class ComputeTransformUseCase:
         self,
         transformer: TransformerPort,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.transformer = transformer
         self.uow_factory = uow_factory
+        self.publisher = publisher
 
     async def execute(self, command: ComputeTransformCommand) -> None:
         """Transforms an inbound X12 EDI payload to JSON and dispatches TRANSFORMATION_COMPLETED."""
@@ -102,119 +105,145 @@ class ComputeTransformUseCase:
                     transaction_count=len(transformed_txns),
                 )
 
-                # 2. Process each transaction
-                extractor = MetadataExtractorService()
-
-                json_payloads = []
-                gs_sender_global = None
-                gs_receiver_global = None
-
-                transaction_type_global = (
-                    transformed_txns[0].transaction_type
-                    if transformed_txns
-                    else edi_msg.transaction_type
+                await self._process_transformed_transactions(
+                    trace_id, standard, edi_msg, transformed_txns, uow
                 )
-                route = (
-                    await uow.inbound_routes.get_inbound_route(
-                        str(edi_msg.sender_id),
-                        str(edi_msg.receiver_id),
-                        str(edi_msg.tenant_id),
-                        str(transaction_type_global) if transaction_type_global else "",
-                    )
-                    if edi_msg.sender_id and edi_msg.receiver_id
-                    else None
-                )
-                partnership_id_str = route.trading_partner_id if route else None
-                logger.info(
-                    "compute_transform.route_resolved",
-                    trace_id=trace_id,
-                    partner_id=partnership_id_str,
-                    has_route=route is not None,
-                )
-
-                for txn in transformed_txns:
-                    txn_type = txn.transaction_type
-                    gs_sender = txn.gs_sender_id
-                    gs_receiver = txn.gs_receiver_id
-
-                    if not gs_sender_global and gs_sender:
-                        gs_sender_global = gs_sender
-                        gs_receiver_global = gs_receiver
-
-                    json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
-                    if isinstance(json_dict, dict):
-                        json_dict["transaction_type"] = txn_type
-                    business_metadata = extractor.extract(txn_type, json_dict)
-
-                    await uow.transactions.create_edi_json(
-                        command=CreateEdiJsonCommand(
-                            trace_id=trace_id,
-                            tenant_id=edi_msg.tenant_id,
-                            direction=EdiDirection.INBOUND,
-                            trading_partner_id=partnership_id_str,
-                            transaction_type=txn_type,
-                            standard=standard,
-                            business_metadata=cast(JsonDict, business_metadata),
-                            payload=cast(JsonDict, json_dict),
-                            status=MessageStatus.PARSED,
-                            replay_count=edi_msg.replay_count,
-                            parent_trace_id=edi_msg.parent_trace_id,
-                            original_trace_id=edi_msg.original_trace_id,
-                        )
-                    )
-                    logger.info(
-                        "compute_transform.edi_json_saved",
-                        trace_id=trace_id,
-                        transaction_type=txn_type,
-                    )
-                    json_payloads.append(json_dict)
-
-                # Metadata to emit in event
-                txn_type_for_parent = (
-                    transformed_txns[0].transaction_type if transformed_txns else None
-                )
-
-                # Payload construction and API Gateway logging are now completely decoupled
-                # and delegated strictly to the WebhookDeliveryWorker.
-                # 4. Record TRANSFORMATION_SUCCESSFUL on the aggregate — repository drains to outbox.
-                edi_msg.add_domain_event(
-                    TransformSuccessful(
-                        trace_id=trace_id,
-                        tenant_id=edi_msg.tenant_id or "",
-                        direction=EdiDirection.INBOUND.value,
-                        isa_sender_id=edi_msg.sender_id,
-                        isa_receiver_id=edi_msg.receiver_id,
-                        gs_sender_id=gs_sender_global,
-                        gs_receiver_id=gs_receiver_global,
-                        transaction_type=txn_type_for_parent,
-                    )
-                )
-                await uow.transactions.save(edi_msg)
-                logger.info(
-                    "compute_transform.outbox_event_dispatched",
-                    trace_id=trace_id,
-                    event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
-                )
-
-                await uow.commit()
 
             logger.info("compute_transform.completed", trace_id=trace_id)
+        except ValueError as e:
+            await self._handle_permanent_failure(trace_id, command.tenant_id, e)
         except Exception as e:
-            logger.exception("compute_transform.failed", trace_id=trace_id, error=str(e))
-
-            # Emit failure domain event in a separate transaction
-            async with self.uow_factory() as failure_uow, failure_uow:
-                edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
-                if edi_msg_fallback:
-                    edi_msg_fallback.add_domain_event(
-                        TransformFailed(
-                            trace_id=trace_id,
-                            tenant_id=edi_msg_fallback.tenant_id or command.tenant_id,
-                            direction=EdiDirection.INBOUND.value,
-                            failure_reason=str(e),
-                        )
-                    )
-                    await failure_uow.transactions.save(edi_msg_fallback)
-                    await failure_uow.commit()
-
+            logger.exception("compute_transform.transient_failure", trace_id=trace_id, error=str(e))
             raise
+
+    async def _handle_permanent_failure(
+        self, trace_id: str, tenant_id: str, error: ValueError
+    ) -> None:
+        logger.exception("compute_transform.permanent_failure", trace_id=trace_id, error=str(error))
+        # Emit failure domain event in a separate transaction
+        async with self.uow_factory() as failure_uow, failure_uow:
+            edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
+            if edi_msg_fallback:
+                edi_msg_fallback.add_domain_event(
+                    TransformFailed(
+                        trace_id=trace_id,
+                        tenant_id=edi_msg_fallback.tenant_id or tenant_id,
+                        direction=EdiDirection.INBOUND.value,
+                        failure_reason=str(error),
+                    )
+                )
+                failure_envelopes = await failure_uow.transactions.flush_events(edi_msg_fallback)
+                await failure_uow.commit()
+
+                try:
+                    for failure_env in failure_envelopes:
+                        await self.publisher.publish(failure_env)
+                    async with self.uow_factory() as ack_uow, ack_uow:
+                        for failure_env in failure_envelopes:
+                            await ack_uow.outbox.mark_completed(failure_env.id)
+                        await ack_uow.commit()
+                except Exception as sync_e:
+                    logger.exception(
+                        "sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e)
+                    )
+
+    async def _process_transformed_transactions(
+        self, trace_id, standard, edi_msg, transformed_txns, uow
+    ):
+        extractor = MetadataExtractorService()
+
+        json_payloads = []
+        gs_sender_global = None
+        gs_receiver_global = None
+
+        transaction_type_global = (
+            transformed_txns[0].transaction_type if transformed_txns else edi_msg.transaction_type
+        )
+        route = (
+            await uow.inbound_routes.get_inbound_route(
+                str(edi_msg.sender_id),
+                str(edi_msg.receiver_id),
+                str(edi_msg.tenant_id),
+                str(transaction_type_global) if transaction_type_global else "",
+            )
+            if edi_msg.sender_id and edi_msg.receiver_id
+            else None
+        )
+        partnership_id_str = route.trading_partner_id if route else None
+        logger.info(
+            "compute_transform.route_resolved",
+            trace_id=trace_id,
+            partner_id=partnership_id_str,
+            has_route=route is not None,
+        )
+
+        for txn in transformed_txns:
+            txn_type = txn.transaction_type
+            gs_sender = txn.gs_sender_id
+            gs_receiver = txn.gs_receiver_id
+
+            if not gs_sender_global and gs_sender:
+                gs_sender_global = gs_sender
+                gs_receiver_global = gs_receiver
+
+            json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
+            if isinstance(json_dict, dict):
+                json_dict["transaction_type"] = txn_type
+            business_metadata = extractor.extract(txn_type, json_dict)
+
+            await uow.transactions.create_edi_json(
+                command=CreateEdiJsonCommand(
+                    trace_id=trace_id,
+                    tenant_id=edi_msg.tenant_id,
+                    direction=EdiDirection.INBOUND,
+                    trading_partner_id=partnership_id_str,
+                    transaction_type=txn_type,
+                    standard=standard,
+                    business_metadata=cast(JsonDict, business_metadata),
+                    payload=cast(JsonDict, json_dict),
+                    status=MessageStatus.PARSED,
+                    replay_count=edi_msg.replay_count,
+                    parent_trace_id=edi_msg.parent_trace_id,
+                    original_trace_id=edi_msg.original_trace_id,
+                )
+            )
+            logger.info(
+                "compute_transform.edi_json_saved",
+                trace_id=trace_id,
+                transaction_type=txn_type,
+            )
+            json_payloads.append(json_dict)
+
+        # Metadata to emit in event
+        txn_type_for_parent = transformed_txns[0].transaction_type if transformed_txns else None
+
+        # 4. Record TRANSFORMATION_SUCCESSFUL on the aggregate — repository drains to outbox.
+        edi_msg.add_domain_event(
+            TransformSuccessful(
+                trace_id=trace_id,
+                tenant_id=edi_msg.tenant_id or "",
+                direction=EdiDirection.INBOUND.value,
+                isa_sender_id=edi_msg.sender_id,
+                isa_receiver_id=edi_msg.receiver_id,
+                gs_sender_id=gs_sender_global,
+                gs_receiver_id=gs_receiver_global,
+                transaction_type=txn_type_for_parent,
+            )
+        )
+        envelopes = await uow.transactions.flush_events(edi_msg)
+        logger.info(
+            "compute_transform.outbox_event_dispatched",
+            trace_id=trace_id,
+            event_type=PipelineEventType.TRANSFORMATION_SUCCESSFUL.value,
+        )
+
+        await uow.commit()
+        try:
+            for env in envelopes:
+                await self.publisher.publish(env)
+            async with self.uow_factory() as ack_uow, ack_uow:
+                for env in envelopes:
+                    await ack_uow.outbox.mark_completed(env.id)
+                await ack_uow.commit()
+        except Exception as sync_e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e))

@@ -189,13 +189,14 @@ class PostgresUserRepository(UserRepositoryPort):
             db_user.email = user.email
             db_user.name = user.name
             db_user.idp_user_id = user.idp_user_id
-            db_user.status = user.status
+            db_user.status = user.status.value
         else:
             db_user = DbUser(
                 id=user.id,
                 idp_user_id=user.idp_user_id,
                 email=user.email,
                 name=user.name,
+                status=user.status.value,
                 created_at=user.created_at.replace(tzinfo=None),
             )
             self.session.add(db_user)

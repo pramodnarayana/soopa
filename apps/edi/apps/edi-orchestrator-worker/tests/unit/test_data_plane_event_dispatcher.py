@@ -1,4 +1,5 @@
 import pytest
+from pubsub.exceptions import ConsumerTerminalError
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -8,28 +9,35 @@ from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
 pytestmark = pytest.mark.asyncio
 
 
-async def test_sqs_consumer_success() -> None:
-    """Test that a valid SQS JSON body is parsed and delegated to the callback."""
-    events_received = []
-
-    async def real_callback(event: EdiDataPlaneEventMessage) -> None:
-        events_received.append(event)
-
-    consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
-
+def _make_body(**overrides: object) -> dict:
+    """
+    Builds a standard serialized EventEnvelope dict as emitted by AwsSqsConsumer.
+    The transport layer always yields raw JsonDict — translation happens in the dispatcher.
+    """
     body = {
+        "id": "msg-1",
+        "source": "soopa.edi",
         "tenant_id": "tenant123",
         "event_type": "TRANSFORMATION_REQUESTED",
         "idempotency_key": "idem123",
         "payload": {"trace_id": "trace123", "direction": "INBOUND"},
     }
+    body.update(overrides)
+    return body
 
-    await consumer.handle(body)
 
-    # Verify callback was called exactly once with the correctly parsed DTO
+async def test_sqs_consumer_success() -> None:
+    """Valid raw envelope dict is translated and delegated to the callback."""
+    events_received: list[EdiDataPlaneEventMessage] = []
+
+    async def real_callback(event: EdiDataPlaneEventMessage) -> None:
+        events_received.append(event)
+
+    consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
+    await consumer.handle(_make_body())
+
     assert len(events_received) == 1
     event = events_received[0]
-
     assert event.tenant_id == "tenant123"
     assert event.trace_id == "trace123"
     assert event.event_type == "TRANSFORMATION_REQUESTED"
@@ -37,77 +45,55 @@ async def test_sqs_consumer_success() -> None:
     assert event.payload == {"trace_id": "trace123", "direction": "INBOUND"}
 
 
-async def test_sqs_consumer_missing_trace_id_drops_message() -> None:
-    """Test that messages missing trace_id are dropped (callback not invoked)."""
-    events_received = []
+async def test_sqs_consumer_missing_trace_id_raises_terminal_error() -> None:
+    """Messages with a payload missing trace_id fail validation and raise ConsumerTerminalError."""
+    events_received: list[EdiDataPlaneEventMessage] = []
 
     async def real_callback(event: EdiDataPlaneEventMessage) -> None:
         events_received.append(event)
 
     consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
-
-    body = {
-        "tenant_id": "tenant123",
-        "event_type": "TRANSFORMATION_REQUESTED",
-        "payload": {
-            # Missing trace_id
-        },
-    }
-
-    await consumer.handle(body)
+    with pytest.raises(ConsumerTerminalError, match="Permanently malformed EDI data plane message"):
+        await consumer.handle(_make_body(payload={}))
 
     assert len(events_received) == 0
 
 
-async def test_sqs_consumer_missing_tenant_id_drops_message() -> None:
-    """Test that messages missing tenant_id are dropped (callback not invoked)."""
-    events_received = []
+async def test_sqs_consumer_missing_tenant_id_raises_terminal_error() -> None:
+    """Messages with an empty tenant_id fail validation and raise ConsumerTerminalError."""
+    events_received: list[EdiDataPlaneEventMessage] = []
 
     async def real_callback(event: EdiDataPlaneEventMessage) -> None:
         events_received.append(event)
 
     consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
-
-    body = {"event_type": "TRANSFORMATION_REQUESTED", "payload": {"trace_id": "trace123"}}
-
-    await consumer.handle(body)
+    with pytest.raises(ConsumerTerminalError, match="Permanently malformed EDI data plane message"):
+        await consumer.handle(_make_body(tenant_id=""))
 
     assert len(events_received) == 0
 
 
-async def test_sqs_consumer_missing_idempotency_key_drops_message() -> None:
-    """Test that missing idempotency key drops message without exploding."""
-    events_received = []
+async def test_sqs_consumer_missing_idempotency_key_raises_terminal_error() -> None:
+    """Messages with an empty idempotency_key fail validation and raise ConsumerTerminalError."""
+    events_received: list[EdiDataPlaneEventMessage] = []
 
     async def real_callback(event: EdiDataPlaneEventMessage) -> None:
         events_received.append(event)
 
     consumer = EdiDataPlaneEventDispatcher(callback=real_callback)
-    body = {
-        "tenant_id": "tenant123",
-        "event_type": "DELIVER",
-        "payload": {"trace_id": "trace123"},
-    }
+    with pytest.raises(ConsumerTerminalError, match="Permanently malformed EDI data plane message"):
+        await consumer.handle(_make_body(idempotency_key=""))
 
-    await consumer.handle(body)
-
-    assert events_received == []
+    assert len(events_received) == 0
 
 
 async def test_sqs_consumer_callback_exception_propogates() -> None:
-    """Test that if the callback throws an exception, it propagates up."""
+    """Exceptions raised by the domain callback must propagate to the SQS manager to prevent ack."""
 
     async def exploding_callback(event: EdiDataPlaneEventMessage) -> None:
         raise RuntimeError("Business Logic Error")
 
     consumer = EdiDataPlaneEventDispatcher(callback=exploding_callback)
 
-    body = {
-        "tenant_id": "tenant123",
-        "event_type": "TRANSFORMATION_REQUESTED",
-        "idempotency_key": "idem123",
-        "payload": {"trace_id": "trace123"},
-    }
-
     with pytest.raises(RuntimeError, match="Business Logic Error"):
-        await consumer.handle(body)
+        await consumer.handle(_make_body())

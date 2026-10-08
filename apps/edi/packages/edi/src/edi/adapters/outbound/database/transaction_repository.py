@@ -3,6 +3,7 @@ import json
 from collections.abc import Sequence
 from typing import Any, Protocol, cast
 
+from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
@@ -43,7 +44,7 @@ from edi.application.dtos.transactions import (
     EdiJsonDTO,
     EdiMessageDTO,
 )
-from edi.domain.enums import MessageStatus, TransactionEntityType
+from edi.domain.enums import EdiOutboxSource, MessageStatus, TransactionEntityType
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import (
@@ -129,6 +130,35 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         stmt = update(EdiMessage).where(EdiMessage.trace_id == str(trace_id)).values(status=status)
         await self.session.execute(stmt)
 
+    async def update_outbound_delivery_metadata(self, aggregate: EdiMessageDomainModel) -> None:
+        """
+        Targeted update for the delivery worker to update outbound EDI Message metadata
+        without merging the entire aggregate state.
+        """
+        stmt = (
+            update(EdiMessage)
+            .where(EdiMessage.id == str(aggregate.id))
+            .values(
+                status=aggregate.status.value if aggregate.status else None,
+                connection_type=aggregate.connection_type,
+                trading_partner_id=aggregate.trading_partner_id,
+                message_id=aggregate.message_id,
+                as2_sender_id=aggregate.as2_sender_id,
+                as2_receiver_id=aggregate.as2_receiver_id,
+                mdn_id=aggregate.mdn_id,
+                mdn_mode=aggregate.mdn_mode,
+                mdn_response=aggregate.mdn_response,
+                signature_algorithm=aggregate.signature_algorithm,
+                encryption_algorithm=aggregate.encryption_algorithm,
+                status_message=aggregate.status_message,
+                state=aggregate.state,
+                msg_headers=aggregate.msg_headers,
+                file_name=aggregate.file_name,
+                content_type=aggregate.content_type,
+            )
+        )
+        await self.session.execute(stmt)
+
     async def update_edi_json(self, command: UpdateEdiJsonCommand) -> None:
         values: dict[str, Any] = {
             field: getattr(command, field)
@@ -171,7 +201,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         except DuplicateEntityError:
             return ""
 
-    async def save(self, aggregate: EdiMessageDomainModel) -> None:
+    async def save(self, aggregate: EdiMessageDomainModel) -> Sequence[EventEnvelope]:
         """
         Drains domain events from the aggregate into the outbox table within
         the same open transaction. This is the DDD-compliant publishing mechanism.
@@ -191,8 +221,21 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             receiver_id=aggregate.receiver_id,
             gs_sender_id=aggregate.gs_sender_id,
             gs_receiver_id=aggregate.gs_receiver_id,
-            edi_data=aggregate.edi_data,
+            as2_sender_id=aggregate.as2_sender_id,
+            as2_receiver_id=aggregate.as2_receiver_id,
+            message_id=aggregate.message_id,
+            mdn_id=aggregate.mdn_id,
+            mdn_mode=aggregate.mdn_mode,
+            mdn_response=aggregate.mdn_response,
+            file_name=aggregate.file_name,
+            content_type=aggregate.content_type,
+            signature_algorithm=aggregate.signature_algorithm,
+            encryption_algorithm=aggregate.encryption_algorithm,
+            status_message=aggregate.status_message,
+            state=aggregate.state,
+            msg_headers=aggregate.msg_headers,
             trading_partner_id=aggregate.trading_partner_id,
+            edi_data=aggregate.edi_data,
             storage_uri=aggregate.storage_uri,
             replay_count=aggregate.replay_count,
             parent_trace_id=aggregate.parent_trace_id,
@@ -200,6 +243,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         )
         await self.session.merge(record)
 
+        envelopes: list[EventEnvelope] = []
         for index, event in enumerate(aggregate.domain_events):
             event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
             idempotency_key = _event_idempotency_key(
@@ -208,9 +252,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 event_count=len(aggregate.domain_events),
             )
             payload_dict = serialize_domain_event(event)
+            tenant_id = event.get_routing_tenant_id() or aggregate.tenant_id
             outbox_record = DataPlaneOutbox(
                 id=event_id,
-                tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
+                tenant_id=tenant_id,
                 idempotency_key=idempotency_key,
                 event_type=event.event_name,
                 payload=payload_dict,
@@ -219,12 +264,67 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 async with self.session.begin_nested():
                     self.session.add(outbox_record)
                     await self.flush()
+                envelopes.append(
+                    EventEnvelope(
+                        id=event_id,
+                        source=EdiOutboxSource.EDI_DATA_PLANE,
+                        tenant_id=tenant_id,
+                        event_type=event.event_name,
+                        payload=payload_dict,
+                        idempotency_key=idempotency_key,
+                    )
+                )
+            except DuplicateEntityError:
+                pass  # Idempotent: already published, safe to skip.
+
+        return envelopes
+
+    async def flush_events(self, aggregate: EdiMessageDomainModel) -> Sequence[EventEnvelope]:
+        """
+        Drains domain events from the aggregate into the outbox table within
+        the same open transaction WITHOUT merging the aggregate state.
+        Use this when a worker only appends events and does not mutate the aggregate root.
+        """
+        envelopes: list[EventEnvelope] = []
+        for index, event in enumerate(aggregate.domain_events):
+            event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
+            idempotency_key = _event_idempotency_key(
+                event.idempotency_key,
+                index=index,
+                event_count=len(aggregate.domain_events),
+            )
+            payload_dict = serialize_domain_event(event)
+            tenant_id = event.get_routing_tenant_id() or aggregate.tenant_id
+            outbox_record = DataPlaneOutbox(
+                id=event_id,
+                tenant_id=tenant_id,
+                idempotency_key=idempotency_key,
+                event_type=event.event_name,
+                payload=payload_dict,
+            )
+            try:
+                async with self.session.begin_nested():
+                    self.session.add(outbox_record)
+                    await self.flush()
+                envelopes.append(
+                    EventEnvelope(
+                        id=event_id,
+                        source=EdiOutboxSource.EDI_DATA_PLANE,
+                        tenant_id=tenant_id,
+                        event_type=event.event_name,
+                        payload=payload_dict,
+                        idempotency_key=idempotency_key,
+                    )
+                )
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
         aggregate.clear_domain_events()
+        return envelopes
 
-    async def save_all(self, aggregates: Sequence[EdiMessageDomainModel]) -> None:
+    async def save_all(
+        self, aggregates: Sequence[EdiMessageDomainModel]
+    ) -> Sequence[EventEnvelope]:
         """
         Drains domain events from multiple aggregates into the outbox table within
         the same open transaction.
@@ -232,6 +332,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         records = []
         outbox_records = []
 
+        envelopes: list[EventEnvelope] = []
         for aggregate in aggregates:
             record_id = (
                 aggregate.id if aggregate.id else generate_id(DomainIdPrefix.EDI_MESSAGE.value)
@@ -267,13 +368,24 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     event_count=len(aggregate.domain_events),
                 )
                 payload_dict = serialize_domain_event(event)
+                tenant_id = event.get_routing_tenant_id() or aggregate.tenant_id
                 outbox_records.append(
                     DataPlaneOutbox(
                         id=event_id,
-                        tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
+                        tenant_id=tenant_id,
                         idempotency_key=idempotency_key,
                         event_type=event.event_name,
                         payload=payload_dict,
+                    )
+                )
+                envelopes.append(
+                    EventEnvelope(
+                        id=event_id,
+                        source=EdiOutboxSource.EDI_DATA_PLANE,
+                        tenant_id=tenant_id,
+                        event_type=event.event_name,
+                        payload=payload_dict,
+                        idempotency_key=idempotency_key,
                     )
                 )
 
@@ -288,10 +400,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
-        for aggregate in aggregates:
-            aggregate.clear_domain_events()
+        return envelopes
 
-    async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
+    async def save_json(self, aggregate: EdiJsonDomainModel) -> Sequence[EventEnvelope]:
         """
         Drains domain events from the EdiJson aggregate into the outbox table within
         the same open transaction.
@@ -325,6 +436,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 f"EdiJson with idempotency key already exists: {exc}"
             ) from exc
 
+        envelopes: list[EventEnvelope] = []
         for index, event in enumerate(aggregate.domain_events):
             event_id = generate_id(DomainIdPrefix.EDI_DP_OUTBOX.value)
             idempotency_key = _event_idempotency_key(
@@ -333,9 +445,10 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 event_count=len(aggregate.domain_events),
             )
             payload_dict = serialize_domain_event(event)
+            tenant_id = event.get_routing_tenant_id() or aggregate.tenant_id
             outbox_record = DataPlaneOutbox(
                 id=event_id,
-                tenant_id=event.get_routing_tenant_id() or aggregate.tenant_id,
+                tenant_id=tenant_id,
                 idempotency_key=idempotency_key,
                 event_type=event.event_name,
                 payload=payload_dict,
@@ -344,10 +457,20 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 async with self.session.begin_nested():
                     self.session.add(outbox_record)
                     await self.flush()
+                envelopes.append(
+                    EventEnvelope(
+                        id=event_id,
+                        source=EdiOutboxSource.EDI_DATA_PLANE,
+                        tenant_id=tenant_id,
+                        event_type=event.event_name,
+                        payload=payload_dict,
+                        idempotency_key=idempotency_key,
+                    )
+                )
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
-        aggregate.clear_domain_events()
+        return envelopes
 
     async def save_trace_event(self, event: TraceEventDomainModel) -> None:
 
@@ -1017,6 +1140,19 @@ def _map_edi_message_to_domain(
         receiver_id=record.receiver_id,
         gs_sender_id=record.gs_sender_id,
         gs_receiver_id=record.gs_receiver_id,
+        as2_sender_id=record.as2_sender_id,
+        as2_receiver_id=record.as2_receiver_id,
+        message_id=record.message_id,
+        mdn_id=record.mdn_id,
+        mdn_mode=record.mdn_mode,
+        mdn_response=record.mdn_response,
+        file_name=record.file_name,
+        content_type=record.content_type,
+        signature_algorithm=record.signature_algorithm,
+        encryption_algorithm=record.encryption_algorithm,
+        status_message=record.status_message,
+        state=record.state,
+        msg_headers=record.msg_headers,
         edi_data=hydrated_edi_data if hydrated_edi_data is not None else record.edi_data,
         trading_partner_id=record.trading_partner_id,
         storage_uri=record.storage_uri,

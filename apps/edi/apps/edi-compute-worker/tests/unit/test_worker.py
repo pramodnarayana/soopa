@@ -3,6 +3,7 @@ from edi.application.use_cases.pipeline.compute_outbound_transform_use_case impo
     ComputeOutboundTransformCommand,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformCommand
+from pubsub.exceptions import ConsumerTerminalError
 
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
 
@@ -27,7 +28,7 @@ class FakeComputeOutboundTransformUseCase:
 
 @pytest.mark.asyncio
 async def test_dispatcher_process_inbound_message_success() -> None:
-    """Dispatcher correctly parses an inbound Debezium body and threads all fields
+    """Dispatcher correctly parses an inbound event body and threads all fields
     — including idempotency_key — into the ComputeTransformCommand."""
     fake_use_case = FakeComputeTransformUseCase()
 
@@ -75,7 +76,8 @@ async def test_dispatcher_drops_message_with_missing_idempotency_key() -> None:
     # Body has no idempotency_key — message must be silently dropped, not raise.
     message_body = {"payload": {"trace_id": "trace-123", "tenant_id": "tenant-1"}}
 
-    await dispatcher.dispatch_raw(message_body)
+    with pytest.raises(ConsumerTerminalError):
+        await dispatcher.dispatch_raw(message_body)
 
     assert fake_use_case.called_command is None
 
@@ -100,14 +102,15 @@ async def test_dispatcher_drops_message_with_missing_trace_id() -> None:
         "payload": {"tenant_id": "tenant-1"},
     }
 
-    await dispatcher.dispatch_raw(message_body)
+    with pytest.raises(ConsumerTerminalError):
+        await dispatcher.dispatch_raw(message_body)
 
     assert fake_use_case.called_command is None
 
 
 @pytest.mark.asyncio
 async def test_dispatcher_process_outbound_message_success() -> None:
-    """Dispatcher correctly parses an outbound Debezium body and threads all fields
+    """Dispatcher correctly parses an outbound event body and threads all fields
     — including idempotency_key — into the ComputeOutboundTransformCommand."""
     fake_outbound_use_case = FakeComputeOutboundTransformUseCase()
 
@@ -129,6 +132,11 @@ async def test_dispatcher_process_outbound_message_success() -> None:
             "tenant_id": "tenant-1",
             "direction": "OUTBOUND",
             "transaction_type": "850",
+            "isa_sender_id": "SENDER123",
+            "isa_receiver_id": "RECEIVER456",
+            "gs_sender_id": "GS_SENDER",
+            "gs_receiver_id": "GS_RECEIVER",
+            "isa_usage_indicator": "T",
             "route_config": {"as2_partner_id": "p-1", "connection_type": "AS2"},
         },
     }
@@ -168,7 +176,8 @@ async def test_dispatcher_drops_outbound_message_missing_transaction_type() -> N
         },
     }
 
-    await dispatcher.dispatch_raw(message_body)
+    with pytest.raises(ConsumerTerminalError):
+        await dispatcher.dispatch_raw(message_body)
 
     assert fake_outbound_use_case.called_command is None
 
@@ -197,6 +206,7 @@ async def test_dispatcher_drops_message_with_invalid_direction() -> None:
         },
     }
 
-    await dispatcher.dispatch_raw(message_body)
+    with pytest.raises(ConsumerTerminalError):
+        await dispatcher.dispatch_raw(message_body)
 
     assert fake_use_case.called_command is None

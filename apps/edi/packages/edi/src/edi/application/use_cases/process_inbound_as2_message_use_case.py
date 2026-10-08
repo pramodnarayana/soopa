@@ -21,6 +21,7 @@ Dependency Inversion is enforced via constructor injection:
 
 import email
 import functools
+import json
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -28,20 +29,16 @@ from email import policy
 from typing import cast
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 
 from edi.domain.enums import (
-    ConnectionType,
     EdiConnectionType,
     EdiDirection,
-    EncryptionAlgorithm,
-    MDNType,
     MessageStatus,
-    SignatureAlgorithm,
 )
-from edi.ports.outbound.transaction_repository import CreateEdiMessageCommand
 
 
 @dataclass(frozen=True)
@@ -86,11 +83,13 @@ class ProcessInboundAs2MessageUseCase:
         dp_factory: DataPlaneUnitOfWorkFactoryPort,
         secret_store: SecretStorePort,
         crypto_service: CryptoServicePort,
+        publisher: OutboxPublisherPort,
     ):
         self.control_plane_uow = control_plane_uow
         self.dp_factory = dp_factory
         self.secret_store = secret_store
         self.crypto_service = crypto_service
+        self.publisher = publisher
 
     async def process_inbound_message(
         self, command: ProcessInboundAs2Command
@@ -134,12 +133,7 @@ class ProcessInboundAs2MessageUseCase:
         # 5. Extract Pure EDI
         pure_edi_bytes = self._extract_pure_edi(final_payload)
 
-        # 6. Save to DB
-        await self._save_transaction(
-            partnership=partnership, as2_msg=as2_msg, pure_edi_bytes=pure_edi_bytes
-        )
-
-        # 7. Generate MDN
+        # 6. Generate MDN
         disposition = "automatic-action/MDN-sent-automatically; processed"
 
         sign_fn = None
@@ -165,6 +159,15 @@ class ProcessInboundAs2MessageUseCase:
             disposition=disposition,
             mic=mic,
             sign_fn=sign_fn,
+        )
+
+        # 7. Save to DB
+        await self._save_transaction(
+            partnership=partnership,
+            remote_partner=remote_partner,
+            as2_msg=as2_msg,
+            pure_edi_bytes=pure_edi_bytes,
+            mdn_response=mdn.body.decode("utf-8", errors="ignore") if mdn and mdn.body else None,
         )
 
         return mdn.body, mdn.headers
@@ -408,7 +411,12 @@ class ProcessInboundAs2MessageUseCase:
         return isa_sender, isa_receiver, transaction_type
 
     async def _save_transaction(
-        self, partnership: AS2PartnershipDomainModel, as2_msg: AS2Message, pure_edi_bytes: bytes
+        self,
+        partnership: AS2PartnershipDomainModel,
+        remote_partner: AS2PartnerDomainModel,
+        as2_msg: AS2Message,
+        pure_edi_bytes: bytes,
+        mdn_response: str | None = None,
     ) -> str:
         # 1. Payload-Based Routing (ISA Extraction)
         try:
@@ -437,26 +445,52 @@ class ProcessInboundAs2MessageUseCase:
             true_tenant_id=true_tenant_id,
         )
 
+        format_standard = None
+        if pure_edi_bytes.startswith(b"ISA"):
+            format_standard = "X12"
+        elif pure_edi_bytes.startswith((b"UNA", b"UNB")):
+            format_standard = "EDIFACT"
+
+        # Attempt to parse filename from Content-Disposition if present
+        file_name = None
+        content_disposition = as2_msg.headers.get("content-disposition")
+        if content_disposition:
+            # Look for filename="..."
+            match = re.search(r'filename="([^"]+)"', content_disposition, re.IGNORECASE)
+            file_name = match.group(1) if match else content_disposition
+
+        content_type = as2_msg.headers.get("content-type")
+        msg_headers_json = json.dumps(as2_msg.headers)
+
         edi_record = {
             "trace_id": generate_id(SystemIdPrefix.TRACE),
             "direction": EdiDirection.INBOUND.value,
             "connection_type": EdiConnectionType.AS2.value,
+            "trading_partner_id": remote_partner.id,
             "sender_id": isa_sender,
             "receiver_id": isa_receiver,
             "as2_sender_id": as2_msg.as2_from,
             "as2_receiver_id": as2_msg.as2_to,
             "message_id": as2_msg.message_id,
             "mdn_mode": partnership.mdn_type,
+            "mdn_response": mdn_response,
+            "file_name": file_name,
+            "content_type": content_type,
             "signature_algorithm": partnership.signature_algorithm,
             "encryption_algorithm": partnership.encryption_algorithm,
+            "status_message": "AS2 payload extracted successfully",
+            "state": "EXTRACTED",
+            "msg_headers": msg_headers_json,
+            "format_standard": format_standard,
             "edi_data": pure_edi_bytes,
             "status": MessageStatus.RECEIVED.value,
         }
 
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
+            edi_message_id = generate_id(DomainIdPrefix.EDI_MESSAGE)
             edi_message_aggregate = EdiMessageDomainModel(
-                id=generate_id(DomainIdPrefix.EDI_MESSAGE),
+                id=edi_message_id,
                 tenant_id=true_tenant_id,
                 trace_id=str(edi_record["trace_id"]),
                 direction=Direction(str(edi_record["direction"])),
@@ -475,78 +509,59 @@ class ProcessInboundAs2MessageUseCase:
                 else None,
                 message_id=str(edi_record["message_id"]) if edi_record.get("message_id") else None,
                 mdn_mode=str(edi_record["mdn_mode"]) if edi_record.get("mdn_mode") else None,
+                mdn_response=str(edi_record["mdn_response"])
+                if edi_record.get("mdn_response")
+                else None,
+                file_name=str(edi_record["file_name"]) if edi_record.get("file_name") else None,
+                content_type=str(edi_record["content_type"])
+                if edi_record.get("content_type")
+                else None,
                 signature_algorithm=str(edi_record["signature_algorithm"])
                 if edi_record.get("signature_algorithm")
                 else None,
                 encryption_algorithm=str(edi_record["encryption_algorithm"])
                 if edi_record.get("encryption_algorithm")
                 else None,
+                status_message=str(edi_record["status_message"])
+                if edi_record.get("status_message")
+                else None,
+                state=str(edi_record["state"]) if edi_record.get("state") else None,
+                msg_headers=str(edi_record["msg_headers"])
+                if edi_record.get("msg_headers")
+                else None,
+                format_standard=str(edi_record["format_standard"])
+                if edi_record.get("format_standard")
+                else None,
+                trading_partner_id=str(edi_record["trading_partner_id"])
+                if edi_record.get("trading_partner_id")
+                else None,
                 edi_data=pure_edi_bytes.decode("utf-8", errors="ignore"),
                 status=RecordStatus(str(edi_record["status"])),
-            )
-
-            msg_id = await dp_uow.transactions.create_edi_message(
-                command=CreateEdiMessageCommand(
-                    id=edi_message_aggregate.id,
-                    trace_id=str(edi_message_aggregate.trace_id),
-                    tenant_id=true_tenant_id,
-                    direction=EdiDirection(str(edi_message_aggregate.direction))
-                    if edi_message_aggregate.direction
-                    else None,
-                    connection_type=ConnectionType(str(edi_message_aggregate.connection_type))
-                    if edi_message_aggregate.connection_type
-                    else None,
-                    sender_id=str(edi_message_aggregate.sender_id)
-                    if edi_message_aggregate.sender_id
-                    else None,
-                    receiver_id=str(edi_message_aggregate.receiver_id)
-                    if edi_message_aggregate.receiver_id
-                    else None,
-                    as2_sender_id=str(edi_message_aggregate.as2_sender_id)
-                    if edi_message_aggregate.as2_sender_id
-                    else None,
-                    as2_receiver_id=str(edi_message_aggregate.as2_receiver_id)
-                    if edi_message_aggregate.as2_receiver_id
-                    else None,
-                    message_id=str(edi_message_aggregate.message_id)
-                    if edi_message_aggregate.message_id
-                    else None,
-                    mdn_mode=MDNType(str(edi_message_aggregate.mdn_mode))
-                    if edi_message_aggregate.mdn_mode
-                    else None,
-                    signature_algorithm=SignatureAlgorithm(
-                        str(edi_message_aggregate.signature_algorithm)
-                    )
-                    if edi_message_aggregate.signature_algorithm
-                    else None,
-                    encryption_algorithm=EncryptionAlgorithm(
-                        str(edi_message_aggregate.encryption_algorithm)
-                    )
-                    if edi_message_aggregate.encryption_algorithm
-                    else None,
-                    edi_data=str(edi_message_aggregate.edi_data)
-                    if edi_message_aggregate.edi_data
-                    else "",
-                    status=MessageStatus(str(edi_message_aggregate.status))
-                    if edi_message_aggregate.status
-                    else None,
-                )
             )
 
             outbox_payload = TransformRequestedEvent(
                 trace_id=str(edi_record["trace_id"]),
                 tenant_id=true_tenant_id,
-                edi_message_id=str(msg_id),
+                edi_message_id=edi_message_id,
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
                 direction=EdiDirection.INBOUND.value,
-                idempotency_key=str(msg_id),
+                idempotency_key=edi_message_id,
             )
 
             edi_message_aggregate.add_domain_event(outbox_payload)
 
-            await dp_uow.transactions.save(edi_message_aggregate)
+            envelopes = await dp_uow.transactions.save(edi_message_aggregate)
 
             await dp_uow.commit()
 
-            return str(msg_id)
+            # Synchronous Dispatch to SQS (Best Effort Tail-Polling)
+            try:
+                for envelope in envelopes:
+                    await self.publisher.publish(envelope)
+                    await dp_uow.outbox.mark_completed(envelope.id)
+                await dp_uow.commit()
+            except Exception as e:
+                logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
+
+            return edi_message_id

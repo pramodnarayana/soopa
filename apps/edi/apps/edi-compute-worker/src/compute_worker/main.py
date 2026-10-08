@@ -14,14 +14,15 @@ from database.router import DatabaseRouter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
 from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
     ComputeOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.provider import PubSubProvider
 
 from compute_worker.compute_dispatcher import EdiComputeDispatcher
 from compute_worker.settings import get_settings
@@ -71,11 +72,20 @@ class EdiComputeWorkerModule(LaunchableWorker):
             aws_endpoint=aws_endpoint,
         )
 
+        publisher = create_edi_pipeline_publisher(
+            compute_queue_url=settings.sqs.compute_queue_url,
+            orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+            deliver_queue_url=settings.sqs.deliver_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=aws_endpoint,
+        )
+
         async def use_case_factory(tenant_id: str) -> ComputeTransformUseCase:
             uow_factory = await uow_provider.get_uow_factory(tenant_id)
             return ComputeTransformUseCase(
                 uow_factory=uow_factory,
                 transformer=transformer,
+                publisher=publisher,
             )
 
         async def outbound_use_case_factory(tenant_id: str) -> ComputeOutboundTransformUseCase:
@@ -83,6 +93,7 @@ class EdiComputeWorkerModule(LaunchableWorker):
             return ComputeOutboundTransformUseCase(
                 uow_factory=uow_factory,
                 transformer=transformer,
+                publisher=publisher,
             )
 
         dispatcher = EdiComputeDispatcher(
@@ -90,15 +101,11 @@ class EdiComputeWorkerModule(LaunchableWorker):
             outbound_use_case_factory=outbound_use_case_factory,
         )
 
-        compute_consumer = AwsSqsConsumer(
+        self.manager = PubSubProvider.create_consumer_manager(
             queue_url=settings.sqs.compute_queue_url,
+            handler=dispatcher.dispatch_raw,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
-        )
-        self.manager = SqsConsumerManager(
-            consumer=compute_consumer,
-            queue_name=settings.sqs.compute_queue_url.rsplit("/", 1)[-1],
-            handler=dispatcher.dispatch_raw,
         )
         assert self.manager is not None
         self.manager.start()

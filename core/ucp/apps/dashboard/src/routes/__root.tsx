@@ -20,7 +20,7 @@ const oidcConfig = {
   client_id: clientId,
   redirect_uri: `${window.location.origin}/callback`,
   response_type: 'code',
-  scope: `openid profile email urn:zitadel:iam:org:project:roles urn:zitadel:iam:org:id urn:zitadel:iam:org:project:id:${projectId}:roles`,
+  scope: `openid profile email urn:zitadel:iam:org:project:roles urn:zitadel:iam:org:id urn:zitadel:iam:org:project:id:${projectId}:roles urn:zitadel:iam:org:project:id:${projectId}:aud`,
   prompt: 'login',
   loadUserInfo: true,
 };

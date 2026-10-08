@@ -85,32 +85,19 @@
     },
     {
       "topic": "edi-data-plane-topic",
-      "queue": "edi-orchestrator",
-      "filterPolicy": {
-        "event_type": [
-          "TRANSFORMATION_REQUESTED",
-          "TRANSFORMATION_SUCCESSFUL",
-          "TRANSFORMATION_FAILED",
-          "DELIVERY_REQUESTED",
-          "DELIVERY_SUCCESSFUL",
-          "DELIVERY_FAILED"
-        ]
-      }
+      "queue": "edi-orchestrator"
     },
+
     {
       "topic": "edi-data-plane-topic",
-      "queue": "edi-compute",
-      "filterPolicy": {
-        "event_type": ["COMPUTE_TRANSFORMATION_COMMAND"]
-      }
+      "queue": "edi-compute"
     },
+
     {
       "topic": "edi-data-plane-topic",
-      "queue": "edi-deliver",
-      "filterPolicy": {
-        "event_type": ["EXECUTE_DELIVERY_COMMAND"]
-      }
+      "queue": "edi-deliver"
     },
+
     {
       "topic": "platform-events-topic",
       "queue": "edi-config-sync-queue",

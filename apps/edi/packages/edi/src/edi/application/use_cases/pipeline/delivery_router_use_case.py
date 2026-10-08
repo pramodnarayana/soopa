@@ -2,6 +2,8 @@ import contextlib
 from collections.abc import Callable
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
@@ -23,8 +25,10 @@ class DeliveryRouterUseCase:
     def __init__(
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
+        self.publisher = publisher
 
     async def deliver(self, trace_id: str, idempotency_key: str | None = None) -> None:
         """
@@ -46,7 +50,18 @@ class DeliveryRouterUseCase:
 
             route = await self._resolve_route(edi_msg, uow)
 
-            await self._dispatch_to_outbox(trace_id, route, edi_msg, uow, idempotency_key)
+            envelope = await self._dispatch_to_outbox(
+                trace_id, route, edi_msg, uow, idempotency_key
+            )
+            await uow.commit()
+
+        try:
+            await self.publisher.publish(envelope)
+            async with self.uow_factory() as uow, uow:
+                await uow.outbox.mark_completed(envelope.id)
+                await uow.commit()
+        except Exception as e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
 
     async def _resolve_route(
         self, edi_msg, uow: DataPlaneUnitOfWorkPort
@@ -119,7 +134,7 @@ class DeliveryRouterUseCase:
         edi_msg,
         uow: DataPlaneUnitOfWorkPort,
         idempotency_key: str | None,
-    ) -> None:
+    ) -> EventEnvelope:
         DESTINATION_RESOLVER = {
             EdiConnectionType.SFTP: lambda r: ("sftp_partner_id", r.sftp_partner_id),
             EdiConnectionType.AS2: lambda r: ("as2_partner_id", r.as2_partner_id),
@@ -156,7 +171,8 @@ class DeliveryRouterUseCase:
             strategy_type=strategy_type,
         )
 
-        await uow.outbox.append_event(
+        envelope = await uow.outbox.append_event(
+            tenant_id=edi_msg.tenant_id,
             idempotency_key=command_key,
             event_type=PipelineEventType.EXECUTE_DELIVERY_COMMAND.value,
             payload={
@@ -164,6 +180,7 @@ class DeliveryRouterUseCase:
                 "tenant_id": edi_msg.tenant_id,
                 "partner_id": partner_id,
                 "strategy_type": strategy_type,
+                "connection_type": route.connection_type,
             },
         )
-        await uow.commit()
+        return envelope

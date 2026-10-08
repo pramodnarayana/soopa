@@ -130,6 +130,7 @@ async def test_execute_delivery_integration(
             "tenant_id": tenant_id,
             "partner_id": partner_id,
             "strategy_type": "webhook_id",
+            "connection_type": "WEBHOOK",
         },
     }
 

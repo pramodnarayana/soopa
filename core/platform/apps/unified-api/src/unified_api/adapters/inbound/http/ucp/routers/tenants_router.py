@@ -127,12 +127,12 @@ async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> "Tenant"
 @router.get(
     "/{tenant_id}",
     response_model=TenantResponse,
-    dependencies=[Depends(RequireCapability(Capability.TENANT_SETTINGS_READ))],
 )
 @inject
 async def find_one(
     tenant_id: str,
     _: Annotated[IdentityContext, Depends(require_tenant_member)],
+    __: Annotated[IdentityContext, Depends(RequireCapability(Capability.TENANT_SETTINGS_READ))],
     session: AsyncSession = Depends(get_db_session),
     query_service_factory: Callable[..., TenantQueryServicePort] = Depends(
         Provide[Container.tenant_query_service.provider]

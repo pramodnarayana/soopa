@@ -10,6 +10,7 @@ individual queue URLs to environment variable names — they always consume the
 structured ``TopologyOutput.queue_env_vars`` from here.
 """
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from typing import TypedDict
@@ -265,11 +266,17 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
         queue_name = sub["queue"]
         topic_arn = available_topics.get(topic_name)
         if topic_arn and queue_name in queues:
+            # Deterministic naming: Hash the filter policy so that array reordering doesn't destroy/recreate resources.
+            filter_policy = sub.get("filterPolicy", {})
+            policy_hash = hashlib.md5(  # noqa: S324 - md5 used only for deterministic resource naming
+                json.dumps(filter_policy, sort_keys=True).encode()
+            ).hexdigest()[:6]
+
             subscribe_queue(
-                f"{prefix}{queue_name}-{topic_name}-sub",
+                f"{prefix}{queue_name}-{topic_name}-sub-{policy_hash}",
                 topic_arn,
                 queues[queue_name],
-                sub.get("filterPolicy"),
+                filter_policy,
             )
             queue_subscriptions[queue_name].append(topic_arn)
 

@@ -1,10 +1,8 @@
 import datetime
 import functools
+from contextlib import asynccontextmanager
 
-import httpx
 import pytest
-
-pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -14,6 +12,10 @@ from seedwork import generate_id
 from sqlalchemy import select
 
 from edi.adapters.inbound.as2.builder import build_outbound_message
+from edi.adapters.outbound.database.control_plane.uow import (
+    SqlAlchemyControlPlaneUnitOfWork,
+)
+from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
@@ -27,6 +29,14 @@ from edi.adapters.outbound.database.models.data_plane import (
     InboundRoute as DataPlaneInboundRoute,
 )
 from edi.adapters.outbound.security.smime import encrypt_payload, sign_payload
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
+from edi.application.use_cases.process_inbound_as2_message_use_case import (
+    ProcessInboundAs2Command,
+    ProcessInboundAs2MessageUseCase,
+)
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher, InMemoryStorageAdapter
+
+pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 EDI_PAYLOAD = b"ISA*00*          *00*          *ZZ*SENDER         *ZZ*RECEIVER       *210101*1200*U*00401*000000001*0*T*:~GS*PO*SENDER*RECEIVER*20210101*1200*1*X*004010~ST*850*0001~BEG*00*NE*456**20210101~SE*3*0001~GE*1*1~IEA*1*000000001~"
 
@@ -61,7 +71,7 @@ def generate_self_signed_cert() -> tuple[bytes, bytes]:
 
 
 async def test_inbound_as2_crypto_integration(
-    db_session, tenant_db_session, client: httpx.AsyncClient, override_get_secret_store
+    db_session, tenant_db_session, override_get_secret_store
 ) -> None:
     """
     Tests the ProcessInboundAs2MessageUseCase full crypto pipeline.
@@ -164,17 +174,34 @@ async def test_inbound_as2_crypto_integration(
         encrypt_fn=encrypt_fn,
     )
 
-    # (AsyncFake for FakeVault removed in favor of direct seeding)
-    # Send to API AS2 server
-    response = await client.post(
-        "/api/v1/as2/receive",
-        content=msg.body,
-        headers=msg.headers,
+    # Create UOWs and Services
+    cp_uow = SqlAlchemyControlPlaneUnitOfWork(db_session)
+
+    class FakeDpFactory:
+        @asynccontextmanager
+        async def get_data_plane_uow(self, tid: str, app_slug: str):
+            yield SqlAlchemyDataPlaneUnitOfWork(
+                tenant_session=tenant_db_session, storage=InMemoryStorageAdapter()
+            )
+
+    dp_factory = FakeDpFactory()
+    crypto_service = SmimeCryptoService()
+    publisher = FakeOutboxPublisher()
+
+    use_case = ProcessInboundAs2MessageUseCase(
+        control_plane_uow=cp_uow,
+        dp_factory=dp_factory,
+        secret_store=override_get_secret_store,
+        crypto_service=crypto_service,
+        publisher=publisher,
     )
 
-    assert response.status_code == 200, (
-        f"Expected 200, got {response.status_code}. Text: {response.text}"
+    cmd = ProcessInboundAs2Command(
+        headers={k.lower(): v for k, v in msg.headers.items()}, body_bytes=msg.body
     )
+
+    mdn_bytes, _mdn_headers = await use_case.process_inbound_message(cmd)
+    assert b"processed" in mdn_bytes
 
     # Verify Data Plane: The pure EDI payload must be saved!
 

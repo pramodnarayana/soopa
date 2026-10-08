@@ -3,8 +3,7 @@ import uuid
 
 import aioboto3
 import pytest
-
-from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
+from storage.adapters.s3_storage_adapter import Aioboto3PayloadStorage
 
 pytestmark = pytest.mark.asyncio
 

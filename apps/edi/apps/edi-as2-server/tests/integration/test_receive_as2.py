@@ -71,7 +71,7 @@ class TestAS2MessageReceiving:
             message_id="test-plain-001",
             content_type="application/edi-x12",
         )
-        response = await as2_client.post("/as2", content=edi_payload, headers=headers)
+        response = await as2_client.post("/as2/inbox", content=edi_payload, headers=headers)
 
         assert response.status_code == 200
         assert "multipart/report" in response.headers["content-type"]
@@ -101,7 +101,7 @@ class TestAS2MessageReceiving:
         idx_rn = signed_as2_payload.find(b"\r\n\r\n")
         split_idx = idx_rn + 4 if idx_rn != -1 else (idx + 2 if idx != -1 else 0)
         body = signed_as2_payload[split_idx:]
-        response = await as2_client.post("/as2", content=body, headers=headers)
+        response = await as2_client.post("/as2/inbox", content=body, headers=headers)
 
         assert response.status_code == 200
         assert b"processed" in response.content
@@ -121,7 +121,7 @@ class TestAS2MessageReceiving:
             message_id="test-unknown-001",
             content_type='multipart/signed; protocol="application/pkcs7-signature"; micalg=sha-256',
         )
-        response = await as2_client.post("/as2", content=edi_payload, headers=headers)
+        response = await as2_client.post("/as2/inbox", content=edi_payload, headers=headers)
 
         # AS2 protocol: always HTTP 200 — even for failures
         assert response.status_code == 200
@@ -135,7 +135,7 @@ class TestAS2MessageReceiving:
         must be rejected with HTTP 400 (not a valid AS2 message at all).
         """
         response = await as2_client.post(
-            "/as2",
+            "/as2/inbox",
             content=edi_payload,
             headers={"content-type": "application/edi-x12"},
         )
@@ -154,10 +154,10 @@ class TestAS2MessageReceiving:
             message_id="test-mic-001",
             content_type="application/edi-x12",
         )
-        response = await as2_client.post("/as2", content=edi_payload, headers=headers)
+        response = await as2_client.post("/as2/inbox", content=edi_payload, headers=headers)
 
         assert response.status_code == 200
-        assert b"Received-content-MIC" in response.content
+        assert b"Received-Content-MIC" in response.content
 
     async def test_encrypted_as2_message_fails_decryption(
         self, as2_client: AsyncClient, sender_keypair: Any, encrypted_as2_payload: bytes
@@ -176,7 +176,7 @@ class TestAS2MessageReceiving:
         # the ASN.1 parser or the decryption algorithm to fail organically.
         tampered_payload = encrypted_as2_payload[:500] + b"X" * 10 + encrypted_as2_payload[510:]
 
-        response = await as2_client.post("/as2", content=tampered_payload, headers=headers)
+        response = await as2_client.post("/as2/inbox", content=tampered_payload, headers=headers)
 
         assert response.status_code == 200
         assert b"decryption-failed" in response.content
@@ -198,7 +198,7 @@ class TestAS2MessageReceiving:
         # causes organic signature verification failure.
         tampered_payload = signed_as2_payload[:-50] + b"X" * 10 + signed_as2_payload[-40:]
 
-        response = await as2_client.post("/as2", content=tampered_payload, headers=headers)
+        response = await as2_client.post("/as2/inbox", content=tampered_payload, headers=headers)
 
         assert response.status_code == 200
         assert b"authentication-failed" in response.content

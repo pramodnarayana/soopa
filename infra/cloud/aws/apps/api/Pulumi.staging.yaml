@@ -1,1 +1,3 @@
-encryptionsalt: v1:SM45cfaTBGs=:v1:XBnnnlVbocbsagw4:u0zq30cYfAuPibCRpviKjclZljJO/g==
+config:
+  api:enable_observability: 'false'
+encryptionsalt: v1:Dgk7/WaiCdU=:v1:ygyq24K2YxvMyyiW:lqAMtj8ZPNHfoIWcdLTycSfXOlF3Lw==

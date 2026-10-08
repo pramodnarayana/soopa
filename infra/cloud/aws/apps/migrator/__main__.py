@@ -26,6 +26,14 @@ data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
+zitadel_stack_ref = config.get("zitadel_stack") or f"organization/zitadel-infrastructure/{_env}"
+zitadel = pulumi.StackReference(zitadel_stack_ref)
+identity_stack_ref = config.get("identity_stack") or f"organization/identity/{_env}"
+identity = pulumi.StackReference(identity_stack_ref)
+notification_stack_ref = config.get("notification_stack") or f"organization/notification/{_env}"
+notification = pulumi.StackReference(notification_stack_ref)
+ucp_stack_ref = config.get("ucp_stack") or f"organization/ucp/{_env}"
+ucp = pulumi.StackReference(ucp_stack_ref)
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
 private_subnets = [
@@ -40,6 +48,14 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 image_tag = config.get("image_tag") or "latest"
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
+
+identity_platform_org_id = zitadel.require_output("platform_org_id")
+identity_platform_admin_id = zitadel.require_output("platform_admin_id")
+identity_edi_project_id = zitadel.require_output("edi_project_id")
+
+identity_jobs_queue_url = identity.require_output("identity_jobs_queue_url")
+notification_jobs_queue_url = notification.require_output("notification_jobs_queue_url")
+ucp_jobs_queue_url = ucp.require_output("ucp_jobs_queue_url")
 
 _region = aws.get_region()
 
@@ -100,7 +116,15 @@ migrator_task = aws.ecs.TaskDefinition(
     execution_role_arn=execution_role.arn,
     task_role_arn=execution_role.arn,
     container_definitions=pulumi.Output.all(
-        placeholder_image, global_db_secret_arn, edi_shard_db_secret_arn
+        placeholder_image,
+        global_db_secret_arn,
+        edi_shard_db_secret_arn,
+        identity_platform_org_id,
+        identity_platform_admin_id,
+        identity_edi_project_id,
+        identity_jobs_queue_url,
+        notification_jobs_queue_url,
+        ucp_jobs_queue_url,
     ).apply(
         lambda args: json.dumps(
             [
@@ -111,12 +135,30 @@ migrator_task = aws.ecs.TaskDefinition(
                     "command": [
                         "sh",
                         "-c",
-                        "cd /app/core/platform/packages/database && alembic upgrade head && cd /app/apps/edi/packages/edi && python src/edi/adapters/outbound/database/run_migrations.py",
+                        "cd /app/core/platform/packages/database && alembic upgrade head && "
+                        "cd /app/apps/edi/packages/edi && python src/edi/adapters/outbound/database/run_migrations.py && "
+                        "cd /app/core/ucp/packages/ucp && python scripts/seed.py && "
+                        "cd /app/core/ucp/apps/ucp-jobs-worker && python scripts/seed_jobs.py && "
+                        "cd /app/core/platform/apps/identity-jobs-worker && python scripts/seed_jobs.py && "
+                        "cd /app/core/platform/apps/notification-jobs-worker && python scripts/seed_jobs.py && "
+                        "cd /app/apps/edi && python scripts/seed_jobs.py",
+                    ],
+                    "environment": [
+                        {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[3]},
+                        {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[4]},
+                        {"name": "IDENTITY_EDI_PROJECT_ID", "value": args[5]},
+                        {"name": "SQS_IDENTITY_JOBS_QUEUE_URL", "value": args[6]},
+                        {"name": "SQS_NOTIFICATION_JOBS_QUEUE_URL", "value": args[7]},
+                        {"name": "SQS_UCP_JOBS_QUEUE_URL", "value": args[8]},
                     ],
                     "secrets": [
                         {"name": "GLOBAL_DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
                         {"name": "DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
                         {"name": "EDI_DATABASE_URL", "valueFrom": f"{args[2]}:url::"},
+                        {
+                            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
+                            "valueFrom": f"{args[2]}:url::",
+                        },
                     ],
                     "logConfiguration": {
                         "logDriver": "awslogs",

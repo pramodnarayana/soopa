@@ -35,16 +35,10 @@ class ZitadelIdentityProviderPort(IdentityProviderPort):
                 logger.info("tenant_already_synced", tenant_id=tenant_id)
                 return
 
-            try:
-                org_name = tenant.name
-                org_id, grant_succeeded = await self.org_provider.create_organization(org_name)
-            except IdentityProviderPortError as e:
-                if e.status_code == 409:
-                    logger.warning(
-                        "organization_already_exists_in_idp",
-                        tenant_id=tenant_id,
-                    )
-                raise
+            org_name = tenant.name
+            org_id, grant_succeeded = await self.org_provider.create_organization(
+                tenant_id, org_name
+            )
 
             if not grant_succeeded:
                 raise IdentityProviderPortError(

@@ -1,6 +1,7 @@
 import typing
 
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 
 """
 Unit tests for the PipelineLifecycleUseCase.
@@ -28,7 +29,7 @@ def make_use_case(uow: FakeDataPlaneUnitOfWork | None = None) -> PipelineLifecyc
     async def fake_uow_factory():
         yield uow_casted
 
-    return PipelineLifecycleUseCase(uow_factory=fake_uow_factory)
+    return PipelineLifecycleUseCase(uow_factory=fake_uow_factory, publisher=FakeOutboxPublisher())
 
 
 async def test_handle_transform_successful_inbound() -> None:

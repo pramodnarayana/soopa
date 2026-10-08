@@ -20,10 +20,10 @@ class EdiConfigSyncSqsDispatcher:
     def __init__(
         self,
         domain_service: ProvisioningWorkerService,
-        translator_port: EventTranslatorPort,
+        transformer_port: EventTranslatorPort,
     ):
         self.domain_service = domain_service
-        self.translator_port = translator_port
+        self.transformer_port = transformer_port
         self._envelope_adapter: TypeAdapter[EventEnvelope] = TypeAdapter(EventEnvelope)
         self._event_adapter: TypeAdapter[ProvisioningEvent] = TypeAdapter(ProvisioningEvent)
 
@@ -62,7 +62,7 @@ class EdiConfigSyncSqsDispatcher:
             # Cross-boundary event — must be translated by the ACL before dispatch.
             bound_logger.info("sqs_dispatcher_routing_to_acl_translator")
             try:
-                translated = self.translator_port.translate_external_event(
+                translated = self.transformer_port.translate_external_event(
                     envelope.event_type, body
                 )
             except ValueError as e:

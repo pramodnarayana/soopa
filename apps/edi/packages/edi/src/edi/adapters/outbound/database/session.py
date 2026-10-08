@@ -1,8 +1,3 @@
-from sqlalchemy import select
-from ucp_models.sharding import DatabaseShard
-
-from database.models.identity import Tenant
-
 """
 FastAPI dependency for injecting an async SQLAlchemy session.
 """
@@ -38,6 +33,11 @@ async def get_global_session(request: Request) -> AsyncGenerator[AsyncSession, N
             await async_gen.__anext__()
 
 
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+
+from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+
+
 async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     """
     Yields a database session per request for AS2 Server (which currently defaults to tenant 0).
@@ -49,34 +49,22 @@ async def get_session(request: Request) -> AsyncGenerator[AsyncSession, None]:
     if not db_router:
         raise RuntimeError("DatabaseRouter not initialized in app state")
 
-    # Resolve Host Company (Tenant 0) dynamically from the Global DB
-
-    global_gen = db_router.get_global_session()
-    global_session = await global_gen.__anext__()
+    # Resolve Host Company (PLATFORM_TENANT_ID) dynamically from the Global DB
+    resolver = TenantResolver(db_router=db_router)
     try:
-        stmt = select(Tenant, DatabaseShard).join(DatabaseShard).where(Tenant.id == 0)
-        result = await global_session.execute(stmt)
-        row = result.first()
-        if not row:
-            raise RuntimeError("Host tenant (Tenant 0) not found in Global DB")
-        tenant_obj, shard_obj = row
-    finally:
-        with contextlib.suppress(StopAsyncIteration):
-            await global_gen.__anext__()
+        shard_id, shard_dsn = await resolver.resolve_shard(PLATFORM_TENANT_ID)
+    except ValueError as e:
+        raise RuntimeError("Host tenant not found in Global DB") from e
 
     async_gen = db_router.get_tenant_session(
-        tenant_id=int(tenant_obj.id),
-        shard_key=str(shard_obj.name),
-        shard_url=str(shard_obj.dsn),
+        tenant_id=PLATFORM_TENANT_ID,
+        shard_key=shard_id,
+        shard_url=shard_dsn,
     )
 
     session = await async_gen.__anext__()
     try:
         yield session
-        await session.commit()
-    except Exception:
-        await session.rollback()
-        raise
     finally:
         with contextlib.suppress(StopAsyncIteration):
             await async_gen.__anext__()

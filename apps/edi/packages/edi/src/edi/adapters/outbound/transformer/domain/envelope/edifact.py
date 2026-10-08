@@ -5,30 +5,31 @@ from typing import cast
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
 from edi.domain.exceptions import InvalidMessageFormatError
+from edi.domain.models.headers import EdiEnvelopeHeaders
 from edi.domain.types import AstNode, JsonDict, JsonValue
 
 
 class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
     @classmethod
     def _build_unb_segment(
-        cls, route_config: JsonDict, now: datetime.datetime, unb05: str
+        cls, edi_headers: EdiEnvelopeHeaders, now: datetime.datetime, unb05: str
     ) -> AstNode:
-        unb_sender_id = str(route_config.get("isa_sender_id") or "").strip()
-        unb_receiver_id = str(route_config.get("isa_receiver_id") or "").strip()
+        unb_sender_id = (edi_headers.isa_sender_id or "").strip()
+        unb_receiver_id = (edi_headers.isa_receiver_id or "").strip()
         if not unb_sender_id or not unb_receiver_id:
             raise InvalidMessageFormatError(
                 "Route config missing required UNB sender or receiver ID"
             )
-        version = str(route_config.get("default_version", "4"))
-        environment = "1" if str(route_config.get("environment", "")) == "T" else ""
+        version = edi_headers.default_version or "4"
+        environment = "1" if edi_headers.isa_usage_indicator == "T" else ""
 
         unb: JsonDict = {
             "S001.01": "UNOA",
             "S001.02": version,
             "S002.01": unb_sender_id,
-            "S002.02": str(route_config.get("isa_sender_qualifier", "14")),
+            "S002.02": edi_headers.isa_sender_qualifier or "14",
             "S003.01": unb_receiver_id,
-            "S003.02": str(route_config.get("isa_receiver_qualifier", "14")),
+            "S003.02": edi_headers.isa_receiver_qualifier or "14",
             "S004.01": now.strftime("%y%m%d"),
             "S004.02": now.strftime("%H%M"),
             "0020": unb05,
@@ -73,16 +74,16 @@ class EdifactEnvelopeBuilder(BaseEnvelopeBuilder):
         return processed_transactions
 
     @classmethod
-    def build(cls, route_config: JsonDict, payload: AstNode | list[AstNode]) -> AstNode:
+    def build(cls, edi_headers: EdiEnvelopeHeaders, payload: AstNode | list[AstNode]) -> AstNode:
         now = datetime.datetime.now(datetime.UTC)
         transactions = payload if isinstance(payload, list) else [payload]
-        transaction_type = str(route_config.get("transaction_type", "UNKNOWN"))
+        transaction_type = edi_headers.transaction_type or "UNKNOWN"
 
         # Generation values
         unb05 = str(uuid.uuid4().int % 1000000000).zfill(9)
 
         # Build segments
-        unb_segment = cls._build_unb_segment(route_config, now, unb05)
+        unb_segment = cls._build_unb_segment(edi_headers, now, unb05)
         processed_transactions = cls._wrap_transactions(transactions, transaction_type)
 
         unz_segment: JsonDict = {

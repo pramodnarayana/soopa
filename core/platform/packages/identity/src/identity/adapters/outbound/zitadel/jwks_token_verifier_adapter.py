@@ -22,16 +22,35 @@ class ZitadelTokenVerifierPortOptions:
     audience: str | list[str]
     jwks_url: str | None = None
     platform_org_id: str | None = None
+    # Optional Host header override for JWKS fetching.
+    # Use this when the JWKS URL points to an internal address (e.g. Cloud Map)
+    # but Zitadel requires the Host header to match its external domain for
+    # instance routing. Keeps JWKS traffic internal (no ALB hairpin) while
+    # satisfying Zitadel's host-header validation.
+    jwks_host_header: str | None = None
 
 
 class ZitadelTokenVerifierPort(TokenVerifierPort):
     def __init__(self, options: ZitadelTokenVerifierPortOptions) -> None:
         self._options = options
         self._jwks_url = options.jwks_url or f"{options.issuer}/oauth/v2/keys"
-        self._jwks_client = PyJWKClient(self._jwks_url)
+        jwks_headers: dict[str, str] | None = None
+        if options.jwks_host_header:
+            jwks_headers = {"Host": options.jwks_host_header}
+        self._jwks_client = PyJWKClient(self._jwks_url, headers=jwks_headers)
         # Thread-safe async cache for userinfo to prevent network calls on every request
         # Format: {jti: (userinfo_dict, timestamp)}
         self._userinfo_cache: dict[str, tuple[JsonDict, float]] = {}
+
+    @property
+    def jwks_url(self) -> str:
+        """The URL used to fetch JWKS (may be an internal Cloud Map address)."""
+        return self._jwks_url
+
+    @property
+    def jwks_host_header(self) -> str | None:
+        """The Host header sent with JWKS requests, or None if not overridden."""
+        return self._options.jwks_host_header
 
     async def verify(self, token: str) -> TokenClaims:  # noqa: C901
         try:

@@ -3,10 +3,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 
 from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDeliveryError
-from edi.domain.enums import MessageStatus
+from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.events import DeliveryFailed, DeliverySuccessful, DomainEvent
+from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -18,6 +20,7 @@ class ExecuteDeliveryCommand:
     tenant_id: str
     partner_id: str
     strategy_type: str
+    connection_type: str
 
 
 class ExecuteDeliveryUseCase:
@@ -30,9 +33,11 @@ class ExecuteDeliveryUseCase:
         self,
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         strategies: Mapping[str, BaseDeliveryStrategy],
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
         self.strategies = strategies
+        self.publisher = publisher
 
     async def execute(
         self, command: ExecuteDeliveryCommand, idempotency_key: str | None = None
@@ -90,8 +95,27 @@ class ExecuteDeliveryUseCase:
                 strategy=command.strategy_type,
                 partner_id=command.partner_id,
             )
+        except Exception as e:
+            logger.exception(
+                "delivery_worker.delivery_failed_unexpected",
+                trace_id=command.trace_id,
+                strategy=command.strategy_type,
+                partner_id=command.partner_id,
+                error=str(e),
+            )
+            raise
 
         # 3. Record final outcome and lock idempotency in a single transaction
+        await self._record_delivery_outcome(command, idempotency_key, edi_msg, status, domain_event)
+
+    async def _record_delivery_outcome(
+        self,
+        command: ExecuteDeliveryCommand,
+        idempotency_key: str | None,
+        edi_msg: EdiMessageDomainModel,
+        status: MessageStatus,
+        domain_event: DomainEvent | None,
+    ) -> None:
         async with self.uow_factory() as uow, uow:
             if idempotency_key:
                 is_new = await uow.record_idempotency(command.tenant_id, idempotency_key)
@@ -103,15 +127,30 @@ class ExecuteDeliveryUseCase:
                     )
                     return
 
-            # Re-fetch because the object from the previous session is detached
-            edi_msg = await uow.transactions.get_edi_message(command.trace_id)
-            if not edi_msg:
-                raise ValueError(f"No EDI Message found for trace_id={command.trace_id}")
+            if edi_msg.direction == EdiDirection.OUTBOUND:
+                edi_msg.status = status
+                edi_msg.connection_type = command.connection_type
+                await uow.transactions.update_outbound_delivery_metadata(edi_msg)
 
-            edi_msg.status = status
             if domain_event:
                 edi_msg.add_domain_event(domain_event)
 
-            # Save the aggregate (which flushes domain events)
-            await uow.transactions.save(edi_msg)
+            envelopes = await uow.transactions.flush_events(edi_msg)
+
             await uow.commit()
+
+        try:
+            for env in envelopes:
+                await self.publisher.publish(env)
+                logger.info(
+                    "delivery_worker.outbox_event_published",
+                    event_id=env.id,
+                    event_type=env.event_type,
+                    trace_id=command.trace_id,
+                )
+            async with self.uow_factory() as ack_uow, ack_uow:
+                for env in envelopes:
+                    await ack_uow.outbox.mark_completed(env.id)
+                await ack_uow.commit()
+        except Exception as sync_e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(sync_e))

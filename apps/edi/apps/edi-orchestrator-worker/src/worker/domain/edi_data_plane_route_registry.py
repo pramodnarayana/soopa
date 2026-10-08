@@ -7,8 +7,10 @@ from seedwork.domain.types import JsonDict
 class RoutableEvent(Protocol):
     """Structural protocol satisfied by EventEnvelope and EdiDataPlaneEventMessage."""
 
-    event_type: str
-    payload: JsonDict
+    @property
+    def event_type(self) -> str: ...
+    @property
+    def payload(self) -> JsonDict: ...
 
 
 class EdiDataPlaneRouteRegistry:

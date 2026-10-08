@@ -10,11 +10,9 @@ from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
 from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from edi.adapters.outbound.sftp.paramiko_sftp_tester import ParamikoSftpTesterAdapter
-from edi.application.use_cases.process_inbound_as2_message_use_case import (
-    ProcessInboundAs2MessageUseCase,
-)
 
 
 class Container(containers.DeclarativeContainer):
@@ -61,12 +59,13 @@ class Container(containers.DeclarativeContainer):
     dp_factory = providers.Factory(SqlAlchemyDataPlaneUnitOfWorkFactory, storage=storage)
 
     # -----------------------------------------------------------------------
-    # Services
+    # Publisher
     # -----------------------------------------------------------------------
-    # Note: control_plane_uow and dp_factory are session-scoped and must be
-    # passed at runtime via kwargs. crypto_service is stateless and pre-wired.
-    as2_receiver_service = providers.Factory(
-        ProcessInboundAs2MessageUseCase,
-        secret_store=vault_port,
-        crypto_service=crypto_service,
+    outbox_publisher = providers.Singleton(
+        create_edi_pipeline_publisher,
+        compute_queue_url=config.sqs.compute_queue_url,
+        orchestrator_queue_url=config.sqs.orchestrator_queue_url,
+        deliver_queue_url=config.sqs.deliver_queue_url,
+        region_name=config.aws.resolved_region,
+        endpoint_url=config.aws.endpoint_url,
     )

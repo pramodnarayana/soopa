@@ -59,18 +59,26 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
 as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
-data_plane_topic_arn = messaging.require_output("data_plane_topic_arn")
+data_plane_topic_arn = messaging.require_output("sns_edi_data_plane_topic_arn")
 sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
 queue_arns = [
-    messaging.require_output("data_plane_jobs_queue_arn"),
-    messaging.require_output("delivery_jobs_queue_arn"),
-    messaging.require_output("orchestrator_jobs_queue_arn"),
+    messaging.require_output("sqs_edi_data_plane_jobs_arn"),
+    messaging.require_output("sqs_edi_deliver_arn"),
+    messaging.require_output("sqs_edi_orchestrator_arn"),
+    messaging.require_output("sqs_edi_compute_arn"),
 ]
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
-    platform.require_output("openobserve_endpoint") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
+)
+obs_user_arn = (
+    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
+)
+obs_pass_arn = (
+    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 ecr_image_uri = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
@@ -102,7 +110,9 @@ aws.iam.RolePolicyAttachment(
 aws.iam.RolePolicy(
     f"{_prefix}dp-workers-ecs-exec-role-policy",
     role=execution_role.id,
-    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
+    policy=pulumi.Output.all(
+        edi_shard_db_secret_arn, global_db_secret_arn, obs_user_arn, obs_pass_arn
+    ).apply(
         lambda args: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -110,7 +120,7 @@ aws.iam.RolePolicy(
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1]],
+                        "Resource": [arn for arn in [args[0], args[1], args[2], args[3]] if arn],
                     },
                     {"Effect": "Allow", "Action": ["logs:CreateLogGroup"], "Resource": "*"},
                 ],
@@ -124,6 +134,7 @@ sidecar = {
     "name": "edi-secrets-sidecar",
     "command": ["python", "/app/apps/edi/apps/edi-secrets-sidecar/main.py"],
     "essential": True,
+    "user": "0",
     "environment": [{"name": "SECRETS_MOUNT_PATH", "value": "/mnt/secrets"}],
     "mountPoints": [
         {"sourceVolume": "secrets", "containerPath": "/mnt/secrets", "readOnly": False}
@@ -156,6 +167,9 @@ dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
     edi_db_host=edi_shard_db_endpoint,
     public_base_url=pulumi.Output.concat("https://api.", staging_domain),
     identity_issuer=pulumi.Output.concat("https://identity.", staging_domain),
+    identity_api_url=pulumi.Output.concat(
+        "https://identity.", platform.require_output("staging_domain")
+    ),
     s3_bucket=as2_payloads_bucket_name,
 ).apply(
     lambda args: queue_env_vars_to_ecs_format(
@@ -166,6 +180,7 @@ dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
             "IDENTITY_ISSUER": args["identity_issuer"],
+            "IDENTITY_API_URL": args["identity_api_url"],
             "S3_BUCKET": args["s3_bucket"],
             "WORKER_MODULES": "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker",
         },
@@ -188,6 +203,8 @@ provision_fargate_service(
     app_mount_points=app_mount_points,
     app_depends_on=app_depends_on,
     firelens_endpoint=firelens_endpoint,
+    obs_user_secret_arn=obs_user_arn,
+    obs_password_secret_arn=obs_pass_arn,
     secrets=[
         {
             "name": "GLOBAL_DATABASE_URL",
@@ -199,7 +216,7 @@ provision_fargate_service(
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":url::"),
         },
         {
-            "name": "SHARD_OVERRIDES__EDI_SHARD_1",
+            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
             "valueFrom": pulumi.Output.concat(edi_shard_db_secret_arn, ":async_url::"),
         },
     ],

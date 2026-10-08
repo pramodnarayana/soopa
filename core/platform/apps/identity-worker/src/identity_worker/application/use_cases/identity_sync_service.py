@@ -223,6 +223,7 @@ class IdentitySyncService:
             bound_logger.info("identity_sync_before_idp_create_user", org_id=idp_tenant_id)
             created_idp_user_id, did_create = await self.user_identity_provider.create_user(
                 org_id=idp_tenant_id,
+                user_id=local_user_id,
                 email=email,
                 first_name=first_name,
                 last_name=last_name,

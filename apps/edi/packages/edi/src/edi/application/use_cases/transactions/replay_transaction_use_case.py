@@ -1,4 +1,5 @@
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
 
@@ -14,8 +15,9 @@ logger = structlog.get_logger(__name__)
 
 
 class ReplayTransactionUseCase:
-    def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
+    def __init__(self, uow: DataPlaneUnitOfWorkPort, publisher: OutboxPublisherPort) -> None:
         self.uow = uow
+        self.publisher = publisher
 
     async def retry_transform(self, tenant_id: str, trace_id: str, actor: str) -> str:
         """
@@ -50,7 +52,7 @@ class ReplayTransactionUseCase:
                 edi_message_id=original.id,
             )
             original.add_domain_event(transform_event)
-            await self.uow.transactions.save(original)
+            envelopes = await self.uow.transactions.flush_events(original)
 
         elif original.direction == EdiDirection.OUTBOUND:
             original_json = await self.uow.transactions.get_edi_json(trace_id)
@@ -70,7 +72,7 @@ class ReplayTransactionUseCase:
                 direction=str(original.direction.value) if original.direction else None,
             )
             original_json.add_domain_event(transform_event)
-            await self.uow.transactions.save_json(original_json)
+            envelopes = await self.uow.transactions.save_json(original_json)
 
         audit_event = TraceEventDomainModel(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
@@ -94,6 +96,10 @@ class ReplayTransactionUseCase:
         )
         await self.uow.transactions.increment_replay_count(tenant_id, [trace_id], entity_types)
         await self.uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)
+            # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
+            await self.uow.outbox.mark_completed(env.id)
         logger.info(
             "replay_transform.completed",
             tenant_id=tenant_id,
@@ -124,7 +130,7 @@ class ReplayTransactionUseCase:
             direction=str(original.direction.value) if original.direction else None,
         )
         original.add_domain_event(deliver_event)
-        await self.uow.transactions.save(original)
+        envelopes = await self.uow.transactions.flush_events(original)
 
         audit_event = TraceEventDomainModel(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
@@ -142,6 +148,10 @@ class ReplayTransactionUseCase:
         )
         await self.uow.transactions.increment_replay_count(tenant_id, [trace_id], entity_types)
         await self.uow.commit()
+        for env in envelopes:
+            await self.publisher.publish(env)
+            # Outbox marks as completed in the same transaction loop? No, Sweeper handles failure
+            await self.uow.outbox.mark_completed(env.id)
 
         logger.info(
             "replay_deliver.completed",

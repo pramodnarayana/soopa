@@ -103,7 +103,6 @@ class CommonSettings(BaseSettings):
     )
     edi_environment: Literal["P", "T", "I"] = Field(
         validation_alias="EDI_ENVIRONMENT",
-        default="P",
         description="EDI Environment flag (Production, Test, Information)",
     )
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
@@ -121,7 +120,7 @@ class CommonSettings(BaseSettings):
     public: PublicSettings = Field(default_factory=lambda: typing.cast(PublicSettings, {}))
 
     @model_validator(mode="after")
-    def validate_external_url(self) -> "CommonSettings":
+    def validate_and_resolve_settings(self) -> "CommonSettings":
         if self.env != "development":
             if self.allow_private_ips:
                 raise ValueError("allow_private_ips must be False in non-development environments")

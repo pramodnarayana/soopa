@@ -54,8 +54,8 @@ async def test_cp_sweeper_fetches_and_processes_events(db_router: DatabaseRouter
     assert len(messages_received) >= 2
 
     assert any(
-        b.event_type == EdiEventType.edi_as2_partner_created.value for b in messages_received
+        b.get("event_type") == EdiEventType.edi_as2_partner_created.value for b in messages_received
     )
     assert any(
-        b.event_type == EdiEventType.edi_as2_partner_updated.value for b in messages_received
+        b.get("event_type") == EdiEventType.edi_as2_partner_updated.value for b in messages_received
     )

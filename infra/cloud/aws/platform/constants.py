@@ -13,11 +13,6 @@ class DatabaseConstants:
 
 import os
 
-from dotenv import load_dotenv
-
-_WORKSPACE_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-load_dotenv(os.path.join(_WORKSPACE_ROOT, "versions.env"))
-
 
 @dataclass(frozen=True)
 class ZitadelConstants:
@@ -32,8 +27,3 @@ class ZitadelConstants:
 class EcsConstants:
     CAPACITY_PROVIDER: str = "FARGATE"
     LOG_DRIVER: str = "awslogs"
-
-
-@dataclass(frozen=True)
-class OpenObserveConstants:
-    DEFAULT_ADMIN_EMAIL: str = "admin@example.com"

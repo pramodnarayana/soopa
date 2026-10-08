@@ -4,11 +4,15 @@ import hashlib
 import typing
 import uuid
 from datetime import UTC, datetime
-from typing import TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
+from database.outbox_serializer import serialize_domain_event
 from seedwork.domain.types import JsonValue
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+
+if TYPE_CHECKING:
+    from edi.domain.models.headers import EdiEnvelopeHeaders
 
 from edi.ports.outbound.api_gateway_repository import (
     ApiGatewayPayloadDTO,
@@ -44,6 +48,8 @@ def _from_dict(cls: type[T], data: dict[str, object] | None) -> T | None:
     return cls(**kwargs)
 
 
+from seedwork.events import EventEnvelope
+
 from edi.application.dtos.partners import (
     LocalAS2PartnerDTO,
 )
@@ -62,7 +68,19 @@ from edi.ports.outbound.transaction_repository import (
     CreateEdiMessageCommand,
     UpdateEdiJsonCommand,
 )
-from edi.ports.outbound.transformer_port import TransformedTransaction, TransformerPort
+from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
+
+
+class FakeOutboxPublisher:
+    def __init__(self) -> None:
+        self.published_events: list[EventEnvelope] = []
+
+    async def publish(self, event: EventEnvelope) -> None:
+        self.published_events.append(event)
+
+    async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
+        self.published_events.extend(events)
+        return [str(env.id) for env in events]
 
 
 class InMemoryStorageAdapter(StoragePort):
@@ -90,18 +108,18 @@ class FakeTransformerAdapter(TransformerPort):
     def __init__(self) -> None:
         self.transform_edi_calls: list[dict[str, object]] = []
         self.transform_json_calls: list[dict[str, object]] = []
-        self.fake_return_transactions: list[TransformedTransaction] | None = None
+        self.fake_return_transactions: list[ParsedEdiMessage] | None = None
 
     async def transform_edi_to_json(
         self, payload: bytes, standard: str, transaction_type: str
-    ) -> list[TransformedTransaction]:
+    ) -> list[ParsedEdiMessage]:
         self.transform_edi_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
         )
         if self.fake_return_transactions is not None:
             return self.fake_return_transactions
         return [
-            TransformedTransaction(
+            ParsedEdiMessage(
                 transaction_type=transaction_type,
                 isa_sender_id="FAKE_ISA_SENDER",
                 isa_receiver_id="FAKE_ISA_RECEIVER",
@@ -117,7 +135,7 @@ class FakeTransformerAdapter(TransformerPort):
         payload: dict[str, JsonValue] | list[dict[str, JsonValue]],
         standard: str,
         transaction_type: str,
-        route_config: dict[str, JsonValue],
+        edi_headers: "EdiEnvelopeHeaders",
     ) -> bytes:
         self.transform_json_calls.append(
             {"payload": payload, "standard": standard, "transaction_type": transaction_type}
@@ -232,7 +250,29 @@ class InMemoryRepositoryAdapter:
         }
         return trace_id
 
-    async def save(self, aggregate: EdiMessageDomainModel) -> None:
+    async def flush_events(self, aggregate: EdiMessageDomainModel) -> list[EventEnvelope]:
+        envelopes = []
+        for event in aggregate.domain_events:
+            payload_json = serialize_domain_event(event)
+            if self.outbox_repo:
+                envelope = await self.outbox_repo.append_event(
+                    tenant_id=aggregate.tenant_id or "",
+                    event_type=event.__class__.__name__,
+                    payload=payload_json,
+                    idempotency_key=event.idempotency_key,
+                )
+                if envelope:
+                    envelopes.append(envelope)
+        aggregate.clear_domain_events()
+        return envelopes
+
+    async def update_outbound_delivery_metadata(self, aggregate: EdiMessageDomainModel) -> None:
+        trace_id = aggregate.trace_id
+        if trace_id in self.edi_messages:
+            self.edi_messages[trace_id]["status"] = aggregate.status
+            self.edi_messages[trace_id]["connection_type"] = aggregate.connection_type
+
+    async def save(self, aggregate: EdiMessageDomainModel) -> list:
         trace_id = aggregate.trace_id
         if not trace_id:
             trace_id = str(uuid.uuid4())
@@ -265,7 +305,10 @@ class InMemoryRepositoryAdapter:
             payload = dataclasses.asdict(event)
             if self.outbox_repo:
                 await self.outbox_repo.append_event(
-                    event_type=event_type, payload=payload, idempotency_key=event.idempotency_key
+                    event_type=event_type,
+                    payload=payload,
+                    idempotency_key=event.idempotency_key,
+                    tenant_id=aggregate.tenant_id,
                 )
             else:
                 self.outbox.append(
@@ -276,8 +319,9 @@ class InMemoryRepositoryAdapter:
                     }
                 )
         aggregate.clear_domain_events()
+        return []
 
-    async def save_json(self, aggregate: EdiJsonDomainModel) -> None:
+    async def save_json(self, aggregate: EdiJsonDomainModel) -> list:
         trace_id = aggregate.trace_id
         if not trace_id:
             trace_id = str(uuid.uuid4())
@@ -303,7 +347,10 @@ class InMemoryRepositoryAdapter:
             payload = dataclasses.asdict(event)
             if self.outbox_repo:
                 await self.outbox_repo.append_event(
-                    event_type=event_type, payload=payload, idempotency_key=event.idempotency_key
+                    event_type=event_type,
+                    payload=payload,
+                    idempotency_key=event.idempotency_key,
+                    tenant_id=aggregate.tenant_id,
                 )
             else:
                 self.outbox.append(
@@ -314,6 +361,7 @@ class InMemoryRepositoryAdapter:
                     }
                 )
         aggregate.clear_domain_events()
+        return []
 
     async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
         trace_id = command.trace_id or str(uuid.uuid4())
@@ -640,16 +688,45 @@ class FakeDataPlaneOutboxRepository:
         self.failed: set[str] = set()
 
     async def append_event(
-        self, event_type: str, payload: dict[str, JsonValue], idempotency_key: str | None = None
-    ) -> None:
+        self,
+        tenant_id: str,
+        event_type: str,
+        payload: dict[str, JsonValue],
+        idempotency_key: str | None = None,
+    ) -> EventEnvelope:
         # Only deduplicate when idempotency_key is explicitly provided (not None)
         if idempotency_key is not None:
             for existing in self.events:
                 if existing["idempotency_key"] == idempotency_key:
-                    return
+                    return EventEnvelope(
+                        id=str(existing.get("id", generate_id(SystemIdPrefix.EVENT))),
+                        source="edi",
+                        event_type=event_type,
+                        payload=payload,
+                        idempotency_key=idempotency_key,
+                        tenant_id=tenant_id,
+                    )
+
+        event_id = generate_id(SystemIdPrefix.EVENT)
         self.events.append(
-            {"idempotency_key": idempotency_key, "event_type": event_type, "payload": payload}
+            {
+                "id": event_id,
+                "idempotency_key": idempotency_key,
+                "event_type": event_type,
+                "payload": payload,
+            }
         )
+        return EventEnvelope(
+            id=event_id,
+            source="edi",
+            event_type=event_type,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            tenant_id=tenant_id,
+        )
+
+    async def mark_completed(self, event_id: str, worker_id: str | None = None) -> None:
+        self.processed.add(event_id)
 
     async def claim_delivery_outbox_event(self, key_str: str) -> str | None:
         if key_str in self.processed or key_str in self.leased:

@@ -1,4 +1,6 @@
 import contextlib
+import json
+import re
 import typing
 
 import structlog
@@ -39,6 +41,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         response_headers: dict[str, str],
         response_body: bytes,
         idempotency_key: str | None = None,
+        edi_msg: EdiMessageDomainModel | None = None,
     ) -> None:
         if not (200 <= status_code < 300):
             logger.error(
@@ -59,6 +62,16 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
 
         disposition = mdn.disposition
         received_mic = mdn.mic
+
+        if edi_msg:
+            edi_msg.mdn_mode = "SYNC"
+            edi_msg.mdn_response = response_body.decode("utf-8", errors="ignore").replace(
+                "\x00", ""
+            )
+            # Usually the MDN has a Message-ID header too, we could set mdn_id
+            edi_msg.mdn_id = response_headers.get("Message-ID") or response_headers.get(
+                "message-id"
+            )
 
         is_success = False
         if disposition:
@@ -210,6 +223,20 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 partnership=partnership_dto_mapped,
                 idempotency_key=idempotency_key,
             )
+
+            # Populate outbound AS2 metadata on the aggregate
+            edi_msg.message_id = as2_msg.headers.get("Message-ID")
+            edi_msg.as2_sender_id = as2_msg.headers.get("AS2-From")
+            edi_msg.as2_receiver_id = as2_msg.headers.get("AS2-To")
+            edi_msg.content_type = as2_msg.headers.get("Content-Type")
+            edi_msg.signature_algorithm = partnership_dto_mapped.signature_algorithm
+            edi_msg.encryption_algorithm = partnership_dto_mapped.encryption_algorithm
+            edi_msg.msg_headers = json.dumps(as2_msg.headers).replace("\x00", "")
+            content_disposition = as2_msg.headers.get("Content-Disposition")
+            if content_disposition:
+                match = re.search(r'filename="([^"]+)"', content_disposition, re.IGNORECASE)
+                edi_msg.file_name = match.group(1) if match else content_disposition
+
         except TerminalDeliveryError:
             raise
         except ValueError as e:
@@ -243,4 +270,5 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             response_headers,
             response_body,
             idempotency_key,
+            edi_msg,
         )

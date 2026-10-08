@@ -39,14 +39,12 @@ services:
   # the two URLs that differ from pnpm dev values in .env.
   # -------------------------------------------------------------------------
   db-seed:
-    image: platform:local
+    <<: *modular-monolith-base
     volumes:
       - ./core:/app/core
       - ./apps:/app/apps
-    env_file: .env
-    extra_hosts:
-      - "ucp.localhost:host-gateway"
     environment:
+      <<: *base-env
       DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
       SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
     command:
@@ -60,11 +58,6 @@ services:
         python /app/apps/edi/scripts/seed_jobs.py &&
         python /app/apps/edi/apps/edi-as2-server/scripts/seed.py
     restart: "no"
-    depends_on:
-      postgres_global:
-        condition: service_healthy
-      edi_postgres_shard:
-        condition: service_healthy
 
   # -------------------------------------------------------------------------
   # 1. Ingress Tier (Synchronous Web Servers)

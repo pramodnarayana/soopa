@@ -1,8 +1,4 @@
 import pytest
-
-pytestmark = pytest.mark.integration
-
-import pytest
 from seedwork import generate_id
 from seedwork.domain.types import UNSET
 
@@ -35,6 +31,8 @@ from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import
     CreateSFTPPartnerUseCase,
 )
 from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
+
+pytestmark = pytest.mark.integration
 
 
 @pytest.fixture

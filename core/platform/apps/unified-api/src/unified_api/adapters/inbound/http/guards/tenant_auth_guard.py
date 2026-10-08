@@ -38,6 +38,7 @@ async def require_tenant_member(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
     tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
+    role_repo_factory: Any = Depends(Provide[Container.role_repo.provider]),
     # Path param name matches the route definition: /tenants/{tenant_id}/...
     tenant_id: str = Path(...),
 ) -> IdentityContext:
@@ -72,6 +73,15 @@ async def require_tenant_member(
         resolved = await tenant_repo.find_by_idp_tenant_id(tenant_id)
         canonical_tenant_id = resolved.id if resolved else tenant_id
 
+        # Load capabilities for this specific tenant, as the user might be accessing it cross-tenant
+        role_repo = role_repo_factory(session=session)
+        tenant_caps = await role_repo.get_user_capabilities(
+            tenant_id=canonical_tenant_id, user_id=identity.subject
+        )
+        identity.capabilities.clear()
+        identity.capabilities.update(identity.permissions)
+        identity.capabilities.update(tenant_caps)
+
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
         return identity
@@ -79,6 +89,16 @@ async def require_tenant_member(
     # Standard users: the token must carry the correct tenant context.
     if tenant_id in identity.authorized_tenants or identity.tenant_id == tenant_id:
         canonical_tenant_id = str(identity.tenant_mapping.get(tenant_id, tenant_id))
+
+        # Load capabilities for this specific tenant, since the JWT might have a different default tenant
+        role_repo = role_repo_factory(session=session)
+        tenant_caps = await role_repo.get_user_capabilities(
+            tenant_id=canonical_tenant_id, user_id=identity.subject
+        )
+        identity.capabilities.clear()
+        identity.capabilities.update(identity.permissions)
+        identity.capabilities.update(tenant_caps)
+
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
         return identity

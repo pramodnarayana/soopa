@@ -203,7 +203,7 @@ class SqlAlchemyDataPlaneOutboxRepository(
     """
     Outbox repository for the Data Plane (Tenant Shard).
     Writes pipeline events (TRANSFORMATION_REQUESTED, DELIVERY_REQUESTED, etc.) consumed
-    by Debezium CDC — lightweight INSERT only, no sweeper columns.
+    by the Sync-Dispatch mechanism — lightweight INSERT only, no sweeper columns.
     """
 
     def __init__(self, session: TenantSession) -> None:

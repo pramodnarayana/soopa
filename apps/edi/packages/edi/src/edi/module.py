@@ -40,7 +40,6 @@ from unified_api.adapters.inbound.http.edi.routers import (
     transactions,
 )
 from unified_api.adapters.inbound.http.edi.routers.tenant import dashboard
-from unified_api.adapters.inbound.http.edi.routers.trading_partners import as2_receive
 
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import shutdown, startup
@@ -153,7 +152,6 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
     app.include_router(outbound_routes.router)
     app.include_router(edi_headers.router)
     app.include_router(edi_tools.router, prefix="/api/v1")
-    app.include_router(as2_receive.router, prefix="/api/v1")
     app.include_router(edi_json.router)
     app.include_router(transactions.router)
     app.include_router(explorer.router)

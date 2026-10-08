@@ -1,5 +1,7 @@
 import pytest
 
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
+
 """
 Unit tests for DeliveryUseCase — inbound webhook and outbound SFTP delivery paths.
 All test doubles are imported from fakes.py (DRY). No fake library used.
@@ -33,7 +35,7 @@ def make_use_case(
         yield _u
 
     def router_factory() -> DeliveryRouterUseCase:
-        return DeliveryRouterUseCase(uow_factory)
+        return DeliveryRouterUseCase(uow_factory, publisher=FakeOutboxPublisher())
 
     return DeliveryUseCase(
         router_factory=router_factory,

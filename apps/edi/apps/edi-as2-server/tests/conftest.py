@@ -20,10 +20,6 @@ import datetime
 import os
 import subprocess
 import tempfile
-
-from dotenv import load_dotenv
-
-load_dotenv()
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 
@@ -36,8 +32,14 @@ from cryptography.x509.oid import NameOID
 from database.provider import get_async_engine
 from database.testing import get_test_shard_url_async
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.models.control_plane import AS2Partner
+from edi.adapters.outbound.database.models.control_plane import (
+    AS2Partner,
+    AS2Partnership,
+    InboundRoute,
+)
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from httpx import ASGITransport, AsyncClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID
 from observability import NoOpLogger, NoOpMetrics, NoOpTracer, ObservabilityProvider
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -104,6 +106,7 @@ async def global_db_session(global_db_connection):
         bind=global_db_connection,
         expire_on_commit=False,
         class_=AsyncSession,
+        info={"session_type": "global"},
         join_transaction_mode="create_savepoint",
     )
     session = SessionLocal()
@@ -126,12 +129,16 @@ async def tenant_db_session(tenant_db_connection):
 
 
 class FakeDatabaseRouter:
-    def __init__(self, session):
-        self.session = session
+    def __init__(self, global_session, tenant_session):
+        self.global_session = global_session
+        self.tenant_session = tenant_session
 
     @contextlib.asynccontextmanager
-    async def get_session(self, tenant_id: str):
-        yield self.session
+    async def get_global_session(self):
+        yield self.global_session
+
+    async def get_tenant_session(self, tenant_id: str, shard_key: str, shard_url: str):
+        yield self.tenant_session
 
     async def close_all(self):
         pass
@@ -318,9 +325,60 @@ class ISALookupConfig:
         self.first_result = None
 
 
+class FakeTenantResolver:
+    def __init__(self, shard_dsn: str) -> None:
+        self._shard_dsn = shard_dsn
+
+    async def resolve_shard(self, tenant_id: str) -> tuple[str, str]:
+        return ("test-shard", self._shard_dsn)
+
+    async def resolve_routing_config(self, tenant_id: str) -> dict:
+        return {}
+
+    async def get_tenant_db_url(self, tenant_id: str) -> str:
+        return self._shard_dsn
+
+
+class FakeS3Storage:
+    async def upload(self, tenant_id: int, message_id: str, payload: bytes) -> str:
+        return f"s3://test-bucket/tenants/{tenant_id}/{message_id}.bin"
+
+    async def download(self, storage_uri: str) -> bytes:
+        return b""
+
+
+class FakeHostVault:
+    def __init__(self, private_key_pem: bytes):
+        self.private_key_pem = private_key_pem
+
+    async def retrieve_private_key(self, vault_ref: str) -> bytes:
+        return self.private_key_pem
+
+    async def get_secret(self, vault_ref: str) -> str:
+        return self.private_key_pem.decode("utf-8")
+
+    async def store_private_key(self, private_key_pem: bytes, category=None) -> str:
+        return "fake-vault-ref"
+
+    async def retrieve_secret(self, vault_ref: str) -> bytes:
+        return self.private_key_pem
+
+    async def delete_secret(self, vault_ref: str) -> None:
+        pass
+
+
+class FakePublisher:
+    async def publish(self, event):
+        pass
+
+
 @pytest_asyncio.fixture
 async def as2_client(
-    sender_keypair: KeyPair, receiver_keypair: KeyPair, global_db_session, tenant_db_session
+    sender_keypair: KeyPair,
+    receiver_keypair: KeyPair,
+    global_db_session,
+    tenant_db_session,
+    tenant_db_engine,
 ) -> AsyncGenerator[AsyncClient, None]:
     """
     FastAPI AsyncClient pre-configured with:
@@ -336,16 +394,8 @@ async def as2_client(
         logger=NoOpLogger(),
     )
 
-    # Fake the S3 storage so tests don't try to connect to LocalStack
-    class FakeS3Storage:
-        async def upload(self, tenant_id: int, message_id: str, payload: bytes) -> str:
-            return f"s3://test-bucket/tenants/{tenant_id}/{message_id}.bin"
-
-        async def download(self, storage_uri: str) -> bytes:
-            return b""
-
     # Seed the AS2 Keypair into the global_db_session
-    tenant_id = "test-tenant"
+    tenant_id = PLATFORM_TENANT_ID
     sender_partner = AS2Partner(
         id=generate_id("as2p"),
         tenant_id=tenant_id,
@@ -363,8 +413,27 @@ async def as2_client(
         public_cert_pem=receiver_keypair.public_cert_pem.decode(),
         is_local=True,
         active=True,
+        private_key_vault_ref="fake-vault-ref",
     )
-    global_db_session.add_all([sender_partner, receiver_partner])
+    partnership = AS2Partnership(
+        id=generate_id("as2ps"),
+        tenant_id=tenant_id,
+        name="Test AS2 Partnership",
+        local_partner_id=receiver_partner.id,
+        remote_partner_id=sender_partner.id,
+        active=True,
+    )
+    inbound_route = InboundRoute(
+        id=generate_id("route"),
+        tenant_id="test-tenant",
+        name="Test AS2 Inbound Route",
+        isa_sender_id="PARTNER",
+        isa_receiver_id="SOOPAEDI",
+        transaction_type="850",
+        as2_partner_id=sender_partner.id,
+        active=True,
+    )
+    global_db_session.add_all([sender_partner, receiver_partner, partnership, inbound_route])
     await global_db_session.flush()
 
     # Create configurable ISA lookup state
@@ -380,17 +449,19 @@ async def as2_client(
     app.dependency_overrides[get_session] = override_get_session
     app.dependency_overrides[get_global_session] = override_get_global_session
 
-    class FakeHostVault:
-        def get_host_private_key(self) -> bytes:
-            return receiver_keypair.private_key_pem
+    app.dependency_overrides[get_vault_service] = lambda: FakeHostVault(
+        receiver_keypair.private_key_pem
+    )
 
-        def get_host_certificate(self) -> bytes:
-            return receiver_keypair.public_cert_pem
+    # Provide the fake db router and tenant resolver
+    shard_dsn = str(tenant_db_engine.url)
+    app.state.db_router = FakeDatabaseRouter(
+        global_session=global_db_session, tenant_session=tenant_db_session
+    )
+    app.state.tenant_resolver = FakeTenantResolver(shard_dsn=shard_dsn)
 
-    app.dependency_overrides[get_vault_service] = lambda: FakeHostVault()
-
-    # Provide the fake db router
-    app.state.db_router = FakeDatabaseRouter(tenant_db_session)
+    app.state.publisher = FakePublisher()
+    app.state.crypto_service = SmimeCryptoService()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Attach the config to the client so tests can modify it

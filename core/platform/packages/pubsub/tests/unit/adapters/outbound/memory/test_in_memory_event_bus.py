@@ -121,7 +121,10 @@ async def test_poll_raw_message_yields_ackable_message_with_correct_payload():
 
     async with bus.poll_raw_message() as msg:
         assert isinstance(msg, AckableMessage)
-        assert msg.payload.raw_data == dataclasses.asdict(event)
+        # The consumer layer yields raw JsonDict. Translation to EventEnvelope happens
+        # at the Dispatcher edge of each bounded context (Hexagonal Architecture).
+        assert isinstance(msg.payload, dict)
+        assert msg.payload == dataclasses.asdict(event)
 
 
 # ---------------------------------------------------------------------------
@@ -253,7 +256,11 @@ async def test_full_round_trip_publish_poll_ack():
         received_payload = msg.payload
         await msg.ack()
 
-    assert received_payload.raw_data == dataclasses.asdict(event)
+    assert received_payload is not None
+    # The consumer layer yields raw JsonDict. Translation to EventEnvelope happens
+    # at the Dispatcher edge of each bounded context (Hexagonal Architecture).
+    assert isinstance(received_payload, dict)
+    assert received_payload == dataclasses.asdict(event)
     assert bus.queue.empty()
 
 

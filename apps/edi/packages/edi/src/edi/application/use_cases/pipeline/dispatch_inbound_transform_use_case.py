@@ -3,6 +3,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
 import structlog
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
@@ -23,10 +24,12 @@ class DispatchInboundTransformUseCase:
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
         settings: typing.Any,
+        publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
         self.transformer = transformer
         self._settings = settings
+        self.publisher = publisher
 
     async def execute(self, trace_id: str, idempotency_key: str | None = None) -> None:
         """Transforms an inbound X12 EDI payload to JSON."""
@@ -55,7 +58,8 @@ class DispatchInboundTransformUseCase:
             compute_key = generate_deterministic_id(
                 SystemIdPrefix.IDEMPOTENCY, idempotency_key, "COMPUTE_TRANSFORMATION_COMMAND"
             )
-            await uow.outbox.append_event(
+            envelope = await uow.outbox.append_event(
+                tenant_id=edi_msg.tenant_id,
                 idempotency_key=compute_key,
                 event_type=PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value,
                 payload={
@@ -68,4 +72,11 @@ class DispatchInboundTransformUseCase:
             )
             await uow.commit()
 
+        try:
+            await self.publisher.publish(envelope)
+            async with self.uow_factory() as uow, uow:
+                await uow.outbox.mark_completed(envelope.id)
+                await uow.commit()
+        except Exception as e:
+            logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
         logger.info("inbound_transform.dispatched_to_compute", trace_id=trace_id)

@@ -12,3 +12,6 @@ config:
     - https://dashboard.staging.flowwolf.io
   zitadel-infrastructure:insecure: "false"
   zitadel-infrastructure:port: "443"
+  zitadel-infrastructure:organization: organization
+  zitadel-infrastructure:platform_admin_password:
+    secure: v1:a9kjbVSOJUfABEPq:W5uHYZ4nh9eHrYIg2bDnMq8ccjPN4zLW9dkhFw==

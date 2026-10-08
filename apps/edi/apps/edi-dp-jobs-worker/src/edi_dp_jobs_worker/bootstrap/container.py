@@ -1,11 +1,12 @@
 import structlog
 from database.router import DatabaseRouter
-from edi.adapters.outbound.pubsub.routing_sqs_publisher import RoutingSqsPublisher
-from edi.domain.enums import EdiJobName, PipelineEventType
+from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
+from edi.domain.enums import EdiJobName
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
+from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
+from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
 
 from edi_dp_jobs_worker.adapters.inbound.jobs.edi_data_plane_outbox_cleanup_job import (
@@ -25,9 +26,6 @@ from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_out
 )
 from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_retention_cleanup_repository import (
     SqlAlchemyEdiDataRetentionCleanupRepository,
-)
-from edi_dp_jobs_worker.application.use_cases.edi_data_plane_outbox_sweeper_use_case import (
-    EdiDataPlaneOutboxSweeperUseCase,
 )
 from edi_dp_jobs_worker.application.use_cases.edi_data_retention_cleanup_use_case import (
     EdiDataRetentionCleanupUseCase,
@@ -70,23 +68,16 @@ class WorkerContainer:
         )
 
         sweeper_repo = SqlAlchemyEdiDataPlaneOutboxSweeperRepository(db_router=self.db_router)
-        routing_map = {
-            PipelineEventType.TRANSFORMATION_REQUESTED.value: self.settings.sqs.compute_queue_url,
-            PipelineEventType.COMPUTE_TRANSFORMATION_COMMAND.value: self.settings.sqs.orchestrator_queue_url,
-            PipelineEventType.TRANSFORMATION_SUCCESSFUL.value: self.settings.sqs.orchestrator_queue_url,
-            PipelineEventType.TRANSFORMATION_FAILED.value: self.settings.sqs.orchestrator_queue_url,
-            PipelineEventType.EXECUTE_DELIVERY_COMMAND.value: self.settings.sqs.deliver_queue_url,
-            PipelineEventType.DELIVERY_REQUESTED.value: self.settings.sqs.deliver_queue_url,
-            PipelineEventType.DELIVERY_SUCCESSFUL.value: self.settings.sqs.orchestrator_queue_url,
-            PipelineEventType.DELIVERY_FAILED.value: self.settings.sqs.orchestrator_queue_url,
-        }
-        publisher = RoutingSqsPublisher(
-            event_type_to_queue_url=routing_map,
+        publisher = create_edi_pipeline_publisher(
+            compute_queue_url=self.settings.sqs.compute_queue_url,
+            orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
+            deliver_queue_url=self.settings.sqs.deliver_queue_url,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,
         )
+
         self.dp_sweeper_job_handler = EdiDataPlaneOutboxSweeperJobHandler(
-            EdiDataPlaneOutboxSweeperUseCase(repository=sweeper_repo, publisher=publisher)
+            OutboxSweeperUseCase(repository=sweeper_repo, publisher=publisher)
         )
 
     def _wire_jobs_consumers(self) -> None:
@@ -110,15 +101,11 @@ class WorkerContainer:
         )
         dp_dispatcher.subscribe(EdiJobName.EDI_DATA_PLANE_OUTBOX_SWEEPER.value, dp_sweeper_handler)
 
-        dp_sqs_consumer = AwsSqsConsumer(
+        self.dp_manager = PubSubProvider.create_consumer_manager(
             queue_url=self.settings.sqs.data_plane_jobs_queue_url,
+            handler=dp_dispatcher.dispatch,
             region_name=self.settings.aws.resolved_region,
             endpoint_url=self.settings.aws.endpoint_url,
-        )
-        self.dp_manager = SqsConsumerManager(
-            consumer=dp_sqs_consumer,
-            queue_name=self.settings.sqs.data_plane_jobs_queue_url.rsplit("/", 1)[-1],
-            handler=dp_dispatcher.dispatch,
         )
 
     async def start(self) -> None:

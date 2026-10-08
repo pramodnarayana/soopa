@@ -5,6 +5,8 @@ import datetime
 import httpx
 import pytest
 
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
+
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 import structlog
 from aiohttp import web
@@ -35,13 +37,11 @@ from edi.adapters.outbound.database.models.data_plane import (
 from edi.adapters.outbound.database.models.data_plane import (
     Webhook as DataPlaneWebhook,
 )
-from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
 from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.testing.fakes.pipeline_fakes import FakeTransformerAdapter
 
 logger = structlog.get_logger(__name__)
@@ -221,7 +221,9 @@ async def test_inbound_flow_e2e(
         uow = SqlAlchemyDataPlaneUnitOfWork(
             tenant_session=session, storage=S3StorageClient("test", None)
         )
-        translate_svc = ComputeTransformUseCase(uow, BotsTransformerAdapter())
+        translate_svc = ComputeTransformUseCase(
+            uow, BotsTransformerAdapter(), publisher=FakeOutboxPublisher()
+        )
 
         # Get trace_id from DB
         res = await session.execute(select(EdiMessage).where(EdiMessage.sender_id == "SENDER"))
@@ -244,13 +246,8 @@ async def test_inbound_flow_e2e(
         async def real_uow_factory():
             yield uow
 
-        def real_router_factory(local_uow):
-            strategies = {
-                webhook.id: WebhookDeliveryStrategy(
-                    local_uow, HttpxDeliveryClient(allow_private_ips=True)
-                )
-            }
-            return DeliveryRouterUseCase(local_uow, strategies)
+        def real_router_factory():
+            return DeliveryRouterUseCase(real_uow_factory, FakeOutboxPublisher())
 
         deliver_svc = DeliveryUseCase(
             router_factory=real_router_factory,

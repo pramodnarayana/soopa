@@ -18,6 +18,7 @@ platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_e
 platform = pulumi.StackReference(platform_stack_ref)
 
 staging_domain = platform.require_output("staging_domain")
+dashboard_domain = staging_domain.apply(lambda d: f"dashboard.{d}")
 
 # Extract root domain (e.g., flowwolf.io from staging.flowwolf.io)
 root_domain = staging_domain.apply(lambda d: ".".join(d.split(".")[-2:]))
@@ -58,7 +59,7 @@ distribution = aws.cloudfront.Distribution(
     enabled=True,
     is_ipv6_enabled=True,
     default_root_object="index.html",
-    aliases=[staging_domain],
+    aliases=[dashboard_domain],
     origins=[
         aws.cloudfront.DistributionOriginArgs(
             domain_name=bucket.bucket_regional_domain_name,
@@ -133,7 +134,11 @@ bucket_policy = aws.s3.BucketPolicy(
     opts=pulumi.ResourceOptions(depends_on=[public_access_block]),
 )
 
+# DNS Record moved to routing stack
+
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("dashboard_s3_bucket", bucket.id)
+pulumi.export("dashboard_cloudfront_id", distribution.id)
 pulumi.export("dashboard_cloudfront_domain", distribution.domain_name)
-pulumi.export("dashboard_url", staging_domain.apply(lambda d: f"https://{d}"))
+pulumi.export("dashboard_cloudfront_zone_id", distribution.hosted_zone_id)
+pulumi.export("dashboard_url", dashboard_domain.apply(lambda d: f"https://{d}"))

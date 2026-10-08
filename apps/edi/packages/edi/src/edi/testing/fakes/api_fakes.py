@@ -127,10 +127,11 @@ class FakeInboundRouteRepository:
                 return r.tenant_id
         return None
 
-    async def save(self, aggregate: AggregateRoot) -> None:
+    async def save(self, aggregate: AggregateRoot) -> list:
         if isinstance(aggregate, InboundRouteDomainModel):
             self.inbound_routes[aggregate.id] = aggregate
         self._flush_events(aggregate)
+        return []
 
     async def delete(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, InboundRouteDomainModel):
@@ -149,6 +150,7 @@ class FakeInboundRouteRepository:
                 )
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeOutboundRouteRepository:
@@ -198,10 +200,11 @@ class FakeOutboundRouteRepository:
         results = [r for r in self.outbound_routes.values() if r.tenant_id == tenant_id]
         return results[offset : offset + limit]
 
-    async def save(self, aggregate: AggregateRoot) -> None:
+    async def save(self, aggregate: AggregateRoot) -> list:
         if isinstance(aggregate, OutboundRouteDomainModel):
             self.outbound_routes[aggregate.id] = aggregate
         self._flush_events(aggregate)
+        return []
 
     async def delete(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, OutboundRouteDomainModel):
@@ -220,6 +223,7 @@ class FakeOutboundRouteRepository:
                 )
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeAS2PartnerRepository:
@@ -296,7 +300,7 @@ class FakeAS2PartnerRepository:
                 return True
         return False
 
-    async def save(self, aggregate: AggregateRoot) -> None:
+    async def save(self, aggregate: AggregateRoot) -> list:
         if isinstance(aggregate, AS2PartnerDomainModel):
             for existing in self.partners.values():
                 if (
@@ -310,6 +314,7 @@ class FakeAS2PartnerRepository:
                     )
             self.partners[aggregate.id] = aggregate
         self._flush_events(aggregate)
+        return []
 
     async def delete(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, AS2PartnerDomainModel):
@@ -328,6 +333,7 @@ class FakeAS2PartnerRepository:
                 )
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeSFTPPartnerRepository:
@@ -391,10 +397,11 @@ class FakeSFTPPartnerRepository:
             if id in self.sftp_partners and self.sftp_partners[id].tenant_id == str(tenant_id)
         ]
 
-    async def save(self, aggregate: AggregateRoot) -> None:
+    async def save(self, aggregate: AggregateRoot) -> list:
         if isinstance(aggregate, SFTPPartnerDomainModel):
             self.sftp_partners[aggregate.id] = aggregate
         self._flush_events(aggregate)
+        return []
 
     async def delete(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, SFTPPartnerDomainModel):
@@ -413,6 +420,7 @@ class FakeSFTPPartnerRepository:
                 )
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeAS2PartnershipRepository:
@@ -490,10 +498,11 @@ class FakeAS2PartnershipRepository:
             return None
         return matches[0]
 
-    async def save(self, aggregate: AggregateRoot) -> None:
+    async def save(self, aggregate: AggregateRoot) -> list:
         if isinstance(aggregate, AS2PartnershipDomainModel):
             self.partnerships[aggregate.id] = aggregate
         self._flush_events(aggregate)
+        return []
 
     async def delete(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, AS2PartnershipDomainModel):
@@ -512,6 +521,7 @@ class FakeAS2PartnershipRepository:
                 )
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeWebhookRepository:
@@ -613,10 +623,11 @@ class FakeOutboundEdiHeaderRepository:
                 return h
         return None
 
-    async def save(self, aggregate: AggregateRoot) -> None:
+    async def save(self, aggregate: AggregateRoot) -> list:
         if isinstance(aggregate, OutboundEdiHeaderDomainModel):
             self._edi_headers[aggregate.id] = aggregate
         self._flush_events(aggregate)
+        return []
 
     async def delete(self, aggregate: AggregateRoot) -> None:
         if isinstance(aggregate, OutboundEdiHeaderDomainModel):
@@ -635,6 +646,7 @@ class FakeOutboundEdiHeaderRepository:
                 )
             )
         aggregate.clear_domain_events()
+        return []
 
 
 class FakeRoute:

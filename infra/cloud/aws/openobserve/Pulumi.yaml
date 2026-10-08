@@ -1,0 +1,6 @@
+name: organization-openobserve
+runtime:
+  name: python
+  options:
+    virtualenv: ../.venv
+description: Shared Observability Software

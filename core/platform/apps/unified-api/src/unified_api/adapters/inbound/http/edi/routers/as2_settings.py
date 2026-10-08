@@ -23,11 +23,8 @@ class PlatformSettingsResponse(BaseModel):
 async def get_platform_settings() -> Any:
     settings = get_settings()
 
-    # We strip trailing slashes to ensure consistent path appending
-    base_url = settings.public.base_url.rstrip("/")
-
     return PlatformSettingsResponse(
-        available_as2_receive_urls=[f"{base_url}/api/v1/as2/receive"],
+        available_as2_receive_urls=[settings.as2_receive_url],
         supported_as2_encryption_algorithms=[
             SupportedAlgorithm(value="AES256", label="AES-256-CBC"),
             SupportedAlgorithm(value="AES128", label="AES-128-CBC"),

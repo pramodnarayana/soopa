@@ -6,7 +6,7 @@ import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
-from edi.adapters.outbound.database.s3 import Aioboto3PayloadStorage
+from storage.adapters.s3_storage_adapter import Aioboto3PayloadStorage
 
 
 @pytest.fixture
