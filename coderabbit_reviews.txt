@@ -1,0 +1,53 @@
+Review comments at
+@apps/edi/apps/edi-as2-server/src/as2_server/ports/outbound/uow_port.py:
+- Line 32: Move the contextlib import in the AS2 unit-of-work port module into
+the top-level import block, before the class definitions, and remove its current
+mid-file placement.
+
+Review comments at @infra/cloud/aws/apps/openas2/__main__.py:
+- Line 113: Update the health-check matcher in the OpenAS2 configuration to use
+only the existing 200-499 range, and correct the nearby comment that incorrectly
+says 411 is excluded. Keep the matcher range unchanged otherwise.
+
+Review comments at @infra/cloud/aws/zitadel/stack_export.json:
+- Around line 1-1318: The committed Pulumi stack export contains decrypted
+credentials, including an instance-owner machine key and the admin password;
+delete stack_export.json, purge it from Git history, revoke machine key
+393863811427205123, and reset the admin password. Add stack_export.json to
+.gitignore so future exports are not committed.
+
+Review comments at @infra/scripts/ci_deploy.sh:
+- Line 24: Remove the hardcoded passphrase from the deployment script and
+require PULUMI_CONFIG_PASSPHRASE to be provided by CI, failing clearly when it
+is unset.
+- Around line 37-38: Remove `|| true` from the `pulumi refresh` command so
+refresh failures stop the deployment; keep `|| true` on `pulumi stack init`.
+
+Review comments at @infra/topology.json:
+- Around line 88-100: Restore event_type filterPolicy entries on all three
+edi-data-plane-topic subscriptions in infra/topology.json: allow the six
+orchestrator event types on edi-orchestrator, COMPUTE_TRANSFORMATION_COMMAND on
+edi-compute, and EXECUTE_DELIVERY_COMMAND on edi-deliver. Preserve the existing
+topic and queue mappings.
+
+Review comments at @tools/openas2/docker-compose.yml:
+- Line 12: Remove the unused SOOPA_AS2_URL environment variable from the Docker
+Compose configuration; do not replace it, since the partnership uses the
+separate port 8001 endpoint.
+
+Review comments at @tools/openas2/Dockerfile:
+- Line 2: Replace the locally built openas2app-openas2:latest base image in the
+FROM instruction with a published OpenAS2 image pinned to a specific version.
+
+Review comments at @tools/openas2/entrypoint.sh:
+- Around line 6-8: Update the entrypoint before its exec of start-openas2.sh to
+replace the AWS as2_url in partnerships.xml with FLOWWOLF_AS2_URL, and change
+the partnership URL value in partnerships.xml to a placeholder that this
+replacement targets. Apply the entrypoint change at tools/openas2/entrypoint.sh
+lines 6-8 and the placeholder change at tools/openas2/config/partnerships.xml
+line 56.
+
+Review comments at @infra/cloud/aws/openobserve/observability.py:
+- Line 191: Update the ZO_ROOT_USER_EMAIL value in the container environment to
+use OpenObserveConstants.DEFAULT_ADMIN_EMAIL instead of a hardcoded email,
+keeping it aligned with the user secret.

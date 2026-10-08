@@ -104,13 +104,13 @@ aws.iam.RolePolicy(
 
 # ── Target Group & ALB Rule ───────────────────────────────────────────────────
 # OpenAS2 returns HTTP 411 (Length Required) on plain GET / — it IS responding,
-# but the old default matcher "200-499" excluded 411. Accept the full range.
+# and the 200-499 range natively includes 411.
 tg_arn = provision_target_group_and_rule(
     name=f"{_prefix}openas2",
     vpc_id=vpc_id,
     port=10080,
     health_check_path="/",
-    health_check_matcher="200-499,411",
+    health_check_matcher="200-499",
     listener_arn=main_alb_listener_arn,
     path_pattern="/*",
     host_header=pulumi.Output.concat("openas2.", staging_domain),

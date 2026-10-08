@@ -21,7 +21,10 @@ else
     exit 1
 fi
 
-export PULUMI_CONFIG_PASSPHRASE="pulumi flowwolf staging"
+if [ -z "$PULUMI_CONFIG_PASSPHRASE" ]; then
+    echo "Error: PULUMI_CONFIG_PASSPHRASE must be set by the CI environment!"
+    exit 1
+fi
 
 echo "======================================================"
 echo "🚀 INITIATING ENTERPRISE CLOUD DEPLOYMENT"
@@ -35,7 +38,7 @@ deploy_stack() {
     echo "📦 Deploying $STACK_NAME..."
     echo "------------------------------------------------------"
     pulumi stack init staging -C "$WORKSPACE_ROOT/$STACK_PATH" || true
-    pulumi refresh -y -s staging -C "$WORKSPACE_ROOT/$STACK_PATH" || true
+    pulumi refresh -y -s staging -C "$WORKSPACE_ROOT/$STACK_PATH"
     pulumi up -y -s staging -C "$WORKSPACE_ROOT/$STACK_PATH"
 }
 

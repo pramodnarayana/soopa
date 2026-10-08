@@ -1,3 +1,4 @@
+import contextlib
 from types import TracebackType
 from typing import Protocol
 
@@ -27,9 +28,6 @@ class AS2UnitOfWorkPort(Protocol):
     async def commit(self) -> None: ...
 
     async def rollback(self) -> None: ...
-
-
-import contextlib
 
 
 class AS2UnitOfWorkFactoryPort(Protocol):
