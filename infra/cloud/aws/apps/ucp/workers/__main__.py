@@ -18,7 +18,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-ucp-"
@@ -41,6 +41,7 @@ identity_stack_ref = config.get("identity_stack") or f"organization/identity/{_e
 ucp_stack_ref = config.get("ucp_stack") or f"organization/ucp/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 aws_zitadel_stack_ref = config.get("aws_zitadel_stack") or f"organization/zitadel/{_env}"
+obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
@@ -50,6 +51,7 @@ identity = pulumi.StackReference(identity_stack_ref)
 ucp = pulumi.StackReference(ucp_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 aws_zitadel = pulumi.StackReference(aws_zitadel_stack_ref)
+obs = pulumi.StackReference(obs_stack_ref)
 machinekey_secret_arn = aws_zitadel.require_output("machinekey_secret_arn")
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
@@ -62,6 +64,7 @@ app_sg_id = foundation.require_output("app_sg_id")
 ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 ecr_repository_url = platform.require_output("ecr_repository_url")
 staging_domain = platform.require_output("staging_domain")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 app_defaults_secret_arn = platform.require_output("app_defaults_secret_arn")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
@@ -75,15 +78,12 @@ sns_platform_events_topic_arn = platform.require_output("sns_platform_events_top
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
     pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
-obs_user_arn = (
-    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
-)
+obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
-    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+    obs.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
@@ -294,6 +294,7 @@ base_env_vars: pulumi.Output = pulumi.Output.all(
         queue_env_vars=args["queue_env_vars"],
         static_vars={
             "ENVIRONMENT": _env,
+            "EDI_ENVIRONMENT": edi_environment_flag(_env),
             "GLOBAL_DB_HOST": args["global_db_host"],
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],

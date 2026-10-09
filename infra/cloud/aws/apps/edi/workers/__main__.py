@@ -21,7 +21,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -40,6 +40,8 @@ platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 messaging = pulumi.StackReference(messaging_stack_ref)
 storage = pulumi.StackReference(storage_stack_ref)
+obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
+obs = pulumi.StackReference(obs_stack_ref)
 
 # ── Infrastructure Inputs ─────────────────────────────────────────────────────
 private_subnets = [
@@ -51,6 +53,7 @@ app_sg_id = foundation.require_output("app_sg_id")
 ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 ecr_repository_url = platform.require_output("ecr_repository_url")
 staging_domain = platform.require_output("staging_domain")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -59,7 +62,6 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
 as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
-data_plane_topic_arn = messaging.require_output("sns_edi_data_plane_topic_arn")
 sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
 queue_arns = [
     messaging.require_output("sqs_edi_data_plane_jobs_arn"),
@@ -70,15 +72,12 @@ queue_arns = [
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
     pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
-obs_user_arn = (
-    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
-)
+obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
-    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+    obs.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 ecr_image_uri = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
@@ -176,6 +175,7 @@ dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
         queue_env_vars=args["queue_env_vars"],
         static_vars={
             "ENVIRONMENT": _env,
+            "EDI_ENVIRONMENT": edi_environment_flag(_env),
             "GLOBAL_DB_HOST": args["global_db_host"],
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
@@ -230,7 +230,7 @@ provision_fargate_service(
         {
             "Effect": "Allow",
             "Action": ["sns:Publish"],
-            "Resource": [data_plane_topic_arn, sns_platform_events_topic_arn],
+            "Resource": [sns_platform_events_topic_arn],
         },
         {
             "Effect": "Allow",

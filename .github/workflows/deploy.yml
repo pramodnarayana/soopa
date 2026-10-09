@@ -32,6 +32,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install uv (Fast Python Package Installer)
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
       - name: Install Pulumi CLI
         uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
 
@@ -57,9 +60,37 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/cloud/aws/platform
           pulumi up -s prod -y
 
+      - name: Deploy OpenObserve Stack
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/openobserve
+          pulumi up -s prod -y
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
+
+      - name: Sync Third-Party Images (Zitadel)
+        run: |
+          ./infra/cloud/aws/platform/sync-images.sh
+
+      - name: Deploy Zitadel Infrastructure Stack
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/zitadel
+          pulumi up -s prod -y
+
+      - name: Wait for Zitadel API to become healthy
+        run: |
+          echo "Waiting 60s for Zitadel ECS task to spin up and upload the machine key..."
+          sleep 60
+
+      - name: Deploy Zitadel Identity Configuration
+        run: |
+          # This configures projects and apps using the Zitadel Pulumi Provider
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/zitadel
+          pulumi up -s prod -y
 
       - name: Build, Tag, and Push Modular Monolith Image
         env:
@@ -105,3 +136,22 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/scheduler
           pulumi config set image_tag $IMAGE_TAG -s prod
           pulumi up -s prod -y
+
+      - name: Run Database Migrations
+        run: |
+          echo "Running Database Migrations against AWS RDS..."
+          # Note: In a true prod environment, these should run securely against the RDS endpoint
+          # either via a bastion, VPN, or a dedicated ECS migration task.
+          cd $GITHUB_WORKSPACE/core/platform/packages/database
+          uv run alembic upgrade head
+
+          cd $GITHUB_WORKSPACE/apps/edi/packages/edi
+          uv run python src/edi/adapters/outbound/database/run_migrations.py
+
+      - name: Run Data Seeding
+        run: |
+          echo "Running Initial Seed Scripts..."
+          cd $GITHUB_WORKSPACE
+          python core/ucp/packages/ucp/scripts/seed.py
+          python core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py
+          python apps/edi/scripts/seed_jobs.py

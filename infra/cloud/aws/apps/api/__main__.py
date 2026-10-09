@@ -24,6 +24,8 @@ messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messag
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
+obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
+obs = pulumi.StackReference(obs_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 zitadel = pulumi.StackReference(zitadel_stack_ref)
 storage = pulumi.StackReference(storage_stack_ref)
@@ -40,6 +42,7 @@ ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 ecr_repository_url = platform.require_output("ecr_repository_url")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
@@ -51,15 +54,12 @@ as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
     pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
-obs_user_arn = (
-    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
-)
+obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
-    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+    obs.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
@@ -135,48 +135,41 @@ api_service = provision_fargate_service(
     obs_password_secret_arn=obs_pass_arn,
     port=8000,
     target_group_arn=api_tg.arn,
-    environment_vars=[
-        {"name": "ENVIRONMENT", "value": "staging"},
-        {
-            "name": "GLOBAL_DB_HOST",
-            "value": pulumi.Output.all(global_db_endpoint).apply(lambda args: args[0]),
-        },
-        {
-            "name": "EDI_DB_HOST",
-            "value": pulumi.Output.all(edi_shard_db_endpoint).apply(lambda args: args[0]),
-        },
-        {"name": "PUBLIC_BASE_URL", "value": pulumi.Output.concat("https://api.", staging_domain)},
-        {
-            "name": "AS2_RECEIVE_URL",
-            "value": pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
-        },
-        {
-            "name": "IDENTITY_ISSUER",
-            "value": pulumi.Output.concat("https://identity.", staging_domain),
-        },
-        {
-            "name": "IDENTITY_UCP_PROJECT_ID",
-            "value": zitadel.require_output("ucp_project_id"),
-        },
-        {
-            "name": "IDENTITY_OAUTH_CLIENT_ID",
-            "value": zitadel.require_output("ucp_web_client_id"),
-        },
-        {
-            "name": "IDENTITY_PLATFORM_ORG_ID",
-            "value": zitadel.require_output("platform_org_id"),
-        },
-        {
-            "name": "IDENTITY_API_URL",
-            "value": pulumi.Output.concat("https://identity.", staging_domain),
-        },
-        {
-            "name": "CORS_ALLOWED_ORIGINS",
-            "value": staging_domain.apply(lambda d: f'["https://dashboard.{d}"]'),
-        },
-        {"name": "S3_BUCKET", "value": as2_payloads_bucket_name},
-        *queue_env_vars_to_ecs_format(messaging.require_output("queue_env_vars")),
-    ],
+    environment_vars=pulumi.Output.all(
+        global_db=global_db_endpoint,
+        edi_db=edi_shard_db_endpoint,
+        domain=staging_domain,
+        ucp_proj=zitadel.require_output("ucp_project_id"),
+        ucp_client=zitadel.require_output("ucp_web_client_id"),
+        plat_org=zitadel.require_output("platform_org_id"),
+        s3_bucket=as2_payloads_bucket_name,
+        queue_vars=messaging.require_output("queue_env_vars"),
+    ).apply(
+        lambda args: [
+            {"name": "ENVIRONMENT", "value": "staging"},
+            {"name": "EDI_ENVIRONMENT", "value": "T"},
+            {
+                "name": "GLOBAL_DB_HOST",
+                "value": args["global_db"][0]
+                if isinstance(args["global_db"], tuple)
+                else args["global_db"],
+            },
+            {
+                "name": "EDI_DB_HOST",
+                "value": args["edi_db"][0] if isinstance(args["edi_db"], tuple) else args["edi_db"],
+            },
+            {"name": "PUBLIC_BASE_URL", "value": f"https://api.{args['domain']}"},
+            {"name": "AS2_RECEIVE_URL", "value": f"https://edi.{args['domain']}/as2/inbox"},
+            {"name": "IDENTITY_ISSUER", "value": f"https://identity.{args['domain']}"},
+            {"name": "IDENTITY_UCP_PROJECT_ID", "value": args["ucp_proj"]},
+            {"name": "IDENTITY_OAUTH_CLIENT_ID", "value": args["ucp_client"]},
+            {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args["plat_org"]},
+            {"name": "IDENTITY_API_URL", "value": f"https://identity.{args['domain']}"},
+            {"name": "CORS_ALLOWED_ORIGINS", "value": f'["https://dashboard.{args["domain"]}"]'},
+            {"name": "S3_BUCKET", "value": args["s3_bucket"]},
+            *queue_env_vars_to_ecs_format(args["queue_vars"], {}),
+        ]
+    ),
     secrets=[
         {
             "name": "GLOBAL_DATABASE_URL",
@@ -215,6 +208,28 @@ api_service = provision_fargate_service(
             "Effect": "Allow",
             "Action": ["s3:GetObject"],
             "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["sqs:SendMessage", "sqs:GetQueueUrl", "sqs:GetQueueAttributes"],
+            "Resource": pulumi.Output.concat(
+                "arn:aws:sqs:",
+                aws.get_region().name,
+                ":",
+                aws.get_caller_identity().account_id,
+                f":{_env}-edi-*",
+            ),
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["sns:Publish"],
+            "Resource": pulumi.Output.concat(
+                "arn:aws:sns:",
+                aws.get_region().name,
+                ":",
+                aws.get_caller_identity().account_id,
+                f":{_env}-platform-events-topic*",
+            ),
         },
     ],
 )

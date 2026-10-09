@@ -47,7 +47,9 @@ async def main() -> None:
         logger.error("IDENTITY_PLATFORM_ADMIN_ID environment variable is not set.")
         sys.exit(1)
 
-    shard_db_url = os.environ.get("SHARD_OVERRIDES__EDI_SHARD_1", "")
+    shard_db_url = os.environ.get("DATABASE__SHARD_OVERRIDES__EDI_SHARD_1") or os.environ.get(
+        "SHARD_OVERRIDES__EDI_SHARD_1", ""
+    )
     if not shard_db_url:
         logger.error("SHARD_OVERRIDES__EDI_SHARD_1 environment variable is not set.")
         sys.exit(1)

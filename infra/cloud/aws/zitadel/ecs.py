@@ -82,7 +82,7 @@ def provision_ecs(
         obs_user_arn = args[9]
         obs_pass_arn = args[10]
 
-        if fl_end:
+        if False:  # fl_end:
             main_log_config = build_firelens_log_config(fl_end, obs_user_arn, obs_pass_arn)
         else:
             main_log_config = {
@@ -129,6 +129,8 @@ def provision_ecs(
                     {"name": "ZITADEL_EXTERNALPORT", "value": "443"},
                     {"name": "ZITADEL_EXTERNALDOMAIN", "value": f"identity.{dns_name}"},
                     {"name": "ZITADEL_TLS_ENABLED", "value": "false"},
+                    {"name": "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_ACTIVE", "value": "false"},
+                    {"name": "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "value": "false"},
                     {"name": "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME", "value": "admin"},
                     {
                         "name": "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME",
@@ -202,7 +204,7 @@ def provision_ecs(
             },
         ]
 
-        if fl_end:
+        if False:  # fl_end:
             containers.append(build_firelens_sidecar(f"/ecs/{prefix}zitadel", region_name))
 
         return json.dumps(containers)
@@ -280,6 +282,7 @@ def provision_ecs(
                 container_port=ZitadelConstants.PORT,
             ),
         ],
+        opts=pulumi.ResourceOptions(ignore_changes=["desired_count"]),
         tags=tags,
     )
 

@@ -1,7 +1,6 @@
 {
   "topics": [
-    { "name": "platform-events-topic", "fifo": true, "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN" },
-    { "name": "edi-data-plane-topic", "fifo": false, "env_var": "SNS_EDI_DATA_PLANE_TOPIC_ARN" }
+    { "name": "platform-events-topic", "fifo": true, "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN" }
   ],
   "queues": [
     { "name": "ucp-jobs", "fifo": true, "dlq": true, "env_var": "SQS_UCP_JOBS_QUEUE_URL" },
@@ -83,21 +82,6 @@
         "event_type": [{ "prefix": "tenant." }, { "prefix": "app." }, { "prefix": "user." }]
       }
     },
-    {
-      "topic": "edi-data-plane-topic",
-      "queue": "edi-orchestrator"
-    },
-
-    {
-      "topic": "edi-data-plane-topic",
-      "queue": "edi-compute"
-    },
-
-    {
-      "topic": "edi-data-plane-topic",
-      "queue": "edi-deliver"
-    },
-
     {
       "topic": "platform-events-topic",
       "queue": "edi-config-sync-queue",
