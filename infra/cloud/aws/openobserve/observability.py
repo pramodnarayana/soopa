@@ -19,6 +19,7 @@ def provision_openobserve_foundations(
     obs_listener_arn: str,
     staging_domain: str,
     cloud_map_namespace_id: str,
+    ecr_repository_url: pulumi.Output[str],
 ):
     obs_bucket = aws.s3.Bucket(
         f"{prefix}observability-data",
@@ -169,12 +170,27 @@ def provision_openobserve_foundations(
         tags=tags,
     )
 
+    # Resolve version from versions.env
+    openobserve_version = os.environ.get("OPENOBSERVE_VERSION")
+    if not openobserve_version:
+        env_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "../../../../versions.env")
+        )
+        if os.path.exists(env_path):
+            with open(env_path) as f:
+                for line in f:
+                    if line.startswith("OPENOBSERVE_VERSION="):
+                        openobserve_version = line.strip().split("=")[1]
+
+    if not openobserve_version:
+        openobserve_version = "v0.8.0"
+
     provision_fargate_service(
         name=f"{prefix}openobserve",
         command=[],
         cluster_arn=ecs_cluster_arn,
         execution_role_arn=obs_exec_role.arn,
-        ecr_image_uri=f"public.ecr.aws/zinclabs/openobserve:{os.environ.get('OPENOBSERVE_VERSION', 'v0.14.3')}",
+        ecr_image_uri=pulumi.Output.concat(ecr_repository_url, f":{openobserve_version}"),
         subnets=private_subnets,
         security_group_id=app_sg_id,
         tags=tags,
@@ -188,7 +204,7 @@ def provision_openobserve_foundations(
             {"name": "ZO_DATA_DIR", "value": "/data"},
             {"name": "ZO_S3_BUCKET", "value": obs_bucket.bucket},
             {"name": "ZO_S3_REGION_NAME", "value": aws.get_region().name},
-            {"name": "ZO_ROOT_USER_EMAIL", "value": "admin@example.com"},
+            {"name": "ZO_ROOT_USER_EMAIL", "value": OpenObserveConstants.DEFAULT_ADMIN_EMAIL},
         ],
         secrets=[
             {"name": "ZO_ROOT_USER_PASSWORD", "valueFrom": obs_password_secret.arn},

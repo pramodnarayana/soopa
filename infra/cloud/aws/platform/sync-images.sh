@@ -19,9 +19,15 @@ if [ -z "$IDENTITY_VERSION" ]; then
     echo "ERROR: IDENTITY_VERSION is unset in versions.env"
     exit 1
 fi
+
+if [ -z "$OPENOBSERVE_VERSION" ]; then
+    echo "ERROR: OPENOBSERVE_VERSION is unset in versions.env"
+    exit 1
+fi
 # Define images to sync. Format: "source_image|target_ecr_repo"
 IMAGES=(
   "ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}|staging-zitadel-image"
+  "public.ecr.aws/zinclabs/openobserve:${OPENOBSERVE_VERSION}|staging-openobserve-image"
 )
 
 for ENTRY in "${IMAGES[@]}"; do

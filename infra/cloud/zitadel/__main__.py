@@ -25,18 +25,18 @@ else:
     # Option 2: Enterprise CI/CD seamlessly fetches the secret directly into Pulumi RAM
     import pulumi_aws as aws
 
-    # 1. We dynamically look up the ARN of the machinekey secret based on environment naming conventions
-    secret_meta = aws.secretsmanager.get_secrets(
-        filters=[{"name": "name", "values": [f"platform/{_env}-zitadel-machinekey"]}]
-    )
-
-    # 2. We dynamically fetch the secret payload (the actual RSA key JSON)
-    secret_value = aws.secretsmanager.get_secret_version(secret_id=secret_meta.arns[0])
-
     # 3. We dynamically fetch the master domain from the platform stack
     org = config.require("organization")
     platform = pulumi.StackReference(f"{org}/platform/{_env}")
     zitadel_domain = platform.require_output("staging_domain")
+
+    # 1. We dynamically look up the exact ARN of the machinekey secret from the zitadel infrastructure stack
+    # This prevents bugs when multiple orphaned secrets match a wildcard search
+    aws_zitadel_stack = pulumi.StackReference(f"{org}/zitadel/{_env}")
+    machinekey_arn = aws_zitadel_stack.require_output("machinekey_secret_arn")
+
+    # 2. We dynamically fetch the secret payload (the actual RSA key JSON)
+    secret_value = aws.secretsmanager.get_secret_version(secret_id=machinekey_arn)
 
     jwt_profile_file = None
     jwt_profile_json = secret_value.secret_string

@@ -96,12 +96,17 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         request.state.tenant_id = active_tenant_id
 
         # ONLY exempt exact-match routes that inherently lack a tenant context
-        is_exempt = request.url.path in self.tenant_exempt_paths
+        normalized_path = request.url.path.rstrip("/")
+        is_exempt = normalized_path in self.tenant_exempt_paths
 
         if not active_tenant_id:
             if is_exempt:
                 return await call_next(request)
-            logger.warning("[TENANT_CONTEXT_MIDDLEWARE] Tenant ID missing from request.")
+            logger.warning(
+                "[TENANT_CONTEXT_MIDDLEWARE] Tenant ID missing from request. path=%s is_exempt=%s",
+                request.url.path,
+                is_exempt,
+            )
             return JSONResponse(
                 status_code=400,
                 content={"detail": "Tenant ID missing from request."},

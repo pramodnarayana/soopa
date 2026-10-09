@@ -63,7 +63,7 @@ ecs_cluster, cloud_map_namespace = provision_cluster(prefix=_prefix, tags=_TAGS,
 platform_events_topic = provision_event_bus(prefix=_prefix, tags=_TAGS)
 
 # ── Container Registries ──────────────────────────────────────────────────────
-zitadel_ecr_repo, app_ecr_repo = provision_ecr(prefix=_prefix, tags=_TAGS)
+zitadel_ecr_repo, app_ecr_repo, openobserve_ecr_repo = provision_ecr(prefix=_prefix, tags=_TAGS)
 
 # ── App Defaults Secret ───────────────────────────────────────────────────────
 # Stores application-level shared credentials that must NOT be injected as
@@ -115,5 +115,6 @@ pulumi.export("staging_domain", staging_domain)
 pulumi.export("sns_platform_events_topic_arn", platform_events_topic.arn)
 pulumi.export("zitadel_ecr_repo_url", zitadel_ecr_repo.repository_url)
 pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)
+pulumi.export("openobserve_ecr_repo_url", openobserve_ecr_repo.repository_url)
 
 pulumi.export("app_defaults_secret_arn", app_defaults_secret.arn)

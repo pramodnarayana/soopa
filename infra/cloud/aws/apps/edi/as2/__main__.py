@@ -12,6 +12,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
+from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -29,8 +30,9 @@ foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 messaging = pulumi.StackReference(messaging_stack_ref)
-storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
-storage = pulumi.StackReference(storage_stack_ref)
+# Storage stack is not used by AS2 server.
+obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
+obs = pulumi.StackReference(obs_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -43,27 +45,30 @@ ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 ecr_repository_url = platform.require_output("ecr_repository_url")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
+namespace_name = platform.require_output("cloud_map_namespace_name")
 
 edi_shard_db_endpoint = data.require_output("edi_shard_db_endpoint")
 edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
-sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
-as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
-as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
+# S3 and SNS are not used by the AS2 server (payloads saved to DB).
+queue_env_vars = messaging.require_output("queue_env_vars")
+queue_arns = [
+    messaging.require_output("sqs_edi_data_plane_jobs_arn"),
+    messaging.require_output("sqs_edi_deliver_arn"),
+    messaging.require_output("sqs_edi_orchestrator_arn"),
+    messaging.require_output("sqs_edi_compute_arn"),
+]
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-namespace_name = platform.require_output("cloud_map_namespace_name")
 firelens_endpoint = (
     pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
 )
-obs_user_arn = (
-    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
-)
+obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
-    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+    obs.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 ecr_image_uri = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
@@ -150,6 +155,30 @@ as2_tg = provision_target_group_and_rule(
     tags=_TAGS,
 )
 
+# ── Environment Variables ─────────────────────────────────────────────────────
+as2_env_vars: pulumi.Output = pulumi.Output.all(
+    queue_env_vars=queue_env_vars,
+    global_db_host=global_db_endpoint,
+    edi_db_host=edi_shard_db_endpoint,
+    public_base_url=pulumi.Output.concat("https://api.", staging_domain),
+    as2_receive_url=pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
+    identity_issuer=pulumi.Output.concat("https://identity.", staging_domain),
+).apply(
+    lambda args: queue_env_vars_to_ecs_format(
+        queue_env_vars=args["queue_env_vars"],
+        static_vars={
+            "AWS_REGION": _region.name,
+            "ENVIRONMENT": _env,
+            "EDI_ENVIRONMENT": edi_environment_flag(_env),
+            "GLOBAL_DB_HOST": args["global_db_host"],
+            "EDI_DB_HOST": args["edi_db_host"],
+            "PUBLIC_BASE_URL": args["public_base_url"],
+            "AS2_RECEIVE_URL": args["as2_receive_url"],
+            "IDENTITY_ISSUER": args["identity_issuer"],
+        },
+    )
+)
+
 # ── AS2 Server ECS Service ────────────────────────────────────────────────────
 as2_server = provision_fargate_service(
     name=f"{_prefix}as2-server",
@@ -169,29 +198,7 @@ as2_server = provision_fargate_service(
     firelens_endpoint=firelens_endpoint,
     obs_user_secret_arn=obs_user_arn,
     obs_password_secret_arn=obs_pass_arn,
-    environment_vars=[
-        {"name": "AWS_REGION", "value": _region.name},
-        {"name": "ENVIRONMENT", "value": _env},
-        {
-            "name": "GLOBAL_DB_HOST",
-            "value": pulumi.Output.all(global_db_endpoint).apply(lambda args: args[0]),
-        },
-        {
-            "name": "EDI_DB_HOST",
-            "value": pulumi.Output.all(edi_shard_db_endpoint).apply(lambda args: args[0]),
-        },
-        {"name": "PUBLIC_BASE_URL", "value": pulumi.Output.concat("https://api.", staging_domain)},
-        {
-            "name": "AS2_RECEIVE_URL",
-            "value": pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
-        },
-        {
-            "name": "IDENTITY_ISSUER",
-            "value": pulumi.Output.concat("https://identity.", staging_domain),
-        },
-        {"name": "SNS_PLATFORM_EVENTS_TOPIC_ARN", "value": sns_platform_events_topic_arn},
-        {"name": "S3_BUCKET", "value": as2_payloads_bucket_name},
-    ],
+    environment_vars=as2_env_vars,
     secrets=[
         {
             "name": "GLOBAL_DATABASE_URL",
@@ -214,16 +221,13 @@ as2_server = provision_fargate_service(
             "Resource": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:edi/*",
         },
         {"Effect": "Allow", "Action": ["secretsmanager:ListSecrets"], "Resource": "*"},
-        {"Effect": "Allow", "Action": ["sns:Publish"], "Resource": sns_platform_events_topic_arn},
         {
             "Effect": "Allow",
-            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
-            "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["s3:ListBucket"],
-            "Resource": as2_payloads_bucket_arn,
+            "Action": [
+                "sqs:SendMessage",
+                "sqs:GetQueueAttributes",
+            ],
+            "Resource": queue_arns,
         },
     ],
 )

@@ -1,6 +1,6 @@
-encryptionsalt: v1:h5cFsNyRu64=:v1:rtr+QrDsVG81Eo66:uzgxblbK5nP70QSzQ/T8UkwRx+aA+Q==
+encryptionsalt: v1:XP0KYO2Tf3w=:v1:jYi3QaSan9faRQhg:uYA7BnXex+/TLLzjD4ZdiuAerYyE2w==
 config:
   zitadel-infrastructure:insecure: "true"
   zitadel-infrastructure:port: "8080"
   zitadel-infrastructure:platform_admin_password:
-    secure: v1:Z49ubv3KxZX03wVJ:LKJX8T4+m35o6xnFyKRvUgd7BW+kJuh6BaTSlvuLd39Z/x60BFJ03J01fR6ds7NjIu80
+    secure: v1:zj0MxmrNbP59qUpl:KT39CAhVic/oBPuppXE1zEY9uS/g3Y53vIW1mmQLrkdR

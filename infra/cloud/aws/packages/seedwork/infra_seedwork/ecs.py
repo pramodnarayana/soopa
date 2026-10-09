@@ -67,6 +67,7 @@ def build_firelens_log_config(
 ) -> dict:
     host = fl_end.split(":")[0]
     fl_port = fl_end.split(":")[1] if ":" in fl_end else ObservabilityConstants.DEFAULT_PORT
+
     main_log_config = {
         "logDriver": EcsConstants.LOG_DRIVER_FIRELENS,
         "options": {
@@ -75,7 +76,8 @@ def build_firelens_log_config(
             "Port": fl_port,
             "URI": ObservabilityConstants.OPENOBSERVE_URI,
             "Format": ObservabilityConstants.JSON_FORMAT,
-            "tls": "off",
+            "tls": "on" if str(fl_port) == "443" else "off",
+            "tls.verify": "on" if str(fl_port) == "443" else "off",
         },
     }
     if obs_user_arn and obs_pass_arn:
@@ -299,6 +301,7 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
         if service_registry_arn
         else None,
         enable_execute_command=enable_execute_command,
+        opts=pulumi.ResourceOptions(ignore_changes=["desired_count"]),
         tags=tags,
     )
 

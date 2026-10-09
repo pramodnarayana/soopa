@@ -1,7 +1,12 @@
 import typing
 from functools import lru_cache
 
-from edi.config.models import CommonSettings, EdiAwsSettings, EdiDataPlaneSqsSettings
+from edi.config.models import (
+    CommonSettings,
+    EdiAwsSettings,
+    EdiDataPlaneSqsSettings,
+    SecretsSettings,
+)
 from pydantic import Field
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformIdentitySettings
@@ -11,6 +16,7 @@ class As2ServerSettings(CommonSettings):
     identity: PlatformIdentitySettings = Field(
         default_factory=lambda: typing.cast(PlatformIdentitySettings, {})
     )
+    secrets: SecretsSettings = Field(default_factory=lambda: typing.cast(SecretsSettings, {}))
     aws: EdiAwsSettings = Field(default_factory=lambda: typing.cast(EdiAwsSettings, {}))
     sqs: EdiDataPlaneSqsSettings = Field(
         default_factory=lambda: typing.cast(EdiDataPlaneSqsSettings, {})

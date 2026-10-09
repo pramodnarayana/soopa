@@ -30,6 +30,11 @@ def provision_global_db(
                 value="300000",
                 apply_method="immediate",
             ),
+            aws.rds.ParameterGroupParameterArgs(
+                name="max_slot_wal_keep_size",
+                value=DatabaseConstants.MAX_SLOT_WAL_KEEP_SIZE_MB,
+                apply_method="immediate",
+            ),
         ],
         tags=tags,
     )
@@ -47,6 +52,7 @@ def provision_global_db(
         vpc_security_group_ids=[db_sg_id],
         db_subnet_group_name=db_subnet_group_name,
         parameter_group_name=global_db_parameter_group.name,
+        max_allocated_storage=100,
         skip_final_snapshot=False,
         final_snapshot_identifier=f"{prefix}global-db-final-snapshot",
         publicly_accessible=False,
