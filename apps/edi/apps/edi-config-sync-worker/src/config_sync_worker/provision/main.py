@@ -1,5 +1,4 @@
 import asyncio
-import signal
 
 import structlog
 from database.router import DatabaseRouter
@@ -22,7 +21,7 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiConfigSyncWorkerModule(LaunchableWorker):
@@ -64,6 +63,11 @@ class EdiConfigSyncWorkerModule(LaunchableWorker):
         assert self.sqs_manager is not None
         self.sqs_manager.start()
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        if self.sqs_manager and self.sqs_manager.task:
+            return [self.sqs_manager.task]
+        return []
+
     async def stop(self) -> None:
         logger.info("shutting_down_gracefully")
         if self.sqs_manager:
@@ -74,38 +78,11 @@ class EdiConfigSyncWorkerModule(LaunchableWorker):
             await self.db_router.close_all()
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("config-sync-worker")
-
     module = EdiConfigSyncWorkerModule()
-
-    try:
-        await module.start()
-
-        loop = asyncio.get_running_loop()
-        stop_event = asyncio.Event()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop_event.set)
-
-        # Wait for stop signal, or if sqs_manager fails
-        manager_task = module.sqs_manager.task if module.sqs_manager else None
-        tasks_to_wait: list[asyncio.Task[object]] = [asyncio.create_task(stop_event.wait())]
-        if manager_task:
-            tasks_to_wait.append(manager_task)
-
-        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
-
-        # If the manager task completed with an exception, re-raise it
-        for task in done:
-            if manager_task and task is manager_task and task.exception():
-                exc = task.exception()
-                logger.error("sqs_consumer_manager_failed", exc_info=exc)
-                if exc:
-                    raise exc
-
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)

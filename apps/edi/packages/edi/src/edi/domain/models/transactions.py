@@ -1,6 +1,6 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from seedwork.models import AggregateRoot
+from seedwork.models import AggregateRoot, TraceEvent
 
 from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.events import TransformRequestedEvent
@@ -16,6 +16,38 @@ class EdiJsonDomainModel(EdiRecordBase):
     business_metadata: dict[str, JsonValue] | None = None
     payload: JsonValue | None = None
     storage_uri: str | None = None
+
+    def clone_for_transform_retry(self, new_id: str, new_trace_id: str) -> "EdiJsonDomainModel":
+        cloned = replace(
+            self,
+            id=new_id,
+            trace_id=new_trace_id,
+            parent_trace_id=self.trace_id,
+            original_trace_id=self.original_trace_id or self.trace_id,
+            replay_count=self.replay_count + 1,
+            status=MessageStatus.RECEIVED,
+            error_code=None,
+            error_details=None,
+            status_message=None,
+        )
+        cloned.clear_domain_events()
+        return cloned
+
+    def clone_for_delivery_retry(self, new_id: str, new_trace_id: str) -> "EdiJsonDomainModel":
+        cloned = replace(
+            self,
+            id=new_id,
+            trace_id=new_trace_id,
+            parent_trace_id=self.trace_id,
+            original_trace_id=self.original_trace_id or self.trace_id,
+            replay_count=self.replay_count + 1,
+            status=MessageStatus.PENDING_DELIVERY,
+            error_code=None,
+            error_details=None,
+            status_message=None,
+        )
+        cloned.clear_domain_events()
+        return cloned
 
 
 @dataclass(kw_only=True)
@@ -38,13 +70,44 @@ class EdiMessageDomainModel(EdiRecordBase):
     content_type: str | None = None
     signature_algorithm: str | None = None
     encryption_algorithm: str | None = None
-    status_message: str | None = None
     state: str | None = None
     msg_headers: str | None = None
     edi_data: str | None = None
     response: str | None = None
     headers: dict[str, JsonValue] | None = None
     storage_uri: str | None = None
+
+    def clone_for_transform_retry(self, new_id: str, new_trace_id: str) -> "EdiMessageDomainModel":
+        cloned = replace(
+            self,
+            id=new_id,
+            trace_id=new_trace_id,
+            parent_trace_id=self.trace_id,
+            original_trace_id=self.original_trace_id or self.trace_id,
+            replay_count=self.replay_count + 1,
+            status=MessageStatus.RECEIVED,
+            error_code=None,
+            error_details=None,
+            status_message=None,
+        )
+        cloned.clear_domain_events()
+        return cloned
+
+    def clone_for_delivery_retry(self, new_id: str, new_trace_id: str) -> "EdiMessageDomainModel":
+        cloned = replace(
+            self,
+            id=new_id,
+            trace_id=new_trace_id,
+            parent_trace_id=self.trace_id,
+            original_trace_id=self.original_trace_id or self.trace_id,
+            replay_count=self.replay_count + 1,
+            status=MessageStatus.PENDING_DELIVERY,
+            error_code=None,
+            error_details=None,
+            status_message=None,
+        )
+        cloned.clear_domain_events()
+        return cloned
 
     def mark_outbound_pending_delivery(
         self,
@@ -191,10 +254,5 @@ class TransactionListDomainModel(AggregateRoot):
 
 
 @dataclass(kw_only=True)
-class TraceEventDomainModel:
-    id: str
-    tenant_id: str
-    trace_id: str
-    event_type: str
-    actor: str
-    metadata: dict[str, JsonValue] | None = None
+class TraceEventDomainModel(TraceEvent):
+    """Domain model representing an audit trace event in the immutable transaction ledger."""

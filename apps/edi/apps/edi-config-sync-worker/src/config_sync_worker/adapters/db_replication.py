@@ -16,19 +16,19 @@ Design invariants:
 
 from collections.abc import AsyncIterator
 from contextlib import aclosing, asynccontextmanager
-from typing import Any, ClassVar, Protocol, cast
+from typing import ClassVar, Protocol, cast
 
 import structlog
 from database.router import DatabaseRouter
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import delete, select
+from sqlalchemy import Select, delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped
 
 from config_sync_worker.adapters.replication_registry import REPLICATION_GRAPH
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
-from config_sync_worker.domain.replication_graph import EntitySpec, topological_layers
+from config_sync_worker.domain.replication_graph import EntitySpec, MapperFunc, topological_layers
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
 
@@ -85,7 +85,11 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                                 source_tenant_id = tenant_id
 
                             await self._upsert_entity(
-                                tenant_session, source_tenant_id, entity, spec.tenant_model
+                                tenant_session,
+                                source_tenant_id,
+                                entity,
+                                spec.tenant_model,
+                                spec.mapper,
                             )
                         await tenant_session.flush()
 
@@ -104,7 +108,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 await tenant_session.commit()
                 logger.info(
-                    "replication_full_state_sync_completed",
+                    "replication_full_sync_completed",
                     tenant_id=tenant_id,
                 )
 
@@ -127,10 +131,6 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     ) -> AsyncIterator[tuple[AsyncSession, AsyncSession]]:
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
-        except (TimeoutError, ConnectionError) as e:
-            raise TransientProvisioningError(
-                f"Tenant {tenant_id} shard resolution timed out or connection failed: {e}"
-            ) from e
         except Exception as e:
             raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 
@@ -146,10 +146,6 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     async def _get_tenant_session(self, tenant_id: str) -> AsyncIterator[AsyncSession]:
         try:
             shard_name, shard_dsn = await self.tenant_port.resolve_shard(tenant_id)
-        except (TimeoutError, ConnectionError) as e:
-            raise TransientProvisioningError(
-                f"Tenant {tenant_id} shard resolution timed out or connection failed: {e}"
-            ) from e
         except Exception as e:
             raise PermanentProvisioningError(f"Tenant {tenant_id} unresolvable: {e}") from e
 
@@ -159,57 +155,49 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
             yield tenant_session
 
     # -----------------------------------------------------------------------
-    # Generic Granular Replication Driver  (dependency-aware, one entity)
+    # Generic Granular Replication Driver (dependency-aware, one entity)
     # -----------------------------------------------------------------------
 
-    async def _replicate_with_dependencies(  # noqa: C901
+    async def _replicate_with_dependencies(
         self, tenant_id: str, entity_id: str, entity_key: str
     ) -> None:
         """
         Granular replication driver. Reads the REPLICATION_GRAPH spec for the
         given entity key, pre-replicates all non-null FK dependencies to the
-        tenant shard, then upserts the entity itself.
-
-        All public replicate_* methods delegate here. Adding a new entity type
-        never requires changing this method — only replication_registry.py.
+        tenant shard in order, and then upserts the target entity.
         """
         spec = REPLICATION_GRAPH[entity_key]
 
         async with self._get_sessions(tenant_id) as (global_session, tenant_session):
             try:
-                # 1. Fetch the entity from the global DB with correct tenant scoping
+                # 1. Fetch the target entity from the global DB
                 entity = await self._fetch_global_entity(global_session, spec, tenant_id, entity_id)
 
-                # 2. Resolve and pre-replicate each declared FK dependency
+                # 2. Pre-replicate dependencies in declared order
                 for dep in spec.dependencies:
-                    try:
-                        dep_id: str | None = entity.__dict__[dep.fk_attr]
-                    except KeyError:
-                        raise PermanentProvisioningError(
-                            f"Replication registry misconfiguration: "
-                            f"{spec.global_model.__name__} has no attribute '{dep.fk_attr}' "
-                            f"declared in its FK dependencies. Fix replication_registry.py."
-                        )
+                    dep_id: str | None = getattr(entity, dep.fk_attr)
                     if not dep_id:
                         continue  # Optional FK not set on this instance — skip
+
+                    dep_spec = REPLICATION_GRAPH[dep.target_key]
 
                     logger.info(
                         "replication_dependency_pre_replication_started",
                         entity_type=spec.global_model.__name__,
                         entity_id=entity_id,
-                        dependency_type=dep.global_model.__name__,
+                        dependency_type=dep_spec.global_model.__name__,
                         dependency_id=dep_id,
                         tenant_id=tenant_id,
                     )
 
-                    dep_model = cast(type[ReplicatedModel], dep.global_model)
+                    dep_model = cast(type[ReplicatedModel], dep_spec.global_model)
                     dep_stmt = select(dep_model).where(dep_model.id == dep_id)
                     dep_res = await global_session.execute(dep_stmt)
                     dep_entity = dep_res.scalars().first()
 
                     if not dep_entity:
                         raise PermanentProvisioningError(
-                            f"FK dependency {dep.global_model.__name__} id={dep_id} "
+                            f"FK dependency {dep_spec.global_model.__name__} id={dep_id} "
                             f"(required by {spec.global_model.__name__} id={entity_id}) "
                             "not found in global DB. The row may have been deleted. "
                             "Sending to DLQ."
@@ -220,7 +208,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         if not dep_tenant_id:
                             raise PermanentProvisioningError(
                                 f"Data integrity violation: {dep_entity.__class__.__name__} "
-                                f"id={dep_entity.id} has a null tenant_id in the global DB."
+                                f"id={getattr(dep_entity, 'id', 'unknown')} has a null tenant_id in the global DB."
                             )
                     else:
                         dep_tenant_id = tenant_id
@@ -229,11 +217,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         tenant_session,
                         dep_tenant_id,
                         cast(DeclarativeBase, dep_entity),
-                        dep.tenant_model,
+                        dep_spec.tenant_model,
+                        dep_spec.mapper,
                     )
                     logger.info(
                         "replication_dependency_pre_replication_completed",
-                        dependency_type=dep.global_model.__name__,
+                        dependency_type=dep_spec.global_model.__name__,
                         dependency_id=dep_id,
                         tenant_id=dep_tenant_id,
                     )
@@ -244,17 +233,17 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                     if not source_tenant_id:
                         raise PermanentProvisioningError(
                             f"Data integrity violation: {entity.__class__.__name__} "
-                            f"id={entity_id} has a null tenant_id in the global DB."
+                            f"id={getattr(entity, 'id', 'unknown')} has a null tenant_id in the global DB."
                         )
                 else:
                     source_tenant_id = tenant_id
 
                 await self._upsert_entity(
-                    tenant_session, source_tenant_id, entity, spec.tenant_model
+                    tenant_session, source_tenant_id, entity, spec.tenant_model, spec.mapper
                 )
                 await tenant_session.commit()
                 logger.info(
-                    "replication_entity_replicated",
+                    "replication_entity_completed",
                     entity_type=spec.global_model.__name__,
                     entity_id=entity_id,
                     tenant_id=tenant_id,
@@ -365,41 +354,26 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         self,
         tenant_session: AsyncSession,
         tenant_id: str,
-        global_entity: DeclarativeBase,
+        global_entity: DeclarativeBase | ReplicatedModel,
         tenant_model: type[DeclarativeBase],
+        mapper: MapperFunc,
     ) -> None:
         """
         Materializes a global entity into the tenant shard via UPSERT.
         Preserves the source entity's tenant_id for shared platform entities;
         falls back to the requesting tenant_id only when strictly absent.
         """
-        tenant_columns: set[str] = {col.name for col in tenant_model.__table__.columns}
-
-        data: dict[str, object] = {
-            col.name: getattr(global_entity, col.name)
-            for col in global_entity.__table__.columns
-            if hasattr(global_entity, col.name) and col.name in tenant_columns
-        }
-
+        data = mapper(global_entity)
         if data.get("tenant_id") is None:
             data["tenant_id"] = tenant_id
 
-        update_cols = {k: v for k, v in data.items() if k != "id"}
-
-        logger.info(
-            "upsert_entity_started",
-            tenant_id=tenant_id,
-            model=tenant_model.__name__,
-            update_cols=list(update_cols),
-            global_entity_id=getattr(global_entity, "id", None),
-        )
-
         stmt = insert(tenant_model).values(**data)
+        update_cols = {k: v for k, v in data.items() if k != "id"}
         stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
 
         logger.debug(
-            "replication_entity_upsert_started",
-            entity_type=tenant_model.__name__,
+            "replication_entity_upserted",
+            tenant_model=tenant_model.__name__,
             entity_id=data.get("id"),
             tenant_id=tenant_id,
         )
@@ -423,7 +397,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                 await tenant_session.commit()
                 logger.info(
                     "replication_entity_deleted",
-                    entity_type=tenant_model.__name__,
+                    tenant_model=tenant_model.__name__,
                     entity_id=entity_id,
                     tenant_id=tenant_id,
                 )
@@ -470,8 +444,8 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         if stale_ids:
             logger.info(
                 "replication_stale_records_removed",
-                stale_count=len(stale_ids),
-                entity_table=tenant_model.__tablename__,
+                count=len(stale_ids),
+                table=tenant_model.__tablename__,
                 tenant_id=tenant_id,
             )
             await tenant_session.execute(
@@ -484,7 +458,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 # ---------------------------------------------------------------------------
 
 
-def _build_fetch_all_stmt(spec: EntitySpec, tenant_id: str) -> Any:
+def _build_fetch_all_stmt(spec: EntitySpec, tenant_id: str) -> Select[tuple[ReplicatedModel]]:
     """Constructs the SELECT statement for fetching all global entities of a given spec."""
     spec_model = cast(type[ReplicatedModel], spec.global_model)
     if spec.include_shared:

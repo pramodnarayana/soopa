@@ -3,7 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict, JsonValue
+
+
+@dataclass(frozen=True, kw_only=True)
+class EdiTraceLineageItemDTO:
+    trace_id: str
+    status: str | None
+    created_at: str | None
+    replay_count: int
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -37,6 +45,8 @@ class EdiMessageDTO:
     msg_headers: dict[str, JsonValue] | None = None
     state: str | None = None
     status_message: str | None = None
+    error_code: str | None = None
+    error_details: JsonDict | None = None
     created_at: datetime
     updated_at: datetime
     replay_count: int = 0
@@ -51,8 +61,11 @@ class EdiJsonDTO:
     tenant_id: str | None = None
     direction: str | None = None
     status: str | None = None
+    status_message: str | None = None
+    error_code: str | None = None
+    error_details: JsonDict | None = None
     trading_partner_id: str | None = None
-    business_metadata: dict[str, JsonValue] | None = None
+    business_metadata: JsonDict | None = None
     transaction_type: str | None = None
     payload: JsonValue | None = None
     created_at: datetime
@@ -71,6 +84,8 @@ class ApiGatewayDTO:
     http_status_code: int | None = None
     payload: JsonValue | None = None
     response: str | None = None
+    error_code: str | None = None
+    error_details: JsonDict | None = None
     created_at: datetime
     updated_at: datetime
     replay_count: int = 0

@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.exceptions import ErrorCode
 
 from edi.core.pipeline.delivery.base import (
     BaseDeliveryStrategy,
@@ -15,6 +16,7 @@ from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.types import JsonDict
 from edi.ports.outbound.api_gateway_repository import CreateApiGatewayCommand
+from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -40,12 +42,18 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
     ) -> tuple[str, EdiWebhookPayload, str | None, str]:
         partner = await uow.webhooks.get_webhook(edi_msg.tenant_id, partner_id)
         if not partner:
-            raise TerminalDeliveryError(f"Webhook partner {partner_id} not found.")
+            raise TerminalDeliveryError(
+                message=f"Webhook partner {partner_id} not found.",
+                code=ErrorCode.NOT_FOUND,
+                details={"partner_id": partner_id},
+            )
 
         edi_jsons = await uow.transactions.get_edi_jsons_by_trace_id(trace_id, edi_msg.tenant_id)
         if not edi_jsons:
             raise TerminalDeliveryError(
-                f"No EDI JSONs found for webhook delivery of trace_id={trace_id}"
+                message=f"No EDI JSONs found for webhook delivery of trace_id={trace_id}",
+                code=ErrorCode.INVALID_PAYLOAD,
+                details={"trace_id": trace_id},
             )
 
         standard: str = edi_jsons[0].standard or "Unknown"
@@ -75,7 +83,8 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
             return None
         if not self.secret_store:
             raise TerminalDeliveryError(
-                "Secret store is not configured but webhook partner requires an auth token."
+                message="Secret store is not configured but webhook partner requires an auth token.",
+                code=ErrorCode.INTERNAL_ERROR,
             )
         return await self.secret_store.get_secret(auth_header_vault_ref)
 
@@ -119,22 +128,13 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         edi_msg: EdiMessageDomainModel,
         idempotency_key: str | None = None,
     ) -> None:
-        try:
-            async with self.uow_factory() as uow, uow:
-                partner_url, envelope, auth_vault_ref, standard = await self._build_payload(
-                    trace_id, partner_id, edi_msg, uow
-                )
-
-            raw_payload = json.dumps(envelope.model_dump()).encode("utf-8")
-            auth_token = await self._get_auth_token(auth_vault_ref)
-        except TerminalDeliveryError:
-            raise
-        except Exception:
-            logger.exception(
-                "Webhook delivery transient failure for trace_id={trace_id}", trace_id=trace_id
+        async with self.uow_factory() as uow, uow:
+            partner_url, envelope, auth_vault_ref, standard = await self._build_payload(
+                trace_id, partner_id, edi_msg, uow
             )
-            raise
 
+        raw_payload = json.dumps(envelope.model_dump()).encode("utf-8")
+        auth_token = await self._get_auth_token(auth_vault_ref)
         status_code = None
         response_text = None
         error_msg = None
@@ -146,21 +146,33 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 idempotency_key=idempotency_key,
             )
         except ValueError as e:
-            logger.exception(
-                "Webhook delivery configuration error for trace_id={trace_id}",
+            logger.error(
+                "webhook_delivery_configuration_error",
                 trace_id=trace_id,
+                error=str(e),
             )
             error_msg = str(e)
-        except TransientDeliveryError:
-            logger.exception(
-                "Webhook delivery transient transport error for trace_id={trace_id}",
+        except (PortConnectionError, PortTimeoutError) as e:
+            logger.error(
+                "webhook_delivery_transient_transport_error",
                 trace_id=trace_id,
+                error=str(e),
             )
-            raise
+            error_code = (
+                ErrorCode.CONNECTION_TIMEOUT
+                if isinstance(e, PortTimeoutError)
+                else ErrorCode.CONNECTION_REFUSED
+            )
+            raise TransientDeliveryError(
+                message=str(e),
+                code=error_code,
+                details={"error": str(e), "partner_url": partner_url},
+            ) from e
         except TerminalDeliveryError as e:
-            logger.exception(
-                "Webhook delivery terminal error for trace_id={trace_id}",
+            logger.error(
+                "webhook_delivery_terminal_error",
                 trace_id=trace_id,
+                error=str(e),
             )
             error_msg = str(e)
 
@@ -185,11 +197,17 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 trace_id=trace_id,
             )
             raise TransientDeliveryError(
-                f"Webhook delivery received transient HTTP {status_code}: {response_text}"
+                message=f"Webhook delivery received transient HTTP {status_code}: {response_text}",
+                code=ErrorCode.UNKNOWN_TRANSPORT_ERROR,
+                details={"status_code": status_code, "response": response_text},
             )
 
         if error_msg:
-            raise TerminalDeliveryError(f"Webhook delivery failed: {error_msg}")
+            raise TerminalDeliveryError(
+                message=f"Webhook delivery failed: {error_msg}",
+                code=ErrorCode.VALIDATION_FAILED,
+                details={"error_msg": error_msg},
+            )
         elif status_code is None or not (200 <= status_code < 300):
             logger.error(
                 "Webhook delivery failed for trace_id={trace_id}. HTTP {status_code}",
@@ -197,7 +215,9 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 status_code=status_code,
             )
             raise TerminalDeliveryError(
-                f"Webhook delivery failed with HTTP {status_code}: {response_text}"
+                message=f"Webhook delivery failed with HTTP {status_code}: {response_text}",
+                code=ErrorCode.VALIDATION_FAILED,
+                details={"status_code": status_code, "response": response_text},
             )
 
         logger.info(

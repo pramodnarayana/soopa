@@ -30,13 +30,12 @@ def _from_dict(cls: type[T], data: dict[str, object] | None) -> T | None:
     kwargs = {}
     if not dataclasses.is_dataclass(cls):
         return None
-    fields = {f.name: f for f in dataclasses.fields(typing.cast(typing.Any, cls))}
-    for name in fields:
+    fields = {f.name: f for f in dataclasses.fields(typing.cast(typing.Any, cls)) if f.init}
+    for name, f in fields.items():
         if name in data:
             kwargs[name] = data[name]
         else:
             # Provide a safe default if the field is missing from test data
-            f = fields[name]
             if f.default is not dataclasses.MISSING:
                 kwargs[name] = f.default
             elif f.default_factory is not dataclasses.MISSING:
@@ -852,6 +851,8 @@ class FakeApiGatewayRepository(ApiGatewayRepositoryPort):
             if data.get("http_status_code")
             else None,
             response=str(data["response"]) if data.get("response") else None,
+            error_code=str(data["error_code"]) if data.get("error_code") else None,
+            error_details=typing.cast(dict[str, JsonValue] | None, data.get("error_details")),
         )
 
     async def update_api_payload_status(
@@ -861,6 +862,8 @@ class FakeApiGatewayRepository(ApiGatewayRepositoryPort):
         webhook_url: str | None = None,
         http_status_code: int | None = None,
         response: str | None = None,
+        error_code: str | None = None,
+        error_details: dict[str, typing.Any] | None = None,
         record_id: str | None = None,
     ) -> None:
         if trace_id in self.api_gateway:

@@ -18,7 +18,7 @@ from edi.application.use_cases.pipeline.delivery_router_use_case import (
 )
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
-from edi.core.pipeline.delivery.base import TerminalDeliveryError
+from edi.core.pipeline.delivery.base import TerminalDeliveryError, TransientDeliveryError
 from edi.domain.enums import PipelineEventType
 from edi.testing.fakes.pipeline_fakes import (
     FakeAS2DeliveryAdapter,
@@ -226,10 +226,10 @@ async def test_deliver_as2_http_failure_bubbles_as_transient() -> None:
     # ── Act ────────────────────────────────────────────────────────────────────
     strategy = make_as2_strategy(uow, as2_adapter)
     edi_msg = await uow.repository.get_edi_message(trace_id)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(TransientDeliveryError):
         await strategy.deliver(trace_id, "p-fail", edi_msg, "fixed-idem-key")
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(TransientDeliveryError):
         await strategy.deliver(trace_id, "p-fail", edi_msg, "fixed-idem-key")
 
     # ── Assert ─────────────────────────────────────────────────────────────────

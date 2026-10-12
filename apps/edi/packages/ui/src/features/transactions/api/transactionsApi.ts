@@ -16,6 +16,8 @@ export const transactionsKeys = {
     [...transactionsKeys.lists(tenantId), params] as const,
   details: (tenantId: string) => [...transactionsKeys.all(tenantId), 'detail'] as const,
   detail: (tenantId: string, id: string) => [...transactionsKeys.details(tenantId), id] as const,
+  lineage: (tenantId: string, id: string) =>
+    [...transactionsKeys.details(tenantId), id, 'lineage'] as const,
   threads: (tenantId: string) => [...transactionsKeys.all(tenantId), 'thread'] as const,
   thread: (tenantId: string, key: string, value: string) =>
     [...transactionsKeys.threads(tenantId), key, value] as const,
@@ -64,6 +66,27 @@ export function useTransactionDetail(traceId: string) {
   });
 }
 
+export interface TraceLineageItem {
+  trace_id: string;
+  status: string;
+  created_at: string;
+  replay_count: number;
+}
+
+export function useTransactionLineage(traceId: string) {
+  const api = useEdiNetwork();
+  const tenantId = useTenantId();
+  return useQuery({
+    queryKey: transactionsKeys.lineage(tenantId, traceId),
+    queryFn: async () => {
+      const response = await api.get<TraceLineageItem[]>(`transactions/${traceId}/lineage`);
+      return response.data;
+    },
+    enabled: !!traceId,
+    refetchInterval: 10000,
+  });
+}
+
 export function useTransactionThread(key: string, value: string) {
   const api = useEdiNetwork();
   const tenantId = useTenantId();
@@ -95,8 +118,8 @@ export function useReplayTransaction() {
     },
     onSuccess: (_, { traceId }) => {
       toast({ title: 'Replay queued', description: 'Transaction queued.', variant: 'success' });
-      // Invalidate the detail query to show the new state
-      queryClient.invalidateQueries({ queryKey: transactionsKeys.detail(tenantId, traceId) });
+      // Invalidate the detail and lineage queries to show the new attempt
+      queryClient.invalidateQueries({ queryKey: transactionsKeys.details(tenantId) });
       queryClient.invalidateQueries({ queryKey: transactionsKeys.lists(tenantId) });
       queryClient.invalidateQueries({ queryKey: explorerKeys.all(tenantId) });
     },

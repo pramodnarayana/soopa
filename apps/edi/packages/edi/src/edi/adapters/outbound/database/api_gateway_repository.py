@@ -1,3 +1,4 @@
+from seedwork.domain.types import JsonDict
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import select, update
@@ -27,6 +28,8 @@ class SqlAlchemyApiGatewayRepository(ApiGatewayRepositoryPort):
             http_status_code=command.http_status_code,
             payload=command.payload,
             response=command.response,
+            error_code=command.error_code,
+            error_details=command.error_details,
         )
         self.session.add(log)
         await self.session.flush()
@@ -50,6 +53,8 @@ class SqlAlchemyApiGatewayRepository(ApiGatewayRepositoryPort):
             status=str(record.status),
             http_status_code=record.http_status_code,
             response=record.response,
+            error_code=record.error_code,
+            error_details=record.error_details,
         )
 
     async def update_api_payload_status(
@@ -59,6 +64,8 @@ class SqlAlchemyApiGatewayRepository(ApiGatewayRepositoryPort):
         webhook_url: str | None = None,
         http_status_code: int | None = None,
         response: str | None = None,
+        error_code: str | None = None,
+        error_details: JsonDict | None = None,
         record_id: str | None = None,
     ) -> None:
         if record_id:
@@ -80,6 +87,10 @@ class SqlAlchemyApiGatewayRepository(ApiGatewayRepositoryPort):
             stmt = stmt.values(http_status_code=http_status_code)
         if response is not None:
             stmt = stmt.values(response=response)
+        if error_code is not None:
+            stmt = stmt.values(error_code=error_code)
+        if error_details is not None:
+            stmt = stmt.values(error_details=error_details)
 
         await self.session.execute(stmt)
         await self.session.flush()

@@ -27,6 +27,7 @@ interface ExplorerTableProps<T> {
   headerToolbar?: React.ReactNode;
   onLoadMore?: () => void;
   hasMore?: boolean;
+  onTraceClick?: (traceId: string) => void;
 }
 
 export function ExplorerTable<T extends { id: string; trace_id?: string; status?: string }>({
@@ -37,6 +38,7 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
   headerToolbar,
   onLoadMore,
   hasMore,
+  onTraceClick,
 }: ExplorerTableProps<T>) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -59,7 +61,9 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
         );
       case 'FAILED':
       case 'ERROR':
-        return <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">FAILURE</Badge>;
+        return (
+          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 border-0">{status}</Badge>
+        );
       case 'PENDING':
       case 'PENDING_DELIVERY':
         return (
@@ -140,17 +144,28 @@ export function ExplorerTable<T extends { id: string; trace_id?: string; status?
                     </TableCell>
                   ))}
                   <TableCell className="text-right py-3" onClick={(e) => e.stopPropagation()}>
-                    {item.trace_id && (
-                      <Link
-                        to="/tenant/transactions/$traceId"
-                        params={{ traceId: item.trace_id }}
-                        className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                        title="View Trace Timeline"
-                      >
-                        Trace
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    )}
+                    {item.trace_id &&
+                      (onTraceClick ? (
+                        <button
+                          type="button"
+                          onClick={() => onTraceClick(item.trace_id!)}
+                          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                          title="View Trace Timeline"
+                        >
+                          Trace
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      ) : (
+                        <Link
+                          to="/tenant/transactions/$traceId"
+                          params={{ traceId: item.trace_id }}
+                          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                          title="View Trace Timeline"
+                        >
+                          Trace
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </Link>
+                      ))}
                   </TableCell>
                 </TableRow>
                 {expandedId === item.id && (

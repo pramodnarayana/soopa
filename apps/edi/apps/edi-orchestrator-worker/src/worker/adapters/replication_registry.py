@@ -15,6 +15,8 @@ Adding a new replicated entity:
     the rest — no changes to the adapter are required.
 """
 
+from typing import Any
+
 from database.models import Webhook as GlobalWebhook
 from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalAS2Partner
 from edi.adapters.outbound.database.models.control_plane import (
@@ -35,8 +37,143 @@ from edi.adapters.outbound.database.models.data_plane import (
 from edi.adapters.outbound.database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from edi.adapters.outbound.database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
+from seedwork.domain.types import JsonDict
 
-from worker.domain.replication_graph import EntityDependency, EntitySpec
+from worker.domain.replication_graph import (
+    EntityDependency,
+    EntitySpec,
+    validate_replication_graph,
+)
+
+
+def map_as2_partner(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "name": entity.name,
+        "as2_id": entity.as2_id,
+        "public_cert_pem": entity.public_cert_pem,
+        "public_cert_vault_ref": entity.public_cert_vault_ref,
+        "private_key_vault_ref": entity.private_key_vault_ref,
+        "prev_public_cert_pem": entity.prev_public_cert_pem,
+        "prev_public_cert_vault_ref": entity.prev_public_cert_vault_ref,
+        "prev_private_key_vault_ref": entity.prev_private_key_vault_ref,
+        "url": entity.url,
+        "is_local": entity.is_local,
+        "active": entity.active,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def map_sftp_partner(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "name": entity.name,
+        "host": entity.host,
+        "port": entity.port,
+        "username": entity.username,
+        "host_key": entity.host_key,
+        "inbound_remote_path": entity.inbound_remote_path,
+        "outbound_remote_path": entity.outbound_remote_path,
+        "password_encrypted": entity.password_encrypted,
+        "credentials_vault_ref": entity.credentials_vault_ref,
+        "active": entity.active,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def map_webhook(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "name": entity.name,
+        "url": entity.url,
+        "auth_header_vault_ref": entity.auth_header_vault_ref,
+        "active": entity.active,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def map_outbound_edi_header(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "trading_partner_id": entity.trading_partner_id,
+        "name": entity.name,
+        "isa_sender_id": entity.isa_sender_id,
+        "isa_sender_qualifier": entity.isa_sender_qualifier,
+        "isa_receiver_id": entity.isa_receiver_id,
+        "isa_receiver_qualifier": entity.isa_receiver_qualifier,
+        "gs_sender_id": entity.gs_sender_id,
+        "gs_receiver_id": entity.gs_receiver_id,
+        "transaction_type": entity.transaction_type,
+        "default_standard": entity.default_standard,
+        "default_version": entity.default_version,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def map_as2_partnership(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "local_partner_id": entity.local_partner_id,
+        "remote_partner_id": entity.remote_partner_id,
+        "name": entity.name,
+        "credentials_vault_ref": entity.credentials_vault_ref,
+        "mdn_type": entity.mdn_type,
+        "mdn_url": entity.mdn_url,
+        "encryption_algorithm": entity.encryption_algorithm,
+        "signature_algorithm": entity.signature_algorithm,
+        "advanced_flags": entity.advanced_flags,
+        "active": entity.active,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def map_inbound_route(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "name": entity.name,
+        "trading_partner_id": entity.trading_partner_id,
+        "isa_sender_id": entity.isa_sender_id,
+        "isa_receiver_id": entity.isa_receiver_id,
+        "gs_sender_id": entity.gs_sender_id,
+        "gs_receiver_id": entity.gs_receiver_id,
+        "transaction_type": entity.transaction_type,
+        "processing_mode": entity.processing_mode,
+        "connection_type": entity.connection_type,
+        "active": entity.active,
+        "webhook_id": entity.webhook_id,
+        "as2_partner_id": entity.as2_partner_id,
+        "sftp_partner_id": entity.sftp_partner_id,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
+
+def map_outbound_route(entity: Any) -> JsonDict:
+    return {
+        "id": entity.id,
+        "tenant_id": entity.tenant_id,
+        "trading_partner_id": entity.trading_partner_id,
+        "name": entity.name,
+        "connection_type": entity.connection_type,
+        "webhook_id": entity.webhook_id,
+        "active": entity.active,
+        "as2_partner_id": entity.as2_partner_id,
+        "sftp_partner_id": entity.sftp_partner_id,
+        "created_at": entity.created_at,
+        "updated_at": entity.updated_at,
+    }
+
 
 # ---------------------------------------------------------------------------
 # Replication Graph
@@ -50,24 +187,28 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
     "as2_partner": EntitySpec(
         global_model=GlobalAS2Partner,
         tenant_model=TenantAS2Partner,
+        mapper=map_as2_partner,
         include_shared=True,
         dependencies=[],
     ),
     "sftp_partner": EntitySpec(
         global_model=GlobalSFTPPartner,
         tenant_model=TenantSFTPPartner,
+        mapper=map_sftp_partner,
         include_shared=False,
         dependencies=[],
     ),
     "webhook": EntitySpec(
         global_model=GlobalWebhook,
         tenant_model=TenantWebhook,
+        mapper=map_webhook,
         include_shared=False,
         dependencies=[],
     ),
     "outbound_edi_header": EntitySpec(
         global_model=GlobalOutboundEdiHeader,
         tenant_model=TenantOutboundEdiHeader,
+        mapper=map_outbound_edi_header,
         include_shared=False,
         dependencies=[],
     ),
@@ -75,6 +216,7 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
     "as2_partnership": EntitySpec(
         global_model=GlobalAS2Partnership,
         tenant_model=TenantAS2Partnership,
+        mapper=map_as2_partnership,
         include_shared=True,
         # FK: local_partner_id → as2_partners.id
         #     remote_partner_id → as2_partners.id
@@ -82,21 +224,18 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
         dependencies=[
             EntityDependency(
                 fk_attr="local_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
             EntityDependency(
                 fk_attr="remote_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
         ],
     ),
     "inbound_route": EntitySpec(
         global_model=GlobalInboundRoute,
         tenant_model=TenantInboundRoute,
+        mapper=map_inbound_route,
         include_shared=False,
         # CHECK constraint: exactly ONE of these three FK columns is non-null.
         # All three are listed; the driver skips null values automatically.
@@ -106,27 +245,22 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
         dependencies=[
             EntityDependency(
                 fk_attr="as2_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
             EntityDependency(
                 fk_attr="sftp_partner_id",
-                global_model=GlobalSFTPPartner,
-                tenant_model=TenantSFTPPartner,
-                include_shared=False,
+                target_key="sftp_partner",
             ),
             EntityDependency(
                 fk_attr="webhook_id",
-                global_model=GlobalWebhook,
-                tenant_model=TenantWebhook,
-                include_shared=False,
+                target_key="webhook",
             ),
         ],
     ),
     "outbound_route": EntitySpec(
         global_model=GlobalOutboundRoute,
         tenant_model=TenantOutboundRoute,
+        mapper=map_outbound_route,
         include_shared=False,
         # CHECK constraint: exactly ONE of these two FK columns is non-null.
         # FK: as2_partner_id  → as2_partners.id
@@ -134,16 +268,15 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
         dependencies=[
             EntityDependency(
                 fk_attr="as2_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
             EntityDependency(
                 fk_attr="sftp_partner_id",
-                global_model=GlobalSFTPPartner,
-                tenant_model=TenantSFTPPartner,
-                include_shared=False,
+                target_key="sftp_partner",
             ),
         ],
     ),
 }
+
+# Fail fast at startup if graph structure violates invariants
+validate_replication_graph(REPLICATION_GRAPH)

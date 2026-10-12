@@ -13,12 +13,24 @@ export const Route = createRoute({
 function TracePageWrapper() {
   const { traceId } = useParams({ from: Route.id });
   const router = useRouter();
-  return <TransactionTracePage traceId={traceId} onBack={() => router.history.back()} />;
+  return (
+    <TransactionTracePage
+      traceId={traceId}
+      onBack={() => router.history.back()}
+      onTraceClick={(targetTraceId) =>
+        void router.navigate({
+          to: '/tenant/transactions/$traceId',
+          params: { traceId: targetTraceId },
+        })
+      }
+    />
+  );
 }
 
-interface TransactionTracePageProps {
+export interface TransactionTracePageProps {
   traceId: string;
   onBack?: () => void;
+  onTraceClick?: (traceId: string) => void;
 }
 
 /**
@@ -27,7 +39,7 @@ interface TransactionTracePageProps {
  * This is the Transactions-scoped version of the trace view.
  * The back button navigates to /tenant/edi/transactions, NOT /tenant/edi/explorer.
  */
-export function TransactionTracePage({ traceId, onBack }: TransactionTracePageProps) {
+export function TransactionTracePage({ traceId, onBack, onTraceClick }: TransactionTracePageProps) {
   const { data, isLoading, isError } = useTransactionDetail(traceId);
 
   return (
@@ -66,7 +78,7 @@ export function TransactionTracePage({ traceId, onBack }: TransactionTracePagePr
       )}
 
       {/* Timeline */}
-      {data && !isLoading && <TransactionTimeline transaction={data} />}
+      {data && !isLoading && <TransactionTimeline transaction={data} onTraceClick={onTraceClick} />}
     </div>
   );
 }

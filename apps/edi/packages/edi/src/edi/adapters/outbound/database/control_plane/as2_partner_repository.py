@@ -1,5 +1,3 @@
-import dataclasses
-
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, or_, select
 
@@ -18,6 +16,41 @@ class SqlAlchemyAS2TradingPartnerRepository(
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    def _to_domain_model(self, record: AS2Partner) -> AS2PartnerDomainModel:
+        return AS2PartnerDomainModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            as2_id=record.as2_id,
+            name=record.name,
+            is_local=record.is_local,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            public_cert_pem=record.public_cert_pem,
+            public_cert_vault_ref=record.public_cert_vault_ref,
+            private_key_vault_ref=record.private_key_vault_ref,
+            prev_public_cert_pem=record.prev_public_cert_pem,
+            prev_public_cert_vault_ref=record.prev_public_cert_vault_ref,
+            prev_private_key_vault_ref=record.prev_private_key_vault_ref,
+            url=record.url,
+            active=record.active,
+        )
+
+    def _update_record_from_domain(
+        self, record: AS2Partner, aggregate: AS2PartnerDomainModel
+    ) -> None:
+        record.tenant_id = aggregate.tenant_id or ""
+        record.as2_id = aggregate.as2_id
+        record.name = aggregate.name
+        record.is_local = aggregate.is_local
+        record.public_cert_pem = aggregate.public_cert_pem
+        record.public_cert_vault_ref = aggregate.public_cert_vault_ref
+        record.private_key_vault_ref = aggregate.private_key_vault_ref
+        record.prev_public_cert_pem = aggregate.prev_public_cert_pem
+        record.prev_public_cert_vault_ref = aggregate.prev_public_cert_vault_ref
+        record.prev_private_key_vault_ref = aggregate.prev_private_key_vault_ref
+        record.url = aggregate.url
+        record.active = aggregate.active
+
     async def save(self, aggregate: AS2PartnerDomainModel) -> None:
         if aggregate.tenant_id and aggregate.tenant_id != PLATFORM_TENANT_ID:
             raise ValueError(
@@ -32,9 +65,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
             record = AS2Partner(id=aggregate.id)
             self.session.add(record)
 
-        for field in dataclasses.fields(aggregate):
-            if field.name not in ("created_at", "updated_at", "_domain_events"):
-                setattr(record, field.name, getattr(aggregate, field.name))
+        self._update_record_from_domain(record, aggregate)
 
         self._drain_events(aggregate)
 
@@ -56,16 +87,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
         )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
-        return (
-            AS2PartnerDomainModel(
-                **{
-                    f.name: getattr(record, f.name)
-                    for f in dataclasses.fields(AS2PartnerDomainModel)
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str) -> bool:
         stmt = select(AS2Partner).where(
@@ -82,12 +104,7 @@ class SqlAlchemyAS2TradingPartnerRepository(
         result = await self.session.execute(
             select(AS2Partner).where(AS2Partner.tenant_id == tenant_id)
         )
-        return [
-            AS2PartnerDomainModel(
-                **{f.name: getattr(r, f.name) for f in dataclasses.fields(AS2PartnerDomainModel)}
-            )
-            for r in result.scalars().all()
-        ]
+        return [self._to_domain_model(r) for r in result.scalars().all()]
 
     async def delete(self, aggregate: AS2PartnerDomainModel) -> None:
         conds = [AS2Partner.id == aggregate.id, AS2Partner.tenant_id == aggregate.tenant_id]
@@ -112,9 +129,4 @@ class SqlAlchemyAS2TradingPartnerRepository(
             AS2Partner.tenant_id == tenant_id, AS2Partner.id.in_(partner_ids)
         )
         result = await self.session.execute(stmt)
-        return [
-            AS2PartnerDomainModel(
-                **{f.name: getattr(r, f.name) for f in dataclasses.fields(AS2PartnerDomainModel)}
-            )
-            for r in result.scalars().all()
-        ]
+        return [self._to_domain_model(r) for r in result.scalars().all()]

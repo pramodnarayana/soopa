@@ -82,7 +82,9 @@ function DirectionBadge({ direction }: { direction?: string }) {
 
 // ─── Table ────────────────────────────────────────────────────────────────────
 
-export function TransactionsTable<T extends { id: string; trace_id?: string; status?: string }>({
+export function TransactionsTable<
+  T extends { id: string; trace_id?: string; status?: string; status_message?: string | null },
+>({
   columns,
   data,
   isLoading,

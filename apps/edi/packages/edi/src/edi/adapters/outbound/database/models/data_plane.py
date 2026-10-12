@@ -204,6 +204,8 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     signature_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
     encryption_algorithm: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_details: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     state: Mapped[str | None] = mapped_column(String(255), nullable=True)
     msg_headers: Mapped[str | None] = mapped_column(Text, nullable=True)
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -252,6 +254,9 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default=MessageStatus.TRANSFORMED
     )
+    status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_details: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
@@ -294,6 +299,8 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     payload: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_details: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
     headers: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)

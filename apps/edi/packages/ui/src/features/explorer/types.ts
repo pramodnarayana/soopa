@@ -1,3 +1,9 @@
+export type JsonValue = string | number | boolean | null | JsonObject | JsonArray;
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+export type JsonArray = Array<JsonValue>;
+
 export interface FilterRule {
   id?: string;
   field: string;
@@ -37,6 +43,9 @@ export interface ExplorerEdiMessage {
   replay_count?: number;
   parent_trace_id?: string | null;
   original_trace_id?: string | null;
+  error_code?: string | null;
+  error_details?: JsonObject | null;
+  status_message?: string | null;
 }
 
 export interface ExplorerEdiJson {
@@ -47,11 +56,14 @@ export interface ExplorerEdiJson {
   trading_partner_id: string | null;
   status: string;
   created_at: string | null;
-  business_metadata: Record<string, unknown> | null;
-  payload: Record<string, unknown> | null;
+  business_metadata: JsonObject | null;
+  payload: JsonObject | null;
   replay_count?: number;
   parent_trace_id?: string | null;
   original_trace_id?: string | null;
+  error_code?: string | null;
+  error_details?: JsonObject | null;
+  status_message?: string | null;
 }
 
 export interface ExplorerResponse<T> {

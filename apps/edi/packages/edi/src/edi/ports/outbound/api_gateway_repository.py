@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict, JsonValue
 
 from edi.domain.enums import EdiDirection, MessageStatus
 
@@ -14,6 +14,8 @@ class ApiGatewayPayloadDTO:
     status: str
     http_status_code: int | None
     response: str | None
+    error_code: str | None
+    error_details: JsonDict | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -28,6 +30,8 @@ class CreateApiGatewayCommand:
     http_status_code: int | None = None
     payload: JsonValue | None = None
     response: str | None = None
+    error_code: str | None = None
+    error_details: JsonDict | None = None
 
 
 class ApiGatewayRepositoryPort(Protocol):
@@ -55,6 +59,8 @@ class ApiGatewayRepositoryPort(Protocol):
         webhook_url: str | None = None,
         http_status_code: int | None = None,
         response: str | None = None,
+        error_code: str | None = None,
+        error_details: JsonDict | None = None,
         record_id: str | None = None,
     ) -> None:
         """

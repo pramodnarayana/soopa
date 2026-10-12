@@ -1,4 +1,3 @@
-import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -16,6 +15,40 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    def _update_record_from_domain(
+        self, record: SFTPPartner, aggregate: SFTPPartnerDomainModel
+    ) -> None:
+        record.tenant_id = aggregate.tenant_id
+        record.name = aggregate.name
+        record.host = aggregate.host
+        record.port = aggregate.port
+        record.username = aggregate.username
+        record.active = aggregate.active
+        record.host_key = aggregate.host_key
+        record.inbound_remote_path = aggregate.inbound_remote_path
+        record.outbound_remote_path = aggregate.outbound_remote_path
+        record.password_encrypted = aggregate.password_encrypted
+        record.credentials_vault_ref = aggregate.credentials_vault_ref
+
+    @staticmethod
+    def _to_domain_model(record: SFTPPartner) -> SFTPPartnerDomainModel:
+        return SFTPPartnerDomainModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            name=record.name,
+            host=record.host,
+            port=record.port,
+            username=record.username,
+            active=record.active,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            host_key=record.host_key,
+            inbound_remote_path=record.inbound_remote_path,
+            outbound_remote_path=record.outbound_remote_path,
+            password_encrypted=record.password_encrypted,
+            credentials_vault_ref=record.credentials_vault_ref,
+        )
+
     # ------------------------------------------------------------------------
     # SFTP Partners (Now in Control Plane)
     # ------------------------------------------------------------------------
@@ -32,9 +65,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
             record = SFTPPartner(id=aggregate.id)
             self.session.add(record)
 
-        for field in dataclasses.fields(aggregate):
-            if field.name not in ("created_at", "updated_at", "_domain_events"):
-                setattr(record, field.name, getattr(aggregate, field.name))
+        self._update_record_from_domain(record, aggregate)
 
         self._drain_events(aggregate)
         await self.session.flush()
@@ -50,17 +81,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
             )
         )
         record = result.scalar_one_or_none()
-        return (
-            SFTPPartnerDomainModel(
-                **{
-                    k: v
-                    for k, v in record.__dict__.items()
-                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_domain_model(record) if record else None
 
     async def list_sftp_partners(self, tenant_id: str) -> Sequence[SFTPPartnerDomainModel]:
         result = await self.session.execute(
@@ -68,16 +89,7 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
                 SFTPPartner.tenant_id == tenant_id, SFTPPartner.deleted_at.is_(None)
             )
         )
-        return [
-            SFTPPartnerDomainModel(
-                **{
-                    k: v
-                    for k, v in r.__dict__.items()
-                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
-                }
-            )
-            for r in result.scalars().all()
-        ]
+        return [self._to_domain_model(r) for r in result.scalars().all()]
 
     async def delete(self, aggregate: SFTPPartnerDomainModel) -> None:
         await self.session.execute(
@@ -105,13 +117,4 @@ class SqlAlchemySFTPPartnerRepository(SFTPPartnerRepositoryPort, GlobalSqlAlchem
                 SFTPPartner.deleted_at.is_(None),
             )
         )
-        return [
-            SFTPPartnerDomainModel(
-                **{
-                    k: v
-                    for k, v in r.__dict__.items()
-                    if not k.startswith("_") and k not in ("deleted_at", "deleted_by")
-                }
-            )
-            for r in result.scalars().all()
-        ]
+        return [self._to_domain_model(r) for r in result.scalars().all()]

@@ -1,7 +1,4 @@
 import asyncio
-import contextlib
-import signal
-import sys
 
 import structlog
 from observability import ObservabilityProvider
@@ -11,7 +8,7 @@ from identity_worker.config.settings import AppSettings
 
 logger = structlog.get_logger(__name__)
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class IdentityWorkerModule(LaunchableWorker):
@@ -28,6 +25,16 @@ class IdentityWorkerModule(LaunchableWorker):
             self.container.events_consumer.start()
             logger.info("identity_event_sqs_consumer_started_in_worker")
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks = []
+        if (
+            self.container
+            and self.container.events_consumer
+            and getattr(self.container.events_consumer, "task", None)
+        ):
+            tasks.append(self.container.events_consumer.task)
+        return tasks
+
     async def stop(self) -> None:
         logger.info("identity_worker_shutting_down_tasks")
         if self.container:
@@ -38,28 +45,13 @@ class IdentityWorkerModule(LaunchableWorker):
 
 
 async def main(
-    stop_event: asyncio.Event | None = None, settings: AppSettings | None = None
+    stop_event: asyncio.Event | None = None,
+    settings: AppSettings | None = None,
 ) -> None:
     ObservabilityProvider.auto_configure_from_env("identity-worker")
-
     module = IdentityWorkerModule(settings=settings)
-    try:
-        await module.start()
-
-        if stop_event is None:
-            stop_event = asyncio.Event()
-            loop = asyncio.get_running_loop()
-            for sig in (signal.SIGTERM, signal.SIGINT):
-                with contextlib.suppress(NotImplementedError, RuntimeError):
-                    loop.add_signal_handler(sig, stop_event.set)
-
-        await stop_event.wait()
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        sys.exit(0)
+    run_worker_app(main)

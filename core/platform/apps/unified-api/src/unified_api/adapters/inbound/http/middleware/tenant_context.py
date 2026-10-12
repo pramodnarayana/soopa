@@ -103,9 +103,9 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             if is_exempt:
                 return await call_next(request)
             logger.warning(
-                "[TENANT_CONTEXT_MIDDLEWARE] Tenant ID missing from request. path=%s is_exempt=%s",
-                request.url.path,
-                is_exempt,
+                "[TENANT_CONTEXT_MIDDLEWARE] Tenant ID missing from request.",
+                path=request.url.path,
+                is_exempt=is_exempt,
             )
             return JSONResponse(
                 status_code=400,

@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import os
-import signal
 from typing import Any
 
 import structlog
@@ -19,7 +18,7 @@ logger = structlog.get_logger(__name__)
 _background_tasks: set[asyncio.Task[None]] = set()
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class SchedulerWorkerModule(LaunchableWorker):
@@ -55,6 +54,11 @@ class SchedulerWorkerModule(LaunchableWorker):
         _background_tasks.add(self.worker_task)
         self.worker_task.add_done_callback(_background_tasks.discard)
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        if self.worker_task:
+            return [self.worker_task]
+        return []
+
     async def stop(self) -> None:
         logger.info("Stopping scheduler worker gracefully...")
         try:
@@ -70,24 +74,11 @@ class SchedulerWorkerModule(LaunchableWorker):
             logger.info("Database engine disposed. Scheduler worker shutdown complete.")
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("scheduler-worker")
-
     module = SchedulerWorkerModule()
-
-    try:
-        await module.start()
-
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            with contextlib.suppress(NotImplementedError, RuntimeError):
-                loop.add_signal_handler(sig, stop_event.set)
-
-        await stop_event.wait()
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)

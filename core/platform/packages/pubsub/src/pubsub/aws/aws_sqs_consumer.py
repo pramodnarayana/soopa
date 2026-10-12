@@ -16,6 +16,7 @@ logger = structlog.get_logger(__name__)
 class _SqsClientProtocol(Protocol):
     async def receive_message(self, **kwargs: Any) -> JsonDict: ...
     async def delete_message(self, **kwargs: Any) -> None: ...
+    async def change_message_visibility(self, **kwargs: Any) -> None: ...
 
 
 class AwsSqsConsumer:
@@ -157,7 +158,6 @@ class AwsSqsConsumer:
             body_length=len(body_str),
         )
 
-        yielded = False
         try:
             event_data = self._extract_event_payload(body_str)
 
@@ -165,9 +165,15 @@ class AwsSqsConsumer:
                 await self._delete_message(sqs_client, receipt_handle)
 
             async def nack() -> None:
-                pass
+                try:
+                    await sqs_client.change_message_visibility(
+                        QueueUrl=self.queue_url,
+                        ReceiptHandle=receipt_handle,
+                        VisibilityTimeout=5,  # 5-second backoff
+                    )
+                except (ClientError, BotoCoreError) as e:
+                    logger.warning("failed_to_reset_visibility_timeout", error=str(e))
 
-            yielded = True
             payload_dto = event_data
 
         except (json.JSONDecodeError, ValueError):
@@ -180,17 +186,4 @@ class AwsSqsConsumer:
             yield None
             return
 
-        try:
-            # Yield the ackable message
-            yield AckableMessage(payload=payload_dto, ack=ack, nack=nack)
-        except Exception as e:
-            # We MUST raise the exception to satisfy the 'No Silenced Failures' enterprise rule.
-            # The upstream consumer manager is responsible for catching and handling this properly.
-            logger.exception(
-                "sqs_event_processing_failed",
-                message_id=message_id,
-                error=str(e),
-            )
-            if not yielded:
-                yield None
-            raise
+        yield AckableMessage(payload=payload_dto, ack=ack, nack=nack)

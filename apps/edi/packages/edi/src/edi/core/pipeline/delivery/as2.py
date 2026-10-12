@@ -5,15 +5,21 @@ import typing
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.exceptions import ErrorCode
 
 from edi.application.dtos.partners import AS2PartnershipDTO, LocalAS2PartnerDTO, RemoteAS2PartnerDTO
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
-from edi.core.pipeline.delivery.base import BaseDeliveryStrategy, TerminalDeliveryError
+from edi.core.pipeline.delivery.base import (
+    BaseDeliveryStrategy,
+    TerminalDeliveryError,
+    TransientDeliveryError,
+)
 from edi.domain.enums import EdiDirection
 from edi.domain.models.as2 import OutboundAS2Message
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.services.as2_protocol import parse_mdn
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
+from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -50,15 +56,25 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 status_code=status_code,
             )
             # Transient error, raise so outbox can retry if applicable
-            raise RuntimeError(f"AS2 Delivery failed with HTTP {status_code}")
+            raise TransientDeliveryError(
+                message=f"AS2 Delivery failed with HTTP {status_code}",
+                code=ErrorCode.UNKNOWN_TRANSPORT_ERROR,
+                details={"status_code": status_code},
+            )
 
         try:
             mdn = parse_mdn(response_headers, response_body)
-        except Exception as e:
-            logger.exception(
-                "AS2 MDN parsing or processing failed for trace_id={trace_id}", trace_id=trace_id
+        except ValueError as e:
+            logger.error(
+                "as2_mdn_parse_failed",
+                trace_id=trace_id,
+                error=str(e),
             )
-            raise TerminalDeliveryError(f"AS2 MDN parsing or processing failed: {e}") from e
+            raise TerminalDeliveryError(
+                message=f"AS2 MDN parsing or processing failed: {e}",
+                code=ErrorCode.VALIDATION_FAILED,
+                details={"error": str(e)},
+            ) from e
 
         disposition = mdn.disposition
         received_mic = mdn.mic
@@ -112,7 +128,11 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             received_mic=received_mic,
             expected_mic=as2_msg.mic,
         )
-        raise TerminalDeliveryError(f"Sync MDN indicates failure: {disposition}")
+        raise TerminalDeliveryError(
+            message=f"Sync MDN indicates failure: {disposition}",
+            code=ErrorCode.VALIDATION_FAILED,
+            details={"disposition": disposition},
+        )
 
     async def _fetch_and_map_partners(
         self, tenant_id: str, partner_id: str
@@ -123,7 +143,9 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             )
             if not partnerships:
                 raise TerminalDeliveryError(
-                    f"No active AS2 partnership found for remote partner {partner_id}."
+                    message=f"No active AS2 partnership found for remote partner {partner_id}.",
+                    code=ErrorCode.NOT_FOUND,
+                    details={"partner_id": partner_id},
                 )
 
             if len(partnerships) != 1:
@@ -133,7 +155,9 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                     remote_partner_id=partner_id,
                 )
                 raise TerminalDeliveryError(
-                    f"Expected exactly 1 active AS2 partnership for remote partner {partner_id}, found {len(partnerships)}."
+                    message=f"Expected exactly 1 active AS2 partnership for remote partner {partner_id}, found {len(partnerships)}.",
+                    code=ErrorCode.CONFLICT,
+                    details={"partner_id": partner_id, "found": len(partnerships)},
                 )
 
             partnership_dto = partnerships[0]
@@ -142,12 +166,16 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 tenant_id, partnership_dto.remote_partner_id
             )
             if not remote_partner_dto:
-                raise TerminalDeliveryError("AS2 remote partner not found.")
+                raise TerminalDeliveryError(
+                    message="AS2 remote partner not found.", code=ErrorCode.NOT_FOUND
+                )
 
             remote_url: str | None = remote_partner_dto.url
             if not remote_url:
                 raise TerminalDeliveryError(
-                    f"AS2 partner {partner_id} has no remote_url configured."
+                    message=f"AS2 partner {partner_id} has no remote_url configured.",
+                    code=ErrorCode.VALIDATION_FAILED,
+                    details={"partner_id": partner_id},
                 )
 
             local_partner_id: str | None = partnership_dto.local_partner_id
@@ -213,7 +241,9 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
             ) = await self._fetch_and_map_partners(edi_msg.tenant_id, partner_id)
 
             if not edi_msg.edi_data:
-                raise TerminalDeliveryError("Empty EDI data")
+                raise TerminalDeliveryError(
+                    message="Empty EDI data", code=ErrorCode.INVALID_PAYLOAD
+                )
             raw_payload = edi_msg.edi_data.encode("utf-8")
 
             as2_msg = await self._as2_orchestrator.build(
@@ -237,18 +267,18 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 match = re.search(r'filename="([^"]+)"', content_disposition, re.IGNORECASE)
                 edi_msg.file_name = match.group(1) if match else content_disposition
 
-        except TerminalDeliveryError:
-            raise
         except ValueError as e:
-            logger.exception(
-                "as2_message_build_terminal_failure", trace_id=trace_id, partner_id=partner_id
+            logger.error(
+                "as2_message_build_terminal_failure",
+                trace_id=trace_id,
+                partner_id=partner_id,
+                error=str(e),
             )
-            raise TerminalDeliveryError(f"MDN processing error: {e}")
-        except Exception:
-            logger.exception(
-                "as2_message_build_transient_failure", trace_id=trace_id, partner_id=partner_id
-            )
-            raise
+            raise TerminalDeliveryError(
+                message=f"MDN processing error: {e}",
+                code=ErrorCode.VALIDATION_FAILED,
+                details={"error": str(e)},
+            ) from e
 
         try:
             status_code, response_headers, response_body = await self.as2_delivery.deliver(
@@ -256,11 +286,23 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 body=as2_msg.body,
                 headers=as2_msg.headers,
             )
-        except Exception as e:
-            logger.exception(
-                "as2_http_transmission_failed", trace_id=trace_id, remote_url=remote_url
+        except (PortConnectionError, PortTimeoutError) as e:
+            logger.error(
+                "as2_http_transmission_failed",
+                trace_id=trace_id,
+                remote_url=remote_url,
+                error=str(e),
             )
-            raise RuntimeError(f"AS2 transmission error: {e}") from e
+            error_code = (
+                ErrorCode.CONNECTION_TIMEOUT
+                if isinstance(e, PortTimeoutError)
+                else ErrorCode.CONNECTION_REFUSED
+            )
+            raise TransientDeliveryError(
+                message=f"AS2 transmission error: {e}",
+                code=error_code,
+                details={"error": str(e), "remote_url": remote_url},
+            ) from e
 
         await self._process_mdn_response(
             trace_id,

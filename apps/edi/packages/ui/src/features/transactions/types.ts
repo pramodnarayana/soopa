@@ -10,6 +10,7 @@ export interface TransactionListItem {
   sender_id: string | null;
   receiver_id: string | null;
   status: string;
+  status_message?: string | null;
   edi_data?: string | null;
   created_at: string;
   replay_count: number;
@@ -30,6 +31,7 @@ export interface TransactionDetailResponse {
     gs_sender_id: string | null;
     gs_receiver_id: string | null;
     status: string;
+    status_message?: string | null;
     edi_data: string | null;
     created_at: string;
     replay_count: number;

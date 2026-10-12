@@ -32,6 +32,9 @@ class PostgresOutboxRelay:
         self._notify_event = asyncio.Event()
         self._connection: asyncpg.Connection | None = None
 
+    def background_tasks(self) -> list[asyncio.Task[Any]]:
+        return [self._task] if self._task else []
+
     def start(self) -> None:
         if not self.is_running:
             self.is_running = True

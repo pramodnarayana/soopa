@@ -94,7 +94,6 @@ def db_session_factory(db_connection) -> async_sessionmaker[AsyncSession]:
 
 @pytest.mark.asyncio
 async def test_compute_worker_transforms_edi_and_publishes_event(
-    db_engine,
     db_connection: AsyncConnection,
     db_session_factory: async_sessionmaker,
 ) -> None:
@@ -129,8 +128,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
         outbound_use_case_factory=fake_outbound_use_case_factory,
     )
 
-    # 2. Seed test data completely outside the pytest connection boundary
-    #    to avoid asyncpg constraint race conditions. We use an autonomous engine connection.
+    # 2. Seed test data within the transaction boundary (rolled back automatically on test teardown)
     trace_id = f"trace_{generate_random_hex(6)}"
     tenant_id = f"tenant_{generate_random_hex(6)}"
     partner_id = f"edi_as2_{generate_random_hex(6)}"
@@ -138,83 +136,63 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     route_id = f"edi_ib_rt_{generate_random_hex(6)}"
     msg_id = f"edi_msg_{generate_random_hex(6)}"
 
-    # We manually assign the ID to bypass the default UUID/hex generator for predictable assertions
-    # Seed data autonomously to prevent test isolation bugs
-    async with db_engine.connect() as conn:
-        await conn.execute(
-            text(
-                "INSERT INTO as2_partners (id, tenant_id, name, as2_id, active, is_local, created_at, updated_at) VALUES (:pid, :tid, 'Test Partner', 'AS2TEST', true, false, NOW(), NOW())"
-            ),
-            {"pid": partner_id, "tid": tenant_id},
-        )
-        await conn.execute(
-            text(
-                "INSERT INTO webhooks (id, tenant_id, name, url, active, created_at, updated_at) VALUES (:wid, :tid, 'Test Webhook', 'https://test.com/webhook', true, NOW(), NOW())"
-            ),
-            {"wid": webhook_id, "tid": tenant_id},
-        )
-        await conn.execute(
-            text(
-                "INSERT INTO inbound_routes (id, tenant_id, name, trading_partner_id, webhook_id, isa_sender_id, isa_receiver_id, transaction_type, active, processing_mode, created_at, updated_at) VALUES (:rid, :tid, 'Route', :pid, :wid, 'SENDER123', 'RECEIVER123', '850', true, 'TRANSFORM', NOW(), NOW())"
-            ),
-            {"rid": route_id, "tid": tenant_id, "pid": partner_id, "wid": webhook_id},
-        )
-        await conn.execute(
-            text(
-                "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, sender_id, receiver_id, edi_data, replay_count, created_at, updated_at) VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', 0, NOW(), NOW())"
-            ),
-            {"mid": msg_id, "trid": trace_id, "tid": tenant_id},
-        )
-        await conn.commit()
+    await db_connection.execute(
+        text(
+            "INSERT INTO as2_partners (id, tenant_id, name, as2_id, active, is_local, created_at, updated_at) "
+            "VALUES (:pid, :tid, 'Test Partner', 'AS2TEST', true, false, NOW(), NOW())"
+        ),
+        {"pid": partner_id, "tid": tenant_id},
+    )
+    await db_connection.execute(
+        text(
+            "INSERT INTO webhooks (id, tenant_id, name, url, active, created_at, updated_at) "
+            "VALUES (:wid, :tid, 'Test Webhook', 'https://test.com/webhook', true, NOW(), NOW())"
+        ),
+        {"wid": webhook_id, "tid": tenant_id},
+    )
+    await db_connection.execute(
+        text(
+            "INSERT INTO inbound_routes (id, tenant_id, name, trading_partner_id, webhook_id, "
+            "isa_sender_id, isa_receiver_id, transaction_type, active, processing_mode, created_at, updated_at) "
+            "VALUES (:rid, :tid, 'Route', :pid, :wid, 'SENDER123', 'RECEIVER123', '850', true, 'TRANSFORM', NOW(), NOW())"
+        ),
+        {"rid": route_id, "tid": tenant_id, "pid": partner_id, "wid": webhook_id},
+    )
+    await db_connection.execute(
+        text(
+            "INSERT INTO edi_messages (id, trace_id, tenant_id, direction, transaction_type, status, "
+            "sender_id, receiver_id, edi_data, replay_count, created_at, updated_at) "
+            "VALUES (:mid, :trid, :tid, 'INBOUND', '850', 'RECEIVED', 'SENDER123', 'RECEIVER123', 'ISA*00...', 0, NOW(), NOW())"
+        ),
+        {"mid": msg_id, "trid": trace_id, "tid": tenant_id},
+    )
 
-    # 3. Run the compute worker.
-    try:
-        await dispatcher.dispatch_raw(
-            body_json={
-                "idempotency_key": f"sys_idemp_integ_{trace_id}",
-                "payload": {
-                    "trace_id": trace_id,
-                    "tenant_id": tenant_id,
-                    "step": "COMPUTE_TRANSFORM",
-                },
-            }
-        )
+    # 3. Run the compute worker
+    await dispatcher.dispatch_raw(
+        body_json={
+            "idempotency_key": f"sys_idemp_integ_{trace_id}",
+            "payload": {
+                "trace_id": trace_id,
+                "tenant_id": tenant_id,
+                "step": "COMPUTE_TRANSFORM",
+            },
+        }
+    )
 
-        # 4. Verify outcomes.
-        res = await db_connection.execute(
-            text("SELECT status, payload FROM edi_json WHERE trace_id = :tid"),
-            {"tid": trace_id},
-        )
-        json_rows = res.fetchall()
-        assert len(json_rows) == 1
-        assert json_rows[0].status == "PARSED"
+    # 4. Verify outcomes
+    res = await db_connection.execute(
+        text("SELECT status, payload FROM edi_json WHERE trace_id = :tid"),
+        {"tid": trace_id},
+    )
+    json_rows = res.fetchall()
+    assert len(json_rows) == 1
+    assert json_rows[0].status == "PARSED"
 
-        # Verify Outbox event was published.
-        res = await db_connection.execute(
-            text("SELECT event_type FROM outbox WHERE tenant_id = :tid"),
-            {"tid": tenant_id},
-        )
-        outbox_rows = res.fetchall()
-        assert len(outbox_rows) == 1
-        assert outbox_rows[0].event_type == "TRANSFORMATION_SUCCESSFUL"
-    finally:
-        # Cleanup seeded data autonomously
-        async with db_engine.connect() as conn:
-            await conn.execute(
-                text("DELETE FROM outbox WHERE tenant_id = :tid"), {"tid": tenant_id}
-            )
-            await conn.execute(
-                text("DELETE FROM api_gateway WHERE trace_id = :trace_id"), {"trace_id": trace_id}
-            )
-            await conn.execute(
-                text("DELETE FROM edi_json WHERE trace_id = :trace_id"), {"trace_id": trace_id}
-            )
-            await conn.execute(text("DELETE FROM edi_messages WHERE id = :mid"), {"mid": msg_id})
-            await conn.execute(
-                text("DELETE FROM inbound_routes WHERE id = :rid"), {"rid": route_id}
-            )
-            await conn.execute(text("DELETE FROM webhooks WHERE id = :wid"), {"wid": webhook_id})
-            await conn.execute(
-                text("DELETE FROM as2_partners WHERE id = :pid"), {"pid": partner_id}
-            )
-            await conn.commit()
+    # Verify Outbox event was published
+    res = await db_connection.execute(
+        text("SELECT event_type FROM outbox WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    )
+    outbox_rows = res.fetchall()
+    assert len(outbox_rows) == 1
+    assert outbox_rows[0].event_type == "TRANSFORMATION_SUCCESSFUL"

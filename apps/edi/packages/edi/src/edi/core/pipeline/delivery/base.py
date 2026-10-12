@@ -13,12 +13,14 @@ logger = structlog.get_logger(__name__)
 import contextlib
 from collections.abc import Callable
 
+from seedwork.domain.exceptions import TerminalDomainError, TransientDomainError
 
-class TerminalDeliveryError(Exception):
+
+class TerminalDeliveryError(TerminalDomainError):
     """Raised when delivery fails fatally and should not be retried."""
 
 
-class TransientDeliveryError(Exception):
+class TransientDeliveryError(TransientDomainError):
     """Raised when delivery fails due to a temporary network or transport error, and should be retried."""
 
 

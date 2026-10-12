@@ -58,6 +58,33 @@ class SqlAlchemyTraceRepository(TraceRepositoryPort):
         json_records = json_res.scalars().all()
         gw_records = gw_res.scalars().all()
 
+        # Enterprise Hydration: If an upstream stage is missing on this trace attempt
+        # (e.g. Delivery retry where Stage 1 was not duplicated), hydrate it from parent_trace_id.
+        if not edi_msg and json_records and json_records[0].parent_trace_id:
+            parent_msg_stmt = (
+                select(EdiMessage)
+                .where(
+                    EdiMessage.tenant_id == tid_str,
+                    EdiMessage.trace_id == json_records[0].parent_trace_id,
+                )
+                .order_by(EdiMessage.created_at.desc())
+                .limit(1)
+            )
+            parent_msg_res = await self.session.execute(parent_msg_stmt)
+            edi_msg = parent_msg_res.scalars().first()
+
+        if not json_records and edi_msg and edi_msg.parent_trace_id:
+            parent_json_stmt = (
+                select(EdiJson)
+                .where(
+                    EdiJson.tenant_id == tid_str,
+                    EdiJson.trace_id == edi_msg.parent_trace_id,
+                )
+                .order_by(EdiJson.created_at.asc())
+            )
+            parent_json_res = await self.session.execute(parent_json_stmt)
+            json_records = parent_json_res.scalars().all()
+
         logger.info(
             "trace_repository.get_edi_trace.db_result",
             tenant_id=tenant_id,

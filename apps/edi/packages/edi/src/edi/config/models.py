@@ -58,6 +58,9 @@ class EdiDataPlaneSqsSettings(BaseSettings):
     deliver_queue_url: str = Field(
         validation_alias="SQS_DELIVER_QUEUE_URL", description="The SQS queue URL for EDI Deliver"
     )
+    deliver_dlq_url: str = Field(
+        validation_alias="SQS_DELIVER_DLQ_URL", description="The SQS queue URL for EDI Deliver DLQ"
+    )
     data_plane_jobs_queue_url: str = Field(
         validation_alias="SQS_DATA_PLANE_JOBS_QUEUE_URL",
         description="The SQS queue URL for EDI Data Plane Jobs",

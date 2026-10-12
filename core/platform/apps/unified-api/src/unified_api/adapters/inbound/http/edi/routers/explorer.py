@@ -33,6 +33,8 @@ _ALLOWED_FIELDS: frozenset[str] = frozenset(
         "business_metadata.invoice_number",
         "business_metadata.load_number",
         "business_metadata.business_reference",
+        "error_code",
+        "status_message",
     }
 )
 _ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})
@@ -79,12 +81,17 @@ def _serialize_edi_message(msg: EdiMessageDTO) -> JsonDict:
         "receiver_id": msg.receiver_id,
         "gs_sender_id": msg.gs_sender_id,
         "gs_receiver_id": msg.gs_receiver_id,
+        "connection_type": msg.connection_type,
+        "trading_partner_id": msg.trading_partner_id,
         "status": msg.status,
         "created_at": msg.created_at.isoformat() if msg.created_at else None,
         "edi_data": msg.edi_data,
         "storage_uri": msg.storage_uri,
         "original_trace_id": msg.original_trace_id,
         "replay_count": msg.replay_count,
+        "error_code": msg.error_code,
+        "error_details": msg.error_details,
+        "status_message": msg.status_message,
     }
 
 
@@ -101,6 +108,9 @@ def _serialize_edi_json(j: EdiJsonDTO) -> JsonDict:
         "payload": j.payload,
         "original_trace_id": j.original_trace_id,
         "replay_count": j.replay_count,
+        "error_code": j.error_code,
+        "error_details": j.error_details,
+        "status_message": j.status_message,
     }
 
 

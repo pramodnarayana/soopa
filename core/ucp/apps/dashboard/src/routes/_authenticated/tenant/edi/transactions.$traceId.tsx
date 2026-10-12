@@ -21,6 +21,12 @@ function TransactionTraceRoute() {
     <TransactionTracePage
       traceId={traceId}
       onBack={() => void navigate({ to: '/tenant/edi/transactions' })}
+      onTraceClick={(targetTraceId) =>
+        void navigate({
+          to: '/tenant/edi/transactions/$traceId',
+          params: { traceId: targetTraceId },
+        })
+      }
     />
   );
 }

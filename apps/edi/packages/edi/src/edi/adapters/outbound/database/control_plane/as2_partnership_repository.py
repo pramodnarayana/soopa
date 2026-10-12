@@ -1,5 +1,3 @@
-import dataclasses
-
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import aliased
@@ -22,20 +20,64 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    def _to_partnership_domain_model(self, record: AS2Partnership) -> AS2PartnershipDomainModel:
+        return AS2PartnershipDomainModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            name=record.name,
+            local_partner_id=record.local_partner_id,
+            remote_partner_id=record.remote_partner_id,
+            mdn_type=record.mdn_type,
+            encryption_algorithm=record.encryption_algorithm,
+            signature_algorithm=record.signature_algorithm,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            credentials_vault_ref=record.credentials_vault_ref,
+            mdn_url=record.mdn_url,
+            advanced_flags=record.advanced_flags,
+            active=record.active,
+        )
+
+    def _to_partner_domain_model(self, record: AS2Partner) -> AS2PartnerDomainModel:
+        return AS2PartnerDomainModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            as2_id=record.as2_id,
+            name=record.name,
+            is_local=record.is_local,
+            created_at=record.created_at,
+            updated_at=record.updated_at,
+            public_cert_pem=record.public_cert_pem,
+            public_cert_vault_ref=record.public_cert_vault_ref,
+            private_key_vault_ref=record.private_key_vault_ref,
+            prev_public_cert_pem=record.prev_public_cert_pem,
+            prev_public_cert_vault_ref=record.prev_public_cert_vault_ref,
+            prev_private_key_vault_ref=record.prev_private_key_vault_ref,
+            url=record.url,
+            active=record.active,
+        )
+
+    def _update_record_from_domain(
+        self, record: AS2Partnership, aggregate: AS2PartnershipDomainModel
+    ) -> None:
+        record.tenant_id = aggregate.tenant_id or ""
+        record.name = aggregate.name
+        record.local_partner_id = aggregate.local_partner_id
+        record.remote_partner_id = aggregate.remote_partner_id
+        record.mdn_type = aggregate.mdn_type
+        record.encryption_algorithm = aggregate.encryption_algorithm
+        record.signature_algorithm = aggregate.signature_algorithm
+        record.credentials_vault_ref = aggregate.credentials_vault_ref
+        record.mdn_url = aggregate.mdn_url
+        record.advanced_flags = aggregate.advanced_flags
+        record.active = aggregate.active
+
     async def list_as2_partnerships(self, tenant_id: str | None) -> list[AS2PartnershipDomainModel]:
         normalized_tenant_id = tenant_id or PLATFORM_TENANT_ID
         result = await self.session.execute(
             select(AS2Partnership).where(AS2Partnership.tenant_id == normalized_tenant_id)
         )
-        return [
-            AS2PartnershipDomainModel(
-                **{
-                    f.name: getattr(r, f.name)
-                    for f in dataclasses.fields(AS2PartnershipDomainModel)
-                }
-            )
-            for r in result.scalars().all()
-        ]
+        return [self._to_partnership_domain_model(r) for r in result.scalars().all()]
 
     async def get_as2_partnerships_by_remote_partner_id(
         self, tenant_id: str | None, remote_partner_id: str, active: bool | None = None
@@ -48,15 +90,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         if active is not None:
             stmt = stmt.where(AS2Partnership.active.is_(active))
         records = (await self.session.execute(stmt)).scalars().all()
-        return [
-            AS2PartnershipDomainModel(
-                **{
-                    f.name: getattr(r, f.name)
-                    for f in dataclasses.fields(AS2PartnershipDomainModel)
-                }
-            )
-            for r in records
-        ]
+        return [self._to_partnership_domain_model(r) for r in records]
 
     async def get_partnership_by_as2_ids(
         self, as2_from: str, as2_to: str
@@ -87,24 +121,9 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         partnership_orm, local_partner_orm, remote_partner_orm = row
 
         return (
-            AS2PartnershipDomainModel(
-                **{
-                    f.name: getattr(partnership_orm, f.name)
-                    for f in dataclasses.fields(AS2PartnershipDomainModel)
-                }
-            ),
-            AS2PartnerDomainModel(
-                **{
-                    f.name: getattr(local_partner_orm, f.name)
-                    for f in dataclasses.fields(AS2PartnerDomainModel)
-                }
-            ),
-            AS2PartnerDomainModel(
-                **{
-                    f.name: getattr(remote_partner_orm, f.name)
-                    for f in dataclasses.fields(AS2PartnerDomainModel)
-                }
-            ),
+            self._to_partnership_domain_model(partnership_orm),
+            self._to_partner_domain_model(local_partner_orm),
+            self._to_partner_domain_model(remote_partner_orm),
         )
 
     async def save(self, aggregate: AS2PartnershipDomainModel) -> None:
@@ -144,9 +163,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
             record = AS2Partnership(id=aggregate.id)
             self.session.add(record)
 
-        for field in dataclasses.fields(aggregate):
-            if field.name not in ("created_at", "updated_at", "_domain_events"):
-                setattr(record, field.name, getattr(aggregate, field.name))
+        self._update_record_from_domain(record, aggregate)
 
         self._drain_events(aggregate)
         await self.session.flush()
@@ -173,12 +190,7 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
         record = (await self.session.execute(stmt)).scalar_one_or_none()
         if not record:
             return None
-        return AS2PartnershipDomainModel(
-            **{
-                f.name: getattr(record, f.name)
-                for f in dataclasses.fields(AS2PartnershipDomainModel)
-            }
-        )
+        return self._to_partnership_domain_model(record)
 
     async def get_as2_partnership(
         self, tenant_id: str | None, partnership_id: str
@@ -191,13 +203,4 @@ class SqlAlchemyAS2PartnershipRepository(AS2PartnershipRepositoryPort, GlobalSql
             )
         )
         record = result.scalar_one_or_none()
-        return (
-            AS2PartnershipDomainModel(
-                **{
-                    f.name: getattr(record, f.name)
-                    for f in dataclasses.fields(AS2PartnershipDomainModel)
-                }
-            )
-            if record
-            else None
-        )
+        return self._to_partnership_domain_model(record) if record else None

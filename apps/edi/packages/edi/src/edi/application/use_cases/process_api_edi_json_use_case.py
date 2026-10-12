@@ -8,7 +8,7 @@ from seedwork.utils import generate_id
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
-from edi.domain.enums import EdiDirection
+from edi.domain.enums import EdiDirection, TraceEventType
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus
@@ -98,6 +98,7 @@ class ProcessApiEdiJsonUseCase:
                 id=generate_id(SystemIdPrefix.GENERIC),
                 tenant_id=command.tenant_id,
                 trace_id=trace_id,
+                original_trace_id=trace_id,
                 direction=Direction.OUTBOUND,
                 trading_partner_id=command.trading_partner_id,
                 transaction_type=transaction_type,
@@ -105,6 +106,8 @@ class ProcessApiEdiJsonUseCase:
                 payload=domain_payload,
                 status=RecordStatus.RECEIVED,
             )
+
+            edi_json_aggregate._append_trace(TraceEventType.RECEIVED)
 
             # 4. Queue the transform atomically through the transaction aggregate
             event_kwargs = {

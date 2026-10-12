@@ -3,7 +3,7 @@ from collections.abc import Callable
 import httpx
 
 from edi.adapters.outbound.security.network import ssrf_safe_context
-from edi.core.pipeline.delivery.base import TransientDeliveryError
+from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 
 
@@ -45,5 +45,7 @@ class HttpxDeliveryClient(HttpDeliveryPort):
                 ) as client:
                     response = await client.post(url, content=payload, headers=headers)
                     return response.status_code, response.text
+            except httpx.TimeoutException as e:
+                raise PortTimeoutError(f"HTTP connection timed out: {e}") from e
             except httpx.RequestError as e:
-                raise TransientDeliveryError(str(e)) from e
+                raise PortConnectionError(f"HTTP connection failed: {e}") from e

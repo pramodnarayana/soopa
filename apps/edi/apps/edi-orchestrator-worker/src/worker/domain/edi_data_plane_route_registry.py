@@ -29,7 +29,7 @@ class EdiDataPlaneRouteRegistry:
         """
         self._registry[(event_type, direction)] = factory
 
-    async def route(self, event: RoutableEvent, uow_factory: Callable[..., object]) -> None:
+    async def route(self, event: RoutableEvent, uow_factory: Callable[..., object]) -> Any:
         """
         Looks up the registered factory and executes it.
         Raises ValueError if no matching route is found.
@@ -45,4 +45,4 @@ class EdiDataPlaneRouteRegistry:
         if not factory:
             raise ValueError(f"No route registered for {event.event_type} {direction}")
 
-        await factory(event, uow_factory)
+        return await factory(event, uow_factory)

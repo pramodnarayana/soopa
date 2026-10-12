@@ -7,6 +7,7 @@ from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.aws_sqs_publisher import AwsSqsPublisher
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.enums import ConsumerAction
 
 
 class PubSubProvider:
@@ -58,7 +59,7 @@ class PubSubProvider:
     def create_consumer_manager(
         cls,
         queue_url: str,
-        handler: Callable[[JsonDict], Awaitable[None]],
+        handler: Callable[[JsonDict], Awaitable[ConsumerAction | None]],
         region_name: str,
         endpoint_url: str | None = None,
     ) -> SqsConsumerManager:

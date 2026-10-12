@@ -9,49 +9,38 @@ It is intentionally infrastructure-free. It contains no SQLAlchemy models,
 no database connections, and no adapter concerns.
 
 Architecture:
-    - `EntityDependency` describes a single nullable FK field on an entity.
+    - `EntityDependency` describes a single nullable FK field on an entity pointing
+      to another replicated entity in the graph.
     - `EntitySpec` describes a full entity: its global/tenant model pair,
-      tenant-scoping semantics, and the list of FK dependencies it carries.
-    - `topological_layers` computes the safe replication order from any
-      dict of EntitySpec values via Kahn's algorithm.
-
-The concrete `REPLICATION_GRAPH` (which wires specific SQLAlchemy models
-into EntitySpec instances) lives in the infrastructure adapter layer at:
-    worker/adapters/replication_registry.py
-
-Adding a new entity with FK constraints:
-    1. Create its EntitySpec in replication_registry.py.
-    2. Add it to REPLICATION_GRAPH there.
-    The topological_layers algorithm and the generic replication driver will
-    handle the rest automatically — no other changes required.
+      tenant-scoping semantics, strictly-typed data mapper, and FK dependencies.
+    - `topological_layers` computes the safe replication order via Kahn's algorithm.
+    - `validate_replication_graph` enforces structural invariants at module boot.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from typing import Any
+
+from seedwork.domain.types import JsonDict
 
 ModelClass = type
+MapperFunc = Callable[[Any], JsonDict]
 
 
 @dataclass(frozen=True)
 class EntityDependency:
     """
-    Describes a single nullable FK field on an entity.
+    Describes a single nullable FK field on an entity pointing to a replicated entity.
 
     Attributes:
-        fk_attr:        The attribute name on the global SQLAlchemy model that
-                        holds the foreign key value (e.g. "as2_partner_id").
-        global_model:   The SQLAlchemy model class to query from the global DB.
-        tenant_model:   The SQLAlchemy model class to upsert into the shard DB.
-        include_shared: If True, the FK target may be a shared platform entity
-                        (owned by PLATFORM_TENANT_ID). The upsert preserves the
-                        source entity's own tenant_id rather than the requesting
-                        tenant's ID.
+        fk_attr:    The attribute name on the global SQLAlchemy model that
+                    holds the foreign key value (e.g. "as2_partner_id").
+        target_key: The entity key in REPLICATION_GRAPH representing the dependency
+                    (e.g. "as2_partner").
     """
 
     fk_attr: str
-    global_model: ModelClass
-    tenant_model: ModelClass
-    include_shared: bool = False
+    target_key: str
 
 
 @dataclass(frozen=True)
@@ -62,15 +51,16 @@ class EntitySpec:
     Attributes:
         global_model:   SQLAlchemy model class in the global (control-plane) DB.
         tenant_model:   SQLAlchemy model class in the tenant (data-plane) shard DB.
+        mapper:         Strictly-typed mapper function translating global model to shard dict.
         include_shared: If True, the query scope includes rows owned by
                         PLATFORM_TENANT_ID (shared platform configuration).
         dependencies:   Ordered list of FK dependencies that must be pre-replicated
-                        before this entity can be safely upserted. Evaluated
-                        left-to-right; null FK values are skipped automatically.
+                        before this entity can be safely upserted.
     """
 
     global_model: ModelClass
     tenant_model: ModelClass
+    mapper: MapperFunc
     include_shared: bool = False
     dependencies: list[EntityDependency] = field(default_factory=list)
 
@@ -85,46 +75,52 @@ def topological_layers(graph: Mapping[str, EntitySpec]) -> list[list[str]]:
 
     Raises:
         ValueError: If a dependency cycle is detected in the graph.
-
-    Example:
-        Given:  as2_partnership → as2_partner
-                outbound_route  → as2_partner
-        Returns: [["as2_partner", ...], ["as2_partnership", "outbound_route", ...]]
     """
-    # Build a reverse lookup: global_model class → entity key
-    model_to_key: dict[type, str] = {spec.global_model: key for key, spec in graph.items()}
-
-    # For each entity, compute the set of entity keys it depends on
     deps_by_key: dict[str, set[str]] = {}
     for key, spec in graph.items():
         dep_keys: set[str] = set()
         for dep in spec.dependencies:
-            dep_key = model_to_key.get(dep.global_model)
-            if dep_key is None:
-                raise ValueError(f"Dependency model {dep.global_model} not found in graph.")
-            if dep_key != key:
-                dep_keys.add(dep_key)
+            if dep.target_key in graph and dep.target_key != key:
+                dep_keys.add(dep.target_key)
         deps_by_key[key] = dep_keys
 
-    # Kahn's algorithm
     layers: list[list[str]] = []
     remaining: set[str] = set(graph.keys())
     resolved: set[str] = set()
 
     while remaining:
-        # Entities whose all dependencies are already resolved are ready for this layer
         ready: set[str] = {k for k in remaining if deps_by_key[k].issubset(resolved)}
 
         if not ready:
             raise ValueError(
                 f"Dependency cycle detected in REPLICATION_GRAPH. "
-                f"Unresolvable entities: {sorted(remaining)}. "
-                f"Check for circular FK references in replication_registry.py."
+                f"Unresolvable entities: {sorted(remaining)}."
             )
 
-        # Sort within each layer for deterministic ordering in tests and logs
         layers.append(sorted(ready))
         resolved |= ready
         remaining -= ready
 
     return layers
+
+
+def validate_replication_graph(graph: Mapping[str, EntitySpec]) -> None:
+    """
+    Strictly validates structural invariants of the replication graph:
+    1. Every dependency target_key must be registered in the graph.
+    2. Every EntitySpec must have a callable mapper.
+    3. The graph must be acyclic.
+    """
+    for entity_key, spec in graph.items():
+        if not callable(spec.mapper):
+            raise TypeError(
+                f"EntitySpec '{entity_key}' has missing or non-callable mapper: {spec.mapper}"
+            )
+        for dep in spec.dependencies:
+            if dep.target_key not in graph:
+                raise ValueError(
+                    f"EntitySpec '{entity_key}' specifies dependency '{dep.fk_attr}' "
+                    f"pointing to unregistered target_key '{dep.target_key}'. "
+                    f"Registered entities: {sorted(graph.keys())}"
+                )
+    topological_layers(graph)

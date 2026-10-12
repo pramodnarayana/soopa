@@ -1,4 +1,3 @@
-import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
@@ -14,6 +13,22 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    def _update_record_from_domain(
+        self, record: OutboundEdiHeader, aggregate: OutboundEdiHeaderDomainModel
+    ) -> None:
+        record.tenant_id = aggregate.tenant_id
+        record.trading_partner_id = aggregate.trading_partner_id
+        record.isa_sender_id = aggregate.isa_sender_id
+        record.isa_receiver_id = aggregate.isa_receiver_id
+        record.name = aggregate.name
+        record.isa_sender_qualifier = aggregate.isa_sender_qualifier
+        record.isa_receiver_qualifier = aggregate.isa_receiver_qualifier
+        record.gs_sender_id = aggregate.gs_sender_id
+        record.gs_receiver_id = aggregate.gs_receiver_id
+        record.transaction_type = aggregate.transaction_type
+        record.default_standard = aggregate.default_standard
+        record.default_version = aggregate.default_version
+
     async def save(self, aggregate: OutboundEdiHeaderDomainModel) -> None:
         result = await self.session.execute(
             select(OutboundEdiHeader).where(
@@ -27,11 +42,7 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
             record = OutboundEdiHeader(id=aggregate.id)
             self.session.add(record)
 
-        for field in dataclasses.fields(aggregate):
-            if field.name not in ("created_at", "updated_at", "_domain_events") and hasattr(
-                record, field.name
-            ):
-                setattr(record, field.name, getattr(aggregate, field.name))
+        self._update_record_from_domain(record, aggregate)
 
         self._drain_events(aggregate)
         await self.session.flush()
@@ -50,21 +61,6 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         await self.session.flush()
 
     def _map_record_to_domain(self, record: OutboundEdiHeader) -> OutboundEdiHeaderDomainModel:
-        kwargs = {
-            f.name: getattr(record, f.name)
-            for f in dataclasses.fields(OutboundEdiHeaderDomainModel)
-            if hasattr(record, f.name)
-            and f.name
-            not in (
-                "id",
-                "tenant_id",
-                "trading_partner_id",
-                "isa_sender_id",
-                "isa_receiver_id",
-                "created_at",
-                "updated_at",
-            )
-        }
         return OutboundEdiHeaderDomainModel(
             id=str(record.id),
             tenant_id=str(record.tenant_id),
@@ -73,7 +69,14 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
             isa_receiver_id=str(record.isa_receiver_id),
             created_at=record.created_at,
             updated_at=record.updated_at,
-            **kwargs,
+            name=record.name,
+            isa_sender_qualifier=record.isa_sender_qualifier,
+            isa_receiver_qualifier=record.isa_receiver_qualifier,
+            gs_sender_id=record.gs_sender_id,
+            gs_receiver_id=record.gs_receiver_id,
+            transaction_type=record.transaction_type,
+            default_standard=record.default_standard,
+            default_version=record.default_version,
         )
 
     async def get_outbound_edi_header(

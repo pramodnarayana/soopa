@@ -1,5 +1,4 @@
 import asyncio
-import signal
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from typing import Any
@@ -147,7 +146,7 @@ def _setup_registry(
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiOrchestratorWorkerModule(LaunchableWorker):
@@ -188,6 +187,11 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
         assert self.orchestrator_manager is not None
         self.orchestrator_manager.start()
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        if self.orchestrator_manager and self.orchestrator_manager.task:
+            return [self.orchestrator_manager.task]
+        return []
+
     async def stop(self) -> None:
         logger.info("data_worker.shutting_down_gracefully")
         if self.orchestrator_manager:
@@ -203,72 +207,10 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
             await self.db_router.close_all()
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     module = EdiOrchestratorWorkerModule()
-
-    try:
-        await module.start()
-
-        # ─────────────────────────────────────────────────────────────
-        # Run all workers concurrently
-        # ─────────────────────────────────────────────────────────────
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop_event.set)
-
-        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-        for mgr in [module.orchestrator_manager]:
-            # Use the new task property once it is exposed
-            task = getattr(mgr, "task", getattr(mgr, "_task", None)) if mgr else None
-            if task:
-                tasks_to_wait.append(task)
-
-        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            if task is not tasks_to_wait[0] and task.exception():
-                exc = task.exception()
-                logger.error("sqs_consumer_manager_failed", exc_info=exc)
-                if exc:
-                    raise exc
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        # Check if it's a Pydantic ValidationError without adding a hard dependency at the top
-        if e.__class__.__name__ == "ValidationError":
-            from pydantic import ValidationError
-
-            all_errors = e.errors() if isinstance(e, ValidationError) else []
-
-            missing_fields = [
-                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
-                for err in all_errors
-                if err.get("type") in ("missing", "value_error.missing")
-            ]
-            invalid_fields = [
-                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
-                for err in all_errors
-                if err.get("type") not in ("missing", "value_error.missing")
-            ]
-
-            if missing_fields:
-                logger.exception(
-                    "worker_startup_configuration_error",
-                    reason="One or more required environment variables are missing from your .env file.",
-                    missing_fields=missing_fields,
-                    remedy="Please check .env.example and ensure all required variables are set.",
-                )
-            if invalid_fields:
-                logger.exception(
-                    "worker_startup_configuration_error",
-                    reason="One or more environment variables have invalid configured values.",
-                    invalid_fields=invalid_fields,
-                )
-        else:
-            logger.exception("worker_startup_failed", reason="Startup initialization error")
-        raise
+    run_worker_app(main)

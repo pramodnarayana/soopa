@@ -67,6 +67,8 @@ class CreateEdiMessageCommand:
     replay_count: int = 0
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
+    error_code: str | None = None
+    error_details: dict[str, JsonValue] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

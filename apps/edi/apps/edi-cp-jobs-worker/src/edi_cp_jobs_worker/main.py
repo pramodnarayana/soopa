@@ -1,5 +1,4 @@
 import asyncio
-import signal
 import typing
 
 import structlog
@@ -10,7 +9,7 @@ from edi_cp_jobs_worker.bootstrap.container import WorkerContainer
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiCpJobsWorkerModule(LaunchableWorker):
@@ -22,55 +21,35 @@ class EdiCpJobsWorkerModule(LaunchableWorker):
         logger.info("edi_cp_jobs_worker.starting")
         await self.container.start()
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks: list[asyncio.Task[object]] = []
+        if self.container.cp_manager and hasattr(self.container.cp_manager, "background_tasks"):
+            tasks.extend(
+                typing.cast(
+                    list[asyncio.Task[object]], self.container.cp_manager.background_tasks()
+                )
+            )
+        if self.container.cp_outbox_relay and hasattr(
+            self.container.cp_outbox_relay, "background_tasks"
+        ):
+            tasks.extend(
+                typing.cast(
+                    list[asyncio.Task[object]], self.container.cp_outbox_relay.background_tasks()
+                )
+            )
+        return tasks
+
     async def stop(self) -> None:
         logger.info("edi_cp_jobs_worker_shutting_down")
         await self.container.dispose()
         logger.info("edi_cp_jobs_worker_stopped")
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("edi-cp-jobs-worker")
-
     module = EdiCpJobsWorkerModule()
-
-    try:
-        await module.start()
-
-        stop_event = asyncio.Event()
-
-        def shutdown_handler(*args: object) -> None:
-            logger.info("edi_cp_jobs_worker_shutdown_signal_received")
-            stop_event.set()
-
-        loop = asyncio.get_running_loop()
-        loop.add_signal_handler(signal.SIGINT, shutdown_handler)
-        loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
-
-        tasks: list[asyncio.Task[object]] = [asyncio.create_task(stop_event.wait())]
-        if module.container.cp_manager and getattr(module.container.cp_manager, "_task", None):
-            tasks.append(typing.cast(asyncio.Task[object], module.container.cp_manager._task))
-        if module.container.cp_outbox_relay and getattr(
-            module.container.cp_outbox_relay, "_task", None
-        ):
-            tasks.append(typing.cast(asyncio.Task[object], module.container.cp_outbox_relay._task))
-
-        done, _pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-
-        for task in done:
-            if task is not tasks[0] and task.exception():
-                exc = task.exception()
-                logger.error("edi_cp_jobs_worker_task_failed", exc_info=exc)
-                if exc:
-                    raise exc
-
-    except asyncio.CancelledError:
-        logger.info("edi_cp_jobs_worker_cancelled")
-    except Exception:
-        logger.exception("edi_cp_jobs_worker_failed")
-        raise
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)
