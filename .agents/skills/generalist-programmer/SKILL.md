@@ -66,3 +66,7 @@ DTOs MUST be defined before any other layer. This is non-negotiable and applies 
 
 ### Strict DTO Enforcement
 - **No Generic Dictionaries**: NEVER pass raw `dict` or `dict[str, Any]` into Application Use Cases or Command Objects. All JSON payloads from adapters (HTTP, SQS) MUST be strictly parsed into strongly-typed DTOs (Data Transfer Objects) at the boundary layer before proceeding.
+
+### Strict Data Mappers (No Dynamic Reflection)
+- **Explicit Mapping**: NEVER use dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to automatically map between SQLAlchemy ORM models and Domain Models.
+- **Type-Safety**: Always use strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`). This guarantees that schema drift will be caught immediately by static analyzers (mypy) rather than causing silent runtime failures.

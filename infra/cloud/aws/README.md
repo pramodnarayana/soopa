@@ -48,20 +48,20 @@ Now that the Platform stack has created our AWS ECR repositories, we must popula
 With the images securely in our ECR, we can bring up the Identity and Observability layers.
 
 ```bash
-# 4. Identity Infrastructure (Zitadel AWS Stack)
+# 4. Observability (OpenObserve)
+# IMPORTANT: This stack dynamically provisions the Route53 A-Record for `obs.*`.
+pulumi up -s <env> -C infra/cloud/aws/openobserve
+
+# 5. Identity Infrastructure (Zitadel AWS Stack)
 # IMPORTANT: This automatically creates the Zitadel Database Schema in RDS via `start-from-init`.
 # IMPORTANT: This stack dynamically provisions the Route53 A-Record for `identity.*` so the configuration step can connect to it.
 pulumi up -s <env> -C infra/cloud/aws/zitadel
 
 # Wait for the Zitadel API to be fully healthy on ECS before proceeding.
 
-# 5. Zitadel Identity Configuration (Zitadel Provider Stack)
+# 6. Zitadel Identity Configuration (Zitadel Provider Stack)
 # IMPORTANT: This connects to the newly created `identity.*` URL and provisions Organizations/Projects/Apps.
 pulumi up -s <env> -C infra/cloud/zitadel
-
-# 6. Observability (OpenObserve)
-# IMPORTANT: This stack dynamically provisions the Route53 A-Record for `obs.*`.
-pulumi up -s <env> -C infra/cloud/aws/openobserve
 ```
 
 ---

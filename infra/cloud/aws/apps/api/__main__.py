@@ -7,7 +7,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -55,7 +55,7 @@ as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
 firelens_endpoint = (
-    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":443") if enable_observability else None
 )
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
@@ -147,7 +147,7 @@ api_service = provision_fargate_service(
     ).apply(
         lambda args: [
             {"name": "ENVIRONMENT", "value": "staging"},
-            {"name": "EDI_ENVIRONMENT", "value": "T"},
+            {"name": "EDI_ENVIRONMENT", "value": edi_environment_flag(_env)},
             {
                 "name": "GLOBAL_DB_HOST",
                 "value": args["global_db"][0]

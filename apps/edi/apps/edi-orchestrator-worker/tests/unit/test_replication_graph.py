@@ -219,3 +219,21 @@ def test_validate_replication_graph_missing_target_raises_value_error() -> None:
     }
     with pytest.raises(ValueError, match="pointing to unregistered target_key 'A'"):
         validate_replication_graph(graph)
+
+
+def test_validate_replication_graph_self_dependency_raises_value_error() -> None:
+    """A self-referential target_key raises a descriptive ValueError at startup."""
+    graph = {
+        "A": EntitySpec(
+            global_model=GlobalA,
+            tenant_model=TenantA,
+            mapper=_dummy_mapper,
+            dependencies=[
+                EntityDependency(fk_attr="parent_a_id", target_key="A"),
+            ],
+        ),
+    }
+    with pytest.raises(
+        ValueError, match="specifies self-dependency 'parent_a_id' pointing to itself"
+    ):
+        validate_replication_graph(graph)

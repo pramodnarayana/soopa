@@ -59,7 +59,14 @@
       "dlq": true,
       "env_var": "SQS_CONTROL_PLANE_JOBS_QUEUE_URL"
     },
-    { "name": "edi-deliver", "fifo": false, "dlq": true, "env_var": "SQS_DELIVER_QUEUE_URL" },
+    {
+      "name": "edi-deliver",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_DELIVER_QUEUE_URL",
+      "dlq_env_var": "SQS_DELIVER_DLQ_URL",
+      "max_receive_count": 3
+    },
     {
       "name": "edi-priority-notifications",
       "fifo": true,

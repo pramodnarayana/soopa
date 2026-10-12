@@ -158,5 +158,15 @@ class SqsConsumerManager:
 
             except asyncio.CancelledError:
                 break
+            except ConsumerTerminalError as e:
+                if ackable_msg is not None:
+                    logger.error(
+                        "sqs_consumer_manager_terminal_payload_error",
+                        queue=self.queue_name,
+                        error=str(e),
+                    )
+                    await ackable_msg.ack()
+                else:
+                    raise
             except Exception as e:  # noqa: BLE001 - Message pump loop must catch all message processing errors to delegate to error_handler and prevent worker crash
                 await self.error_handler.handle_error(e, ackable_msg, self.queue_name)

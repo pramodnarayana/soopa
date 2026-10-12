@@ -82,7 +82,7 @@ def provision_ecs(
         obs_user_arn = args[9]
         obs_pass_arn = args[10]
 
-        if False:  # fl_end:
+        if fl_end:
             main_log_config = build_firelens_log_config(fl_end, obs_user_arn, obs_pass_arn)
         else:
             main_log_config = {
@@ -204,7 +204,7 @@ def provision_ecs(
             },
         ]
 
-        if False:  # fl_end:
+        if fl_end:
             containers.append(build_firelens_sidecar(f"/ecs/{prefix}zitadel", region_name))
 
         return json.dumps(containers)

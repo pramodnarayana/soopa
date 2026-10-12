@@ -22,6 +22,7 @@ TABLES_TO_CLEAR = [
     "outbox",
     "events_processed",
     "trace_events",
+    "ack_receipts",
 ]
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ from seedwork.utils import generate_id
 from .events import DomainEvent
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, eq=False)
 class AggregateRoot:
     """
     Base class for DDD Aggregates to store domain events internally.
@@ -52,7 +52,7 @@ class TraceEvent:
     metadata: dict[str, Any] | None = None
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, eq=False)
 class TracedAggregateRoot(AggregateRoot):
     """
     Base class for DDD Aggregates that also support an immutable audit ledger

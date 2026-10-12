@@ -15,7 +15,9 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Load environment variables natively (No Node/pnpm required)
 if [ -f "$WORKSPACE_ROOT/versions.env" ]; then
-    export $(grep -v '^#' "$WORKSPACE_ROOT/versions.env" | xargs)
+    set -a
+    source "$WORKSPACE_ROOT/versions.env"
+    set +a
 else
     echo "Error: versions.env not found!"
     exit 1
@@ -39,9 +41,11 @@ deploy_stack() {
     echo "------------------------------------------------------"
     echo "📦 Deploying $STACK_NAME ($ENV)..."
     echo "------------------------------------------------------"
-    pulumi stack init $ENV -C "$WORKSPACE_ROOT/$STACK_PATH" || true
-    pulumi refresh -y -s $ENV -C "$WORKSPACE_ROOT/$STACK_PATH"
-    pulumi up -y -s $ENV -C "$WORKSPACE_ROOT/$STACK_PATH"
+    if ! pulumi stack select "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH" 2>/dev/null; then
+        pulumi stack init "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
+    fi
+    pulumi refresh -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
+    pulumi up -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
 }
 
 # 1. Core Infrastructure
@@ -61,7 +65,7 @@ deploy_stack "infra/cloud/aws/apps/migrator" "Database Migrator"
 echo "------------------------------------------------------"
 echo "📦 Running Database Migrations & Seeding ($ENV)..."
 echo "------------------------------------------------------"
-$WORKSPACE_ROOT/infra/scripts/init_databases.sh $ENV
+"$WORKSPACE_ROOT/infra/scripts/init_databases.sh" "$ENV"
 
 # 5. Main API
 deploy_stack "infra/cloud/aws/apps/api" "Unified API"

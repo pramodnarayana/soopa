@@ -175,6 +175,15 @@ class FakeEdiMessageRepository:
                 return model
         return None
 
+    async def get_edi_jsons_by_trace_id(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> list[EdiJsonDomainModel]:
+        return [
+            model
+            for model in self._json_models.values()
+            if model.trace_id == trace_id and (tenant_id is None or model.tenant_id == tenant_id)
+        ]
+
     async def create_edi_json(self, record: EdiJsonDomainModel) -> None:
         pass
 

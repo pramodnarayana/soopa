@@ -51,7 +51,9 @@ async def main() -> None:
         "SHARD_OVERRIDES__EDI_SHARD_1", ""
     )
     if not shard_db_url:
-        logger.error("SHARD_OVERRIDES__EDI_SHARD_1 environment variable is not set.")
+        logger.error(
+            "Neither DATABASE__SHARD_OVERRIDES__EDI_SHARD_1 nor SHARD_OVERRIDES__EDI_SHARD_1 environment variable is set."
+        )
         sys.exit(1)
 
     edi_project_id = os.environ.get("IDENTITY_EDI_PROJECT_ID", "")
@@ -178,7 +180,7 @@ async def main() -> None:
                 )
             )
             await conn.execute(stmt_shard)
-            logger.info("Successfully seeded EDI primary shard.", shard_dsn=shard_db_url)
+            logger.info("Successfully seeded EDI primary shard.", shard_id="edi_shard_1")
 
             # Update the EDI app with the Zitadel Project ID from the environment
             stmt_app = (

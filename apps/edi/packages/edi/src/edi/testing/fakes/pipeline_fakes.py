@@ -168,6 +168,23 @@ class InMemoryRepositoryAdapter:
             dto_data["payload"] = dto_data["edi_json"]
         return _from_dict(EdiJsonDomainModel, dto_data)
 
+    async def get_edi_jsons_by_trace_id(
+        self, trace_id: str, tenant_id: str | None = None
+    ) -> list[EdiJsonDomainModel]:
+        raw = self.edi_json.get(trace_id)
+        if not raw:
+            return []
+
+        dto_data = dict(raw)
+        if "edi_json" in dto_data:
+            dto_data["payload"] = dto_data["edi_json"]
+        model = _from_dict(EdiJsonDomainModel, dto_data)
+        if model is None:
+            return []
+        if tenant_id and model.tenant_id != tenant_id:
+            return []
+        return [model]
+
     async def get_outbound_edi_header_by_route_or_partner(
         self,
         route_id: str | None = None,

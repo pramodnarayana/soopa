@@ -233,7 +233,8 @@ export function ExplorerLayout({
 
         const groupMap = new Map<string, ExplorerEdiJson>();
         itemsToProcess.forEach((i: ExplorerEdiJson) => {
-          const groupId = i.original_trace_id || i.trace_id;
+          const baseTrace = i.original_trace_id || i.trace_id;
+          const groupId = `${baseTrace}_${i.transaction_type || ''}`;
           const existing = groupMap.get(groupId);
           if (!existing || (i.replay_count || 0) > (existing.replay_count || 0)) {
             groupMap.set(groupId, i);

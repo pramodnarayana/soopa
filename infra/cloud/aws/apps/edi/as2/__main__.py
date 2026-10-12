@@ -64,7 +64,7 @@ queue_arns = [
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
 firelens_endpoint = (
-    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":443") if enable_observability else None
 )
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (

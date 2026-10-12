@@ -36,7 +36,7 @@ else:
     machinekey_arn = aws_zitadel_stack.require_output("machinekey_secret_arn")
 
     # 2. We dynamically fetch the secret payload (the actual RSA key JSON)
-    secret_value = aws.secretsmanager.get_secret_version(secret_id=machinekey_arn)
+    secret_value = aws.secretsmanager.get_secret_version_output(secret_id=machinekey_arn)
 
     jwt_profile_file = None
     jwt_profile_json = secret_value.secret_string

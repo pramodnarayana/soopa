@@ -62,6 +62,7 @@ create_queue_with_dlq() {
     local source_queue=$1
     local dlq=$2
     local fifo=$3
+    local max_receive_count=$4
     local dlq_url
     local dlq_arn
     local queue_attributes
@@ -79,9 +80,9 @@ create_queue_with_dlq() {
     local policy="{\\\"Version\\\":\\\"2012-10-17\\\",\\\"Statement\\\":[{\\\"Effect\\\":\\\"Allow\\\",\\\"Principal\\\":\\\"*\\\",\\\"Action\\\":\\\"sqs:SendMessage\\\",\\\"Resource\\\":\\\"$queue_arn\\\",\\\"Condition\\\":{\\\"ArnLike\\\":{\\\"aws:SourceArn\\\":\\\"arn:aws:sns:us-east-1:000000000000:*\\\"}}}]}"
 
     if [ "$fifo" = "true" ]; then
-        queue_attributes=$(printf '{"FifoQueue":"true","ContentBasedDeduplication":"true","RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"5\\"}","Policy":"%s"}' "$dlq_arn" "$policy")
+        queue_attributes=$(printf '{"FifoQueue":"true","ContentBasedDeduplication":"true","RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"%s\\"}","Policy":"%s"}' "$dlq_arn" "$max_receive_count" "$policy")
     else
-        queue_attributes=$(printf '{"RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"5\\"}","Policy":"%s"}' "$dlq_arn" "$policy")
+        queue_attributes=$(printf '{"RedrivePolicy":"{\\"deadLetterTargetArn\\":\\"%s\\",\\"maxReceiveCount\\":\\"%s\\"}","Policy":"%s"}' "$dlq_arn" "$max_receive_count" "$policy")
     fi
 
     awslocal sqs create-queue --queue-name "$source_queue" --attributes "$queue_attributes"
@@ -90,6 +91,7 @@ create_queue_with_dlq() {
 for row in $(parse_json "queues"); do
     logical_queue_name=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('name', ''))" "$row")
     fifo=$(python3 -c "import sys, json; print(str(json.loads(sys.argv[1]).get('fifo', False)).lower())" "$row")
+    max_receive_count=$(python3 -c "import sys, json; print(json.loads(sys.argv[1]).get('max_receive_count', 5))" "$row")
 
     if [ "$fifo" = "true" ]; then
         physical_queue_name="${logical_queue_name}.fifo"
@@ -99,8 +101,8 @@ for row in $(parse_json "queues"); do
         dlq_name="${logical_queue_name}-dlq"
     fi
 
-    echo "Creating Queue: $physical_queue_name (FIFO=$fifo)"
-    create_queue_with_dlq "$physical_queue_name" "$dlq_name" "$fifo"
+    echo "Creating Queue: $physical_queue_name (FIFO=$fifo, MaxReceiveCount=$max_receive_count)"
+    create_queue_with_dlq "$physical_queue_name" "$dlq_name" "$fifo" "$max_receive_count"
 done
 
 # 5. Create Subscriptions

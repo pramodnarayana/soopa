@@ -18,6 +18,9 @@ class EdiJsonDomainModel(EdiRecordBase):
     storage_uri: str | None = None
 
     def clone_for_transform_retry(self, new_id: str, new_trace_id: str) -> "EdiJsonDomainModel":
+        metadata = dict(self.business_metadata) if self.business_metadata is not None else None
+        if metadata is not None:
+            metadata.pop("_idempotency_key", None)
         cloned = replace(
             self,
             id=new_id,
@@ -29,11 +32,15 @@ class EdiJsonDomainModel(EdiRecordBase):
             error_code=None,
             error_details=None,
             status_message=None,
+            business_metadata=metadata,
         )
         cloned.clear_domain_events()
         return cloned
 
     def clone_for_delivery_retry(self, new_id: str, new_trace_id: str) -> "EdiJsonDomainModel":
+        metadata = dict(self.business_metadata) if self.business_metadata is not None else None
+        if metadata is not None:
+            metadata.pop("_idempotency_key", None)
         cloned = replace(
             self,
             id=new_id,
@@ -45,6 +52,7 @@ class EdiJsonDomainModel(EdiRecordBase):
             error_code=None,
             error_details=None,
             status_message=None,
+            business_metadata=metadata,
         )
         cloned.clear_domain_events()
         return cloned

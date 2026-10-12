@@ -275,7 +275,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                 error=str(e),
             )
             raise TerminalDeliveryError(
-                message=f"MDN processing error: {e}",
+                message=f"AS2 message build error: {e}",
                 code=ErrorCode.VALIDATION_FAILED,
                 details={"error": str(e)},
             ) from e

@@ -28,6 +28,7 @@ class QueueConfig(TypedDict, total=False):
     fifo: bool
     dlq: bool
     env_var: str
+    dlq_env_var: str
 
 
 class TopicConfig(TypedDict, total=False):
@@ -180,6 +181,9 @@ class TopologyOutput:
     # to wire subscriptions or grant extra IAM permissions.
     queues: dict[str, aws.sqs.Queue] = field(default_factory=dict)
 
+    # Raw dlq queue objects keyed by topology queue name.
+    dlqs: dict[str, aws.sqs.Queue] = field(default_factory=dict)
+
     # Raw topic objects keyed by topology topic name.
     topics: dict[str, aws.sns.Topic] = field(default_factory=dict)
 
@@ -224,6 +228,7 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
     """
     external_topic_arns = external_topic_arns or {}
     queues: dict[str, aws.sqs.Queue] = {}
+    dlqs: dict[str, aws.sqs.Queue] = {}
     topics: dict[str, aws.sns.Topic] = {}
 
     # ── Provision topics ─────────────────────────────────────────────────────
@@ -248,10 +253,11 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
             continue
         prefixed_name = f"{prefix}{name}"
         if queue_conf.get("fifo"):
-            q, _ = provision_fifo_queue_pair(prefixed_name, tags)
+            q, d = provision_fifo_queue_pair(prefixed_name, tags)
         else:
-            q, _ = provision_standard_queue_pair(prefixed_name, tags)
+            q, d = provision_standard_queue_pair(prefixed_name, tags)
         queues[name] = q
+        dlqs[name] = d
 
     # ── Wire SNS subscriptions ───────────────────────────────────────────────
     available_topics: dict[str, pulumi.Input[str]] = {
@@ -325,6 +331,16 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
             env_var_outputs[env_var] = queues[name].url
             already_assigned[env_var] = name
 
+        dlq_env_var = queue_conf.get("dlq_env_var")
+        if dlq_env_var and name in dlqs:
+            if dlq_env_var in env_var_outputs:
+                raise ValueError(
+                    f"Duplicate env_var '{dlq_env_var}' declared in topology.json for "
+                    f"queue dlq '{name}'. Already assigned to '{already_assigned[dlq_env_var]}'."
+                )
+            env_var_outputs[dlq_env_var] = dlqs[name].url
+            already_assigned[dlq_env_var] = f"{name}-dlq"
+
     for topic_conf in topology.get("topics", []):
         env_var = topic_conf.get("env_var")
         name = topic_conf["name"]
@@ -353,4 +369,4 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
         pulumi.Output.all(**env_var_outputs) if env_var_outputs else pulumi.Output.from_input({})
     )
 
-    return TopologyOutput(queue_env_vars=resolved, queues=queues, topics=topics)
+    return TopologyOutput(queue_env_vars=resolved, queues=queues, topics=topics, dlqs=dlqs)

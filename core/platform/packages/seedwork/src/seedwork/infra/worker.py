@@ -63,11 +63,16 @@ async def run_worker_app_async(
 
         # If any critical task died (other than the stop_event), propagate the exception
         for task in done:
-            if task is not tasks_to_wait[0] and task.exception():
+            if task is not tasks_to_wait[0]:
+                if task.cancelled():
+                    raise RuntimeError("Critical worker background task was cancelled")
                 exc = task.exception()
-                logger.error("worker_background_task_failed", exc_info=exc)
                 if exc:
+                    logger.error("worker_background_task_failed", exc_info=exc)
                     raise exc
+                raise RuntimeError(
+                    "Critical worker background task exited cleanly but unexpectedly"
+                )
     finally:
         for task in tasks_to_wait:
             if not task.done():
@@ -108,14 +113,14 @@ def run_worker_app(
         ]
 
         if missing_fields:
-            logger.exception(
+            logger.error(
                 "worker_startup_configuration_error",
                 reason="One or more required environment variables are missing from your .env file.",
                 missing_fields=missing_fields,
                 remedy="Please check .env.example and ensure all required variables are set.",
             )
         if invalid_fields:
-            logger.exception(
+            logger.error(
                 "worker_startup_configuration_error",
                 reason="One or more environment variables have invalid configured values.",
                 invalid_fields=invalid_fields,

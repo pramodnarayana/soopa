@@ -5,6 +5,7 @@ from typing import Any, Protocol, cast
 
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
+from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
 
@@ -65,6 +66,24 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     def __init__(self, session: TenantSession, storage: StoragePort) -> None:
         TenantSqlAlchemyRepository.__init__(self, session)
         self.storage = storage
+
+    async def _persist_trace_events(self, aggregate: TracedAggregateRoot) -> None:
+        for t_event in aggregate.trace_events:
+            try:
+                async with self.session.begin_nested():
+                    trace_record = TraceEvent(
+                        id=t_event.id,
+                        tenant_id=t_event.tenant_id,
+                        trace_id=t_event.trace_id,
+                        event_type=t_event.event_type,
+                        actor=t_event.actor,
+                        metadata_=t_event.metadata,
+                    )
+                    self.session.add(trace_record)
+                    await self.flush()
+            except DuplicateEntityError:
+                pass
+        aggregate.clear_trace_events()
 
     async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         msg = EdiMessage(
@@ -283,23 +302,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
-        for t_event in aggregate.trace_events:
-            try:
-                async with self.session.begin_nested():
-                    trace_record = TraceEvent(
-                        id=t_event.id,
-                        tenant_id=t_event.tenant_id,
-                        trace_id=t_event.trace_id,
-                        event_type=t_event.event_type,
-                        actor=t_event.actor,
-                        metadata_=t_event.metadata,
-                    )
-                    self.session.add(trace_record)
-                    await self.flush()
-            except DuplicateEntityError:
-                pass
-
-        aggregate.clear_trace_events()
+        await self._persist_trace_events(aggregate)
 
         return envelopes
 
@@ -343,23 +346,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
-        for t_event in aggregate.trace_events:
-            try:
-                async with self.session.begin_nested():
-                    trace_record = TraceEvent(
-                        id=t_event.id,
-                        tenant_id=t_event.tenant_id,
-                        trace_id=t_event.trace_id,
-                        event_type=t_event.event_type,
-                        actor=t_event.actor,
-                        metadata_=t_event.metadata,
-                    )
-                    self.session.add(trace_record)
-                    await self.flush()
-            except DuplicateEntityError:
-                pass
-
-        aggregate.clear_trace_events()
+        await self._persist_trace_events(aggregate)
 
         aggregate.clear_domain_events()
         return envelopes
@@ -446,22 +433,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 pass  # Idempotent: already published, safe to skip.
 
         for aggregate in aggregates:
-            for t_event in aggregate.trace_events:
-                try:
-                    async with self.session.begin_nested():
-                        trace_record = TraceEvent(
-                            id=t_event.id,
-                            tenant_id=t_event.tenant_id,
-                            trace_id=t_event.trace_id,
-                            event_type=t_event.event_type,
-                            actor=t_event.actor,
-                            metadata_=t_event.metadata,
-                        )
-                        self.session.add(trace_record)
-                        await self.flush()
-                except DuplicateEntityError:
-                    pass
-            aggregate.clear_trace_events()
+            await self._persist_trace_events(aggregate)
 
         return envelopes
 
@@ -536,23 +508,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
-        for t_event in aggregate.trace_events:
-            try:
-                async with self.session.begin_nested():
-                    trace_record = TraceEvent(
-                        id=t_event.id,
-                        tenant_id=t_event.tenant_id,
-                        trace_id=t_event.trace_id,
-                        event_type=t_event.event_type,
-                        actor=t_event.actor,
-                        metadata_=t_event.metadata,
-                    )
-                    self.session.add(trace_record)
-                    await self.flush()
-            except DuplicateEntityError:
-                pass
-
-        aggregate.clear_trace_events()
+        await self._persist_trace_events(aggregate)
 
         return envelopes
 
@@ -885,6 +841,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             "direction",
             "status",
             "transaction_type",
+            "error_code",
+            "status_message",
             "sender_id",
             "receiver_id",
             "gs_sender_id",
@@ -1010,8 +968,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 attr = model.error_code
             elif field == "status_message":
                 attr = model.status_message
-            elif field == "original_trace_id":
-                attr = model.original_trace_id
             elif field == "sender_id" and issubclass(model, EdiMessage):
                 attr = model.sender_id
             elif field == "receiver_id" and issubclass(model, EdiMessage):
@@ -1272,6 +1228,8 @@ def _map_edi_message_to_domain(
         signature_algorithm=record.signature_algorithm,
         encryption_algorithm=record.encryption_algorithm,
         status_message=record.status_message,
+        error_code=record.error_code,
+        error_details=record.error_details,
         state=record.state,
         msg_headers=record.msg_headers,
         edi_data=hydrated_edi_data if hydrated_edi_data is not None else record.edi_data,

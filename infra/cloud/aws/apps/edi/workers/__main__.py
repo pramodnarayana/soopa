@@ -73,7 +73,7 @@ queue_arns = [
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
 firelens_endpoint = (
-    pulumi.Output.concat("openobserve.", namespace_name, ":5080") if enable_observability else None
+    pulumi.Output.concat("openobserve.", namespace_name, ":443") if enable_observability else None
 )
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
@@ -182,7 +182,7 @@ dp_worker_env_vars: pulumi.Output = pulumi.Output.all(
             "IDENTITY_ISSUER": args["identity_issuer"],
             "IDENTITY_API_URL": args["identity_api_url"],
             "S3_BUCKET": args["s3_bucket"],
-            "WORKER_MODULES": "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker",
+            "WORKER_MODULES": "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-delivery-dlq-worker,edi-dp-jobs-worker",
         },
     )
 )

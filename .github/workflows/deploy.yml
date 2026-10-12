@@ -33,7 +33,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install uv (Fast Python Package Installer)
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v3
 
       - name: Install Pulumi CLI
         uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
@@ -82,8 +82,18 @@ jobs:
 
       - name: Wait for Zitadel API to become healthy
         run: |
-          echo "Waiting 60s for Zitadel ECS task to spin up and upload the machine key..."
-          sleep 60
+          echo "Waiting for Zitadel ECS task to spin up and upload the machine key..."
+          ZITADEL_URL=$(pulumi stack output url -s prod -C $GITHUB_WORKSPACE/infra/cloud/aws/zitadel)
+          for i in {1..30}; do
+            if curl -sSf "$ZITADEL_URL/debug/healthz" > /dev/null; then
+              echo "Zitadel is healthy!"
+              exit 0
+            fi
+            echo "Waiting 10s for Zitadel API..."
+            sleep 10
+          done
+          echo "Zitadel did not become healthy in time."
+          exit 1
 
       - name: Deploy Zitadel Identity Configuration
         run: |
@@ -100,6 +110,16 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Deploy Database Migrator and Initialize
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          echo "Deploying Migrator Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/migrator
+          pulumi up -s prod -y
+
+          echo "Running Database Migrations & Seeding..."
+          $GITHUB_WORKSPACE/infra/scripts/init_databases.sh prod
 
       - name: Deploy Application Stacks
         env:
@@ -136,22 +156,3 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/scheduler
           pulumi config set image_tag $IMAGE_TAG -s prod
           pulumi up -s prod -y
-
-      - name: Run Database Migrations
-        run: |
-          echo "Running Database Migrations against AWS RDS..."
-          # Note: In a true prod environment, these should run securely against the RDS endpoint
-          # either via a bastion, VPN, or a dedicated ECS migration task.
-          cd $GITHUB_WORKSPACE/core/platform/packages/database
-          uv run alembic upgrade head
-
-          cd $GITHUB_WORKSPACE/apps/edi/packages/edi
-          uv run python src/edi/adapters/outbound/database/run_migrations.py
-
-      - name: Run Data Seeding
-        run: |
-          echo "Running Initial Seed Scripts..."
-          cd $GITHUB_WORKSPACE
-          python core/ucp/packages/ucp/scripts/seed.py
-          python core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py
-          python apps/edi/scripts/seed_jobs.py

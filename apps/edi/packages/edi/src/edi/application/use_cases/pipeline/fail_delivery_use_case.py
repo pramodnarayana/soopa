@@ -42,49 +42,62 @@ class FailDeliveryUseCase:
 
         async with self.uow_factory() as uow, uow:
             edi_msg = await uow.transactions.get_edi_message(command.trace_id)
+            edi_json = None
             if not edi_msg:
-                bound_logger.error("fail_delivery.edi_message_not_found")
-                return
+                edi_json = await uow.transactions.get_edi_json(command.trace_id)
+                if not edi_json:
+                    bound_logger.error("fail_delivery.record_not_found")
+                    return
 
-            if edi_msg.tenant_id != command.tenant_id:
+            target = edi_msg or edi_json
+            assert target is not None
+
+            if target.tenant_id != command.tenant_id:
                 bound_logger.error("fail_delivery.tenant_mismatch")
                 return
 
             # Skip if already in a terminal failed state to ensure idempotency
-            if edi_msg.status == MessageStatus.FAILED:
+            if target.status == MessageStatus.FAILED:
                 bound_logger.info("fail_delivery.already_failed")
                 return
 
             bound_logger.info("fail_delivery.updating_state")
 
             # Update the domain model (status, status_message, and appends trace event)
-            edi_msg.mark_delivery_failed(reason=command.reason)
+            target.mark_delivery_failed(reason=command.reason)
 
             # Drop an event into the outbox for notifications
             domain_event = DeliveryFailed(
                 trace_id=command.trace_id,
                 tenant_id=command.tenant_id,
-                direction=edi_msg.direction.value if edi_msg.direction else "OUTBOUND",
+                direction=target.direction.value if target.direction else "OUTBOUND",
                 failure_reason=command.reason,
-                error_code=edi_msg.error_code,
-                error_details=edi_msg.error_details,
+                error_code=target.error_code,
+                error_details=target.error_details,
             )
-            edi_msg.add_domain_event(domain_event)
+            target.add_domain_event(domain_event)
 
-            # Save changes
-            await uow.transactions.update_edi_message_status(
-                trace_id=command.trace_id,
-                status=edi_msg.status.value,
-            )
-            await uow.transactions.update_outbound_delivery_metadata(edi_msg)
+            # Save changes and persist outbox / trace events
+            if edi_msg:
+                await uow.transactions.update_edi_message_status(
+                    trace_id=command.trace_id,
+                    status=edi_msg.status.value,
+                )
+                await uow.transactions.update_outbound_delivery_metadata(edi_msg)
+                envelopes = await uow.transactions.flush_events(edi_msg)
+            else:
+                assert edi_json is not None
+                envelopes = await uow.transactions.save_json(edi_json)
 
-            # Persist trace events and outbox domain events
-            envelopes = await uow.transactions.flush_events(edi_msg)
             await uow.commit()
 
         try:
             for env in envelopes:
                 await self.publisher.publish(env)
+            async with self.uow_factory() as ack_uow, ack_uow:
+                for env in envelopes:
+                    await ack_uow.outbox.mark_completed(env.id)
+                await ack_uow.commit()
             bound_logger.info("fail_delivery.success")
         except Exception as e:
             bound_logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))

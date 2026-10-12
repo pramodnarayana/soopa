@@ -9,6 +9,7 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.exceptions import ErrorCode, TerminalDomainError
 from seedwork.domain.types import JsonDict
 
+from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.domain.events import TransformFailed, TransformSuccessful
@@ -120,8 +121,16 @@ class ComputeTransformUseCase:
                 )
 
             logger.info("compute_transform.completed", trace_id=trace_id)
-        except TerminalDomainError as e:
-            await self._handle_permanent_failure(trace_id, command.tenant_id, e)
+        except (TerminalDomainError, TransformationError, ValueError) as e:
+            terminal_err = (
+                e
+                if isinstance(e, TerminalDomainError)
+                else TerminalDomainError(
+                    message=str(e),
+                    code=ErrorCode.TRANSFORMATION_FAILED,
+                )
+            )
+            await self._handle_permanent_failure(trace_id, command.tenant_id, terminal_err)
         except Exception as e:
             logger.exception("compute_transform.transient_failure", trace_id=trace_id, error=str(e))
             raise
@@ -136,7 +145,11 @@ class ComputeTransformUseCase:
         async with self.uow_factory() as failure_uow, failure_uow:
             edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
             if edi_msg_fallback:
-                edi_msg_fallback.mark_transform_failed(reason=error.message)
+                edi_msg_fallback.mark_transform_failed(
+                    reason=error.message,
+                    error_code=error.code,
+                    error_details=error.details,
+                )
                 edi_msg_fallback.add_domain_event(
                     TransformFailed(
                         trace_id=trace_id,

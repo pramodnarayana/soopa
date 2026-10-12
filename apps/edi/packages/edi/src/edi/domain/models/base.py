@@ -113,12 +113,23 @@ class EdiRecordBase(TracedAggregateRoot):
             stack_trace=stack_trace,
         )
 
-    def mark_transform_failed(self, reason: str, stack_trace: str | None = None) -> None:
+    def mark_transform_failed(
+        self,
+        reason: str,
+        error_code: str | None = None,
+        error_details: JsonDict | None = None,
+        stack_trace: str | None = None,
+    ) -> None:
         self.status = MessageStatus.FAILED
         self.status_message = reason[:255]
+        if error_code:
+            self.error_code = error_code
+        if error_details:
+            self.error_details = error_details
         self._append_trace(
             TraceEventType.TRANSFORMATION_FAILED,
-            reason=reason,
+            reason=self.status_message,
+            error_code=self.error_code,
             stack_trace=stack_trace,
         )
 

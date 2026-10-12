@@ -80,7 +80,7 @@ def topological_layers(graph: Mapping[str, EntitySpec]) -> list[list[str]]:
     for key, spec in graph.items():
         dep_keys: set[str] = set()
         for dep in spec.dependencies:
-            if dep.target_key in graph and dep.target_key != key:
+            if dep.target_key in graph:
                 dep_keys.add(dep.target_key)
         deps_by_key[key] = dep_keys
 
@@ -107,7 +107,7 @@ def topological_layers(graph: Mapping[str, EntitySpec]) -> list[list[str]]:
 def validate_replication_graph(graph: Mapping[str, EntitySpec]) -> None:
     """
     Strictly validates structural invariants of the replication graph:
-    1. Every dependency target_key must be registered in the graph.
+    1. Every dependency target_key must be registered in the graph and cannot be a self-dependency.
     2. Every EntitySpec must have a callable mapper.
     3. The graph must be acyclic.
     """
@@ -117,6 +117,10 @@ def validate_replication_graph(graph: Mapping[str, EntitySpec]) -> None:
                 f"EntitySpec '{entity_key}' has missing or non-callable mapper: {spec.mapper}"
             )
         for dep in spec.dependencies:
+            if dep.target_key == entity_key:
+                raise ValueError(
+                    f"EntitySpec '{entity_key}' specifies self-dependency '{dep.fk_attr}' pointing to itself."
+                )
             if dep.target_key not in graph:
                 raise ValueError(
                     f"EntitySpec '{entity_key}' specifies dependency '{dep.fk_attr}' "

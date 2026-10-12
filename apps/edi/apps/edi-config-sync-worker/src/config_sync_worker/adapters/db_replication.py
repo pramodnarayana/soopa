@@ -28,7 +28,12 @@ from sqlalchemy.orm import DeclarativeBase, Mapped
 
 from config_sync_worker.adapters.replication_registry import REPLICATION_GRAPH
 from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
-from config_sync_worker.domain.replication_graph import EntitySpec, MapperFunc, topological_layers
+from config_sync_worker.domain.replication_graph import (
+    EntityDependency,
+    EntitySpec,
+    MapperFunc,
+    topological_layers,
+)
 from config_sync_worker.ports.outbound.replication_port import ReplicationPort
 from config_sync_worker.ports.outbound.tenant_port import TenantPort
 
@@ -158,6 +163,71 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
     # Generic Granular Replication Driver (dependency-aware, one entity)
     # -----------------------------------------------------------------------
 
+    async def _pre_replicate_dependency(
+        self,
+        global_session: AsyncSession,
+        tenant_session: AsyncSession,
+        entity: DeclarativeBase | ReplicatedModel,
+        spec: EntitySpec,
+        dep: EntityDependency,
+        tenant_id: str,
+        entity_id: str,
+    ) -> None:
+        if not hasattr(entity, dep.fk_attr):
+            raise PermanentProvisioningError(
+                f"Entity {spec.global_model.__name__} is missing declared FK attribute '{dep.fk_attr}'"
+            )
+        dep_id: str | None = getattr(entity, dep.fk_attr)
+        if not dep_id:
+            return
+
+        dep_spec = REPLICATION_GRAPH[dep.target_key]
+        logger.info(
+            "replication_dependency_pre_replication_started",
+            entity_type=spec.global_model.__name__,
+            entity_id=entity_id,
+            dependency_type=dep_spec.global_model.__name__,
+            dependency_id=dep_id,
+            tenant_id=tenant_id,
+        )
+
+        dep_model = cast(type[ReplicatedModel], dep_spec.global_model)
+        dep_stmt = select(dep_model).where(dep_model.id == dep_id)
+        dep_res = await global_session.execute(dep_stmt)
+        dep_entity = dep_res.scalars().first()
+
+        if not dep_entity:
+            raise PermanentProvisioningError(
+                f"FK dependency {dep_spec.global_model.__name__} id={dep_id} "
+                f"(required by {spec.global_model.__name__} id={entity_id}) "
+                "not found in global DB. The row may have been deleted. "
+                "Sending to DLQ."
+            )
+
+        if hasattr(dep_entity, "tenant_id"):
+            dep_tenant_id = cast(str | None, dep_entity.tenant_id)
+            if not dep_tenant_id:
+                raise PermanentProvisioningError(
+                    f"Data integrity violation: {dep_entity.__class__.__name__} "
+                    f"id={getattr(dep_entity, 'id', 'unknown')} has a null tenant_id in the global DB."
+                )
+        else:
+            dep_tenant_id = tenant_id
+
+        await self._upsert_entity(
+            tenant_session,
+            dep_tenant_id,
+            cast(DeclarativeBase, dep_entity),
+            dep_spec.tenant_model,
+            dep_spec.mapper,
+        )
+        logger.info(
+            "replication_dependency_pre_replication_completed",
+            dependency_type=dep_spec.global_model.__name__,
+            dependency_id=dep_id,
+            tenant_id=dep_tenant_id,
+        )
+
     async def _replicate_with_dependencies(
         self, tenant_id: str, entity_id: str, entity_key: str
     ) -> None:
@@ -175,56 +245,14 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
                 # 2. Pre-replicate dependencies in declared order
                 for dep in spec.dependencies:
-                    dep_id: str | None = getattr(entity, dep.fk_attr)
-                    if not dep_id:
-                        continue  # Optional FK not set on this instance — skip
-
-                    dep_spec = REPLICATION_GRAPH[dep.target_key]
-
-                    logger.info(
-                        "replication_dependency_pre_replication_started",
-                        entity_type=spec.global_model.__name__,
-                        entity_id=entity_id,
-                        dependency_type=dep_spec.global_model.__name__,
-                        dependency_id=dep_id,
-                        tenant_id=tenant_id,
-                    )
-
-                    dep_model = cast(type[ReplicatedModel], dep_spec.global_model)
-                    dep_stmt = select(dep_model).where(dep_model.id == dep_id)
-                    dep_res = await global_session.execute(dep_stmt)
-                    dep_entity = dep_res.scalars().first()
-
-                    if not dep_entity:
-                        raise PermanentProvisioningError(
-                            f"FK dependency {dep_spec.global_model.__name__} id={dep_id} "
-                            f"(required by {spec.global_model.__name__} id={entity_id}) "
-                            "not found in global DB. The row may have been deleted. "
-                            "Sending to DLQ."
-                        )
-
-                    if hasattr(dep_entity, "tenant_id"):
-                        dep_tenant_id = cast(str | None, dep_entity.tenant_id)
-                        if not dep_tenant_id:
-                            raise PermanentProvisioningError(
-                                f"Data integrity violation: {dep_entity.__class__.__name__} "
-                                f"id={getattr(dep_entity, 'id', 'unknown')} has a null tenant_id in the global DB."
-                            )
-                    else:
-                        dep_tenant_id = tenant_id
-
-                    await self._upsert_entity(
+                    await self._pre_replicate_dependency(
+                        global_session,
                         tenant_session,
-                        dep_tenant_id,
-                        cast(DeclarativeBase, dep_entity),
-                        dep_spec.tenant_model,
-                        dep_spec.mapper,
-                    )
-                    logger.info(
-                        "replication_dependency_pre_replication_completed",
-                        dependency_type=dep_spec.global_model.__name__,
-                        dependency_id=dep_id,
-                        tenant_id=dep_tenant_id,
+                        entity,
+                        spec,
+                        dep,
+                        tenant_id,
+                        entity_id,
                     )
 
                 # 3. Upsert the entity — all FK dependencies are now guaranteed to exist

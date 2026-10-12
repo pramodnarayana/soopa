@@ -7,8 +7,8 @@ echo "======================================================"
 
 # 1. Run Migrations for all Bounded Contexts
 # Here we enforce the Enterprise Pattern: we call each context's isolated runner.
-echo "Running UCP Migrations..."
-python /app/core/platform/packages/database/src/database/run_migrations.py
+echo "Running platform database migrations..."
+cd /app/core/platform/packages/database && python -m alembic upgrade head
 
 echo "Running EDI Migrations..."
 python /app/apps/edi/packages/edi/src/edi/adapters/outbound/database/run_migrations.py

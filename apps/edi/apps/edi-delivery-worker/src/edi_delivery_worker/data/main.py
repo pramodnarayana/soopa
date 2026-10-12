@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from functools import partial
@@ -31,6 +32,7 @@ from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
 from edi.domain.enums import PipelineEventType, TraceEventType
+from observability import ObservabilityProvider
 from pubsub.enums import ConsumerAction
 
 DELIVERY_OUTCOME_TO_CONSUMER_ACTION: dict[TraceEventType, ConsumerAction] = {
@@ -191,7 +193,12 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
             settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault, self.is_dlq
         )
 
-        queue_url = settings.sqs.deliver_dlq_url if self.is_dlq else settings.sqs.deliver_queue_url
+        if self.is_dlq:
+            if not settings.sqs.deliver_dlq_url:
+                raise ValueError("SQS_DELIVER_DLQ_URL is required when running in DLQ mode")
+            queue_url = settings.sqs.deliver_dlq_url
+        else:
+            queue_url = settings.sqs.deliver_queue_url
 
         self.deliver_manager = PubSubProvider.create_consumer_manager(
             queue_url=queue_url,
@@ -228,12 +235,15 @@ class EdiDeliveryDlqWorkerModule(EdiDeliveryWorkerModule):
 
 
 async def main(stop_event: asyncio.Event | None = None) -> None:
-    module = EdiDeliveryWorkerModule(is_dlq=False)
+    is_dlq = "--dlq" in sys.argv
+    service_name = "edi-delivery-dlq-worker" if is_dlq else "edi-delivery-worker"
+    ObservabilityProvider.auto_configure_from_env(service_name)
+    module = EdiDeliveryWorkerModule(is_dlq=is_dlq)
     await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    import sys
-
     is_dlq = "--dlq" in sys.argv
+    service_name = "edi-delivery-dlq-worker" if is_dlq else "edi-delivery-worker"
+    ObservabilityProvider.auto_configure_from_env(service_name)
     run_worker_app(lambda: EdiDeliveryWorkerModule(is_dlq=is_dlq))
