@@ -7,6 +7,7 @@ Dataclasses representing pure domain events emitted by the EDI bounded context.
 
 from dataclasses import dataclass
 
+from seedwork.domain.types import JsonValue
 from seedwork.events import DomainEvent
 
 from edi.domain.constants import ProvisioningEventType
@@ -82,6 +83,8 @@ class TransformFailed(DomainEvent):
     tenant_id: str
     direction: str
     failure_reason: str
+    error_code: str | None = None
+    error_details: dict[str, JsonValue] | None = None
 
     @property
     def event_name(self) -> str:
@@ -135,6 +138,8 @@ class DeliveryFailed(DomainEvent):
     tenant_id: str
     direction: str
     failure_reason: str
+    error_code: str | None = None
+    error_details: dict[str, JsonValue] | None = None
 
     @property
     def event_name(self) -> str:

@@ -6,8 +6,10 @@ from typing import cast
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from seedwork.domain.exceptions import ErrorCode, TerminalDomainError
 from seedwork.domain.types import JsonDict
 
+from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
 from edi.domain.events import TransformFailed, TransformSuccessful
@@ -79,11 +81,17 @@ class ComputeTransformUseCase:
                 edi_msg = await uow.transactions.get_edi_message(trace_id)
                 if not edi_msg:
                     logger.warning("compute_transform.edi_message_not_found", trace_id=trace_id)
-                    raise ValueError(f"No EDI message found for trace_id={trace_id}")
+                    raise TerminalDomainError(
+                        message=f"No EDI message found for trace_id={trace_id}",
+                        code=ErrorCode.NOT_FOUND,
+                    )
 
                 if not edi_msg.edi_data:
                     logger.warning("compute_transform.edi_data_missing", trace_id=trace_id)
-                    raise ValueError(f"No EDI data found for trace_id={trace_id}")
+                    raise TerminalDomainError(
+                        message=f"No EDI data found for trace_id={trace_id}",
+                        code=ErrorCode.INVALID_PAYLOAD,
+                    )
 
                 raw_payload = edi_msg.edi_data.encode("utf-8")
 
@@ -97,7 +105,10 @@ class ComputeTransformUseCase:
                         trace_id=trace_id,
                         transaction_type=transaction_type,
                     )
-                    raise ValueError(f"Failed to transform EDI transaction {transaction_type}")
+                    raise TerminalDomainError(
+                        message=f"Failed to transform EDI transaction {transaction_type}",
+                        code=ErrorCode.TRANSFORMATION_FAILED,
+                    )
 
                 logger.info(
                     "compute_transform.transform_succeeded",
@@ -110,28 +121,46 @@ class ComputeTransformUseCase:
                 )
 
             logger.info("compute_transform.completed", trace_id=trace_id)
-        except ValueError as e:
-            await self._handle_permanent_failure(trace_id, command.tenant_id, e)
+        except (TerminalDomainError, TransformationError, ValueError) as e:
+            terminal_err = (
+                e
+                if isinstance(e, TerminalDomainError)
+                else TerminalDomainError(
+                    message=str(e),
+                    code=ErrorCode.TRANSFORMATION_FAILED,
+                )
+            )
+            await self._handle_permanent_failure(trace_id, command.tenant_id, terminal_err)
         except Exception as e:
             logger.exception("compute_transform.transient_failure", trace_id=trace_id, error=str(e))
             raise
 
     async def _handle_permanent_failure(
-        self, trace_id: str, tenant_id: str, error: ValueError
+        self, trace_id: str, tenant_id: str, error: TerminalDomainError
     ) -> None:
-        logger.exception("compute_transform.permanent_failure", trace_id=trace_id, error=str(error))
+        logger.exception(
+            "compute_transform.permanent_failure", trace_id=trace_id, error=error.message
+        )
         # Emit failure domain event in a separate transaction
         async with self.uow_factory() as failure_uow, failure_uow:
             edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
             if edi_msg_fallback:
+                edi_msg_fallback.mark_transform_failed(
+                    reason=error.message,
+                    error_code=error.code,
+                    error_details=error.details,
+                )
                 edi_msg_fallback.add_domain_event(
                     TransformFailed(
                         trace_id=trace_id,
                         tenant_id=edi_msg_fallback.tenant_id or tenant_id,
                         direction=EdiDirection.INBOUND.value,
-                        failure_reason=str(error),
+                        failure_reason=error.message,
+                        error_code=error.code,
+                        error_details=error.details,
                     )
                 )
+                await failure_uow.transactions.update_outbound_delivery_metadata(edi_msg_fallback)
                 failure_envelopes = await failure_uow.transactions.flush_events(edi_msg_fallback)
                 await failure_uow.commit()
 
@@ -204,7 +233,7 @@ class ComputeTransformUseCase:
                     status=MessageStatus.PARSED,
                     replay_count=edi_msg.replay_count,
                     parent_trace_id=edi_msg.parent_trace_id,
-                    original_trace_id=edi_msg.original_trace_id,
+                    original_trace_id=edi_msg.original_trace_id or edi_msg.trace_id,
                 )
             )
             logger.info(
@@ -218,6 +247,7 @@ class ComputeTransformUseCase:
         txn_type_for_parent = transformed_txns[0].transaction_type if transformed_txns else None
 
         # 4. Record TRANSFORMATION_SUCCESSFUL on the aggregate — repository drains to outbox.
+        edi_msg.mark_transformed()
         edi_msg.add_domain_event(
             TransformSuccessful(
                 trace_id=trace_id,
@@ -230,6 +260,7 @@ class ComputeTransformUseCase:
                 transaction_type=txn_type_for_parent,
             )
         )
+        await uow.transactions.update_outbound_delivery_metadata(edi_msg)
         envelopes = await uow.transactions.flush_events(edi_msg)
         logger.info(
             "compute_transform.outbox_event_dispatched",

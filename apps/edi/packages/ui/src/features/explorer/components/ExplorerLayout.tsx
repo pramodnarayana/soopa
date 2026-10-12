@@ -4,6 +4,7 @@ import { Label } from '@soopa/ui/components/ui/label';
 import { Database, FileJson } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
+import { TRANSACTION_STATUS_GROUPS } from '../../transactions/constants';
 import { useExplorerEdiJson, useExplorerEdiMessages } from '../api/explorerApi';
 import type { ExplorerEdiJson, ExplorerEdiMessage, FilterRule } from '../types';
 import { ExplorerTable } from './ExplorerTable';
@@ -13,11 +14,12 @@ const sharedColumns = [
   { key: 'direction', label: 'Direction', className: 'w-[12%]' },
   { key: 'sender_id', label: 'Sender ID', className: 'w-[18%]' },
   { key: 'receiver_id', label: 'Receiver ID', className: 'w-[18%]' },
-  { key: 'status', label: 'Status', className: 'w-[17%]' },
+  { key: 'status', label: 'Status', className: 'w-[10%]' },
+
   {
     key: 'created_at',
     label: 'Created At',
-    className: 'w-[25%]',
+    className: 'w-[15%]',
     render: (item: { created_at?: string | null }) =>
       item.created_at ? new Date(item.created_at).toLocaleString() : '-',
   },
@@ -34,6 +36,13 @@ const messageFields: FieldDef[] = [
     operators: ['eq', 'neq', 'contains'],
   },
   { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  { label: 'Error Code', id: 'error_code', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Error Message',
+    id: 'status_message',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
   { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains'] },
   {
     label: 'Transaction Type',
@@ -58,6 +67,13 @@ const jsonFields: FieldDef[] = [
     operators: ['eq', 'neq', 'contains'],
   },
   { label: 'Status', id: 'status', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  { label: 'Error Code', id: 'error_code', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    label: 'Error Message',
+    id: 'status_message',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
   { label: 'Direction', id: 'direction', type: 'text', operators: ['eq', 'neq', 'contains'] },
   {
     label: 'Transaction Type',
@@ -137,7 +153,11 @@ function ExplorerCommonFields({
   );
 }
 
-export function ExplorerLayout() {
+export function ExplorerLayout({
+  onTraceClick,
+}: {
+  onTraceClick?: (traceId: string) => void;
+} = {}) {
   const [messagesFilters, setMessagesFilters] = useState<FilterRule[]>([]);
   const [jsonFilters, setJsonFilters] = useState<FilterRule[]>([]);
   const [activeTab, setActiveTab] = useState('messages');
@@ -182,10 +202,23 @@ export function ExplorerLayout() {
   useEffect(() => {
     if (messagesData?.items) {
       setAccumulatedMessages((prev) => {
-        if (messagesOffset === 0) return messagesData.items;
-        const nextMap = new Map(prev.map((i) => [i.id, i]));
-        messagesData.items.forEach((i: ExplorerEdiMessage) => nextMap.set(i.id, i));
-        return Array.from(nextMap.values());
+        let itemsToProcess = messagesData.items;
+        if (messagesOffset !== 0) {
+          itemsToProcess = [...prev, ...messagesData.items];
+        }
+
+        const groupMap = new Map<string, ExplorerEdiMessage>();
+        itemsToProcess.forEach((i: ExplorerEdiMessage) => {
+          const groupId = i.original_trace_id || i.trace_id;
+          const existing = groupMap.get(groupId);
+          if (!existing || (i.replay_count || 0) > (existing.replay_count || 0)) {
+            groupMap.set(groupId, i);
+          }
+        });
+
+        return Array.from(groupMap.values()).sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+        );
       });
     }
   }, [messagesData, messagesOffset]);
@@ -193,10 +226,24 @@ export function ExplorerLayout() {
   useEffect(() => {
     if (jsonData?.items) {
       setAccumulatedJson((prev) => {
-        if (jsonOffset === 0) return jsonData.items;
-        const nextMap = new Map(prev.map((i) => [i.id, i]));
-        jsonData.items.forEach((i: ExplorerEdiJson) => nextMap.set(i.id, i));
-        return Array.from(nextMap.values());
+        let itemsToProcess = jsonData.items;
+        if (jsonOffset !== 0) {
+          itemsToProcess = [...prev, ...jsonData.items];
+        }
+
+        const groupMap = new Map<string, ExplorerEdiJson>();
+        itemsToProcess.forEach((i: ExplorerEdiJson) => {
+          const baseTrace = i.original_trace_id || i.trace_id;
+          const groupId = `${baseTrace}_${i.transaction_type || ''}`;
+          const existing = groupMap.get(groupId);
+          if (!existing || (i.replay_count || 0) > (existing.replay_count || 0)) {
+            groupMap.set(groupId, i);
+          }
+        });
+
+        return Array.from(groupMap.values()).sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime(),
+        );
       });
     }
   }, [jsonData, jsonOffset]);
@@ -247,9 +294,20 @@ export function ExplorerLayout() {
             columns={messageColumns}
             data={accumulatedMessages}
             isLoading={messagesLoading && messagesOffset === 0}
+            onTraceClick={onTraceClick}
             renderExpanded={(item) => (
               <div className="space-y-4">
                 <ExplorerCommonFields item={item} />
+                {item.error_details && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-red-700 mb-2">Error Details</h4>
+                    <CodeViewer
+                      height={200}
+                      language="json"
+                      value={JSON.stringify(item.error_details, null, 2)}
+                    />
+                  </div>
+                )}
                 <div>
                   <h4 className="text-sm font-semibold text-slate-900 mb-2">Raw Payload</h4>
                   <CodeViewer
@@ -258,6 +316,17 @@ export function ExplorerLayout() {
                     value={item.edi_data || item.storage_uri || 'No payload available.'}
                   />
                 </div>
+                {TRANSACTION_STATUS_GROUPS.ERROR.has(item.status?.toUpperCase() || '') &&
+                  (item.error_code || item.status_message) && (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2 text-red-700">Failure Reason</h4>
+                      <div className="h-[150px] overflow-y-auto p-4 rounded-lg border shadow-inner font-mono text-sm whitespace-pre-wrap break-words w-full bg-red-50 border-red-200 text-red-700">
+                        {item.error_code && item.status_message
+                          ? `${item.error_code} - ${item.status_message}`
+                          : item.error_code || item.status_message}
+                      </div>
+                    </div>
+                  )}
               </div>
             )}
             onLoadMore={handleMessagesLoadMore}
@@ -277,9 +346,20 @@ export function ExplorerLayout() {
             columns={jsonColumns}
             data={accumulatedJson}
             isLoading={jsonLoading && jsonOffset === 0}
+            onTraceClick={onTraceClick}
             renderExpanded={(item) => (
               <div className="space-y-4">
                 <ExplorerCommonFields item={item} />
+                {item.error_details && (
+                  <div>
+                    <h4 className="text-sm font-semibold text-red-700 mb-2">Error Details</h4>
+                    <CodeViewer
+                      height={200}
+                      language="json"
+                      value={JSON.stringify(item.error_details, null, 2)}
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <h4 className="text-sm font-semibold text-slate-700 mb-2">Business Metadata</h4>
@@ -302,6 +382,17 @@ export function ExplorerLayout() {
                     />
                   </div>
                 </div>
+                {TRANSACTION_STATUS_GROUPS.ERROR.has(item.status?.toUpperCase() || '') &&
+                  (item.error_code || item.status_message) && (
+                    <div>
+                      <h4 className="text-sm font-semibold mb-2 text-red-700">Failure Reason</h4>
+                      <div className="h-[150px] overflow-y-auto p-4 rounded-lg border shadow-inner font-mono text-sm whitespace-pre-wrap break-words w-full bg-red-50 border-red-200 text-red-700">
+                        {item.error_code && item.status_message
+                          ? `${item.error_code} - ${item.status_message}`
+                          : item.error_code || item.status_message}
+                      </div>
+                    </div>
+                  )}
               </div>
             )}
             onLoadMore={handleJsonLoadMore}

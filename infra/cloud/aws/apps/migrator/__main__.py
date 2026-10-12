@@ -132,17 +132,7 @@ migrator_task = aws.ecs.TaskDefinition(
                     "name": "app",
                     "image": args[0],
                     "essential": True,
-                    "command": [
-                        "sh",
-                        "-c",
-                        "cd /app/core/platform/packages/database && alembic upgrade head && "
-                        "cd /app/apps/edi/packages/edi && python src/edi/adapters/outbound/database/run_migrations.py && "
-                        "cd /app/core/ucp/packages/ucp && python scripts/seed.py && "
-                        "cd /app/core/ucp/apps/ucp-jobs-worker && python scripts/seed_jobs.py && "
-                        "cd /app/core/platform/apps/identity-jobs-worker && python scripts/seed_jobs.py && "
-                        "cd /app/core/platform/apps/notification-jobs-worker && python scripts/seed_jobs.py && "
-                        "cd /app/apps/edi && python scripts/seed_jobs.py",
-                    ],
+                    "command": ["sh", "-c", "/app/infra/scripts/migrate_and_seed.sh"],
                     "environment": [
                         {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[3]},
                         {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[4]},

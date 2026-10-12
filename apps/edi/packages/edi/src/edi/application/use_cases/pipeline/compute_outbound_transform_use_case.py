@@ -13,6 +13,7 @@ from edi.domain.enums import (
     EdiDirection,
     EdiStandard,
     PipelineEventType,
+    TraceEventType,
 )
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.headers import EdiEnvelopeHeaders
@@ -95,7 +96,7 @@ class ComputeOutboundTransformUseCase:
                 tenant_id=edi_json.tenant_id or "",
                 replay_count=edi_json.replay_count,
                 parent_trace_id=edi_json.parent_trace_id,
-                original_trace_id=edi_json.original_trace_id,
+                original_trace_id=edi_json.original_trace_id or edi_json.trace_id,
                 edi_data=edi_str,
                 format_standard=standard,
                 transaction_type=edi_headers.transaction_type,
@@ -105,6 +106,9 @@ class ComputeOutboundTransformUseCase:
                 gs_receiver_id=edi_headers.gs_receiver_id,
                 trading_partner_id=trading_partner_id,
             )
+
+        edi_msg._append_trace(TraceEventType.TRANSFORMATION_SUCCESSFUL)
+
         return await uow.transactions.save(edi_msg)
 
     async def execute(self, command: ComputeOutboundTransformCommand) -> None:
@@ -222,6 +226,9 @@ class ComputeOutboundTransformUseCase:
             async with self.uow_factory() as failure_uow, failure_uow:
                 edi_json_fallback = await failure_uow.transactions.get_edi_json(trace_id)
                 if edi_json_fallback:
+                    edi_json_fallback.mark_transform_failed(reason=str(e))
+                    await failure_uow.transactions.save_json(edi_json_fallback)
+
                     event_key = generate_deterministic_id(
                         SystemIdPrefix.IDEMPOTENCY, command.idempotency_key, "TRANSFORMATION_FAILED"
                     )

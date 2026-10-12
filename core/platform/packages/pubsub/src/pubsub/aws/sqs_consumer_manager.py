@@ -1,15 +1,33 @@
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 import structlog
 from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
+from pubsub.enums import ConsumerAction
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
+from pubsub.message import AckableMessage
 from pubsub.ports.consumer_error_handler_port import ConsumerErrorHandlerPort
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from seedwork.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
+
+
+async def _execute_ack(msg: AckableMessage) -> None:
+    await msg.ack()
+
+
+async def _execute_nack(msg: AckableMessage) -> None:
+    await msg.nack()
+
+
+CONSUMER_ACTION_STRATEGIES: dict[ConsumerAction, Callable[[AckableMessage], Awaitable[None]]] = {
+    ConsumerAction.ACK: _execute_ack,
+    ConsumerAction.NACK: _execute_nack,
+    ConsumerAction.DLQ: _execute_nack,  # SQS redrive handles DLQ routing automatically on nack
+}
 
 
 class SqsConsumerManager:
@@ -28,7 +46,7 @@ class SqsConsumerManager:
     def __init__(
         self,
         consumer: MessageConsumerPort,
-        handler: Callable[[JsonDict], Awaitable[None]],
+        handler: Callable[[JsonDict], Awaitable[ConsumerAction | None]],
         queue_name: str = "",
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
@@ -48,6 +66,9 @@ class SqsConsumerManager:
 
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
+
+    def background_tasks(self) -> list[asyncio.Task[Any]]:
+        return [self._task] if self._task else []
 
     @property
     def task(self) -> asyncio.Task[None] | None:
@@ -94,13 +115,17 @@ class SqsConsumerManager:
                 self.is_running = False
                 raise
             except ConsumerTerminalError:
-                logger.exception("sqs_consumer_manager_terminal_error", queue=self.queue_name)
+                logger.error("sqs_consumer_manager_terminal_error", queue=self.queue_name)
                 raise
-            except ConsumerTransientError:
-                logger.exception("sqs_consumer_manager_transient_error", queue=self.queue_name)
+            except ConsumerTransientError as e:
+                logger.warning(
+                    "sqs_consumer_manager_transient_error", queue=self.queue_name, reason=str(e)
+                )
                 await asyncio.sleep(self.error_sleep_seconds)
             except Exception:
-                logger.exception("sqs_consumer_manager_fatal_error", queue=self.queue_name)
+                logger.exception(
+                    "sqs_consumer_manager_unhandled_fatal_error", queue=self.queue_name
+                )
                 raise
 
     async def _poll_continuous(self) -> None:
@@ -125,14 +150,23 @@ class SqsConsumerManager:
                         payload_keys=keys,
                     )
 
-                    await self.handler(ackable_msg.payload)
-                    await ackable_msg.ack()
+                    action = await self.handler(ackable_msg.payload)
+                    action = action or ConsumerAction.ACK
+
+                    strategy_fn = CONSUMER_ACTION_STRATEGIES.get(action, _execute_ack)
+                    await strategy_fn(ackable_msg)
+
             except asyncio.CancelledError:
                 break
-            except ConsumerTerminalError:
-                raise
-            except ConsumerTransientError:
-                logger.exception("sqs_consumer_manager_poll_error", queue=self.queue_name)
-                await asyncio.sleep(self.poll_sleep_seconds * 5)
-            except Exception as e:  # noqa: BLE001
+            except ConsumerTerminalError as e:
+                if ackable_msg is not None:
+                    logger.error(
+                        "sqs_consumer_manager_terminal_payload_error",
+                        queue=self.queue_name,
+                        error=str(e),
+                    )
+                    await ackable_msg.ack()
+                else:
+                    raise
+            except Exception as e:  # noqa: BLE001 - Message pump loop must catch all message processing errors to delegate to error_handler and prevent worker crash
                 await self.error_handler.handle_error(e, ackable_msg, self.queue_name)

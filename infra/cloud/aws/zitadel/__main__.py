@@ -29,6 +29,9 @@ platform = pulumi.StackReference(platform_stack_ref)
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 data = pulumi.StackReference(data_stack_ref)
 
+obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
+obs = pulumi.StackReference(obs_stack_ref)
+
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
     foundation.require_output("private_subnet_a_id"),
@@ -57,14 +60,10 @@ ecs_task_role, ecs_execution_role = provision_roles(
 
 # ── ECS Service & Task ────────────────────────────────────────────────────────
 enable_observability = config.get_bool("enable_observability") or False
-firelens_endpoint = (
-    platform.require_output("openobserve_endpoint") if enable_observability else None
-)
-obs_user_arn = (
-    platform.require_output("openobserve_user_secret_arn") if enable_observability else None
-)
+firelens_endpoint = obs.require_output("openobserve_endpoint") if enable_observability else None
+obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
-    platform.require_output("openobserve_password_secret_arn") if enable_observability else None
+    obs.require_output("openobserve_password_secret_arn") if enable_observability else None
 )
 
 zitadel_svc = provision_ecs(

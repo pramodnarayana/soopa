@@ -182,6 +182,9 @@ class PipelineLifecycleUseCase:
                 await uow.api_gateway_transactions.update_api_payload_status(
                     trace_id, str(MessageStatus.DELIVERED)
                 )
+                await uow.transactions.update_edi_json_status(
+                    trace_id, str(MessageStatus.DELIVERED)
+                )
             else:
                 await uow.transactions.update_edi_message_status(
                     trace_id, str(MessageStatus.DELIVERED)
@@ -216,6 +219,7 @@ class PipelineLifecycleUseCase:
                 await uow.api_gateway_transactions.update_api_payload_status(
                     trace_id, str(MessageStatus.FAILED)
                 )
+                await uow.transactions.update_edi_json_status(trace_id, str(MessageStatus.FAILED))
             else:
                 await uow.transactions.update_edi_message_status(
                     trace_id, str(MessageStatus.FAILED)

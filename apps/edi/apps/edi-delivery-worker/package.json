@@ -9,9 +9,12 @@
     "deadcode:deptry": "uv run deptry .",
     "test:integration": "uv run pytest tests/integration --cov=src",
     "cov": "uv run pytest -m \"not integration\" --cov=src --cov-report=term-missing --ignore=tests/integration --ignore=tests/e2e",
-    "dev": "PYTHONUNBUFFERED=1 uv run python -m edi_delivery_worker.data.main"
+    "dev:main": "PYTHONUNBUFFERED=1 uv run python -m edi_delivery_worker.data.main",
+    "dev:dlq": "PYTHONUNBUFFERED=1 uv run python -m edi_delivery_worker.data.main --dlq",
+    "dev": "concurrently \"pnpm dev:main\" \"pnpm dev:dlq\""
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "@soopa/ucp-models": "workspace:*",
     "@soopa/api": "workspace:*",
     "@soopa/seedwork": "workspace:*",

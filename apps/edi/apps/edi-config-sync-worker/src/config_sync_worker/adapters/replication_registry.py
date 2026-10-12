@@ -3,7 +3,7 @@ Replication Registry — Infrastructure Wiring of the Dependency Graph.
 
 This module is the SINGLE SOURCE OF TRUTH for which entities are replicated
 and what their FK dependencies are. It wires concrete SQLAlchemy model classes
-into the EntitySpec declarative structure defined in worker.domain.replication_graph.
+into the EntitySpec declarative structure defined in config_sync_worker.domain.replication_graph.
 
 This is an infrastructure concern (it imports ORM models), deliberately
 separated from the pure domain types and algorithm in replication_graph.py.
@@ -35,8 +35,21 @@ from edi.adapters.outbound.database.models.data_plane import (
 from edi.adapters.outbound.database.models.data_plane import OutboundRoute as TenantOutboundRoute
 from edi.adapters.outbound.database.models.data_plane import SFTPPartner as TenantSFTPPartner
 from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
+from edi.adapters.outbound.database.replication_mappers import (
+    map_as2_partner,
+    map_as2_partnership,
+    map_inbound_route,
+    map_outbound_edi_header,
+    map_outbound_route,
+    map_sftp_partner,
+    map_webhook,
+)
 
-from config_sync_worker.domain.replication_graph import EntityDependency, EntitySpec
+from config_sync_worker.domain.replication_graph import (
+    EntityDependency,
+    EntitySpec,
+    validate_replication_graph,
+)
 
 # ---------------------------------------------------------------------------
 # Replication Graph
@@ -50,24 +63,28 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
     "as2_partner": EntitySpec(
         global_model=GlobalAS2Partner,
         tenant_model=TenantAS2Partner,
+        mapper=map_as2_partner,
         include_shared=True,
         dependencies=[],
     ),
     "sftp_partner": EntitySpec(
         global_model=GlobalSFTPPartner,
         tenant_model=TenantSFTPPartner,
+        mapper=map_sftp_partner,
         include_shared=False,
         dependencies=[],
     ),
     "webhook": EntitySpec(
         global_model=GlobalWebhook,
         tenant_model=TenantWebhook,
+        mapper=map_webhook,
         include_shared=False,
         dependencies=[],
     ),
     "outbound_edi_header": EntitySpec(
         global_model=GlobalOutboundEdiHeader,
         tenant_model=TenantOutboundEdiHeader,
+        mapper=map_outbound_edi_header,
         include_shared=False,
         dependencies=[],
     ),
@@ -75,6 +92,7 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
     "as2_partnership": EntitySpec(
         global_model=GlobalAS2Partnership,
         tenant_model=TenantAS2Partnership,
+        mapper=map_as2_partnership,
         include_shared=True,
         # FK: local_partner_id → as2_partners.id
         #     remote_partner_id → as2_partners.id
@@ -82,21 +100,18 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
         dependencies=[
             EntityDependency(
                 fk_attr="local_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
             EntityDependency(
                 fk_attr="remote_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
         ],
     ),
     "inbound_route": EntitySpec(
         global_model=GlobalInboundRoute,
         tenant_model=TenantInboundRoute,
+        mapper=map_inbound_route,
         include_shared=False,
         # CHECK constraint: exactly ONE of these three FK columns is non-null.
         # All three are listed; the driver skips null values automatically.
@@ -106,27 +121,22 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
         dependencies=[
             EntityDependency(
                 fk_attr="as2_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
             EntityDependency(
                 fk_attr="sftp_partner_id",
-                global_model=GlobalSFTPPartner,
-                tenant_model=TenantSFTPPartner,
-                include_shared=False,
+                target_key="sftp_partner",
             ),
             EntityDependency(
                 fk_attr="webhook_id",
-                global_model=GlobalWebhook,
-                tenant_model=TenantWebhook,
-                include_shared=False,
+                target_key="webhook",
             ),
         ],
     ),
     "outbound_route": EntitySpec(
         global_model=GlobalOutboundRoute,
         tenant_model=TenantOutboundRoute,
+        mapper=map_outbound_route,
         include_shared=False,
         # CHECK constraint: exactly ONE of these two FK columns is non-null.
         # FK: as2_partner_id  → as2_partners.id
@@ -134,16 +144,15 @@ REPLICATION_GRAPH: dict[str, EntitySpec] = {
         dependencies=[
             EntityDependency(
                 fk_attr="as2_partner_id",
-                global_model=GlobalAS2Partner,
-                tenant_model=TenantAS2Partner,
-                include_shared=True,
+                target_key="as2_partner",
             ),
             EntityDependency(
                 fk_attr="sftp_partner_id",
-                global_model=GlobalSFTPPartner,
-                tenant_model=TenantSFTPPartner,
-                include_shared=False,
+                target_key="sftp_partner",
             ),
         ],
     ),
 }
+
+# Fail fast at startup if graph structure violates invariants
+validate_replication_graph(REPLICATION_GRAPH)

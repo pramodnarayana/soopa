@@ -47,6 +47,7 @@ COPY --from=builder --chown=app:app /build/.venv /app/.venv
 # Copy application source
 COPY --from=builder --chown=app:app /build/apps /app/apps
 COPY --from=builder --chown=app:app /build/core /app/core
+COPY --from=builder --chown=app:app /build/infra /app/infra
 
 # Ensure python uses the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"

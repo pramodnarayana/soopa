@@ -15,6 +15,7 @@ import {
 } from '../../../features/transactions/api/transactionsApi';
 import { ReplayBadge } from '../../../features/transactions/components/ReplayBadge';
 import { TransactionsTable } from '../../../features/transactions/components/TransactionsTable';
+import { TRANSACTION_STATUS_GROUPS } from '../../../features/transactions/constants';
 import { Route as appRoute } from '../../tenant';
 
 export const Route = createRoute({
@@ -79,15 +80,29 @@ function RowActions({
 
 // ─── Shared field renderers ───────────────────────────────────────────────────
 
-function FieldGrid({ items }: { items: { label: string; value: string | null | undefined }[] }) {
+function FieldGrid({
+  items,
+}: {
+  items: {
+    label: string;
+    value: string | null | undefined;
+    valueClassName?: string;
+    containerClassName?: string;
+  }[];
+}) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {items.map(({ label, value }) => (
-        <div key={label} className="bg-white rounded-lg border border-slate-200 p-3 shadow-sm">
+      {items.map(({ label, value, valueClassName, containerClassName }) => (
+        <div
+          key={label}
+          className={`rounded-lg border p-3 shadow-sm ${containerClassName || 'bg-white border-slate-200'}`}
+        >
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
             {label}
           </div>
-          <div className="font-mono text-sm text-slate-900 truncate">{value || '—'}</div>
+          <div className={`font-mono text-sm truncate ${valueClassName || 'text-slate-900'}`}>
+            {value || '—'}
+          </div>
         </div>
       ))}
     </div>
@@ -127,12 +142,37 @@ function EdiMessageExpandedRow({ item }: { item: ExplorerEdiMessage }) {
           { label: 'Status', value: item.status },
         ]}
       />
+      {item.error_details && (
+        <div className="mt-4">
+          <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">
+            Error Details
+          </div>
+          <CodeViewer
+            language="json"
+            height={200}
+            value={JSON.stringify(item.error_details, null, 2)}
+          />
+        </div>
+      )}
       <div className="mt-4">
         <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
           Raw EDI Data
         </div>
         <CodeViewer language="edi" height={350} value={item.edi_data || 'No EDI data available.'} />
       </div>
+      {TRANSACTION_STATUS_GROUPS.ERROR.has(item.status?.toUpperCase() || '') &&
+        (item.error_code || item.status_message) && (
+          <div className="mt-4">
+            <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">
+              Failure Reason
+            </div>
+            <div className="h-[150px] overflow-y-auto p-4 rounded-lg bg-red-50 border border-red-200 shadow-inner text-red-700 font-mono text-sm whitespace-pre-wrap break-words w-full">
+              {item.error_code && item.status_message
+                ? `${item.error_code} - ${item.status_message}`
+                : item.error_code || item.status_message}
+            </div>
+          </div>
+        )}
     </div>
   );
 }
@@ -170,7 +210,19 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           { label: 'Status', value: item.status },
         ]}
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {item.error_details && (
+        <div className="mt-4">
+          <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">
+            Error Details
+          </div>
+          <CodeViewer
+            language="json"
+            height={200}
+            value={JSON.stringify(item.error_details, null, 2)}
+          />
+        </div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div>
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
             Business Metadata
@@ -192,6 +244,19 @@ function EdiJsonExpandedRow({ item }: { item: ExplorerEdiJson }) {
           />
         </div>
       </div>
+      {TRANSACTION_STATUS_GROUPS.ERROR.has(item.status?.toUpperCase() || '') &&
+        (item.error_code || item.status_message) && (
+          <div className="mt-4">
+            <div className="text-xs font-semibold text-red-700 uppercase tracking-wide mb-2">
+              Failure Reason
+            </div>
+            <div className="h-[150px] overflow-y-auto p-4 rounded-lg bg-red-50 border border-red-200 shadow-inner text-red-700 font-mono text-sm whitespace-pre-wrap break-words w-full">
+              {item.error_code && item.status_message
+                ? `${item.error_code} - ${item.status_message}`
+                : item.error_code || item.status_message}
+            </div>
+          </div>
+        )}
     </div>
   );
 }
@@ -298,6 +363,13 @@ const messageFields: FieldDef[] = [
   sharedFieldDefs.sender_id,
   sharedFieldDefs.receiver_id,
   { id: 'status', label: 'Status', type: 'text', operators: ['eq', 'neq'] },
+  { id: 'error_code', label: 'Error Code', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    id: 'status_message',
+    label: 'Error Message',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
 ];
 
 const jsonFields: FieldDef[] = [
@@ -346,6 +418,13 @@ const jsonFields: FieldDef[] = [
     operators: ['eq', 'contains'],
   },
   { id: 'status', label: 'Status', type: 'text', operators: ['eq', 'neq'] },
+  { id: 'error_code', label: 'Error Code', type: 'text', operators: ['eq', 'neq', 'contains'] },
+  {
+    id: 'status_message',
+    label: 'Error Message',
+    type: 'text',
+    operators: ['eq', 'neq', 'contains'],
+  },
 ];
 
 // ─── Main Page ────────────────────────────────────────────────────────────────

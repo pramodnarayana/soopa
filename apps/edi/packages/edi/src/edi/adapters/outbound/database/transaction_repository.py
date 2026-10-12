@@ -5,6 +5,7 @@ from typing import Any, Protocol, cast
 
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
+from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
 
@@ -66,6 +67,24 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
         TenantSqlAlchemyRepository.__init__(self, session)
         self.storage = storage
 
+    async def _persist_trace_events(self, aggregate: TracedAggregateRoot) -> None:
+        for t_event in aggregate.trace_events:
+            try:
+                async with self.session.begin_nested():
+                    trace_record = TraceEvent(
+                        id=t_event.id,
+                        tenant_id=t_event.tenant_id,
+                        trace_id=t_event.trace_id,
+                        event_type=t_event.event_type,
+                        actor=t_event.actor,
+                        metadata_=t_event.metadata,
+                    )
+                    self.session.add(trace_record)
+                    await self.flush()
+            except DuplicateEntityError:
+                pass
+        aggregate.clear_trace_events()
+
     async def create_edi_message(self, command: CreateEdiMessageCommand) -> str:
         msg = EdiMessage(
             id=command.id or generate_id(DomainIdPrefix.EDI_MESSAGE.value),
@@ -98,6 +117,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             msg_headers=json.dumps(command.msg_headers) if command.msg_headers else None,
             state=command.state,
             status_message=command.status_message,
+            error_code=command.error_code,
+            error_details=command.error_details,
             replay_count=command.replay_count,
             parent_trace_id=command.parent_trace_id,
             original_trace_id=command.original_trace_id,
@@ -151,6 +172,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 signature_algorithm=aggregate.signature_algorithm,
                 encryption_algorithm=aggregate.encryption_algorithm,
                 status_message=aggregate.status_message,
+                error_code=aggregate.error_code,
+                error_details=aggregate.error_details,
                 state=aggregate.state,
                 msg_headers=aggregate.msg_headers,
                 file_name=aggregate.file_name,
@@ -232,6 +255,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             signature_algorithm=aggregate.signature_algorithm,
             encryption_algorithm=aggregate.encryption_algorithm,
             status_message=aggregate.status_message,
+            error_code=aggregate.error_code,
+            error_details=aggregate.error_details,
             state=aggregate.state,
             msg_headers=aggregate.msg_headers,
             trading_partner_id=aggregate.trading_partner_id,
@@ -277,6 +302,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
+        await self._persist_trace_events(aggregate)
+
         return envelopes
 
     async def flush_events(self, aggregate: EdiMessageDomainModel) -> Sequence[EventEnvelope]:
@@ -319,6 +346,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
+        await self._persist_trace_events(aggregate)
+
         aggregate.clear_domain_events()
         return envelopes
 
@@ -353,6 +382,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     gs_receiver_id=aggregate.gs_receiver_id,
                     edi_data=aggregate.edi_data,
                     trading_partner_id=aggregate.trading_partner_id,
+                    status_message=aggregate.status_message,
+                    error_code=aggregate.error_code,
+                    error_details=aggregate.error_details,
                     storage_uri=aggregate.storage_uri,
                     replay_count=aggregate.replay_count,
                     parent_trace_id=aggregate.parent_trace_id,
@@ -400,6 +432,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
 
+        for aggregate in aggregates:
+            await self._persist_trace_events(aggregate)
+
         return envelopes
 
     async def save_json(self, aggregate: EdiJsonDomainModel) -> Sequence[EventEnvelope]:
@@ -415,6 +450,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             tenant_id=aggregate.tenant_id,
             direction=aggregate.direction.value if aggregate.direction else None,
             status=aggregate.status.value if aggregate.status else None,
+            status_message=aggregate.status_message,
+            error_code=aggregate.error_code,
+            error_details=aggregate.error_details,
             trading_partner_id=aggregate.trading_partner_id,
             transaction_type=aggregate.transaction_type,
             standard=aggregate.standard,
@@ -469,6 +507,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 )
             except DuplicateEntityError:
                 pass  # Idempotent: already published, safe to skip.
+
+        await self._persist_trace_events(aggregate)
 
         return envelopes
 
@@ -606,6 +646,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             tenant_id=record.tenant_id,
             direction=Direction(record.direction) if record.direction else Direction.OUTBOUND,
             status=MessageStatus(record.status) if record.status else MessageStatus.PENDING,
+            status_message=record.status_message,
+            error_code=record.error_code,
+            error_details=record.error_details,
             trading_partner_id=record.trading_partner_id,
             transaction_type=record.transaction_type,
             standard=record.standard,
@@ -641,6 +684,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                     if record.direction
                     else Direction.OUTBOUND,
                     status=MessageStatus(record.status) if record.status else MessageStatus.PENDING,
+                    status_message=record.status_message,
+                    error_code=record.error_code,
+                    error_details=record.error_details,
                     trading_partner_id=record.trading_partner_id,
                     transaction_type=record.transaction_type,
                     standard=record.standard,
@@ -685,6 +731,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             tenant_id=command.tenant_id,
             direction=command.direction,
             status=command.status,
+            status_message=getattr(command, "status_message", None),
+            error_code=getattr(command, "error_code", None),
+            error_details=getattr(command, "error_details", None),
             trading_partner_id=command.trading_partner_id,
             standard=command.standard,
             business_metadata=command.business_metadata,
@@ -768,6 +817,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 msg_headers=json.loads(r.msg_headers) if r.msg_headers else None,
                 state=r.state,
                 status_message=r.status_message,
+                error_code=r.error_code,
+                error_details=r.error_details,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
                 replay_count=r.replay_count,
@@ -783,10 +834,15 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
     _ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})
     _ALLOWED_FIELDS: frozenset[str] = frozenset(
         {
+            "trace_id",
+            "original_trace_id",
+            "parent_trace_id",
             "trading_partner_id",
             "direction",
             "status",
             "transaction_type",
+            "error_code",
+            "status_message",
             "sender_id",
             "receiver_id",
             "gs_sender_id",
@@ -896,12 +952,22 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 continue
 
             attr: Mapped[object] | None = None
-            if field == "direction":
+            if field == "trace_id":
+                attr = model.trace_id
+            elif field == "parent_trace_id":
+                attr = model.parent_trace_id
+            elif field == "original_trace_id":
+                attr = model.original_trace_id
+            elif field == "direction":
                 attr = model.direction
             elif field == "status":
                 attr = model.status
             elif field == "transaction_type":
                 attr = model.transaction_type
+            elif field == "error_code":
+                attr = model.error_code
+            elif field == "status_message":
+                attr = model.status_message
             elif field == "sender_id" and issubclass(model, EdiMessage):
                 attr = model.sender_id
             elif field == "receiver_id" and issubclass(model, EdiMessage):
@@ -979,6 +1045,8 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 msg_headers=json.loads(r.msg_headers) if r.msg_headers else None,
                 state=r.state,
                 status_message=r.status_message,
+                error_code=r.error_code,
+                error_details=r.error_details,
                 created_at=r.created_at,
                 updated_at=r.updated_at,
                 replay_count=r.replay_count,
@@ -1015,6 +1083,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 tenant_id=j.tenant_id,
                 direction=j.direction,
                 status=j.status,
+                status_message=j.status_message,
+                error_code=j.error_code,
+                error_details=j.error_details,
                 trading_partner_id=j.trading_partner_id,
                 business_metadata=j.business_metadata,
                 transaction_type=j.transaction_type,
@@ -1054,6 +1125,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 tenant_id=r.tenant_id,
                 direction=r.direction,
                 status=r.status,
+                status_message=r.status_message,
+                error_code=r.error_code,
+                error_details=r.error_details,
                 trading_partner_id=r.trading_partner_id,
                 business_metadata=r.business_metadata,
                 transaction_type=r.transaction_type,
@@ -1104,6 +1178,9 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             tenant_id=record.tenant_id,
             direction=record.direction,
             status=record.status,
+            status_message=record.status_message,
+            error_code=record.error_code,
+            error_details=record.error_details,
             trading_partner_id=record.trading_partner_id,
             transaction_type=record.transaction_type,
             business_metadata=record.business_metadata,
@@ -1151,6 +1228,8 @@ def _map_edi_message_to_domain(
         signature_algorithm=record.signature_algorithm,
         encryption_algorithm=record.encryption_algorithm,
         status_message=record.status_message,
+        error_code=record.error_code,
+        error_details=record.error_details,
         state=record.state,
         msg_headers=record.msg_headers,
         edi_data=hydrated_edi_data if hydrated_edi_data is not None else record.edi_data,

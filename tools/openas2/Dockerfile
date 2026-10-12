@@ -1,5 +1,6 @@
-# hadolint ignore=DL3007
-FROM openas2app-openas2:latest
+ARG OPENAS2_VERSION=3.3.0
+ARG REGISTRY_URL=634680389104.dkr.ecr.us-east-1.amazonaws.com/staging-openas2
+FROM ${REGISTRY_URL}:${OPENAS2_VERSION}
 
 # Copy over the specific configurations for the mock trading partner
 COPY config/ /opt/openas2/config/

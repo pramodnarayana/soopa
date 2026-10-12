@@ -1,4 +1,3 @@
-import dataclasses
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -22,6 +21,28 @@ from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPo
 class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlchemyRepository):
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
+
+    def _update_record_from_domain(
+        self, record: InboundRoute, aggregate: InboundRouteDomainModel
+    ) -> None:
+        record.tenant_id = aggregate.tenant_id
+        record.name = aggregate.name
+        record.isa_sender_id = aggregate.isa_sender_id
+        record.isa_receiver_id = aggregate.isa_receiver_id
+        record.active = aggregate.active
+        record.trading_partner_id = aggregate.trading_partner_id
+        record.gs_sender_id = aggregate.gs_sender_id
+        record.gs_receiver_id = aggregate.gs_receiver_id
+        record.transaction_type = aggregate.transaction_type
+        record.processing_mode = (
+            aggregate.processing_mode.value if aggregate.processing_mode else None
+        )
+        record.webhook_id = aggregate.webhook_id
+        record.as2_partner_id = aggregate.as2_partner_id
+        record.sftp_partner_id = aggregate.sftp_partner_id
+        record.connection_type = (
+            aggregate.connection_type.value if aggregate.connection_type else None
+        )
 
     @staticmethod
     def _to_domain_model(record: InboundRoute) -> InboundRouteDomainModel:
@@ -132,9 +153,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             record = InboundRoute(id=aggregate.id)
             self.session.add(record)
 
-        for field in dataclasses.fields(aggregate):
-            if field.name not in ("created_at", "updated_at", "_domain_events"):
-                setattr(record, field.name, getattr(aggregate, field.name))
+        self._update_record_from_domain(record, aggregate)
 
         self._drain_events(aggregate)
         await self.session.flush()

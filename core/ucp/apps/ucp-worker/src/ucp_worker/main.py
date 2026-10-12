@@ -1,6 +1,4 @@
 import asyncio
-import contextlib
-import signal
 
 import structlog
 from observability import ObservabilityProvider
@@ -11,7 +9,7 @@ from ucp_worker.bootstrap.container import WorkerContainer
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class UcpWorkerModule(LaunchableWorker):
@@ -28,6 +26,16 @@ class UcpWorkerModule(LaunchableWorker):
             self.container.events_consumer.start()
             logger.info("ucp_event_sqs_consumer_started_in_worker")
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks = []
+        if (
+            self.container
+            and self.container.events_consumer
+            and getattr(self.container.events_consumer, "task", None)
+        ):
+            tasks.append(self.container.events_consumer.task)
+        return tasks
+
     async def stop(self) -> None:
         logger.info("ucp_worker_shutting_down_tasks")
         if self.container:
@@ -37,25 +45,11 @@ class UcpWorkerModule(LaunchableWorker):
         logger.info("ucp_worker_shutdown_complete")
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("ucp-worker")
-
     module = UcpWorkerModule()
-
-    try:
-        await module.start()
-
-        # We need a stop event to block until shutdown
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            with contextlib.suppress(NotImplementedError, RuntimeError):
-                loop.add_signal_handler(sig, stop_event.set)
-
-        await stop_event.wait()
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)

@@ -1,7 +1,6 @@
 {
   "topics": [
-    { "name": "platform-events-topic", "fifo": true, "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN" },
-    { "name": "edi-data-plane-topic", "fifo": false, "env_var": "SNS_EDI_DATA_PLANE_TOPIC_ARN" }
+    { "name": "platform-events-topic", "fifo": true, "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN" }
   ],
   "queues": [
     { "name": "ucp-jobs", "fifo": true, "dlq": true, "env_var": "SQS_UCP_JOBS_QUEUE_URL" },
@@ -60,7 +59,14 @@
       "dlq": true,
       "env_var": "SQS_CONTROL_PLANE_JOBS_QUEUE_URL"
     },
-    { "name": "edi-deliver", "fifo": false, "dlq": true, "env_var": "SQS_DELIVER_QUEUE_URL" },
+    {
+      "name": "edi-deliver",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_DELIVER_QUEUE_URL",
+      "dlq_env_var": "SQS_DELIVER_DLQ_URL",
+      "max_receive_count": 3
+    },
     {
       "name": "edi-priority-notifications",
       "fifo": true,
@@ -83,21 +89,6 @@
         "event_type": [{ "prefix": "tenant." }, { "prefix": "app." }, { "prefix": "user." }]
       }
     },
-    {
-      "topic": "edi-data-plane-topic",
-      "queue": "edi-orchestrator"
-    },
-
-    {
-      "topic": "edi-data-plane-topic",
-      "queue": "edi-compute"
-    },
-
-    {
-      "topic": "edi-data-plane-topic",
-      "queue": "edi-deliver"
-    },
-
     {
       "topic": "platform-events-topic",
       "queue": "edi-config-sync-queue",

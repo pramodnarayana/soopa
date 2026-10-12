@@ -129,6 +129,8 @@ def provision_ecs(
                     {"name": "ZITADEL_EXTERNALPORT", "value": "443"},
                     {"name": "ZITADEL_EXTERNALDOMAIN", "value": f"identity.{dns_name}"},
                     {"name": "ZITADEL_TLS_ENABLED", "value": "false"},
+                    {"name": "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_ACTIVE", "value": "false"},
+                    {"name": "ZITADEL_DEFAULTINSTANCE_FEATURES_LOGINV2_REQUIRED", "value": "false"},
                     {"name": "ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME", "value": "admin"},
                     {
                         "name": "ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME",
@@ -280,6 +282,7 @@ def provision_ecs(
                 container_port=ZitadelConstants.PORT,
             ),
         ],
+        opts=pulumi.ResourceOptions(ignore_changes=["desired_count"]),
         tags=tags,
     )
 

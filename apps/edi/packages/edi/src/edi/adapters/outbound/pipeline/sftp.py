@@ -6,6 +6,7 @@ import typing
 import paramiko
 import structlog
 
+from edi.ports.outbound.exceptions import PortAuthenticationError, PortConnectionError
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
 logger = structlog.get_logger(__name__)
@@ -98,10 +99,12 @@ def get_ssh_client(
     try:
         client.connect(**typing.cast(typing.Any, connect_kwargs))
         return client
-    except Exception:
-        logger.exception("SSH Connection failed for %s:%s", host, port)
+    except paramiko.AuthenticationException as e:
         client.close()
-        raise
+        raise PortAuthenticationError(f"SFTP authentication failed: {e}") from e
+    except (paramiko.SSHException, OSError) as e:
+        client.close()
+        raise PortConnectionError(f"SFTP Connection failed for {host}:{port}: {e}") from e
 
 
 class ParamikoSftpClient(SftpDeliveryPort):
@@ -180,10 +183,10 @@ class ParamikoSftpClient(SftpDeliveryPort):
                 val_3="/" + target_file,
             )
 
-        except Exception as e:
-            logger.exception("SFTP upload failed for {host}:{port}", host=host, port=port)
-
-            raise RuntimeError(f"SFTP Delivery failed: {e}") from e
+        except paramiko.SSHException as e:
+            raise PortConnectionError(f"SFTP SSH delivery failed: {e}") from e
+        except OSError as e:
+            raise PortConnectionError(f"SFTP socket/network error: {e}") from e
         finally:
             if sftp:
                 sftp.close()

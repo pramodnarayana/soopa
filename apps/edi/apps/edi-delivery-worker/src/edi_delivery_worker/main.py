@@ -1,39 +1,28 @@
+import argparse
 import asyncio
-import signal
 
 import structlog
 from observability import ObservabilityProvider
+from seedwork.infra.worker import run_worker_app, run_worker_app_async
 
 logger = structlog.get_logger(__name__)
-
 
 from edi_delivery_worker.data.main import EdiDeliveryWorkerModule
 
 
-async def main() -> None:
-    ObservabilityProvider.auto_configure_from_env("edi-delivery-worker")
-    logger.info("delivery_worker_starting")
+async def main(stop_event: asyncio.Event | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Run the EDI delivery worker")
+    parser.add_argument("--dlq", action="store_true", help="Run as DLQ consumer")
+    args, _ = parser.parse_known_args()
 
-    module = EdiDeliveryWorkerModule()
+    ObservabilityProvider.auto_configure_from_env(
+        "edi-delivery-dlq-worker" if args.dlq else "edi-delivery-worker"
+    )
+    logger.info("delivery_worker_starting", is_dlq=args.dlq)
 
-    try:
-        await module.start()
-
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-
-        def shutdown_handler(*args: object) -> None:
-            logger.info("delivery_worker_shutdown_signal_received")
-            stop_event.set()
-
-        loop.add_signal_handler(signal.SIGINT, shutdown_handler)
-        loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
-
-        await stop_event.wait()
-    finally:
-        logger.info("delivery_worker_stopped")
-        await module.stop()
+    module = EdiDeliveryWorkerModule(is_dlq=args.dlq)
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)

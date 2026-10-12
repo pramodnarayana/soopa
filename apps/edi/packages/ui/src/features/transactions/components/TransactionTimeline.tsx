@@ -1,5 +1,6 @@
 import { Badge } from '@soopa/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
+import { Link } from '@tanstack/react-router';
 import {
   Activity,
   AlertCircle,
@@ -10,12 +11,14 @@ import {
   Server,
 } from 'lucide-react';
 import { CodeViewer } from '../../../components/ui/code-viewer';
+import { useTransactionLineage } from '../api/transactionsApi';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 import type { TransactionDetailResponse } from '../types';
 import { ReplayBadge } from './ReplayBadge';
 
 interface Props {
   transaction: TransactionDetailResponse;
+  onTraceClick?: (traceId: string) => void;
 }
 
 function IsaGsFieldsGrid({
@@ -53,7 +56,7 @@ function IsaGsFieldsGrid({
   );
 }
 
-export function TransactionTimeline({ transaction }: Props) {
+export function TransactionTimeline({ transaction, onTraceClick }: Props) {
   const msg = transaction.edi_message;
   const jsons = transaction.edi_json || [];
   const gateways = transaction.api_gateway || [];
@@ -61,10 +64,13 @@ export function TransactionTimeline({ transaction }: Props) {
   // Infer direction from edi_message if available; fall back to edi_json (outbound replay
   // creates EdiJson first — edi_message may not exist yet during the async race window).
   const direction = msg?.direction ?? jsons[0]?.direction;
+  const traceId = msg?.trace_id ?? jsons[0]?.trace_id;
   const isOutbound = direction === 'OUTBOUND';
   const primaryStatus = isOutbound ? (jsons[0]?.status ?? msg?.status) : msg?.status;
   const isFailed = TRANSACTION_STATUS_GROUPS.ERROR.has(primaryStatus?.toUpperCase() || '');
   const colorClass = isFailed ? 'text-red-600' : 'text-emerald-600';
+
+  const { data: lineage } = useTransactionLineage(traceId || '');
 
   const createdAt = msg?.created_at ?? jsons[0]?.created_at;
 
@@ -74,14 +80,14 @@ export function TransactionTimeline({ transaction }: Props) {
     if (TRANSACTION_STATUS_GROUPS.SUCCESS.has(upper)) {
       return (
         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
-          SUCCESS ({upper})
+          {upper}
         </Badge>
       );
     }
     if (TRANSACTION_STATUS_GROUPS.ERROR.has(upper)) {
       return (
         <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-          FAILURE ({upper})
+          {upper}
         </Badge>
       );
     }
@@ -303,6 +309,11 @@ export function TransactionTimeline({ transaction }: Props) {
                       ? msg.connection_type
                       : 'Default Routing'}
                   </div>
+                  {isDeliveryFailed && msg.status_message && (
+                    <div className="mt-1 text-red-600 font-medium break-words max-w-[500px]">
+                      Reason: {msg.status_message}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -415,6 +426,48 @@ export function TransactionTimeline({ transaction }: Props) {
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto">
+      {/* Lineage Breadcrumbs */}
+      {lineage && lineage.length > 1 && (
+        <div className="flex items-center flex-wrap gap-2 p-4 bg-slate-50 rounded-xl border border-slate-200">
+          <span className="text-sm font-medium text-slate-500 mr-2">Execution History:</span>
+          {lineage.map((item, index) => {
+            const isCurrent = item.trace_id === traceId;
+            const isErr = TRANSACTION_STATUS_GROUPS.ERROR.has(item.status?.toUpperCase());
+            const badgeColor = isCurrent
+              ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+              : isErr
+                ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50';
+
+            return (
+              <div key={item.trace_id} className="flex items-center gap-2">
+                {index > 0 && <span className="text-slate-300">→</span>}
+                {onTraceClick ? (
+                  <button
+                    type="button"
+                    onClick={() => onTraceClick(item.trace_id)}
+                    disabled={isCurrent}
+                    className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${badgeColor} ${
+                      isCurrent ? 'cursor-default' : 'cursor-pointer'
+                    }`}
+                  >
+                    Attempt {index + 1} {isErr ? '(Failed)' : ''}
+                  </button>
+                ) : (
+                  <Link
+                    to="/tenant/transactions/$traceId"
+                    params={{ traceId: item.trace_id }}
+                    className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${badgeColor}`}
+                  >
+                    Attempt {index + 1} {isErr ? '(Failed)' : ''}
+                  </Link>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Overview Header */}
       <div className="flex items-center justify-between p-6 bg-white rounded-xl border border-slate-200 shadow-sm">
         <div>

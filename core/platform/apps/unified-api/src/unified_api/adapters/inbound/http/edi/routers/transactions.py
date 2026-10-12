@@ -1,11 +1,21 @@
+from dataclasses import replace
+
 import structlog
 from edi.adapters.outbound.database.routing_resolver_repository import (
     SqlAlchemyRoutingResolverRepository,
 )
-from edi.application.dtos.transactions import ApiGatewayDTO, EdiJsonDTO, EdiMessageDTO
+from edi.application.dtos.transactions import (
+    ApiGatewayDTO,
+    EdiJsonDTO,
+    EdiMessageDTO,
+    EdiTraceLineageItemDTO,
+)
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
 from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
     BulkReplayTransactionsUseCase,
+)
+from edi.application.use_cases.transactions.get_edi_trace_lineage_use_case import (
+    GetEdiTraceLineageUseCase,
 )
 from edi.application.use_cases.transactions.get_edi_trace_use_case import (
     GetEdiTraceUseCase,
@@ -22,7 +32,7 @@ from edi.application.use_cases.transactions.modify_and_replay_use_case import (
 from edi.application.use_cases.transactions.replay_transaction_use_case import (
     ReplayTransactionUseCase,
 )
-from edi.domain.enums import ReplayCheckpoint
+from edi.domain.enums import EdiConnectionType, ReplayCheckpoint
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -208,8 +218,19 @@ async def get_edi_trace(
                 result.edi_message, result.edi_jsons
             )
 
+            edi_message = result.edi_message
+            if (
+                edi_message
+                and _new_conn_type
+                and (
+                    not edi_message.connection_type
+                    or edi_message.connection_type == EdiConnectionType.UNKNOWN.value
+                )
+            ):
+                edi_message = replace(edi_message, connection_type=_new_conn_type.upper())
+
             return EdiTraceResponse(
-                edi_message=result.edi_message,
+                edi_message=edi_message,
                 edi_json=result.edi_jsons,
                 api_gateway=result.api_gateways,
                 trading_partner_name=trading_partner_name,
@@ -217,6 +238,24 @@ async def get_edi_trace(
         except TransactionNotFoundError as e:
             log.warning("get_edi_trace.not_found", reason=str(e))
             raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/{trace_id}/lineage", response_model=list[EdiTraceLineageItemDTO])
+async def get_edi_trace_lineage(
+    trace_id: str,
+    tenant_id: str = Depends(get_current_tenant_id),
+    uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+) -> list[EdiTraceLineageItemDTO]:
+    """
+    Returns the full lineage of replay attempts for a given trace.
+    Returns lightweight summaries suitable for UI breadcrumbs.
+    """
+    log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
+    log.info("get_edi_trace_lineage.received")
+    async with uow:
+        svc = GetEdiTraceLineageUseCase(uow)
+        lineage = await svc.execute(tenant_id, trace_id)
+        return list(lineage)
 
 
 @router.post("/{trace_id}/replay", status_code=202, response_model=ReplayResponse)

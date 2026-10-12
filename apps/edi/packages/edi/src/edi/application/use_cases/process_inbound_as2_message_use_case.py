@@ -38,6 +38,7 @@ from edi.domain.enums import (
     EdiConnectionType,
     EdiDirection,
     MessageStatus,
+    TraceEventType,
 )
 
 
@@ -478,7 +479,7 @@ class ProcessInboundAs2MessageUseCase:
             "content_type": content_type,
             "signature_algorithm": partnership.signature_algorithm,
             "encryption_algorithm": partnership.encryption_algorithm,
-            "status_message": "AS2 payload extracted successfully",
+            "status_message": None,
             "state": "EXTRACTED",
             "msg_headers": msg_headers_json,
             "format_standard": format_standard,
@@ -493,6 +494,7 @@ class ProcessInboundAs2MessageUseCase:
                 id=edi_message_id,
                 tenant_id=true_tenant_id,
                 trace_id=str(edi_record["trace_id"]),
+                original_trace_id=str(edi_record["trace_id"]),
                 direction=Direction(str(edi_record["direction"])),
                 connection_type=str(edi_record["connection_type"])
                 if edi_record.get("connection_type")
@@ -537,6 +539,12 @@ class ProcessInboundAs2MessageUseCase:
                 else None,
                 edi_data=pure_edi_bytes.decode("utf-8", errors="ignore"),
                 status=RecordStatus(str(edi_record["status"])),
+            )
+
+            edi_message_aggregate._append_trace(
+                TraceEventType.RECEIVED,
+                as2_sender=as2_msg.as2_from,
+                as2_receiver=as2_msg.as2_to,
             )
 
             outbox_payload = TransformRequestedEvent(

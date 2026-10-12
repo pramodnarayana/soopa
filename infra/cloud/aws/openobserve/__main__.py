@@ -34,6 +34,7 @@ if enable_observability is not False:
     obs_listener_arn = platform.require_output("main_alb_obs_listener_arn")
     cloud_map_namespace_id = platform.require_output("cloud_map_namespace_id")
     staging_domain = platform.require_output("staging_domain")
+    openobserve_ecr_repo_url = platform.require_output("openobserve_ecr_repo_url")
 
     # ── Provision OpenObserve ─────────────────────────────────────────────────────
     obs_bucket, obs_user_arn, obs_pass_arn = provision_openobserve_foundations(
@@ -47,6 +48,7 @@ if enable_observability is not False:
         obs_listener_arn=obs_listener_arn,
         staging_domain=staging_domain,
         cloud_map_namespace_id=cloud_map_namespace_id,
+        ecr_repository_url=openobserve_ecr_repo_url,
     )
 
     import pulumi_aws as aws

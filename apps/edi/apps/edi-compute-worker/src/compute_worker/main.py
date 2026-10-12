@@ -1,5 +1,4 @@
 import asyncio
-import signal
 
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
@@ -31,7 +30,7 @@ from compute_worker.settings import get_settings
 logger = structlog.get_logger("worker_runner")
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiComputeWorkerModule(LaunchableWorker):
@@ -111,6 +110,11 @@ class EdiComputeWorkerModule(LaunchableWorker):
         self.manager.start()
         logger.info("compute_worker_running")
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        if self.manager and self.manager.task:
+            return [self.manager.task]
+        return []
+
     async def stop(self) -> None:
         logger.info("compute_worker_stopping")
         try:
@@ -122,33 +126,11 @@ class EdiComputeWorkerModule(LaunchableWorker):
         logger.info("compute_worker_stopped")
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("edi-compute-worker")
-
     module = EdiComputeWorkerModule()
-
-    try:
-        await module.start()
-
-        # Handle shutdown signals
-        loop = asyncio.get_running_loop()
-
-        stop_event = asyncio.Event()
-
-        def shutdown_handler(*args: object) -> None:
-            logger.info("compute_worker_shutdown_signal_received")
-            stop_event.set()
-
-        loop.add_signal_handler(signal.SIGINT, shutdown_handler)
-        loop.add_signal_handler(signal.SIGTERM, shutdown_handler)
-
-        await stop_event.wait()
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("compute_worker_stopped_by_user")
+    run_worker_app(main)

@@ -1,9 +1,9 @@
 import asyncio
-import signal
+import sys
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 from functools import partial
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from database.router import DatabaseRouter
@@ -24,10 +24,22 @@ from edi.application.use_cases.pipeline.execute_delivery_use_case import (
     ExecuteDeliveryCommand,
     ExecuteDeliveryUseCase,
 )
+from edi.application.use_cases.pipeline.fail_delivery_use_case import (
+    FailDeliveryCommand,
+    FailDeliveryUseCase,
+)
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.enums import PipelineEventType
+from edi.domain.enums import PipelineEventType, TraceEventType
+from observability import ObservabilityProvider
+from pubsub.enums import ConsumerAction
+
+DELIVERY_OUTCOME_TO_CONSUMER_ACTION: dict[TraceEventType, ConsumerAction] = {
+    TraceEventType.DELIVERY_SUCCESSFUL: ConsumerAction.ACK,
+    TraceEventType.DELIVERY_ATTEMPT_FAILED: ConsumerAction.NACK,
+    TraceEventType.DELIVERY_FAILED: ConsumerAction.ACK,
+}
 from edi.domain.exceptions import InvalidMessageError
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
@@ -58,6 +70,7 @@ def _setup_registry(
     sftp_delivery: SftpDeliveryPort,
     as2_delivery: AS2DeliveryPort,
     vault: SecretStorePort,
+    is_dlq: bool = False,
 ) -> EdiDataPlaneEventDispatcher:
 
     publisher = create_edi_pipeline_publisher(
@@ -80,7 +93,7 @@ def _setup_registry(
             uow_factory=uow_fact, strategies=strategies, publisher=publisher
         )
 
-    async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
+    async def run_deliver(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> ConsumerAction:
         try:
             payload_tenant_id = e.payload["tenant_id"]
             if payload_tenant_id != e.tenant_id:
@@ -100,27 +113,50 @@ def _setup_registry(
                 f"EXECUTE_DELIVERY_COMMAND payload is missing required field: {exc}"
             ) from exc
 
-        await use_case_factory(uow_fact).execute(command=command, idempotency_key=e.idempotency_key)
+        outcome = await use_case_factory(uow_fact).execute(
+            command=command, idempotency_key=e.idempotency_key
+        )
+        return DELIVERY_OUTCOME_TO_CONSUMER_ACTION.get(outcome, ConsumerAction.DLQ)
+
+    # DLQ Use Case
+    def dlq_use_case_factory(uow_fact: UowFactory) -> FailDeliveryUseCase:
+        return FailDeliveryUseCase(uow_factory=uow_fact, publisher=publisher)
+
+    async def run_dlq(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> ConsumerAction:
+        try:
+            command = FailDeliveryCommand(
+                trace_id=cast(str, e.payload["trace_id"]),
+                tenant_id=e.tenant_id,
+                reason="Max delivery retries exceeded.",
+            )
+        except KeyError as exc:
+            raise InvalidMessageError(
+                f"DLQ event payload is missing required field: {exc}"
+            ) from exc
+
+        await dlq_use_case_factory(uow_fact).execute(command=command)
+        return ConsumerAction.ACK
 
     # Note: EXECUTE_DELIVERY_COMMAND is the only event this worker listens to
     registry.register(
         event_type=PipelineEventType.EXECUTE_DELIVERY_COMMAND.value,
         direction=None,
-        factory=run_deliver,
+        factory=run_dlq if is_dlq else run_deliver,
     )
 
-    async def route_event(event: EdiDataPlaneEventMessage) -> None:
+    async def route_event(event: EdiDataPlaneEventMessage) -> ConsumerAction:
         uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
-        await registry.route(event, uow_factory)
+        return await registry.route(event, uow_factory)
 
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiDeliveryWorkerModule(LaunchableWorker):
-    def __init__(self) -> None:
+    def __init__(self, is_dlq: bool = False) -> None:
+        self.is_dlq = is_dlq
         self.db_router: DatabaseRouter | None = None
         self.deliver_manager: SqsConsumerManager | None = None
 
@@ -154,17 +190,29 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
         )
 
         consumer = _setup_registry(
-            settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault
+            settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault, self.is_dlq
         )
 
+        if self.is_dlq:
+            if not settings.sqs.deliver_dlq_url:
+                raise ValueError("SQS_DELIVER_DLQ_URL is required when running in DLQ mode")
+            queue_url = settings.sqs.deliver_dlq_url
+        else:
+            queue_url = settings.sqs.deliver_queue_url
+
         self.deliver_manager = PubSubProvider.create_consumer_manager(
-            queue_url=settings.sqs.deliver_queue_url,
+            queue_url=queue_url,
             handler=consumer.handle,
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
         )
         assert self.deliver_manager is not None
         self.deliver_manager.start()
+
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        if self.deliver_manager and self.deliver_manager.task:
+            return [self.deliver_manager.task]
+        return []
 
     async def stop(self) -> None:
         logger.info("data_edi_delivery_worker.shutting_down_gracefully")
@@ -181,71 +229,21 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
             await self.db_router.close_all()
 
 
-async def main() -> None:
-    module = EdiDeliveryWorkerModule()
+class EdiDeliveryDlqWorkerModule(EdiDeliveryWorkerModule):
+    def __init__(self) -> None:
+        super().__init__(is_dlq=True)
 
-    try:
-        await module.start()
 
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            loop.add_signal_handler(sig, stop_event.set)
-
-        tasks_to_wait: list[asyncio.Task[Any]] = [asyncio.create_task(stop_event.wait())]
-
-        task = (
-            getattr(module.deliver_manager, "task", getattr(module.deliver_manager, "_task", None))
-            if module.deliver_manager
-            else None
-        )
-        if task:
-            tasks_to_wait.append(task)
-
-        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            if task is not tasks_to_wait[0] and task.exception():
-                exc = task.exception()
-                logger.error("sqs_consumer_manager_failed", exc_info=exc)
-                if exc:
-                    raise exc
-    finally:
-        await module.stop()
+async def main(stop_event: asyncio.Event | None = None) -> None:
+    is_dlq = "--dlq" in sys.argv
+    service_name = "edi-delivery-dlq-worker" if is_dlq else "edi-delivery-worker"
+    ObservabilityProvider.auto_configure_from_env(service_name)
+    module = EdiDeliveryWorkerModule(is_dlq=is_dlq)
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except Exception as e:
-        if e.__class__.__name__ == "ValidationError":
-            from pydantic import ValidationError
-
-            all_errors = e.errors() if isinstance(e, ValidationError) else []
-
-            missing_fields = [
-                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
-                for err in all_errors
-                if err.get("type") in ("missing", "value_error.missing")
-            ]
-            invalid_fields = [
-                f"{'.'.join(str(loc_item) for loc_item in err.get('loc', []))} ({err.get('msg', '')})"
-                for err in all_errors
-                if err.get("type") not in ("missing", "value_error.missing")
-            ]
-
-            if missing_fields:
-                logger.exception(
-                    "worker_startup_configuration_error",
-                    reason="One or more required environment variables are missing from your .env file.",
-                    missing_fields=missing_fields,
-                    invalid_fields=invalid_fields,
-                )
-            else:
-                logger.exception(
-                    "worker_startup_configuration_error",
-                    reason="One or more configuration variables have invalid values.",
-                    invalid_fields=invalid_fields,
-                )
-        else:
-            logger.exception("worker_startup_failed")
-        raise
+    is_dlq = "--dlq" in sys.argv
+    service_name = "edi-delivery-dlq-worker" if is_dlq else "edi-delivery-worker"
+    ObservabilityProvider.auto_configure_from_env(service_name)
+    run_worker_app(lambda: EdiDeliveryWorkerModule(is_dlq=is_dlq))

@@ -32,6 +32,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install uv (Fast Python Package Installer)
+        uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v3
+
       - name: Install Pulumi CLI
         uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
 
@@ -57,9 +60,47 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/cloud/aws/platform
           pulumi up -s prod -y
 
+      - name: Deploy OpenObserve Stack
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/openobserve
+          pulumi up -s prod -y
+
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
+
+      - name: Sync Third-Party Images (Zitadel)
+        run: |
+          ./infra/cloud/aws/platform/sync-images.sh
+
+      - name: Deploy Zitadel Infrastructure Stack
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/zitadel
+          pulumi up -s prod -y
+
+      - name: Wait for Zitadel API to become healthy
+        run: |
+          echo "Waiting for Zitadel ECS task to spin up and upload the machine key..."
+          ZITADEL_URL=$(pulumi stack output url -s prod -C $GITHUB_WORKSPACE/infra/cloud/aws/zitadel)
+          for i in {1..30}; do
+            if curl -sSf "$ZITADEL_URL/debug/healthz" > /dev/null; then
+              echo "Zitadel is healthy!"
+              exit 0
+            fi
+            echo "Waiting 10s for Zitadel API..."
+            sleep 10
+          done
+          echo "Zitadel did not become healthy in time."
+          exit 1
+
+      - name: Deploy Zitadel Identity Configuration
+        run: |
+          # This configures projects and apps using the Zitadel Pulumi Provider
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          cd $GITHUB_WORKSPACE/infra/cloud/zitadel
+          pulumi up -s prod -y
 
       - name: Build, Tag, and Push Modular Monolith Image
         env:
@@ -69,6 +110,16 @@ jobs:
         run: |
           docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+
+      - name: Deploy Database Migrator and Initialize
+        run: |
+          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
+          echo "Deploying Migrator Stack..."
+          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/migrator
+          pulumi up -s prod -y
+
+          echo "Running Database Migrations & Seeding..."
+          $GITHUB_WORKSPACE/infra/scripts/init_databases.sh prod
 
       - name: Deploy Application Stacks
         env:

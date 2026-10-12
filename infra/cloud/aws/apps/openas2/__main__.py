@@ -16,8 +16,11 @@ _prefix = f"{_env}-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "openas2", "Environment": _env}
 
 config = pulumi.Config()
+if _env == "prod":
+    raise ValueError("OpenAS2 testing infrastructure cannot be deployed to production.")
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
+obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 desired_count = config.get_int("desired_count")
 
 if desired_count is None:
@@ -25,6 +28,7 @@ if desired_count is None:
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
+obs = pulumi.StackReference(obs_stack_ref)
 
 vpc_id = foundation.require_output("vpc_id")
 private_subnets = [
@@ -37,9 +41,9 @@ ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
-obs_endpoint = pulumi.Output.concat("openobserve.", namespace_name, ":5080")
-obs_user_arn = platform.require_output("openobserve_user_secret_arn")
-obs_pass_arn = platform.require_output("openobserve_password_secret_arn")
+obs_endpoint = pulumi.Output.concat("openobserve.", namespace_name, ":443")
+obs_user_arn = obs.require_output("openobserve_user_secret_arn")
+obs_pass_arn = obs.require_output("openobserve_password_secret_arn")
 
 image_tag = config.get("image_tag") or "latest"
 
@@ -104,17 +108,28 @@ aws.iam.RolePolicy(
 
 # ── Target Group & ALB Rule ───────────────────────────────────────────────────
 # OpenAS2 returns HTTP 411 (Length Required) on plain GET / — it IS responding,
-# but the old default matcher "200-499" excluded 411. Accept the full range.
+# and the 200-499 range natively includes 411.
 tg_arn = provision_target_group_and_rule(
     name=f"{_prefix}openas2",
     vpc_id=vpc_id,
     port=10080,
     health_check_path="/",
-    health_check_matcher="200-499,411",
+    health_check_matcher="200-499",
     listener_arn=main_alb_listener_arn,
     path_pattern="/*",
     host_header=pulumi.Output.concat("openas2.", staging_domain),
     priority=60,
+    tags=_TAGS,
+)
+
+# ── S3 Outbox Bucket (Sidecar) ────────────────────────────────────────────────
+# Strictly bind the bucket name to the environment to prevent global collisions
+target_bucket_name = f"openas2-flowwolf-{_env}-outbox"
+
+outbox_bucket = aws.s3.Bucket(
+    f"{_prefix}openas2-outbox",
+    bucket=target_bucket_name,
+    force_destroy=(_env != "prod"),
     tags=_TAGS,
 )
 
@@ -139,6 +154,34 @@ fargate_service = provision_fargate_service(
     environment_vars=[
         {"name": "FLOWWOLF_AS2_URL", "value": flowwolf_as2_url},
     ],
+    bucket_arns=[outbox_bucket.arn, outbox_bucket.arn.apply(lambda arn: f"{arn}/*")],
+    volumes=[{"name": "outbox-volume"}],
+    app_mount_points=[
+        {
+            "sourceVolume": "outbox-volume",
+            "containerPath": f"/opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2",
+            "readOnly": False,
+        }
+    ],
+    sidecar_container={
+        "name": "s3-poller",
+        "image": "amazon/aws-cli:2.15.11",
+        "entryPoint": ["sh", "-c"],
+        "command": [
+            f"while true; do "
+            f"aws s3 mv s3://{target_bucket_name} /tmp/staging --recursive || true; "
+            f'for f in /tmp/staging/*; do [ -e "$f" ] && mv "$f" /opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2/ || true; done; '
+            f"sleep 5; done",
+        ],
+        "essential": False,
+        "mountPoints": [
+            {
+                "sourceVolume": "outbox-volume",
+                "containerPath": f"/opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2",
+                "readOnly": False,
+            }
+        ],
+    },
     firelens_endpoint=obs_endpoint,
     obs_user_secret_arn=obs_user_arn,
     obs_password_secret_arn=obs_pass_arn,

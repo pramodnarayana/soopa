@@ -5,11 +5,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        OPENAS2_VERSION: ${OPENAS2_VERSION:-3.3.0}
     container_name: openas2_testing_partner
     ports:
       - "10080:10080"
-    environment:
-      - SOOPA_AS2_URL=http://host.docker.internal:3000/api/v1/as2/receive
     volumes:
       - ./data/outbox:/opt/openas2/data/outbox
     restart: unless-stopped

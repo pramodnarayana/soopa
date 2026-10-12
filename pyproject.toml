@@ -185,7 +185,7 @@ exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S", "C90", "TID251", "PLC0415", "T20", "PGH"]
-ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF012", "S101"] # Handled by formatter / existing legacy code
+ignore = ["E501", "B904", "E402", "TRY003", "RUF013", "TRY300", "TRY301", "RUF012", "S101", "TRY400"] # Handled by formatter / existing legacy code / intentional non-traceback retry logging
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging".msg = "Use structlog via ILogger port instead of standard logging."
@@ -232,24 +232,18 @@ source = ["apps", "core"]
 omit = [
     "*/tests/*",
     "*/migrations/*",
-    # Infrastructure adapters requiring live external connections (DB, SFTP, Vault).
+    # Infrastructure adapters requiring live external connections (DB, SFTP, Vault, AWS).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
-    "apps/edi/packages/edi/src/api/adapters/edi_header_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/outbound_route_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/as2_partnership_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/transaction_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/api_token_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/webhook_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/outbox_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/as2_partner_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/tenant_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/sftp_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/data_plane_as2_repository.py",
-    "apps/edi/packages/edi/src/api/adapters/inbound_route_repository.py",
+    "*/adapters/outbound/database/*",
+    "*/adapters/outbound/sftp/*",
+    "*/adapters/outbound/pipeline/as2.py",
+    "*/adapters/outbound/pipeline/sftp.py",
+    "*/adapters/outbound/pipeline/http.py",
+    "*/pubsub/aws/aws_batch_publisher_base.py",
+    "*/pubsub/aws/aws_sqs_consumer.py",
     "*/adapters/sftp.py",
     "*/adapters/paramiko_sftp_tester.py",
     "*/adapters/vault.py",
-    "*/adapters/sqs_queue.py",
     # AS2 server main (ASGI lifespan wiring — integration only)
     "apps/edi/apps/edi-as2-server/src/as2_server/main.py",
     # Transformer worker entrypoint (subprocess runner, not business logic)

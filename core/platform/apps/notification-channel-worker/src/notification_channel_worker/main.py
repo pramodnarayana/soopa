@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 import inspect
-import signal
 from collections.abc import Awaitable
 from typing import cast
 
@@ -15,7 +14,7 @@ from notification_channel_worker.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class NotificationChannelWorkerModule(LaunchableWorker):
@@ -44,6 +43,9 @@ class NotificationChannelWorkerModule(LaunchableWorker):
             consumer.start()
         logger.info("notification_channel_worker_started", consumers=len(self.consumers))
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        return [c.task for c in self.consumers if c.task is not None]
+
     async def stop(self) -> None:
         logger.info("notification_channel_worker_shutting_down")
         for consumer in self.consumers:
@@ -52,42 +54,11 @@ class NotificationChannelWorkerModule(LaunchableWorker):
         await cast(Awaitable[None], self.container.shutdown_resources())
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("notification-channel-worker")
-
     module = NotificationChannelWorkerModule()
-
-    try:
-        await module.start()
-
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            with contextlib.suppress(NotImplementedError, RuntimeError):
-                loop.add_signal_handler(sig, stop_event.set)
-
-        stop_task = asyncio.create_task(stop_event.wait())
-        wait_tasks: list[asyncio.Task[object]] = [stop_task]
-        for consumer in module.consumers:
-            if consumer.task is not None:
-                wait_tasks.append(consumer.task)
-
-        done, pending = await asyncio.wait(
-            wait_tasks,
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        for task in pending:
-            task.cancel()
-
-        for consumer in module.consumers:
-            if consumer.task is not None and consumer.task in done:
-                exc = consumer.task.exception()
-                if exc is not None:
-                    raise exc
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)

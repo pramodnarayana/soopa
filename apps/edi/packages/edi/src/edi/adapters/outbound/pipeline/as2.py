@@ -10,6 +10,7 @@ import structlog
 
 from edi.adapters.outbound.security.network import ssrf_safe_context
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
+from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 
 logger = structlog.get_logger(__name__)
 
@@ -51,12 +52,17 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
         if self.validator and not self.validator(url):
             raise ValueError("URL validation failed for provided destination.")
 
-        with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
-            async with httpx.AsyncClient(
-                timeout=self.timeout,
-                follow_redirects=False,  # AS2 spec does not permit redirect following
-            ) as client:
-                response = await client.post(url, content=body, headers=headers)
+        try:
+            with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
+                async with httpx.AsyncClient(
+                    timeout=self.timeout,
+                    follow_redirects=False,  # AS2 spec does not permit redirect following
+                ) as client:
+                    response = await client.post(url, content=body, headers=headers)
+        except httpx.TimeoutException as e:
+            raise PortTimeoutError(f"AS2 connection timed out: {e}") from e
+        except httpx.RequestError as e:
+            raise PortConnectionError(f"AS2 connection failed: {e}") from e
 
         # Convert httpx headers to a standard dict
         resp_headers = {k.lower(): v for k, v in response.headers.items()}

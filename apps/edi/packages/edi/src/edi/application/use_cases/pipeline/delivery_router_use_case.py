@@ -40,6 +40,10 @@ class DeliveryRouterUseCase:
         async with self.uow_factory() as uow, uow:
             edi_msg = await uow.transactions.get_edi_message(trace_id)
             if not edi_msg:
+                edi_json = await uow.transactions.get_edi_json(trace_id)
+                if edi_json and edi_json.parent_trace_id:
+                    edi_msg = await uow.transactions.get_edi_message(edi_json.parent_trace_id)
+            if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
             if idempotency_key:

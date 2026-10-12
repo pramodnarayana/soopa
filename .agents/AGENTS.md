@@ -109,6 +109,10 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Strict Attribute Access**: NEVER use `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`).
 - **Fail Fast**: If a database column is dropped or renamed, the application MUST fail statically (via typecheckers) or loudly at runtime rather than silently returning `None` and propagating phantom data.
 
+# Strict Data Mappers (No Dynamic Reflection)
+- **Explicit Mapping**: NEVER use dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to automatically map between SQLAlchemy ORM models and Domain Models.
+- **Type-Safety**: Always use strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`). This guarantees that schema drift will be caught immediately by static analyzers (mypy) rather than causing silent runtime failures.
+
 # Dual Architecture & Legacy Discovery Methodology (Strictly Enforced)
 
 To guarantee that no legacy code or "Dual Architectures" (multiple ways of solving the same problem) slip through the cracks, agents MUST NEVER rely exclusively on shallow, keyword-based static analysis (e.g., grepping for `Any`, `unittest.mock`, or `legacy`).

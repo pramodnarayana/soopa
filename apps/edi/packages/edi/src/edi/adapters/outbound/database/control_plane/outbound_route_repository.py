@@ -1,4 +1,3 @@
-import dataclasses
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
@@ -21,6 +20,20 @@ from edi.ports.outbound.outbound_route_repository import OutboundRouteRepository
 class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAlchemyRepository):
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
+
+    def _update_record_from_domain(
+        self, record: OutboundRoute, aggregate: OutboundRouteDomainModel
+    ) -> None:
+        record.tenant_id = aggregate.tenant_id
+        record.trading_partner_id = aggregate.trading_partner_id
+        record.name = aggregate.name
+        record.active = aggregate.active
+        record.connection_type = (
+            aggregate.connection_type.value if aggregate.connection_type else None
+        )
+        record.as2_partner_id = aggregate.as2_partner_id
+        record.sftp_partner_id = aggregate.sftp_partner_id
+        record.webhook_id = aggregate.webhook_id
 
     @staticmethod
     def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
@@ -126,9 +139,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             record = OutboundRoute(id=aggregate.id)
             self.session.add(record)
 
-        for field in dataclasses.fields(aggregate):
-            if field.name not in ("created_at", "updated_at", "_domain_events"):
-                setattr(record, field.name, getattr(aggregate, field.name))
+        self._update_record_from_domain(record, aggregate)
 
         self._drain_events(aggregate)
         await self.session.flush()

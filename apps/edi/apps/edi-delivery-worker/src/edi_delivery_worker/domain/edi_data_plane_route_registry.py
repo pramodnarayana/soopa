@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import Protocol
 
+from pubsub.enums import ConsumerAction
 from seedwork.domain.types import JsonDict
 
 
@@ -15,13 +16,13 @@ class RoutableEvent(Protocol):
 
 class EdiDataPlaneRouteRegistry:
     def __init__(self) -> None:
-        self._registry: dict[tuple[str, str | None], Callable[..., Awaitable[Any]]] = {}
+        self._registry: dict[tuple[str, str | None], Callable[..., Awaitable[ConsumerAction]]] = {}
 
     def register(
         self,
         event_type: str,
         direction: str | None,
-        factory: Callable[..., Awaitable[Any]],
+        factory: Callable[..., Awaitable[ConsumerAction]],
     ) -> None:
         """
         Registers a factory function to be called when an event matching the
@@ -29,13 +30,15 @@ class EdiDataPlaneRouteRegistry:
         """
         self._registry[(event_type, direction)] = factory
 
-    async def route(self, event: RoutableEvent, uow_factory: Callable[..., object]) -> None:
+    async def route(
+        self, event: RoutableEvent, uow_factory: Callable[..., object]
+    ) -> ConsumerAction:
         """
         Looks up the registered factory and executes it.
         Raises ValueError if no matching route is found.
         """
         direction = event.payload.get("direction")
-        key = (event.event_type, direction)
+        key = (event.event_type, str(direction) if direction is not None else None)
 
         # Fallback to a generic route if specific direction route doesn't exist
         if key not in self._registry:
@@ -45,4 +48,4 @@ class EdiDataPlaneRouteRegistry:
         if not factory:
             raise ValueError(f"No route registered for {event.event_type} {direction}")
 
-        await factory(event, uow_factory)
+        return await factory(event, uow_factory)

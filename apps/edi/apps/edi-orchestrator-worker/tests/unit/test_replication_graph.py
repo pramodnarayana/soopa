@@ -1,8 +1,19 @@
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
+from seedwork.domain.types import JsonDict
 
-from worker.domain.replication_graph import EntityDependency, EntitySpec, topological_layers
+from worker.domain.replication_graph import (
+    EntityDependency,
+    EntitySpec,
+    topological_layers,
+    validate_replication_graph,
+)
+
+
+def _dummy_mapper(_entity: Any) -> JsonDict:
+    return {"id": "dummy"}
 
 
 @dataclass
@@ -15,7 +26,6 @@ class DummyTenantModel:
     pass
 
 
-# A set of mock models to build our graph
 class GlobalA:
     pass
 
@@ -54,20 +64,23 @@ def test_topological_layers_acyclic() -> None:
         "A": EntitySpec(
             global_model=GlobalA,
             tenant_model=TenantA,
+            mapper=_dummy_mapper,
         ),
         "B": EntitySpec(
             global_model=GlobalB,
             tenant_model=TenantB,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="a_id", global_model=GlobalA, tenant_model=TenantA)
+                EntityDependency(fk_attr="a_id", target_key="A"),
             ],
         ),
         "C": EntitySpec(
             global_model=GlobalC,
             tenant_model=TenantC,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="b_id", global_model=GlobalB, tenant_model=TenantB),
-                EntityDependency(fk_attr="a_id", global_model=GlobalA, tenant_model=TenantA),
+                EntityDependency(fk_attr="b_id", target_key="B"),
+                EntityDependency(fk_attr="a_id", target_key="A"),
             ],
         ),
     }
@@ -88,23 +101,27 @@ def test_topological_layers_disconnected() -> None:
         "A": EntitySpec(
             global_model=GlobalA,
             tenant_model=TenantA,
+            mapper=_dummy_mapper,
         ),
         "B": EntitySpec(
             global_model=GlobalB,
             tenant_model=TenantB,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="a_id", global_model=GlobalA, tenant_model=TenantA)
+                EntityDependency(fk_attr="a_id", target_key="A"),
             ],
         ),
         "C": EntitySpec(
             global_model=GlobalC,
             tenant_model=TenantC,
+            mapper=_dummy_mapper,
         ),
         "D": EntitySpec(
             global_model=GlobalD,
             tenant_model=TenantD,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="c_id", global_model=GlobalC, tenant_model=TenantC)
+                EntityDependency(fk_attr="c_id", target_key="C"),
             ],
         ),
     }
@@ -118,22 +135,14 @@ def test_topological_layers_disconnected() -> None:
 
 
 def test_topological_layers_ignores_missing_dependencies() -> None:
-    """If a dependency points to a model not in the graph, it's ignored for ordering."""
-
-    class GlobalMissing:
-        pass
-
-    class TenantMissing:
-        pass
-
+    """If a dependency points to a key not in the graph, it's ignored for ordering."""
     graph = {
         "A": EntitySpec(
             global_model=GlobalA,
             tenant_model=TenantA,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(
-                    fk_attr="missing_id", global_model=GlobalMissing, tenant_model=TenantMissing
-                )
+                EntityDependency(fk_attr="missing_id", target_key="MISSING"),
             ],
         )
     }
@@ -148,25 +157,83 @@ def test_topological_layers_cyclic_raises_value_error() -> None:
         "A": EntitySpec(
             global_model=GlobalA,
             tenant_model=TenantA,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="b_id", global_model=GlobalB, tenant_model=TenantB)
+                EntityDependency(fk_attr="b_id", target_key="B"),
             ],
         ),
         "B": EntitySpec(
             global_model=GlobalB,
             tenant_model=TenantB,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="c_id", global_model=GlobalC, tenant_model=TenantC)
+                EntityDependency(fk_attr="c_id", target_key="C"),
             ],
         ),
         "C": EntitySpec(
             global_model=GlobalC,
             tenant_model=TenantC,
+            mapper=_dummy_mapper,
             dependencies=[
-                EntityDependency(fk_attr="a_id", global_model=GlobalA, tenant_model=TenantA)
+                EntityDependency(fk_attr="a_id", target_key="A"),
             ],
         ),
     }
 
     with pytest.raises(ValueError, match="Dependency cycle detected"):
         topological_layers(graph)
+
+
+def test_validate_replication_graph_valid() -> None:
+    """A valid, acyclic graph with all targets registered passes validation."""
+    graph = {
+        "A": EntitySpec(
+            global_model=GlobalA,
+            tenant_model=TenantA,
+            mapper=_dummy_mapper,
+        ),
+        "B": EntitySpec(
+            global_model=GlobalB,
+            tenant_model=TenantB,
+            mapper=_dummy_mapper,
+            dependencies=[
+                EntityDependency(fk_attr="a_id", target_key="A"),
+            ],
+        ),
+    }
+    # Should not raise
+    validate_replication_graph(graph)
+
+
+def test_validate_replication_graph_missing_target_raises_value_error() -> None:
+    """An unregistered target_key raises a descriptive ValueError at startup."""
+    graph = {
+        "B": EntitySpec(
+            global_model=GlobalB,
+            tenant_model=TenantB,
+            mapper=_dummy_mapper,
+            dependencies=[
+                EntityDependency(fk_attr="a_id", target_key="A"),
+            ],
+        ),
+    }
+    with pytest.raises(ValueError, match="pointing to unregistered target_key 'A'"):
+        validate_replication_graph(graph)
+
+
+def test_validate_replication_graph_self_dependency_raises_value_error() -> None:
+    """A self-referential target_key raises a descriptive ValueError at startup."""
+    graph = {
+        "A": EntitySpec(
+            global_model=GlobalA,
+            tenant_model=TenantA,
+            mapper=_dummy_mapper,
+            dependencies=[
+                EntityDependency(fk_attr="parent_a_id", target_key="A"),
+            ],
+        ),
+    }
+    with pytest.raises(
+        ValueError, match="specifies self-dependency 'parent_a_id' pointing to itself"
+    ):
+        validate_replication_graph(graph)

@@ -1,9 +1,8 @@
 import asyncio
 import contextlib
 import inspect
-import signal
 from collections.abc import Awaitable
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from observability import ObservabilityProvider
@@ -16,7 +15,7 @@ from notification_jobs_worker.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class NotificationJobsWorkerModule(LaunchableWorker):
@@ -55,6 +54,15 @@ class NotificationJobsWorkerModule(LaunchableWorker):
         self.jobs_consumer.start()
         logger.info("notification_jobs_worker_consumer_started")
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks: list[asyncio.Task[Any]] = []
+        if self.outbox_listener and hasattr(self.outbox_listener, "background_tasks"):
+            tasks.extend(self.outbox_listener.background_tasks())
+
+        if self.jobs_consumer and hasattr(self.jobs_consumer, "background_tasks"):
+            tasks.extend(self.jobs_consumer.background_tasks())
+        return tasks
+
     async def stop(self) -> None:
         logger.info("notification_jobs_worker_shutting_down")
         if self.jobs_consumer:
@@ -66,45 +74,11 @@ class NotificationJobsWorkerModule(LaunchableWorker):
         await cast(Awaitable[None], self.container.shutdown_resources())
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("notification-jobs-worker")
-
     module = NotificationJobsWorkerModule()
-
-    try:
-        await module.start()
-
-        stop_event = asyncio.Event()
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            with contextlib.suppress(NotImplementedError, RuntimeError):
-                loop.add_signal_handler(sig, stop_event.set)
-
-        # Supervise the relay task alongside the stop event so relay failures are propagated.
-        relay_task: asyncio.Task[object] | None = (
-            getattr(module.outbox_listener, "_task", None) if module.outbox_listener else None
-        )
-        consumer_task: asyncio.Task[object] | None = (
-            getattr(module.jobs_consumer, "_task", None) if module.jobs_consumer else None
-        )
-
-        tasks_to_wait: list[asyncio.Task[object]] = [asyncio.create_task(stop_event.wait())]
-        if relay_task is not None:
-            tasks_to_wait.append(relay_task)
-        if consumer_task is not None:
-            tasks_to_wait.append(consumer_task)
-
-        done, _pending = await asyncio.wait(tasks_to_wait, return_when=asyncio.FIRST_COMPLETED)
-        for task in done:
-            stop_task = tasks_to_wait[0]
-            if task is not stop_task and not task.cancelled() and task.exception():
-                exc = task.exception()
-                logger.error("notification_outbox_relay_or_consumer_failed", exc_info=exc)
-                if exc:
-                    raise exc
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    run_worker_app(main)

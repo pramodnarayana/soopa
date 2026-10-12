@@ -1,7 +1,4 @@
 import asyncio
-import signal
-import sys
-from types import FrameType
 
 import structlog
 from observability import ObservabilityProvider
@@ -12,7 +9,7 @@ from identity_jobs_worker.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class IdentityJobsWorkerModule(LaunchableWorker):
@@ -38,6 +35,22 @@ class IdentityJobsWorkerModule(LaunchableWorker):
         if not self.container.outbox_relay and not self.container.jobs_consumer:
             logger.warning("no_tasks_configured_for_identity_jobs_worker")
 
+    def get_background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks = []
+        if (
+            self.container
+            and self.container.outbox_relay
+            and getattr(self.container.outbox_relay, "task", None)
+        ):
+            tasks.append(self.container.outbox_relay.task)
+        if (
+            self.container
+            and self.container.jobs_consumer
+            and getattr(self.container.jobs_consumer, "task", None)
+        ):
+            tasks.append(self.container.jobs_consumer.task)
+        return tasks
+
     async def stop(self) -> None:
         logger.info("identity_jobs_worker_shutting_down")
         if self.container:
@@ -61,29 +74,11 @@ class IdentityJobsWorkerModule(LaunchableWorker):
         logger.info("identity_jobs_worker_shutdown_complete")
 
 
-async def main() -> None:
+async def main(stop_event: asyncio.Event | None = None) -> None:
     ObservabilityProvider.auto_configure_from_env("identity-jobs-worker")
-
     module = IdentityJobsWorkerModule()
-
-    shutdown_event = asyncio.Event()
-
-    def handle_sigint(_sig: int, _frame: FrameType | None) -> None:
-        logger.info("received_shutdown_signal")
-        shutdown_event.set()
-
-    signal.signal(signal.SIGINT, handle_sigint)
-    signal.signal(signal.SIGTERM, handle_sigint)
-
-    try:
-        await module.start()
-        await shutdown_event.wait()
-    finally:
-        await module.stop()
+    await run_worker_app_async(module, stop_event=stop_event)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        sys.exit(0)
+    run_worker_app(main)

@@ -7,6 +7,21 @@ definition environment format.
 Centralised here so compute stacks never duplicate this transformation logic.
 """
 
+EDI_ENVIRONMENT_PRODUCTION = "P"
+EDI_ENVIRONMENT_TEST = "T"
+PRODUCTION_STACK_NAME = "production"
+
+
+def edi_environment_flag(stack_name: str) -> str:
+    """
+    Maps a Pulumi stack name to the ``EDI_ENVIRONMENT`` flag required by the EDI
+    worker settings (``P`` = Production, ``T`` = Test). Every non-production
+    stack (e.g. staging) runs in Test mode.
+    """
+    if stack_name == PRODUCTION_STACK_NAME:
+        return EDI_ENVIRONMENT_PRODUCTION
+    return EDI_ENVIRONMENT_TEST
+
 
 def queue_env_vars_to_ecs_format(
     queue_env_vars: dict[str, str],

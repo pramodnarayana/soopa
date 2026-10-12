@@ -1,8 +1,9 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
 import structlog
+from pubsub.enums import ConsumerAction
 from pubsub.exceptions import ConsumerTerminalError
 from pydantic import BaseModel, Field, ValidationError, model_validator
 from seedwork.domain.types import JsonDict
@@ -62,10 +63,12 @@ class EdiDataPlaneEventDispatcher:
     not in the generic platform transport layer.
     """
 
-    def __init__(self, callback: Callable[[EdiDataPlaneEventMessage], Any]) -> None:
+    def __init__(
+        self, callback: Callable[[EdiDataPlaneEventMessage], Awaitable[ConsumerAction]]
+    ) -> None:
         self._callback = callback
 
-    async def handle(self, body: JsonDict) -> None:
+    async def handle(self, body: JsonDict) -> ConsumerAction:
         """Entry point invoked by the SQS poll loop for each received raw message."""
         bound_logger = logger.bind(payload_keys=list(body.keys()))
 
@@ -94,9 +97,7 @@ class EdiDataPlaneEventDispatcher:
         )
         bound_logger.debug("data_plane_events_sqs_consumer.message_received")
 
-        try:
-            await self._callback(event)
-            bound_logger.info("data_plane_events_sqs_consumer.message_processed")
-        except Exception:
-            bound_logger.exception("data_plane_events_sqs_consumer.processing_failed")
-            raise
+        action = await self._callback(event)
+        bound_logger.info("data_plane_events_sqs_consumer.message_processed", action=str(action))
+
+        return action or ConsumerAction.ACK
