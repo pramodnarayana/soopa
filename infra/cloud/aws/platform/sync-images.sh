@@ -2,10 +2,12 @@
 set -eo pipefail
 
 # Enterprise Central Image Manifest Pipeline
-# Usage: ./sync-images.sh
+# Usage: ./sync-images.sh [environment]
+
+TARGET_ENV="${1:-staging}"
 
 AWS_REGION="us-east-1"
-echo "Logging into AWS ECR..."
+echo "Logging into AWS ECR for environment: ${TARGET_ENV}..."
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
 
@@ -26,8 +28,8 @@ if [ -z "$OPENOBSERVE_VERSION" ]; then
 fi
 # Define images to sync. Format: "source_image|target_ecr_repo"
 IMAGES=(
-  "ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}|staging-zitadel-image"
-  "public.ecr.aws/zinclabs/openobserve:${OPENOBSERVE_VERSION}|staging-openobserve-image"
+  "ghcr.io/zitadel/zitadel:${IDENTITY_VERSION}|${TARGET_ENV}-zitadel-image"
+  "public.ecr.aws/zinclabs/openobserve:${OPENOBSERVE_VERSION}|${TARGET_ENV}-openobserve-image"
 )
 
 for ENTRY in "${IMAGES[@]}"; do

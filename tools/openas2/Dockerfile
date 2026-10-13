@@ -1,5 +1,5 @@
-ARG OPENAS2_VERSION=3.3.0
-ARG REGISTRY_URL=634680389104.dkr.ecr.us-east-1.amazonaws.com/staging-openas2
+ARG REGISTRY_URL=openas2-openas2
+ARG OPENAS2_VERSION=latest
 FROM ${REGISTRY_URL}:${OPENAS2_VERSION}
 
 # Copy over the specific configurations for the mock trading partner

@@ -2,15 +2,11 @@ import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
-from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalAS2Partner
-from edi.adapters.outbound.database.models.control_plane import InboundRoute as GlobalInboundRoute
-from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
-from edi.adapters.outbound.database.models.data_plane import InboundRoute as TenantInboundRoute
+from edi.adapters.outbound.database.models import control_plane, data_plane
+from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
+from edi.ports.outbound.tenant_port import TenantPort
 from seedwork import generate_random_hex
 from sqlalchemy import select, text
-
-from worker.adapters.db_replication import SqlAlchemyReplicationAdapter
-from worker.ports.outbound.tenant_port import TenantPort
 
 
 class FakeTenantPort(TenantPort):
@@ -47,7 +43,7 @@ async def test_replicate_as2_partner(
 
     # Insert AS2 Partner into global DB
     async for session in db_router.get_global_session():
-        global_partner = GlobalAS2Partner(
+        global_partner = control_plane.AS2Partner(
             id=partner_id,
             tenant_id=tenant_id,
             name="Test Partner",
@@ -66,8 +62,8 @@ async def test_replicate_as2_partner(
     # 3. Assert it exists in the tenant DB
     async for session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", "fake_dsn"):
         result = await session.execute(
-            select(TenantAS2Partner).where(
-                TenantAS2Partner.id == partner_id, TenantAS2Partner.tenant_id == tenant_id
+            select(data_plane.AS2Partner).where(
+                data_plane.AS2Partner.id == partner_id, data_plane.AS2Partner.tenant_id == tenant_id
             )
         )
         tenant_partner = result.scalars().first()
@@ -95,7 +91,7 @@ async def test_replicate_inbound_route_with_dependency(
     )
 
     async for session in db_router.get_global_session():
-        global_partner = GlobalAS2Partner(
+        global_partner = control_plane.AS2Partner(
             id=partner_id,
             tenant_id=tenant_id,
             name="Dep Partner",
@@ -105,7 +101,7 @@ async def test_replicate_inbound_route_with_dependency(
             public_cert_pem="dummy_cert",
         )
 
-        global_route = GlobalInboundRoute(
+        global_route = control_plane.InboundRoute(
             id=route_id,
             tenant_id=tenant_id,
             name="Test Route",
@@ -128,12 +124,12 @@ async def test_replicate_inbound_route_with_dependency(
     # 3. Assert both route and its dependency exist in the tenant DB
     async for session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", "fake_dsn"):
         route_res = await session.execute(
-            select(TenantInboundRoute).where(TenantInboundRoute.id == route_id)
+            select(data_plane.InboundRoute).where(data_plane.InboundRoute.id == route_id)
         )
         tenant_route = route_res.scalars().first()
 
         partner_res = await session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         tenant_partner = partner_res.scalars().first()
 
@@ -162,7 +158,7 @@ async def test_replicate_tenant_configuration_full_sync(
     # We manually insert a partner into the tenant DB to simulate a stale record that should be deleted
     stale_partner_id = f"stale_{generate_random_hex(6)}"
     async for session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", "fake_dsn"):
-        stale_partner = TenantAS2Partner(
+        stale_partner = data_plane.AS2Partner(
             id=stale_partner_id,
             tenant_id=tenant_id,
             name="Stale",
@@ -176,7 +172,7 @@ async def test_replicate_tenant_configuration_full_sync(
 
     # We insert the real partner into the global DB
     async for session in db_router.get_global_session():
-        global_partner = GlobalAS2Partner(
+        global_partner = control_plane.AS2Partner(
             id=partner_id,
             tenant_id=tenant_id,
             name="Real Partner",
@@ -195,12 +191,12 @@ async def test_replicate_tenant_configuration_full_sync(
     # Assert Real Partner is there and Stale Partner is deleted
     async for session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", "fake_dsn"):
         real_res = await session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         assert real_res.scalars().first() is not None
 
         stale_res = await session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == stale_partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == stale_partner_id)
         )
         assert stale_res.scalars().first() is None
 
@@ -220,7 +216,7 @@ async def test_delete_granular(
     )
 
     async for session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", "fake_dsn"):
-        partner = TenantAS2Partner(
+        partner = data_plane.AS2Partner(
             id=partner_id,
             tenant_id=tenant_id,
             name="To Delete",
@@ -237,6 +233,6 @@ async def test_delete_granular(
 
     async for session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", "fake_dsn"):
         res = await session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         assert res.scalars().first() is None

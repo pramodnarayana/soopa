@@ -6,14 +6,15 @@ Each entry declares which Pulumi output becomes which .env variable.
 """
 
 import json
+import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 import structlog
 
 logger = structlog.get_logger(__name__)
-from pathlib import Path
 
 # ── Schema: .env variable name → Terraform output key ─────────────────────────
 _TERRAFORM_TO_ENV_MAPPINGS: dict[str, str] = {
@@ -41,15 +42,18 @@ def _read_pulumi_outputs(script_dir: Path) -> dict[str, str]:
         raise RuntimeError("pulumi binary not found in PATH")
 
     pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
+    env = os.environ.copy()
+    env["PULUMI_CONFIG_PASSPHRASE"] = "local"  # noqa: S105 - Local dev passphrase
 
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(  # noqa: S603 - Pulumi binary safely resolved via shutil.which with controlled arguments
         [pulumi_bin, "stack", "output", "--json", "--show-secrets", "-s", "local"],
         cwd=pulumi_dir,
         capture_output=True,
         text=True,
         check=True,
+        env=env,
     )
-    pulumi_output: dict = json.loads(result.stdout)
+    pulumi_output: dict[str, object] = json.loads(result.stdout)
     return {
         key: (json.dumps(value) if isinstance(value, (dict, list)) else str(value))
         for key, value in pulumi_output.items()

@@ -5,13 +5,13 @@ from typing import Any
 
 import pytest
 from edi.domain.enums import EdiEventType
+from edi.domain.replication import PermanentProvisioningError, TransientProvisioningError
+from edi.ports.outbound.replication_port import ReplicationPort
+from edi.ports.outbound.tenant_port import TenantPort
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
-from worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
 from worker.domain.service import ProvisioningWorkerService
 from worker.ports.outbound.outbox_port import OutboxPort
-from worker.ports.outbound.replication_port import ReplicationPort
-from worker.ports.outbound.tenant_port import TenantPort
 
 
 class FakeTenantPort(TenantPort):

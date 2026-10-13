@@ -89,4 +89,4 @@ services:
     command: [ "python", "-m", "unified_worker.main" ]
     environment:
       <<: *base-env
-      WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-dp-jobs-worker"
+      WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-delivery-dlq-worker,edi-dp-jobs-worker"

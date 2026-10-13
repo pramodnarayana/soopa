@@ -1,25 +1,26 @@
 from database.models.identity import Tenant
-from edi.adapters.outbound.database.models.control_plane import AS2Partner as GlobalTradingPartner
-from edi.adapters.outbound.database.models.control_plane import InboundRoute
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
 from sqlalchemy import select as sql_select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 
+from as2_server.domain.errors import AmbiguousTenantRoutingError
 
-class AS2TenantRepositoryAdapter:
+
+class SqlAlchemyTenantRoutingRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def resolve_tenant_id(self, as2_to: str) -> str | None:
         result = await self.session.execute(
-            sql_select(GlobalTradingPartner.tenant_id)
-            .where(GlobalTradingPartner.as2_id == as2_to)
-            .where(GlobalTradingPartner.is_local.is_(True))
-            .where(GlobalTradingPartner.active.is_(True))
+            sql_select(AS2Partner.tenant_id)
+            .where(AS2Partner.as2_id == as2_to)
+            .where(AS2Partner.is_local.is_(True))
+            .where(AS2Partner.active.is_(True))
         )
         tenant_rows = result.fetchall()
         if len(tenant_rows) > 1:
-            raise ValueError(f"Ambiguous AS2-To match: multiple tenants claim {as2_to}")
+            raise AmbiguousTenantRoutingError(as2_to)
         if tenant_rows:
             return str(tenant_rows[0][0])
         return None
@@ -42,16 +43,14 @@ class AS2TenantRepositoryAdapter:
 
         stmt = (
             sql_select(InboundRoute.tenant_id)
-            .join(GlobalTradingPartner, InboundRoute.as2_partner_id == GlobalTradingPartner.id)
+            .join(AS2Partner, InboundRoute.as2_partner_id == AS2Partner.id)
             .where(*conditions)
-            .where(GlobalTradingPartner.as2_id == as2_peer_id)
+            .where(AS2Partner.as2_id == as2_peer_id)
         )
         result = await self.session.execute(stmt)
         tenant_rows = result.fetchall()
         if len(tenant_rows) > 1:
-            raise ValueError(
-                f"Ambiguous inbound route match: multiple tenants for ISA {isa_sender}/{isa_receiver}"
-            )
+            raise AmbiguousTenantRoutingError(f"ISA {isa_sender}/{isa_receiver}")
         if tenant_rows:
             return str(tenant_rows[0][0])
         return None

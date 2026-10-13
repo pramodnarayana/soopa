@@ -234,7 +234,17 @@ omit = [
     "*/migrations/*",
     # Infrastructure adapters requiring live external connections (DB, SFTP, Vault, AWS).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
-    "*/adapters/outbound/database/*",
+    "*/adapters/outbound/database/control_plane/*",
+    "*/adapters/outbound/database/data_plane/*",
+    "*/adapters/outbound/database/*repository*.py",
+    "*/adapters/outbound/database/*uow*.py",
+    "*/adapters/outbound/database/session.py",
+    "*/adapters/outbound/database/run_migrations.py",
+    "*/adapters/outbound/database/s3.py",
+    "*/adapters/outbound/database/encryption.py",
+    "*/adapters/outbound/database/payload_hydration.py",
+    "*/adapters/outbound/database/tenant_resolver.py",
+    "*/adapters/outbound/database/tenant_uow_provider.py",
     "*/adapters/outbound/sftp/*",
     "*/adapters/outbound/pipeline/as2.py",
     "*/adapters/outbound/pipeline/sftp.py",

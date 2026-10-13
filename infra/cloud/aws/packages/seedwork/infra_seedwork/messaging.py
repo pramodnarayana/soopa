@@ -29,6 +29,7 @@ class QueueConfig(TypedDict, total=False):
     dlq: bool
     env_var: str
     dlq_env_var: str
+    max_receive_count: int
 
 
 class TopicConfig(TypedDict, total=False):
@@ -252,10 +253,15 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
         if queue_filter is not None and name not in queue_filter:
             continue
         prefixed_name = f"{prefix}{name}"
+        max_receive_count = queue_conf.get("max_receive_count", 5)
         if queue_conf.get("fifo"):
-            q, d = provision_fifo_queue_pair(prefixed_name, tags)
+            q, d = provision_fifo_queue_pair(
+                prefixed_name, tags, max_receive_count=max_receive_count
+            )
         else:
-            q, d = provision_standard_queue_pair(prefixed_name, tags)
+            q, d = provision_standard_queue_pair(
+                prefixed_name, tags, max_receive_count=max_receive_count
+            )
         queues[name] = q
         dlqs[name] = d
 

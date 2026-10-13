@@ -4,13 +4,13 @@ import structlog
 from edi.domain.constants import ProvisioningEventType
 from edi.domain.enums import EdiEventType, WebhookEventType
 from edi.domain.events import ProvisioningEvent
+from edi.domain.replication import PermanentProvisioningError, TransientProvisioningError
+from edi.ports.outbound.replication_port import ReplicationPort
+from edi.ports.outbound.tenant_port import TenantPort
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pydantic import TypeAdapter, ValidationError
 
-from worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
 from worker.ports.outbound.outbox_port import OutboxPort
-from worker.ports.outbound.replication_port import ReplicationPort
-from worker.ports.outbound.tenant_port import TenantPort
 
 logger = structlog.get_logger(__name__)
 
@@ -74,7 +74,7 @@ class ProvisioningWorkerService:
                     # Log permanent errors but don't retry them
                     logger.exception("permanent_provisioning_error_ignored", tenant_id=t_id)
 
-                except (ValueError, TypeError, KeyError, RuntimeError) as e:
+                except (TransientProvisioningError, TimeoutError, ConnectionError) as e:
                     transient_errors.append(e)
             if transient_errors:
                 raise TransientProvisioningError(

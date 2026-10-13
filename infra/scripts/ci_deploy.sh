@@ -52,6 +52,7 @@ deploy_stack() {
 deploy_stack "infra/cloud/aws/foundation" "Foundation (VPC & Networking)"
 deploy_stack "infra/cloud/aws/data" "Data (RDS & Secrets)"
 deploy_stack "infra/cloud/aws/platform" "Platform (ECS & ECR)"
+"$WORKSPACE_ROOT/infra/cloud/aws/platform/sync-images.sh" "$ENV"
 deploy_stack "infra/cloud/aws/openobserve" "OpenObserve"
 
 # 2. Core Identity Infrastructure

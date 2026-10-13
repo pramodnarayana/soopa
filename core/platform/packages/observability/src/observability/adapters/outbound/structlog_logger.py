@@ -4,8 +4,11 @@ Automatically injects the active OTel trace_id into every log line.
 Swap this out by registering a different LoggerPort implementation in provider.py.
 """
 
+import logging  # noqa: TID251 - Platform adapter bridging stdlib logging to structlog
 import sys
+import threading
 import time
+import types
 from typing import Any
 
 import structlog
@@ -80,6 +83,57 @@ def _make_otlp_log_processor() -> structlog.types.Processor:
     return _otlp_log_processor
 
 
+class InterceptHandler(logging.Handler):
+    """
+    Standard enterprise log handler that intercepts Python standard library logging
+    and redirects records into structlog, ensuring consistent JSON formatting,
+    trace context injection, and preventing multiline traceback splitting on stderr.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level = record.levelname.lower()
+            logger = structlog.get_logger(record.name)
+            log_method = getattr(logger, level, logger.info)
+            exc_info = record.exc_info
+            if exc_info:
+                log_method(record.getMessage(), exc_info=exc_info)
+            else:
+                log_method(record.getMessage())
+        except Exception:  # noqa: BLE001 - Error handler safety net for logging infrastructure
+            self.handleError(record)
+
+
+def _handle_uncaught_exception(
+    exc_type: type[BaseException],
+    exc_value: BaseException,
+    exc_traceback: types.TracebackType | None,
+) -> None:
+    """Intercept uncaught process exceptions and log as single structured JSON events."""
+    if issubclass(exc_type, (KeyboardInterrupt, SystemExit)):
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+        return
+    logger = structlog.get_logger("uncaught_exception")
+    logger.critical(
+        "uncaught_exception",
+        exc_info=(exc_type, exc_value, exc_traceback),
+    )
+
+
+def _handle_uncaught_thread_exception(args: threading.ExceptHookArgs) -> None:
+    """Intercept uncaught thread exceptions and log as single structured JSON events."""
+    if issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
+        if args.exc_value is not None:
+            sys.__excepthook__(args.exc_type, args.exc_value, args.exc_traceback)
+        return
+    logger = structlog.get_logger("uncaught_thread_exception")
+    logger.critical(
+        "uncaught_thread_exception",
+        thread_name=args.thread.name if args.thread else "unknown",
+        exc_info=(args.exc_type, args.exc_value, args.exc_traceback),
+    )
+
+
 def _configure_structlog(log_level: str) -> None:
     # Map string log levels to structlog filtering int values (same as standard logging ints)
     level_filter_map = {
@@ -106,6 +160,17 @@ def _configure_structlog(log_level: str) -> None:
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(sys.stdout),
     )
+
+    # Intercept Python standard library logging (Uvicorn, Starlette, SQLAlchemy, etc.)
+    logging.basicConfig(handlers=[InterceptHandler()], level=log_level_int, force=True)
+    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "starlette", "fastapi"):
+        std_logger = logging.getLogger(logger_name)
+        std_logger.handlers = [InterceptHandler()]
+        std_logger.propagate = False
+
+    # Intercept uncaught interpreter and thread-level exceptions
+    sys.excepthook = _handle_uncaught_exception
+    threading.excepthook = _handle_uncaught_thread_exception
 
 
 class StructlogLogger(LoggerPort):

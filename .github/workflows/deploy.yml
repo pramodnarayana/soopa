@@ -60,19 +60,19 @@ jobs:
           cd $GITHUB_WORKSPACE/infra/cloud/aws/platform
           pulumi up -s prod -y
 
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
+
+      - name: Sync Third-Party Images (Zitadel & OpenObserve)
+        run: |
+          ./infra/cloud/aws/platform/sync-images.sh prod
+
       - name: Deploy OpenObserve Stack
         run: |
           source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
           cd $GITHUB_WORKSPACE/infra/cloud/aws/openobserve
           pulumi up -s prod -y
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
-
-      - name: Sync Third-Party Images (Zitadel)
-        run: |
-          ./infra/cloud/aws/platform/sync-images.sh
 
       - name: Deploy Zitadel Infrastructure Stack
         run: |
@@ -83,7 +83,12 @@ jobs:
       - name: Wait for Zitadel API to become healthy
         run: |
           echo "Waiting for Zitadel ECS task to spin up and upload the machine key..."
-          ZITADEL_URL=$(pulumi stack output url -s prod -C $GITHUB_WORKSPACE/infra/cloud/aws/zitadel)
+          IDENTITY_DOMAIN=$(pulumi stack output identity_domain -s prod -C $GITHUB_WORKSPACE/infra/cloud/aws/zitadel)
+          if [ -z "$IDENTITY_DOMAIN" ]; then
+            echo "Error: identity_domain output is empty!"
+            exit 1
+          fi
+          ZITADEL_URL="https://$IDENTITY_DOMAIN"
           for i in {1..30}; do
             if curl -sSf "$ZITADEL_URL/debug/healthz" > /dev/null; then
               echo "Zitadel is healthy!"

@@ -14,7 +14,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from database.models import Webhook as GlobalWebhook
+from database.models import Webhook
 from seedwork import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -114,7 +114,7 @@ async def test_inbound_flow_e2e(
         tenant_id = 0
 
         # Create Webhook (Global DB)
-        webhook = GlobalWebhook(
+        webhook = Webhook(
             id=generate_id("id"),
             tenant_id=tenant_id,
             name="E2E Webhook",

@@ -10,13 +10,12 @@ import aioboto3
 import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
+from edi.domain.replication import PermanentProvisioningError, TransientProvisioningError
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import DomainIdPrefix
-
-from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
 
 
 class SqsTestPublisher:
@@ -40,14 +39,11 @@ class SqsTestPublisher:
 
 
 from database.models.identity import Tenant
-from database.models.webhooks import Webhook as GlobalWebhook
+from database.models.webhooks import Webhook
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.models.control_plane import AS2Partner
-from edi.adapters.outbound.database.models.control_plane import OutboundRoute as GlobalOutboundRoute
-from edi.adapters.outbound.database.models.data_plane import AS2Partner as TenantAS2Partner
-from edi.adapters.outbound.database.models.data_plane import OutboundRoute as TenantOutboundRoute
-from edi.adapters.outbound.database.models.data_plane import Webhook as TenantWebhook
+from edi.adapters.outbound.database.models import control_plane, data_plane
+from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from edi.domain.enums import EdiConnectionType, EdiEventType
 from sqlalchemy import delete, select
@@ -55,7 +51,6 @@ from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
-from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
     EdiConfigSyncSqsDispatcher,
 )
@@ -168,7 +163,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
             )
             session.add(tenant_shard)
 
-            partner = AS2Partner(
+            partner = control_plane.AS2Partner(
                 id=test_partner_id,
                 tenant_id=test_tenant_id,
                 name="Integration Test Partner",
@@ -245,7 +240,7 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
     # 4. Verify replication occurred in the Shard DB
     async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         replicated_partner = res.scalars().first()
 
@@ -295,7 +290,7 @@ async def test_webhook_replication_e2e_flow(e2e_context: dict[str, Any]) -> None
 
     # 1. Insert the global webhook
     async for global_session in db_router.get_global_session():
-        global_webhook = GlobalWebhook(
+        global_webhook = Webhook(
             id=webhook_id,
             tenant_id=tenant_id,
             name="Test Webhook",
@@ -329,7 +324,7 @@ async def test_webhook_replication_e2e_flow(e2e_context: dict[str, Any]) -> None
     # 4. Verify replication
     async for tenant_session in db_router.get_tenant_session(tenant_id, "edi_shard_1", base_url):
         res = await tenant_session.execute(
-            select(TenantWebhook).where(TenantWebhook.id == webhook_id)
+            select(data_plane.Webhook).where(data_plane.Webhook.id == webhook_id)
         )
         tenant_webhook = res.scalars().first()
         assert tenant_webhook is not None
@@ -356,7 +351,7 @@ async def test_outbound_route_replication_e2e_flow(e2e_context: dict[str, Any]) 
 
     # 1. Insert the global outbound route
     async for global_session in db_router.get_global_session():
-        global_route = GlobalOutboundRoute(
+        global_route = control_plane.OutboundRoute(
             id=route_id,
             tenant_id=tenant_id,
             trading_partner_id=trading_partner_id,
@@ -392,7 +387,7 @@ async def test_outbound_route_replication_e2e_flow(e2e_context: dict[str, Any]) 
     # 4. Verify replication
     async for tenant_session in db_router.get_tenant_session(tenant_id, "edi_shard_1", base_url):
         res = await tenant_session.execute(
-            select(TenantOutboundRoute).where(TenantOutboundRoute.id == route_id)
+            select(data_plane.OutboundRoute).where(data_plane.OutboundRoute.id == route_id)
         )
         tenant_route = res.scalars().first()
         assert tenant_route is not None
@@ -481,7 +476,7 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     # Verify replication still valid
     async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         replicated_partner = res.scalars().first()
         assert replicated_partner is not None
@@ -515,7 +510,9 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
 
     # Now delete it globally
     async for global_session in db_router.get_global_session():
-        await global_session.execute(delete(AS2Partner).where(AS2Partner.id == partner_id))
+        await global_session.execute(
+            delete(control_plane.AS2Partner).where(control_plane.AS2Partner.id == partner_id)
+        )
         await global_session.commit()
 
     # Now send the deleted event
@@ -534,7 +531,7 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
     # Verify replication deleted it in Shard DB
     async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         replicated_partner = res.scalars().first()
         assert replicated_partner is None
@@ -554,7 +551,7 @@ async def test_provisioning_full_state_sync(e2e_context: dict[str, Any]) -> None
     # Insert a stale partner into the tenant shard that shouldn't be there
     stale_id = generate_id("stale")
     async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
-        stale_partner = TenantAS2Partner(
+        stale_partner = data_plane.AS2Partner(
             id=stale_id,
             tenant_id=tenant_id,
             name="Stale Partner",
@@ -570,13 +567,13 @@ async def test_provisioning_full_state_sync(e2e_context: dict[str, Any]) -> None
     # Verify stale partner was deleted by _sync_deletes
     async for tenant_session in db_router.get_tenant_session(tenant_id, "ucp_shard_1", base_url):
         res = await tenant_session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == stale_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == stale_id)
         )
         assert res.scalars().first() is None
 
         # Verify legitimate partner was replicated
         res = await tenant_session.execute(
-            select(TenantAS2Partner).where(TenantAS2Partner.id == partner_id)
+            select(data_plane.AS2Partner).where(data_plane.AS2Partner.id == partner_id)
         )
         assert res.scalars().first() is not None
 

@@ -66,15 +66,14 @@ sns_platform_events_topic_arn = platform.require_output("sns_platform_events_top
 queue_arns = [
     messaging.require_output("sqs_edi_data_plane_jobs_arn"),
     messaging.require_output("sqs_edi_deliver_arn"),
+    pulumi.Output.concat(messaging.require_output("sqs_edi_deliver_arn"), "-dlq"),
     messaging.require_output("sqs_edi_orchestrator_arn"),
     messaging.require_output("sqs_edi_compute_arn"),
 ]
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
-firelens_endpoint = (
-    pulumi.Output.concat("openobserve.", namespace_name, ":443") if enable_observability else None
-)
+firelens_endpoint = obs.require_output("openobserve_endpoint") if enable_observability else None
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
     obs.require_output("openobserve_password_secret_arn") if enable_observability else None

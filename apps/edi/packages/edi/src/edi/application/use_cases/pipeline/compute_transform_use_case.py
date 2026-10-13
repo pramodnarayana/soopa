@@ -1,25 +1,24 @@
 import contextlib
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.exceptions import ErrorCode, TerminalDomainError
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonValue
 
 from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
+from edi.domain.enums import EdiDirection, EdiStandard, MessageStatus, PipelineEventType
 from edi.domain.events import TransformFailed, TransformSuccessful
+from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.ports.outbound.transaction_repository import CreateEdiJsonCommand
-from edi.ports.outbound.transformer_port import TransformerPort
+from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
-
-from edi.domain.enums import EdiStandard
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -96,9 +95,18 @@ class ComputeTransformUseCase:
                 raw_payload = edi_msg.edi_data.encode("utf-8")
 
                 # 1. Transform
-                transformed_txns = await self.transformer.transform_edi_to_json(
-                    payload=raw_payload, standard=standard, transaction_type=transaction_type or ""
-                )
+                try:
+                    transformed_txns = await self.transformer.transform_edi_to_json(
+                        payload=raw_payload,
+                        standard=standard,
+                        transaction_type=transaction_type or "",
+                    )
+                except ValueError as e:
+                    raise TerminalDomainError(
+                        message=f"Invalid payload format: {e}",
+                        code=ErrorCode.TRANSFORMATION_FAILED,
+                    ) from e
+
                 if not transformed_txns:
                     logger.warning(
                         "compute_transform.transform_failed",
@@ -121,7 +129,7 @@ class ComputeTransformUseCase:
                 )
 
             logger.info("compute_transform.completed", trace_id=trace_id)
-        except (TerminalDomainError, TransformationError, ValueError) as e:
+        except (TerminalDomainError, TransformationError) as e:
             terminal_err = (
                 e
                 if isinstance(e, TerminalDomainError)
@@ -177,8 +185,13 @@ class ComputeTransformUseCase:
                     )
 
     async def _process_transformed_transactions(
-        self, trace_id, standard, edi_msg, transformed_txns, uow
-    ):
+        self,
+        trace_id: str,
+        standard: str,
+        edi_msg: EdiMessageDomainModel,
+        transformed_txns: Sequence[ParsedEdiMessage],
+        uow: DataPlaneUnitOfWorkPort,
+    ) -> None:
         extractor = MetadataExtractorService()
 
         json_payloads = []
@@ -218,7 +231,9 @@ class ComputeTransformUseCase:
             json_dict = copy.deepcopy(txn.payload) if txn.payload else {}
             if isinstance(json_dict, dict):
                 json_dict["transaction_type"] = txn_type
-            business_metadata = extractor.extract(txn_type, json_dict)
+            business_metadata = extractor.extract(
+                txn_type, json_dict if isinstance(json_dict, dict) else {}
+            )
 
             await uow.transactions.create_edi_json(
                 command=CreateEdiJsonCommand(
@@ -228,8 +243,8 @@ class ComputeTransformUseCase:
                     trading_partner_id=partnership_id_str,
                     transaction_type=txn_type,
                     standard=standard,
-                    business_metadata=cast(JsonDict, business_metadata),
-                    payload=cast(JsonDict, json_dict),
+                    business_metadata=business_metadata,
+                    payload=cast(JsonValue, json_dict),
                     status=MessageStatus.PARSED,
                     replay_count=edi_msg.replay_count,
                     parent_trace_id=edi_msg.parent_trace_id,

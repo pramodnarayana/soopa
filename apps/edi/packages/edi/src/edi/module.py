@@ -48,38 +48,7 @@ from edi.domain.exceptions import OrchestrationError, VaultError
 logger = structlog.get_logger(__name__)
 
 
-def create_edi_app(settings: typing.Any = None) -> FastAPI:
-    if settings is None:
-        raise ValueError("Settings must be injected into create_edi_app")
-
-    @fastapi.concurrency.asynccontextmanager
-    async def app_lifespan(app: FastAPI):
-        await startup(
-            app,
-            global_db_url=str(settings.database.global_url),
-            pool_size=settings.database.pool_size,
-            max_overflow=settings.database.max_overflow,
-            shard_overrides=settings.database.shard_overrides,
-        )
-        try:
-            yield
-        finally:
-            await shutdown()
-
-    app = FastAPI(
-        title="EDI AS2 Platform API",
-        description="Main gateway for the EDI AS2 Platform",
-        version="1.0.0",
-        lifespan=app_lifespan,
-        swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
-        swagger_ui_init_oauth={
-            "clientId": settings.identity.oauth_client_id,
-            "appName": "EDI AS2 Platform API",
-            "usePkceWithAuthorizationCodeGrant": True,
-            "scopes": "openid profile email",
-        },
-    )
-
+def _setup_edi_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         request: Request, exc: RequestValidationError
@@ -131,6 +100,52 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
             status_code=500,
             content={"detail": str(exc)},
         )
+
+    @app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        sanitized_path = (
+            request.url.path.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+        )
+        logger.exception("unhandled_exception", path=sanitized_path)
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal Server Error"},
+        )
+
+
+def create_edi_app(settings: typing.Any = None) -> FastAPI:
+    if settings is None:
+        raise ValueError("Settings must be injected into create_edi_app")
+
+    @fastapi.concurrency.asynccontextmanager
+    async def app_lifespan(app: FastAPI):
+        await startup(
+            app,
+            global_db_url=str(settings.database.global_url),
+            pool_size=settings.database.pool_size,
+            max_overflow=settings.database.max_overflow,
+            shard_overrides=settings.database.shard_overrides,
+        )
+        try:
+            yield
+        finally:
+            await shutdown()
+
+    app = FastAPI(
+        title="EDI AS2 Platform API",
+        description="Main gateway for the EDI AS2 Platform",
+        version="1.0.0",
+        lifespan=app_lifespan,
+        swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
+        swagger_ui_init_oauth={
+            "clientId": settings.identity.oauth_client_id,
+            "appName": "EDI AS2 Platform API",
+            "usePkceWithAuthorizationCodeGrant": True,
+            "scopes": "openid profile email",
+        },
+    )
+
+    _setup_edi_exception_handlers(app)
 
     app.include_router(trading_partners.router)
     app.include_router(

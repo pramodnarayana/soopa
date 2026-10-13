@@ -3,13 +3,13 @@ import asyncio
 import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
+from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
 from observability import ObservabilityProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
-from config_sync_worker.adapters.db_replication import SqlAlchemyReplicationAdapter
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
     EdiConfigSyncSqsDispatcher,
 )
