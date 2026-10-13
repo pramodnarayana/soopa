@@ -38,14 +38,15 @@ echo "======================================================"
 deploy_stack() {
     local STACK_PATH=$1
     local STACK_NAME=$2
+    local SUPPORTS_IMAGE_TAG=${3:-false}
     echo "------------------------------------------------------"
     echo "📦 Deploying $STACK_NAME ($ENV)..."
     echo "------------------------------------------------------"
     if ! pulumi stack select "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH" 2>/dev/null; then
         pulumi stack init "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
     fi
-    if [ -n "$IMAGE_TAG" ]; then
-        pulumi config set image_tag "$IMAGE_TAG" -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH" 2>/dev/null || true
+    if [ -n "$IMAGE_TAG" ] && [ "$SUPPORTS_IMAGE_TAG" = "true" ]; then
+        pulumi config set image_tag "$IMAGE_TAG" -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
     fi
     pulumi refresh -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
     pulumi up -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
@@ -65,24 +66,24 @@ deploy_stack "infra/cloud/aws/zitadel" "Zitadel Infrastructure"
 deploy_stack "infra/cloud/zitadel" "Zitadel Configuration"
 
 # 4. Database Migrator Task Definition & Execution
-deploy_stack "infra/cloud/aws/apps/migrator" "Database Migrator"
+deploy_stack "infra/cloud/aws/apps/migrator" "Database Migrator" "true"
 echo "------------------------------------------------------"
 echo "📦 Running Database Migrations & Seeding ($ENV)..."
 echo "------------------------------------------------------"
 "$WORKSPACE_ROOT/infra/scripts/init_databases.sh" "$ENV"
 
 # 5. Main API
-deploy_stack "infra/cloud/aws/apps/api" "Unified API"
+deploy_stack "infra/cloud/aws/apps/api" "Unified API" "true"
 
 # 4. Background Workers (UCP & EDI)
-deploy_stack "infra/cloud/aws/apps/ucp/workers" "UCP Workers"
-deploy_stack "infra/cloud/aws/apps/edi/workers" "EDI Workers"
+deploy_stack "infra/cloud/aws/apps/ucp/workers" "UCP Workers" "true"
+deploy_stack "infra/cloud/aws/apps/edi/workers" "EDI Workers" "true"
 
 # 5. EDI Transports & CDC
-deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server"
+deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server" "true"
 
 # 6. Tools
-deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner"
+deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner" "true"
 
 # Ensure required virtualenv symlinks for micro-stacks
 if [ -d "$WORKSPACE_ROOT/infra/cloud/aws/.venv" ]; then
@@ -98,6 +99,8 @@ if command -v pnpm &> /dev/null; then
     echo "📦 Building & Deploying Frontend Dashboard Assets ($ENV)..."
     echo "------------------------------------------------------"
     "$WORKSPACE_ROOT/infra/cloud/aws/apps/dashboard/deploy-dashboard.sh" "$ENV"
+else
+    echo "⚠️ WARNING: 'pnpm' not found in PATH; skipping Frontend Dashboard asset deployment." >&2
 fi
 
 # 8. Edge & Routing
