@@ -11,8 +11,35 @@ echo "🔒 Hiding .env and injecting .env.example to simulate strict CI environm
 ENV_BACKED_UP=0
 ENV_INJECTED=0
 
-# Use a trap to ensure .env is ALWAYS restored, even if tests fail or user hits Ctrl+C
-trap 'echo "🔓 Restoring .env..."; [ "$ENV_INJECTED" -eq 1 ] && rm -f .env; [ "$ENV_BACKED_UP" -eq 1 ] && [ -f .env.bak ] && mv .env.bak .env' EXIT
+# Idempotent cleanup routine:
+# 1. Disable traps to prevent re-entrant execution loops
+# 2. Terminate any lingering background child processes
+# 3. Restore filesystem state (.env)
+# 4. Preserve original exit code
+_cleanup() {
+  local exit_code=$?
+  trap - EXIT INT TERM
+
+  local child_pids
+  child_pids=$(jobs -p 2>/dev/null || true)
+  if [ -n "$child_pids" ]; then
+    echo "$child_pids" | xargs kill 2>/dev/null || true
+  fi
+
+  echo ""
+  echo "🔓 Restoring .env..."
+  if [ "$ENV_INJECTED" -eq 1 ]; then
+    rm -f .env
+  fi
+  if [ "$ENV_BACKED_UP" -eq 1 ] && [ -f .env.bak ]; then
+    mv .env.bak .env
+  fi
+  echo "✅ .env restored."
+
+  exit "$exit_code"
+}
+
+trap _cleanup EXIT INT TERM
 
 if [ -f .env ]; then
   mv .env .env.bak

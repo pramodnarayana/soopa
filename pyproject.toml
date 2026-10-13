@@ -76,6 +76,7 @@ pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+timeout = 60
 norecursedirs = ["node_modules", "frontend"]
 addopts = "-v --tb=short --ignore=services/worker --import-mode=importlib"
 markers = [
