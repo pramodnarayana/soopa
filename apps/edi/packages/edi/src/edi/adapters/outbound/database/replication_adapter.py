@@ -79,6 +79,7 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                         res = await global_session.execute(stmt)
                         entities = res.scalars().all()
 
+                        rows_to_upsert: list[dict[str, object]] = []
                         for entity in entities:
                             if hasattr(entity, "tenant_id"):
                                 source_tenant_id = cast(str | None, entity.tenant_id)
@@ -90,12 +91,16 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
                             else:
                                 source_tenant_id = tenant_id
 
-                            await self._upsert_entity(
+                            data = dict(spec.mapper(entity))
+                            if data.get("tenant_id") is None:
+                                data["tenant_id"] = source_tenant_id
+                            rows_to_upsert.append(data)
+
+                        if rows_to_upsert:
+                            await self._upsert_batch(
                                 tenant_session,
-                                source_tenant_id,
-                                entity,
+                                rows_to_upsert,
                                 spec.data_plane_model,
-                                spec.mapper,
                             )
                         await tenant_session.flush()
 
@@ -207,6 +212,12 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
 
         dep_model = cast(type[ReplicatedModel], dep_spec.control_plane_model)
         dep_stmt = select(dep_model).where(dep_model.id == dep_id)
+        if dep_spec.include_shared:
+            dep_stmt = dep_stmt.where(
+                (dep_model.tenant_id == tenant_id) | (dep_model.tenant_id == SHARED_TENANT_ID)
+            )
+        else:
+            dep_stmt = dep_stmt.where(dep_model.tenant_id == tenant_id)
         dep_res = await global_session.execute(dep_stmt)
         dep_entity = dep_res.scalars().first()
 
@@ -343,61 +354,90 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         await self._replicate_with_dependencies(tenant_id, partner_id, "as2_partner")
 
     async def delete_as2_partner(self, tenant_id: str, partner_id: str) -> None:
+        spec = REPLICATION_GRAPH["as2_partner"]
         await self._granular_delete(
-            tenant_id, partner_id, REPLICATION_GRAPH["as2_partner"].data_plane_model
+            tenant_id, partner_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     async def replicate_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
         await self._replicate_with_dependencies(tenant_id, partnership_id, "as2_partnership")
 
     async def delete_as2_partnership(self, tenant_id: str, partnership_id: str) -> None:
+        spec = REPLICATION_GRAPH["as2_partnership"]
         await self._granular_delete(
-            tenant_id, partnership_id, REPLICATION_GRAPH["as2_partnership"].data_plane_model
+            tenant_id, partnership_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     async def replicate_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
         await self._replicate_with_dependencies(tenant_id, partner_id, "sftp_partner")
 
     async def delete_sftp_partner(self, tenant_id: str, partner_id: str) -> None:
+        spec = REPLICATION_GRAPH["sftp_partner"]
         await self._granular_delete(
-            tenant_id, partner_id, REPLICATION_GRAPH["sftp_partner"].data_plane_model
+            tenant_id, partner_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     async def replicate_webhook(self, tenant_id: str, webhook_id: str) -> None:
         await self._replicate_with_dependencies(tenant_id, webhook_id, "webhook")
 
     async def delete_webhook(self, tenant_id: str, webhook_id: str) -> None:
+        spec = REPLICATION_GRAPH["webhook"]
         await self._granular_delete(
-            tenant_id, webhook_id, REPLICATION_GRAPH["webhook"].data_plane_model
+            tenant_id, webhook_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     async def replicate_inbound_route(self, tenant_id: str, route_id: str) -> None:
         await self._replicate_with_dependencies(tenant_id, route_id, "inbound_route")
 
     async def delete_inbound_route(self, tenant_id: str, route_id: str) -> None:
+        spec = REPLICATION_GRAPH["inbound_route"]
         await self._granular_delete(
-            tenant_id, route_id, REPLICATION_GRAPH["inbound_route"].data_plane_model
+            tenant_id, route_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     async def replicate_outbound_route(self, tenant_id: str, route_id: str) -> None:
         await self._replicate_with_dependencies(tenant_id, route_id, "outbound_route")
 
     async def delete_outbound_route(self, tenant_id: str, route_id: str) -> None:
+        spec = REPLICATION_GRAPH["outbound_route"]
         await self._granular_delete(
-            tenant_id, route_id, REPLICATION_GRAPH["outbound_route"].data_plane_model
+            tenant_id, route_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     async def replicate_outbound_edi_header(self, tenant_id: str, header_id: str) -> None:
         await self._replicate_with_dependencies(tenant_id, header_id, "outbound_edi_header")
 
     async def delete_outbound_edi_header(self, tenant_id: str, header_id: str) -> None:
+        spec = REPLICATION_GRAPH["outbound_edi_header"]
         await self._granular_delete(
-            tenant_id, header_id, REPLICATION_GRAPH["outbound_edi_header"].data_plane_model
+            tenant_id, header_id, spec.data_plane_model, include_shared=spec.include_shared
         )
 
     # -----------------------------------------------------------------------
     # Private Infrastructure Helpers
     # -----------------------------------------------------------------------
+
+    async def _upsert_batch(
+        self,
+        tenant_session: AsyncSession,
+        rows_data: list[dict[str, object]],
+        tenant_model: type[DeclarativeBase],
+        chunk_size: int = 100,
+    ) -> None:
+        """
+        Batches and upserts multiple mapped rows into the tenant shard.
+        Uses multi-row insert and conflict update using stmt.excluded.
+        Chunks large batches to limit statement size.
+        """
+        if not rows_data:
+            return
+
+        for i in range(0, len(rows_data), chunk_size):
+            chunk = rows_data[i : i + chunk_size]
+            stmt = insert(tenant_model).values(chunk)
+            update_cols = {k: getattr(stmt.excluded, k) for k in chunk[0] if k != "id"}
+            stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
+            await tenant_session.execute(stmt)
 
     async def _upsert_entity(
         self,
@@ -416,33 +456,34 @@ class SqlAlchemyReplicationAdapter(ReplicationPort):
         if data.get("tenant_id") is None:
             data["tenant_id"] = tenant_id
 
-        stmt = insert(tenant_model).values(**data)
-        update_cols = {k: v for k, v in data.items() if k != "id"}
-        stmt = stmt.on_conflict_do_update(index_elements=["id"], set_=update_cols)
-
+        await self._upsert_batch(tenant_session, [data], tenant_model)
         logger.debug(
             "replication_entity_upserted",
             tenant_model=tenant_model.__name__,
             entity_id=data.get("id"),
             tenant_id=tenant_id,
         )
-        await tenant_session.execute(stmt)
 
     async def _granular_delete(
         self,
         tenant_id: str,
         entity_id: str,
         tenant_model: type[ReplicatedModel],
+        include_shared: bool = False,
     ) -> None:
         """Deletes a single entity from the tenant shard by ID."""
         async with self._get_tenant_session(tenant_id) as tenant_session:
             try:
-                await tenant_session.execute(
-                    delete(tenant_model).where(
-                        tenant_model.id == entity_id,
-                        tenant_model.tenant_id == tenant_id,
+                stmt = delete(tenant_model).where(tenant_model.id == entity_id)
+                if include_shared:
+                    stmt = stmt.where(
+                        (tenant_model.tenant_id == tenant_id)
+                        | (tenant_model.tenant_id == SHARED_TENANT_ID)
                     )
-                )
+                else:
+                    stmt = stmt.where(tenant_model.tenant_id == tenant_id)
+
+                await tenant_session.execute(stmt)
                 await tenant_session.commit()
                 logger.info(
                     "replication_entity_deleted",

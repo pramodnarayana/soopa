@@ -48,7 +48,7 @@
     "infra:init-edi": "cd apps/edi && make sqs-purge db-init",
     "infra:start-identity": "docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml up -d",
     "infra:stop-identity": "docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml stop",
-    "openas2:start": "docker compose -f tools/openas2/docker-compose.yml up --build -d",
+    "openas2:start": "docker network inspect soopa_mono_default >/dev/null 2>&1 || docker network create soopa_mono_default; docker compose -f tools/openas2/docker-compose.yml up --build -d",
     "openas2:stop": "docker compose -f tools/openas2/docker-compose.yml down",
     "infra:sync-identity": "uv run python infra/local/zitadel/sync.py",
     "infra:sync-topology": "uv run python infra/scripts/sync_topology.py",

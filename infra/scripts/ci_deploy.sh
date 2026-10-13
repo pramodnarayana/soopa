@@ -44,6 +44,9 @@ deploy_stack() {
     if ! pulumi stack select "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH" 2>/dev/null; then
         pulumi stack init "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
     fi
+    if [ -n "$IMAGE_TAG" ]; then
+        pulumi config set image_tag "$IMAGE_TAG" -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH" 2>/dev/null || true
+    fi
     pulumi refresh -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
     pulumi up -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
 }
@@ -81,8 +84,21 @@ deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server"
 # 6. Tools
 deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner"
 
+# Ensure required virtualenv symlinks for micro-stacks
+if [ -d "$WORKSPACE_ROOT/infra/cloud/aws/.venv" ]; then
+    mkdir -p "$WORKSPACE_ROOT/infra/cloud/aws/packages/seedwork"
+    ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/cloud/aws/packages/seedwork/.venv" 2>/dev/null || true
+    ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/.venv" 2>/dev/null || true
+fi
+
 # 7. Frontend Dashboard
 deploy_stack "infra/cloud/aws/apps/dashboard" "Frontend Dashboard"
+if command -v pnpm &> /dev/null; then
+    echo "------------------------------------------------------"
+    echo "📦 Building & Deploying Frontend Dashboard Assets ($ENV)..."
+    echo "------------------------------------------------------"
+    "$WORKSPACE_ROOT/infra/cloud/aws/apps/dashboard/deploy-dashboard.sh" "$ENV"
+fi
 
 # 8. Edge & Routing
 deploy_stack "infra/cloud/aws/apps/routing" "Global Edge Routing"

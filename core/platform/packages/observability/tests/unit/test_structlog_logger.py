@@ -1,12 +1,22 @@
-import logging  # noqa: TID251 - Unit test validating stdlib logging interception
 import sys
 import threading
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
 
 from observability.adapters.outbound import structlog_logger
 from observability.adapters.outbound.structlog_logger import StructlogLogger
+
+
+@dataclass
+class _FakeLogRecord:
+    levelname: str = "ERROR"
+    name: str = "test_uvicorn_error"
+    exc_info: Any = None
+
+    def getMessage(self) -> str:
+        return "an unhandled error occurred"
 
 
 def test_otlp_processor_preserves_each_lazy_logger_name(monkeypatch: Any) -> None:
@@ -47,17 +57,17 @@ def test_intercept_handler_routes_std_logging_to_structlog(monkeypatch: Any) -> 
         "FakeLogger", (), {"error": fake_logger_call, "info": fake_logger_call}
     )()
 
-    monkeypatch.setattr(structlog, "get_logger", lambda _name: fake_structlog_logger)
+    monkeypatch.setattr(structlog, "get_logger", lambda _name, **_kw: fake_structlog_logger)
 
     handler = structlog_logger.InterceptHandler()
-    logger = logging.getLogger("test_uvicorn_error")
-    logger.handlers = [handler]
-    logger.propagate = False
 
     try:
         raise ValueError("synthetic database failure")
     except ValueError:
-        logger.exception("an unhandled error occurred")
+        exc_info = sys.exc_info()
+
+    fake_record: Any = _FakeLogRecord(exc_info=exc_info)
+    handler.emit(fake_record)
 
     assert len(events_captured) == 1
     assert events_captured[0]["event"] == "an unhandled error occurred"

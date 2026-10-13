@@ -93,7 +93,7 @@ class InterceptHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             level = record.levelname.lower()
-            logger = structlog.get_logger(record.name)
+            logger = structlog.get_logger(record.name, logger_name=record.name)
             log_method = getattr(logger, level, logger.info)
             exc_info = record.exc_info
             if exc_info:

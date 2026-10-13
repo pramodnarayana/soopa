@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
       args:
         REGISTRY_URL: ${OPENAS2_REGISTRY_URL:-openas2-openas2}
-        OPENAS2_VERSION: ${OPENAS2_VERSION:-latest}
+        OPENAS2_VERSION: ${OPENAS2_VERSION:-3.3.0}
     container_name: openas2_testing_partner
     extra_hosts:
       - "host.docker.internal:host-gateway"

@@ -149,7 +149,9 @@ async def main() -> None:
                 tenant_orgs = [
                     org
                     for org in all_orgs
-                    if org["id"] != platform_org_id and org.get("name") != IDENTITY_SYSTEM_ORG_NAME
+                    if org.get("id")
+                    and org.get("id") != platform_org_id
+                    and org.get("name") != IDENTITY_SYSTEM_ORG_NAME
                 ]
 
                 if not tenant_orgs:

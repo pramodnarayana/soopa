@@ -1,5 +1,5 @@
 ARG REGISTRY_URL=openas2-openas2
-ARG OPENAS2_VERSION=latest
+ARG OPENAS2_VERSION=3.3.0
 FROM ${REGISTRY_URL}:${OPENAS2_VERSION}
 
 # Copy over the specific configurations for the mock trading partner
