@@ -83,7 +83,7 @@ deploy_stack "infra/cloud/aws/apps/edi/workers" "EDI Workers" "true"
 deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server" "true"
 
 # 6. Tools
-deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner" "true"
+deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner"
 
 # Ensure required virtualenv symlinks for micro-stacks
 if [ -d "$WORKSPACE_ROOT/infra/cloud/aws/.venv" ]; then
