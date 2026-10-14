@@ -3,15 +3,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createRootRoute, Outlet } from '@tanstack/react-router';
 import { AuthProvider } from 'react-oidc-context';
 
+import { config } from '@/lib/config';
+
 const queryClient = new QueryClient();
 
-const authority = (import.meta.env as unknown as Record<string, string>).IDENTITY_API_URL;
-const clientId = (import.meta.env as unknown as Record<string, string>).IDENTITY_UCP_WEB_CLIENT_ID;
-const projectId = (import.meta.env as unknown as Record<string, string>).IDENTITY_UCP_PROJECT_ID;
+const { authority, clientId, projectId } = config.identity;
 
 if (!authority || !clientId || !projectId) {
   throw new Error(
-    'FATAL: Missing required Identity environment variables (IDENTITY_API_URL, IDENTITY_UCP_WEB_CLIENT_ID, IDENTITY_UCP_PROJECT_ID). Check the root .env file.',
+    'FATAL: Missing required Identity environment variables (VITE_IDENTITY_API_URL, VITE_IDENTITY_UCP_WEB_CLIENT_ID, VITE_IDENTITY_UCP_PROJECT_ID). Check the root .env file.',
   );
 }
 

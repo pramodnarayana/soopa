@@ -11,23 +11,26 @@ echo "=== Dynamically Fetching Configuration from Pulumi (The Advanced Enterpris
 ALB_DOMAIN=$(pulumi stack output staging_domain -s "$ENV" -C "$REPO_ROOT/infra/cloud/aws/platform")
 export VITE_API_PROXY_TARGET="https://api.${ALB_DOMAIN}"
 export VITE_UCP_API_URL="https://api.${ALB_DOMAIN}"
+export VITE_IDENTITY_API_URL="https://identity.${ALB_DOMAIN}"
 export IDENTITY_API_URL="https://identity.${ALB_DOMAIN}"
 
 # 2. Fetch Client and Project IDs from Zitadel Config Stack
 # Note: Since client ID is a secret, we use --show-secrets.
 IDENTITY_UCP_WEB_CLIENT_ID=$(pulumi stack output ucp_web_client_id -s "$ENV" -C "$REPO_ROOT/infra/cloud/zitadel" --show-secrets)
+export VITE_IDENTITY_UCP_WEB_CLIENT_ID="$IDENTITY_UCP_WEB_CLIENT_ID"
 export IDENTITY_UCP_WEB_CLIENT_ID
 IDENTITY_UCP_PROJECT_ID=$(pulumi stack output ucp_project_id -s "$ENV" -C "$REPO_ROOT/infra/cloud/zitadel")
+export VITE_IDENTITY_UCP_PROJECT_ID="$IDENTITY_UCP_PROJECT_ID"
 export IDENTITY_UCP_PROJECT_ID
 
 echo "Discovered Frontend Config: "
 echo "- API Target: $VITE_API_PROXY_TARGET"
-echo "- Identity URL: $IDENTITY_API_URL"
-echo "- Project ID: $IDENTITY_UCP_PROJECT_ID"
+echo "- Identity URL: $VITE_IDENTITY_API_URL"
+echo "- Project ID: $VITE_IDENTITY_UCP_PROJECT_ID"
 
 echo "=== Building Dashboard ==="
 cd "$REPO_ROOT"
-pnpm --filter @soopa/dashboard build
+pnpm turbo run build --filter=@soopa/dashboard
 
 echo "=== Fetching Dashboard S3 Bucket from Pulumi ==="
 BUCKET_NAME=$(pulumi stack output dashboard_s3_bucket -s "$ENV" -C "$SCRIPT_DIR")
