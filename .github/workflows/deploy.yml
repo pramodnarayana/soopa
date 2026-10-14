@@ -61,14 +61,12 @@ jobs:
           # 1. Setup AWS Infra Virtualenv
           cd $GITHUB_WORKSPACE/infra/cloud/aws
           uv venv .venv
-          source .venv/bin/activate
-          uv pip install -e . -e packages/seedwork
+          uv pip install --python .venv -e . -e packages/seedwork
 
           # 2. Setup Zitadel Provider Virtualenv
           cd $GITHUB_WORKSPACE/infra/cloud/zitadel
           uv venv .venv
-          source .venv/bin/activate
-          uv pip install -r requirements.txt
+          uv pip install --python .venv -r requirements.txt
 
           # 3. Create Virtualenv Symlinks for micro-stacks
           mkdir -p $GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork
