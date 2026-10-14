@@ -39,18 +39,34 @@ deploy_stack() {
     local STACK_PATH=$1
     local STACK_NAME=$2
     local SUPPORTS_IMAGE_TAG=${3:-false}
+    local TARGET_DIR="$WORKSPACE_ROOT/$STACK_PATH"
     echo "------------------------------------------------------"
     echo "📦 Deploying $STACK_NAME ($ENV)..."
     echo "------------------------------------------------------"
-    if ! pulumi stack select "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH" 2>/dev/null; then
-        pulumi stack init "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
+    if ! pulumi stack select "$ENV" -C "$TARGET_DIR" 2>/dev/null; then
+        pulumi stack init "$ENV" -C "$TARGET_DIR"
     fi
     if [ -n "$IMAGE_TAG" ] && [ "$SUPPORTS_IMAGE_TAG" = "true" ]; then
-        pulumi config set image_tag "$IMAGE_TAG" -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
+        pulumi config set image_tag "$IMAGE_TAG" -s "$ENV" -C "$TARGET_DIR"
     fi
-    pulumi refresh -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
-    pulumi up -y -s "$ENV" -C "$WORKSPACE_ROOT/$STACK_PATH"
+    if [ -f "$TARGET_DIR/.venv/bin/activate" ]; then
+        (
+            source "$TARGET_DIR/.venv/bin/activate"
+            pulumi refresh -y -s "$ENV" -C "$TARGET_DIR"
+            pulumi up -y -s "$ENV" -C "$TARGET_DIR"
+        )
+    else
+        pulumi refresh -y -s "$ENV" -C "$TARGET_DIR"
+        pulumi up -y -s "$ENV" -C "$TARGET_DIR"
+    fi
 }
+
+# Ensure required virtualenv symlinks for micro-stacks
+if [ -d "$WORKSPACE_ROOT/infra/cloud/aws/.venv" ]; then
+    mkdir -p "$WORKSPACE_ROOT/infra/cloud/aws/packages/seedwork"
+    ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/cloud/aws/packages/seedwork/.venv" 2>/dev/null || true
+    ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/.venv" 2>/dev/null || true
+fi
 
 # 1. Core Infrastructure
 deploy_stack "infra/cloud/aws/foundation" "Foundation (VPC & Networking)"
@@ -84,13 +100,6 @@ deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server" "true"
 
 # 6. Tools
 deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner"
-
-# Ensure required virtualenv symlinks for micro-stacks
-if [ -d "$WORKSPACE_ROOT/infra/cloud/aws/.venv" ]; then
-    mkdir -p "$WORKSPACE_ROOT/infra/cloud/aws/packages/seedwork"
-    ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/cloud/aws/packages/seedwork/.venv" 2>/dev/null || true
-    ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/.venv" 2>/dev/null || true
-fi
 
 # 7. Frontend Dashboard
 deploy_stack "infra/cloud/aws/apps/dashboard" "Frontend Dashboard"
