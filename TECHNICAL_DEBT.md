@@ -508,3 +508,17 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: The system currently uses Post-Commit Sync Dispatch for the Outbox pattern. The same API thread that commits the transaction executes `sqs.send_message()` synchronously. While this avoids infrastructure bloat, it introduces blocking latency to the end-user API response, especially when producing multiple events.
 - **Action Item**: Refactor the outbox dispatch mechanism to use **In-Memory Async Dispatch**. Upon transaction commit, the API should push the event to an in-memory queue (e.g., `asyncio.Queue` or a background task) and immediately return `200 OK`. A dedicated background thread within the same process will drain the in-memory queue and publish to SQS. Rely on the existing database Sweeper as the fallback mechanism for container crashes.
+
+## [Identity Architecture] Enterprise IdP Mapping Resiliency & Local Dev Parity (Zitadel vs Postgres)
+
+- **Date Added**: 2026-10-14
+- **Status**: TO DO
+- **Description**:
+  1. The canonical Platform Sentinel Tenant (`ten_000000000000000000000000`) is mapped to the external IdP (Zitadel) organization ID via `identity.tenants.idp_tenant_id`.
+  2. Zitadel generates ephemeral 64-bit integer IDs upon bootstrap (e.g., `394161401339314179`), whereas `.env.example` has historically contained a static dummy ID (`384772010141548547`).
+  3. When running local CI simulation scripts like `scripts/verify_ci.sh`, `.env` is swapped with `.env.example` and `pnpm infra:up` runs `db-seed`, which overwrites `identity.tenants` in PostgreSQL with the dummy ID. Upon script exit, `.env` is restored but the database is not re-seeded, causing authentication failures (HTTP 403 `TenantNotProvisionedError`) when logging into the local UI.
+  4. In a pure enterprise architecture, the system should be resilient against IdP drift and not rely on manual re-seeding after script execution.
+- **Action Item**:
+  1. **Self-Healing Sentinel Mapping / JIT Linking**: In `JwtStrategy` (or `identity` use cases), if a verified token matches `settings.identity.platform_org_id`, automatically link or self-heal the mapping to `ten_000000000000000000000000` dynamically rather than rejecting with 403.
+  2. **Token Custom Claims / IdP Metadata**: When Zitadel (or external IdP) provisions the platform organization, attach metadata (`internal_tenant_id = ten_000000000000000000000000`) and configure Zitadel token enrichment to include this claim directly in JWTs so mapping does not require static database synchronization.
+  3. **Local Tooling Parity**: Ensure `scripts/verify_ci.sh`'s cleanup routine (`_cleanup`) re-runs `pnpm db:seed:ucp` after restoring `.env`, and update `infra/local/zitadel/sync.py` to keep `.env.example` synchronized with local Zitadel runs.
