@@ -287,6 +287,9 @@ class InMemoryRepositoryAdapter:
         if trace_id in self.edi_messages:
             self.edi_messages[trace_id]["status"] = aggregate.status
             self.edi_messages[trace_id]["connection_type"] = aggregate.connection_type
+            self.edi_messages[trace_id]["error_code"] = aggregate.error_code
+            self.edi_messages[trace_id]["status_message"] = aggregate.status_message
+            self.edi_messages[trace_id]["error_details"] = aggregate.error_details
 
     async def save(self, aggregate: EdiMessageDomainModel) -> list:
         trace_id = aggregate.trace_id

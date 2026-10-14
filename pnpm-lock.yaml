@@ -249,6 +249,15 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:../../packages/edi
+      '@soopa/database':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/database
+      '@soopa/identity':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/identity
+      '@soopa/pubsub':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/pubsub
       '@soopa/secret_store':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/secret_store

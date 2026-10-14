@@ -3,7 +3,6 @@ import asyncio
 import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
-from pydantic import ValidationError
 
 from worker.data.main import main
 
@@ -11,23 +10,19 @@ from worker.data.main import main
 async def test_data_main_boot_and_shutdown() -> None:
     """
     Test that the data worker boots successfully, wires all dependencies,
-    connects to SQS/Postgres, and shuts down cleanly on cancellation.
+    connects to SQS/Postgres, and shuts down cleanly via stop_event.
     No monkeypatching is used; this connects to real LocalStack and PostgreSQL.
     """
-    task = asyncio.create_task(main())
+    stop_event = asyncio.Event()
+    task = asyncio.create_task(main(stop_event=stop_event))
 
-    # Let the worker boot up and initialize all SqsConsumerManagers
-    await asyncio.sleep(1.5)
+    # Allow worker initialization to complete
+    await asyncio.sleep(0.5)
 
     assert not task.done(), "Worker task should not exit prematurely"
-    # Cancel the task to trigger the finally block (graceful shutdown)
-    task.cancel()
 
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
-    except ValidationError:
-        # If the environment isn't fully set up for tests, we catch this,
-        # but in CI the env should be valid.
-        raise
+    # Signal graceful shutdown via architectural stop_event contract
+    stop_event.set()
+
+    # Worker should terminate cleanly within timeout
+    await asyncio.wait_for(task, timeout=5.0)

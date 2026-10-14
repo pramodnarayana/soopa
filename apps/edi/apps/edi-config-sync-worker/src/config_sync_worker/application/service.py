@@ -4,11 +4,10 @@ import structlog
 from edi.domain.constants import ProvisioningEventType
 from edi.domain.enums import EdiEventType, WebhookEventType
 from edi.domain.events import ProvisioningEvent
+from edi.domain.replication import PermanentProvisioningError, TransientProvisioningError
+from edi.ports.outbound.replication_port import ReplicationPort
+from edi.ports.outbound.tenant_port import TenantPort
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-
-from config_sync_worker.domain.errors import PermanentProvisioningError, TransientProvisioningError
-from config_sync_worker.ports.outbound.replication_port import ReplicationPort
-from config_sync_worker.ports.outbound.tenant_port import TenantPort
 
 logger = structlog.get_logger(__name__)
 

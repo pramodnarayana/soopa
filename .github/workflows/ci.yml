@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "main", "development" ]
 
+permissions:
+  contents: read
+
 jobs:
   lint-and-typecheck:
     name: Lint & Typecheck
@@ -154,3 +157,21 @@ jobs:
           cp -a coverage_artifacts/coverage-unit/. ./ || true
           cp -a coverage_artifacts/coverage-integration/. ./ || true
           ./scripts/aggregate_coverage.py
+
+  deploy-staging:
+    name: Deploy to AWS (Staging)
+    needs: [build-docker, coverage-gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/development'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: staging
+    secrets: inherit
+
+  deploy-prod:
+    name: Deploy to AWS (Production)
+    needs: [build-docker, coverage-gate]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: prod
+    secrets: inherit

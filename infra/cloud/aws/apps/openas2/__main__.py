@@ -41,7 +41,7 @@ ecs_cluster_arn = platform.require_output("ecs_cluster_arn")
 main_alb_listener_arn = platform.require_output("main_alb_listener_arn")
 staging_domain = platform.require_output("staging_domain")
 namespace_name = platform.require_output("cloud_map_namespace_name")
-obs_endpoint = pulumi.Output.concat("openobserve.", namespace_name, ":443")
+obs_endpoint = obs.require_output("openobserve_endpoint")
 obs_user_arn = obs.require_output("openobserve_user_secret_arn")
 obs_pass_arn = obs.require_output("openobserve_password_secret_arn")
 
@@ -168,9 +168,12 @@ fargate_service = provision_fargate_service(
         "image": "amazon/aws-cli:2.15.11",
         "entryPoint": ["sh", "-c"],
         "command": [
-            f"while true; do "
-            f"aws s3 mv s3://{target_bucket_name} /tmp/staging --recursive || true; "
-            f'for f in /tmp/staging/*; do [ -e "$f" ] && mv "$f" /opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2/ || true; done; '
+            f"mkdir -p /opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2/.staging && while true; do "
+            f"if aws s3 mv s3://{target_bucket_name} /opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2/.staging --recursive; then "
+            f"for f in /opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2/.staging/*; do "
+            f'[ -e "$f" ] && (mv "$f" /opt/openas2/data/outbox/FLOWWOLF_{_env.upper()}_AS2/ || echo "Failed to move $f" >&2); '
+            f"done; "
+            f"fi; "
             f"sleep 5; done",
         ],
         "essential": False,

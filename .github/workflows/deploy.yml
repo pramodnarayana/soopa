@@ -1,158 +1,102 @@
 name: Deploy Infrastructure and Applications
 
 on:
-  push:
-    branches:
-      - main
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target deployment environment (staging or prod)'
+        required: true
+        type: string
+        default: 'staging'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target deployment environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - prod
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
   deploy:
+    name: Deploy to AWS (${{ inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'staging' }}
+    concurrency:
+      group: deploy-${{ inputs.environment || 'staging' }}
+      cancel-in-progress: false
     env:
-      PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
       AWS_REGION: us-east-1
       PULUMI_SKIP_UPDATE_CHECK: 'true'
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      TARGET_ENV: ${{ inputs.environment || 'staging' }}
+      STATE_BUCKET: s3://iac-state-platform-634680389104
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Setup Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
-        with:
-          python-version: '3.11'
-
-      - name: Install uv (Fast Python Package Installer)
-        uses: astral-sh/setup-uv@f94ec6bedd8674c4426838e6b50417d36b6ab231 # v3
+      - name: Setup Environment (Node, Python, pnpm, uv)
+        uses: ./.github/actions/setup-env
 
       - name: Install Pulumi CLI
         uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
 
-      - name: Enterprise Config (cp .env.example .env)
-        run: cp .env.example .env
-
-      - name: Create Python venv and Install Requirements
+      - name: Setup Pulumi Virtual Environments
         run: |
-          cd infra/cloud/aws
-          python -m venv .venv
+          # 1. Setup AWS Infra Virtualenv
+          cd $GITHUB_WORKSPACE/infra/cloud/aws
+          uv venv .venv
           source .venv/bin/activate
-          pip install -r requirements.txt
+          uv pip install -e . -e packages/seedwork
 
-      - name: Deploy Foundation Stack
-        run: |
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/foundation
-          pulumi up -s prod -y
+          # 2. Setup Zitadel Provider Virtualenv
+          cd $GITHUB_WORKSPACE/infra/cloud/zitadel
+          uv venv .venv
+          source .venv/bin/activate
+          uv pip install -r requirements.txt
 
-      - name: Deploy Platform Stack
-        run: |
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/platform
-          pulumi up -s prod -y
+          # 3. Create Virtualenv Symlinks for micro-stacks
+          mkdir -p $GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork
+          ln -sfn $GITHUB_WORKSPACE/infra/cloud/aws/.venv $GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork/.venv
+          ln -sfn $GITHUB_WORKSPACE/infra/cloud/aws/.venv $GITHUB_WORKSPACE/infra/.venv
 
-      - name: Deploy OpenObserve Stack
-        run: |
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/openobserve
-          pulumi up -s prod -y
+      - name: Pulumi S3 Login (Open-Source State)
+        run: pulumi login ${{ env.STATE_BUCKET }}
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
 
-      - name: Sync Third-Party Images (Zitadel)
-        run: |
-          ./infra/cloud/aws/platform/sync-images.sh
-
-      - name: Deploy Zitadel Infrastructure Stack
-        run: |
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/zitadel
-          pulumi up -s prod -y
-
-      - name: Wait for Zitadel API to become healthy
-        run: |
-          echo "Waiting for Zitadel ECS task to spin up and upload the machine key..."
-          ZITADEL_URL=$(pulumi stack output url -s prod -C $GITHUB_WORKSPACE/infra/cloud/aws/zitadel)
-          for i in {1..30}; do
-            if curl -sSf "$ZITADEL_URL/debug/healthz" > /dev/null; then
-              echo "Zitadel is healthy!"
-              exit 0
-            fi
-            echo "Waiting 10s for Zitadel API..."
-            sleep 10
-          done
-          echo "Zitadel did not become healthy in time."
-          exit 1
-
-      - name: Deploy Zitadel Identity Configuration
-        run: |
-          # This configures projects and apps using the Zitadel Pulumi Provider
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          cd $GITHUB_WORKSPACE/infra/cloud/zitadel
-          pulumi up -s prod -y
-
       - name: Build, Tag, and Push Modular Monolith Image
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           IMAGE_TAG: sha-${{ github.sha }}
-          ECR_REPOSITORY: "prod-modular-monolith"
+          ECR_REPOSITORY: ${{ env.TARGET_ENV }}-app-image
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          echo "Pushing Docker image to ECR..."
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Deploy Database Migrator and Initialize
-        run: |
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          echo "Deploying Migrator Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/migrator
-          pulumi up -s prod -y
-
-          echo "Running Database Migrations & Seeding..."
-          $GITHUB_WORKSPACE/infra/scripts/init_databases.sh prod
-
-      - name: Deploy Application Stacks
+      - name: Deploy Infrastructure, Migrations, Application Stacks & Frontend
         env:
           IMAGE_TAG: sha-${{ github.sha }}
         run: |
           source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-
-          echo "Deploying API Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/api
-          pulumi config set image_tag $IMAGE_TAG -s prod
-          pulumi up -s prod -y
-
-          echo "Deploying EDI Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/edi
-          pulumi config set image_tag $IMAGE_TAG -s prod
-          pulumi up -s prod -y
-
-          echo "Deploying UCP Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/ucp
-          pulumi config set image_tag $IMAGE_TAG -s prod
-          pulumi up -s prod -y
-
-          echo "Deploying Identity Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/identity
-          pulumi config set image_tag $IMAGE_TAG -s prod
-          pulumi up -s prod -y
-
-          echo "Deploying Notification Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/notification
-          pulumi config set image_tag $IMAGE_TAG -s prod
-          pulumi up -s prod -y
-
-          echo "Deploying Scheduler Stack..."
-          cd $GITHUB_WORKSPACE/infra/cloud/aws/apps/scheduler
-          pulumi config set image_tag $IMAGE_TAG -s prod
-          pulumi up -s prod -y
+          ./infra/scripts/ci_deploy.sh ${{ env.TARGET_ENV }}

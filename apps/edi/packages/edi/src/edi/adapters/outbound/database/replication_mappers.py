@@ -1,9 +1,17 @@
-from typing import Any
+from collections.abc import Mapping
 
-from seedwork.domain.types import JsonDict
+from database.models import Webhook
+from edi.adapters.outbound.database.models.control_plane import (
+    AS2Partner,
+    AS2Partnership,
+    InboundRoute,
+    OutboundEdiHeader,
+    OutboundRoute,
+    SFTPPartner,
+)
 
 
-def map_as2_partner(entity: Any) -> JsonDict:
+def map_as2_partner(entity: AS2Partner) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,
@@ -23,7 +31,7 @@ def map_as2_partner(entity: Any) -> JsonDict:
     }
 
 
-def map_sftp_partner(entity: Any) -> JsonDict:
+def map_sftp_partner(entity: SFTPPartner) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,
@@ -42,7 +50,7 @@ def map_sftp_partner(entity: Any) -> JsonDict:
     }
 
 
-def map_webhook(entity: Any) -> JsonDict:
+def map_webhook(entity: Webhook) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,
@@ -55,7 +63,7 @@ def map_webhook(entity: Any) -> JsonDict:
     }
 
 
-def map_outbound_edi_header(entity: Any) -> JsonDict:
+def map_outbound_edi_header(entity: OutboundEdiHeader) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,
@@ -75,7 +83,7 @@ def map_outbound_edi_header(entity: Any) -> JsonDict:
     }
 
 
-def map_as2_partnership(entity: Any) -> JsonDict:
+def map_as2_partnership(entity: AS2Partnership) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,
@@ -94,7 +102,7 @@ def map_as2_partnership(entity: Any) -> JsonDict:
     }
 
 
-def map_inbound_route(entity: Any) -> JsonDict:
+def map_inbound_route(entity: InboundRoute) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,
@@ -116,7 +124,7 @@ def map_inbound_route(entity: Any) -> JsonDict:
     }
 
 
-def map_outbound_route(entity: Any) -> JsonDict:
+def map_outbound_route(entity: OutboundRoute) -> Mapping[str, object]:
     return {
         "id": entity.id,
         "tenant_id": entity.tenant_id,

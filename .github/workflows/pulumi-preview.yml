@@ -8,7 +8,6 @@ on:
       - 'infra/cloud/aws/**'
 
 permissions:
-  id-token: write
   contents: read
   pull-requests: write
 
@@ -24,39 +23,42 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Setup Python
-        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
-        with:
-          python-version: '3.13'
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
 
       - name: Install Pulumi CLI
         uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
 
-      - name: Install Python dependencies
+      - name: Setup Infra Virtual Environment
         run: |
           cd infra/cloud/aws
-          python -m venv .venv
+          uv venv .venv
           source .venv/bin/activate
-          pip install -r requirements.txt
+          uv pip install -e . -e packages/seedwork
+
+      - name: Pulumi S3 Login
+        run: pulumi login s3://iac-state-platform-634680389104
+        env:
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
       - name: Pulumi Preview (Platform)
-        uses: pulumi/actions@cd99a7f8865434dd3532b586a26f9ebea596894f # v5
-        with:
-          command: preview
-          stack-name: dev
-          work-dir: infra/cloud/aws/platform
-          comment-on-pr: true
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          source infra/cloud/aws/.venv/bin/activate
+          cd infra/cloud/aws/platform
+          pulumi preview -s staging
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_SKIP_UPDATE_CHECK: 'true'
 
       - name: Check Pulumi Policies (CrossGuard)
         run: |
           source infra/cloud/aws/.venv/bin/activate
           cd infra/cloud/aws/platform
-          pulumi preview --policy-pack ../policy -s dev
+          pulumi preview --policy-pack ../policy -s staging
         env:
-          PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+          PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          PULUMI_SKIP_UPDATE_CHECK: 'true'

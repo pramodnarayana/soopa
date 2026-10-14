@@ -1,10 +1,15 @@
-class ProvisioningError(Exception):
-    """Base exception for provisioning errors."""
+"""
+Provisioning Errors — Re-exported from central edi package.
+"""
 
+from edi.domain.replication import (
+    PermanentProvisioningError,
+    ProvisioningError,
+    TransientProvisioningError,
+)
 
-class PermanentProvisioningError(ProvisioningError):
-    """An error that cannot be resolved by retrying (e.g., bad payload)."""
-
-
-class TransientProvisioningError(ProvisioningError):
-    """An error that might be resolved by retrying (e.g., network failure)."""
+__all__ = [
+    "PermanentProvisioningError",
+    "ProvisioningError",
+    "TransientProvisioningError",
+]

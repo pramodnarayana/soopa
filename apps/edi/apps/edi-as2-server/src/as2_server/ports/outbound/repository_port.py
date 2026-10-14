@@ -42,7 +42,7 @@ class AS2TenantRepositoryPort(Protocol):
     ) -> str | None:
         """
         Resolves the true tenant ID from the global inbound routes using ISA identifiers.
-        Raises ValueError if multiple active routes match (ambiguous resolution).
+        Raises AmbiguousTenantRoutingError if multiple active routes match (ambiguous resolution).
         """
         ...
 
