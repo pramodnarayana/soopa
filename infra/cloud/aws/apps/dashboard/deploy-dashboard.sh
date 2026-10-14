@@ -27,7 +27,7 @@ echo "- Project ID: $IDENTITY_UCP_PROJECT_ID"
 
 echo "=== Building Dashboard ==="
 cd "$REPO_ROOT"
-pnpm --filter @soopa/dashboard build
+pnpm turbo run build --filter=@soopa/dashboard
 
 echo "=== Fetching Dashboard S3 Bucket from Pulumi ==="
 BUCKET_NAME=$(pulumi stack output dashboard_s3_bucket -s "$ENV" -C "$SCRIPT_DIR")

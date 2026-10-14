@@ -12,6 +12,13 @@
     },
     "build": {
       "dependsOn": ["^build"],
+      "env": [
+        "VITE_API_PROXY_TARGET",
+        "VITE_UCP_API_URL",
+        "IDENTITY_API_URL",
+        "IDENTITY_UCP_WEB_CLIENT_ID",
+        "IDENTITY_UCP_PROJECT_ID"
+      ],
       "outputs": ["dist/**"]
     },
     "db:generate": {
