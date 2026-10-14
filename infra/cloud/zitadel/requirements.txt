@@ -1,3 +1,4 @@
+pip
 pulumi>=3.0.0
 pulumiverse-zitadel>=0.2.0
 protobuf>=5.29.6,<6.0.0
