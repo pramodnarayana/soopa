@@ -65,8 +65,7 @@ jobs:
 
           # 2. Setup Zitadel Provider Virtualenv
           cd $GITHUB_WORKSPACE/infra/cloud/zitadel
-          uv venv .venv
-          uv pip install --python .venv -r requirements.txt
+          uv sync
 
           # 3. Create Virtualenv Symlinks for micro-stacks
           mkdir -p $GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork

@@ -1,0 +1,12 @@
+[project]
+name = "infra-zitadel"
+version = "0.1.0"
+description = "Zitadel IAM Infrastructure using Pulumi"
+requires-python = ">=3.11"
+dependencies = [
+    "pulumi>=3.0.0",
+    "pulumiverse-zitadel>=0.2.0",
+    "protobuf>=5.29.6,<6.0.0",
+    "pulumi-aws>=6.0.0",
+    "python-dotenv>=1.0.1",
+]
