@@ -1,5 +1,21 @@
+import importlib.metadata
 import os
+import sys
+import types
 from pathlib import Path
+
+# Enterprise compatibility shim for third-party Pulumi providers relying on legacy pkg_resources
+if "pkg_resources" not in sys.modules:
+
+    class _DistributionShim:
+        def __init__(self, name: str) -> None:
+            self.version = importlib.metadata.version(name)
+
+    class _PkgResourcesShim(types.ModuleType):
+        def require(self, name: str) -> list[_DistributionShim]:
+            return [_DistributionShim(name)]
+
+    sys.modules["pkg_resources"] = _PkgResourcesShim("pkg_resources")
 
 import pulumi
 import pulumiverse_zitadel as zitadel
