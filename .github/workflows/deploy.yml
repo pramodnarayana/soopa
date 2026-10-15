@@ -63,6 +63,17 @@ jobs:
               - 'core/ucp/apps/dashboard/**'
               - 'infra/cloud/aws/apps/dashboard/**'
 
+      - name: Validate AWS Credentials Configuration
+        shell: bash
+        env:
+          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$AWS_KEY" ] || [ -z "$AWS_SECRET" ]; then
+            echo "::error::AWS credentials missing. Please configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY under GitHub Repository Settings -> Secrets and variables -> Actions -> Secrets."
+            exit 1
+          fi
+
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
         with:
