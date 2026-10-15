@@ -117,7 +117,7 @@ pulumi up -s <env> -C infra/cloud/aws/apps/routing
 
 Deployments and infrastructure provisioning are orchestrated entirely via native GitHub Actions pipelines:
 
-1. **Permanent Cloud Infrastructure (`preview-infra.yml` & `provision-infra.yml`)**:
+1. **Cloud Infrastructure (`preview-infra.yml` & `provision-infra.yml`)**:
    - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
    - PRs trigger speculative `preview-infra.yml` (`pulumi preview --diff`) with 0 skipped clutter.
    - Post-merge pushes to `development` / `main` execute `provision-infra.yml` via dedicated Continuous Delivery pipelines (`cd-staging.yml`, `cd-prod.yml`).

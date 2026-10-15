@@ -78,5 +78,9 @@ runs:
           exit 1
         fi
         pulumi login "$STATE_BUCKET"
-        echo "PULUMI_SKIP_UPDATE_CHECK=true" >> $GITHUB_ENV
-        echo "PULUMI_CONFIG_PASSPHRASE=${{ inputs.pulumi-config-passphrase }}" >> $GITHUB_ENV
+        echo "PULUMI_SKIP_UPDATE_CHECK=true" >> "$GITHUB_ENV"
+        {
+          echo "PULUMI_CONFIG_PASSPHRASE<<EOF"
+          printf '%s\n' "$PULUMI_CONFIG_PASSPHRASE"
+          echo "EOF"
+        } >> "$GITHUB_ENV"

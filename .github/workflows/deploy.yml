@@ -8,6 +8,10 @@ on:
         required: true
         type: string
         default: 'staging'
+      commit_sha:
+        description: 'Specific commit SHA to deploy'
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       environment:
@@ -40,13 +44,14 @@ jobs:
       TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
       STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-      IMAGE_TAG: sha-${{ github.sha }}
+      IMAGE_TAG: sha-${{ inputs.commit_sha || github.sha }}
 
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ inputs.commit_sha || github.sha }}
           persist-credentials: false
 
       - name: Detect Changed Paths

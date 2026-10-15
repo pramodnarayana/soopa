@@ -2,9 +2,19 @@ import os
 from dataclasses import dataclass
 
 
+def _get_identity_image() -> str:
+    version = (os.environ.get("IDENTITY_VERSION") or "").strip()
+    if not version:
+        raise RuntimeError(
+            "Required environment variable 'IDENTITY_VERSION' is unset or empty. "
+            "Ensure 'versions.env' is sourced before running Pulumi."
+        )
+    return f"ghcr.io/zitadel/zitadel:{version}"
+
+
 @dataclass(frozen=True)
 class ZitadelConstants:
-    IMAGE: str = f"ghcr.io/zitadel/zitadel:{os.environ.get('IDENTITY_VERSION', 'v4.19.3')}"
+    IMAGE: str = _get_identity_image()
     CONTAINER_NAME: str = "zitadel"
     PORT: int = 8080
     CPU: str = "1024"
