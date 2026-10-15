@@ -20,8 +20,10 @@ logger = structlog.get_logger(__name__)
 _TERRAFORM_TO_ENV_MAPPINGS: dict[str, str] = {
     "IDENTITY_PLATFORM_ORG_ID": "platform_org_id",
     "IDENTITY_UCP_PROJECT_ID": "ucp_project_id",
+    "VITE_IDENTITY_UCP_PROJECT_ID": "ucp_project_id",
     "IDENTITY_EDI_PROJECT_ID": "edi_project_id",
     "IDENTITY_UCP_WEB_CLIENT_ID": "ucp_web_client_id",
+    "VITE_IDENTITY_UCP_WEB_CLIENT_ID": "ucp_web_client_id",
     "IDENTITY_UCP_API_CLIENT_ID": "ucp_api_client_id",
     "IDENTITY_EDI_API_CLIENT_ID": "edi_api_client_id",
     "IDENTITY_MACHINE_KEY": "iam_manager_sa_key",
@@ -148,6 +150,9 @@ def main() -> None:
             )
             continue
         updates[env_var] = value
+
+    updates.setdefault("VITE_UCP_API_URL", "http://localhost:3000")
+    updates.setdefault("VITE_IDENTITY_API_URL", "http://ucp.localhost:8080")
 
     _update_env_file(env_path, updates)
     logger.info("✅ Successfully synchronized Zitadel outputs to .env")
