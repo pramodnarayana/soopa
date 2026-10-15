@@ -140,7 +140,7 @@ jobs:
       - name: Preview OpenAS2
         uses: ./.github/actions/pulumi-stack-preview
         with:
-          stack-dir: infra/cloud/aws/openas2
+          stack-dir: infra/cloud/aws/apps/openas2
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Preview Dashboard Infrastructure (S3 & CloudFront)
@@ -262,7 +262,7 @@ jobs:
         if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
-          stack-dir: infra/cloud/aws/openas2
+          stack-dir: infra/cloud/aws/apps/openas2
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Dashboard Infrastructure (S3 & CloudFront)
