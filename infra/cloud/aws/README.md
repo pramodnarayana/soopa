@@ -77,8 +77,8 @@ Now that the core infrastructure and identity configurations are deployed, we mu
 # IMPORTANT: This must be deployed first so the task definition exists in AWS!
 pulumi up -s <env> -C infra/cloud/aws/apps/migrator
 
-# 2. Run all Database Migrations AND Data Seeding safely via the Migrator Task
-./infra/scripts/init_databases.sh <env>
+# 2. Run Database Migrations safely via the Typed Migrator Task Runner
+uv run python -m infra_seedwork.tasks.run_ecs_migrator --env <env> --action migrate --domain all
 ```
 
 ---
@@ -115,19 +115,19 @@ pulumi up -s <env> -C infra/cloud/aws/apps/routing
 
 ## Enterprise CI/CD Automation
 
-For Enterprise-grade CI/CD pipelines (like GitHub Actions), developers do not manually execute the above steps. Instead, the deployment process is highly automated to prevent human error.
+Deployments and infrastructure provisioning are orchestrated entirely via native GitHub Actions pipelines:
 
-You can use the deployment script which handles state synchronization (`pulumi refresh`) and deploys all infrastructure, identity configurations, and application micro-stacks automatically.
+1. **Permanent Cloud Infrastructure (`provision-infra.yml`)**:
+   - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
+   - PRs trigger `pulumi preview --diff` with step summaries.
+   - Pushes to `development` / `main` require Platform Team approval via GitHub Environment protection gates (`infra-staging`, `infra-production`).
 
-```bash
-# For Staging:
-./infra/scripts/ci_deploy.sh staging
+2. **Application Continuous Delivery (`deploy.yml`)**:
+   - Builds and tags the modular monolith image (`sha-*`).
+   - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_migrator`).
+   - Executes rolling updates for API, UCP workers, EDI workers, and AS2 servers.
+   - Builds and deploys frontend dashboard assets to S3/CloudFront (`deploy-dashboard.sh`).
 
-# For Production:
-./infra/scripts/ci_deploy.sh production
-```
-
-**Why this is Enterprise-Grade:**
-- **Drift Protection**: Automatically runs `pulumi refresh` before `pulumi up`.
-- **Environment Isolation**: Strictly scopes deployments via the injected `$ENV` parameter.
-- **Fail-Fast**: The script executes with `set -e`, meaning any failure in the Pulumi Directed Acyclic Graph (DAG) immediately stops the pipeline to prevent partial deployments.
+3. **Monorepo Governance (`.github/CODEOWNERS`)**:
+   - Infrastructure paths are strictly owned by `@soopa/platform-team`.
+   - Application paths are owned by `@soopa/app-leads` and `@soopa/domain-leads`.

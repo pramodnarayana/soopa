@@ -8,9 +8,9 @@ Provisions stateful data persistence resources:
 
 import pulumi
 import pulumi_aws as aws
-from constants import DatabaseConstants
 from edi_db import provision_edi_db
 from global_db import provision_global_db
+from infra_seedwork import DatabaseConstants
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"

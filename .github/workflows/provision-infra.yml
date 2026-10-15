@@ -1,0 +1,257 @@
+name: Provision Permanent Cloud Infrastructure
+
+on:
+  pull_request:
+    branches:
+      - main
+      - development
+    paths:
+      - 'infra/cloud/aws/**'
+      - '!infra/cloud/aws/apps/api/**'
+      - '!infra/cloud/aws/apps/ucp/**'
+      - '!infra/cloud/aws/apps/edi/**'
+      - '!infra/cloud/aws/apps/migrator/**'
+      - 'infra/cloud/zitadel/**'
+      - 'versions.env'
+      - '.github/workflows/provision-infra.yml'
+      - '.github/actions/pulumi-*/**'
+  push:
+    branches:
+      - main
+      - development
+    paths:
+      - 'infra/cloud/aws/**'
+      - '!infra/cloud/aws/apps/api/**'
+      - '!infra/cloud/aws/apps/ucp/**'
+      - '!infra/cloud/aws/apps/edi/**'
+      - '!infra/cloud/aws/apps/migrator/**'
+      - 'infra/cloud/zitadel/**'
+      - 'versions.env'
+      - '.github/workflows/provision-infra.yml'
+      - '.github/actions/pulumi-*/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: provision-infra-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  determine-context:
+    name: Determine Execution Context
+    runs-on: ubuntu-latest
+    outputs:
+      target_env: ${{ steps.set-env.outputs.target_env }}
+      is_preview: ${{ steps.set-env.outputs.is_preview }}
+    steps:
+      - id: set-env
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "target_env=staging" >> $GITHUB_OUTPUT
+            echo "is_preview=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENV="${{ inputs.environment }}"
+            [ "$ENV" = "prod" ] && ENV="production"
+            echo "target_env=$ENV" >> $GITHUB_OUTPUT
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "target_env=production" >> $GITHUB_OUTPUT
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+          else
+            echo "target_env=staging" >> $GITHUB_OUTPUT
+            echo "is_preview=false" >> $GITHUB_OUTPUT
+          fi
+
+  preview:
+    name: Preview Permanent Infrastructure (Staging)
+    needs: [determine-context]
+    if: needs.determine-context.outputs.is_preview == 'true'
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      TARGET_ENV: ${{ needs.determine-context.outputs.target_env }}
+      STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Environment (Node, Python, pnpm, uv)
+        uses: ./.github/actions/setup-env
+
+      - name: Pulumi Setup
+        uses: ./.github/actions/pulumi-setup
+        with:
+          state-bucket: ${{ env.STATE_BUCKET }}
+          pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      - name: Preview Foundation (VPC & Networking)
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/foundation
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Data (Aurora RDS & KMS)
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/data
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Platform (ECS Cluster & ECR)
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/platform
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview OpenObserve
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/openobserve
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Zitadel Infrastructure
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/zitadel
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Zitadel Configuration
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/zitadel
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview OpenAS2
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/openas2
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Dashboard Infrastructure (S3 & CloudFront)
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/dashboard
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Global Routing
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/routing
+          stack-name: ${{ env.TARGET_ENV }}
+
+  apply:
+    name: Provision Permanent Infrastructure
+    needs: [determine-context]
+    if: needs.determine-context.outputs.is_preview == 'false'
+    runs-on: ubuntu-latest
+    environment: infra-${{ needs.determine-context.outputs.target_env }}
+    env:
+      AWS_REGION: us-east-1
+      TARGET_ENV: ${{ needs.determine-context.outputs.target_env }}
+      STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Environment (Node, Python, pnpm, uv)
+        uses: ./.github/actions/setup-env
+
+      - name: Pulumi Setup
+        uses: ./.github/actions/pulumi-setup
+        with:
+          state-bucket: ${{ env.STATE_BUCKET }}
+          pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+      # Step 1: Core Network & Database Foundation
+      - name: Deploy Foundation (VPC & Networking)
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/foundation
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Data (Aurora RDS & KMS)
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/data
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Platform (ECS Cluster & ECR)
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/platform
+          stack-name: ${{ env.TARGET_ENV }}
+
+      # Step 2: Third-Party Images Sync (OpenObserve, Zitadel)
+      - name: Sync Third-Party Container Images to ECR
+        shell: bash
+        run: |
+          ./infra/cloud/aws/platform/sync-images.sh "${{ env.TARGET_ENV }}"
+
+      # Step 3: Platform Services & Identity
+      - name: Deploy OpenObserve
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/openobserve
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Zitadel Infrastructure
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/zitadel
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Zitadel Configuration
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/zitadel
+          stack-name: ${{ env.TARGET_ENV }}
+
+      # Step 4: Tools, Dashboard Infra & Global Routing
+      - name: Deploy OpenAS2 Partner Server
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/openas2
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Dashboard Infrastructure (S3 & CloudFront)
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/dashboard
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Global Edge Routing
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/routing
+          stack-name: ${{ env.TARGET_ENV }}

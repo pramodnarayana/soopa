@@ -2,7 +2,8 @@ import json
 
 import pulumi
 import pulumi_aws as aws
-from constants import DatabaseConstants, EcsConstants, ZitadelConstants
+from constants import EcsConstants, ZitadelConstants
+from infra_seedwork import DatabaseConstants
 from infra_seedwork.ecs import build_firelens_log_config, build_firelens_sidecar
 from infra_seedwork.network import provision_target_group_and_rule
 
@@ -121,7 +122,7 @@ def provision_ecs(
                     },
                     {
                         "name": "ZITADEL_DATABASE_POSTGRES_DATABASE",
-                        "value": DatabaseConstants.GLOBAL_DB_NAME,
+                        "value": DatabaseConstants.ZITADEL_DB_NAME,
                     },
                     {"name": "ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE", "value": "require"},
                     {"name": "ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE", "value": "require"},

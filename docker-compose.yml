@@ -47,16 +47,7 @@ services:
       <<: *base-env
       DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
       SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
-    command:
-      - sh
-      - -c
-      - >
-        python /app/core/ucp/packages/ucp/scripts/seed.py &&
-        python /app/core/ucp/apps/ucp-jobs-worker/scripts/seed_jobs.py &&
-        python /app/core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py &&
-        python /app/core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py &&
-        python /app/apps/edi/scripts/seed_jobs.py &&
-        python /app/apps/edi/apps/edi-as2-server/scripts/seed.py
+    command: ["python", "-m", "platform_migrator", "seed", "--domain", "all"]
     restart: "no"
 
   # -------------------------------------------------------------------------

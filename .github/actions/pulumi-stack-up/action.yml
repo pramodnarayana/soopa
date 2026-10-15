@@ -1,0 +1,57 @@
+name: "Pulumi Stack Up"
+description: "Selects a Pulumi stack, optionally configures image_tag and refresh, and runs pulumi up -y."
+
+inputs:
+  stack-dir:
+    description: "Directory of the Pulumi stack relative to workspace root (e.g. infra/cloud/aws/foundation)"
+    required: true
+  stack-name:
+    description: "Target environment / stack name (e.g. staging or prod)"
+    required: true
+  image-tag:
+    description: "Optional image tag configuration for application stacks"
+    required: false
+    default: ""
+  refresh:
+    description: "Whether to run pulumi refresh before deploying (true/false)"
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Pulumi Up
+      shell: bash
+      env:
+        STACK_DIR: ${{ inputs.stack-dir }}
+        STACK_NAME: ${{ inputs.stack-name }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        REFRESH: ${{ inputs.refresh }}
+      run: |
+        set -eo pipefail
+        TARGET_DIR="$GITHUB_WORKSPACE/$STACK_DIR"
+        echo "======================================================"
+        echo "📦 Deploying Stack: $STACK_DIR [$STACK_NAME]"
+        echo "======================================================"
+
+        if pulumi stack ls -C "$TARGET_DIR" 2>/dev/null | grep -qE "(^|[[:space:]])${STACK_NAME}([[:space:]]|$)"; then
+          echo "Selecting existing stack: $STACK_NAME"
+          pulumi stack select "$STACK_NAME" -C "$TARGET_DIR"
+        else
+          echo "Stack $STACK_NAME not found in backend. Initializing..."
+          pulumi stack init "$STACK_NAME" -C "$TARGET_DIR"
+        fi
+
+        if [ -n "$IMAGE_TAG" ]; then
+          echo "Setting configuration image_tag=$IMAGE_TAG"
+          pulumi config set image_tag "$IMAGE_TAG" -s "$STACK_NAME" -C "$TARGET_DIR"
+        fi
+
+        if [ "$REFRESH" = "true" ]; then
+          echo "Refreshing stack $STACK_NAME..."
+          pulumi refresh -y -s "$STACK_NAME" -C "$TARGET_DIR"
+        fi
+
+        echo "Applying updates via pulumi up -y..."
+        pulumi up -y -s "$STACK_NAME" -C "$TARGET_DIR"
+        echo "✅ Stack $STACK_DIR applied successfully."
