@@ -4,7 +4,7 @@ import urllib.parse
 import pulumi
 import pulumi_aws as aws
 import pulumi_random as random
-from constants import DatabaseConstants
+from infra_seedwork import DatabaseConstants
 
 
 def provision_edi_db(

@@ -1,0 +1,17 @@
+# ==============================================================================
+# GitHub Code Owners Configuration
+#
+# Enforces enterprise team ownership boundaries across the modular monolith.
+# Root directory separation guarantees that platform substrate and autonomous
+# application domains have clear, unambiguous approval authorities.
+# ==============================================================================
+
+# Core Platform Substrate & CI/CD Pipelines
+infra/**                              @soopa/platform-team
+.github/**                            @soopa/platform-team
+
+# Core Control Plane & Shared Platform Services
+core/**                               @soopa/domain-leads
+
+# Autonomous Application Domains
+apps/edi/**                           @soopa/edi-team

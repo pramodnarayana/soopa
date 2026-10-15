@@ -1,0 +1,86 @@
+name: "Pulumi Setup"
+description: "Installs Pulumi CLI, sets up Python virtual environments and symlinks, and logs into the state backend."
+
+inputs:
+  state-bucket:
+    description: "S3 State Bucket URL (e.g. s3://my-pulumi-state-bucket)"
+    required: true
+  pulumi-config-passphrase:
+    description: "Pulumi Config Passphrase for secret encryption"
+    required: true
+  setup-zitadel:
+    description: "Whether to initialize the Zitadel provider virtual environment"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Pulumi CLI
+      uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
+
+    - name: Load Infrastructure Application Versions
+      shell: bash
+      run: |
+        if [ -f "$GITHUB_WORKSPACE/versions.env" ]; then
+          echo "Loading versions.env into GITHUB_ENV..."
+          grep -v '^#' "$GITHUB_WORKSPACE/versions.env" | grep -v '^[[:space:]]*$' >> "$GITHUB_ENV"
+        fi
+
+    - name: Setup AWS Infra Virtualenv & Symlinks
+      shell: bash
+      run: |
+        echo "Setting up AWS Pulumi virtual environment..."
+        cd "$GITHUB_WORKSPACE/infra/cloud/aws"
+        if [ ! -d ".venv" ]; then
+          uv venv .venv
+          uv pip install --python .venv -e . -e packages/seedwork
+        fi
+
+        # Create symlinks for micro-stacks to share the AWS virtual environment
+        mkdir -p "$GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork"
+        ln -sfn "$GITHUB_WORKSPACE/infra/cloud/aws/.venv" "$GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork/.venv"
+        ln -sfn "$GITHUB_WORKSPACE/infra/cloud/aws/.venv" "$GITHUB_WORKSPACE/infra/.venv"
+
+    - name: Setup Zitadel Provider Virtualenv
+      if: inputs.setup-zitadel == 'true'
+      shell: bash
+      run: |
+        if [ -d "$GITHUB_WORKSPACE/infra/cloud/zitadel" ]; then
+          echo "Setting up Zitadel Pulumi virtual environment..."
+          cd "$GITHUB_WORKSPACE/infra/cloud/zitadel"
+          if [ ! -d ".venv" ]; then
+            uv sync
+          fi
+        fi
+
+    - name: Pulumi Login (OSS S3 Backend)
+      shell: bash
+      env:
+        STATE_BUCKET: ${{ inputs.state-bucket }}
+        PULUMI_CONFIG_PASSPHRASE: ${{ inputs.pulumi-config-passphrase }}
+      run: |
+        # ==============================================================================
+        # PULUMI BACKEND AUTHENTICATION
+        #
+        # Current: Pulumi OSS using S3 state bucket.
+        # Future Migration to Pulumi Cloud:
+        #   Replace this step with:
+        #     pulumi login
+        #   with env PULUMI_ACCESS_TOKEN (passed via inputs)
+        # ==============================================================================
+        if [ -z "$STATE_BUCKET" ]; then
+          echo "::error::Input 'state-bucket' is required but empty. Please configure 'PULUMI_STATE_BUCKET' under GitHub Repository Settings -> Secrets and variables -> Actions -> Variables."
+          exit 1
+        fi
+        if [ -z "$PULUMI_CONFIG_PASSPHRASE" ]; then
+          echo "::error::Input 'pulumi-config-passphrase' is required but empty. Please configure 'PULUMI_CONFIG_PASSPHRASE' under GitHub Repository Settings -> Secrets and variables -> Actions -> Secrets."
+          exit 1
+        fi
+        pulumi login "$STATE_BUCKET"
+        echo "PULUMI_SKIP_UPDATE_CHECK=true" >> "$GITHUB_ENV"
+        {
+          echo "PULUMI_CONFIG_PASSPHRASE<<EOF"
+          printf '%s\n' "$PULUMI_CONFIG_PASSPHRASE"
+          echo "EOF"
+        } >> "$GITHUB_ENV"

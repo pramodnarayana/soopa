@@ -2,7 +2,8 @@ import json
 
 import pulumi
 import pulumi_aws as aws
-from constants import DatabaseConstants, EcsConstants, ZitadelConstants
+from constants import EcsConstants, ZitadelConstants
+from infra_seedwork import DatabaseConstants
 from infra_seedwork.ecs import build_firelens_log_config, build_firelens_sidecar
 from infra_seedwork.network import provision_target_group_and_rule
 

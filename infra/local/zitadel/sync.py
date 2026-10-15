@@ -20,8 +20,10 @@ logger = structlog.get_logger(__name__)
 _TERRAFORM_TO_ENV_MAPPINGS: dict[str, str] = {
     "IDENTITY_PLATFORM_ORG_ID": "platform_org_id",
     "IDENTITY_UCP_PROJECT_ID": "ucp_project_id",
+    "VITE_IDENTITY_UCP_PROJECT_ID": "ucp_project_id",
     "IDENTITY_EDI_PROJECT_ID": "edi_project_id",
     "IDENTITY_UCP_WEB_CLIENT_ID": "ucp_web_client_id",
+    "VITE_IDENTITY_UCP_WEB_CLIENT_ID": "ucp_web_client_id",
     "IDENTITY_UCP_API_CLIENT_ID": "ucp_api_client_id",
     "IDENTITY_EDI_API_CLIENT_ID": "edi_api_client_id",
     "IDENTITY_MACHINE_KEY": "iam_manager_sa_key",
@@ -149,6 +151,19 @@ def main() -> None:
             continue
         updates[env_var] = value
 
+    # Set API URL defaults only when absent from the existing .env file
+    existing_content = env_path.read_text(encoding="utf-8")
+    existing_keys = {
+        line.split("=", 1)[0].strip()
+        for line in existing_content.splitlines()
+        if "=" in line and not line.strip().startswith("#")
+    }
+
+    if "VITE_UCP_API_URL" not in existing_keys:
+        updates["VITE_UCP_API_URL"] = "http://localhost:3000"
+    if "VITE_IDENTITY_API_URL" not in existing_keys:
+        updates["VITE_IDENTITY_API_URL"] = "http://ucp.localhost:8080"
+
     _update_env_file(env_path, updates)
     logger.info("✅ Successfully synchronized Zitadel outputs to .env")
 
@@ -160,5 +175,5 @@ if __name__ == "__main__":
         logger.exception("File I/O error")
         sys.exit(1)
     except KeyboardInterrupt:
-        logger.exception("\nSync cancelled.")
+        logger.warning("sync_cancelled_by_user")
         sys.exit(0)

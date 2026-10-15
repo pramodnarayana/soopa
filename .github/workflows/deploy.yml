@@ -1,4 +1,4 @@
-name: Deploy Infrastructure and Applications
+name: Application Continuous Delivery
 
 on:
   workflow_call:
@@ -8,6 +8,10 @@ on:
         required: true
         type: string
         default: 'staging'
+      commit_sha:
+        description: 'Specific commit SHA to deploy'
+        required: false
+        type: string
   workflow_dispatch:
     inputs:
       environment:
@@ -21,79 +25,161 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+
 
 jobs:
   deploy:
-    name: Deploy to AWS (${{ inputs.environment || 'staging' }})
+    name: Deploy Applications to AWS (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'staging' }}
+    permissions:
+      contents: read
+      id-token: write
+    environment: ${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
     concurrency:
-      group: deploy-${{ inputs.environment || 'staging' }}
+      group: deploy-${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
       cancel-in-progress: false
     env:
       AWS_REGION: us-east-1
-      PULUMI_SKIP_UPDATE_CHECK: 'true'
+      TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
+      STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
-      TARGET_ENV: ${{ inputs.environment || 'staging' }}
-      STATE_BUCKET: s3://iac-state-platform-634680389104
+      IMAGE_TAG: sha-${{ inputs.commit_sha || github.sha }}
+
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          ref: ${{ inputs.commit_sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
 
-      - name: Configure AWS Credentials
+      - name: Detect Changed Paths
+        id: filter
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        with:
+          base: ${{ inputs.commit_sha && format('{0}^', inputs.commit_sha) || '' }}
+          ref: ${{ inputs.commit_sha || '' }}
+          filters: |
+            edi:
+              - 'apps/edi/**'
+              - 'infra/cloud/aws/apps/edi/**'
+              - 'core/platform/apps/platform-migrator/src/platform_migrator/runners/edi_runner.py'
+            ucp:
+              - 'core/ucp/**'
+              - 'infra/cloud/aws/apps/ucp/**'
+            api:
+              - 'core/platform/**'
+              - 'core/packages/**'
+              - 'infra/cloud/aws/apps/api/**'
+              - 'infra/cloud/aws/apps/migrator/**'
+            dashboard:
+              - 'core/ucp/apps/dashboard/**'
+              - 'infra/cloud/aws/apps/dashboard/**'
+            shared:
+              - 'Dockerfile'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'versions.env'
+              - 'core/platform/packages/**'
+              - 'infra/cloud/aws/packages/seedwork/**'
+
+      - name: Configure AWS Credentials (OIDC Federation)
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN || 'arn:aws:iam::634680389104:role/flowwolf-github-deployer-role' }}
+          role-session-name: github-actions-deploy-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
+
 
       - name: Setup Environment (Node, Python, pnpm, uv)
         uses: ./.github/actions/setup-env
 
-      - name: Install Pulumi CLI
-        uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
-
-      - name: Setup Pulumi Virtual Environments
-        run: |
-          # 1. Setup AWS Infra Virtualenv
-          cd $GITHUB_WORKSPACE/infra/cloud/aws
-          uv venv .venv
-          uv pip install --python .venv -e . -e packages/seedwork
-
-          # 2. Setup Zitadel Provider Virtualenv
-          cd $GITHUB_WORKSPACE/infra/cloud/zitadel
-          uv sync
-
-          # 3. Create Virtualenv Symlinks for micro-stacks
-          mkdir -p $GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork
-          ln -sfn $GITHUB_WORKSPACE/infra/cloud/aws/.venv $GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork/.venv
-          ln -sfn $GITHUB_WORKSPACE/infra/cloud/aws/.venv $GITHUB_WORKSPACE/infra/.venv
-
-      - name: Pulumi S3 Login (Open-Source State)
-        run: pulumi login ${{ env.STATE_BUCKET }}
+      - name: Pulumi Setup
+        uses: ./.github/actions/pulumi-setup
+        with:
+          state-bucket: ${{ env.STATE_BUCKET }}
+          pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          setup-zitadel: "true"
 
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.0.1
 
-      - name: Build, Tag, and Push Modular Monolith Image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          IMAGE_TAG: sha-${{ github.sha }}
-          ECR_REPOSITORY: ${{ env.TARGET_ENV }}-app-image
-        run: |
-          echo "Building Docker image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          echo "Pushing Docker image to ECR..."
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3.8.0
 
-      - name: Deploy Infrastructure, Migrations, Application Stacks & Frontend
-        env:
-          IMAGE_TAG: sha-${{ github.sha }}
+      - name: Build and Push Modular Monolith Image to ECR
+        uses: docker/build-push-action@b32b51a8eda65d6793cd0494a773d4f6bcef32dc # v6.11.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.TARGET_ENV }}-app-image:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.TARGET_ENV }}-app-image:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Step 1: Database Migrator Stack & Domain-Scoped Migrations
+      - name: Deploy Database Migrator Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/migrator
+          stack-name: ${{ env.TARGET_ENV }}
+          image-tag: ${{ env.IMAGE_TAG }}
+
+      - name: Execute Platform Database Migrations (global_db)
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.ucp == 'true' || steps.filter.outputs.shared == 'true'
+        shell: bash
         run: |
-          source $GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin/activate
-          ./infra/scripts/ci_deploy.sh ${{ env.TARGET_ENV }}
+          uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain platform
+
+      - name: Execute EDI Shard Database Migrations (edi_shard)
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
+        shell: bash
+        run: |
+          uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain edi
+
+      # Step 2: Main HTTP API Service
+      - name: Deploy Unified API Stack
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.shared == 'true'
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/api
+          stack-name: ${{ env.TARGET_ENV }}
+          image-tag: ${{ env.IMAGE_TAG }}
+
+      # Step 3: Background Worker Containers (Selective Domain Deployment)
+      - name: Deploy UCP Workers Stack
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.ucp == 'true' || steps.filter.outputs.shared == 'true'
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/ucp/workers
+          stack-name: ${{ env.TARGET_ENV }}
+          image-tag: ${{ env.IMAGE_TAG }}
+
+      - name: Deploy EDI Workers Stack
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/workers
+          stack-name: ${{ env.TARGET_ENV }}
+          image-tag: ${{ env.IMAGE_TAG }}
+
+      # Step 4: EDI AS2 Partner Server
+      - name: Deploy EDI AS2 Server Stack
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/as2
+          stack-name: ${{ env.TARGET_ENV }}
+          image-tag: ${{ env.IMAGE_TAG }}
+
+      # Step 5: Frontend Dashboard Assets (Vite Build & S3 Upload)
+      - name: Build & Deploy Frontend Dashboard Assets
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.dashboard == 'true'
+        shell: bash
+        run: |
+          ./infra/cloud/aws/apps/dashboard/deploy-dashboard.sh "${{ env.TARGET_ENV }}"

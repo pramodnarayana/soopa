@@ -52,6 +52,7 @@ members = [
     "core/platform/apps/notification-jobs-worker",
     "core/platform/apps/unified-api",
     "core/platform/apps/unified-worker",
+    "core/platform/apps/platform-migrator",
     "apps/edi/apps/edi-secrets-sidecar",
     "infra/cloud/aws",
 ]

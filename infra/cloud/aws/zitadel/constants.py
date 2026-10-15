@@ -1,22 +1,20 @@
+import os
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
-class DatabaseConstants:
-    ENGINE: str = "postgres"
-    ENGINE_VERSION: str = "15.19"
-    GLOBAL_DB_NAME: str = "global_db"
-    MASTER_USERNAME: str = "postgres"
-    DEFAULT_INSTANCE_CLASS: str = "db.t4g.micro"
-    DEFAULT_ALLOCATED_STORAGE_GB: int = 20
-
-
-import os
+def _get_identity_image() -> str:
+    version = (os.environ.get("IDENTITY_VERSION") or "").strip()
+    if not version:
+        raise RuntimeError(
+            "Required environment variable 'IDENTITY_VERSION' is unset or empty. "
+            "Ensure 'versions.env' is sourced before running Pulumi."
+        )
+    return f"ghcr.io/zitadel/zitadel:{version}"
 
 
 @dataclass(frozen=True)
 class ZitadelConstants:
-    IMAGE: str = f"ghcr.io/zitadel/zitadel:{os.environ['IDENTITY_VERSION']}"
+    IMAGE: str = _get_identity_image()
     CONTAINER_NAME: str = "zitadel"
     PORT: int = 8080
     CPU: str = "1024"

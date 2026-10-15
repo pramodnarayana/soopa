@@ -1,0 +1,55 @@
+name: "Pulumi Stack Preview"
+description: "Selects a Pulumi stack and runs preview --diff, printing details to stdout and step summary."
+
+inputs:
+  stack-dir:
+    description: "Directory of the Pulumi stack relative to workspace root (e.g. infra/cloud/aws/platform)"
+    required: true
+  stack-name:
+    description: "Target environment / stack name (e.g. staging or prod)"
+    required: true
+  image-tag:
+    description: "Optional image tag configuration for application stacks"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Pulumi Preview
+      shell: bash
+      env:
+        STACK_DIR: ${{ inputs.stack-dir }}
+        STACK_NAME: ${{ inputs.stack-name }}
+        IMAGE_TAG: ${{ inputs.image-tag }}
+      run: |
+        set -eo pipefail
+        TARGET_DIR="$GITHUB_WORKSPACE/$STACK_DIR"
+        echo "======================================================"
+        echo "🔍 Previewing Stack: $STACK_DIR [$STACK_NAME]"
+        echo "======================================================"
+
+        if pulumi stack ls -C "$TARGET_DIR" 2>/dev/null | grep -qE "(^|[[:space:]])${STACK_NAME}\\*?([[:space:]]|$)"; then
+          echo "Selecting existing stack: $STACK_NAME"
+          pulumi stack select "$STACK_NAME" -C "$TARGET_DIR"
+        else
+          echo "Stack $STACK_NAME not found in backend. Initializing..."
+          pulumi stack init "$STACK_NAME" -C "$TARGET_DIR"
+        fi
+
+        if [ -n "$IMAGE_TAG" ]; then
+          echo "Setting configuration image_tag=$IMAGE_TAG"
+          pulumi config set image_tag "$IMAGE_TAG" -s "$STACK_NAME" -C "$TARGET_DIR"
+        fi
+
+        echo "Running pulumi preview --diff..."
+        PREVIEW_OUT=$(mktemp)
+        pulumi preview --diff -s "$STACK_NAME" -C "$TARGET_DIR" 2>&1 | tee "$PREVIEW_OUT"
+
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+          echo "### 🔍 Pulumi Preview: \`$STACK_DIR\` ($STACK_NAME)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -n 100 "$PREVIEW_OUT" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        fi
+        rm -f "$PREVIEW_OUT"
