@@ -151,8 +151,18 @@ def main() -> None:
             continue
         updates[env_var] = value
 
-    updates.setdefault("VITE_UCP_API_URL", "http://localhost:3000")
-    updates.setdefault("VITE_IDENTITY_API_URL", "http://ucp.localhost:8080")
+    # Set API URL defaults only when absent from the existing .env file
+    existing_content = env_path.read_text(encoding="utf-8")
+    existing_keys = {
+        line.split("=", 1)[0].strip()
+        for line in existing_content.splitlines()
+        if "=" in line and not line.strip().startswith("#")
+    }
+
+    if "VITE_UCP_API_URL" not in existing_keys:
+        updates["VITE_UCP_API_URL"] = "http://localhost:3000"
+    if "VITE_IDENTITY_API_URL" not in existing_keys:
+        updates["VITE_IDENTITY_API_URL"] = "http://ucp.localhost:8080"
 
     _update_env_file(env_path, updates)
     logger.info("✅ Successfully synchronized Zitadel outputs to .env")

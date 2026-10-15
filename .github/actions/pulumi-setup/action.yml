@@ -19,6 +19,14 @@ runs:
     - name: Install Pulumi CLI
       uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
 
+    - name: Load Infrastructure Application Versions
+      shell: bash
+      run: |
+        if [ -f "$GITHUB_WORKSPACE/versions.env" ]; then
+          echo "Loading versions.env into GITHUB_ENV..."
+          grep -v '^#' "$GITHUB_WORKSPACE/versions.env" | grep -v '^[[:space:]]*$' >> "$GITHUB_ENV"
+        fi
+
     - name: Setup AWS Infra Virtualenv & Symlinks
       shell: bash
       run: |

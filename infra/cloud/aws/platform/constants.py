@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ZitadelConstants:
-    IMAGE: str = f"ghcr.io/zitadel/zitadel:{os.environ['IDENTITY_VERSION']}"
+    IMAGE: str = f"ghcr.io/zitadel/zitadel:{os.environ.get('IDENTITY_VERSION', 'v4.19.3')}"
     CONTAINER_NAME: str = "zitadel"
     PORT: int = 8080
     CPU: str = "1024"
