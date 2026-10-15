@@ -59,7 +59,7 @@ runs:
         # Future Migration to Pulumi Cloud:
         #   Replace this step with:
         #     pulumi login
-        #   with env PULUMI_ACCESS_TOKEN: ${{ secrets.PULUMI_ACCESS_TOKEN }}
+        #   with env PULUMI_ACCESS_TOKEN (passed via inputs)
         # ==============================================================================
         if [ -z "$STATE_BUCKET" ]; then
           echo "::error::Input 'state-bucket' is required but empty. Please configure 'PULUMI_STATE_BUCKET' under GitHub Repository Settings -> Secrets and variables -> Actions -> Variables."
