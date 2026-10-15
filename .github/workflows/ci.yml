@@ -10,11 +10,11 @@ permissions:
   contents: read
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & Typecheck
+  validate:
+    name: Validate (Lint, Typecheck & Build)
     runs-on: ubuntu-latest
     concurrency:
-      group: ${{ github.workflow }}-lint-${{ github.ref }}
+      group: ${{ github.workflow }}-validate-${{ github.ref }}
       cancel-in-progress: true
     permissions:
       contents: read
@@ -34,6 +34,9 @@ jobs:
 
       - name: Lint (Node)
         run: pnpm turbo lint
+
+      - name: Build All Workspaces (Node & Dashboard Validation)
+        run: pnpm turbo build
 
   test-unit:
     name: Unit Tests
@@ -66,7 +69,7 @@ jobs:
 
   test-integration:
     name: Integration Tests
-    needs: [lint-and-typecheck, test-unit]
+    needs: [validate, test-unit]
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-test-integration-${{ github.ref }}
@@ -105,7 +108,7 @@ jobs:
 
   build-docker:
     name: Build Modular Monolith
-    needs: [lint-and-typecheck, test-unit]
+    needs: [validate, test-unit]
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-build-docker-${{ github.ref }}

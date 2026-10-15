@@ -3,35 +3,42 @@
  *
  * This is the single, canonical place where env vars are read.
  * All modules must import from here — never access import.meta.env directly.
+ *
+ * All required variables are validated at module evaluation time. A missing
+ * variable throws immediately rather than silently producing broken API calls.
  */
 
-const apiOrigin = (import.meta.env.VITE_UCP_API_URL as string | undefined)
-  ?.trim()
-  .replace(/\/+$/, '');
+const rawApiOrigin = import.meta.env.VITE_UCP_API_URL?.trim().replace(/\/+$/, '');
 
 const identityApiUrl = (
-  (import.meta.env.VITE_IDENTITY_API_URL as string | undefined) ??
-  ((import.meta.env as unknown as Record<string, string>).IDENTITY_API_URL as string | undefined)
+  import.meta.env.VITE_IDENTITY_API_URL ??
+  // @deprecated fallback — IDENTITY_API_URL is never exposed by Vite at runtime.
+  import.meta.env.IDENTITY_API_URL
 )
   ?.trim()
   .replace(/\/+$/, '');
 
 const identityClientId = (
-  (import.meta.env.VITE_IDENTITY_UCP_WEB_CLIENT_ID as string | undefined) ??
-  ((import.meta.env as unknown as Record<string, string>).IDENTITY_UCP_WEB_CLIENT_ID as
-    | string
-    | undefined)
+  import.meta.env.VITE_IDENTITY_UCP_WEB_CLIENT_ID ??
+  // @deprecated fallback — IDENTITY_UCP_WEB_CLIENT_ID is never exposed by Vite at runtime.
+  import.meta.env.IDENTITY_UCP_WEB_CLIENT_ID
 )?.trim();
 
 const identityProjectId = (
-  (import.meta.env.VITE_IDENTITY_UCP_PROJECT_ID as string | undefined) ??
-  ((import.meta.env as unknown as Record<string, string>).IDENTITY_UCP_PROJECT_ID as
-    | string
-    | undefined)
+  import.meta.env.VITE_IDENTITY_UCP_PROJECT_ID ??
+  // @deprecated fallback — IDENTITY_UCP_PROJECT_ID is never exposed by Vite at runtime.
+  import.meta.env.IDENTITY_UCP_PROJECT_ID
 )?.trim();
 
+// Fail fast: missing required variables must throw at startup, not produce silent API failures.
+if (!rawApiOrigin) {
+  throw new Error(
+    'FATAL: Missing required environment variable VITE_UCP_API_URL. Check the root .env file.',
+  );
+}
+
 export const config = {
-  apiOrigin: apiOrigin ?? '',
+  apiOrigin: rawApiOrigin,
   identity: {
     authority: identityApiUrl ?? '',
     clientId: identityClientId ?? '',

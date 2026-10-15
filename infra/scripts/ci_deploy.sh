@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # ==============================================================================
 # CI/CD Deployment Script
@@ -29,9 +29,10 @@ if [ -z "$PULUMI_CONFIG_PASSPHRASE" ]; then
 fi
 
 ENV=${1:-staging}
+SCOPE=${2:-${DEPLOY_SCOPE:-app}}
 
 echo "======================================================"
-echo "🚀 INITIATING ENTERPRISE CLOUD DEPLOYMENT FOR ENV: $ENV"
+echo "🚀 INITIATING ENTERPRISE CLOUD DEPLOYMENT [$ENV] (Scope: $SCOPE)"
 echo "======================================================"
 
 # Helper function to deploy a stack
@@ -49,14 +50,19 @@ deploy_stack() {
     if [ -n "$IMAGE_TAG" ] && [ "$SUPPORTS_IMAGE_TAG" = "true" ]; then
         pulumi config set image_tag "$IMAGE_TAG" -s "$ENV" -C "$TARGET_DIR"
     fi
+    local RUN_REFRESH=${PULUMI_REFRESH:-false}
     if [ -f "$TARGET_DIR/.venv/bin/activate" ]; then
         (
             source "$TARGET_DIR/.venv/bin/activate"
-            pulumi refresh -y -s "$ENV" -C "$TARGET_DIR"
+            if [ "$RUN_REFRESH" = "true" ]; then
+                pulumi refresh -y -s "$ENV" -C "$TARGET_DIR"
+            fi
             pulumi up -y -s "$ENV" -C "$TARGET_DIR"
         )
     else
-        pulumi refresh -y -s "$ENV" -C "$TARGET_DIR"
+        if [ "$RUN_REFRESH" = "true" ]; then
+            pulumi refresh -y -s "$ENV" -C "$TARGET_DIR"
+        fi
         pulumi up -y -s "$ENV" -C "$TARGET_DIR"
     fi
 }
@@ -68,52 +74,80 @@ if [ -d "$WORKSPACE_ROOT/infra/cloud/aws/.venv" ]; then
     ln -sfn "$WORKSPACE_ROOT/infra/cloud/aws/.venv" "$WORKSPACE_ROOT/infra/.venv" 2>/dev/null || true
 fi
 
-# 1. Core Infrastructure
-deploy_stack "infra/cloud/aws/foundation" "Foundation (VPC & Networking)"
-deploy_stack "infra/cloud/aws/data" "Data (RDS & Secrets)"
-deploy_stack "infra/cloud/aws/platform" "Platform (ECS & ECR)"
-"$WORKSPACE_ROOT/infra/cloud/aws/platform/sync-images.sh" "$ENV"
-deploy_stack "infra/cloud/aws/openobserve" "OpenObserve"
+# ==============================================================================
+# PHASE 1: PERMANENT INFRASTRUCTURE (Executed only on full/infra scope)
+# ==============================================================================
+# Valid SCOPE values: "app" (fast application CD) | "full" (permanent infra + app).
+# Any other value is a hard error — no undocumented aliases are permitted.
+if [ "$SCOPE" != "app" ] && [ "$SCOPE" != "full" ]; then
+    echo "Error: Invalid DEPLOY_SCOPE '${SCOPE}'. Valid values are: app, full"
+    exit 1
+fi
 
-# 2. Core Identity Infrastructure
-deploy_stack "infra/cloud/aws/zitadel" "Zitadel Infrastructure"
+if [ "$SCOPE" = "full" ]; then
+    echo "======================================================"
+    echo "🏗️ PROVISIONING PERMANENT CLOUD INFRASTRUCTURE"
+    echo "======================================================"
 
-# 3. Identity Configuration (Pulumi Zitadel Provider)
-deploy_stack "infra/cloud/zitadel" "Zitadel Configuration"
+    # 1. Core Infrastructure
+    deploy_stack "infra/cloud/aws/foundation" "Foundation (VPC & Networking)"
+    deploy_stack "infra/cloud/aws/data" "Data (RDS & Secrets)"
+    deploy_stack "infra/cloud/aws/platform" "Platform (ECS & ECR)"
+    "$WORKSPACE_ROOT/infra/cloud/aws/platform/sync-images.sh" "$ENV"
+    deploy_stack "infra/cloud/aws/openobserve" "OpenObserve"
 
-# 4. Database Migrator Task Definition & Execution
+    # 2. Core Identity Infrastructure
+    deploy_stack "infra/cloud/aws/zitadel" "Zitadel Infrastructure"
+
+    # 3. Identity Configuration (Pulumi Zitadel Provider)
+    deploy_stack "infra/cloud/zitadel" "Zitadel Configuration"
+
+    # 4. Tools
+    deploy_stack "infra/cloud/aws/openas2" "OpenAS2 Partner"
+
+    # 5. Frontend Dashboard S3/CloudFront Infrastructure
+    deploy_stack "infra/cloud/aws/apps/dashboard" "Frontend Dashboard Infra (S3/CloudFront)"
+
+    # 6. Global Edge Routing
+    deploy_stack "infra/cloud/aws/apps/routing" "Global Edge Routing"
+fi
+
+# ==============================================================================
+# PHASE 2: APPLICATION CONTINUOUS DELIVERY (Executed on every deployment)
+# ==============================================================================
+echo "======================================================"
+echo "🚀 EXECUTING APPLICATION DEPLOYMENT & MIGRATIONS"
+echo "======================================================"
+
+# 1. Database Migrator Task Definition & Execution
 deploy_stack "infra/cloud/aws/apps/migrator" "Database Migrator" "true"
 echo "------------------------------------------------------"
 echo "📦 Running Database Migrations & Seeding ($ENV)..."
 echo "------------------------------------------------------"
 "$WORKSPACE_ROOT/infra/scripts/init_databases.sh" "$ENV"
 
-# 5. Main API
+# 2. Main API Service
 deploy_stack "infra/cloud/aws/apps/api" "Unified API" "true"
 
-# 4. Background Workers (UCP & EDI)
+# 3. Background Workers (UCP & EDI)
 deploy_stack "infra/cloud/aws/apps/ucp/workers" "UCP Workers" "true"
 deploy_stack "infra/cloud/aws/apps/edi/workers" "EDI Workers" "true"
 
-# 5. EDI Transports & CDC
+# 4. EDI Transports & CDC
 deploy_stack "infra/cloud/aws/apps/edi/as2" "EDI AS2 Server" "true"
 
-# 6. Tools
-deploy_stack "infra/cloud/aws/apps/openas2" "OpenAS2 Partner"
-
-# 7. Frontend Dashboard
-deploy_stack "infra/cloud/aws/apps/dashboard" "Frontend Dashboard"
-if command -v pnpm &> /dev/null; then
-    echo "------------------------------------------------------"
-    echo "📦 Building & Deploying Frontend Dashboard Assets ($ENV)..."
-    echo "------------------------------------------------------"
-    "$WORKSPACE_ROOT/infra/cloud/aws/apps/dashboard/deploy-dashboard.sh" "$ENV"
-else
-    echo "⚠️ WARNING: 'pnpm' not found in PATH; skipping Frontend Dashboard asset deployment." >&2
+# 5. Frontend Dashboard Assets (Build & S3 Sync)
+# In CI, pnpm is always guaranteed by the setup-env action. Missing pnpm is a hard failure.
+# When running locally, ensure pnpm is installed before executing this script.
+if ! command -v pnpm &> /dev/null; then
+    echo "Error: 'pnpm' not found in PATH. Cannot deploy Frontend Dashboard assets." >&2
+    echo "In CI: verify the setup-env action ran. Locally: run 'corepack enable && corepack prepare'." >&2
+    exit 1
 fi
-
-# 8. Edge & Routing
-deploy_stack "infra/cloud/aws/apps/routing" "Global Edge Routing"
+echo "------------------------------------------------------"
+echo "📦 Building & Deploying Frontend Dashboard Assets ($ENV)..."
+echo "------------------------------------------------------"
+"$WORKSPACE_ROOT/infra/cloud/aws/apps/dashboard/deploy-dashboard.sh" "$ENV"
 
 echo "======================================================"
 echo "✅ DEPLOYMENT COMPLETE"
