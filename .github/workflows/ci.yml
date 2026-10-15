@@ -204,10 +204,6 @@ jobs:
     name: Preview Permanent Infrastructure (Staging)
     needs: [detect-changes, coverage-gate]
     if: github.event_name == 'pull_request' && needs.detect-changes.outputs.infra == 'true' && (github.event.pull_request.head.repo.full_name == github.repository)
-    permissions:
-      contents: read
-      pull-requests: write
-      id-token: write
     uses: ./.github/workflows/provision-infra.yml
     with:
       target_env: staging
@@ -223,9 +219,6 @@ jobs:
     name: Provision Permanent Infrastructure (Staging)
     needs: [detect-changes, coverage-gate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
-    permissions:
-      contents: read
-      id-token: write
     uses: ./.github/workflows/provision-infra.yml
     with:
       target_env: staging
@@ -238,9 +231,6 @@ jobs:
     name: Deploy Applications to AWS (Staging)
     needs: [build-docker, coverage-gate, infra-provision-staging]
     if: github.event_name == 'push' && github.ref == 'refs/heads/development'
-    permissions:
-      contents: read
-      id-token: write
     uses: ./.github/workflows/deploy.yml
     with:
       environment: staging
@@ -255,9 +245,6 @@ jobs:
     name: Provision Permanent Infrastructure (Production)
     needs: [detect-changes, coverage-gate]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      id-token: write
     uses: ./.github/workflows/provision-infra.yml
     with:
       target_env: production
@@ -270,9 +257,6 @@ jobs:
     name: Deploy Applications to AWS (Production)
     needs: [build-docker, coverage-gate, infra-provision-prod]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: read
-      id-token: write
     uses: ./.github/workflows/deploy.yml
     with:
       environment: prod
