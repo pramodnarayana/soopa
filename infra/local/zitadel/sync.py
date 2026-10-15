@@ -175,5 +175,5 @@ if __name__ == "__main__":
         logger.exception("File I/O error")
         sys.exit(1)
     except KeyboardInterrupt:
-        logger.exception("\nSync cancelled.")
+        logger.warning("sync_cancelled_by_user")
         sys.exit(0)

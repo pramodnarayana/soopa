@@ -6,6 +6,7 @@ on:
   pull_request:
     branches: [ "main", "development" ]
 
+
 permissions:
   contents: read
   pull-requests: write
@@ -38,6 +39,7 @@ jobs:
               - 'infra/cloud/zitadel/**'
               - 'versions.env'
               - '.github/workflows/provision-infra.yml'
+              - '.github/workflows/preview-infra.yml'
               - '.github/actions/pulumi-*/**'
             apps:
               - 'apps/**'
@@ -195,69 +197,3 @@ jobs:
           cp -a coverage_artifacts/coverage-unit/. ./ || true
           cp -a coverage_artifacts/coverage-integration/. ./ || true
           ./scripts/aggregate_coverage.py
-
-  # ---------------------------------------------------------------------------
-  # Phase 1 Gate (Pre-Merge): Speculative Infrastructure Preview
-  # Triggers on Pull Requests ONLY after all tests & coverage gates succeed.
-  # ---------------------------------------------------------------------------
-  infra-preview:
-    name: Preview Permanent Infrastructure (Staging)
-    needs: [detect-changes, coverage-gate]
-    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.infra == 'true' && (github.event.pull_request.head.repo.full_name == github.repository)
-    uses: ./.github/workflows/provision-infra.yml
-    with:
-      target_env: staging
-      action: preview
-    secrets: inherit
-
-  # ---------------------------------------------------------------------------
-  # Phase 2 (Post-Merge): Continuous Delivery (Staging)
-  # Triggers when code is merged into development.
-  # Order: 1. Provision Permanent Infra -> 2. Application Deployment & Migrations
-  # ---------------------------------------------------------------------------
-  infra-provision-staging:
-    name: Provision Permanent Infrastructure (Staging)
-    needs: [detect-changes, coverage-gate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/development'
-    uses: ./.github/workflows/provision-infra.yml
-    with:
-      target_env: staging
-      action: apply
-      skip_if_unchanged: true
-      infra_changed: ${{ needs.detect-changes.outputs.infra == 'true' }}
-    secrets: inherit
-
-  deploy-staging:
-    name: Deploy Applications to AWS (Staging)
-    needs: [build-docker, coverage-gate, infra-provision-staging]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/development'
-    uses: ./.github/workflows/deploy.yml
-    with:
-      environment: staging
-    secrets: inherit
-
-  # ---------------------------------------------------------------------------
-  # Phase 2 (Post-Merge): Continuous Delivery (Production)
-  # Triggers when code is merged into main.
-  # Order: 1. Provision Permanent Infra -> 2. Application Deployment & Migrations
-  # ---------------------------------------------------------------------------
-  infra-provision-prod:
-    name: Provision Permanent Infrastructure (Production)
-    needs: [detect-changes, coverage-gate]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/provision-infra.yml
-    with:
-      target_env: production
-      action: apply
-      skip_if_unchanged: true
-      infra_changed: ${{ needs.detect-changes.outputs.infra == 'true' }}
-    secrets: inherit
-
-  deploy-prod:
-    name: Deploy Applications to AWS (Production)
-    needs: [build-docker, coverage-gate, infra-provision-prod]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: ./.github/workflows/deploy.yml
-    with:
-      environment: prod
-    secrets: inherit

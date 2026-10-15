@@ -11,13 +11,38 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Protocol, TypedDict
 
 import boto3
 import botocore.exceptions
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+
+class CloudWatchLogsEvent(TypedDict, total=False):
+    timestamp: int
+    message: str
+    ingestionTime: int
+
+
+class CloudWatchLogsClientProtocol(Protocol):
+    def get_log_events(
+        self,
+        *,
+        logGroupName: str,
+        logStreamName: str,
+        startFromHead: bool = ...,
+    ) -> Mapping[str, Sequence[CloudWatchLogsEvent]]: ...
+
+    def filter_log_events(
+        self,
+        *,
+        logGroupName: str,
+        logStreamNamePrefix: str,
+    ) -> Mapping[str, Sequence[CloudWatchLogsEvent]]: ...
 
 
 def find_migrator_stack_dir() -> Path:
@@ -33,7 +58,7 @@ def find_migrator_stack_dir() -> Path:
     raise FileNotFoundError("Could not locate infra/cloud/aws/apps/migrator directory")
 
 
-def get_migrator_stack_outputs(env: str) -> dict[str, str | dict]:
+def get_migrator_stack_outputs(env: str) -> dict[str, str | dict[str, object]]:
     """Fetch outputs from the Pulumi migrator stack."""
     migrator_dir = find_migrator_stack_dir()
 
@@ -60,11 +85,14 @@ def get_migrator_stack_outputs(env: str) -> dict[str, str | dict]:
         )
         raise RuntimeError(f"Pulumi stack output failed: {result.stderr}")
 
-    return json.loads(result.stdout)
+    outputs = json.loads(result.stdout)
+    if not isinstance(outputs, dict):
+        raise TypeError(f"Expected dict from Pulumi output, got {type(outputs).__name__}")
+    return outputs
 
 
 def stream_task_logs(
-    logs_client,
+    logs_client: CloudWatchLogsClientProtocol,
     log_group: str,
     task_id: str,
 ) -> None:
@@ -80,7 +108,7 @@ def stream_task_logs(
                 startFromHead=True,
             )
             events = response.get("events", [])
-        except logs_client.exceptions.ResourceNotFoundException:
+        except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError, AttributeError):
             response = logs_client.filter_log_events(
                 logGroupName=log_group,
                 logStreamNamePrefix=stream_name,
@@ -88,7 +116,8 @@ def stream_task_logs(
             events = response.get("events", [])
 
         for event in events:
-            message = event.get("message", "").rstrip()
+            raw_msg = event.get("message", "")
+            message = raw_msg.rstrip() if isinstance(raw_msg, str) else str(raw_msg).rstrip()
             logger.info("ecs_task_log", log_entry=message)
     except (botocore.exceptions.ClientError, botocore.exceptions.BotoCoreError) as exc:
         logger.warning(
@@ -112,6 +141,13 @@ def run_migration_task(
     log_group = f"/ecs/{env}-migrator-migrator"
 
     outputs = get_migrator_stack_outputs(env)
+    for required_key in ("task_definition_arn", "cli_network_configuration"):
+        if required_key not in outputs:
+            logger.error("missing_migrator_stack_output", missing_key=required_key, env=env)
+            raise KeyError(
+                f"Required Pulumi output '{required_key}' missing from migrator stack '{env}'"
+            )
+
     task_def_arn = str(outputs["task_definition_arn"])
     net_config_raw = outputs["cli_network_configuration"]
     net_config = json.loads(net_config_raw) if isinstance(net_config_raw, str) else net_config_raw
