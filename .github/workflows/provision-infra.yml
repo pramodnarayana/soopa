@@ -60,7 +60,6 @@ jobs:
       contents: read
       pull-requests: write
       id-token: write
-    environment: ${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}
     env:
       AWS_REGION: us-east-1
       TARGET_ENV: ${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}

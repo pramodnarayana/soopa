@@ -46,7 +46,7 @@ jobs:
               - 'infra/cloud/aws/apps/**'
 
   validate:
-    name: Validate (Lint, Typecheck & Build)
+    name: Lint & Typecheck
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-validate-${{ github.ref }}
