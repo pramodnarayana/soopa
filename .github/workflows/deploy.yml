@@ -21,21 +21,27 @@ on:
 
 permissions:
   contents: read
+  id-token: write
+
 
 jobs:
   deploy:
-    name: Deploy Applications to AWS (${{ inputs.environment || 'staging' }})
+    name: Deploy Applications to AWS (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment || 'staging' }}
+    permissions:
+      contents: read
+      id-token: write
+    environment: ${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
     concurrency:
-      group: deploy-${{ inputs.environment || 'staging' }}
+      group: deploy-${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
       cancel-in-progress: false
     env:
       AWS_REGION: us-east-1
-      TARGET_ENV: ${{ (inputs.environment == 'prod') && 'production' || (inputs.environment || 'staging') }}
-      STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET }}
+      TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }}
+      STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
       IMAGE_TAG: sha-${{ github.sha }}
+
 
     steps:
       - name: Checkout Code
@@ -51,6 +57,7 @@ jobs:
             edi:
               - 'apps/edi/**'
               - 'infra/cloud/aws/apps/edi/**'
+              - 'core/platform/apps/platform-migrator/src/platform_migrator/runners/edi_runner.py'
             ucp:
               - 'core/ucp/**'
               - 'infra/cloud/aws/apps/ucp/**'
@@ -62,24 +69,21 @@ jobs:
             dashboard:
               - 'core/ucp/apps/dashboard/**'
               - 'infra/cloud/aws/apps/dashboard/**'
+            shared:
+              - 'Dockerfile'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'versions.env'
+              - 'core/platform/packages/**'
+              - 'infra/cloud/aws/packages/seedwork/**'
 
-      - name: Validate AWS Credentials Configuration
-        shell: bash
-        env:
-          AWS_KEY: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          if [ -z "$AWS_KEY" ] || [ -z "$AWS_SECRET" ]; then
-            echo "::error::AWS credentials missing. Please configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY under GitHub Repository Settings -> Secrets and variables -> Actions -> Secrets."
-            exit 1
-          fi
-
-      - name: Configure AWS Credentials
+      - name: Configure AWS Credentials (OIDC Federation)
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN || 'arn:aws:iam::634680389104:role/flowwolf-github-deployer-role' }}
+          role-session-name: github-actions-deploy-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
+
 
       - name: Setup Environment (Node, Python, pnpm, uv)
         uses: ./.github/actions/setup-env
@@ -119,20 +123,20 @@ jobs:
           image-tag: ${{ env.IMAGE_TAG }}
 
       - name: Execute Platform Database Migrations (global_db)
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.ucp == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.ucp == 'true' || steps.filter.outputs.shared == 'true'
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain platform
 
       - name: Execute EDI Shard Database Migrations (edi_shard)
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain edi
 
       # Step 2: Main HTTP API Service
       - name: Deploy Unified API Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/api
@@ -141,7 +145,7 @@ jobs:
 
       # Step 3: Background Worker Containers (Selective Domain Deployment)
       - name: Deploy UCP Workers Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.ucp == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.ucp == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/ucp/workers
@@ -149,7 +153,7 @@ jobs:
           image-tag: ${{ env.IMAGE_TAG }}
 
       - name: Deploy EDI Workers Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/edi/workers
@@ -158,7 +162,7 @@ jobs:
 
       # Step 4: EDI AS2 Partner Server
       - name: Deploy EDI AS2 Server Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true'
+        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/edi/as2

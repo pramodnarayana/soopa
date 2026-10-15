@@ -5,6 +5,7 @@ Unit Tests for ECS Migrator Task Dispatcher
 import sys
 from pathlib import Path
 
+import botocore.exceptions
 import pytest
 from infra_seedwork.tasks.run_ecs_migrator import (
     find_migrator_stack_dir,
@@ -73,6 +74,143 @@ def test_run_migration_task_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
 
     exit_code = run_migration_task(env="staging", action="migrate", domain="edi")
     assert exit_code == 0
+
+
+def test_run_migration_task_selects_app_container(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_outputs = {
+        "task_definition_arn": "arn:aws:ecs:us-east-1:123456789012:task-definition/staging-migrator:1",
+        "cli_network_configuration": "{}",
+    }
+    monkeypatch.setattr(
+        "infra_seedwork.tasks.run_ecs_migrator.get_migrator_stack_outputs",
+        lambda _env: fake_outputs,
+    )
+
+    class FakeLogsClient:
+        def get_log_events(self, **kwargs):
+            return {"events": [{"message": "app finished"}]}
+
+    class FakeWaiter:
+        def wait(self, **kwargs):
+            pass
+
+    class FakeEcsClient:
+        def run_task(self, **kwargs):
+            return {"tasks": [{"taskArn": "arn:aws:ecs:task/123"}], "failures": []}
+
+        def get_waiter(self, waiter_name):
+            return FakeWaiter()
+
+        def describe_tasks(self, **kwargs):
+            return {
+                "tasks": [
+                    {
+                        "taskArn": "arn:aws:ecs:task/123",
+                        "containers": [
+                            {"name": "datadog-agent", "exitCode": 0},
+                            {"name": "app", "exitCode": 42},
+                        ],
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(
+        "boto3.client",
+        lambda service, **kwargs: FakeEcsClient() if service == "ecs" else FakeLogsClient(),
+    )
+
+    exit_code = run_migration_task(env="staging", action="migrate", domain="platform")
+    assert exit_code == 42
+
+
+def test_run_migration_task_waiter_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_outputs = {
+        "task_definition_arn": "arn:aws:ecs:us-east-1:123456789012:task-definition/staging-migrator:1",
+        "cli_network_configuration": "{}",
+    }
+    monkeypatch.setattr(
+        "infra_seedwork.tasks.run_ecs_migrator.get_migrator_stack_outputs",
+        lambda _env: fake_outputs,
+    )
+
+    class FakeLogsClient:
+        def get_log_events(self, **kwargs):
+            return {"events": [{"message": "timeout logs"}]}
+
+    class FakeTimeoutWaiter:
+        def wait(self, **kwargs):
+            raise botocore.exceptions.WaiterError(
+                name="tasks_stopped", reason="Max attempts exceeded", last_response={}
+            )
+
+    class FakeEcsClient:
+        def run_task(self, **kwargs):
+            return {"tasks": [{"taskArn": "arn:aws:ecs:task/123"}], "failures": []}
+
+        def get_waiter(self, waiter_name):
+            return FakeTimeoutWaiter()
+
+        def describe_tasks(self, **kwargs):
+            return {
+                "tasks": [
+                    {
+                        "taskArn": "arn:aws:ecs:task/123",
+                        "containers": [{"name": "app", "exitCode": 137}],
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(
+        "boto3.client",
+        lambda service, **kwargs: FakeEcsClient() if service == "ecs" else FakeLogsClient(),
+    )
+
+    exit_code = run_migration_task(env="staging", action="migrate", domain="platform")
+    assert exit_code == 137
+
+
+def test_run_migration_task_none_exit_code_defaults_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_outputs = {
+        "task_definition_arn": "arn:aws:ecs:us-east-1:123456789012:task-definition/staging-migrator:1",
+        "cli_network_configuration": "{}",
+    }
+    monkeypatch.setattr(
+        "infra_seedwork.tasks.run_ecs_migrator.get_migrator_stack_outputs",
+        lambda _env: fake_outputs,
+    )
+
+    class FakeLogsClient:
+        def get_log_events(self, **kwargs):
+            return {"events": []}
+
+    class FakeWaiter:
+        def wait(self, **kwargs):
+            pass
+
+    class FakeEcsClient:
+        def run_task(self, **kwargs):
+            return {"tasks": [{"taskArn": "arn:aws:ecs:task/123"}], "failures": []}
+
+        def get_waiter(self, waiter_name):
+            return FakeWaiter()
+
+        def describe_tasks(self, **kwargs):
+            return {
+                "tasks": [
+                    {
+                        "taskArn": "arn:aws:ecs:task/123",
+                        "containers": [{"name": "app", "exitCode": None}],
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(
+        "boto3.client",
+        lambda service, **kwargs: FakeEcsClient() if service == "ecs" else FakeLogsClient(),
+    )
+
+    exit_code = run_migration_task(env="staging", action="migrate", domain="platform")
+    assert exit_code == 1
 
 
 def test_main_cli_arguments(monkeypatch: pytest.MonkeyPatch) -> None:

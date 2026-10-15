@@ -10,25 +10,9 @@
 
 const rawApiOrigin = import.meta.env.VITE_UCP_API_URL?.trim().replace(/\/+$/, '');
 
-const identityApiUrl = (
-  import.meta.env.VITE_IDENTITY_API_URL ??
-  // @deprecated fallback — IDENTITY_API_URL is never exposed by Vite at runtime.
-  import.meta.env.IDENTITY_API_URL
-)
-  ?.trim()
-  .replace(/\/+$/, '');
-
-const identityClientId = (
-  import.meta.env.VITE_IDENTITY_UCP_WEB_CLIENT_ID ??
-  // @deprecated fallback — IDENTITY_UCP_WEB_CLIENT_ID is never exposed by Vite at runtime.
-  import.meta.env.IDENTITY_UCP_WEB_CLIENT_ID
-)?.trim();
-
-const identityProjectId = (
-  import.meta.env.VITE_IDENTITY_UCP_PROJECT_ID ??
-  // @deprecated fallback — IDENTITY_UCP_PROJECT_ID is never exposed by Vite at runtime.
-  import.meta.env.IDENTITY_UCP_PROJECT_ID
-)?.trim();
+const identityApiUrl = import.meta.env.VITE_IDENTITY_API_URL?.trim().replace(/\/+$/, '');
+const identityClientId = import.meta.env.VITE_IDENTITY_UCP_WEB_CLIENT_ID?.trim();
+const identityProjectId = import.meta.env.VITE_IDENTITY_UCP_PROJECT_ID?.trim();
 
 // Fail fast: missing required variables must throw at startup, not produce silent API failures.
 if (!rawApiOrigin) {

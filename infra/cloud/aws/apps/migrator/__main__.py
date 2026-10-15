@@ -132,7 +132,11 @@ migrator_task = aws.ecs.TaskDefinition(
                     "name": "app",
                     "image": args[0],
                     "essential": True,
-                    "command": ["python", "-m", "platform_migrator", "migrate", "--domain", "all"],
+                    "command": [
+                        "sh",
+                        "-c",
+                        "python -m platform_migrator migrate --domain all && python -m platform_migrator seed --domain all",
+                    ],
                     "environment": [
                         {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[3]},
                         {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[4]},

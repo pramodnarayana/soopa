@@ -122,7 +122,7 @@ def provision_ecs(
                     },
                     {
                         "name": "ZITADEL_DATABASE_POSTGRES_DATABASE",
-                        "value": DatabaseConstants.ZITADEL_DB_NAME,
+                        "value": DatabaseConstants.GLOBAL_DB_NAME,
                     },
                     {"name": "ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE", "value": "require"},
                     {"name": "ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE", "value": "require"},

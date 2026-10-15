@@ -129,5 +129,6 @@ Deployments and infrastructure provisioning are orchestrated entirely via native
    - Builds and deploys frontend dashboard assets to S3/CloudFront (`deploy-dashboard.sh`).
 
 3. **Monorepo Governance (`.github/CODEOWNERS`)**:
-   - Infrastructure paths are strictly owned by `@soopa/platform-team`.
-   - Application paths are owned by `@soopa/app-leads` and `@soopa/domain-leads`.
+   - Infrastructure paths (`infra/**`, `.github/**`) are strictly owned by `@soopa/platform-team`.
+   - Core control plane paths (`core/**`) are owned by `@soopa/domain-leads`.
+   - Application domain paths (`apps/edi/**`) are owned by `@soopa/edi-team`.

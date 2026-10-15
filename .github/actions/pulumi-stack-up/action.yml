@@ -34,7 +34,7 @@ runs:
         echo "📦 Deploying Stack: $STACK_DIR [$STACK_NAME]"
         echo "======================================================"
 
-        if pulumi stack ls -C "$TARGET_DIR" 2>/dev/null | grep -qE "(^|[[:space:]])${STACK_NAME}([[:space:]]|$)"; then
+        if pulumi stack ls -C "$TARGET_DIR" 2>/dev/null | grep -qE "(^|[[:space:]])${STACK_NAME}\\*?([[:space:]]|$)"; then
           echo "Selecting existing stack: $STACK_NAME"
           pulumi stack select "$STACK_NAME" -C "$TARGET_DIR"
         else

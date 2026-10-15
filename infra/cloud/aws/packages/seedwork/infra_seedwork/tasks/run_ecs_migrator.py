@@ -165,11 +165,18 @@ def run_migration_task(
 
     logger.info("waiting_for_task_completion", task_arn=task_arn)
     waiter = ecs.get_waiter("tasks_stopped")
-    waiter.wait(
-        cluster=cluster,
-        tasks=[task_arn],
-        WaiterConfig={"Delay": 5, "MaxAttempts": 60},
-    )
+    try:
+        waiter.wait(
+            cluster=cluster,
+            tasks=[task_arn],
+            WaiterConfig={"Delay": 5, "MaxAttempts": 120},
+        )
+    except botocore.exceptions.WaiterError as exc:
+        logger.error(
+            "ecs_task_waiter_timed_out",
+            task_arn=task_arn,
+            error=str(exc),
+        )
 
     desc_response = ecs.describe_tasks(cluster=cluster, tasks=[task_arn])
     described_tasks = desc_response.get("tasks", [])
@@ -178,8 +185,11 @@ def run_migration_task(
         logger.error("task_not_found_on_describe", task_arn=task_arn)
         raise RuntimeError(f"Could not describe stopped task {task_arn}")
 
-    container = described_tasks[0]["containers"][0]
-    exit_code = container.get("exitCode", 1)
+    containers = described_tasks[0].get("containers", [])
+    app_containers = [c for c in containers if c.get("name") == "app"]
+    container = app_containers[0] if app_containers else (containers[0] if containers else {})
+    raw_exit_code = container.get("exitCode")
+    exit_code = 1 if raw_exit_code is None else int(raw_exit_code)
     stop_reason = described_tasks[0].get("stoppedReason", "Unknown")
 
     logger.info(
@@ -191,7 +201,7 @@ def run_migration_task(
 
     stream_task_logs(logs, log_group, task_id)
 
-    return int(exit_code)
+    return exit_code
 
 
 def main() -> None:
