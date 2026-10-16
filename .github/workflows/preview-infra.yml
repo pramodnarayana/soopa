@@ -1,4 +1,4 @@
-name: Infrastructure Preview
+name: Cloud Infrastructure Preview
 
 on:
   pull_request:
@@ -13,6 +13,7 @@ on:
       - 'versions.env'
       - '.github/workflows/provision-infra.yml'
       - '.github/workflows/preview-infra.yml'
+      - '.github/workflows/check-infra.yml'
       - '.github/actions/pulumi-*/**'
   workflow_call:
     inputs:
@@ -45,7 +46,7 @@ concurrency:
 
 jobs:
   preview:
-    name: Preview (${{ inputs.target_env || inputs.environment || 'staging' }})
+    name: Speculative Cloud Diff (${{ inputs.target_env || inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read

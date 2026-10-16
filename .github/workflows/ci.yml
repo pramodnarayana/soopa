@@ -105,11 +105,6 @@ jobs:
           path: "**/.coverage.integration"
           include-hidden-files: true
 
-      - name: Test Infrastructure (Pulumi Mocks)
-        run: |
-          cd infra/cloud/aws
-          uv run pytest tests/
-
   build-docker:
     name: Build Modular Monolith
     needs: [validate, test-unit]

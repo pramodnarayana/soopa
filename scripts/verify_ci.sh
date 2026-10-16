@@ -78,9 +78,6 @@ COVERAGE_FILE=.coverage.unit CI=true pnpm cov:python
 echo "✅ Running Integration Tests..."
 COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
 
-echo "✅ Test Infrastructure (Pulumi Mocks)..."
-cd infra/cloud/aws && uv run pytest tests/ && cd ../../../
-
 echo "✅ Aggregating Coverage and Enforcing Thresholds..."
 ./scripts/aggregate_coverage.py
 

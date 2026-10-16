@@ -1,4 +1,4 @@
-name: Continuous Delivery (Production)
+name: Application Service Rollout (Production)
 
 on:
   workflow_run:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   deploy-prod:
-    name: Deploy Applications to AWS (Production)
+    name: Rollout Applications to AWS (Production)
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     uses: ./.github/workflows/deploy.yml
     with:

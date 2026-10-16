@@ -117,13 +117,15 @@ pulumi up -s <env> -C infra/cloud/aws/apps/routing
 
 Deployments and infrastructure provisioning are orchestrated entirely via native GitHub Actions pipelines:
 
-1. **Cloud Infrastructure (`preview-infra.yml` & `provision-infra.yml`)**:
+1. **Cloud Infrastructure Pipelines (`check-infra.yml`, `preview-infra.yml` & `provision-infra.yml`)**:
    - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
-   - PRs trigger speculative `preview-infra.yml` (`pulumi preview --diff`) when infrastructure paths change.
-   - Post-merge pushes to `development` / `main` touching `infra/**` execute `provision-infra.yml` directly and independently via native GitHub Actions path filters.
+   - **Static Checks (`check-infra.yml`)**: Fast, unprivileged workflow (zero AWS credentials) running linters and pure unit tests without cloud mocks on any `infra/**` PR.
+   - **Speculative Cloud Diff (`preview-infra.yml`)**: OIDC-authenticated workflow generating `pulumi preview` diffs against live AWS infrastructure stacks.
+   - **Cloud Infrastructure Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` touching `infra/**`.
 
-2. **Application Continuous Delivery (`cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
-   - Gated on `Modular Monolith CI` completion on `development` (staging) and `main` (production).
+2. **Application Continuous Delivery (`ci.yml`, `cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
+   - **Application CI (`ci.yml`)**: Gated on linting, unit/integration testing, and Docker image build test for pure application services (zero infra mocks).
+   - **Application Service Rollout (`deploy.yml`)**: Triggered post-CI via `cd-staging.yml` / `cd-prod.yml`.
    - Builds and tags the single modular monolith container image (`sha-*`).
    - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_migrator`).
    - Executes rolling updates for API, UCP workers, EDI workers, and AS2 servers.

@@ -1,0 +1,39 @@
+name: Cloud Infrastructure Check
+
+on:
+  pull_request:
+    branches: [ "main", "development" ]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/*infra*.yml'
+      - '.github/actions/pulumi-*/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Static Checks & Unit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Environment (Node, Python, pnpm, uv)
+        uses: ./.github/actions/setup-env
+
+      - name: Run Ruff Linter
+        shell: bash
+        run: |
+          uv run ruff check infra/cloud/aws
+
+      - name: Run Pure Unit Tests (Zero Mocks)
+        shell: bash
+        run: |
+          cd infra/cloud/aws
+          uv run pytest tests/

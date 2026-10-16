@@ -1,65 +1,113 @@
-import json
+"""Pure unit tests for Fargate ECS primitives and builders (Zero Mocks)."""
 
-import pulumi
-import pytest
-from infra_seedwork.ecs import provision_fargate_service
-
-captured_task_defs = []
-
-
-class MyMocks(pulumi.runtime.Mocks):
-    def new_resource(self, args: pulumi.runtime.MockResourceArgs):
-        outputs = dict(args.inputs)
-        if args.typ == "aws:ecs/taskDefinition:TaskDefinition":
-            captured_task_defs.append(args.inputs)
-            outputs["arn"] = f"arn:aws:ecs:us-east-1:123456789012:task-definition/{args.name}:1"
-        return [f"{args.name}-id", outputs]
-
-    def call(self, args: pulumi.runtime.MockCallArgs):
-        if args.token == "aws:index/getCallerIdentity:getCallerIdentity":
-            return {
-                "accountId": "123456789012",
-                "arn": "arn:aws:iam::123456789012:root",
-                "userId": "AKIAIOSFODNN7EXAMPLE",
-            }
-        if args.token == "aws:index/getRegion:getRegion":
-            return {"name": "us-east-1"}
-        return {}
+from infra_seedwork.ecs import (
+    EcsConstants,
+    ObservabilityConstants,
+    build_awslogs_log_config,
+    build_container_definitions,
+    build_firelens_log_config,
+    build_firelens_sidecar,
+    build_task_role_policy_statements,
+)
 
 
-@pytest.fixture(scope="function", autouse=True)
-def override_mocks():
-    pulumi.runtime.set_mocks(MyMocks())
-    captured_task_defs.clear()
-
-
-@pytest.mark.asyncio(loop_scope="function")
-async def test_provision_fargate_service_injects_command():
-    """
-    Test that the provision_fargate_service injects the entrypoint command.
-    """
-    service_result = provision_fargate_service(
+def test_build_container_definitions_injects_command_and_metadata():
+    """Verify that pure container definition builder attaches entrypoint command and metadata."""
+    containers = build_container_definitions(
         name="test-worker",
+        image="123456789012.dkr.ecr.us-east-1.amazonaws.com/modular-monolith:latest",
         command=["python", "-m", "apps.test.worker"],
-        cluster_arn="arn:aws:ecs:us-east-1:123456789012:cluster/test-cluster",
-        subnets=["subnet-123", "subnet-456"],
-        security_group_id="sg-123",
-        ecr_image_uri="123456789012.dkr.ecr.us-east-1.amazonaws.com/modular-monolith:latest",
-        execution_role_arn="arn:aws:iam::123456789012:role/ExecRole",
-        tags={"Environment": "Test"},
+        port_mappings=[{"containerPort": 8080, "hostPort": 8080}],
+        environment=[{"name": "ENV", "value": "test"}],
+        secrets=[{"name": "DB_PASS", "valueFrom": "arn:aws:secretsmanager:..."}],
     )
 
-    # Wait for the service to be created and check the task definition
-    def check_task_def(args):
-        # The captured_task_defs list should have the task definition inputs
-        assert len(captured_task_defs) > 0
-        task_definition_args = captured_task_defs[0]
-        container_definitions = task_definition_args.get("containerDefinitions")
+    assert len(containers) == 1
+    app_container = containers[0]
+    assert app_container["name"] == EcsConstants.CONTAINER_NAME_APP
+    assert app_container["command"] == ["python", "-m", "apps.test.worker"]
+    assert (
+        app_container["image"]
+        == "123456789012.dkr.ecr.us-east-1.amazonaws.com/modular-monolith:latest"
+    )
+    assert app_container["essential"] is True
+    assert app_container["portMappings"] == [{"containerPort": 8080, "hostPort": 8080}]
+    assert app_container["environment"] == [{"name": "ENV", "value": "test"}]
+    assert app_container["secrets"] == [
+        {"name": "DB_PASS", "valueFrom": "arn:aws:secretsmanager:..."}
+    ]
 
-        if isinstance(container_definitions, str):
-            containers = json.loads(container_definitions)
-            command = containers[0].get("command", [])
-            assert command == ["python", "-m", "apps.test.worker"], f"Command mismatch: {command}"
 
-    # Verify that the task definition is correctly wired up
-    pulumi.Output.all(service_result.task_definition).apply(check_task_def)
+def test_build_container_definitions_appends_sidecars():
+    """Verify that sidecar containers (e.g. FluentBit) are appended cleanly."""
+    sidecar = build_firelens_sidecar(
+        group_name="/ecs/test-worker",
+        region_name="us-east-1",
+    )
+    containers = build_container_definitions(
+        name="test-worker",
+        image="app-image:latest",
+        command=["python", "worker.py"],
+        sidecars=[sidecar],
+    )
+
+    assert len(containers) == 2
+    assert containers[0]["name"] == EcsConstants.CONTAINER_NAME_APP
+    assert containers[1]["name"] == EcsConstants.CONTAINER_NAME_LOG_ROUTER
+    assert containers[1]["image"] == ObservabilityConstants.DEFAULT_FLUENTBIT_IMAGE
+    assert containers[1]["essential"] is True
+
+
+def test_build_awslogs_log_config_structure():
+    """Verify CloudWatch awslogs configuration schema."""
+    config = build_awslogs_log_config(
+        group_name="/ecs/api",
+        region_name="us-east-1",
+        stream_prefix="api",
+    )
+    assert config["logDriver"] == EcsConstants.LOG_DRIVER_AWSLOGS
+    assert config["options"]["awslogs-group"] == "/ecs/api"
+    assert config["options"]["awslogs-region"] == "us-east-1"
+    assert config["options"]["awslogs-stream-prefix"] == "api"
+    assert config["options"]["awslogs-create-group"] == "true"
+
+
+def test_build_firelens_log_config_with_secrets():
+    """Verify Firelens log configuration with OpenObserve credentials."""
+    config = build_firelens_log_config(
+        fl_end="openobserve.internal:5080",
+        obs_user_arn="arn:aws:secretsmanager:us-east-1:123:secret:obs-user",
+        obs_pass_arn="arn:aws:secretsmanager:us-east-1:123:secret:obs-pass",
+    )
+    assert config["logDriver"] == EcsConstants.LOG_DRIVER_FIRELENS
+    assert config["options"]["Host"] == "openobserve.internal"
+    assert config["options"]["Port"] == "5080"
+    assert config["secretOptions"] == [
+        {
+            "name": "http_user",
+            "valueFrom": "arn:aws:secretsmanager:us-east-1:123:secret:obs-user",
+        },
+        {
+            "name": "http_passwd",
+            "valueFrom": "arn:aws:secretsmanager:us-east-1:123:secret:obs-pass",
+        },
+    ]
+
+
+def test_build_task_role_policy_statements_composition():
+    """Verify pure IAM policy statement assembly for queues, topics, buckets, and SSM."""
+    statements = build_task_role_policy_statements(
+        queue_arns=["arn:aws:sqs:us-east-1:123:my-queue"],
+        topic_arns=["arn:aws:sns:us-east-1:123:my-topic"],
+        bucket_arns=["arn:aws:s3:::my-bucket"],
+        extra_statements=[{"Effect": "Allow", "Action": ["kms:Decrypt"], "Resource": "*"}],
+        enable_execute_command=True,
+    )
+
+    actions = [s["Action"] for s in statements]
+    assert ["sqs:*"] in actions
+    assert ["sns:*"] in actions
+    assert ["s3:*"] in actions
+    assert ["kms:Decrypt"] in actions
+    sids = [s.get("Sid") for s in statements]
+    assert "ExecuteCommand" in sids

@@ -1,4 +1,4 @@
-name: Infrastructure Provision
+name: Cloud Infrastructure Rollout
 
 on:
   push:
@@ -15,6 +15,7 @@ on:
       - 'versions.env'
       - '.github/workflows/provision-infra.yml'
       - '.github/workflows/preview-infra.yml'
+      - '.github/workflows/check-infra.yml'
       - '.github/actions/pulumi-*/**'
   workflow_dispatch:
     inputs:
@@ -48,7 +49,7 @@ concurrency:
 
 jobs:
   apply:
-    name: Provision (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production' || github.ref_name == 'main') && 'production' || 'staging' }})
+    name: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production' || github.ref_name == 'main') && 'production' || 'staging' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read

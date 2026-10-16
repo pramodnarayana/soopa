@@ -1,4 +1,4 @@
-name: Continuous Delivery (Staging)
+name: Application Service Rollout (Staging)
 
 on:
   workflow_run:
@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   deploy-staging:
-    name: Deploy Applications to AWS (Staging)
+    name: Rollout Applications to AWS (Staging)
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     uses: ./.github/workflows/deploy.yml
     with:

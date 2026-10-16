@@ -1,7 +1,35 @@
 import json
+from typing import TypedDict
 
 import pulumi
 import pulumi_aws as aws
+
+
+class ContainerDefinition(TypedDict, total=False):
+    name: str
+    image: str
+    command: list[str]
+    essential: bool
+    portMappings: list[dict[str, object]]
+    environment: list[dict[str, object]]
+    secrets: list[dict[str, object]]
+    mountPoints: list[dict[str, object]]
+    dependsOn: list[dict[str, object]]
+    logConfiguration: dict[str, object]
+    firelensConfiguration: dict[str, object]
+
+
+class LogConfiguration(TypedDict, total=False):
+    logDriver: str
+    options: dict[str, str]
+    secretOptions: list[dict[str, str]]
+
+
+class IamPolicyStatement(TypedDict, total=False):
+    Sid: str
+    Effect: str
+    Action: list[str]
+    Resource: list[str] | str
 
 
 class EcsConstants:
@@ -22,10 +50,15 @@ class ObservabilityConstants:
     TLS_ON = "off"
 
 
-def _build_base_statements(
-    queue_arns: list, topic_arns: list, bucket_arns: list, extra_statements: list
-) -> list:
-    statements = []
+def build_task_role_policy_statements(
+    queue_arns: list[str] | None = None,
+    topic_arns: list[str] | None = None,
+    bucket_arns: list[str] | None = None,
+    extra_statements: list[dict[str, object]] | None = None,
+    enable_execute_command: bool = False,
+) -> list[dict[str, object]]:
+    """Build IAM statements for ECS task execution role (pure function, zero external dependencies)."""
+    statements: list[dict[str, object]] = []
     if queue_arns:
         statements.append({"Effect": "Allow", "Action": ["sqs:*"], "Resource": queue_arns})
     if topic_arns:
@@ -34,7 +67,124 @@ def _build_base_statements(
         statements.append({"Effect": "Allow", "Action": ["s3:*"], "Resource": bucket_arns})
     if extra_statements:
         statements.extend(extra_statements)
+    if enable_execute_command:
+        statements.append(
+            {
+                "Sid": "ExecuteCommand",
+                "Effect": "Allow",
+                "Action": [
+                    "ssmmessages:CreateControlChannel",
+                    "ssmmessages:CreateDataChannel",
+                    "ssmmessages:OpenControlChannel",
+                    "ssmmessages:OpenDataChannel",
+                ],
+                "Resource": "*",
+            }
+        )
     return statements
+
+
+def _build_base_statements(
+    queue_arns: list, topic_arns: list, bucket_arns: list, extra_statements: list
+) -> list:
+    """Internal compatibility helper."""
+    return build_task_role_policy_statements(
+        queue_arns=queue_arns,
+        topic_arns=topic_arns,
+        bucket_arns=bucket_arns,
+        extra_statements=extra_statements,
+    )
+
+
+def build_awslogs_log_config(
+    group_name: str,
+    region_name: str,
+    stream_prefix: str = EcsConstants.CONTAINER_NAME_APP,
+) -> LogConfiguration:
+    """Build standard CloudWatch awslogs configuration (pure function)."""
+    return {
+        "logDriver": EcsConstants.LOG_DRIVER_AWSLOGS,
+        "options": {
+            "awslogs-group": group_name,
+            "awslogs-region": region_name,
+            "awslogs-stream-prefix": stream_prefix,
+            "awslogs-create-group": EcsConstants.TRUE_STR,
+        },
+    }
+
+
+def _build_sidecar_definition(s: dict[str, object], fallback_image: str) -> ContainerDefinition:
+    """Helper to normalize a sidecar definition dictionary into ContainerDefinition."""
+    sidecar_def: ContainerDefinition = {
+        "name": str(s.get("name", "")),
+        "image": str(s.get("image", fallback_image)),
+        "essential": bool(s.get("essential", False)),
+    }
+    port_mappings = s.get("portMappings")
+    if isinstance(port_mappings, list):
+        sidecar_def["portMappings"] = port_mappings
+
+    environment = s.get("environment")
+    if isinstance(environment, list):
+        sidecar_def["environment"] = environment
+
+    secrets = s.get("secrets")
+    if isinstance(secrets, list):
+        sidecar_def["secrets"] = secrets
+
+    mount_points = s.get("mountPoints")
+    if isinstance(mount_points, list):
+        sidecar_def["mountPoints"] = mount_points
+
+    depends_on = s.get("dependsOn")
+    if isinstance(depends_on, list):
+        sidecar_def["dependsOn"] = depends_on
+
+    log_configuration = s.get("logConfiguration")
+    if isinstance(log_configuration, dict):
+        sidecar_def["logConfiguration"] = log_configuration
+
+    firelens_configuration = s.get("firelensConfiguration")
+    if isinstance(firelens_configuration, dict):
+        sidecar_def["firelensConfiguration"] = firelens_configuration
+
+    return sidecar_def
+
+
+def build_container_definitions(
+    name: str,
+    image: str,
+    command: list[str] | None = None,
+    container_name: str = EcsConstants.CONTAINER_NAME_APP,
+    port_mappings: list[dict[str, object]] | None = None,
+    environment: list[dict[str, object]] | None = None,
+    secrets: list[dict[str, object]] | None = None,
+    mount_points: list[dict[str, object]] | None = None,
+    depends_on: list[dict[str, object]] | None = None,
+    log_configuration: dict[str, object] | None = None,
+    sidecars: list[dict[str, object]] | None = None,
+) -> list[ContainerDefinition]:
+    """Pure builder for ECS container definitions (zero cloud SDK mocks required)."""
+    main_container: ContainerDefinition = {
+        "name": container_name,
+        "image": image,
+        "essential": True,
+        "portMappings": port_mappings or [],
+        "environment": environment or [],
+        "secrets": secrets or [],
+        "mountPoints": mount_points or [],
+        "dependsOn": depends_on or [],
+        "logConfiguration": log_configuration or {},
+    }
+    if command is not None:
+        main_container["command"] = command
+
+    containers: list[ContainerDefinition] = [main_container]
+    if sidecars:
+        for s in sidecars:
+            containers.append(_build_sidecar_definition(s, image))
+
+    return containers
 
 
 def build_firelens_sidecar(
@@ -92,7 +242,58 @@ def build_firelens_log_config(
     return main_log_config
 
 
-def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyclomatic complexity to assemble all AWS ECS primitives in a single atomic transaction
+def _build_load_balancers(
+    port: int | None,
+    target_group_arn: str | None,
+    extra_target_groups: list[dict[str, object]] | None,
+) -> list[aws.ecs.ServiceLoadBalancerArgs]:
+    """Helper to assemble ECS service load balancer arguments."""
+    lbs: list[aws.ecs.ServiceLoadBalancerArgs] = []
+    if target_group_arn and port:
+        lbs.append(
+            aws.ecs.ServiceLoadBalancerArgs(
+                target_group_arn=target_group_arn,
+                container_name=EcsConstants.CONTAINER_NAME_APP,
+                container_port=port,
+            )
+        )
+    if extra_target_groups:
+        for tg in extra_target_groups:
+            tg_arn = str(tg.get("target_group_arn", ""))
+            tg_port = int(tg.get("port", 0))
+            lbs.append(
+                aws.ecs.ServiceLoadBalancerArgs(
+                    target_group_arn=tg_arn,
+                    container_name=EcsConstants.CONTAINER_NAME_APP,
+                    container_port=tg_port,
+                )
+            )
+    return lbs
+
+
+def _build_service_sidecars(
+    name: str,
+    region_name: str,
+    firelens_endpoint: str | None,
+    fluentbit_image_uri: str,
+    sidecar_container: dict[str, object] | None,
+) -> list[dict[str, object]]:
+    """Helper to assemble sidecar configurations."""
+    sidecars: list[dict[str, object]] = []
+    if firelens_endpoint:
+        sidecars.append(
+            build_firelens_sidecar(
+                group_name=f"/ecs/{name}",
+                region_name=region_name,
+                fluentbit_image_uri=fluentbit_image_uri,
+            )
+        )
+    if sidecar_container:
+        sidecars.append({**sidecar_container, "image": sidecar_container.get("image")})
+    return sidecars
+
+
+def provision_fargate_service(
     name: str,
     command: list,
     cluster_arn: str,
@@ -150,24 +351,13 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
         tags=tags,
     )
 
-    base_statements = _build_base_statements(
-        queue_arns, topic_arns, bucket_arns, extra_task_policy_statements
+    base_statements = build_task_role_policy_statements(
+        queue_arns=queue_arns,
+        topic_arns=topic_arns,
+        bucket_arns=bucket_arns,
+        extra_statements=extra_task_policy_statements,
+        enable_execute_command=enable_execute_command,
     )
-
-    if enable_execute_command:
-        base_statements.append(
-            {
-                "Sid": "ExecuteCommand",
-                "Effect": "Allow",
-                "Action": [
-                    "ssmmessages:CreateControlChannel",
-                    "ssmmessages:CreateDataChannel",
-                    "ssmmessages:OpenControlChannel",
-                    "ssmmessages:OpenDataChannel",
-                ],
-                "Resource": "*",
-            }
-        )
 
     if base_statements:
         aws.iam.RolePolicy(
@@ -183,62 +373,52 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
             ),
         )
 
-    port_mappings = [{"containerPort": port, "hostPort": port}] if port else []
+    port_mappings: list[dict[str, object]] = (
+        [{"containerPort": port, "hostPort": port}] if port else []
+    )
     if extra_ports:
-        port_mappings.extend([{"containerPort": p, "hostPort": p} for p in extra_ports])
+        for p in extra_ports:
+            port_mappings.append({"containerPort": p, "hostPort": p})
     env_vars = environment_vars if environment_vars else []
 
-    sidecars = []
-    if firelens_endpoint:
-        sidecars.append(
-            build_firelens_sidecar(
-                group_name=f"/ecs/{name}",
-                region_name=_region.name,
-                fluentbit_image_uri=fluentbit_image_uri,
-            )
-        )
+    sidecars = _build_service_sidecars(
+        name=name,
+        region_name=_region.name,
+        firelens_endpoint=firelens_endpoint,
+        fluentbit_image_uri=fluentbit_image_uri,
+        sidecar_container=sidecar_container,
+    )
 
-    if sidecar_container:
-        sidecars.append({**sidecar_container, "image": sidecar_container.get("image")})
+    def make_container_defs(args: list[object]) -> str:
+        image = str(args[0])
+        env = args[1] if isinstance(args[1], list) else []
+        fl_end = str(args[2]) if args[2] else None
+        obs_user_arn = str(args[3]) if args[3] else None
+        obs_pass_arn = str(args[4]) if args[4] else None
+        sec = args[5] if isinstance(args[5], list) else []
 
-    def make_container_defs(args):
-        image = args[0]
-        env = args[1]
-        fl_end = args[2]
-        obs_user_arn = args[3]
-        obs_pass_arn = args[4]
-        sec = args[5]
-
+        main_log_config: LogConfiguration
         if fl_end:
             main_log_config = build_firelens_log_config(fl_end, obs_user_arn, obs_pass_arn)
         else:
-            main_log_config = {
-                "logDriver": EcsConstants.LOG_DRIVER_AWSLOGS,
-                "options": {
-                    "awslogs-group": f"/ecs/{name}",
-                    "awslogs-region": _region.name,
-                    "awslogs-stream-prefix": EcsConstants.CONTAINER_NAME_APP,
-                    "awslogs-create-group": EcsConstants.TRUE_STR,
-                },
-            }
+            main_log_config = build_awslogs_log_config(
+                group_name=f"/ecs/{name}",
+                region_name=_region.name,
+                stream_prefix=EcsConstants.CONTAINER_NAME_APP,
+            )
 
-        containers = [
-            {
-                "name": EcsConstants.CONTAINER_NAME_APP,
-                "image": image,
-                "command": command,
-                "essential": True,
-                "portMappings": port_mappings,
-                "environment": env,
-                "secrets": sec or [],
-                "mountPoints": app_mount_points or [],
-                "dependsOn": app_depends_on or [],
-                "logConfiguration": main_log_config,
-            }
-        ]
-
-        for s in sidecars:
-            containers.append({**s, "image": image} if not s.get("image") else s)
+        containers = build_container_definitions(
+            name=name,
+            image=image,
+            command=command,
+            port_mappings=port_mappings,
+            environment=env,
+            secrets=sec,
+            mount_points=app_mount_points,
+            depends_on=app_depends_on,
+            log_configuration=main_log_config,
+            sidecars=sidecars,
+        )
 
         return json.dumps(containers)
 
@@ -263,24 +443,11 @@ def provision_fargate_service(  # noqa: C901 - Factory pattern requires high cyc
         tags=tags,
     )
 
-    lbs = []
-    if target_group_arn:
-        lbs.append(
-            aws.ecs.ServiceLoadBalancerArgs(
-                target_group_arn=target_group_arn,
-                container_name="app",
-                container_port=port,
-            )
-        )
-    if extra_target_groups:
-        for tg in extra_target_groups:
-            lbs.append(
-                aws.ecs.ServiceLoadBalancerArgs(
-                    target_group_arn=tg["target_group_arn"],
-                    container_name="app",
-                    container_port=tg["port"],
-                )
-            )
+    lbs = _build_load_balancers(
+        port=port,
+        target_group_arn=target_group_arn,
+        extra_target_groups=extra_target_groups,
+    )
 
     svc = aws.ecs.Service(
         f"{name}-svc",

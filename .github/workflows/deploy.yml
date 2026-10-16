@@ -1,4 +1,4 @@
-name: Application Continuous Delivery
+name: Application Service Rollout
 
 on:
   workflow_call:
@@ -30,7 +30,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Deploy Applications to AWS (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})
+    name: Rollout Applications to AWS (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
