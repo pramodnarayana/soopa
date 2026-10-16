@@ -1,11 +1,69 @@
+import pulumi
 import pulumi_aws as aws
 
+from infra_seedwork.constants import ObservabilityDefaults
 
-def provision_secure_bucket(name: str, tags: dict, kms_key_arn: str = None) -> aws.s3.BucketV2:
+
+def attach_bucket_lifecycle_configuration(
+    name: str,
+    bucket_id: pulumi.Input[str],
+    noncurrent_version_expiration_days: int | None = None,
+    abort_incomplete_multipart_upload_days: int = 1,
+    expired_object_delete_marker: bool = True,
+) -> aws.s3.BucketLifecycleConfigurationV2:
     """
-    Provisions a secure, versioned S3 bucket with public access blocked.
+    Attaches cost-saving S3 lifecycle rules to prune noncurrent versions,
+    abort stalled multipart uploads, and remove expired object delete markers.
+    """
+    if noncurrent_version_expiration_days is None:
+        is_prod = pulumi.get_stack() == "production"
+        noncurrent_version_expiration_days = (
+            ObservabilityDefaults.DEFAULT_PROD_S3_NONCURRENT_RETENTION_DAYS
+            if is_prod
+            else ObservabilityDefaults.DEFAULT_NON_PROD_S3_NONCURRENT_RETENTION_DAYS
+        )
+
+    return aws.s3.BucketLifecycleConfigurationV2(
+        f"{name}-lifecycle",
+        bucket=bucket_id,
+        rules=[
+            aws.s3.BucketLifecycleConfigurationV2RuleArgs(
+                id="cost-optimization-cleanup",
+                status="Enabled",
+                abort_incomplete_multipart_upload=aws.s3.BucketLifecycleConfigurationV2RuleAbortIncompleteMultipartUploadArgs(
+                    days_after_initiation=abort_incomplete_multipart_upload_days,
+                ),
+                noncurrent_version_expiration=aws.s3.BucketLifecycleConfigurationV2RuleNoncurrentVersionExpirationArgs(
+                    noncurrent_days=noncurrent_version_expiration_days,
+                ),
+                expiration=aws.s3.BucketLifecycleConfigurationV2RuleExpirationArgs(
+                    expired_object_delete_marker=expired_object_delete_marker,
+                )
+                if expired_object_delete_marker
+                else None,
+            )
+        ],
+    )
+
+
+def provision_secure_bucket(
+    name: str,
+    tags: dict,
+    kms_key_arn: str = None,
+    noncurrent_version_expiration_days: int | None = None,
+) -> aws.s3.BucketV2:
+    """
+    Provisions a secure, versioned S3 bucket with public access blocked and cost lifecycle rules.
     Uses AWS KMS if provided, otherwise defaults to AES256.
     """
+    if noncurrent_version_expiration_days is None:
+        is_prod = pulumi.get_stack() == "production"
+        noncurrent_version_expiration_days = (
+            ObservabilityDefaults.DEFAULT_PROD_S3_NONCURRENT_RETENTION_DAYS
+            if is_prod
+            else ObservabilityDefaults.DEFAULT_NON_PROD_S3_NONCURRENT_RETENTION_DAYS
+        )
+
     bucket = aws.s3.BucketV2(
         name,
         bucket=name,
@@ -28,6 +86,13 @@ def provision_secure_bucket(name: str, tags: dict, kms_key_arn: str = None) -> a
             status="Enabled"
         ),
     )
+
+    if noncurrent_version_expiration_days is not None:
+        attach_bucket_lifecycle_configuration(
+            name=name,
+            bucket_id=bucket.id,
+            noncurrent_version_expiration_days=noncurrent_version_expiration_days,
+        )
 
     if kms_key_arn:
         aws.s3.BucketServerSideEncryptionConfigurationV2(

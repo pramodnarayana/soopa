@@ -30,6 +30,7 @@ class AwsSqsConsumer:
         queue_url: str,
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
+        wait_time_seconds: int = 20,
     ):
         if not queue_url:
             logger.error(
@@ -38,9 +39,15 @@ class AwsSqsConsumer:
             )
             raise ValueError("SQS queue URL must be provided")
 
+        if not (0 <= wait_time_seconds <= 20):
+            raise ValueError(
+                f"wait_time_seconds must be between 0 and 20 (AWS SQS limit), got {wait_time_seconds}"
+            )
+
         self.queue_url = queue_url
         self.region_name = region_name
         self.endpoint_url = endpoint_url
+        self.wait_time_seconds = wait_time_seconds
         self.session = aioboto3.Session()
         self._client: _SqsClientProtocol | None = None
         self._client_context: Any | None = None
@@ -116,9 +123,10 @@ class AwsSqsConsumer:
             response = await sqs_client.receive_message(
                 QueueUrl=self.queue_url,
                 MaxNumberOfMessages=1,
-                WaitTimeSeconds=5,
+                WaitTimeSeconds=self.wait_time_seconds,
                 MessageAttributeNames=["All"],
             )
+
             messages = cast(list[JsonDict], response.get("Messages", []))
             if not messages:
                 logger.debug("sqs_consumer_polling_empty", queue_url=self.queue_url)

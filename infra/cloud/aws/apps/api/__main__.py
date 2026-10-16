@@ -144,7 +144,7 @@ api_service = provision_fargate_service(
         queue_vars=messaging.require_output("queue_env_vars"),
     ).apply(
         lambda args: [
-            {"name": "ENVIRONMENT", "value": "staging"},
+            {"name": "ENVIRONMENT", "value": _env},
             {"name": "EDI_ENVIRONMENT", "value": edi_environment_flag(_env)},
             {
                 "name": "GLOBAL_DB_HOST",

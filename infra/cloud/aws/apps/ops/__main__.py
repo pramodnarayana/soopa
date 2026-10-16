@@ -86,6 +86,17 @@ extra_policy = [
     }
 ]
 
+is_prod = _env == "production"
+
+# Cost optimization: Scale to 0 by default; scale to 1 on-demand when SSM DB access is needed
+desired_count = config.get_int("desired_count")
+if desired_count is None:
+    desired_count = 0
+
+use_spot = config.get_bool("use_spot")
+if use_spot is None:
+    use_spot = not is_prod
+
 bastion_service = provision_fargate_service(
     name=f"{_prefix}bastion",
     command=["sh", "-c", "yum install -y postgresql15 && tail -f /dev/null"],
@@ -98,7 +109,8 @@ bastion_service = provision_fargate_service(
     cpu="256",
     memory="512",
     enable_execute_command=True,
-    desired_count=1,
+    desired_count=desired_count,
+    use_spot=use_spot,
     environment_vars=[
         {"name": "DB_ENDPOINT", "value": global_db_endpoint},
     ],

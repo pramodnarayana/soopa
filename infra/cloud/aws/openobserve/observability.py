@@ -20,12 +20,42 @@ def provision_openobserve_foundations(
     staging_domain: str,
     cloud_map_namespace_id: str,
     ecr_repository_url: pulumi.Output[str],
+    retention_days: int | None = None,
 ):
-    obs_bucket = aws.s3.Bucket(
+    is_prod = pulumi.get_stack() == "production"
+    effective_retention = (
+        retention_days
+        if retention_days is not None
+        else (
+            OpenObserveConstants.DEFAULT_PROD_RETENTION_DAYS
+            if is_prod
+            else OpenObserveConstants.DEFAULT_NON_PROD_RETENTION_DAYS
+        )
+    )
+
+    obs_bucket = aws.s3.BucketV2(
         f"{prefix}observability-data",
         bucket=f"{prefix}observability-data",
         force_destroy=True,
         tags=tags,
+    )
+
+    # Cost & compliance: Enforce environment-tiered retention policy on OpenObserve logs in S3
+    aws.s3.BucketLifecycleConfigurationV2(
+        f"{prefix}observability-data-lifecycle",
+        bucket=obs_bucket.id,
+        rules=[
+            aws.s3.BucketLifecycleConfigurationV2RuleArgs(
+                id=f"openobserve-{effective_retention}-day-retention",
+                status="Enabled",
+                expiration=aws.s3.BucketLifecycleConfigurationV2RuleExpirationArgs(
+                    days=effective_retention,
+                ),
+                abort_incomplete_multipart_upload=aws.s3.BucketLifecycleConfigurationV2RuleAbortIncompleteMultipartUploadArgs(
+                    days_after_initiation=1,
+                ),
+            )
+        ],
     )
 
     obs_user_password = random.RandomPassword(
@@ -152,7 +182,7 @@ def provision_openobserve_foundations(
     aws.cloudwatch.LogGroup(
         f"{prefix}openobserve-log-group",
         name=f"/ecs/{prefix}openobserve",
-        retention_in_days=3,
+        retention_in_days=effective_retention,
         tags=tags,
     )
 
@@ -205,11 +235,14 @@ def provision_openobserve_foundations(
             {"name": "ZO_S3_BUCKET", "value": obs_bucket.bucket},
             {"name": "ZO_S3_REGION_NAME", "value": aws.get_region().name},
             {"name": "ZO_ROOT_USER_EMAIL", "value": OpenObserveConstants.DEFAULT_ADMIN_EMAIL},
+            {"name": "ZO_COMPACT_DATA_RETENTION_DAYS", "value": str(effective_retention)},
         ],
         secrets=[
             {"name": "ZO_ROOT_USER_PASSWORD", "valueFrom": obs_password_secret.arn},
         ],
         service_registry_arn=obs_sd.arn,
+        log_retention_days=effective_retention,
+        manage_log_group=False,
     )
 
     return obs_bucket, obs_user_secret.arn, obs_password_secret.arn
