@@ -1,4 +1,5 @@
-name: Application Service Rollout
+name: "App: Rollout"
+run-name: "App: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})"
 
 on:
   workflow_call:
@@ -30,7 +31,7 @@ permissions:
 
 jobs:
   deploy:
-    name: Rollout Applications to AWS (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})
+    name: "App: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production') && 'production' || (inputs.environment || 'staging') }})"
     runs-on: ubuntu-latest
     permissions:
       contents: read
