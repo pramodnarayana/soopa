@@ -119,11 +119,12 @@ Deployments and infrastructure provisioning are orchestrated entirely via native
 
 1. **Cloud Infrastructure (`preview-infra.yml` & `provision-infra.yml`)**:
    - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
-   - PRs trigger speculative `preview-infra.yml` (`pulumi preview --diff`) with 0 skipped clutter.
-   - Post-merge pushes to `development` / `main` execute `provision-infra.yml` via dedicated Continuous Delivery pipelines (`cd-staging.yml`, `cd-prod.yml`).
+   - PRs trigger speculative `preview-infra.yml` (`pulumi preview --diff`) when infrastructure paths change.
+   - Post-merge pushes to `development` / `main` touching `infra/**` execute `provision-infra.yml` directly and independently via native GitHub Actions path filters.
 
-2. **Application Continuous Delivery (`deploy.yml`)**:
-   - Builds and tags the modular monolith image (`sha-*`).
+2. **Application Continuous Delivery (`cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
+   - Gated on `Modular Monolith CI` completion on `development` (staging) and `main` (production).
+   - Builds and tags the single modular monolith container image (`sha-*`).
    - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_migrator`).
    - Executes rolling updates for API, UCP workers, EDI workers, and AS2 servers.
    - Builds and deploys frontend dashboard assets to S3/CloudFront (`deploy-dashboard.sh`).

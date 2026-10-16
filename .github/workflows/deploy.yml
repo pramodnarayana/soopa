@@ -52,38 +52,7 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ inputs.commit_sha || github.sha }}
-          fetch-depth: 0
           persist-credentials: false
-
-      - name: Detect Changed Paths
-        id: filter
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
-        with:
-          base: ${{ inputs.commit_sha && format('{0}^', inputs.commit_sha) || '' }}
-          ref: ${{ inputs.commit_sha || '' }}
-          filters: |
-            edi:
-              - 'apps/edi/**'
-              - 'infra/cloud/aws/apps/edi/**'
-              - 'core/platform/apps/platform-migrator/src/platform_migrator/runners/edi_runner.py'
-            ucp:
-              - 'core/ucp/**'
-              - 'infra/cloud/aws/apps/ucp/**'
-            api:
-              - 'core/platform/**'
-              - 'core/packages/**'
-              - 'infra/cloud/aws/apps/api/**'
-              - 'infra/cloud/aws/apps/migrator/**'
-            dashboard:
-              - 'core/ucp/apps/dashboard/**'
-              - 'infra/cloud/aws/apps/dashboard/**'
-            shared:
-              - 'Dockerfile'
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'versions.env'
-              - 'core/platform/packages/**'
-              - 'infra/cloud/aws/packages/seedwork/**'
 
       - name: Configure AWS Credentials (OIDC Federation)
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
@@ -91,7 +60,6 @@ jobs:
           role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN || 'arn:aws:iam::634680389104:role/flowwolf-github-deployer-role' }}
           role-session-name: github-actions-deploy-${{ github.run_id }}
           aws-region: ${{ env.AWS_REGION }}
-
 
       - name: Setup Environment (Node, Python, pnpm, uv)
         uses: ./.github/actions/setup-env
@@ -131,29 +99,25 @@ jobs:
           image-tag: ${{ env.IMAGE_TAG }}
 
       - name: Execute Platform Database Migrations (global_db)
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.ucp == 'true' || steps.filter.outputs.shared == 'true'
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain platform
 
       - name: Execute EDI Shard Database Migrations (edi_shard)
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain edi
 
       # Step 2: Main HTTP API Service
       - name: Deploy Unified API Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.api == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/api
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
 
-      # Step 3: Background Worker Containers (Selective Domain Deployment)
+      # Step 3: Background Worker Containers (Unified Monolith Deployment)
       - name: Deploy UCP Workers Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.ucp == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/ucp/workers
@@ -161,7 +125,6 @@ jobs:
           image-tag: ${{ env.IMAGE_TAG }}
 
       - name: Deploy EDI Workers Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/edi/workers
@@ -170,7 +133,6 @@ jobs:
 
       # Step 4: EDI AS2 Partner Server
       - name: Deploy EDI AS2 Server Stack
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.edi == 'true' || steps.filter.outputs.shared == 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/edi/as2
@@ -179,7 +141,6 @@ jobs:
 
       # Step 5: Frontend Dashboard Assets (Vite Build & S3 Upload)
       - name: Build & Deploy Frontend Dashboard Assets
-        if: github.event_name == 'workflow_dispatch' || steps.filter.outputs.dashboard == 'true'
         shell: bash
         run: |
           ./infra/cloud/aws/apps/dashboard/deploy-dashboard.sh "${{ env.TARGET_ENV }}"
