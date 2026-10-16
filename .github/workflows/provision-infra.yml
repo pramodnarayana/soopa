@@ -1,27 +1,22 @@
-name: Infrastructure Provision
+name: Cloud Infrastructure Rollout
 
 on:
-  workflow_call:
-    inputs:
-      target_env:
-        description: 'Target environment (staging or production)'
-        required: true
-        type: string
-        default: 'staging'
-      skip_if_unchanged:
-        description: 'Whether to check if infra changed before applying'
-        required: false
-        type: boolean
-        default: false
-      infra_changed:
-        description: 'Whether infra files changed'
-        required: false
-        type: boolean
-        default: true
-      commit_sha:
-        description: 'Specific commit SHA to checkout'
-        required: false
-        type: string
+  push:
+    branches:
+      - development
+      - main
+    paths:
+      - 'infra/cloud/aws/**'
+      - '!infra/cloud/aws/apps/api/**'
+      - '!infra/cloud/aws/apps/ucp/**'
+      - '!infra/cloud/aws/apps/edi/**'
+      - '!infra/cloud/aws/apps/migrator/**'
+      - 'infra/cloud/zitadel/**'
+      - 'versions.env'
+      - '.github/workflows/provision-infra.yml'
+      - '.github/workflows/preview-infra.yml'
+      - '.github/workflows/check-infra.yml'
+      - '.github/actions/pulumi-*/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -32,26 +27,37 @@ on:
         options:
           - staging
           - production
+  workflow_call:
+    inputs:
+      target_env:
+        description: 'Target environment (staging or production)'
+        required: false
+        type: string
+        default: 'staging'
+      commit_sha:
+        description: 'Specific commit SHA to checkout'
+        required: false
+        type: string
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: provision-infra-${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}
+  group: provision-infra-${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
   cancel-in-progress: false
 
 jobs:
   apply:
-    name: Provision (${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || (inputs.target_env || inputs.environment || 'staging') }})
+    name: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    environment: ${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}
+    environment: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
     env:
       AWS_REGION: us-east-1
-      TARGET_ENV: ${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}
+      TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
       STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 
@@ -62,19 +68,7 @@ jobs:
           ref: ${{ inputs.commit_sha || github.sha }}
           persist-credentials: false
 
-      - name: Check If Infrastructure Changed
-        id: check-infra
-        shell: bash
-        run: |
-          if [ "${{ inputs.skip_if_unchanged }}" = "true" ] && [ "${{ inputs.infra_changed }}" != "true" ]; then
-            echo "skip=true" >> $GITHUB_OUTPUT
-            echo "Cloud infrastructure unchanged. Skipping Pulumi apply."
-          else
-            echo "skip=false" >> $GITHUB_OUTPUT
-          fi
-
       - name: Configure AWS Credentials (OIDC Federation)
-        if: steps.check-infra.outputs.skip != 'true'
         uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
         with:
           role-to-assume: ${{ vars.AWS_DEPLOYER_ROLE_ARN || 'arn:aws:iam::634680389104:role/flowwolf-github-deployer-role' }}
@@ -82,11 +76,9 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Environment (Node, Python, pnpm, uv)
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/setup-env
 
       - name: Pulumi Setup
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-setup
         with:
           state-bucket: ${{ env.STATE_BUCKET }}
@@ -94,21 +86,18 @@ jobs:
 
       # Step 1: Core Network & Database Foundation
       - name: Deploy Foundation (VPC & Networking)
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/foundation
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Data (Aurora RDS & KMS)
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/data
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Platform (ECS Cluster & ECR)
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/platform
@@ -116,28 +105,24 @@ jobs:
 
       # Step 2: Third-Party Images Sync (OpenObserve, Zitadel)
       - name: Sync Third-Party Container Images to ECR
-        if: steps.check-infra.outputs.skip != 'true'
         shell: bash
         run: |
           ./infra/cloud/aws/platform/sync-images.sh "${{ env.TARGET_ENV }}"
 
       # Step 3: Platform Services & Identity
       - name: Deploy OpenObserve
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/openobserve
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Zitadel Infrastructure
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/zitadel
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Zitadel Configuration
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/zitadel
@@ -145,21 +130,18 @@ jobs:
 
       # Step 4: Tools, Dashboard Infra & Global Routing
       - name: Deploy OpenAS2 Partner Server
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/openas2
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Dashboard Infrastructure (S3 & CloudFront)
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/dashboard
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Deploy Global Edge Routing
-        if: steps.check-infra.outputs.skip != 'true'
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/routing

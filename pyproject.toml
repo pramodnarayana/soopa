@@ -100,7 +100,6 @@ dev = [
     "deptry>=0.25.1",
     "pip-audit>=2.10.1",
     "types-paramiko>=3.3.0",
-    "semgrep>=1.0.0",
     "pulumi>=3.0.0",
     "setuptools>=84.0.0",
 ]
