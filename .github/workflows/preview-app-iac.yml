@@ -8,12 +8,16 @@ on:
       - 'infra/cloud/aws/apps/ucp/**'
       - 'infra/cloud/aws/apps/edi/**'
       - 'infra/cloud/aws/apps/migrator/**'
+      - 'infra/cloud/aws/packages/seedwork/**'
+      - '.github/actions/pulumi-setup/**'
+      - '.github/actions/pulumi-stack-preview/**'
+      - '.github/actions/setup-env/**'
       - '.github/workflows/preview-app-iac.yml'
   workflow_call:
     inputs:
       target_env:
         description: 'Target environment (staging or production)'
-        required: true
+        required: false
         type: string
         default: 'staging'
   workflow_dispatch:
@@ -29,7 +33,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write
   id-token: write
 
 concurrency:
@@ -42,7 +45,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
       id-token: write
     env:
       AWS_REGION: us-east-1

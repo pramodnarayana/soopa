@@ -419,9 +419,7 @@ def provision_fargate_service(
             ),
         )
 
-    port_mappings: list[dict[str, object]] = (
-        [{"containerPort": port, "hostPort": port}] if port else []
-    )
+    port_mappings: list[PortMapping] = [{"containerPort": port, "hostPort": port}] if port else []
     if extra_ports:
         for p in extra_ports:
             port_mappings.append({"containerPort": p, "hostPort": p})

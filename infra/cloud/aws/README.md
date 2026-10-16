@@ -121,7 +121,7 @@ Deployments and infrastructure provisioning are orchestrated entirely via native
    - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
    - **Static Checks (`check-infra.yml`)**: Fast, unprivileged workflow (zero AWS credentials) running linters and pure unit tests without cloud mocks on any `infra/**` PR.
    - **Speculative Cloud Diff (`preview-infra.yml`)**: OIDC-authenticated workflow generating `pulumi preview` diffs against live AWS infrastructure stacks.
-   - **Cloud Infrastructure Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding application ECS service stacks `infra/cloud/aws/apps/**`, which roll out via Application Service Rollout).
+   - **Cloud Infrastructure Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding application ECS service stacks `api`, `ucp`, `edi`, and `migrator`, which roll out via Application Service Rollout; `openas2`, `dashboard`, and `routing` still roll out through `provision-infra.yml`).
 
 2. **Application Continuous Delivery (`ci.yml`, `preview-app-iac.yml`, `cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
    - **Application CI (`ci.yml`)**: Gated on linting, unit/integration testing, and Docker image build test for pure application services (zero infra mocks).
