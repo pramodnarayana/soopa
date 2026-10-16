@@ -44,7 +44,7 @@ def queue_env_vars_to_ecs_format(
     Returns:
         ECS-compatible list of ``{"name": ..., "value": ...}`` dicts.
     """
-    entries: list[dict[str, str]] = [{"name": k, "value": v} for k, v in static_vars.items()]
+    entries: list[EnvironmentVariable] = [{"name": k, "value": v} for k, v in static_vars.items()]
     for env_var_name, url in queue_env_vars.items():
         entries.append({"name": env_var_name, "value": url})
     return entries
