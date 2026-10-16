@@ -1,4 +1,5 @@
-name: Application Service Rollout (Staging)
+name: "App: Rollout (staging)"
+run-name: "App: Rollout (staging)"
 
 on:
   workflow_run:
@@ -19,7 +20,7 @@ concurrency:
 
 jobs:
   deploy-staging:
-    name: Rollout Applications to AWS (Staging)
+    name: "App: Rollout (staging)"
     if: |
       github.event_name == 'workflow_dispatch' ||
       (

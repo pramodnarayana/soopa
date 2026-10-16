@@ -1,4 +1,5 @@
-name: Cloud Infrastructure Rollout
+name: "Infra: Rollout"
+run-name: "Infra: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }})"
 
 on:
   push:
@@ -49,7 +50,7 @@ concurrency:
 
 jobs:
   apply:
-    name: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }})
+    name: "Infra: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }})"
     runs-on: ubuntu-latest
     permissions:
       contents: read
