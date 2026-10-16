@@ -3,6 +3,7 @@
 from infra_seedwork.ecs import (
     EcsConstants,
     ObservabilityConstants,
+    _build_service_sidecars,
     build_awslogs_log_config,
     build_container_definitions,
     build_firelens_log_config,
@@ -111,3 +112,97 @@ def test_build_task_role_policy_statements_composition():
     assert ["kms:Decrypt"] in actions
     sids = [s.get("Sid") for s in statements]
     assert "ExecuteCommand" in sids
+
+
+def test_build_container_definitions_omits_log_configuration_when_empty():
+    """Verify that logConfiguration is omitted from container def when not supplied or empty."""
+    containers_none = build_container_definitions(
+        name="test-worker",
+        image="app-image:latest",
+        log_configuration=None,
+    )
+    assert "logConfiguration" not in containers_none[0]
+
+    containers_empty = build_container_definitions(
+        name="test-worker",
+        image="app-image:latest",
+        log_configuration={},
+    )
+    assert "logConfiguration" not in containers_empty[0]
+
+
+def test_build_container_definitions_preserves_supplied_log_configuration():
+    """Verify that supplied logConfiguration is preserved on container definition."""
+    log_config = build_awslogs_log_config(
+        group_name="/ecs/test",
+        region_name="us-east-1",
+    )
+    containers = build_container_definitions(
+        name="test-worker",
+        image="app-image:latest",
+        log_configuration=log_config,
+    )
+    assert "logConfiguration" in containers[0]
+    assert containers[0]["logConfiguration"]["logDriver"] == EcsConstants.LOG_DRIVER_AWSLOGS
+
+
+def test_build_container_definitions_custom_sidecar_defaults_essential_and_preserves_fields():
+    """Verify that a custom sidecar preserves ECS fields (command, healthCheck) and defaults essential to True."""
+    sidecar = {
+        "name": "custom-agent",
+        "command": ["./agent", "--port", "9090"],
+        "healthCheck": {
+            "command": ["CMD-SHELL", "curl -f http://localhost:9090/health || exit 1"],
+            "interval": 30,
+            "timeout": 5,
+        },
+        "user": "1001:1001",
+    }
+    containers = build_container_definitions(
+        name="test-app",
+        image="main-app:latest",
+        sidecars=[sidecar],
+    )
+    assert len(containers) == 2
+    sidecar_def = containers[1]
+    assert sidecar_def["name"] == "custom-agent"
+    assert sidecar_def["image"] == "main-app:latest"  # fallback to main image
+    assert sidecar_def["essential"] is True  # defaults to True
+    assert sidecar_def["command"] == ["./agent", "--port", "9090"]
+    assert sidecar_def["healthCheck"] == {
+        "command": ["CMD-SHELL", "curl -f http://localhost:9090/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+    }
+    assert sidecar_def["user"] == "1001:1001"
+
+
+def test_build_container_definitions_custom_sidecar_respects_explicit_essential_false():
+    """Verify that a custom sidecar preserves explicit essential=False."""
+    sidecar = {
+        "name": "optional-metrics",
+        "essential": False,
+        "image": "prom/statsd-exporter:latest",
+    }
+    containers = build_container_definitions(
+        name="test-app",
+        image="main-app:latest",
+        sidecars=[sidecar],
+    )
+    assert len(containers) == 2
+    sidecar_def = containers[1]
+    assert sidecar_def["essential"] is False
+    assert sidecar_def["image"] == "prom/statsd-exporter:latest"
+
+
+def test_build_service_sidecars_preserves_missing_image_key():
+    """Verify that _build_service_sidecars does not inject image: None when image is omitted."""
+    sidecars = _build_service_sidecars(
+        name="api",
+        region_name="us-east-1",
+        firelens_endpoint=None,
+        fluentbit_image_uri=ObservabilityConstants.DEFAULT_FLUENTBIT_IMAGE,
+        sidecar_container={"name": "sidecar-worker"},
+    )
+    assert len(sidecars) == 1
+    assert "image" not in sidecars[0]

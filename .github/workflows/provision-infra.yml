@@ -44,20 +44,20 @@ permissions:
   id-token: write
 
 concurrency:
-  group: provision-infra-${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production' || github.ref_name == 'main') && 'production' || 'staging' }}
+  group: provision-infra-${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
   cancel-in-progress: false
 
 jobs:
   apply:
-    name: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production' || github.ref_name == 'main') && 'production' || 'staging' }})
+    name: Rollout (${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
-    environment: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production' || github.ref_name == 'main') && 'production' || 'staging' }}
+    environment: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
     env:
       AWS_REGION: us-east-1
-      TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production' || github.ref_name == 'main') && 'production' || 'staging' }}
+      TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
       STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
 

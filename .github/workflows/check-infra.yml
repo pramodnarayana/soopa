@@ -6,6 +6,7 @@ on:
     paths:
       - 'infra/**'
       - '.github/workflows/*infra*.yml'
+      - '.github/workflows/preview-app-iac.yml'
       - '.github/actions/pulumi-*/**'
   workflow_dispatch:
 

@@ -7,6 +7,8 @@ definition environment format.
 Centralised here so compute stacks never duplicate this transformation logic.
 """
 
+from infra_seedwork.ecs import EnvironmentVariable
+
 EDI_ENVIRONMENT_PRODUCTION = "P"
 EDI_ENVIRONMENT_TEST = "T"
 PRODUCTION_STACK_NAME = "production"
@@ -26,7 +28,7 @@ def edi_environment_flag(stack_name: str) -> str:
 def queue_env_vars_to_ecs_format(
     queue_env_vars: dict[str, str],
     static_vars: dict[str, str],
-) -> list[dict[str, str]]:
+) -> list[EnvironmentVariable]:
     """
     Merges topology-driven queue/topic env vars with static platform env vars
     and converts the result into the ECS task definition ``environment`` format:

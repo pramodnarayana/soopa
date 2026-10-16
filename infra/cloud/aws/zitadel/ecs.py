@@ -4,7 +4,12 @@ import pulumi
 import pulumi_aws as aws
 from constants import EcsConstants, ZitadelConstants
 from infra_seedwork import DatabaseConstants
-from infra_seedwork.ecs import build_firelens_log_config, build_firelens_sidecar
+from infra_seedwork.ecs import (
+    ContainerDefinition,
+    build_awslogs_log_config,
+    build_firelens_log_config,
+    build_firelens_sidecar,
+)
 from infra_seedwork.network import provision_target_group_and_rule
 
 
@@ -86,16 +91,13 @@ def provision_ecs(
         if fl_end:
             main_log_config = build_firelens_log_config(fl_end, obs_user_arn, obs_pass_arn)
         else:
-            main_log_config = {
-                "logDriver": EcsConstants.LOG_DRIVER,
-                "options": {
-                    "awslogs-group": f"/ecs/{prefix}zitadel",
-                    "awslogs-region": region_name,
-                    "awslogs-stream-prefix": ZitadelConstants.CONTAINER_NAME,
-                },
-            }
+            main_log_config = build_awslogs_log_config(
+                group_name=f"/ecs/{prefix}zitadel",
+                region_name=region_name,
+                stream_prefix=ZitadelConstants.CONTAINER_NAME,
+            )
 
-        containers = [
+        containers: list[ContainerDefinition] = [
             {
                 "name": ZitadelConstants.CONTAINER_NAME,
                 "image": f"{ecr_repo_url}:{ZitadelConstants.IMAGE.split(':')[-1]}",

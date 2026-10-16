@@ -1,0 +1,127 @@
+name: Application IaC Preview
+
+on:
+  pull_request:
+    branches: [ "main", "development" ]
+    paths:
+      - 'infra/cloud/aws/apps/api/**'
+      - 'infra/cloud/aws/apps/ucp/**'
+      - 'infra/cloud/aws/apps/edi/**'
+      - 'infra/cloud/aws/apps/migrator/**'
+      - '.github/workflows/preview-app-iac.yml'
+  workflow_call:
+    inputs:
+      target_env:
+        description: 'Target environment (staging or production)'
+        required: true
+        type: string
+        default: 'staging'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+concurrency:
+  group: preview-app-iac-${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    name: Speculative Application Diff (${{ inputs.target_env || inputs.environment || 'staging' }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    env:
+      AWS_REGION: us-east-1
+      TARGET_ENV: ${{ (inputs.target_env == 'prod' || inputs.environment == 'prod' || inputs.target_env == 'production' || inputs.environment == 'production') && 'production' || 'staging' }}
+      STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Check Fork Pull Request Status
+        id: check-fork
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+            echo "is_fork=true" >> $GITHUB_OUTPUT
+            echo "::notice::Pull request originates from a fork where AWS secrets are restricted. Skipping credentialed preview."
+          else
+            echo "is_fork=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS Credentials (OIDC Federation)
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: aws-actions/configure-aws-credentials@ff717079ee2060e4bcee96c4779b553acc87447c # v4.0.2
+        with:
+          role-to-assume: ${{ vars.AWS_PREVIEW_ROLE_ARN || 'arn:aws:iam::634680389104:role/flowwolf-github-preview-role' }}
+          role-session-name: github-actions-app-preview-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Environment (Node, Python, pnpm, uv)
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/setup-env
+
+      - name: Pulumi Setup
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-setup
+        with:
+          state-bucket: ${{ env.STATE_BUCKET }}
+          pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+          setup-zitadel: "true"
+
+      # Step 1: Database Migrator Stack
+      - name: Preview Database Migrator Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/migrator
+          stack-name: ${{ env.TARGET_ENV }}
+
+      # Step 2: Main HTTP API Service
+      - name: Preview Unified API Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/api
+          stack-name: ${{ env.TARGET_ENV }}
+
+      # Step 3: Background Worker Containers
+      - name: Preview UCP Workers Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/ucp/workers
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview EDI Workers Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/workers
+          stack-name: ${{ env.TARGET_ENV }}
+
+      # Step 4: EDI AS2 Partner Server
+      - name: Preview EDI AS2 Server Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/as2
+          stack-name: ${{ env.TARGET_ENV }}
