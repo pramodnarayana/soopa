@@ -128,6 +128,7 @@ stop_environment() {
         log "Step 1a: Persisting current ECS desired counts to SSM..."
         counts_json="{"
         first=true
+        all_zeros=true
         for svc_arn in $services; do
             svc_name="${svc_arn##*/}"
             info=$(aws ecs describe-services \
@@ -136,6 +137,14 @@ stop_environment() {
                 --region "$REGION" \
                 --query "services[0].desiredCount" \
                 --output text 2>/dev/null || echo "1")
+
+            if ! [[ "$info" =~ ^[0-9]+$ ]]; then
+                info="1"
+            fi
+
+            if [[ "$info" -gt 0 ]]; then
+                all_zeros=false
+            fi
 
             if [ "$first" = true ]; then
                 first=false
@@ -146,15 +155,20 @@ stop_environment() {
         done
         counts_json="${counts_json}}"
 
-        if aws ssm put-parameter \
-            --name "$SSM_PARAM_NAME" \
-            --value "$counts_json" \
-            --type "String" \
-            --overwrite \
-            --region "$REGION" >/dev/null 2>&1; then
-            log "  Successfully persisted pre-shutdown desired counts to SSM: ${counts_json}"
+        if [ "$all_zeros" = true ]; then
+            log "  All ECS services are already at desiredCount=0; skipping SSM persistence to preserve pre-shutdown state."
         else
-            log "  Warning: Failed to persist counts to SSM, continuing with scale-down."
+            if aws ssm put-parameter \
+                --name "$SSM_PARAM_NAME" \
+                --value "$counts_json" \
+                --type "String" \
+                --overwrite \
+                --region "$REGION" >/dev/null 2>&1; then
+                log "  Successfully persisted pre-shutdown desired counts to SSM: ${counts_json}"
+            else
+                log_error "Failed to persist pre-shutdown desired counts to SSM (${SSM_PARAM_NAME}). Aborting scale-down to prevent unrecoverable state loss."
+                exit 1
+            fi
         fi
     fi
 
@@ -185,17 +199,27 @@ stop_environment() {
 
         while [[ $waited -lt $max_wait ]]; do
             total_running=0
+            poll_failed=false
             for svc_arn in $services; do
-                running=$(aws ecs describe-services \
+                svc_name="${svc_arn##*/}"
+                running_out=$(aws ecs describe-services \
                     --cluster "$CLUSTER_NAME" \
                     --services "$svc_arn" \
                     --region "$REGION" \
                     --query "services[0].runningCount" \
-                    --output text 2>/dev/null || echo "0")
-                total_running=$((total_running + running))
+                    --output text 2>/dev/null)
+                exit_code=$?
+
+                if [[ $exit_code -ne 0 ]] || ! [[ "$running_out" =~ ^[0-9]+$ ]]; then
+                    log "  Warning: Failed to query running count for ${svc_name} (exit code ${exit_code}, output: '${running_out}'). Treating as not drained."
+                    total_running=$((total_running + 1))
+                    poll_failed=true
+                else
+                    total_running=$((total_running + running_out))
+                fi
             done
 
-            if [[ $total_running -eq 0 ]]; then
+            if [[ $total_running -eq 0 && "$poll_failed" = false ]]; then
                 log "  All ECS tasks successfully drained (0 running tasks across cluster)."
                 break
             fi

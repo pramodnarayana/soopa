@@ -47,19 +47,23 @@ jobs:
 
       - name: Resolve Action
         id: resolve-action
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_ACTION: ${{ inputs.action }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "ACTION=${{ inputs.action }}" >> $GITHUB_OUTPUT
-            echo "Resolved action from manual trigger: ${{ inputs.action }}"
-          elif [ "${{ github.event_name }}" = "schedule" ]; then
-            if [ "${{ github.event.schedule }}" = "30 16 * * 1-5" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "ACTION=$INPUT_ACTION" >> $GITHUB_OUTPUT
+            echo "Resolved action from manual trigger: $INPUT_ACTION"
+          elif [ "$EVENT_NAME" = "schedule" ]; then
+            if [ "$EVENT_SCHEDULE" = "30 16 * * 1-5" ]; then
               echo "ACTION=stop" >> $GITHUB_OUTPUT
-              echo "Resolved action from night schedule (${{ github.event.schedule }}): stop"
-            elif [ "${{ github.event.schedule }}" = "0 4 * * 1-5" ]; then
+              echo "Resolved action from night schedule ($EVENT_SCHEDULE): stop"
+            elif [ "$EVENT_SCHEDULE" = "0 4 * * 1-5" ]; then
               echo "ACTION=start" >> $GITHUB_OUTPUT
-              echo "Resolved action from morning schedule (${{ github.event.schedule }}): start"
+              echo "Resolved action from morning schedule ($EVENT_SCHEDULE): start"
             else
-              echo "ERROR: Unrecognized schedule expression: '${{ github.event.schedule }}'" >&2
+              echo "ERROR: Unrecognized schedule expression: '$EVENT_SCHEDULE'" >&2
               exit 1
             fi
           else

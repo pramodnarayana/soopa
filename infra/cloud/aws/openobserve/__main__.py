@@ -39,8 +39,11 @@ if enable_observability is not False:
     staging_domain = platform.require_output("staging_domain")
     openobserve_ecr_repo_url = platform.require_output("openobserve_ecr_repo_url")
 
+    raw_retention_days = config.get_int("log_retention_days")
     retention_days = (
-        config.get_int("log_retention_days") or ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
+        raw_retention_days
+        if raw_retention_days is not None
+        else ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
     )
     secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 

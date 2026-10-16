@@ -19,7 +19,7 @@ runs:
     - name: Install Pulumi CLI
       uses: pulumi/setup-pulumi@b374ceb6168550de27c6eba92e01c1a774040e11 # v2
 
-    - name: Load Infrastructure Application Versions
+    - name: Load Infrastructure App Versions
       shell: bash
       run: |
         if [ -f "$GITHUB_WORKSPACE/versions.env" ]; then
