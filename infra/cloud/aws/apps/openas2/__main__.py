@@ -8,6 +8,7 @@ import json
 
 import pulumi
 import pulumi_aws as aws
+from infra_seedwork import ObservabilityDefaults, StackEnvironment
 from infra_seedwork.ecr import attach_ecr_lifecycle_policy
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.network import provision_target_group_and_rule
@@ -17,8 +18,7 @@ _prefix = f"{_env}-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "openas2", "Environment": _env}
 
 config = pulumi.Config()
-is_prod = _env in ("prod", "production")
-if is_prod:
+if _env == StackEnvironment.PRODUCTION:
     raise ValueError("OpenAS2 testing infrastructure cannot be deployed to production.")
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
@@ -60,10 +60,11 @@ ecr_repo = aws.ecr.Repository(
     force_delete=True,
     tags=_TAGS,
 )
-is_prod = _env == "production"
 configured_max_images = config.get_int("max_image_count")
 max_image_count = (
-    configured_max_images if configured_max_images is not None else (30 if is_prod else 5)
+    configured_max_images
+    if configured_max_images is not None
+    else ObservabilityDefaults.DEFAULT_ECR_MAX_IMAGE_COUNT
 )
 
 attach_ecr_lifecycle_policy(
@@ -144,7 +145,7 @@ target_bucket_name = f"openas2-flowwolf-{_env}-outbox"
 outbox_bucket = aws.s3.BucketV2(
     f"{_prefix}openas2-outbox",
     bucket=target_bucket_name,
-    force_destroy=not is_prod,
+    force_destroy=True,
     tags=_TAGS,
 )
 
@@ -219,9 +220,7 @@ fargate_service = provision_fargate_service(
     obs_user_secret_arn=obs_user_arn,
     obs_password_secret_arn=obs_pass_arn,
     enable_execute_command=True,
-    use_spot=config.get_bool("use_spot")
-    if config.get_bool("use_spot") is not None
-    else not is_prod,
+    use_spot=config.get_bool("use_spot") if config.get_bool("use_spot") is not None else True,
     tags=_TAGS,
 )
 

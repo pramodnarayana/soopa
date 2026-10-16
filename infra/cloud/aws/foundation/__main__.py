@@ -295,9 +295,7 @@ endpoints_sg = aws.ec2.SecurityGroup(
 # In non-production, traffic routes through the existing NAT Gateway for pennies.
 # In production, Interface Endpoints provide dedicated private intra-AWS routing.
 config = pulumi.Config()
-enable_interface_endpoints = config.get_bool("enable_interface_endpoints")
-if enable_interface_endpoints is None:
-    enable_interface_endpoints = _env == "production"
+enable_interface_endpoints = config.get_bool("enable_interface_endpoints") or False
 
 if enable_interface_endpoints:
     for service in ["sns", "sqs", "logs", "secretsmanager"]:

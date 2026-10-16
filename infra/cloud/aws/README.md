@@ -111,6 +111,19 @@ pulumi up -s <env> -C infra/cloud/aws/apps/dashboard
 pulumi up -s <env> -C infra/cloud/aws/apps/routing
 ```
 
+### CloudWatch Log Group Adoption & Migration
+
+ECS services explicitly provision their CloudWatch Log Groups with environment-tiered retention policies (3 days for non-prod, 30 days for production) to eliminate storage leakage.
+
+If an ECS service log group was previously created automatically by the ECS agent (`awslogs-create-group: true`), Pulumi may report a `ResourceAlreadyExistsException` on first rollout. To adopt an existing log group into Pulumi state:
+
+```bash
+# Example: Import pre-existing log group for openas2 service
+pulumi import aws:cloudwatch/logGroup:LogGroup <env>-openas2-log-group /ecs/<env>-openas2 -s <env> -C infra/cloud/aws/apps/openas2
+
+# Alternatively, pass import_log_group=True to provision_fargate_service for the initial rollout.
+```
+
 ---
 
 ## Enterprise CI/CD Automation

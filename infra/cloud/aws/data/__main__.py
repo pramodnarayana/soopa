@@ -34,19 +34,17 @@ db_subnet_group = aws.rds.SubnetGroup(
     tags=_TAGS,
 )
 
-is_prod = _env == "production"
-default_instance = (
-    DatabaseConstants.DEFAULT_PROD_INSTANCE_CLASS
-    if is_prod
-    else DatabaseConstants.DEFAULT_NON_PROD_INSTANCE_CLASS
-)
-instance_class = config.get("db_instance_class") or default_instance
+instance_class = config.get("db_instance_class") or DatabaseConstants.DEFAULT_INSTANCE_CLASS
 allocated_storage = (
     config.get_int("db_allocated_storage") or DatabaseConstants.DEFAULT_ALLOCATED_STORAGE_GB
 )
-multi_az = config.get_bool("multi_az")
-if multi_az is None:
-    multi_az = is_prod
+multi_az = config.get_bool("multi_az") or False
+skip_final_snapshot = (
+    config.get_bool("skip_final_snapshot")
+    if config.get_bool("skip_final_snapshot") is not None
+    else True
+)
+secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 
 # ── Provision Global Database ─────────────────────────────────────────────────
 global_db, db_secret, db_password = provision_global_db(
@@ -57,6 +55,8 @@ global_db, db_secret, db_password = provision_global_db(
     instance_class=instance_class,
     allocated_storage=allocated_storage,
     multi_az=multi_az,
+    skip_final_snapshot=skip_final_snapshot,
+    secret_recovery_window_days=secret_recovery_window_days,
 )
 
 # ── Provision EDI Shard Database ──────────────────────────────────────────────
@@ -68,6 +68,8 @@ edi_shard_db, edi_db_secret = provision_edi_db(
     instance_class=instance_class,
     allocated_storage=allocated_storage,
     multi_az=multi_az,
+    skip_final_snapshot=skip_final_snapshot,
+    secret_recovery_window_days=secret_recovery_window_days,
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────

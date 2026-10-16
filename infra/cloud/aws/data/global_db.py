@@ -15,6 +15,8 @@ def provision_global_db(
     instance_class: str,
     allocated_storage: int,
     multi_az: bool = False,
+    skip_final_snapshot: bool = True,
+    secret_recovery_window_days: int = 0,
 ):
     db_password = random.RandomPassword(
         "global-db-password",
@@ -40,8 +42,6 @@ def provision_global_db(
         tags=tags,
     )
 
-    is_prod = pulumi.get_stack() == "production"
-
     global_db = aws.rds.Instance(
         f"{prefix}global-db",
         identifier=f"{prefix}global-db",
@@ -57,8 +57,10 @@ def provision_global_db(
         parameter_group_name=global_db_parameter_group.name,
         max_allocated_storage=100,
         multi_az=multi_az,
-        skip_final_snapshot=not is_prod,
-        final_snapshot_identifier=f"{prefix}global-db-final-snapshot" if is_prod else None,
+        skip_final_snapshot=skip_final_snapshot,
+        final_snapshot_identifier=f"{prefix}global-db-final-snapshot"
+        if not skip_final_snapshot
+        else None,
         publicly_accessible=False,
         storage_encrypted=True,
         tags=tags,
@@ -67,7 +69,7 @@ def provision_global_db(
     db_secret = aws.secretsmanager.Secret(
         f"{prefix}global-db-secret",
         name_prefix=f"edi/{prefix}global-db-credentials-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
     aws.secretsmanager.SecretVersion(

@@ -6,7 +6,7 @@ Provisions the OpenObserve stack onto the ECS platform.
 
 import pulumi
 import pulumi_aws as aws
-from constants import OpenObserveConstants
+from infra_seedwork import ObservabilityDefaults
 from observability import provision_openobserve_foundations
 
 _env = pulumi.get_stack()
@@ -39,14 +39,10 @@ if enable_observability is not False:
     staging_domain = platform.require_output("staging_domain")
     openobserve_ecr_repo_url = platform.require_output("openobserve_ecr_repo_url")
 
-    retention_days = config.get_int("log_retention_days")
-    if retention_days is None:
-        is_prod = _env == "production"
-        retention_days = (
-            OpenObserveConstants.DEFAULT_PROD_RETENTION_DAYS
-            if is_prod
-            else OpenObserveConstants.DEFAULT_NON_PROD_RETENTION_DAYS
-        )
+    retention_days = (
+        config.get_int("log_retention_days") or ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
+    )
+    secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 
     # ── Provision OpenObserve ─────────────────────────────────────────────────────
     obs_bucket, obs_user_arn, obs_pass_arn = provision_openobserve_foundations(
@@ -62,6 +58,7 @@ if enable_observability is not False:
         cloud_map_namespace_id=cloud_map_namespace_id,
         ecr_repository_url=openobserve_ecr_repo_url,
         retention_days=retention_days,
+        secret_recovery_window_days=secret_recovery_window_days,
     )
 
     hosted_zone = aws.route53.get_zone_output(name=staging_domain)

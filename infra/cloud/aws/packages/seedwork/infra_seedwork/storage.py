@@ -16,11 +16,8 @@ def attach_bucket_lifecycle_configuration(
     abort stalled multipart uploads, and remove expired object delete markers.
     """
     if noncurrent_version_expiration_days is None:
-        is_prod = pulumi.get_stack() == "production"
         noncurrent_version_expiration_days = (
-            ObservabilityDefaults.DEFAULT_PROD_S3_NONCURRENT_RETENTION_DAYS
-            if is_prod
-            else ObservabilityDefaults.DEFAULT_NON_PROD_S3_NONCURRENT_RETENTION_DAYS
+            ObservabilityDefaults.DEFAULT_S3_NONCURRENT_RETENTION_DAYS
         )
 
     return aws.s3.BucketLifecycleConfigurationV2(
@@ -57,11 +54,8 @@ def provision_secure_bucket(
     Uses AWS KMS if provided, otherwise defaults to AES256.
     """
     if noncurrent_version_expiration_days is None:
-        is_prod = pulumi.get_stack() == "production"
         noncurrent_version_expiration_days = (
-            ObservabilityDefaults.DEFAULT_PROD_S3_NONCURRENT_RETENTION_DAYS
-            if is_prod
-            else ObservabilityDefaults.DEFAULT_NON_PROD_S3_NONCURRENT_RETENTION_DAYS
+            ObservabilityDefaults.DEFAULT_S3_NONCURRENT_RETENTION_DAYS
         )
 
     bucket = aws.s3.BucketV2(

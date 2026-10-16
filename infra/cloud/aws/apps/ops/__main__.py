@@ -86,16 +86,12 @@ extra_policy = [
     }
 ]
 
-is_prod = _env == "production"
-
 # Cost optimization: Scale to 0 by default; scale to 1 on-demand when SSM DB access is needed
 desired_count = config.get_int("desired_count")
 if desired_count is None:
     desired_count = 0
 
-use_spot = config.get_bool("use_spot")
-if use_spot is None:
-    use_spot = not is_prod
+use_spot = config.get_bool("use_spot") if config.get_bool("use_spot") is not None else False
 
 bastion_service = provision_fargate_service(
     name=f"{_prefix}bastion",

@@ -15,6 +15,8 @@ def provision_edi_db(
     instance_class: str,
     allocated_storage: int,
     multi_az: bool = False,
+    skip_final_snapshot: bool = True,
+    secret_recovery_window_days: int = 0,
 ):
     edi_db_password = random.RandomPassword(
         "edi-shard-db-password",
@@ -40,8 +42,6 @@ def provision_edi_db(
         tags=tags,
     )
 
-    is_prod = pulumi.get_stack() == "production"
-
     edi_shard_db = aws.rds.Instance(
         f"{prefix}edi-shard-db",
         identifier=f"{prefix}edi-shard-db",
@@ -57,8 +57,10 @@ def provision_edi_db(
         parameter_group_name=edi_shard_db_parameter_group.name,
         max_allocated_storage=100,
         multi_az=multi_az,
-        skip_final_snapshot=not is_prod,
-        final_snapshot_identifier=f"{prefix}edi-shard-db-final-snapshot" if is_prod else None,
+        skip_final_snapshot=skip_final_snapshot,
+        final_snapshot_identifier=f"{prefix}edi-shard-db-final-snapshot"
+        if not skip_final_snapshot
+        else None,
         publicly_accessible=False,
         storage_encrypted=True,
         tags=tags,
@@ -67,7 +69,7 @@ def provision_edi_db(
     edi_db_secret = aws.secretsmanager.Secret(
         f"{prefix}edi-shard-db-secret",
         name_prefix=f"edi/{prefix}edi-shard-db-credentials-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
 

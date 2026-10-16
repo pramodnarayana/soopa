@@ -4,6 +4,8 @@ from typing import TypedDict
 import pulumi
 import pulumi_aws as aws
 
+from infra_seedwork.constants import ObservabilityDefaults, validate_log_retention
+
 
 class PortMapping(TypedDict, total=False):
     containerPort: int
@@ -103,8 +105,6 @@ class ObservabilityConstants:
     OPENOBSERVE_URI = "/api/default/default/_json"
     DEFAULT_PORT = "80"
     TLS_ON = "off"
-    DEFAULT_PROD_LOG_RETENTION_DAYS: int = 30
-    DEFAULT_NON_PROD_LOG_RETENTION_DAYS: int = 3
 
 
 def build_task_role_policy_statements(
@@ -376,6 +376,7 @@ def provision_fargate_service(
     service_registry_arn: str | None = None,
     log_retention_days: int | None = None,
     manage_log_group: bool = True,
+    import_log_group: bool = False,
     use_spot: bool = False,
 ) -> aws.ecs.Service:
     """
@@ -384,31 +385,31 @@ def provision_fargate_service(
     _region = aws.get_region()
     _identity = aws.get_caller_identity()
 
-    is_prod = pulumi.get_stack() == "production"
     effective_log_retention = (
-        log_retention_days
+        validate_log_retention(log_retention_days)
         if log_retention_days is not None
-        else (
-            ObservabilityConstants.DEFAULT_PROD_LOG_RETENTION_DAYS
-            if is_prod
-            else ObservabilityConstants.DEFAULT_NON_PROD_LOG_RETENTION_DAYS
-        )
+        else ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
     )
 
     # Explicitly provision CloudWatch LogGroups with retention to eliminate cost leakage
     if manage_log_group and effective_log_retention is not None:
+        main_lg_opts = pulumi.ResourceOptions(import_=f"/ecs/{name}") if import_log_group else None
         aws.cloudwatch.LogGroup(
             f"{name}-log-group",
             name=f"/ecs/{name}",
             retention_in_days=effective_log_retention,
             tags=tags,
+            opts=main_lg_opts,
         )
         if firelens_endpoint:
+            fb_lg_name = f"/ecs/{name}-{EcsConstants.FIRELENS_TYPE}"
+            fb_lg_opts = pulumi.ResourceOptions(import_=fb_lg_name) if import_log_group else None
             aws.cloudwatch.LogGroup(
                 f"{name}-fluentbit-log-group",
-                name=f"/ecs/{name}-{EcsConstants.FIRELENS_TYPE}",
+                name=fb_lg_name,
                 retention_in_days=effective_log_retention,
                 tags=tags,
+                opts=fb_lg_opts,
             )
 
     # Task Role

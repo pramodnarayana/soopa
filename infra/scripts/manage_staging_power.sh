@@ -12,9 +12,6 @@ set -euo pipefail
 
 ACTION="${1:-status}"
 ENV_NAME="${2:-staging}"
-CLUSTER_NAME="${ENV_NAME}-cluster"
-REGION="${AWS_REGION:-us-east-1}"
-DB_INSTANCES=("${ENV_NAME}-global-db" "${ENV_NAME}-edi-shard-db")
 
 log() {
     printf "[%s] %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
@@ -23,6 +20,17 @@ log() {
 log_error() {
     printf "[%s] ERROR: %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
 }
+
+# Strict guardrail: restrict power management strictly to staging
+if [[ "$ENV_NAME" != "staging" ]]; then
+    log_error "This power management script is strictly restricted to 'staging'. Refusing to operate on '${ENV_NAME}'."
+    exit 1
+fi
+
+CLUSTER_NAME="${ENV_NAME}-cluster"
+REGION="${AWS_REGION:-us-east-1}"
+DB_INSTANCES=("${ENV_NAME}-global-db" "${ENV_NAME}-edi-shard-db")
+SSM_PARAM_NAME="/${ENV_NAME}/power/pre_shutdown_desired_counts"
 
 check_dependencies() {
     if ! command -v aws >/dev/null 2>&1; then
@@ -33,19 +41,49 @@ check_dependencies() {
 
 get_db_status() {
     local db_id="$1"
-    aws rds describe-db-instances \
+    local status
+    local err_file
+    err_file=$(mktemp)
+
+    if status=$(aws rds describe-db-instances \
         --db-instance-identifier "$db_id" \
         --region "$REGION" \
         --query "DBInstances[0].DBInstanceStatus" \
-        --output text 2>/dev/null || echo "not-found"
+        --output text 2>"$err_file"); then
+        rm -f "$err_file"
+        echo "$status"
+    else
+        local err
+        err=$(cat "$err_file" 2>/dev/null || true)
+        rm -f "$err_file"
+        if echo "$err" | grep -q "DBInstanceNotFound"; then
+            echo "not-found"
+        else
+            log_error "Failed to query RDS instance '${db_id}': ${err}"
+            return 1
+        fi
+    fi
 }
 
 get_cluster_services() {
-    aws ecs list-services \
+    local services
+    local err_file
+    err_file=$(mktemp)
+
+    if services=$(aws ecs list-services \
         --cluster "$CLUSTER_NAME" \
         --region "$REGION" \
         --query "serviceArns[]" \
-        --output text 2>/dev/null || true
+        --output text 2>"$err_file"); then
+        rm -f "$err_file"
+        echo "$services"
+    else
+        local err
+        err=$(cat "$err_file" 2>/dev/null || true)
+        rm -f "$err_file"
+        log_error "Failed to list ECS services for cluster '${CLUSTER_NAME}': ${err}"
+        return 1
+    fi
 }
 
 show_status() {
@@ -83,8 +121,45 @@ show_status() {
 stop_environment() {
     log ">>> Initiating SHUTDOWN sequence for '${ENV_NAME}'..."
 
-    log "Step 1: Scaling down all ECS services in cluster '${CLUSTER_NAME}' to 0..."
     services=$(get_cluster_services)
+
+    # Step 1a: Persist current ECS desired counts to SSM Parameter Store
+    if [[ -n "$services" ]]; then
+        log "Step 1a: Persisting current ECS desired counts to SSM..."
+        counts_json="{"
+        first=true
+        for svc_arn in $services; do
+            svc_name="${svc_arn##*/}"
+            info=$(aws ecs describe-services \
+                --cluster "$CLUSTER_NAME" \
+                --services "$svc_arn" \
+                --region "$REGION" \
+                --query "services[0].desiredCount" \
+                --output text 2>/dev/null || echo "1")
+
+            if [ "$first" = true ]; then
+                first=false
+            else
+                counts_json="${counts_json},"
+            fi
+            counts_json="${counts_json}\"${svc_name}\":${info}"
+        done
+        counts_json="${counts_json}}"
+
+        if aws ssm put-parameter \
+            --name "$SSM_PARAM_NAME" \
+            --value "$counts_json" \
+            --type "String" \
+            --overwrite \
+            --region "$REGION" >/dev/null 2>&1; then
+            log "  Successfully persisted pre-shutdown desired counts to SSM: ${counts_json}"
+        else
+            log "  Warning: Failed to persist counts to SSM, continuing with scale-down."
+        fi
+    fi
+
+    # Step 1b: Scale down all ECS services in cluster to 0
+    log "Step 1b: Scaling down all ECS services in cluster '${CLUSTER_NAME}' to 0..."
     if [[ -n "$services" ]]; then
         for svc_arn in $services; do
             svc_name="${svc_arn##*/}"
@@ -96,11 +171,47 @@ stop_environment() {
                 --region "$REGION" \
                 --output text --query "service.serviceName" >/dev/null
         done
-        log "  All ECS services scaled down."
+        log "  All ECS services scale-down requested."
     else
         log "  No ECS services to scale down."
     fi
 
+    # Step 1c: Wait for running ECS tasks to drain to 0 before stopping databases
+    if [[ -n "$services" ]]; then
+        log "Step 1c: Waiting for all ECS tasks to drain and reach 0 running tasks..."
+        max_wait=300
+        waited=0
+        poll_interval=5
+
+        while [[ $waited -lt $max_wait ]]; do
+            total_running=0
+            for svc_arn in $services; do
+                running=$(aws ecs describe-services \
+                    --cluster "$CLUSTER_NAME" \
+                    --services "$svc_arn" \
+                    --region "$REGION" \
+                    --query "services[0].runningCount" \
+                    --output text 2>/dev/null || echo "0")
+                total_running=$((total_running + running))
+            done
+
+            if [[ $total_running -eq 0 ]]; then
+                log "  All ECS tasks successfully drained (0 running tasks across cluster)."
+                break
+            fi
+
+            log "  Waiting for ${total_running} running task(s) to stop (waited ${waited}s / max ${max_wait}s)..."
+            sleep "$poll_interval"
+            waited=$((waited + poll_interval))
+        done
+
+        if [[ $waited -ge $max_wait ]]; then
+            log_error "Timeout (${max_wait}s) waiting for ECS tasks to drain to 0 running tasks."
+            exit 1
+        fi
+    fi
+
+    # Step 2: Stopping RDS PostgreSQL instances after services are fully drained
     log "Step 2: Stopping RDS PostgreSQL instances..."
     for db in "${DB_INSTANCES[@]}"; do
         current_status=$(get_db_status "$db")
@@ -131,6 +242,17 @@ start_environment() {
     for db in "${DB_INSTANCES[@]}"; do
         current_status=$(get_db_status "$db")
         log "  DB '${db}' is currently '${current_status}'"
+
+        # If DB is in 'stopping' state, wait for it to reach 'stopped' before requesting start
+        if [[ "$current_status" == "stopping" ]]; then
+            log "  DB '${db}' is currently 'stopping'. Waiting for it to reach 'stopped' (timeout: 10m)..."
+            aws rds wait db-instance-stopped \
+                --db-instance-identifier "$db" \
+                --region "$REGION"
+            current_status=$(get_db_status "$db")
+            log "  DB '${db}' has transitioned to state '${current_status}'"
+        fi
+
         if [[ "$current_status" == "stopped" ]]; then
             log "  Starting DB '${db}'..."
             aws rds start-db-instance \
@@ -143,7 +265,8 @@ start_environment() {
         elif [[ "$current_status" == "available" ]]; then
             log "  DB '${db}' is already available."
         else
-            log "  DB '${db}' in state '${current_status}'."
+            log_error "DB '${db}' is in unexpected state '${current_status}'. Cannot proceed with safe startup."
+            exit 1
         fi
     done
 
@@ -159,6 +282,19 @@ start_environment() {
     fi
 
     log "Step 3: Scaling up ECS services in cluster '${CLUSTER_NAME}'..."
+    # Attempt to load saved desired counts from SSM Parameter Store
+    saved_counts=""
+    if saved_raw=$(aws ssm get-parameter \
+        --name "$SSM_PARAM_NAME" \
+        --query "Parameter.Value" \
+        --output text \
+        --region "$REGION" 2>/dev/null); then
+        saved_counts="$saved_raw"
+        log "  Loaded pre-shutdown desired counts from SSM: ${saved_counts}"
+    else
+        log "  No pre-shutdown desired counts found in SSM. Falling back to default configuration."
+    fi
+
     services=$(get_cluster_services)
     if [[ -n "$services" ]]; then
         for svc_arn in $services; do
@@ -168,11 +304,22 @@ start_environment() {
                 log "  Skipping '${svc_name}' (bastion scales to 0 by default)"
                 continue
             fi
-            log "  Scaling ${svc_name} -> desired_count=1"
+
+            # Determine desired count: from saved counts if available, otherwise default to 1
+            target_count=1
+            if [[ -n "$saved_counts" ]]; then
+                # Extract integer value for this service: "svc_name":N
+                matched_count=$(echo "$saved_counts" | grep -o "\"${svc_name}\":[0-9]*" | cut -d':' -f2 || true)
+                if [[ -n "$matched_count" ]]; then
+                    target_count="$matched_count"
+                fi
+            fi
+
+            log "  Scaling ${svc_name} -> desired_count=${target_count}"
             aws ecs update-service \
                 --cluster "$CLUSTER_NAME" \
                 --service "$svc_arn" \
-                --desired-count 1 \
+                --desired-count "$target_count" \
                 --region "$REGION" \
                 --output text --query "service.serviceName" >/dev/null
         done

@@ -7,7 +7,7 @@ import json
 import pulumi
 import pulumi_aws as aws
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
+from infra_seedwork.env import queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -15,6 +15,7 @@ _prefix = f"{_env}-api-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "api", "Environment": _env}
 
 config = pulumi.Config()
+edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
@@ -145,7 +146,7 @@ api_service = provision_fargate_service(
     ).apply(
         lambda args: [
             {"name": "ENVIRONMENT", "value": _env},
-            {"name": "EDI_ENVIRONMENT", "value": edi_environment_flag(_env)},
+            {"name": "EDI_ENVIRONMENT", "value": edi_environment},
             {
                 "name": "GLOBAL_DB_HOST",
                 "value": args["global_db"][0]

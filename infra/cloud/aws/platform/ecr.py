@@ -6,16 +6,11 @@ from infra_seedwork.ecr import attach_ecr_lifecycle_policy
 
 def provision_ecr(prefix: str, tags: dict):
     config = pulumi.Config()
-    is_prod = pulumi.get_stack() == "production"
     configured_max = config.get_int("ecr_max_image_count")
     max_images = (
         configured_max
         if configured_max is not None
-        else (
-            ObservabilityDefaults.DEFAULT_PROD_ECR_RETENTION_COUNT
-            if is_prod
-            else ObservabilityDefaults.DEFAULT_NON_PROD_ECR_RETENTION_COUNT
-        )
+        else ObservabilityDefaults.DEFAULT_ECR_MAX_IMAGE_COUNT
     )
 
     # ECR Repository for Zitadel Mirror

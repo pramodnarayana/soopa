@@ -5,6 +5,7 @@ import pulumi
 import pulumi_aws as aws
 import pulumi_random as random
 from constants import OpenObserveConstants
+from infra_seedwork import ObservabilityDefaults, validate_log_retention
 from infra_seedwork.ecs import provision_fargate_service
 
 
@@ -21,16 +22,12 @@ def provision_openobserve_foundations(
     cloud_map_namespace_id: str,
     ecr_repository_url: pulumi.Output[str],
     retention_days: int | None = None,
+    secret_recovery_window_days: int = 0,
 ):
-    is_prod = pulumi.get_stack() == "production"
     effective_retention = (
-        retention_days
+        validate_log_retention(retention_days)
         if retention_days is not None
-        else (
-            OpenObserveConstants.DEFAULT_PROD_RETENTION_DAYS
-            if is_prod
-            else OpenObserveConstants.DEFAULT_NON_PROD_RETENTION_DAYS
-        )
+        else ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
     )
 
     obs_bucket = aws.s3.BucketV2(
@@ -64,12 +61,10 @@ def provision_openobserve_foundations(
         special=False,
     )
 
-    is_prod = pulumi.get_stack() == "production"
-
     obs_user_secret = aws.secretsmanager.Secret(
         f"{prefix}obs-user-secret",
         name_prefix=f"platform/{prefix}openobserve-user-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
 
@@ -82,7 +77,7 @@ def provision_openobserve_foundations(
     obs_password_secret = aws.secretsmanager.Secret(
         f"{prefix}obs-password-secret",
         name_prefix=f"platform/{prefix}openobserve-password-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
 
