@@ -290,18 +290,26 @@ endpoints_sg = aws.ec2.SecurityGroup(
     tags={**_TAGS, "Name": f"{_prefix}endpoints-sg"},
 )
 
-# AWS PrivateLink Interface Endpoints
-for service in ["sns", "sqs", "logs", "secretsmanager"]:
-    aws.ec2.VpcEndpoint(
-        f"{_prefix}{service}-endpoint",
-        vpc_id=vpc.id,
-        service_name=f"com.amazonaws.{_region.name}.{service}",
-        vpc_endpoint_type="Interface",
-        subnet_ids=[private_subnet_a.id],
-        security_group_ids=[endpoints_sg.id],
-        private_dns_enabled=True,
-        tags={**_TAGS, "Name": f"{_prefix}{service}-endpoint"},
-    )
+# ── AWS PrivateLink Interface Endpoints (Cost Optimization) ───────────────────
+# Interface endpoints cost ~$7.20/month base each ($28.80/mo total for 4).
+# In non-production, traffic routes through the existing NAT Gateway for pennies.
+# In production, Interface Endpoints provide dedicated private intra-AWS routing.
+config = pulumi.Config()
+enable_interface_endpoints = config.get_bool("enable_interface_endpoints") or False
+
+if enable_interface_endpoints:
+    for service in ["sns", "sqs", "logs", "secretsmanager"]:
+        aws.ec2.VpcEndpoint(
+            f"{_prefix}{service}-endpoint",
+            vpc_id=vpc.id,
+            service_name=f"com.amazonaws.{_region.name}.{service}",
+            vpc_endpoint_type="Interface",
+            subnet_ids=[private_subnet_a.id],
+            security_group_ids=[endpoints_sg.id],
+            private_dns_enabled=True,
+            tags={**_TAGS, "Name": f"{_prefix}{service}-endpoint"},
+        )
+
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("vpc_id", vpc.id)

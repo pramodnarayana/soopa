@@ -11,8 +11,9 @@ import json
 
 import pulumi
 import pulumi_aws as aws
+from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
+from infra_seedwork.env import queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -21,6 +22,7 @@ _TAGS = {"ManagedBy": "pulumi", "Component": "edi-as2", "Environment": _env}
 
 # ── Stack References ──────────────────────────────────────────────────────────
 config = pulumi.Config()
+edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
@@ -63,6 +65,7 @@ queue_arns = [
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+autoscaling_config = load_autoscaling_config_from_pulumi(config)
 firelens_endpoint = obs.require_output("openobserve_endpoint") if enable_observability else None
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
@@ -167,7 +170,7 @@ as2_env_vars: pulumi.Output = pulumi.Output.all(
         static_vars={
             "AWS_REGION": _region.name,
             "ENVIRONMENT": _env,
-            "EDI_ENVIRONMENT": edi_environment_flag(_env),
+            "EDI_ENVIRONMENT": edi_environment,
             "GLOBAL_DB_HOST": args["global_db_host"],
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
@@ -228,6 +231,7 @@ as2_server = provision_fargate_service(
             "Resource": queue_arns,
         },
     ],
+    autoscaling_config=autoscaling_config,
 )
 
 # DNS Record moved to routing stack

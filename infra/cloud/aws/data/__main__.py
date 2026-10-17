@@ -38,6 +38,13 @@ instance_class = config.get("db_instance_class") or DatabaseConstants.DEFAULT_IN
 allocated_storage = (
     config.get_int("db_allocated_storage") or DatabaseConstants.DEFAULT_ALLOCATED_STORAGE_GB
 )
+multi_az = config.get_bool("multi_az") or False
+skip_final_snapshot = (
+    config.get_bool("skip_final_snapshot")
+    if config.get_bool("skip_final_snapshot") is not None
+    else True
+)
+secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 
 # ── Provision Global Database ─────────────────────────────────────────────────
 global_db, db_secret, db_password = provision_global_db(
@@ -47,6 +54,9 @@ global_db, db_secret, db_password = provision_global_db(
     tags=_TAGS,
     instance_class=instance_class,
     allocated_storage=allocated_storage,
+    multi_az=multi_az,
+    skip_final_snapshot=skip_final_snapshot,
+    secret_recovery_window_days=secret_recovery_window_days,
 )
 
 # ── Provision EDI Shard Database ──────────────────────────────────────────────
@@ -57,6 +67,9 @@ edi_shard_db, edi_db_secret = provision_edi_db(
     tags=_TAGS,
     instance_class=instance_class,
     allocated_storage=allocated_storage,
+    multi_az=multi_az,
+    skip_final_snapshot=skip_final_snapshot,
+    secret_recovery_window_days=secret_recovery_window_days,
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────

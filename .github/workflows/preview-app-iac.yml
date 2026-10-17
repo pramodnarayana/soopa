@@ -1,4 +1,4 @@
-name: Application IaC Preview
+name: App IaC Preview
 
 on:
   pull_request:
@@ -41,7 +41,7 @@ concurrency:
 
 jobs:
   preview:
-    name: Speculative Application Diff (${{ inputs.target_env || inputs.environment || 'staging' }})
+    name: Speculative App Diff (${{ inputs.target_env || inputs.environment || 'staging' }})
     runs-on: ubuntu-latest
     permissions:
       contents: read

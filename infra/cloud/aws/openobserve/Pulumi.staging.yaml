@@ -1,3 +1,5 @@
 config:
   organization-openobserve:enable: "true"
+  organization-openobserve:log_retention_days: "3"
+  organization-openobserve:secret_recovery_window_days: "0"
 encryptionsalt: v1:GwOCMP4H1zA=:v1:XDToVloMAAvs1Cla:wpyjXxm2vRhz0dLqn7DN8PZDDdB5Tg==

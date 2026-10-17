@@ -19,7 +19,6 @@ from event_bus import provision_event_bus
 _env = pulumi.get_stack()
 _prefix = f"{_env}-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "platform", "Environment": _env}
-is_prod = _env == "production"
 
 # ── Stack Reference to Foundation ─────────────────────────────────────────────
 config = pulumi.Config()
@@ -81,11 +80,13 @@ identity_pwd_param = aws.ssm.get_parameter_output(
 )
 identity_default_user_password = pulumi.Output.secret(identity_pwd_param.value)
 
+secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
+
 app_defaults_secret = aws.secretsmanager.Secret(
     f"{_prefix}app-defaults",
     name=f"{_prefix}app-defaults",
     description="Shared application-level credentials for platform workers (e.g. identity seed password, machine key).",
-    recovery_window_in_days=30 if is_prod else 0,
+    recovery_window_in_days=secret_recovery_window_days,
     tags=_TAGS,
 )
 aws.secretsmanager.SecretVersion(

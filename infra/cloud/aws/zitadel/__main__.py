@@ -49,8 +49,9 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 global_db_password = data.require_output("global_db_password")
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
+secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 masterkey, admin_password, mk_secret, machine_secret, admin_secret = provision_secrets(
-    _prefix, _TAGS
+    _prefix, _TAGS, secret_recovery_window_days=secret_recovery_window_days
 )
 
 # ── Roles ─────────────────────────────────────────────────────────────────────

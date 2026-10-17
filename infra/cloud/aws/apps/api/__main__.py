@@ -6,8 +6,9 @@ import json
 
 import pulumi
 import pulumi_aws as aws
+from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
+from infra_seedwork.env import queue_env_vars_to_ecs_format
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -15,6 +16,7 @@ _prefix = f"{_env}-api-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "api", "Environment": _env}
 
 config = pulumi.Config()
+edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
@@ -54,6 +56,7 @@ as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+autoscaling_config = load_autoscaling_config_from_pulumi(config)
 firelens_endpoint = obs.require_output("openobserve_endpoint") if enable_observability else None
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
@@ -144,8 +147,8 @@ api_service = provision_fargate_service(
         queue_vars=messaging.require_output("queue_env_vars"),
     ).apply(
         lambda args: [
-            {"name": "ENVIRONMENT", "value": "staging"},
-            {"name": "EDI_ENVIRONMENT", "value": edi_environment_flag(_env)},
+            {"name": "ENVIRONMENT", "value": _env},
+            {"name": "EDI_ENVIRONMENT", "value": edi_environment},
             {
                 "name": "GLOBAL_DB_HOST",
                 "value": args["global_db"][0]
@@ -230,6 +233,7 @@ api_service = provision_fargate_service(
             ),
         },
     ],
+    autoscaling_config=autoscaling_config,
 )
 
 # DNS Record moved to routing stack

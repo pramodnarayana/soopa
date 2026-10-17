@@ -5,6 +5,8 @@ Provisions the OpenObserve stack onto the ECS platform.
 """
 
 import pulumi
+import pulumi_aws as aws
+from infra_seedwork import ObservabilityDefaults
 from observability import provision_openobserve_foundations
 
 _env = pulumi.get_stack()
@@ -33,8 +35,17 @@ if enable_observability is not False:
     main_listener_arn = platform.require_output("main_alb_listener_arn")
     obs_listener_arn = platform.require_output("main_alb_obs_listener_arn")
     cloud_map_namespace_id = platform.require_output("cloud_map_namespace_id")
+    cloud_map_namespace_name = platform.require_output("cloud_map_namespace_name")
     staging_domain = platform.require_output("staging_domain")
     openobserve_ecr_repo_url = platform.require_output("openobserve_ecr_repo_url")
+
+    raw_retention_days = config.get_int("log_retention_days")
+    retention_days = (
+        raw_retention_days
+        if raw_retention_days is not None
+        else ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
+    )
+    secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 
     # ── Provision OpenObserve ─────────────────────────────────────────────────────
     obs_bucket, obs_user_arn, obs_pass_arn = provision_openobserve_foundations(
@@ -49,9 +60,9 @@ if enable_observability is not False:
         staging_domain=staging_domain,
         cloud_map_namespace_id=cloud_map_namespace_id,
         ecr_repository_url=openobserve_ecr_repo_url,
+        retention_days=retention_days,
+        secret_recovery_window_days=secret_recovery_window_days,
     )
-
-    import pulumi_aws as aws
 
     hosted_zone = aws.route53.get_zone_output(name=staging_domain)
     obs_dns_record = aws.route53.Record(
@@ -68,7 +79,10 @@ if enable_observability is not False:
         ],
     )
 
-    pulumi.export("openobserve_endpoint", obs_dns_record.name.apply(lambda dns: f"{dns}:443"))
+    # Cost optimization: Internal Cloud Map endpoint for ECS log shippers (0 NAT/ALB fees)
+    internal_log_endpoint = cloud_map_namespace_name.apply(lambda ns: f"openobserve.{ns}:5080")
+    pulumi.export("openobserve_endpoint", internal_log_endpoint)
+    pulumi.export("openobserve_ui_url", pulumi.Output.concat("https://", obs_dns_record.name))
     pulumi.export("openobserve_user_secret_arn", obs_user_arn)
     pulumi.export("openobserve_password_secret_arn", obs_pass_arn)
     pulumi.export("openobserve_bucket_name", obs_bucket.bucket)

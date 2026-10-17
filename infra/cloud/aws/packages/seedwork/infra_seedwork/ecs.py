@@ -4,6 +4,12 @@ from typing import TypedDict
 import pulumi
 import pulumi_aws as aws
 
+from infra_seedwork.autoscaling import (
+    ServiceAutoScalingConfig,
+    configure_ecs_service_autoscaling,
+)
+from infra_seedwork.constants import ObservabilityDefaults, validate_log_retention
+
 
 class PortMapping(TypedDict, total=False):
     containerPort: int
@@ -372,12 +378,44 @@ def provision_fargate_service(
     secrets: pulumi.Input[list[SecretVariable]] | None = None,
     enable_execute_command: bool = False,
     service_registry_arn: str | None = None,
+    log_retention_days: int | None = None,
+    manage_log_group: bool = True,
+    import_log_group: bool = False,
+    use_spot: bool = False,
+    autoscaling_config: ServiceAutoScalingConfig | None = None,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
     """
     _region = aws.get_region()
     _identity = aws.get_caller_identity()
+
+    effective_log_retention = (
+        validate_log_retention(log_retention_days)
+        if log_retention_days is not None
+        else ObservabilityDefaults.DEFAULT_LOG_RETENTION_DAYS
+    )
+
+    # Explicitly provision CloudWatch LogGroups with retention to eliminate cost leakage
+    if manage_log_group and effective_log_retention is not None:
+        main_lg_opts = pulumi.ResourceOptions(import_=f"/ecs/{name}") if import_log_group else None
+        aws.cloudwatch.LogGroup(
+            f"{name}-log-group",
+            name=f"/ecs/{name}",
+            retention_in_days=effective_log_retention,
+            tags=tags,
+            opts=main_lg_opts,
+        )
+        if firelens_endpoint:
+            fb_lg_name = f"/ecs/{name}-{EcsConstants.FIRELENS_TYPE}"
+            fb_lg_opts = pulumi.ResourceOptions(import_=fb_lg_name) if import_log_group else None
+            aws.cloudwatch.LogGroup(
+                f"{name}-fluentbit-log-group",
+                name=fb_lg_name,
+                retention_in_days=effective_log_retention,
+                tags=tags,
+                opts=fb_lg_opts,
+            )
 
     # Task Role
     task_role = aws.iam.Role(
@@ -493,27 +531,63 @@ def provision_fargate_service(
         extra_target_groups=extra_target_groups,
     )
 
-    svc = aws.ecs.Service(
-        f"{name}-svc",
-        cluster=cluster_arn,
-        task_definition=task_def.arn,
-        desired_count=desired_count,
-        launch_type="FARGATE",
-        network_configuration=aws.ecs.ServiceNetworkConfigurationArgs(
+    effective_desired_count = (
+        autoscaling_config.bounds.min_capacity
+        if (autoscaling_config and autoscaling_config.enabled)
+        else desired_count
+    )
+
+    service_kwargs: dict[str, object] = {
+        "cluster": cluster_arn,
+        "task_definition": task_def.arn,
+        "desired_count": effective_desired_count,
+        "network_configuration": aws.ecs.ServiceNetworkConfigurationArgs(
             subnets=subnets,
             security_groups=[security_group_id],
             assign_public_ip=is_public,
         ),
-        load_balancers=lbs if lbs else None,
-        health_check_grace_period_seconds=120 if lbs else None,
-        service_registries=aws.ecs.ServiceServiceRegistriesArgs(
-            registry_arn=service_registry_arn,
-        )
-        if service_registry_arn
-        else None,
-        enable_execute_command=enable_execute_command,
-        opts=pulumi.ResourceOptions(ignore_changes=["desired_count"]),
-        tags=tags,
+        "load_balancers": lbs if lbs else None,
+        "health_check_grace_period_seconds": 120 if lbs else None,
+        "service_registries": (
+            aws.ecs.ServiceServiceRegistriesArgs(
+                registry_arn=service_registry_arn,
+            )
+            if service_registry_arn
+            else None
+        ),
+        "enable_execute_command": enable_execute_command,
+        "opts": pulumi.ResourceOptions(ignore_changes=["desired_count"]),
+        "tags": tags,
+    }
+
+    if use_spot:
+        service_kwargs["capacity_provider_strategies"] = [
+            aws.ecs.ServiceCapacityProviderStrategyArgs(
+                capacity_provider="FARGATE_SPOT",
+                weight=1,
+                base=0,
+            )
+        ]
+    else:
+        service_kwargs["launch_type"] = "FARGATE"
+
+    svc = aws.ecs.Service(
+        f"{name}-svc",
+        **service_kwargs,
     )
+
+    if autoscaling_config and autoscaling_config.enabled:
+        cluster_name = (
+            cluster_arn.apply(lambda arn: arn.split("/")[-1])
+            if isinstance(cluster_arn, pulumi.Output)
+            else cluster_arn.split("/")[-1]
+        )
+        configure_ecs_service_autoscaling(
+            name=name,
+            cluster_name=cluster_name,
+            service_name=svc.name,
+            config=autoscaling_config,
+            tags=tags,
+        )
 
     return svc

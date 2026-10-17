@@ -17,8 +17,9 @@ import json
 
 import pulumi
 import pulumi_aws as aws
+from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
-from infra_seedwork.env import edi_environment_flag, queue_env_vars_to_ecs_format
+from infra_seedwork.env import queue_env_vars_to_ecs_format
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-ucp-"
@@ -26,6 +27,7 @@ _TAGS = {"ManagedBy": "pulumi", "Component": "ucp-workers", "Environment": _env}
 
 # ── Stack References ──────────────────────────────────────────────────────────
 config = pulumi.Config()
+edi_environment = config.get("edi_environment") or "T"
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 
@@ -78,6 +80,7 @@ sns_platform_events_topic_arn = platform.require_output("sns_platform_events_top
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
+autoscaling_config = load_autoscaling_config_from_pulumi(config)
 firelens_endpoint = obs.require_output("openobserve_endpoint") if enable_observability else None
 obs_user_arn = obs.require_output("openobserve_user_secret_arn") if enable_observability else None
 obs_pass_arn = (
@@ -156,10 +159,11 @@ aws.iam.RolePolicyAttachment(
 )
 
 # ── IAM Manager Secret ────────────────────────────────────────────────────────
+secret_recovery_window_days = config.get_int("secret_recovery_window_days") or 0
 iam_manager_sa_secret = aws.secretsmanager.Secret(
     f"{_prefix}iam-manager-sa-key",
     name_prefix=f"identity/{_prefix}iam-manager-sa-key-",
-    recovery_window_in_days=30 if _env == "production" else 0,
+    recovery_window_in_days=secret_recovery_window_days,
     tags=_TAGS,
 )
 
@@ -292,7 +296,7 @@ base_env_vars: pulumi.Output = pulumi.Output.all(
         queue_env_vars=args["queue_env_vars"],
         static_vars={
             "ENVIRONMENT": _env,
-            "EDI_ENVIRONMENT": edi_environment_flag(_env),
+            "EDI_ENVIRONMENT": edi_environment,
             "GLOBAL_DB_HOST": args["global_db_host"],
             "EDI_DB_HOST": args["edi_db_host"],
             "PUBLIC_BASE_URL": args["public_base_url"],
@@ -361,4 +365,5 @@ for group in worker_groups:
                 "valueFrom": iam_manager_sa_secret.arn,
             },
         ],
+        autoscaling_config=autoscaling_config,
     )

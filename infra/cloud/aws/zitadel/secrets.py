@@ -1,9 +1,8 @@
-import pulumi
 import pulumi_aws as aws
 import pulumi_random as random
 
 
-def provision_secrets(prefix: str, tags: dict):
+def provision_secrets(prefix: str, tags: dict, secret_recovery_window_days: int = 0):
     # Zitadel requires a masterkey (32 bytes)
     zitadel_masterkey = random.RandomPassword(
         "zitadel-masterkey",
@@ -17,12 +16,10 @@ def provision_secrets(prefix: str, tags: dict):
         override_special="!@#$%^&*()-_=+",
     )
 
-    is_prod = pulumi.get_stack() == "production"
-
     zitadel_masterkey_secret = aws.secretsmanager.Secret(
         f"{prefix}zitadel-masterkey-secret",
         name_prefix=f"platform/{prefix}zitadel-masterkey-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
 
@@ -35,7 +32,7 @@ def provision_secrets(prefix: str, tags: dict):
     zitadel_machinekey_secret = aws.secretsmanager.Secret(
         f"{prefix}zitadel-machinekey-secret",
         name_prefix=f"platform/{prefix}zitadel-machinekey-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
     # Intentionally DO NOT create a SecretVersion here for the MachineKey.
@@ -44,7 +41,7 @@ def provision_secrets(prefix: str, tags: dict):
     zitadel_admin_password_secret = aws.secretsmanager.Secret(
         f"{prefix}zitadel-admin-password-secret",
         name_prefix=f"platform/{prefix}zitadel-admin-password-",
-        recovery_window_in_days=30 if is_prod else 0,
+        recovery_window_in_days=secret_recovery_window_days,
         tags=tags,
     )
 

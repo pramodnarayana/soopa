@@ -64,6 +64,7 @@ def provision_fifo_queue_pair(
     Provisions a FIFO SQS queue and its paired dead-letter queue.
     Accepts purely logical names (e.g. 'edi-config-sync-queue') and enforces
     Enterprise Fail-Fast architectural boundaries by rejecting AWS-specific suffixes.
+    Enforces SQS long polling (20 seconds) to minimize empty poll API charges.
     """
     if logical_name.endswith(".fifo"):
         raise ValueError(
@@ -76,6 +77,7 @@ def provision_fifo_queue_pair(
         name=f"{logical_name}-dlq.fifo",
         fifo_queue=True,
         content_based_deduplication=True,
+        receive_wait_time_seconds=20,
         tags=tags,
     )
 
@@ -84,6 +86,7 @@ def provision_fifo_queue_pair(
         name=f"{logical_name}.fifo",
         fifo_queue=True,
         content_based_deduplication=True,
+        receive_wait_time_seconds=20,
         redrive_policy=pulumi.Output.all(dlq.arn).apply(
             lambda args: json.dumps(
                 {"deadLetterTargetArn": args[0], "maxReceiveCount": max_receive_count}
@@ -99,11 +102,13 @@ def provision_standard_queue_pair(
 ) -> tuple[aws.sqs.Queue, aws.sqs.Queue]:
     """
     Provisions a Standard SQS queue and its paired dead-letter queue.
+    Enforces SQS long polling (20 seconds) to minimize empty poll API charges.
     """
     dlq = aws.sqs.Queue(
         f"{name}-dlq",
         name=f"{name}-dlq",
         fifo_queue=False,
+        receive_wait_time_seconds=20,
         tags=tags,
     )
 
@@ -111,6 +116,7 @@ def provision_standard_queue_pair(
         name,
         name=name,
         fifo_queue=False,
+        receive_wait_time_seconds=20,
         redrive_policy=pulumi.Output.all(dlq.arn).apply(
             lambda args: json.dumps(
                 {"deadLetterTargetArn": args[0], "maxReceiveCount": max_receive_count}
