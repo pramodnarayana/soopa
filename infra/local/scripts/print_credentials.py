@@ -10,12 +10,13 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]
 load_dotenv(REPO_ROOT / ".env")
 
-PLATFORM_ADMIN_EMAIL = os.getenv("IDENTITY_PLATFORM_ADMIN_EMAIL", "admin@flowwolf.io")
-PLATFORM_ADMIN_PASSWORD = os.getenv("IDENTITY_PLATFORM_ADMIN_PASSWORD", "Password1!")
+COMPANY_DOMAIN = os.getenv("COMPANY_DOMAIN", "flowwolf.io")
+PLATFORM_ADMIN_EMAIL = os.getenv("IDENTITY_PLATFORM_ADMIN_EMAIL", f"admin@{COMPANY_DOMAIN}")
 TENANT_DEFAULT_PASSWORD = os.getenv("IDENTITY_DEFAULT_USER_PASSWORD", "Password1!")
+PLATFORM_ADMIN_PASSWORD = os.getenv("IDENTITY_PLATFORM_ADMIN_PASSWORD", TENANT_DEFAULT_PASSWORD)
 ZITADEL_ADMIN_USER = "zitadel-admin@zitadel.ucp.localhost"
 ZITADEL_ADMIN_PASSWORD = "Password1!"  # noqa: S105 - Standard local dev credential display
 

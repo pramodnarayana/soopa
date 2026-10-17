@@ -31,7 +31,7 @@ RUNTIME_ID=$(aws ecs describe-tasks --cluster "$CLUSTER_ARN" --tasks "$TASK_ARN"
   --query 'tasks[0].containers[0].runtimeId' --output text)
 
 # Get the DB Endpoint dynamically from Pulumi 'data' stack
-cd "$(dirname "$0")/../cloud/aws/data"
+cd "$(dirname "$0")/../aws/data"
 
 if [ "$TARGET_DB" = "edi" ]; then
     DB_HOST=$(pulumi stack output edi_shard_db_endpoint --stack staging)

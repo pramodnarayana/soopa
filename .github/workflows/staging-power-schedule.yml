@@ -73,5 +73,5 @@ jobs:
 
       - name: Execute Power Sequencing
         run: |
-          chmod +x ./infra/scripts/manage_staging_power.sh
-          ./infra/scripts/manage_staging_power.sh "${{ steps.resolve-action.outputs.ACTION }}" staging
+          chmod +x ./infra/cloud/scripts/manage_staging_power.sh
+          ./infra/cloud/scripts/manage_staging_power.sh "${{ steps.resolve-action.outputs.ACTION }}" staging

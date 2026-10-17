@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [ "main", "development" ]
     paths:
-      - 'infra/**'
+      - 'infra/cloud/**'
       - '.github/workflows/*infra*.yml'
       - '.github/workflows/preview-app-iac.yml'
       - '.github/actions/pulumi-*/**'
@@ -31,7 +31,7 @@ jobs:
       - name: Run Ruff Linter
         shell: bash
         run: |
-          uv run ruff check infra/cloud/aws
+          uv run ruff check infra/cloud
 
       - name: Run Pure Unit Tests (Zero Mocks)
         shell: bash
