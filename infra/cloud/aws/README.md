@@ -130,11 +130,11 @@ pulumi import aws:cloudwatch/logGroup:LogGroup <env>-openas2-log-group /ecs/<env
 
 Deployments and infrastructure provisioning are orchestrated entirely via native GitHub Actions pipelines:
 
-1. **Cloud Infrastructure Pipelines (`check-infra.yml`, `preview-infra.yml` & `provision-infra.yml`)**:
+1. **Cloud Infra Pipelines (`check-infra.yml`, `preview-infra.yml` & `provision-infra.yml`)**:
    - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
    - **Static Checks (`check-infra.yml`)**: Fast, unprivileged workflow (zero AWS credentials) running linters and pure unit tests without cloud mocks on any `infra/**` PR.
    - **Speculative Cloud Diff (`preview-infra.yml`)**: OIDC-authenticated workflow generating `pulumi preview` diffs against live AWS infrastructure stacks.
-   - **Cloud Infrastructure Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding app ECS service stacks `api`, `ucp`, `edi`, and `migrator`, which roll out via App Service Rollout; `openas2`, `dashboard`, and `routing` still roll out through `provision-infra.yml`).
+   - **Cloud Infra Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding app ECS service stacks `api`, `ucp`, `edi`, and `migrator`, which roll out via App Service Rollout; `openas2`, `dashboard`, and `routing` still roll out through `provision-infra.yml`).
 
 2. **App Continuous Delivery (`ci.yml`, `preview-app-iac.yml`, `cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
    - **App CI (`ci.yml`)**: Gated on linting, unit/integration testing, and Docker image build test for pure application services (zero infra mocks).

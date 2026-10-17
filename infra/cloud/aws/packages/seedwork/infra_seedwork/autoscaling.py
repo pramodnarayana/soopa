@@ -5,6 +5,7 @@ Provides strongly-typed, domain-agnostic primitives for registering ECS Fargate 
 with AWS Application Auto Scaling and attaching target tracking scaling policies.
 """
 
+import math
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -46,6 +47,20 @@ class CpuUtilizationTrackingConfig:
     scale_in_cooldown: int = 300
     scale_out_cooldown: int = 60
 
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.target_value) or not (0 < self.target_value <= 100):
+            raise ValueError(
+                f"target_value must be a finite percentage in (0, 100], got {self.target_value}"
+            )
+        if self.scale_in_cooldown < 0:
+            raise ValueError(
+                f"scale_in_cooldown must be non-negative, got {self.scale_in_cooldown}"
+            )
+        if self.scale_out_cooldown < 0:
+            raise ValueError(
+                f"scale_out_cooldown must be non-negative, got {self.scale_out_cooldown}"
+            )
+
 
 @dataclass(frozen=True)
 class MemoryUtilizationTrackingConfig:
@@ -54,6 +69,20 @@ class MemoryUtilizationTrackingConfig:
     target_value: float = 75.0
     scale_in_cooldown: int = 300
     scale_out_cooldown: int = 60
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.target_value) or not (0 < self.target_value <= 100):
+            raise ValueError(
+                f"target_value must be a finite percentage in (0, 100], got {self.target_value}"
+            )
+        if self.scale_in_cooldown < 0:
+            raise ValueError(
+                f"scale_in_cooldown must be non-negative, got {self.scale_in_cooldown}"
+            )
+        if self.scale_out_cooldown < 0:
+            raise ValueError(
+                f"scale_out_cooldown must be non-negative, got {self.scale_out_cooldown}"
+            )
 
 
 @dataclass(frozen=True)
@@ -82,12 +111,20 @@ def load_autoscaling_config_from_pulumi(
     key_cpu = f"{pfx}target_cpu_percent" if pfx else "target_cpu_percent"
     key_mem = f"{pfx}target_memory_percent" if pfx else "target_memory_percent"
 
-    enabled = config.get_bool(key_enabled) or False
-    min_cap = config.get_int(key_min) or 1
-    max_cap = config.get_int(key_max) or 4
+    enabled_val = config.get_bool(key_enabled)
+    enabled = enabled_val if enabled_val is not None else False
 
-    cpu_target = config.get_float(key_cpu) or 70.0
-    mem_target = config.get_float(key_mem) or 75.0
+    min_cap_val = config.get_int(key_min)
+    min_cap = min_cap_val if min_cap_val is not None else 1
+
+    max_cap_val = config.get_int(key_max)
+    max_cap = max_cap_val if max_cap_val is not None else 4
+
+    cpu_target_val = config.get_float(key_cpu)
+    cpu_target = cpu_target_val if cpu_target_val is not None else 70.0
+
+    mem_target_val = config.get_float(key_mem)
+    mem_target = mem_target_val if mem_target_val is not None else 75.0
 
     return ServiceAutoScalingConfig(
         enabled=enabled,

@@ -21,6 +21,11 @@ log_error() {
     printf "[%s] ERROR: %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
 }
 
+log_warn() {
+    printf "[%s] WARN: %s\n" "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
+}
+
+
 # Strict guardrail: restrict power management strictly to staging
 if [[ "$ENV_NAME" != "staging" ]]; then
     log_error "This power management script is strictly restricted to 'staging'. Refusing to operate on '${ENV_NAME}'."
@@ -411,10 +416,9 @@ start_environment() {
 
         log "  Application and worker ECS services restored to active status."
 
-        # Delete the saved snapshot only after every saved service count has been restored successfully
+        # Delete the saved snapshot only after all active services have been restored successfully
         if [ "$has_saved_snapshot" = true ]; then
             saved_service_names=$(echo "$saved_counts" | grep -o '"[^"]*":[0-9]*' | cut -d'"' -f2 || true)
-            missing_saved_services=false
             for saved_svc in $saved_service_names; do
                 if [[ "$saved_svc" =~ bastion ]]; then
                     continue
@@ -427,17 +431,11 @@ start_environment() {
                     fi
                 done
                 if [ "$svc_found" = false ]; then
-                    log_error "Saved service '${saved_svc}' from SSM snapshot was not found in cluster services."
-                    missing_saved_services=true
+                    log_warn "Saved service '${saved_svc}' from SSM snapshot was not found in cluster services (service may have been retired)."
                 fi
             done
 
-            if [ "$missing_saved_services" = true ]; then
-                log_error "Not all services in SSM snapshot were restored. Preserving SSM snapshot for retry."
-                exit 1
-            fi
-
-            log "  All saved service counts restored successfully. Deleting snapshot from SSM (${SSM_PARAM_NAME})..."
+            log "  All active services restored successfully. Deleting snapshot from SSM (${SSM_PARAM_NAME})..."
             del_err_file=$(mktemp)
             if aws ssm delete-parameter \
                 --name "$SSM_PARAM_NAME" \

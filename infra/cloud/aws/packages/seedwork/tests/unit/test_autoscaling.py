@@ -122,3 +122,38 @@ def test_configure_ecs_service_autoscaling_noop_when_disabled() -> None:
     )
     assert target is None
     assert policies == []
+
+
+@pytest.mark.parametrize("invalid_val", [0.0, -10.0, 100.1, 150.0, float("nan"), float("inf")])
+def test_cpu_utilization_tracking_rejects_invalid_target_value(invalid_val: float) -> None:
+    with pytest.raises(ValueError, match="target_value must be a finite percentage in"):
+        CpuUtilizationTrackingConfig(target_value=invalid_val)
+
+
+@pytest.mark.parametrize("invalid_val", [0.0, -5.0, 100.5, 200.0, float("nan"), float("inf")])
+def test_memory_utilization_tracking_rejects_invalid_target_value(invalid_val: float) -> None:
+    with pytest.raises(ValueError, match="target_value must be a finite percentage in"):
+        MemoryUtilizationTrackingConfig(target_value=invalid_val)
+
+
+def test_utilization_tracking_rejects_negative_cooldowns() -> None:
+    with pytest.raises(ValueError, match="scale_in_cooldown must be non-negative"):
+        CpuUtilizationTrackingConfig(scale_in_cooldown=-1)
+    with pytest.raises(ValueError, match="scale_out_cooldown must be non-negative"):
+        CpuUtilizationTrackingConfig(scale_out_cooldown=-1)
+    with pytest.raises(ValueError, match="scale_in_cooldown must be non-negative"):
+        MemoryUtilizationTrackingConfig(scale_in_cooldown=-1)
+    with pytest.raises(ValueError, match="scale_out_cooldown must be non-negative"):
+        MemoryUtilizationTrackingConfig(scale_out_cooldown=-1)
+
+
+def test_load_autoscaling_config_preserves_zero_min_capacity_for_validation() -> None:
+    fake_config = FakePulumiConfig(ints={"min_capacity": 0})
+    with pytest.raises(ValueError, match="min_capacity must be at least 1"):
+        load_autoscaling_config_from_pulumi(fake_config)
+
+
+def test_load_autoscaling_config_preserves_zero_cpu_target_for_validation() -> None:
+    fake_config = FakePulumiConfig(floats={"target_cpu_percent": 0.0})
+    with pytest.raises(ValueError, match="target_value must be a finite percentage in"):
+        load_autoscaling_config_from_pulumi(fake_config)

@@ -90,7 +90,7 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
 
-      - name: Start Database & Infrastructure
+      - name: Start Database & Infra
         run: |
           cp .env.example .env
           pnpm infra:up
