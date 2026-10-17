@@ -300,13 +300,26 @@ start_environment() {
         current_status=$(get_db_status "$db")
         log "  DB '${db}' is currently '${current_status}'"
 
-        # If DB is in 'stopping' state, wait for it to reach 'stopped' before requesting start
+        # If DB is in 'stopping' state, wait for it to reach 'stopped' before requesting start.
+        # Note: AWS CLI does not support a 'db-instance-stopped' waiter subcommand, so we poll get_db_status.
         if [[ "$current_status" == "stopping" ]]; then
-            log "  DB '${db}' is currently 'stopping'. Waiting for it to reach 'stopped' (timeout: 10m)..."
-            aws rds wait db-instance-stopped \
-                --db-instance-identifier "$db" \
-                --region "$REGION"
-            current_status=$(get_db_status "$db")
+            log "  DB '${db}' is currently 'stopping'. Waiting for it to reach 'stopped' (timeout: 15m)..."
+            waited=0
+            max_wait=900
+            poll_interval=15
+            while [[ $waited -lt $max_wait ]]; do
+                current_status=$(get_db_status "$db")
+                if [[ "$current_status" == "stopped" ]]; then
+                    break
+                fi
+                log "  Waiting for DB '${db}' to finish stopping (current: '${current_status}', waited ${waited}s)..."
+                sleep "$poll_interval"
+                waited=$((waited + poll_interval))
+            done
+            if [[ "$current_status" != "stopped" ]]; then
+                log_error "Timeout waiting for DB '${db}' to transition from 'stopping' to 'stopped'."
+                exit 1
+            fi
             log "  DB '${db}' has transitioned to state '${current_status}'"
         fi
 
