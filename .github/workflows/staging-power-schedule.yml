@@ -72,6 +72,8 @@ jobs:
           fi
 
       - name: Execute Power Sequencing
+        env:
+          RESOLVED_ACTION: ${{ steps.resolve-action.outputs.ACTION }}
         run: |
-          chmod +x ./infra/scripts/manage_staging_power.sh
-          ./infra/scripts/manage_staging_power.sh "${{ steps.resolve-action.outputs.ACTION }}" staging
+          chmod +x ./infra/cloud/scripts/manage_staging_power.sh
+          ./infra/cloud/scripts/manage_staging_power.sh "$RESOLVED_ACTION" staging

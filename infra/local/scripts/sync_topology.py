@@ -1,18 +1,18 @@
 import json
 import re
 import sys
+from pathlib import Path
 
 import structlog
 
 logger = structlog.get_logger(__name__)
-from pathlib import Path
 
 
-def main():
+def main() -> None:
     logger.info("Syncing Topology configuration to .env...")
 
     script_dir = Path(__file__).parent.resolve()
-    root_dir = script_dir.parent.parent
+    root_dir = script_dir.parents[2]
     env_path = root_dir / ".env"
     topology_path = root_dir / "infra" / "topology.json"
 
@@ -30,7 +30,7 @@ def main():
     LOCALSTACK_URL = "http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/"
     LOCALSTACK_SNS_ARN = "arn:aws:sns:us-east-1:000000000000:"
 
-    mappings = {}
+    mappings: dict[str, str] = {}
 
     # Process Queues
     for queue in topology.get("queues", []):

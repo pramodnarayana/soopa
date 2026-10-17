@@ -6,7 +6,7 @@
 # and power up in the morning or on-demand.
 #
 # Usage:
-#   ./infra/scripts/manage_staging_power.sh [status|stop|start] [cluster_name]
+#   ./infra/cloud/scripts/manage_staging_power.sh [status|stop|start] [cluster_name]
 # ==============================================================================
 set -euo pipefail
 
@@ -316,6 +316,7 @@ start_environment() {
                 sleep "$poll_interval"
                 waited=$((waited + poll_interval))
             done
+            current_status=$(get_db_status "$db")
             if [[ "$current_status" != "stopped" ]]; then
                 log_error "Timeout waiting for DB '${db}' to transition from 'stopping' to 'stopped'."
                 exit 1

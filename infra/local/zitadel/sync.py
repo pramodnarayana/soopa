@@ -31,7 +31,7 @@ _TERRAFORM_TO_ENV_MAPPINGS: dict[str, str] = {
 }
 
 
-def _read_pulumi_outputs(script_dir: Path) -> dict[str, str]:
+def _read_pulumi_outputs(script_dir: Path, stack: str = "local") -> dict[str, str]:
     """
     Run `pulumi stack output --json` and return a flat mapping of output_name -> value.
 
@@ -39,19 +39,26 @@ def _read_pulumi_outputs(script_dir: Path) -> dict[str, str]:
         subprocess.CalledProcessError: if pulumi exits non-zero.
         json.JSONDecodeError: if the output is not valid JSON.
     """
+    if stack == "local":
+        logger.info(
+            "Local identity outputs are managed directly by bootstrap.py; skipping Pulumi sync."
+        )
+        return {}
+
     pulumi_bin = shutil.which("pulumi")
     if not pulumi_bin:
         logger.info(
-            "Pulumi binary not installed; local identity outputs are managed directly by bootstrap.py."
+            "Pulumi binary not installed; skipping Pulumi sync.",
+            stack=stack,
         )
         return {}
 
     pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
     env = os.environ.copy()
-    env["PULUMI_CONFIG_PASSPHRASE"] = "local"  # noqa: S105 - Local dev passphrase
+    env.setdefault("PULUMI_CONFIG_PASSPHRASE", stack)
 
     result = subprocess.run(  # noqa: S603 - Pulumi binary safely resolved via shutil.which with controlled arguments
-        [pulumi_bin, "stack", "output", "--json", "--show-secrets", "-s", "local"],
+        [pulumi_bin, "stack", "output", "--json", "--show-secrets", "-s", stack],
         cwd=pulumi_dir,
         capture_output=True,
         text=True,

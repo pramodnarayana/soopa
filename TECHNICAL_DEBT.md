@@ -522,3 +522,10 @@ The taxonomy drifted organically as different engineers built different bounded 
   1. **Self-Healing Sentinel Mapping / JIT Linking**: In `JwtStrategy` (or `identity` use cases), if a verified token matches `settings.identity.platform_org_id`, automatically link or self-heal the mapping to `ten_000000000000000000000000` dynamically rather than rejecting with 403.
   2. **Token Custom Claims / IdP Metadata**: When Zitadel (or external IdP) provisions the platform organization, attach metadata (`internal_tenant_id = ten_000000000000000000000000`) and configure Zitadel token enrichment to include this claim directly in JWTs so mapping does not require static database synchronization.
   3. **Local Tooling Parity**: Ensure `scripts/verify_ci.sh`'s cleanup routine (`_cleanup`) re-runs `pnpm db:seed:ucp` after restoring `.env`, and update `infra/local/zitadel/sync.py` to keep `.env.example` synchronized with local Zitadel runs.
+
+## [Infrastructure] Rewrite Staging Power Script in Python
+
+- **Date Added**: 2026-10-17
+- **Status**: TO DO
+- **Description**: Staging power management (`infra/cloud/scripts/manage_staging_power.sh`) is currently implemented as a ~500-line shell script invoked by GitHub Actions (`.github/workflows/staging-power-schedule.yml`). Bash lacks static typing, structured error handling, and unit testability.
+- **Action Item**: Rewrite `manage_staging_power.sh` into a clean, typed Python script (e.g., `infra/cloud/scripts/manage_staging_power.py`) using `boto3` to manage RDS and ECS states, and update the GitHub Actions workflow to run the Python script.

@@ -141,7 +141,7 @@ Database migrations are managed via **Alembic** and SQLAlchemy through the unifi
 | **Global PostgreSQL** | `5432` | `localhost:5432/soopa_global` | Multi-tenant control plane, users, identity, jobs |
 | **EDI Shard PostgreSQL** | `5433` | `localhost:5433/edi_tenant_shard` | B2B EDI transaction shard database |
 | **LocalStack** | `4566` | [http://localhost:4566](http://localhost:4566) | Local AWS mock for SQS, S3, Secrets Manager |
-| **OpenAS2 Server** | `8085` / `10080` | [http://localhost:10080](http://localhost:10080) | AS2 protocol inbound/outbound server and web UI |
+| **OpenAS2 Server** | `10080` | [http://localhost:10080](http://localhost:10080) | AS2 protocol inbound/outbound server and web UI |
 | **SFTP Server** | `2222` | `sftp://localhost:2222` | Mock SFTP trading partner endpoint |
 
 ---

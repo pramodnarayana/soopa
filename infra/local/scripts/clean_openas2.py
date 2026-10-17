@@ -5,13 +5,14 @@ Utility script to stop OpenAS2 and clean all runtime data for a clean slate.
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[3]
 OPENAS2_COMPOSE = REPO_ROOT / "tools" / "openas2" / "docker-compose.yml"
 OPENAS2_DATA_DIR = REPO_ROOT / "tools" / "openas2" / "data"
 
@@ -28,21 +29,26 @@ REQUIRED_DIRS = [
 ]
 
 
-def stop_openas2_container() -> None:
+def stop_openas2_container() -> bool:
     logger.info("Stopping and removing OpenAS2 container...")
     if not DOCKER_BIN:
-        logger.warning("docker binary not found in PATH, skipping container stop")
-        return
+        logger.error("docker binary not found in PATH, cannot stop OpenAS2 container")
+        return False
     try:
-        subprocess.run(  # noqa: S603 - Dynamic docker executable resolved safely via shutil.which
+        res = subprocess.run(  # noqa: S603 - Dynamic docker executable resolved safely via shutil.which
             [DOCKER_BIN, "compose", "-f", str(OPENAS2_COMPOSE), "down", "-v"],
             cwd=str(REPO_ROOT),
             check=False,
             capture_output=True,
             text=True,
         )
+        if res.returncode != 0:
+            logger.error("Failed to stop OpenAS2 via docker compose", stderr=res.stderr)
+            return False
+        return True
     except (subprocess.SubprocessError, OSError) as exc:
-        logger.warning("Failed to stop OpenAS2 via docker compose", error=str(exc))
+        logger.error("Failed to execute docker compose shutdown", error=str(exc))
+        return False
 
 
 def clean_openas2_runtime_data() -> None:
@@ -63,8 +69,13 @@ def clean_openas2_runtime_data() -> None:
 
 
 def main() -> None:
-    stop_openas2_container()
-    clean_openas2_runtime_data()
+    if stop_openas2_container():
+        clean_openas2_runtime_data()
+    else:
+        logger.error(
+            "Skipping OpenAS2 runtime data cleanup because container could not be stopped."
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

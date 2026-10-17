@@ -26,7 +26,7 @@ def wait_for_file(file_path: Path, max_wait_ms: int = 60000) -> None:
     while (time.time() - start_time) * 1000 < max_wait_ms:
         if file_path.exists() and file_path.stat().st_size > 10:
             content = file_path.read_text(encoding="utf-8").strip()
-            if content.startswith(("{", "ey")):
+            if content:
                 logger.info("File found with valid token content!")
                 return
         time.sleep(1)
@@ -167,17 +167,6 @@ def _provision_zitadel_resources(pat_token: str, root_dir: Path) -> dict[str, st
             for attempt in range(1, retries + 1):
                 try:
                     resp = client.post(path, json=data, headers=headers)
-                    if resp.status_code in (502, 503):
-                        if attempt == retries:
-                            resp.raise_for_status()
-                        logger.warning(
-                            "Zitadel gateway unavailable (warming up internal gRPC), retrying...",
-                            path=path,
-                            attempt=attempt,
-                            status=resp.status_code,
-                        )
-                        time.sleep(2.0)
-                        continue
                     if resp.is_error:
                         logger.exception(
                             "zitadel_api_call_failed",
@@ -187,11 +176,11 @@ def _provision_zitadel_resources(pat_token: str, root_dir: Path) -> dict[str, st
                         )
                         resp.raise_for_status()
                     return resp.json()  # type: ignore[no-any-return]
-                except (httpx.RemoteProtocolError, httpx.ConnectError, httpx.ReadTimeout) as err:
+                except (httpx.ConnectError, httpx.RemoteProtocolError) as err:
                     if attempt == retries:
                         raise
                     logger.warning(
-                        "Transient network error calling Zitadel API, retrying...",
+                        "Transient connection/protocol error calling Zitadel API, retrying...",
                         path=path,
                         attempt=attempt,
                         error=str(err),
