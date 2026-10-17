@@ -125,49 +125,77 @@ stop_environment() {
 
     # Step 1a: Persist current ECS desired counts to SSM Parameter Store
     if [[ -n "$services" ]]; then
-        log "Step 1a: Persisting current ECS desired counts to SSM..."
-        counts_json="{"
-        first=true
-        all_zeros=true
-        for svc_arn in $services; do
-            svc_name="${svc_arn##*/}"
-            info=$(aws ecs describe-services \
-                --cluster "$CLUSTER_NAME" \
-                --services "$svc_arn" \
-                --region "$REGION" \
-                --query "services[0].desiredCount" \
-                --output text 2>/dev/null || echo "1")
+        log "Step 1a: Checking pre-shutdown desired counts in SSM..."
 
-            if ! [[ "$info" =~ ^[0-9]+$ ]]; then
-                info="1"
-            fi
-
-            if [[ "$info" -gt 0 ]]; then
-                all_zeros=false
-            fi
-
-            if [ "$first" = true ]; then
-                first=false
-            else
-                counts_json="${counts_json},"
-            fi
-            counts_json="${counts_json}\"${svc_name}\":${info}"
-        done
-        counts_json="${counts_json}}"
-
-        if [ "$all_zeros" = true ]; then
-            log "  All ECS services are already at desiredCount=0; skipping SSM persistence to preserve pre-shutdown state."
+        has_existing_snapshot=false
+        ssm_check_err=$(mktemp)
+        if existing_snapshot=$(aws ssm get-parameter \
+            --name "$SSM_PARAM_NAME" \
+            --query "Parameter.Value" \
+            --output text \
+            --region "$REGION" 2>"$ssm_check_err"); then
+            rm -f "$ssm_check_err"
+            has_existing_snapshot=true
+            log "  Existing snapshot found in SSM (${existing_snapshot}); preserving it to prevent overwrite during partial-shutdown retry."
         else
-            if aws ssm put-parameter \
-                --name "$SSM_PARAM_NAME" \
-                --value "$counts_json" \
-                --type "String" \
-                --overwrite \
-                --region "$REGION" >/dev/null 2>&1; then
-                log "  Successfully persisted pre-shutdown desired counts to SSM: ${counts_json}"
+            check_err=$(cat "$ssm_check_err" 2>/dev/null || true)
+            rm -f "$ssm_check_err"
+            if echo "$check_err" | grep -q "ParameterNotFound"; then
+                log "  No existing SSM snapshot found. Capturing current desired counts..."
             else
-                log_error "Failed to persist pre-shutdown desired counts to SSM (${SSM_PARAM_NAME}). Aborting scale-down to prevent unrecoverable state loss."
+                log_error "Failed to check existing SSM snapshot (${SSM_PARAM_NAME}): ${check_err}"
                 exit 1
+            fi
+        fi
+
+        if [ "$has_existing_snapshot" = false ]; then
+            counts_json="{"
+            first=true
+            all_zeros=true
+            for svc_arn in $services; do
+                svc_name="${svc_arn##*/}"
+                info=$(aws ecs describe-services \
+                    --cluster "$CLUSTER_NAME" \
+                    --services "$svc_arn" \
+                    --region "$REGION" \
+                    --query "services[0].desiredCount" \
+                    --output text 2>/dev/null || echo "1")
+
+                if ! [[ "$info" =~ ^[0-9]+$ ]]; then
+                    info="1"
+                fi
+
+                if [[ "$info" -gt 0 ]]; then
+                    all_zeros=false
+                fi
+
+                if [ "$first" = true ]; then
+                    first=false
+                else
+                    counts_json="${counts_json},"
+                fi
+                counts_json="${counts_json}\"${svc_name}\":${info}"
+            done
+            counts_json="${counts_json}}"
+
+            if [ "$all_zeros" = true ]; then
+                log "  All ECS services are already at desiredCount=0; skipping SSM persistence to preserve pre-shutdown state."
+            else
+                put_err_file=$(mktemp)
+                if aws ssm put-parameter \
+                    --name "$SSM_PARAM_NAME" \
+                    --value "$counts_json" \
+                    --type "String" \
+                    --overwrite \
+                    --region "$REGION" >/dev/null 2>"$put_err_file"; then
+                    rm -f "$put_err_file"
+                    log "  Successfully persisted pre-shutdown desired counts to SSM: ${counts_json}"
+                else
+                    put_err=$(cat "$put_err_file" 2>/dev/null || true)
+                    rm -f "$put_err_file"
+                    log_error "Failed to persist pre-shutdown desired counts to SSM (${SSM_PARAM_NAME}): ${put_err}. Aborting scale-down to prevent unrecoverable state loss."
+                    exit 1
+                fi
             fi
         fi
     fi
@@ -308,19 +336,38 @@ start_environment() {
     log "Step 3: Scaling up ECS services in cluster '${CLUSTER_NAME}'..."
     # Attempt to load saved desired counts from SSM Parameter Store
     saved_counts=""
+    has_saved_snapshot=false
+    ssm_get_err=$(mktemp)
     if saved_raw=$(aws ssm get-parameter \
         --name "$SSM_PARAM_NAME" \
         --query "Parameter.Value" \
         --output text \
-        --region "$REGION" 2>/dev/null); then
+        --region "$REGION" 2>"$ssm_get_err"); then
+        rm -f "$ssm_get_err"
         saved_counts="$saved_raw"
+        has_saved_snapshot=true
         log "  Loaded pre-shutdown desired counts from SSM: ${saved_counts}"
     else
-        log "  No pre-shutdown desired counts found in SSM. Falling back to default configuration."
+        get_err=$(cat "$ssm_get_err" 2>/dev/null || true)
+        rm -f "$ssm_get_err"
+        if echo "$get_err" | grep -q "ParameterNotFound"; then
+            log "  No pre-shutdown desired counts found in SSM. Falling back to default configuration."
+        else
+            log_error "Failed to query SSM parameter '${SSM_PARAM_NAME}': ${get_err}"
+            exit 1
+        fi
     fi
 
     services=$(get_cluster_services)
-    if [[ -n "$services" ]]; then
+    if [[ -z "$services" ]]; then
+        log "  No ECS services found to restore."
+        if [ "$has_saved_snapshot" = true ]; then
+            log_error "Snapshot exists in SSM but no cluster services were found. Preserving snapshot."
+            exit 1
+        fi
+    else
+        all_restored=true
+        restored_services=()
         for svc_arn in $services; do
             svc_name="${svc_arn##*/}"
             # Bastion / debug tasks remain scaled to 0 unless manually requested
@@ -340,16 +387,70 @@ start_environment() {
             fi
 
             log "  Scaling ${svc_name} -> desired_count=${target_count}"
-            aws ecs update-service \
+            svc_err_file=$(mktemp)
+            if aws ecs update-service \
                 --cluster "$CLUSTER_NAME" \
                 --service "$svc_arn" \
                 --desired-count "$target_count" \
                 --region "$REGION" \
-                --output text --query "service.serviceName" >/dev/null
+                --output text --query "service.serviceName" >/dev/null 2>"$svc_err_file"; then
+                rm -f "$svc_err_file"
+                restored_services+=("$svc_name")
+            else
+                svc_err=$(cat "$svc_err_file" 2>/dev/null || true)
+                rm -f "$svc_err_file"
+                log_error "Failed to scale service '${svc_name}' to desired_count=${target_count}: ${svc_err}"
+                all_restored=false
+            fi
         done
+
+        if [ "$all_restored" = false ]; then
+            log_error "One or more ECS services failed to scale up. Preserving SSM snapshot for retry."
+            exit 1
+        fi
+
         log "  Application and worker ECS services restored to active status."
-    else
-        log "  No ECS services found to restore."
+
+        # Delete the saved snapshot only after every saved service count has been restored successfully
+        if [ "$has_saved_snapshot" = true ]; then
+            saved_service_names=$(echo "$saved_counts" | grep -o '"[^"]*":[0-9]*' | cut -d'"' -f2 || true)
+            missing_saved_services=false
+            for saved_svc in $saved_service_names; do
+                if [[ "$saved_svc" =~ bastion ]]; then
+                    continue
+                fi
+                svc_found=false
+                for r_svc in "${restored_services[@]}"; do
+                    if [[ "$r_svc" == "$saved_svc" ]]; then
+                        svc_found=true
+                        break
+                    fi
+                done
+                if [ "$svc_found" = false ]; then
+                    log_error "Saved service '${saved_svc}' from SSM snapshot was not found in cluster services."
+                    missing_saved_services=true
+                fi
+            done
+
+            if [ "$missing_saved_services" = true ]; then
+                log_error "Not all services in SSM snapshot were restored. Preserving SSM snapshot for retry."
+                exit 1
+            fi
+
+            log "  All saved service counts restored successfully. Deleting snapshot from SSM (${SSM_PARAM_NAME})..."
+            del_err_file=$(mktemp)
+            if aws ssm delete-parameter \
+                --name "$SSM_PARAM_NAME" \
+                --region "$REGION" >/dev/null 2>"$del_err_file"; then
+                rm -f "$del_err_file"
+                log "  Successfully removed pre-shutdown snapshot from SSM."
+            else
+                del_err=$(cat "$del_err_file" 2>/dev/null || true)
+                rm -f "$del_err_file"
+                log_error "Failed to delete SSM parameter '${SSM_PARAM_NAME}' after restore: ${del_err}"
+                exit 1
+            fi
+        fi
     fi
 
     log ">>> STARTUP sequence completed for '${ENV_NAME}'."

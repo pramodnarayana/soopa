@@ -35,16 +35,20 @@ config:
   edi-workers:edi_environment: "T"
   edi-workers:enable_observability: "true"
   edi-workers:image_tag: latest
+  edi-workers:enable_autoscaling: "false"
   edi-as2:edi_environment: "T"
   edi-as2:enable_observability: "true"
   edi-as2:image_tag: latest
+  edi-as2:enable_autoscaling: "false"
 
   # ── Unified Commerce Platform (UCP) Application ────────────────────────────
   ucp-workers:enable_observability: "true"
   ucp-workers:edi_environment: "T"
   ucp-workers:secret_recovery_window_days: "0"
+  ucp-workers:enable_autoscaling: "false"
 
   # ── Unified API Application ────────────────────────────────────────────────
   api:enable_observability: "true"
   api:edi_environment: "T"
+  api:enable_autoscaling: "false"
 encryptionsalt: v1:Ogwj2y1RAAQ=:v1:PH7TlLpHVBMMeniq:Sf9mwmNq11Pq5ffP2dN8t9Z4PeM8Yw==

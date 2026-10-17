@@ -4,6 +4,10 @@ from typing import TypedDict
 import pulumi
 import pulumi_aws as aws
 
+from infra_seedwork.autoscaling import (
+    ServiceAutoScalingConfig,
+    configure_ecs_service_autoscaling,
+)
 from infra_seedwork.constants import ObservabilityDefaults, validate_log_retention
 
 
@@ -378,6 +382,7 @@ def provision_fargate_service(
     manage_log_group: bool = True,
     import_log_group: bool = False,
     use_spot: bool = False,
+    autoscaling_config: ServiceAutoScalingConfig | None = None,
 ) -> aws.ecs.Service:
     """
     Provisions a standard Shopify-style ECS Fargate Service.
@@ -526,10 +531,16 @@ def provision_fargate_service(
         extra_target_groups=extra_target_groups,
     )
 
+    effective_desired_count = (
+        autoscaling_config.bounds.min_capacity
+        if (autoscaling_config and autoscaling_config.enabled)
+        else desired_count
+    )
+
     service_kwargs: dict[str, object] = {
         "cluster": cluster_arn,
         "task_definition": task_def.arn,
-        "desired_count": desired_count,
+        "desired_count": effective_desired_count,
         "network_configuration": aws.ecs.ServiceNetworkConfigurationArgs(
             subnets=subnets,
             security_groups=[security_group_id],
@@ -564,5 +575,19 @@ def provision_fargate_service(
         f"{name}-svc",
         **service_kwargs,
     )
+
+    if autoscaling_config and autoscaling_config.enabled:
+        cluster_name = (
+            cluster_arn.apply(lambda arn: arn.split("/")[-1])
+            if isinstance(cluster_arn, pulumi.Output)
+            else cluster_arn.split("/")[-1]
+        )
+        configure_ecs_service_autoscaling(
+            name=name,
+            cluster_name=cluster_name,
+            service_name=svc.name,
+            config=autoscaling_config,
+            tags=tags,
+        )
 
     return svc
