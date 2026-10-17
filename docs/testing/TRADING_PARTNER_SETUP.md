@@ -39,7 +39,9 @@ This represents the external partner that we will send to and receive from.
 * **Name**: `OpenAS2`
 * **AS2 ID**: `OPEN_AS2`
 * **Email**: `as2@openas2.local`
-* **AS2 URL**: `http://openas2:10080/`
+* **AS2 URL**:
+  * For `pnpm dev`: `http://localhost:10080/`
+  * For Docker (`pnpm services:up`): `http://openas2:10080/`
 * **Public Certificate**: Select the `openas2_public.cer` you uploaded.
 
 ---

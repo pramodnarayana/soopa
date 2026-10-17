@@ -41,7 +41,10 @@ def _read_pulumi_outputs(script_dir: Path) -> dict[str, str]:
     """
     pulumi_bin = shutil.which("pulumi")
     if not pulumi_bin:
-        raise RuntimeError("pulumi binary not found in PATH")
+        logger.info(
+            "Pulumi binary not installed; local identity outputs are managed directly by bootstrap.py."
+        )
+        return {}
 
     pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
     env = os.environ.copy()
@@ -137,6 +140,10 @@ def main() -> None:
     except json.JSONDecodeError as e:
         logger.exception("ERROR: Failed to parse pulumi output as JSON", error=str(e))
         sys.exit(1)
+
+    if not outputs:
+        logger.info("No Pulumi outputs detected. Keeping existing .env identity configuration.")
+        return
 
     # Build the updates dict, warning for any missing Pulumi outputs
     updates: dict[str, str] = {}
