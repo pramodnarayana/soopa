@@ -176,11 +176,11 @@ def _provision_zitadel_resources(pat_token: str, root_dir: Path) -> dict[str, st
                         )
                         resp.raise_for_status()
                     return resp.json()  # type: ignore[no-any-return]
-                except httpx.ConnectError as err:
+                except (httpx.ConnectError, httpx.RemoteProtocolError) as err:
                     if attempt == retries:
                         raise
                     logger.warning(
-                        "Transient connection error calling Zitadel API, retrying...",
+                        "Transient connection/protocol error calling Zitadel API, retrying...",
                         path=path,
                         attempt=attempt,
                         error=str(err),

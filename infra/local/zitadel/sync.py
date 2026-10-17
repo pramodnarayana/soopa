@@ -55,7 +55,7 @@ def _read_pulumi_outputs(script_dir: Path, stack: str = "local") -> dict[str, st
 
     pulumi_dir = script_dir.parent.parent / "cloud" / "zitadel"
     env = os.environ.copy()
-    env["PULUMI_CONFIG_PASSPHRASE"] = stack
+    env.setdefault("PULUMI_CONFIG_PASSPHRASE", stack)
 
     result = subprocess.run(  # noqa: S603 - Pulumi binary safely resolved via shutil.which with controlled arguments
         [pulumi_bin, "stack", "output", "--json", "--show-secrets", "-s", stack],
