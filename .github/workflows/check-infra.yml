@@ -1,4 +1,4 @@
-name: Cloud Infrastructure Check
+name: Infra Check
 
 on:
   pull_request:

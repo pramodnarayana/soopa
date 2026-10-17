@@ -117,7 +117,7 @@ jobs:
           stack-dir: infra/cloud/aws/openobserve
           stack-name: ${{ env.TARGET_ENV }}
 
-      - name: Deploy Zitadel Infrastructure
+      - name: Deploy Zitadel Infra
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/zitadel
@@ -136,7 +136,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/openas2
           stack-name: ${{ env.TARGET_ENV }}
 
-      - name: Deploy Dashboard Infrastructure (S3 & CloudFront)
+      - name: Deploy Dashboard Infra (S3 & CloudFront)
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/dashboard

@@ -1,4 +1,4 @@
-name: Cloud Infrastructure Preview
+name: Infra Preview
 
 on:
   pull_request:
@@ -122,7 +122,7 @@ jobs:
           stack-dir: infra/cloud/aws/openobserve
           stack-name: ${{ env.TARGET_ENV }}
 
-      - name: Preview Zitadel Infrastructure
+      - name: Preview Zitadel Infra
         if: steps.check-fork.outputs.is_fork != 'true'
         uses: ./.github/actions/pulumi-stack-preview
         with:
@@ -143,7 +143,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/openas2
           stack-name: ${{ env.TARGET_ENV }}
 
-      - name: Preview Dashboard Infrastructure (S3 & CloudFront)
+      - name: Preview Dashboard Infra (S3 & CloudFront)
         if: steps.check-fork.outputs.is_fork != 'true'
         uses: ./.github/actions/pulumi-stack-preview
         with:

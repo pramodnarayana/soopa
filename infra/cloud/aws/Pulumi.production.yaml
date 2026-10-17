@@ -6,6 +6,7 @@ config:
 
   # ── Shared Data Layer ──────────────────────────────────────────────────────
   data:db_instance_class: "db.t4g.medium"
+  # Intentionally Single-AZ for early production phase to optimize costs; Multi-AZ standby will be enabled in a future milestone.
   data:multi_az: "false"
   data:skip_final_snapshot: "false"
   data:secret_recovery_window_days: "30"
@@ -36,6 +37,7 @@ config:
   edi-workers:enable_observability: "true"
   edi-workers:image_tag: latest
   edi-workers:enable_autoscaling: "true"
+  # Intentionally kept at 1 for baseline load; dynamic autoscaling scales out to max_capacity under traffic.
   edi-workers:min_capacity: "1"
   edi-workers:max_capacity: "4"
   edi-workers:target_cpu_percent: "75"
@@ -44,6 +46,7 @@ config:
   edi-as2:enable_observability: "true"
   edi-as2:image_tag: latest
   edi-as2:enable_autoscaling: "true"
+  # Intentionally kept at 1 for baseline load; dynamic autoscaling scales out to max_capacity under traffic.
   edi-as2:min_capacity: "1"
   edi-as2:max_capacity: "4"
   edi-as2:target_cpu_percent: "70"
@@ -54,6 +57,7 @@ config:
   ucp-workers:edi_environment: "P"
   ucp-workers:secret_recovery_window_days: "30"
   ucp-workers:enable_autoscaling: "true"
+  # Intentionally kept at 1 for baseline load; dynamic autoscaling scales out to max_capacity under traffic.
   ucp-workers:min_capacity: "1"
   ucp-workers:max_capacity: "4"
   ucp-workers:target_cpu_percent: "75"
@@ -63,6 +67,7 @@ config:
   api:enable_observability: "true"
   api:edi_environment: "P"
   api:enable_autoscaling: "true"
+  # Intentionally kept at 1 for baseline load; dynamic autoscaling scales out to max_capacity under traffic.
   api:min_capacity: "1"
   api:max_capacity: "4"
   api:target_cpu_percent: "70"
