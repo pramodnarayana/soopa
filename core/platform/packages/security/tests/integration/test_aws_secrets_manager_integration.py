@@ -1,6 +1,7 @@
 """Integration tests for AwsSecretsManagerAdapter against live LocalStack."""
 
 import asyncio
+import os
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,15 @@ pytestmark = pytest.mark.integration
 
 RETRIEVAL_TIMEOUT_SECONDS = 5.0
 RETRIEVAL_RETRY_INTERVAL_SECONDS = 0.1
+
+
+@pytest.fixture(autouse=True)
+def setup_localstack_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    endpoint = os.getenv("AWS_ENDPOINT_URL") or "http://localhost:4566"
+    monkeypatch.setenv("AWS_ENDPOINT_URL", endpoint)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID") or "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY") or "test")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", os.getenv("AWS_DEFAULT_REGION") or "us-east-1")
 
 
 async def retrieve_secret_with_retry(adapter: AwsSecretsManagerAdapter, ref: str) -> bytes:

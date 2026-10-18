@@ -44,6 +44,8 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         region_name: str | None = None,
         secrets_mount_path: str = "/mnt/secrets",
         client: SecretsManagerClientProtocol | None = None,
+        aws_access_key_id: str | None = None,
+        aws_secret_access_key: str | None = None,
     ) -> None:
         if client is not None:
             self.client: SecretsManagerClientProtocol = client
@@ -54,12 +56,13 @@ class AwsSecretsManagerAdapter(SecretStorePort):
             client_kwargs: dict[str, str] = {"region_name": resolved_region}
             if resolved_endpoint:
                 client_kwargs["endpoint_url"] = resolved_endpoint
-                access_key = os.getenv("AWS_ACCESS_KEY_ID")
-                secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-                if access_key:
-                    client_kwargs["aws_access_key_id"] = access_key
-                if secret_key:
-                    client_kwargs["aws_secret_access_key"] = secret_key
+
+            access_key = aws_access_key_id or os.getenv("AWS_ACCESS_KEY_ID")
+            secret_key = aws_secret_access_key or os.getenv("AWS_SECRET_ACCESS_KEY")
+            if access_key:
+                client_kwargs["aws_access_key_id"] = access_key
+            if secret_key:
+                client_kwargs["aws_secret_access_key"] = secret_key
 
             self.client = boto3.client("secretsmanager", **client_kwargs)
         self._secrets_mount_path = secrets_mount_path
