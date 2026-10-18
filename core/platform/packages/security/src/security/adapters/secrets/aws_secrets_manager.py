@@ -4,6 +4,7 @@ import asyncio
 import os
 import time
 from pathlib import Path
+from typing import Protocol
 
 import boto3
 import structlog
@@ -14,6 +15,20 @@ from seedwork.utils import generate_id
 from security.ports.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
+
+
+class SecretsManagerClientProtocol(Protocol):
+    """Protocol for interacting with the AWS Secrets Manager client."""
+
+    def create_secret(
+        self, *, Name: str, SecretString: str, Description: str = ...
+    ) -> dict[str, object]: ...
+
+    def get_secret_value(self, *, SecretId: str) -> dict[str, object]: ...
+
+    def delete_secret(
+        self, *, SecretId: str, RecoveryWindowInDays: int = 7
+    ) -> dict[str, object]: ...
 
 
 class AwsSecretsManagerAdapter(SecretStorePort):
@@ -28,21 +43,25 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         endpoint_url: str | None = None,
         region_name: str | None = None,
         secrets_mount_path: str = "/mnt/secrets",
+        client: SecretsManagerClientProtocol | None = None,
     ) -> None:
-        resolved_endpoint = endpoint_url or os.getenv("AWS_ENDPOINT_URL")
-        resolved_region = region_name or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+        if client is not None:
+            self.client: SecretsManagerClientProtocol = client
+        else:
+            resolved_endpoint = endpoint_url or os.getenv("AWS_ENDPOINT_URL")
+            resolved_region = region_name or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
 
-        client_kwargs: dict[str, str] = {"region_name": resolved_region}
-        if resolved_endpoint:
-            client_kwargs["endpoint_url"] = resolved_endpoint
-            access_key = os.getenv("AWS_ACCESS_KEY_ID")
-            secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-            if access_key:
-                client_kwargs["aws_access_key_id"] = access_key
-            if secret_key:
-                client_kwargs["aws_secret_access_key"] = secret_key
+            client_kwargs: dict[str, str] = {"region_name": resolved_region}
+            if resolved_endpoint:
+                client_kwargs["endpoint_url"] = resolved_endpoint
+                access_key = os.getenv("AWS_ACCESS_KEY_ID")
+                secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+                if access_key:
+                    client_kwargs["aws_access_key_id"] = access_key
+                if secret_key:
+                    client_kwargs["aws_secret_access_key"] = secret_key
 
-        self.client = boto3.client("secretsmanager", **client_kwargs)
+            self.client = boto3.client("secretsmanager", **client_kwargs)
         self._secrets_mount_path = secrets_mount_path
         self._cache: dict[str, tuple[bytes, float]] = {}
         self._cache_ttl_seconds = int(os.getenv("SECRETS_CACHE_TTL", "3600"))
@@ -85,7 +104,10 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         if secret_bin is not None:
             if isinstance(secret_bin, bytes):
                 return secret_bin
-            return bytes(secret_bin)
+            if isinstance(secret_bin, (bytearray, memoryview)):
+                return bytes(secret_bin)
+            if isinstance(secret_bin, str):
+                return secret_bin.encode("utf-8")
         raise ValueError(f"Secret value is empty: {vault_ref}")
 
     async def retrieve_secret(self, vault_ref: str) -> bytes:

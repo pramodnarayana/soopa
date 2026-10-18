@@ -70,6 +70,13 @@ def sync_deps(check_only: bool = False):  # noqa: C901 - Multi-pass AST script c
                 if match:
                     actual_deps.append(match.group(1).replace("-", "_"))
 
+        if "project" in data and "optional-dependencies" in data["project"]:
+            for _extra, deps in data["project"]["optional-dependencies"].items():
+                for d in deps:
+                    match = re.match(r"^([a-zA-Z0-9_\-]+)", d)
+                    if match:
+                        actual_deps.append(match.group(1).replace("-", "_"))
+
         if "dependency-groups" in data:
             for _group, deps in data["dependency-groups"].items():
                 for d in deps:

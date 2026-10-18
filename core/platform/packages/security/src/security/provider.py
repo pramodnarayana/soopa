@@ -39,8 +39,8 @@ class SecurityProvider:
         if len(stripped) == 64:
             try:
                 return bytes.fromhex(stripped)
-            except ValueError:
-                pass
+            except ValueError as e:
+                raise ValueError(f"Malformed 64-character hex encryption key: {e}") from e
 
         # 2. Base64 encoding (44 chars = 32 bytes)
         if len(stripped) == 44:
@@ -48,8 +48,11 @@ class SecurityProvider:
                 decoded = base64.b64decode(stripped, validate=True)
                 if len(decoded) == 32:
                     return decoded
-            except (binascii.Error, ValueError):
-                pass
+                raise ValueError(
+                    f"44-character base64 encryption key decoded to {len(decoded)} bytes; expected 32 bytes"
+                )
+            except (binascii.Error, ValueError) as e:
+                raise ValueError(f"Malformed 44-character base64 encryption key: {e}") from e
 
         # 3. Raw 32 bytes UTF-8
         key_bytes = stripped.encode("utf-8")

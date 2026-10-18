@@ -1,4 +1,5 @@
 import base64
+import hashlib
 
 import pytest
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
@@ -110,6 +111,23 @@ def test_hmac_signer_non_ascii_and_malformed_signatures() -> None:
     assert signer.verify(payload, "") is False
 
 
+class FakeSecretsManagerClient:
+    def __init__(self) -> None:
+        self.deleted_secrets: list[str] = []
+
+    def create_secret(
+        self, *, Name: str, SecretString: str, Description: str = ""
+    ) -> dict[str, object]:
+        return {"ARN": f"arn:aws:secretsmanager:::secret:{Name}", "Name": Name}
+
+    def get_secret_value(self, *, SecretId: str) -> dict[str, object]:
+        return {"SecretString": "mock_secret"}
+
+    def delete_secret(self, *, SecretId: str, RecoveryWindowInDays: int = 7) -> dict[str, object]:
+        self.deleted_secrets.append(SecretId)
+        return {"ARN": f"arn:aws:secretsmanager:::secret:{SecretId}", "Name": SecretId}
+
+
 @pytest.mark.asyncio
 async def test_aws_secrets_manager_path_traversal_and_sidecar_cleanup(
     tmp_path: pytest.TempPathFactory,
@@ -120,7 +138,11 @@ async def test_aws_secrets_manager_path_traversal_and_sidecar_cleanup(
     secret_file.parent.mkdir(parents=True)
     secret_file.write_bytes(b"mounted_secret_content")
 
-    adapter = AwsSecretsManagerAdapter(secrets_mount_path=str(mount_dir))
+    fake_client = FakeSecretsManagerClient()
+    adapter = AwsSecretsManagerAdapter(
+        secrets_mount_path=str(mount_dir),
+        client=fake_client,
+    )
 
     # Valid read from mounted directory
     retrieved = await adapter.retrieve_secret("soopa/as2/test_key")
@@ -137,6 +159,7 @@ async def test_aws_secrets_manager_path_traversal_and_sidecar_cleanup(
     assert secret_file.exists()
     await adapter.delete_secret("soopa/as2/test_key")
     assert not secret_file.exists()
+    assert fake_client.deleted_secrets == ["soopa/as2/test_key"]
 
 
 def test_security_provider_decodes_hex_and_base64_keys() -> None:
@@ -152,6 +175,40 @@ def test_security_provider_decodes_hex_and_base64_keys() -> None:
     assert len(b64_key) == 44
     cipher_b64 = SecurityProvider.get_cipher(key=SecurityProvider._decode_aes_key(b64_key))
     assert cipher_b64.decrypt_str(cipher_b64.encrypt_str("hello")) == "hello"
+
+    # Malformed 64-char hex key raises ValueError
+    malformed_hex = "g" * 64
+    with pytest.raises(ValueError, match="Malformed 64-character hex encryption key"):
+        SecurityProvider._decode_aes_key(malformed_hex)
+
+    # Malformed 44-char base64 key raises ValueError
+    malformed_b64 = "????" + ("a" * 40)
+    with pytest.raises(ValueError, match="Malformed 44-character base64 encryption key"):
+        SecurityProvider._decode_aes_key(malformed_b64)
+
+    # 44-char base64 key that decodes to non-32 bytes raises ValueError
+    non_32_b64 = base64.b64encode(b"a" * 33).decode("ascii")
+    assert len(non_32_b64) == 44
+    with pytest.raises(ValueError, match="decoded to 33 bytes; expected 32 bytes"):
+        SecurityProvider._decode_aes_key(non_32_b64)
+
+    # Legacy arbitrary passphrase falls back to SHA-256 derivation
+    derived = SecurityProvider._decode_aes_key("legacy-arbitrary-password")
+    assert len(derived) == 32
+    assert derived == hashlib.sha256(b"legacy-arbitrary-password").digest()
+
+
+@pytest.mark.asyncio
+async def test_aws_secrets_manager_delete_secret_without_mounted_file(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    fake_client = FakeSecretsManagerClient()
+    adapter = AwsSecretsManagerAdapter(
+        secrets_mount_path=str(tmp_path / "nonexistent"),
+        client=fake_client,
+    )
+    await adapter.delete_secret("soopa/as2/unmounted_key")
+    assert fake_client.deleted_secrets == ["soopa/as2/unmounted_key"]
 
 
 def test_security_provider_fails_fast_in_production(monkeypatch: pytest.MonkeyPatch) -> None:

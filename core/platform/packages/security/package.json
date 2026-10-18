@@ -4,8 +4,12 @@
   "private": true,
   "description": "Centralized Platform Security, Secrets, and Cryptography",
   "scripts": {
-    "test": "uv run pytest",
-    "lint": "uv run ruff check ."
+    "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
+    "test:integration": "uv run pytest tests/integration --cov=src",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
+    "cov": "uv run pytest -m \"not integration\" --cov=src --cov-report=term-missing --ignore=tests/integration --ignore=tests/e2e",
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format . && uv run ruff check --fix ."
   },
   "devDependencies": {
     "@soopa/seedwork": "workspace:*"
