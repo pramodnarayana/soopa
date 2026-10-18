@@ -93,7 +93,11 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         try:
             response = await asyncio.to_thread(self.client.get_secret_value, SecretId=vault_ref)
         except ClientError as e:
-            if e.response["Error"]["Code"] == "ResourceNotFoundException":
+            code = e.response.get("Error", {}).get("Code")
+            msg = str(e.response.get("Error", {}).get("Message", ""))
+            if code == "ResourceNotFoundException" or (
+                code == "InvalidRequestException" and "marked for deletion" in msg.lower()
+            ):
                 raise ValueError(f"Secret not found: {vault_ref}") from e
             raise
 
@@ -189,5 +193,10 @@ class AwsSecretsManagerAdapter(SecretStorePort):
                 RecoveryWindowInDays=7,
             )
         except ClientError as e:
-            if e.response["Error"]["Code"] != "ResourceNotFoundException":
-                raise
+            code = e.response.get("Error", {}).get("Code")
+            msg = str(e.response.get("Error", {}).get("Message", ""))
+            if code == "ResourceNotFoundException" or (
+                code == "InvalidRequestException" and "marked for deletion" in msg.lower()
+            ):
+                return
+            raise
