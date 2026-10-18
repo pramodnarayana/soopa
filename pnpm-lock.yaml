@@ -654,11 +654,7 @@ importers:
         specifier: workspace:*
         version: link:../../../ucp/apps/ucp-worker
 
-  core/platform/packages/database:
-    devDependencies:
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../../ucp/packages/models
+  core/platform/packages/database: {}
 
   core/platform/packages/identity:
     devDependencies:
