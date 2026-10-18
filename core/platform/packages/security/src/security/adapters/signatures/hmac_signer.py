@@ -17,6 +17,12 @@ class HmacSigner(SignaturePort):
         return hmac.new(self._secret, payload, hashlib.sha256).hexdigest()
 
     def verify(self, payload: bytes, signature: str) -> bool:
-        """Constant-time verification of signature."""
+        """Constant-time verification of signature.
+
+        Guarantees constant-time comparison on ASCII-encoded bytes and safely returns
+        False for non-ASCII or invalid signature strings without throwing.
+        """
+        if not isinstance(signature, str) or not signature.isascii():
+            return False
         expected = self.sign(payload)
-        return hmac.compare_digest(expected, signature)
+        return hmac.compare_digest(expected.encode("ascii"), signature.encode("ascii"))

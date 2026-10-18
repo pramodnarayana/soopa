@@ -13,11 +13,13 @@ from .identity import ApiKey, ApiToken, Role, Tenant, TenantUser, User, UserRole
 from .notifications import NotificationOutbox, NotificationTemplate, UserNotificationPreference
 from .observability import SystemAuditLog
 from .scheduling import ScheduledJob
+from .sharding import DatabaseShard, ShardRegistry
 from .webhooks import Webhook
 
 __all__ = [
     "ApiKey",
     "ApiToken",
+    "DatabaseShard",
     "IdempotencyResult",
     "IdentityBase",
     "NotificationBase",
@@ -29,6 +31,7 @@ __all__ = [
     "Role",
     "ScheduledJob",
     "SchedulingBase",
+    "ShardRegistry",
     "SoftDeleteMixin",
     "SystemAuditLog",
     "Tenant",

@@ -5,7 +5,7 @@
   "description": "Centralized Platform Security, Secrets, and Cryptography",
   "scripts": {
     "test": "uv run pytest",
-    "lint": "ruff check src"
+    "lint": "uv run ruff check ."
   },
   "devDependencies": {
     "@soopa/seedwork": "workspace:*"

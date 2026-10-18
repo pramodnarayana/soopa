@@ -13,6 +13,7 @@
   "devDependencies": {
     "@soopa/database": "workspace:*",
     "@soopa/outbox": "workspace:*",
-    "@soopa/seedwork": "workspace:*"
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/ucp-models": "workspace:*"
   }
 }

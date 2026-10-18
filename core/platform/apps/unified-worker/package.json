@@ -6,12 +6,6 @@
     "start": "PYTHONUNBUFFERED=1 uv run python -m unified_worker.main"
   },
   "devDependencies": {
-    "@soopa/database": "workspace:*",
-    "@soopa/identity": "workspace:*",
-    "@soopa/observability": "workspace:*",
-    "@soopa/pubsub": "workspace:*",
-    "@soopa/ucp": "workspace:*",
-    "@soopa/ucp-models": "workspace:*",
     "@soopa/identity-worker": "workspace:*",
     "@soopa/identity-jobs-worker": "workspace:*",
     "@soopa/notification-worker": "workspace:*",

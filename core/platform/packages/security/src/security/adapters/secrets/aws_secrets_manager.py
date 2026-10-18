@@ -3,6 +3,7 @@
 import asyncio
 import os
 import time
+from pathlib import Path
 
 import boto3
 import structlog
@@ -98,9 +99,9 @@ class AwsSecretsManagerAdapter(SecretStorePort):
             if cached is not None and time.time() < cached[1]:
                 return cached[0]
 
-            local_path = os.path.join(self._secrets_mount_path, vault_ref.replace("/", os.sep))
-            if os.path.exists(local_path) and os.path.isfile(local_path):
-                val = await asyncio.to_thread(self._read_file, local_path)
+            mounted_path = self._resolve_mounted_path(vault_ref)
+            if mounted_path is not None and mounted_path.is_file():
+                val = await asyncio.to_thread(self._read_file, str(mounted_path))
             else:
                 val = await self._fetch_from_aws(vault_ref)
 
@@ -108,6 +109,27 @@ class AwsSecretsManagerAdapter(SecretStorePort):
                 self._cache.clear()
             self._cache[vault_ref] = (val, time.time() + self._cache_ttl_seconds)
             return val
+
+    def _resolve_mounted_path(self, vault_ref: str) -> Path | None:
+        """Resolves and validates that a candidate secret path remains securely within _secrets_mount_path.
+
+        Prevents path traversal, absolute path escapes, and symlink escapes (CWE-22).
+        """
+        try:
+            mount_root = Path(self._secrets_mount_path).resolve()
+            clean_ref = vault_ref.lstrip("/\\")
+            candidate = (mount_root / clean_ref).resolve()
+            if candidate.is_relative_to(mount_root):
+                return candidate
+            logger.warning(
+                "secrets_mount_path_traversal_prevented",
+                vault_ref=vault_ref,
+                candidate=str(candidate),
+                mount_root=str(mount_root),
+            )
+            return None
+        except (ValueError, OSError, RuntimeError):
+            return None
 
     @staticmethod
     def _read_file(path: str) -> bytes:
@@ -125,6 +147,18 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         async with self._locks_lock:
             self._locks.pop(vault_ref, None)
         self._cache.pop(vault_ref, None)
+
+        # Remove local sidecar file if present
+        mounted_path = self._resolve_mounted_path(vault_ref)
+        if mounted_path is not None and mounted_path.is_file():
+            try:
+                await asyncio.to_thread(mounted_path.unlink, missing_ok=True)
+            except OSError as e:
+                logger.warning(
+                    "local_secret_file_removal_failed",
+                    vault_ref=vault_ref,
+                    error=str(e),
+                )
 
         try:
             await asyncio.to_thread(

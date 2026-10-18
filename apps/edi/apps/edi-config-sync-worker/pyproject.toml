@@ -11,7 +11,6 @@ edi = { workspace = true }
 outbox = { workspace = true }
 pubsub = { workspace = true }
 seedwork = { workspace = true }
-security = { workspace = true }
 
 [tool.deptry]
 known_first_party = ["config_sync_worker"]

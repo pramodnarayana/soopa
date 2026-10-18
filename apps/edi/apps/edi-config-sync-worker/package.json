@@ -15,7 +15,6 @@
     "@soopa/api": "workspace:*",
     "@soopa/outbox": "workspace:*",
     "@soopa/pubsub": "workspace:*",
-    "@soopa/seedwork": "workspace:*",
-    "@soopa/security": "workspace:*"
+    "@soopa/seedwork": "workspace:*"
   }
 }

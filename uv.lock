@@ -892,7 +892,6 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "ucp-models" },
 ]
 
 [package.metadata]
@@ -902,7 +901,6 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-    { name = "ucp-models", editable = "core/ucp/packages/models" },
 ]
 
 [[package]]

@@ -66,6 +66,9 @@ pnpm run syncpack:python:check
 echo "✅ Running Typechecks..."
 pnpm run typecheck
 
+echo "✅ Linting All Workspaces (Node & Python)..."
+pnpm turbo lint
+
 echo "✅ Running Ruff lint across full EDI surface (including e2e, workers, and apps)..."
 # This runs unconditionally — bypasses turbo caching — to catch violations in all files
 # including e2e tests and worker entrypoints that pnpm test excludes from execution.

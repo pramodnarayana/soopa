@@ -1,7 +1,7 @@
 from sqlalchemy import select, text
-from ucp_models.sharding import DatabaseShard
 
 from database.constants import DatabaseShardStatus
+from database.models.sharding import DatabaseShard
 
 """
 Enterprise Database Routing and Provisioning.

@@ -1,8 +1,9 @@
-"""Unit tests for the centralized security package."""
+import base64
 
 import pytest
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from security.adapters.ciphers.fernet_cipher import FernetCipher
+from security.adapters.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
 from security.adapters.signatures.hmac_signer import HmacSigner
 from security.provider import SecurityProvider
 from security.sanitization.scrubber import sanitize_error
@@ -75,7 +76,8 @@ async def test_in_memory_vault_lifecycle() -> None:
         await vault.retrieve_secret(ref)
 
 
-def test_security_provider_resolves_components() -> None:
+def test_security_provider_resolves_components(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ALLOW_EPHEMERAL_SECURITY_KEYS", "true")
     cipher = SecurityProvider.get_cipher()
     assert cipher is not None
 
@@ -96,3 +98,70 @@ def test_sanitization_scrubber_masks_sensitive_data() -> None:
     sanitized_bearer = sanitize_error(error_with_bearer)
     assert "my_super_secret_token_12345" not in sanitized_bearer
     assert "Bearer [REDACTED]" in sanitized_bearer
+
+
+def test_hmac_signer_non_ascii_and_malformed_signatures() -> None:
+    signer = HmacSigner("test_secret")
+    payload = b"payload_bytes"
+
+    # Non-ASCII unicode characters
+    assert signer.verify(payload, "invalid_sig_🔥") is False
+    assert signer.verify(payload, "éèêë") is False
+    assert signer.verify(payload, "") is False
+
+
+@pytest.mark.asyncio
+async def test_aws_secrets_manager_path_traversal_and_sidecar_cleanup(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    mount_dir = tmp_path / "secrets_mount"
+    mount_dir.mkdir()
+    secret_file = mount_dir / "soopa" / "as2" / "test_key"
+    secret_file.parent.mkdir(parents=True)
+    secret_file.write_bytes(b"mounted_secret_content")
+
+    adapter = AwsSecretsManagerAdapter(secrets_mount_path=str(mount_dir))
+
+    # Valid read from mounted directory
+    retrieved = await adapter.retrieve_secret("soopa/as2/test_key")
+    assert retrieved == b"mounted_secret_content"
+
+    # Path traversal attack attempts should be rejected (returning None from resolution)
+    assert adapter._resolve_mounted_path("../../etc/passwd") is None
+    assert adapter._resolve_mounted_path("/etc/passwd") is not None
+    # Resolved /etc/passwd is checked against mount_dir
+    resolved = adapter._resolve_mounted_path("../../../etc/shadow")
+    assert resolved is None
+
+    # Sidecar file cleanup on delete_secret
+    assert secret_file.exists()
+    await adapter.delete_secret("soopa/as2/test_key")
+    assert not secret_file.exists()
+
+
+def test_security_provider_decodes_hex_and_base64_keys() -> None:
+    # 32-byte key in hex (64 chars)
+    raw_bytes = b"0123456789abcdef0123456789abcdef"
+    hex_key = raw_bytes.hex()
+    assert len(hex_key) == 64
+    cipher_hex = SecurityProvider.get_cipher(key=SecurityProvider._decode_aes_key(hex_key))
+    assert cipher_hex.decrypt_str(cipher_hex.encrypt_str("hello")) == "hello"
+
+    # 32-byte key in base64 (44 chars)
+    b64_key = base64.b64encode(raw_bytes).decode("ascii")
+    assert len(b64_key) == 44
+    cipher_b64 = SecurityProvider.get_cipher(key=SecurityProvider._decode_aes_key(b64_key))
+    assert cipher_b64.decrypt_str(cipher_b64.encrypt_str("hello")) == "hello"
+
+
+def test_security_provider_fails_fast_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("SECURITY_AES_KEY", raising=False)
+    monkeypatch.delenv("DB_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_EPHEMERAL_SECURITY_KEYS", raising=False)
+
+    with pytest.raises(RuntimeError, match="Neither SECURITY_AES_KEY nor DB_ENCRYPTION_KEY"):
+        SecurityProvider.get_cipher()
+
+    with pytest.raises(RuntimeError, match="DB_ENCRYPTION_KEY is not configured"):
+        SecurityProvider.get_fernet_cipher()

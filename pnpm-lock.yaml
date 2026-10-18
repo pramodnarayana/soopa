@@ -156,9 +156,6 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:../../packages/edi
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../../../core/ucp/packages/models
 
   apps/edi/apps/edi-config-sync-worker:
     devDependencies:
@@ -171,9 +168,6 @@ importers:
       '@soopa/pubsub':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/pubsub
-      '@soopa/security':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/security
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
@@ -186,9 +180,6 @@ importers:
       '@soopa/config-sync-worker':
         specifier: workspace:*
         version: link:../edi-config-sync-worker
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../../../core/platform/packages/database
       '@soopa/outbox':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/outbox
@@ -626,9 +617,6 @@ importers:
       '@soopa/config-sync-worker':
         specifier: workspace:*
         version: link:../../../../apps/edi/apps/edi-config-sync-worker
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../packages/database
       '@soopa/edi-cp-worker':
         specifier: workspace:*
         version: link:../../../../apps/edi/apps/edi-cp-jobs-worker
@@ -638,9 +626,6 @@ importers:
       '@soopa/edi-dp-jobs-worker':
         specifier: workspace:*
         version: link:../../../../apps/edi/apps/edi-dp-jobs-worker
-      '@soopa/identity':
-        specifier: workspace:*
-        version: link:../../packages/identity
       '@soopa/identity-jobs-worker':
         specifier: workspace:*
         version: link:../identity-jobs-worker
@@ -656,32 +641,24 @@ importers:
       '@soopa/notification-worker':
         specifier: workspace:*
         version: link:../notification-worker
-      '@soopa/observability':
-        specifier: workspace:*
-        version: link:../../packages/observability
       '@soopa/orchestrator-worker':
         specifier: workspace:*
         version: link:../../../../apps/edi/apps/edi-orchestrator-worker
-      '@soopa/pubsub':
-        specifier: workspace:*
-        version: link:../../packages/pubsub
       '@soopa/scheduler-worker':
         specifier: workspace:*
         version: link:../scheduler-worker
-      '@soopa/ucp':
-        specifier: workspace:*
-        version: link:../../../ucp/packages/ucp
       '@soopa/ucp-jobs-worker':
         specifier: workspace:*
         version: link:../../../ucp/apps/ucp-jobs-worker
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../../ucp/packages/models
       '@soopa/ucp-worker':
         specifier: workspace:*
         version: link:../../../ucp/apps/ucp-worker
 
-  core/platform/packages/database: {}
+  core/platform/packages/database:
+    devDependencies:
+      '@soopa/ucp-models':
+        specifier: workspace:*
+        version: link:../../../ucp/packages/models
 
   core/platform/packages/identity:
     devDependencies:
@@ -700,6 +677,9 @@ importers:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../seedwork
+      '@soopa/ucp-models':
+        specifier: workspace:*
+        version: link:../../../ucp/packages/models
 
   core/platform/packages/observability: {}
 
@@ -729,6 +709,9 @@ importers:
       '@soopa/database':
         specifier: workspace:*
         version: link:../database
+      '@soopa/ucp-models':
+        specifier: workspace:*
+        version: link:../../../ucp/packages/models
 
   core/platform/packages/schemas:
     devDependencies:
@@ -871,9 +854,6 @@ importers:
 
   core/ucp/apps/ucp-worker:
     devDependencies:
-      '@soopa/database':
-        specifier: workspace:*
-        version: link:../../../platform/packages/database
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../../platform/packages/observability
@@ -883,9 +863,6 @@ importers:
       '@soopa/ucp':
         specifier: workspace:*
         version: link:../../packages/ucp
-      '@soopa/ucp-models':
-        specifier: workspace:*
-        version: link:../../packages/models
 
   core/ucp/packages/models:
     devDependencies:
