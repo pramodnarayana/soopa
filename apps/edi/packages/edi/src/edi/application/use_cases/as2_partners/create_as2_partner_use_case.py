@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
-from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.secret_store_port import SecretStorePort
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 

@@ -15,16 +15,17 @@ single reason to change (SRP):
 import functools
 
 import structlog
-from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.secret_store_port import SecretStorePort
 
 from edi.adapters.inbound.as2.builder import build_outbound_message
-from edi.adapters.outbound.security import encrypt_payload, sign_payload
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 from edi.application.dtos.partners import (
     AS2PartnershipDTO,
     LocalAS2PartnerDTO,
     RemoteAS2PartnerDTO,
 )
 from edi.domain.models.as2 import OutboundAS2Message
+from edi.ports.outbound.crypto_service_port import CryptoServicePort
 
 logger = structlog.get_logger(__name__)
 
@@ -57,8 +58,13 @@ class AS2MessageOrchestrator:
     keeping this class free of direct cryptographic logic.
     """
 
-    def __init__(self, vault: SecretStorePort | None = None) -> None:
+    def __init__(
+        self,
+        vault: SecretStorePort | None = None,
+        crypto_service: CryptoServicePort | None = None,
+    ) -> None:
         self.secret_store = vault
+        self.crypto_service: CryptoServicePort = crypto_service or SmimeCryptoService()
 
     async def build(
         self,
@@ -115,12 +121,9 @@ class AS2MessageOrchestrator:
         )
 
         # ── Build sign / encrypt callables via functools.partial ──────────────
-        #    sign_payload(payload, private_key_pem, public_cert_pem)
-        #    encrypt_payload(payload, public_cert_pem, algorithm)
-        #    partial pre-fills the trailing keyword args; builder supplies payload as first positional.
         sign_fn = (
             functools.partial(
-                sign_payload,
+                self.crypto_service.sign,
                 private_key_pem=local_private_key_pem,
                 public_cert_pem=local_cert_pem,
             )
@@ -131,7 +134,7 @@ class AS2MessageOrchestrator:
         encryption_alg: str = partnership.encryption_algorithm or "AES256"
         encrypt_fn = (
             functools.partial(
-                encrypt_payload,
+                self.crypto_service.encrypt,
                 public_cert_pem=remote_cert_pem,
                 algorithm=encryption_alg,
             )

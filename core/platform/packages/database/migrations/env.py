@@ -65,7 +65,14 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     def include_name(name, type_, parent_names):
         if type_ == "schema":
-            return name in [None, "ucp", "identity", "notifications", "scheduling", "observability"]
+            return name in [
+                None,
+                "ucp",
+                "identity",
+                "notifications",
+                "scheduling",
+                "observability",
+            ]
         return True
 
     def include_object(object, name, type_, reflected, compare_to):

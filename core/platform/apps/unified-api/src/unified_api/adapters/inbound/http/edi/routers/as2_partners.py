@@ -26,7 +26,7 @@ from edi.domain.exceptions import (
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.secret_store_port import SecretStorePort
 from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile

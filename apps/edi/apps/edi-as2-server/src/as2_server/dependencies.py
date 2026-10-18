@@ -7,13 +7,12 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
 from fastapi import Depends, HTTPException, Request
-from secret_store.ports.secret_store_port import SecretStorePort
-from secret_store.provider import SecretStoreProvider
+from security import SecretStorePort, SecurityProvider
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
 def get_vault_service() -> SecretStorePort:
-    return SecretStoreProvider.create()
+    return SecurityProvider.get_secret_store()
 
 
 VaultDep = Annotated[SecretStorePort, Depends(get_vault_service)]

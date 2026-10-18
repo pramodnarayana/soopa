@@ -144,6 +144,9 @@ importers:
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/observability
+      '@soopa/security':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/security
       '@soopa/ucp-models':
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/models
@@ -168,9 +171,9 @@ importers:
       '@soopa/pubsub':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/pubsub
-      '@soopa/secret_store':
+      '@soopa/security':
         specifier: workspace:*
-        version: link:../../../../core/platform/packages/secret_store
+        version: link:../../../../core/platform/packages/security
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
@@ -213,9 +216,9 @@ importers:
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/observability
-      '@soopa/secret_store':
+      '@soopa/security':
         specifier: workspace:*
-        version: link:../../../../core/platform/packages/secret_store
+        version: link:../../../../core/platform/packages/security
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
@@ -258,9 +261,9 @@ importers:
       '@soopa/pubsub':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/pubsub
-      '@soopa/secret_store':
+      '@soopa/security':
         specifier: workspace:*
-        version: link:../../../../core/platform/packages/secret_store
+        version: link:../../../../core/platform/packages/security
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
@@ -285,9 +288,9 @@ importers:
       '@soopa/outbox':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/outbox
-      '@soopa/secret_store':
+      '@soopa/security':
         specifier: workspace:*
-        version: link:../../../../core/platform/packages/secret_store
+        version: link:../../../../core/platform/packages/security
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
@@ -608,6 +611,9 @@ importers:
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@soopa/security':
+        specifier: workspace:*
+        version: link:../../packages/security
       '@soopa/ucp':
         specifier: workspace:*
         version: link:../../../ucp/packages/ucp
@@ -733,7 +739,7 @@ importers:
         specifier: ~6.0.3
         version: 6.0.3
 
-  core/platform/packages/secret_store:
+  core/platform/packages/security:
     devDependencies:
       '@soopa/seedwork':
         specifier: workspace:*

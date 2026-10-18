@@ -3,7 +3,7 @@ import json
 from collections.abc import Callable
 
 import structlog
-from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.secret_store_port import SecretStorePort
 from seedwork.domain.exceptions import ErrorCode
 
 from edi.core.pipeline.delivery.base import (

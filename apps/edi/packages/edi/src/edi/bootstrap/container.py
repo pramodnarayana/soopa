@@ -1,5 +1,5 @@
 from dependency_injector import containers, providers
-from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from security import AwsSecretsManagerAdapter
 
 from edi.adapters.outbound.database.control_plane.tenant_repository import (
     SqlAlchemyTenantRepository,

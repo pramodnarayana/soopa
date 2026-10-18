@@ -1,0 +1,32 @@
+[project]
+name = "security"
+version = "0.1.0"
+description = "Centralized Enterprise Security, Secrets, and Cryptography Package for Soopa"
+authors = [
+    {name = "Platform Security Team", email = "security@soopa.com"}
+]
+requires-python = ">=3.11"
+dependencies = [
+    "cryptography>=44.0.0",
+    "boto3>=1.34.0",
+    "structlog>=24.1.0",
+    "seedwork",
+]
+
+[tool.uv.sources]
+seedwork = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]

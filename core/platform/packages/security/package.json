@@ -1,0 +1,13 @@
+{
+  "name": "@soopa/security",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Centralized Platform Security, Secrets, and Cryptography",
+  "scripts": {
+    "test": "uv run pytest",
+    "lint": "ruff check src"
+  },
+  "devDependencies": {
+    "@soopa/seedwork": "workspace:*"
+  }
+}

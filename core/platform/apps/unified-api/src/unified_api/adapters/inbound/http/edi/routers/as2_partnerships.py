@@ -24,7 +24,7 @@ from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.secret_store_port import SecretStorePort
 
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.services import (

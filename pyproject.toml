@@ -25,7 +25,6 @@ members = [
     "core/platform/packages/outbox",
     "core/platform/packages/pubsub",
     "core/platform/packages/seedwork",
-    "core/platform/packages/secret_store",
     "core/platform/packages/storage",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
@@ -55,6 +54,7 @@ members = [
     "core/platform/apps/platform-migrator",
     "apps/edi/apps/edi-secrets-sidecar",
     "infra/cloud/aws",
+    "core/platform/packages/security",
 ]
 exclude = ["apps/edi/packages/ui"]
 
@@ -73,6 +73,7 @@ edi = { workspace = true }
 as2-server = { workspace = true }
 unified-api = { workspace = true }
 unified-worker = { workspace = true }
+security = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
@@ -156,6 +157,7 @@ mypy_path = [
     "core/platform/apps/notification-jobs-worker/src",
     "core/ucp/apps/ucp-worker/src",
     "core/platform/apps/unified-worker/src",
+    "core/platform/packages/security/src",
 ]
 
 [[tool.mypy.overrides]]

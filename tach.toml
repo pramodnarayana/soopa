@@ -8,8 +8,14 @@ source_roots = [
     "apps/edi/packages/pipeline/src",
     "core/platform/packages/identity/src",
     "core/platform/packages/schemas/python/src",
-    "core/ucp/packages/models/src"
+    "core/ucp/packages/models/src",
+    "core/platform/packages/security/src"
 ]
+
+[[modules]]
+path = "security"
+depends_on = []
+
 
 [[modules]]
 path = "edi.domain"

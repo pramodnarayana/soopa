@@ -16,6 +16,7 @@
     "@soopa/api": "workspace:*",
     "@soopa/identity": "workspace:*",
     "@soopa/observability": "workspace:*",
-    "@soopa/database": "workspace:*"
+    "@soopa/database": "workspace:*",
+    "@soopa/security": "workspace:*"
   }
 }

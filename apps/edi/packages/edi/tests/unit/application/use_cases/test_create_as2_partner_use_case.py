@@ -1,7 +1,7 @@
 from typing import cast
 
 import pytest
-from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.secret_store_port import SecretStorePort
 
 from edi.application.use_cases.as2_partners.create_as2_partner_use_case import (
     CreateAS2PartnerUseCase,

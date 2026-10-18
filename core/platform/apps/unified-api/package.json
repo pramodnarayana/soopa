@@ -13,6 +13,7 @@
     "@soopa/ucp": "workspace:*",
     "@soopa/api": "workspace:*",
     "@soopa/observability": "workspace:*",
-    "@soopa/notification": "workspace:*"
+    "@soopa/notification": "workspace:*",
+    "@soopa/security": "workspace:*"
   }
 }
