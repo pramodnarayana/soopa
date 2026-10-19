@@ -19,6 +19,7 @@ from edi.domain.models.as2 import OutboundAS2Message
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.domain.services.as2_protocol import parse_mdn
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
+from edi.ports.outbound.crypto_service_port import CryptoServicePort
 from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -33,10 +34,11 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         ],
         as2_delivery: AS2DeliveryPort,
         vault: SecretStorePort | None = None,
+        crypto_service: CryptoServicePort | None = None,
     ) -> None:
         super().__init__(uow_factory, vault)
         self.as2_delivery = as2_delivery
-        self._as2_orchestrator = AS2MessageOrchestrator(vault=vault)
+        self._as2_orchestrator = AS2MessageOrchestrator(vault=vault, crypto_service=crypto_service)
 
     async def _process_mdn_response(
         self,

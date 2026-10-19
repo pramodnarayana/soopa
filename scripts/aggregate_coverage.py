@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import glob
 import json
 import os
 import shutil
@@ -69,10 +68,15 @@ def main() -> None:
     uv_path = get_uv_path()
     failed = False
 
-    for pkg_json in glob.glob("**/package.json", recursive=True):
-        success = process_package(pkg_json, uv_path)
-        if not success:
-            failed = True
+    for root, dirs, files in os.walk(".", topdown=True):
+        dirs[:] = [
+            d for d in dirs if not d.startswith(".") and d not in ("node_modules", "dist", "build")
+        ]
+        if "package.json" in files:
+            pkg_json = os.path.join(root, "package.json")
+            success = process_package(pkg_json, uv_path)
+            if not success:
+                failed = True
 
     if failed:
         sys.exit(1)

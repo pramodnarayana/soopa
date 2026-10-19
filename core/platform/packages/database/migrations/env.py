@@ -2,7 +2,6 @@ import asyncio
 import os
 from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
 
-import ucp_models.sharding  # noqa: F401
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import pool, text
@@ -65,7 +64,14 @@ def run_migrations_offline() -> None:
 def do_run_migrations(connection: Connection) -> None:
     def include_name(name, type_, parent_names):
         if type_ == "schema":
-            return name in [None, "ucp", "identity", "notifications", "scheduling", "observability"]
+            return name in [
+                None,
+                "ucp",
+                "identity",
+                "notifications",
+                "scheduling",
+                "observability",
+            ]
         return True
 
     def include_object(object, name, type_, reflected, compare_to):

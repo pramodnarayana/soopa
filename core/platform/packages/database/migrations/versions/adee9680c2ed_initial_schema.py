@@ -594,7 +594,16 @@ def upgrade() -> None:
             updated_at = NOW();
         """
     )
-
+    op.execute(
+        """
+        INSERT INTO ucp.apps (id, slug, name, description, created_at, updated_at)
+        VALUES ('app_ip_core', 'ip', 'Integration Platform', 'Universal Integration Platform for Energy & Enterprise Systems.', NOW(), NOW())
+        ON CONFLICT (slug) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            updated_at = NOW();
+        """
+    )
     # Runtime job seeding is intentionally NOT done here.
     # Scheduled jobs are seeded per bounded context via dedicated seed scripts
     # (e.g. apps/edi/scripts/seed_jobs.py, core/platform/apps/*/scripts/seed_jobs.py).

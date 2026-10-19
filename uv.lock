@@ -37,6 +37,7 @@ members = [
     "scheduler-worker",
     "secret-store",
     "secrets-sidecar",
+    "security",
     "seedwork",
     "storage",
     "ucp",
@@ -270,6 +271,8 @@ dependencies = [
     { name = "observability" },
     { name = "prometheus-client" },
     { name = "python-dotenv" },
+    { name = "secret-store" },
+    { name = "security" },
     { name = "sqlalchemy" },
     { name = "ucp-models" },
     { name = "uvicorn", extra = ["standard"] },
@@ -290,6 +293,8 @@ requires-dist = [
     { name = "observability", editable = "core/platform/packages/observability" },
     { name = "prometheus-client", specifier = ">=0.20.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
+    { name = "secret-store", editable = "core/platform/packages/secret-store" },
+    { name = "security", editable = "core/platform/packages/security" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.22.0" },
@@ -890,7 +895,6 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
     { name = "sqlalchemy", extra = ["asyncio"] },
-    { name = "ucp-models" },
 ]
 
 [package.metadata]
@@ -900,7 +904,6 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.12" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
-    { name = "ucp-models", editable = "core/ucp/packages/models" },
 ]
 
 [[package]]
@@ -1036,6 +1039,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "secret-store" },
+    { name = "security" },
     { name = "seedwork" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
@@ -1073,7 +1077,8 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
-    { name = "secret-store", editable = "core/platform/packages/secret_store" },
+    { name = "secret-store", editable = "core/platform/packages/secret-store" },
+    { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "structlog", specifier = ">=24.1.0" },
@@ -1150,6 +1155,7 @@ dependencies = [
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "secret-store" },
+    { name = "security" },
     { name = "seedwork" },
     { name = "sqlalchemy" },
     { name = "structlog" },
@@ -1172,7 +1178,8 @@ requires-dist = [
     { name = "observability", editable = "core/platform/packages/observability" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "secret-store", editable = "core/platform/packages/secret_store" },
+    { name = "secret-store", editable = "core/platform/packages/secret-store" },
+    { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
     { name = "structlog" },
@@ -2627,7 +2634,7 @@ dependencies = [
     { name = "pubsub" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "secret-store" },
+    { name = "security" },
     { name = "seedwork" },
     { name = "sqlalchemy" },
     { name = "structlog" },
@@ -2651,7 +2658,7 @@ requires-dist = [
     { name = "pubsub", editable = "core/platform/packages/pubsub" },
     { name = "pydantic" },
     { name = "python-dotenv" },
-    { name = "secret-store", editable = "core/platform/packages/secret_store" },
+    { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
     { name = "structlog" },
@@ -3616,18 +3623,30 @@ requires-dist = [
 [[package]]
 name = "secret-store"
 version = "0.1.0"
-source = { editable = "core/platform/packages/secret_store" }
+source = { editable = "core/platform/packages/secret-store" }
 dependencies = [
     { name = "boto3" },
     { name = "seedwork" },
     { name = "structlog" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.34.0" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
-    { name = "structlog", specifier = ">=24.0.0" },
+    { name = "structlog", specifier = ">=24.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
 ]
 
 [[package]]
@@ -3645,6 +3664,35 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.28.0" },
     { name = "edi", editable = "apps/edi/packages/edi" },
     { name = "structlog", specifier = ">=24.1.0" },
+]
+
+[[package]]
+name = "security"
+version = "0.1.0"
+source = { editable = "core/platform/packages/security" }
+dependencies = [
+    { name = "cryptography" },
+    { name = "seedwork" },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cryptography", specifier = ">=44.0.0" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "structlog", specifier = ">=24.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
 ]
 
 [[package]]
@@ -4086,6 +4134,8 @@ dependencies = [
     { name = "fastapi" },
     { name = "notification" },
     { name = "observability" },
+    { name = "secret-store" },
+    { name = "security" },
     { name = "ucp" },
     { name = "uvicorn" },
 ]
@@ -4114,6 +4164,8 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.2.2" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.7" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
+    { name = "secret-store", editable = "core/platform/packages/secret-store" },
+    { name = "security", editable = "core/platform/packages/security" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
     { name = "uvicorn", specifier = ">=0.30.1" },
 ]

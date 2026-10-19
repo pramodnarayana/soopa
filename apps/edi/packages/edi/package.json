@@ -16,6 +16,7 @@
     "@soopa/outbox": "workspace:*",
     "@soopa/ucp": "workspace:*",
     "@soopa/seedwork": "workspace:*",
-    "@soopa/secret_store": "workspace:*"
+    "@soopa/security": "workspace:*",
+    "@soopa/secret-store": "workspace:*"
   }
 }

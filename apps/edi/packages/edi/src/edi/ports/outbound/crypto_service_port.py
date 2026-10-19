@@ -63,3 +63,17 @@ class CryptoServicePort(Protocol):
             Signed MIME bytes (multipart/signed envelope).
         """
         ...
+
+    def encrypt(
+        self,
+        payload: bytes,
+        public_cert_pem: bytes,
+        algorithm: str = "AES256",
+    ) -> bytes:
+        """
+        Encrypts a payload for AS2 transmission using S/MIME CMS enveloped data.
+
+        Returns:
+            Encrypted S/MIME bytes (application/pkcs7-mime).
+        """
+        ...

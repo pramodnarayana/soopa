@@ -12,7 +12,6 @@
     "dev": "PYTHONUNBUFFERED=1 uv run python -m compute_worker.main"
   },
   "devDependencies": {
-    "@soopa/ucp-models": "workspace:*",
     "@soopa/api": "workspace:*"
   }
 }

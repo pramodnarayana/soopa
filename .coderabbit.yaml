@@ -43,5 +43,7 @@ reviews:
     base_branches:
       - main
       - development
+      - ip_development
+      - ip/*
 chat:
   auto_reply: true

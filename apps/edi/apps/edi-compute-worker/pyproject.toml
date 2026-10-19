@@ -6,7 +6,6 @@ requires-python = ">=3.11"
 dependencies = ["edi", "aioboto3>=12.0.0", "dotenv", "structlog"]
 
 [tool.uv.sources]
-ucp_models = { workspace = true }
 edi = { workspace = true }
 
 [tool.deptry]

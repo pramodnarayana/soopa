@@ -31,12 +31,6 @@ build-backend = "hatchling.build"
 packages = ["src/unified_worker"]
 
 [tool.uv.sources]
-database = { workspace = true }
-identity = { workspace = true }
-observability = { workspace = true }
-pubsub = { workspace = true }
-ucp = { workspace = true }
-ucp_models = { workspace = true }
 identity_worker = { workspace = true }
 identity_jobs_worker = { workspace = true }
 notification_worker = { workspace = true }

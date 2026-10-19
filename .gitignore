@@ -10,9 +10,10 @@ __pycache__/
 *.pyc
 .pytest_cache/
 *.tsbuildinfo
+tsup.config.bundled*
 routeTree.gen.ts
 
-.coverage
+.coverage*
 
 # Zitadel machine keys - should be retrieved from container volume
 infra/zitadel/machinekey.json

@@ -22,6 +22,7 @@ You are a senior, enterprise-grade software engineer. Your primary focus is writ
 7. **Centralized Generic Infrastructure**: Do not duplicate generic infrastructure code (like Outbox engines, Queue listeners, Pub/Sub connectors) across multiple bounded contexts. If you encounter duplicate infrastructure, it must be extracted into a centralized, pure platform package and consumed via abstract Ports.
 8. **DDD Aggregates for Events**: NEVER use procedural coordination for outbox events (e.g., Use Case manually calls `uow.repository.save(x)` and then `uow.outbox.publish(y)`). ALWAYS use DDD Aggregates where models inherit from `DomainEventMixin` and call `self.add_domain_event()`. The Repository adapter must automatically handle extracting and flushing events during persistence.
 9. **No Defensive getattr() Masking**: NEVER use `getattr(obj, "field", None)` to silently swallow missing attributes or structural drift between ORM models and DTOs. If a domain model or DTO requires a field, it must be explicitly defined and mapped using standard dot access (`obj.field`). Fail fast if a schema discrepancy exists.
+10. **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container or Provider) is the sole authority responsible for assembling concrete adapters together.
 
 ## Execution Workflow
 1. When asked to implement a feature, first define the **DTOs** in `application/dto.py` before writing any port, use case, or adapter.
@@ -70,3 +71,8 @@ DTOs MUST be defined before any other layer. This is non-negotiable and applies 
 ### Strict Data Mappers (No Dynamic Reflection)
 - **Explicit Mapping**: NEVER use dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to automatically map between SQLAlchemy ORM models and Domain Models.
 - **Type-Safety**: Always use strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`). This guarantees that schema drift will be caught immediately by static analyzers (mypy) rather than causing silent runtime failures.
+
+### Zero Adapter-to-Adapter Coupling (Strictly Enforced)
+
+- **Decoupled Adapters**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces).
+- **Composition Root Assembly**: The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority responsible for assembling concrete adapters and injecting them into dependent adapters.

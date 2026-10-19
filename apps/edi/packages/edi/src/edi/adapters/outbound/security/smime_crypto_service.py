@@ -9,7 +9,12 @@ place in the codebase permitted to import from edi.adapters.outbound.security.sm
 import structlog
 from cryptography.exceptions import UnsupportedAlgorithm
 
-from edi.adapters.outbound.security.smime import decrypt_payload, sign_payload, verify_signature
+from edi.adapters.outbound.security.smime import (
+    decrypt_payload,
+    encrypt_payload,
+    sign_payload,
+    verify_signature,
+)
 from edi.ports.outbound.crypto_service_port import CryptoServicePort
 
 logger = structlog.get_logger(__name__)
@@ -69,6 +74,19 @@ class SmimeCryptoService:
         return sign_payload(
             payload,
             private_key_pem=private_key_pem,
+            public_cert_pem=public_cert_pem,
+            algorithm=algorithm,
+        )
+
+    def encrypt(
+        self,
+        payload: bytes,
+        public_cert_pem: bytes,
+        algorithm: str = "AES256",
+    ) -> bytes:
+        """Encrypts a payload using S/MIME CMS enveloped data."""
+        return encrypt_payload(
+            payload,
             public_cert_pem=public_cert_pem,
             algorithm=algorithm,
         )

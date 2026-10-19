@@ -15,7 +15,7 @@
     "@soopa/ucp-models": "workspace:*",
     "@soopa/api": "workspace:*",
     "@soopa/seedwork": "workspace:*",
-    "@soopa/secret_store": "workspace:*",
+    "@soopa/security": "workspace:*",
     "@soopa/pubsub": "workspace:*",
     "@soopa/database": "workspace:*",
     "@soopa/identity": "workspace:*"

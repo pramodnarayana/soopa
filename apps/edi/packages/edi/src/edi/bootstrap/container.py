@@ -1,5 +1,5 @@
 from dependency_injector import containers, providers
-from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store import SecretStoreProvider
 
 from edi.adapters.outbound.database.control_plane.tenant_repository import (
     SqlAlchemyTenantRepository,
@@ -38,7 +38,7 @@ class Container(containers.DeclarativeContainer):
         allow_private_ips=config.allow_private_ips,
     )
     vault_port = providers.Singleton(
-        AwsSecretsManagerAdapter,
+        SecretStoreProvider.get_secret_store,
         secrets_mount_path=config.secrets.mount_path,
     )
     storage = providers.Singleton(

@@ -2,9 +2,9 @@ name: Modular Monolith CI
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: [ "main", "development", "ip_development", "ip/*" ]
   pull_request:
-    branches: [ "main", "development" ]
+    branches: [ "main", "development", "ip_development", "ip/*" ]
 
 
 permissions:

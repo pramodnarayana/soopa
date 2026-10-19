@@ -18,7 +18,7 @@ from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store import AwsSecretsManagerAdapter
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
@@ -81,10 +81,7 @@ async def db_engine():
     db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
 
-    # In integration tests, the EDI bounded context expects its Tenant schema (e.g. edi_messages)
-    # to be present on the tenant shard. Because we patch all connections to point to this single
-    # global test database, we must ensure the Tenant models are actually created here.
-
+    # In integration tests, ensure schemas and tables exist on the test database
     async with engine.begin() as conn:
         await conn.run_sync(TenantBase.metadata.create_all)
 

@@ -8,8 +8,6 @@
   },
   "devDependencies": {
     "@soopa/ucp": "workspace:*",
-    "@soopa/ucp-models": "workspace:*",
-    "@soopa/database": "workspace:*",
     "@soopa/observability": "workspace:*",
     "@soopa/pubsub": "workspace:*"
   }

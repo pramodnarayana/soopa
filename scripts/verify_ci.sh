@@ -66,17 +66,22 @@ pnpm run syncpack:python:check
 echo "✅ Running Typechecks..."
 pnpm run typecheck
 
+echo "✅ Linting All Workspaces (Node & Python)..."
+pnpm turbo lint
+
 echo "✅ Running Ruff lint across full EDI surface (including e2e, workers, and apps)..."
 # This runs unconditionally — bypasses turbo caching — to catch violations in all files
 # including e2e tests and worker entrypoints that pnpm test excludes from execution.
 uv run ruff check apps/edi
 
 echo "✅ Running Tests (Node + Python Coverage)..."
-pnpm test:node
-COVERAGE_FILE=.coverage.unit CI=true pnpm cov:python
+# Enterprise Standard: Hermetically sandbox ambient developer cloud credentials so tests run
+# in the exact same bare credential environment as GitHub Actions CI runners.
+AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null pnpm test:node
+AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null COVERAGE_FILE=.coverage.unit CI=true pnpm cov:python
 
 echo "✅ Running Integration Tests..."
-COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
+AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
 
 echo "✅ Aggregating Coverage and Enforcing Thresholds..."
 ./scripts/aggregate_coverage.py

@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Annotated
 
 from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
@@ -7,13 +8,13 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
 from fastapi import Depends, HTTPException, Request
-from secret_store.ports.secret_store_port import SecretStorePort
-from secret_store.provider import SecretStoreProvider
+from secret_store import SecretStorePort, SecretStoreProvider
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+@lru_cache(maxsize=1)
 def get_vault_service() -> SecretStorePort:
-    return SecretStoreProvider.create()
+    return SecretStoreProvider.get_secret_store()
 
 
 VaultDep = Annotated[SecretStorePort, Depends(get_vault_service)]
