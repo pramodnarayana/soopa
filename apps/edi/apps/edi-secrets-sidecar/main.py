@@ -1,6 +1,7 @@
 import asyncio
 import os
 from contextlib import suppress
+from pathlib import Path
 from typing import Any, Protocol, cast
 
 import boto3
@@ -27,26 +28,18 @@ class SecretsManagerClient(Protocol):
 
 
 def get_client() -> SecretsManagerClient:
-    env = os.getenv("ENVIRONMENT", "production")
-    if env in ("development", "dev", "test", "local"):
-        endpoint_url = os.getenv("AWS_ENDPOINT_URL", "http://localhost:4566")
-        return cast(
-            SecretsManagerClient,
-            boto3.client(
-                "secretsmanager",
-                endpoint_url=endpoint_url,
-                region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-            ),
-        )
-    else:
-        return cast(
-            SecretsManagerClient,
-            boto3.client(
-                "secretsmanager", region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1")
-            ),
-        )
+    region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    client_kwargs: dict[str, str] = {"region_name": region}
+    endpoint_url = os.getenv("AWS_ENDPOINT_URL")
+    if endpoint_url:
+        client_kwargs["endpoint_url"] = endpoint_url
+    access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    if access_key:
+        client_kwargs["aws_access_key_id"] = access_key
+    secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    if secret_key:
+        client_kwargs["aws_secret_access_key"] = secret_key
+    return cast(SecretsManagerClient, boto3.client("secretsmanager", **client_kwargs))
 
 
 def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str | None:
@@ -76,6 +69,17 @@ def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str
         return None
 
     file_path = os.path.join(SECRETS_MOUNT_PATH, *parts)
+    resolved_path = Path(file_path).resolve()
+    resolved_mount = Path(SECRETS_MOUNT_PATH).resolve()
+    if not resolved_path.is_relative_to(resolved_mount):
+        logger.error(
+            "secret_file_path_traversal_prevented",
+            secret_name=secret_name,
+            file_path=str(resolved_path),
+            mount_path=str(resolved_mount),
+        )
+        return None
+
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
     tmp_path = file_path + ".tmp"
@@ -94,9 +98,22 @@ def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str
     return os.path.realpath(file_path)
 
 
-def _reconcile_files(active_files: set[str]) -> None:
+def _reconcile_files(active_files: set[str], target_dir: str | None = None) -> None:
     mount_path = os.path.realpath(SECRETS_MOUNT_PATH)
-    for root, _, files in os.walk(mount_path):
+    reconcile_dir = os.path.realpath(target_dir) if target_dir else mount_path
+
+    if not Path(reconcile_dir).is_relative_to(Path(mount_path)):
+        logger.error(
+            "reconciliation_path_traversal_prevented",
+            target_dir=target_dir,
+            mount_path=mount_path,
+        )
+        return
+
+    if not os.path.exists(reconcile_dir):
+        return
+
+    for root, _, files in os.walk(reconcile_dir):
         for filename in files:
             if filename.endswith(".tmp"):
                 continue
@@ -117,9 +134,16 @@ def sync_secrets() -> None:
     client = get_client()
     try:
         paginator = client.get_paginator("list_secrets")
-        filter_prefix = os.environ.get("SECRETS_FILTER_PREFIX", "edi/")
-        filters = [{"Key": "name", "Values": [filter_prefix]}]
-        page_iterator = paginator.paginate(Filters=filters)
+        filter_prefix = os.environ.get("SECRETS_FILTER_PREFIX", "edi/").strip()
+        prefix_parts = [p for p in filter_prefix.strip("/").split("/") if p]
+
+        if prefix_parts:
+            filters = [{"Key": "name", "Values": [filter_prefix]}]
+            page_iterator = paginator.paginate(Filters=filters)
+            reconcile_target = os.path.join(SECRETS_MOUNT_PATH, *prefix_parts)
+        else:
+            page_iterator = paginator.paginate()
+            reconcile_target = SECRETS_MOUNT_PATH
 
         active_files: set[str] = set()
 
@@ -129,7 +153,7 @@ def sync_secrets() -> None:
                 if file_path:
                     active_files.add(file_path)
 
-        _reconcile_files(active_files)
+        _reconcile_files(active_files, target_dir=reconcile_target)
 
         logger.info("secrets_sync_completed", mount_path=SECRETS_MOUNT_PATH)
     except Exception as e:
