@@ -10,6 +10,7 @@ import boto3
 import structlog
 from botocore.exceptions import ClientError
 from seedwork.id_registry import SystemIdPrefix
+from seedwork.infra.config_models import PlatformAwsSettings
 from seedwork.utils import generate_id
 
 from secret_store.ports.secret_path_resolver_port import MountedSecretPathResolverPort
@@ -49,19 +50,21 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         aws_secret_access_key: str | None = None,
         secrets_prefix: str | None = None,
         path_resolver: MountedSecretPathResolverPort | None = None,
+        aws_settings: PlatformAwsSettings | None = None,
     ) -> None:
         if client is not None:
             self.client: SecretsManagerClientProtocol = client
         else:
-            resolved_endpoint = endpoint_url or os.getenv("AWS_ENDPOINT_URL")
-            resolved_region = region_name or os.getenv("AWS_DEFAULT_REGION") or "us-east-1"
+            settings = aws_settings or PlatformAwsSettings()
+            resolved_endpoint = endpoint_url or settings.endpoint_url
+            resolved_region = region_name or settings.resolved_region
 
             client_kwargs: dict[str, str] = {"region_name": resolved_region}
             if resolved_endpoint:
                 client_kwargs["endpoint_url"] = resolved_endpoint
 
-            access_key = aws_access_key_id or os.getenv("AWS_ACCESS_KEY_ID")
-            secret_key = aws_secret_access_key or os.getenv("AWS_SECRET_ACCESS_KEY")
+            access_key = aws_access_key_id or settings.access_key_id
+            secret_key = aws_secret_access_key or settings.secret_access_key
             if access_key:
                 client_kwargs["aws_access_key_id"] = access_key
             if secret_key:

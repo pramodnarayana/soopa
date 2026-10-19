@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Annotated
 
 from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
@@ -11,6 +12,7 @@ from secret_store import SecretStorePort, SecretStoreProvider
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+@lru_cache(maxsize=1)
 def get_vault_service() -> SecretStorePort:
     return SecretStoreProvider.get_secret_store()
 

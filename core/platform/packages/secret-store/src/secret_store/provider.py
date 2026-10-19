@@ -5,6 +5,7 @@ from collections.abc import Callable
 from enum import StrEnum
 
 import structlog
+from seedwork.infra.config_models import PlatformAwsSettings
 
 from secret_store.adapters.aws_secrets_manager import (
     AwsSecretsManagerAdapter,
@@ -37,13 +38,18 @@ class SecretStoreProvider:
         backend: SecretStoreBackend | str,
         factory: Callable[..., SecretStorePort],
     ) -> None:
-        """Registers a factory for a custom or third-party SecretStorePort implementation."""
+        """Registers a factory for a SecretStorePort implementation."""
         key = (
             backend
             if isinstance(backend, SecretStoreBackend)
             else SecretStoreBackend(str(backend).lower())
         )
         cls._secret_store_registry[key] = factory
+
+    @classmethod
+    def reset_registry(cls) -> None:
+        """Resets the registered backend factories (used for clean teardown and test isolation)."""
+        cls._secret_store_registry.clear()
 
     @classmethod
     def get_secret_store(
@@ -57,6 +63,7 @@ class SecretStoreProvider:
         aws_access_key_id: str | None = None,
         aws_secret_access_key: str | None = None,
         secrets_prefix: str | None = None,
+        aws_settings: PlatformAwsSettings | None = None,
     ) -> SecretStorePort:
         """Resolves the configured secret store adapter conforming to SecretStorePort.
 
@@ -87,6 +94,7 @@ class SecretStoreProvider:
                 aws_access_key_id=aws_access_key_id,
                 aws_secret_access_key=aws_secret_access_key,
                 secrets_prefix=secrets_prefix,
+                aws_settings=aws_settings,
             )
 
         match selected_backend:
@@ -100,6 +108,7 @@ class SecretStoreProvider:
                     aws_secret_access_key=aws_secret_access_key,
                     secrets_prefix=secrets_prefix,
                     path_resolver=resolver,
+                    aws_settings=aws_settings,
                 )
             case SecretStoreBackend.VAULT | SecretStoreBackend.GCP | SecretStoreBackend.AZURE:
                 raise NotImplementedError(

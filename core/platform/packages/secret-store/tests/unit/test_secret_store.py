@@ -278,14 +278,17 @@ def test_secret_store_provider_unimplemented_backend() -> None:
         SecretStoreProvider.get_secret_store(backend=SecretStoreBackend.VAULT)
 
 
-def test_secret_store_provider_custom_backend_registry(tmp_path: Path) -> None:
-    custom_fake = InMemoryVaultAdapter()
-    SecretStoreProvider.register_secret_store_backend(
-        SecretStoreBackend.VAULT,
-        lambda **kwargs: custom_fake,
-    )
-    resolved = SecretStoreProvider.get_secret_store(
-        secrets_mount_path=str(tmp_path),
-        backend=SecretStoreBackend.VAULT,
-    )
-    assert resolved is custom_fake
+def test_register_secret_store_backend(tmp_path: Path) -> None:
+    try:
+        fake_vault = InMemoryVaultAdapter()
+        SecretStoreProvider.register_secret_store_backend(
+            SecretStoreBackend.VAULT,
+            lambda **kwargs: fake_vault,
+        )
+        resolved = SecretStoreProvider.get_secret_store(
+            secrets_mount_path=str(tmp_path),
+            backend=SecretStoreBackend.VAULT,
+        )
+        assert resolved is fake_vault
+    finally:
+        SecretStoreProvider.reset_registry()

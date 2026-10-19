@@ -117,9 +117,9 @@ def sync_secrets() -> None:
     client = get_client()
     try:
         paginator = client.get_paginator("list_secrets")
-        filter_prefix = os.getenv("SECRETS_FILTER_PREFIX")
-        filters = [{"Key": "name", "Values": [filter_prefix]}] if filter_prefix else []
-        page_iterator = paginator.paginate(Filters=filters) if filters else paginator.paginate()
+        filter_prefix = os.environ.get("SECRETS_FILTER_PREFIX", "edi/")
+        filters = [{"Key": "name", "Values": [filter_prefix]}]
+        page_iterator = paginator.paginate(Filters=filters)
 
         active_files: set[str] = set()
 

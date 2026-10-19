@@ -57,12 +57,20 @@ jobs:
             echo "Resolved action from manual trigger: $INPUT_ACTION"
           elif [ "$EVENT_NAME" = "schedule" ]; then
             HOUR=$(date -u +%H)
-            if [[ "$EVENT_SCHEDULE" == *"16"* || "$EVENT_SCHEDULE" == *"17"* ]] || [ "$HOUR" -ge 12 ]; then
+            if [ "$EVENT_SCHEDULE" = "30 16 * * 1-5" ]; then
               echo "ACTION=stop" >> $GITHUB_OUTPUT
               echo "Resolved action from night schedule (expression: '$EVENT_SCHEDULE', UTC hour: $HOUR): stop"
+            elif [ "$EVENT_SCHEDULE" = "45 3 * * 1-5" ]; then
+              if [ "$HOUR" -ge 12 ]; then
+                echo "ACTION=skip" >> $GITHUB_OUTPUT
+                echo "Morning schedule delayed past midday (expression: '$EVENT_SCHEDULE', UTC hour: $HOUR). Skipping power-on sequence."
+              else
+                echo "ACTION=start" >> $GITHUB_OUTPUT
+                echo "Resolved action from morning schedule (expression: '$EVENT_SCHEDULE', UTC hour: $HOUR): start"
+              fi
             else
-              echo "ACTION=start" >> $GITHUB_OUTPUT
-              echo "Resolved action from morning schedule (expression: '$EVENT_SCHEDULE', UTC hour: $HOUR): start"
+              echo "ACTION=skip" >> $GITHUB_OUTPUT
+              echo "Unrecognized schedule expression: '$EVENT_SCHEDULE'. Skipping."
             fi
           else
             echo "ACTION=status" >> $GITHUB_OUTPUT
@@ -70,6 +78,7 @@ jobs:
           fi
 
       - name: Execute Power Sequencing
+        if: steps.resolve-action.outputs.ACTION != 'skip'
         env:
           RESOLVED_ACTION: ${{ steps.resolve-action.outputs.ACTION }}
         run: |
