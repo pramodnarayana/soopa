@@ -10,7 +10,8 @@ source_roots = [
     "core/platform/packages/schemas/python/src",
     "core/ucp/packages/models/src",
     "core/platform/packages/security/src",
-    "core/platform/packages/secret-store/src"
+    "core/platform/packages/secret-store/src",
+    "core/platform/packages/sftp/src"
 ]
 
 [[modules]]
@@ -19,6 +20,10 @@ depends_on = []
 
 [[modules]]
 path = "secret_store"
+depends_on = []
+
+[[modules]]
+path = "sftp"
 depends_on = []
 
 
@@ -31,7 +36,8 @@ path = "edi.adapters"
 depends_on = [
     "edi.domain",
     "edi.ports",
-    "schemas"
+    "schemas",
+    "sftp"
 ]
 
 [[modules]]
