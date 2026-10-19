@@ -66,14 +66,26 @@ class ConnectionCatalog(AggregateRoot):
             raise ValueError("connection_id cannot be empty")
 
         # Compute deterministic catalog hash for schema drift detection
+        sorted_streams = sorted(streams, key=lambda s: s.name)
         stream_dicts = [
             {
                 "name": s.name,
-                "fields": [{"name": f.name, "type": f.data_type} for f in s.fields],
-                "primary_key": list(s.primary_key),
+                "fields": sorted(
+                    [
+                        {
+                            "name": f.name,
+                            "type": f.data_type,
+                            "nullable": f.nullable,
+                        }
+                        for f in s.fields
+                    ],
+                    key=lambda f: f["name"],
+                ),
+                "primary_key": sorted(s.primary_key),
                 "cursor_field": s.cursor_field,
+                "supported_sync_modes": sorted([m.value for m in s.supported_sync_modes]),
             }
-            for s in streams
+            for s in sorted_streams
         ]
         raw_json = json.dumps(stream_dicts, sort_keys=True)
         catalog_hash = hashlib.sha256(raw_json.encode("utf-8")).hexdigest()

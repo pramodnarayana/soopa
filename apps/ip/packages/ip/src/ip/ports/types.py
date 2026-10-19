@@ -64,6 +64,7 @@ class WriteRecordCommand:
     stream_name: str
     operation: str  # 'CREATE' | 'UPDATE' | 'UPSERT' | 'DELETE'
     payload: JsonDict
+    record_id: str | None = None
 
 
 @dataclass(frozen=True)

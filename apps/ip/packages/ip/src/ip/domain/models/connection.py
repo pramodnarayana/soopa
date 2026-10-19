@@ -136,6 +136,10 @@ class Connection(AggregateRoot):
 
     def mark_error(self, error_code: str, error_message: str) -> None:
         """Records a connectivity/auth error and marks status as ERROR."""
+        if self.status == ConnectionStatus.DEACTIVATED:
+            raise InvalidConnectionStateException(
+                f"Cannot record error on deactivated connection {self.id}. Relink first."
+            )
         self.status = ConnectionStatus.ERROR
         self.last_error_code = error_code
         self.last_error_message = error_message

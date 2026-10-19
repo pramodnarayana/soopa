@@ -1,5 +1,4 @@
-"""OAuth 2.0 authentication strategy with automatic token refresh."""
-
+import asyncio
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -22,6 +21,10 @@ class OAuth2Strategy(AuthenticatorPort):
         on_token_refreshed: Callable[[str, str | None, float | None], None] | None = None,
         refresh_buffer_seconds: int = 120,
     ) -> None:
+        parsed = httpx.URL(token_url)
+        if parsed.scheme != "https" and parsed.host not in ("localhost", "127.0.0.1", "testserver"):
+            raise ValueError(f"OAuth2 token_url must use HTTPS: {token_url}")
+
         self._client_id = client_id
         self._client_secret = client_secret
         self._token_url = token_url
@@ -30,6 +33,7 @@ class OAuth2Strategy(AuthenticatorPort):
         self._expires_at_epoch = expires_at_epoch
         self._on_token_refreshed = on_token_refreshed
         self._refresh_buffer_seconds = refresh_buffer_seconds
+        self._lock = asyncio.Lock()
 
     @property
     def access_token(self) -> str:
@@ -53,24 +57,25 @@ class OAuth2Strategy(AuthenticatorPort):
 
     async def refresh_if_needed(self) -> bool:
         """Refreshes the token if expired or nearing expiration."""
-        if await self.is_valid():
-            return False
+        async with self._lock:
+            if await self.is_valid():
+                return False
 
-        if not self._refresh_token:
-            return False
+            if not self._refresh_token:
+                return False
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(
-                self._token_url,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self._refresh_token,
-                    "client_id": self._client_id,
-                    "client_secret": self._client_secret,
-                },
-            )
-            resp.raise_for_status()
-            payload = resp.json()
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(
+                    self._token_url,
+                    data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": self._refresh_token,
+                        "client_id": self._client_id,
+                        "client_secret": self._client_secret,
+                    },
+                )
+                resp.raise_for_status()
+                payload = resp.json()
 
         new_access_token = payload.get("access_token")
         if not new_access_token:

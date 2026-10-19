@@ -149,12 +149,13 @@ async def list_connections(
     tenant_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     session: AsyncSession = Depends(get_db_session),
-    connection_status: str | None = Query(None, alias="status"),
+    connection_status: ConnectionStatus | None = Query(None, alias="status"),
 ) -> list[ConnectionHttpResponse]:
     """Lists connections configured for this tenant, optionally filtered by status."""
     connection_repo = SqlAlchemyConnectionRepository(session)
-    domain_status = ConnectionStatus(connection_status) if connection_status else None
-    connections = await connection_repo.list_by_tenant(tenant_id=tenant_id, status=domain_status)
+    connections = await connection_repo.list_by_tenant(
+        tenant_id=tenant_id, status=connection_status
+    )
 
     return [
         _map_connection_dto_to_response(
@@ -354,4 +355,6 @@ async def relink_connection(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except AuthenticationFailedException as exc:
         await session.rollback()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc

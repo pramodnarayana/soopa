@@ -51,13 +51,15 @@ def upgrade() -> None:
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deactivated_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "tenant_id",
-            "connection_fingerprint",
-            "status",
-            name="uq_tenant_fingerprint_status",
-        ),
         schema="ip",
+    )
+    op.create_index(
+        "uq_tenant_active_fingerprint",
+        "connections",
+        ["tenant_id", "connection_fingerprint"],
+        unique=True,
+        schema="ip",
+        postgresql_where=sa.text("status != 'DEACTIVATED'"),
     )
     op.create_index(
         op.f("ix_ip_connections_tenant_id"),
@@ -81,6 +83,9 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column("discovered_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "connection_id", "catalog_version", name="uq_ip_catalog_connection_version"
+        ),
         schema="ip",
     )
     op.create_index(
@@ -157,6 +162,11 @@ def downgrade() -> None:
     op.drop_table("connection_catalogs", schema="ip")
     op.drop_index(
         op.f("ix_ip_connections_tenant_id"),
+        table_name="connections",
+        schema="ip",
+    )
+    op.drop_index(
+        "uq_tenant_active_fingerprint",
         table_name="connections",
         schema="ip",
     )

@@ -142,6 +142,7 @@ class SqlAlchemyConnectionRepository(ConnectionRepositoryPort):
         stmt = select(ConnectionRecord).where(
             ConnectionRecord.tenant_id == tenant_id,
             ConnectionRecord.connection_fingerprint == fingerprint,
+            ConnectionRecord.status != ConnectionStatus.DEACTIVATED.value,
         )
         result = await self._session.execute(stmt)
         record = result.scalar_one_or_none()

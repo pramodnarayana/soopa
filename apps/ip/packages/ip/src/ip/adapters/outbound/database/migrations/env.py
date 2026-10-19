@@ -1,5 +1,4 @@
 import asyncio
-from logging.config import fileConfig  # noqa: TID251 - Required by Alembic setup
 
 # Import models to ensure they are registered with IpBase.registry
 import ip.adapters.outbound.database.models.catalog_model
@@ -14,9 +13,6 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 config = context.config
-
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = IpBase.registry.metadata
 

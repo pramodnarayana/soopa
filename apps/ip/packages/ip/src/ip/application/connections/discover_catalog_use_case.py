@@ -100,4 +100,10 @@ class DiscoverCatalogUseCase:
             stream_count=len(catalog_dto.streams),
         )
 
-        return catalog_dto
+        return DiscoveredCatalogDTO(
+            connection_id=catalog_entity.connection_id,
+            catalog_version=catalog_entity.catalog_version,
+            catalog_hash=catalog_entity.catalog_hash,
+            streams=catalog_dto.streams,
+            discovered_at=catalog_entity.discovered_at,
+        )

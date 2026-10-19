@@ -44,16 +44,17 @@ class CreateConnectionUseCase:
 
     async def execute(self, command: CreateConnectionCommand) -> ConnectionDTO:
         endpoint = command.endpoint_for_fingerprint or str(
-            command.public_config.get("base_url")
+            command.public_config.get("endpoint_url")
+            or command.public_config.get("base_url")
             or command.public_config.get("host")
             or command.name
         )
         fingerprint = compute_connection_fingerprint(command.tenant_id, command.app_id, endpoint)
 
         existing = await self._connection_repo.get_by_fingerprint(command.tenant_id, fingerprint)
-        if existing and existing.status == ConnectionStatus.ACTIVE:
+        if existing and existing.status != ConnectionStatus.DEACTIVATED:
             raise DuplicateConnectionFingerprintException(
-                f"An active connection for {command.app_id} already exists with fingerprint {fingerprint}."
+                f"A connection for {command.app_id} already exists with fingerprint {fingerprint}."
             )
 
         encrypted_creds = (

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ip.domain.models.connection import AuthType
 from pydantic import BaseModel, Field
 
 
@@ -12,7 +13,9 @@ class CreateConnectionHttpRequest(BaseModel):
 
     app_id: str = Field(..., description="Unique application identifier (e.g. 'itron_mdm')")
     name: str = Field(..., description="User-friendly name for this connection")
-    auth_type: str = Field(..., description="Authentication strategy (e.g. 'API_KEY', 'OAUTH2')")
+    auth_type: AuthType = Field(
+        ..., description="Authentication strategy (e.g. 'API_KEY', 'OAUTH2')"
+    )
     public_config: dict[str, Any] = Field(
         default_factory=dict,
         description="Public configuration dictionary (endpoints, ports, timeouts)",
@@ -31,7 +34,7 @@ class CheckConnectionHttpRequest(BaseModel):
     """Payload to test external connectivity without saving a connection."""
 
     app_id: str
-    auth_type: str
+    auth_type: AuthType
     public_config: dict[str, Any] = Field(default_factory=dict)
     raw_credentials: dict[str, Any] = Field(default_factory=dict)
 
@@ -40,7 +43,7 @@ class RelinkConnectionHttpRequest(BaseModel):
     """Payload to refresh credentials and reactivate a disconnected connection."""
 
     new_name: str | None = None
-    updated_raw_credentials: dict[str, Any] = Field(default_factory=dict)
+    updated_raw_credentials: dict[str, Any] | None = None
 
 
 class ConnectionHttpResponse(BaseModel):

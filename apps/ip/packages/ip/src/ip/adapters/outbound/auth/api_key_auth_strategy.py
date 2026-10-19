@@ -32,11 +32,8 @@ class ApiKeyAuthStrategy(AuthenticatorPort):
         if self._placement == ApiKeyPlacement.HEADER:
             request.headers[self._param_name] = self._api_key
         else:
-            # Query parameter injection
-            url = request.url.copy_with(
-                params={**request.url.params, self._param_name: self._api_key}
-            )
-            request.url = url
+            # Query parameter injection (preserves repeated query parameters)
+            request.url = request.url.copy_set_param(self._param_name, self._api_key)
         return request
 
     async def is_valid(self) -> bool:

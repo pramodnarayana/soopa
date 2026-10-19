@@ -170,7 +170,10 @@ def _register_ip_exception_handlers(app: FastAPI) -> None:
     ) -> JSONResponse:
         sanitized_path = _sanitize_path(request)
         logger.warning("authentication_failed", path=sanitized_path, error=str(exc))
-        return JSONResponse(status_code=401, content={"detail": str(exc)})
+        return JSONResponse(
+            status_code=422,
+            content={"detail": str(exc), "code": "EXTERNAL_AUTHENTICATION_FAILED"},
+        )
 
 
 def setup_shell_exception_handlers(app: FastAPI) -> None:

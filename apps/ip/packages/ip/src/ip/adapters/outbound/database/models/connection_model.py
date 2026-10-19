@@ -2,7 +2,7 @@ from datetime import datetime
 
 from ip.adapters.outbound.database.models.base import IpBase
 from ip.domain.types import JsonDict
-from sqlalchemy import DateTime, Integer, LargeBinary, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Index, Integer, LargeBinary, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,11 +12,12 @@ class ConnectionRecord(IpBase):
 
     __tablename__ = "connections"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_tenant_active_fingerprint",
             "tenant_id",
             "connection_fingerprint",
-            "status",
-            name="uq_tenant_fingerprint_status",
+            unique=True,
+            postgresql_where=text("status != 'DEACTIVATED'"),
         ),
         {"schema": "ip"},
     )

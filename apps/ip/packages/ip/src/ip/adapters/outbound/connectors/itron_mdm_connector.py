@@ -15,6 +15,7 @@ from ip.application.responses import (
     WriteRecordCommand,
     WriteResultDTO,
 )
+from ip.domain.exceptions import CatalogDiscoveryFailedException
 from ip.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
@@ -55,6 +56,24 @@ class ItronMdmConnector(BaseConnector):
             },
         }
 
+    @staticmethod
+    def _validate_endpoint(endpoint: str) -> str:
+        stripped = endpoint.strip()
+        if not stripped:
+            raise ValueError("Missing required field: endpoint_url")
+        url = httpx.URL(stripped)
+        if not url.host:
+            raise ValueError("Endpoint URL must include a host.")
+        if url.username or url.password:
+            raise ValueError("Endpoint URL cannot contain embedded user credentials.")
+        if url.query or url.fragment:
+            raise ValueError("Endpoint URL cannot contain query or fragment parameters.")
+        if url.scheme != "https" and url.host not in ("localhost", "127.0.0.1", "testserver"):
+            raise ValueError(f"Endpoint URL must use HTTPS: {endpoint}")
+        if url.host.startswith("169.254."):
+            raise ValueError("Access to link-local and cloud metadata endpoints is prohibited.")
+        return str(url).rstrip("/")
+
     def _get_headers(self, credentials: JsonDict) -> dict[str, str]:
         api_key = str(credentials.get("api_key", ""))
         return {
@@ -63,22 +82,61 @@ class ItronMdmConnector(BaseConnector):
             "Content-Type": "application/json",
         }
 
+    @staticmethod
+    def _get_default_streams() -> list[StreamSchemaDTO]:
+        return [
+            StreamSchemaDTO(
+                name="meters",
+                fields=[
+                    StreamFieldDTO(name="id", data_type="string", nullable=False),
+                    StreamFieldDTO(name="serial_number", data_type="string", nullable=False),
+                    StreamFieldDTO(name="model", data_type="string"),
+                    StreamFieldDTO(name="status", data_type="string"),
+                    StreamFieldDTO(name="last_reading_time", data_type="datetime"),
+                ],
+                primary_key=["id"],
+                cursor_field="last_reading_time",
+            ),
+            StreamSchemaDTO(
+                name="interval_reads",
+                fields=[
+                    StreamFieldDTO(name="meter_id", data_type="string", nullable=False),
+                    StreamFieldDTO(name="timestamp", data_type="datetime", nullable=False),
+                    StreamFieldDTO(name="kwh_delivered", data_type="number", nullable=False),
+                    StreamFieldDTO(name="kwh_received", data_type="number"),
+                    StreamFieldDTO(name="quality", data_type="string"),
+                ],
+                primary_key=["meter_id", "timestamp"],
+                cursor_field="timestamp",
+            ),
+            StreamSchemaDTO(
+                name="service_points",
+                fields=[
+                    StreamFieldDTO(name="id", data_type="string", nullable=False),
+                    StreamFieldDTO(name="address", data_type="string"),
+                    StreamFieldDTO(name="customer_id", data_type="string"),
+                    StreamFieldDTO(name="meter_id", data_type="string"),
+                ],
+                primary_key=["id"],
+            ),
+        ]
+
     async def check(
         self,
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> ConnectionCheckResultDTO:
-        endpoint = str(public_config.get("endpoint_url", "")).rstrip("/")
-        api_key = str(credentials.get("api_key", ""))
-
-        if not endpoint:
+        try:
+            endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
+        except ValueError as err:
             return ConnectionCheckResultDTO(
                 success=False,
                 status="FAILED",
-                message="Missing required field: endpoint_url",
+                message=str(err),
                 error_code="INVALID_CONFIG",
             )
 
+        api_key = str(credentials.get("api_key", ""))
         if not api_key:
             return ConnectionCheckResultDTO(
                 success=False,
@@ -128,7 +186,7 @@ class ItronMdmConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> DiscoveredCatalogDTO:
-        endpoint = str(public_config.get("endpoint_url", "")).rstrip("/")
+        endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
         schema_url = f"{endpoint}/api/v1/schema/streams"
         headers = self._get_headers(credentials)
 
@@ -159,47 +217,25 @@ class ItronMdmConnector(BaseConnector):
                                 ),
                             )
                         )
+                elif response.status_code == 404:
+                    logger.info("itron_mdm_schema_endpoint_404_fallback", endpoint=endpoint)
+                    streams = self._get_default_streams()
+                elif response.status_code in (401, 403):
+                    raise CatalogDiscoveryFailedException(
+                        f"Authentication failed during schema discovery: HTTP {response.status_code}"
+                    )
+                else:
+                    raise CatalogDiscoveryFailedException(
+                        f"Schema discovery failed with HTTP {response.status_code}: {response.text}"
+                    )
         except httpx.RequestError as exc:
-            logger.warning("itron_mdm_schema_discovery_fallback", endpoint=endpoint, error=str(exc))
-
-        # Default canonical Itron AMI stream definitions if remote introspection endpoint is absent
-        if not streams:
-            streams = [
-                StreamSchemaDTO(
-                    name="meters",
-                    fields=[
-                        StreamFieldDTO(name="id", data_type="string", nullable=False),
-                        StreamFieldDTO(name="serial_number", data_type="string", nullable=False),
-                        StreamFieldDTO(name="model", data_type="string"),
-                        StreamFieldDTO(name="status", data_type="string"),
-                        StreamFieldDTO(name="last_reading_time", data_type="datetime"),
-                    ],
-                    primary_key=["id"],
-                    cursor_field="last_reading_time",
-                ),
-                StreamSchemaDTO(
-                    name="interval_reads",
-                    fields=[
-                        StreamFieldDTO(name="meter_id", data_type="string", nullable=False),
-                        StreamFieldDTO(name="timestamp", data_type="datetime", nullable=False),
-                        StreamFieldDTO(name="kwh_delivered", data_type="number", nullable=False),
-                        StreamFieldDTO(name="kwh_received", data_type="number"),
-                        StreamFieldDTO(name="quality", data_type="string"),
-                    ],
-                    primary_key=["meter_id", "timestamp"],
-                    cursor_field="timestamp",
-                ),
-                StreamSchemaDTO(
-                    name="service_points",
-                    fields=[
-                        StreamFieldDTO(name="id", data_type="string", nullable=False),
-                        StreamFieldDTO(name="address", data_type="string"),
-                        StreamFieldDTO(name="customer_id", data_type="string"),
-                        StreamFieldDTO(name="meter_id", data_type="string"),
-                    ],
-                    primary_key=["id"],
-                ),
-            ]
+            raise CatalogDiscoveryFailedException(
+                f"Network error during schema discovery for {endpoint}: {exc}"
+            ) from exc
+        except (ValueError, KeyError) as exc:
+            raise CatalogDiscoveryFailedException(
+                f"Malformed schema response from {endpoint}: {exc}"
+            ) from exc
 
         return self.build_catalog_dto(connection_id, streams)
 
@@ -211,7 +247,7 @@ class ItronMdmConnector(BaseConnector):
         limit: int = 100,
         cursor: str | None = None,
     ) -> Sequence[str]:
-        endpoint = str(public_config.get("endpoint_url", "")).rstrip("/")
+        endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
         url = f"{endpoint}/api/v1/streams/{stream_name}/ids"
         headers = self._get_headers(credentials)
         params: dict[str, str | int] = {"limit": limit}
@@ -232,7 +268,7 @@ class ItronMdmConnector(BaseConnector):
         cursor: str | None = None,
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
-        endpoint = str(public_config.get("endpoint_url", "")).rstrip("/")
+        endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
         url = f"{endpoint}/api/v1/streams/{stream_name}/records"
         headers = self._get_headers(credentials)
         params: dict[str, str | int] = {"limit": limit}
@@ -260,18 +296,60 @@ class ItronMdmConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> WriteResultDTO:
-        endpoint = str(public_config.get("endpoint_url", "")).rstrip("/")
-        url = f"{endpoint}/api/v1/streams/{stream_name}/records"
+        if command.stream_name != stream_name:
+            return WriteResultDTO(
+                success=False,
+                record_id="failed",
+                error_message=f"Stream name mismatch: expected '{stream_name}', got '{command.stream_name}'",
+            )
+
+        try:
+            endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
+        except ValueError as err:
+            return WriteResultDTO(
+                success=False,
+                record_id="failed",
+                error_message=str(err),
+            )
+
         headers = self._get_headers(credentials)
+        op = command.operation.upper()
 
         try:
             async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                resp = await client.post(url, headers=headers, json=command.payload)
+                if op == "CREATE":
+                    url = f"{endpoint}/api/v1/streams/{stream_name}/records"
+                    resp = await client.post(url, headers=headers, json=command.payload)
+                elif op in ("UPDATE", "UPSERT"):
+                    if not command.record_id:
+                        return WriteResultDTO(
+                            success=False,
+                            record_id="failed",
+                            error_message=f"Operation '{op}' requires a record_id.",
+                        )
+                    url = f"{endpoint}/api/v1/streams/{stream_name}/records/{command.record_id}"
+                    resp = await client.put(url, headers=headers, json=command.payload)
+                elif op == "DELETE":
+                    if not command.record_id:
+                        return WriteResultDTO(
+                            success=False,
+                            record_id="failed",
+                            error_message="Operation 'DELETE' requires a record_id.",
+                        )
+                    url = f"{endpoint}/api/v1/streams/{stream_name}/records/{command.record_id}"
+                    resp = await client.delete(url, headers=headers)
+                else:
+                    return WriteResultDTO(
+                        success=False,
+                        record_id="failed",
+                        error_message=f"Unsupported write operation: {command.operation}",
+                    )
+
                 resp.raise_for_status()
-                data = resp.json()
+                data = resp.json() if resp.content else {}
                 return WriteResultDTO(
                     success=True,
-                    record_id=str(data.get("id", "written_rec")),
+                    record_id=str(data.get("id", command.record_id or "written_rec")),
                     destination_id=str(data.get("destination_id", f"{self.app_id}_{stream_name}")),
                 )
         except httpx.HTTPStatusError as exc:

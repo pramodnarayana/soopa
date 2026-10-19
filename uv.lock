@@ -1789,6 +1789,7 @@ dependencies = [
 dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
+    { name = "pytest-httpserver" },
     { name = "pytest-mock" },
 ]
 
@@ -1814,6 +1815,7 @@ requires-dist = [
 dev = [
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-httpserver", specifier = ">=1.0.0" },
     { name = "pytest-mock", specifier = ">=3.12.0" },
 ]
 
