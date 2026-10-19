@@ -1,6 +1,10 @@
-from dataclasses import dataclass, field
-from typing import Any, ClassVar
+from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import ClassVar
+
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 
 from .events import DomainEvent
@@ -49,7 +53,9 @@ class TraceEvent:
     trace_id: str
     event_type: str
     actor: str
-    metadata: dict[str, Any] | None = None
+    correlation_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    metadata: JsonDict | None = None
 
 
 @dataclass(kw_only=True, eq=False)
@@ -61,6 +67,7 @@ class TracedAggregateRoot(AggregateRoot):
 
     trace_id: str
     tenant_id: str
+    correlation_id: str | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0

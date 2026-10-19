@@ -1,55 +1,28 @@
-import asyncio
-import base64
-import io
-import typing
+"""SFTP Outbound Delivery Adapter delegating to centralized platform sftp package."""
 
-import paramiko
+from __future__ import annotations
+
+import asyncio
+from typing import TYPE_CHECKING
+
 import structlog
+from sftp import (
+    SftpAuthenticationError,
+    SftpConnectionConfig,
+    SftpConnectionError,
+    SftpHostValidationError,
+    SftpOperationError,
+    SftpSession,
+    create_ssh_client,
+)
 
 from edi.ports.outbound.exceptions import PortAuthenticationError, PortConnectionError
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 
+if TYPE_CHECKING:
+    import paramiko
+
 logger = structlog.get_logger(__name__)
-
-
-def _setup_host_key(
-    client: paramiko.SSHClient, host: str, port: int, host_key_string: str | None
-) -> None:
-    if not host_key_string:
-        structlog.get_logger(__name__).warning(
-            f"No host key provided for {host}. Using AutoAddPolicy (vulnerable to MITM)."
-        )
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    else:
-        parts = host_key_string.split()
-        if len(parts) < 2:
-            raise ValueError(f"Malformed host_key_string: {host_key_string}")
-
-        key_type = parts[0]
-        key_data = base64.b64decode(parts[-1])
-        if "ed25519" in key_type.lower():
-            parsed_key: paramiko.PKey = paramiko.Ed25519Key(data=key_data)
-        elif "ecdsa" in key_type.lower():
-            parsed_key = paramiko.ECDSAKey(data=key_data)
-        else:
-            parsed_key = paramiko.RSAKey(data=key_data)
-
-        host_identifier = f"[{host}]:{port}" if port != 22 else host
-        client.get_host_keys().add(hostname=host_identifier, keytype=key_type, key=parsed_key)
-        client.set_missing_host_key_policy(paramiko.RejectPolicy())
-
-
-def _parse_client_key(client_key_string: str) -> paramiko.PKey:
-    key_io = io.StringIO(client_key_string)
-    try:
-        return paramiko.RSAKey.from_private_key(key_io)
-    except (paramiko.SSHException, ValueError):
-        key_io.seek(0)
-        try:
-            return paramiko.ECDSAKey.from_private_key(key_io)
-        except (paramiko.SSHException, ValueError):
-            key_io.seek(0)
-            return paramiko.Ed25519Key.from_private_key(key_io)
 
 
 def get_ssh_client(
@@ -60,57 +33,24 @@ def get_ssh_client(
     client_key_string: str | None = None,
     host_key_string: str | None = None,
     timeout: int = 10,
+    allow_local: bool = True,
 ) -> paramiko.SSHClient:
-    """
-    Creates an enterprise-grade, configured SSHClient.
-    """
-    client = paramiko.SSHClient()
-    _setup_host_key(client, host, port, host_key_string)
-
-    connect_kwargs: dict[str, object] = {
-        "hostname": host,
-        "port": port,
-        "username": username,
-        "look_for_keys": False,
-        "allow_agent": False,
-        "timeout": timeout,
-    }
-
-    if host_key_string and host_key_string.startswith("ssh-rsa"):
-        # Apply legacy algorithms only to this specific transport instance
-        def legacy_transport_factory(*args, **kwargs):
-            t = paramiko.Transport(*args, **kwargs)
-            if "ssh-rsa" not in t._preferred_keys:
-                t._preferred_keys = (*t._preferred_keys, "ssh-rsa")
-            if "ssh-rsa" not in t._key_info:
-                t._key_info = dict(t._key_info)
-                t._key_info["ssh-rsa"] = paramiko.RSAKey
-            return t
-
-        connect_kwargs["transport_factory"] = legacy_transport_factory
-
-    if client_key_string:
-        connect_kwargs["pkey"] = _parse_client_key(client_key_string)
-    elif password:
-        connect_kwargs["password"] = password
-    else:
-        raise ValueError("Must provide either a password or a client key.")
-
-    try:
-        client.connect(**typing.cast(typing.Any, connect_kwargs))
-        return client
-    except paramiko.AuthenticationException as e:
-        client.close()
-        raise PortAuthenticationError(f"SFTP authentication failed: {e}") from e
-    except (paramiko.SSHException, OSError) as e:
-        client.close()
-        raise PortConnectionError(f"SFTP Connection failed for {host}:{port}: {e}") from e
+    """Creates a configured paramiko SSHClient delegating to centralized sftp package."""
+    config = SftpConnectionConfig(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        private_key=client_key_string,
+        host_key=host_key_string,
+        timeout_seconds=float(timeout),
+        allow_local=allow_local,
+    )
+    return create_ssh_client(config)
 
 
 class ParamikoSftpClient(SftpDeliveryPort):
-    """
-    Concrete implementation of SftpDeliveryPort using paramiko.
-    """
+    """Concrete implementation of SftpDeliveryPort delegating to centralized platform sftp."""
 
     async def deliver(
         self,
@@ -149,46 +89,33 @@ class ParamikoSftpClient(SftpDeliveryPort):
         filename: str,
         payload: bytes,
     ) -> None:
-        client = None
-        sftp = None
+        if not host_key:
+            raise ValueError("SFTP host_key is required for server verification")
+
+        config = SftpConnectionConfig(
+            host=host,
+            port=port,
+            username=username,
+            password=password or None,
+            private_key=client_key or None,
+            host_key=host_key,
+            allow_local=True,
+            timeout_seconds=15.0,
+        )
+
+        target_file = f"{remote_path.rstrip('/')}/{filename}" if remote_path else filename
+
         try:
-            if not host_key:
-                raise ValueError("SFTP host_key is required for server verification")
-
-            client = get_ssh_client(
-                host=host,
-                port=port,
-                username=username,
-                password=password,
-                client_key_string=client_key,
-                host_key_string=host_key,
-            )
-
-            sftp = client.open_sftp()
-
-            if not sftp:
-                raise RuntimeError("Failed to create SFTP client from transport")
-
-            target_file = f"{remote_path.rstrip('/')}/{filename}" if remote_path else filename
-
-            # Use putfo for file-like object
-            with io.BytesIO(payload) as fl:
-                sftp.putfo(fl, target_file)
-
-            logger.info(
-                "Successfully uploaded {filename} to {host}:{port}{'/' + target_file}",
-                filename=filename,
-                host=host,
-                port=port,
-                val_3="/" + target_file,
-            )
-
-        except paramiko.SSHException as e:
-            raise PortConnectionError(f"SFTP SSH delivery failed: {e}") from e
-        except OSError as e:
-            raise PortConnectionError(f"SFTP socket/network error: {e}") from e
-        finally:
-            if sftp:
-                sftp.close()
-            if client:
-                client.close()
+            with SftpSession(config) as session:
+                session.put_file(target_file, payload)
+                logger.info(
+                    "sftp_delivery_succeeded",
+                    filename=filename,
+                    host=host,
+                    port=port,
+                    target_file=target_file,
+                )
+        except SftpAuthenticationError as exc:
+            raise PortAuthenticationError(f"SFTP authentication failed: {exc}") from exc
+        except (SftpConnectionError, SftpHostValidationError, SftpOperationError) as exc:
+            raise PortConnectionError(f"SFTP delivery failed for {host}:{port}: {exc}") from exc
