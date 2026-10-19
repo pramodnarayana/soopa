@@ -10,6 +10,7 @@ import boto3
 import structlog
 from botocore.exceptions import ClientError
 from seedwork.id_registry import SystemIdPrefix
+from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformAwsSettings
 from seedwork.utils import generate_id
 
@@ -55,7 +56,7 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         if client is not None:
             self.client: SecretsManagerClientProtocol = client
         else:
-            settings = aws_settings or PlatformAwsSettings()
+            settings = aws_settings or load_settings_safely(PlatformAwsSettings)
             resolved_endpoint = endpoint_url or settings.endpoint_url
             resolved_region = region_name or settings.resolved_region
 
@@ -65,6 +66,7 @@ class AwsSecretsManagerAdapter(SecretStorePort):
 
             access_key = aws_access_key_id or settings.access_key_id
             secret_key = aws_secret_access_key or settings.secret_access_key
+
             if access_key:
                 client_kwargs["aws_access_key_id"] = access_key
             if secret_key:

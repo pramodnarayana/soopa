@@ -81,7 +81,7 @@ AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null pnpm test:node
 AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null COVERAGE_FILE=.coverage.unit CI=true pnpm cov:python
 
 echo "✅ Running Integration Tests..."
-COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
+AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
 
 echo "✅ Aggregating Coverage and Enforcing Thresholds..."
 ./scripts/aggregate_coverage.py
