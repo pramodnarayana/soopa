@@ -8,24 +8,17 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from security.adapters.ciphers.fernet_cipher import FernetCipher
-from security.adapters.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
 from security.adapters.signatures.hmac_signer import HmacSigner
 from security.ports.cipher_port import CipherPort
-from security.ports.secret_store_port import SecretStorePort
 from security.ports.signature_port import SignaturePort
 
 logger = structlog.get_logger(__name__)
 
 
 class SecurityProvider:
-    """Centralized enterprise provider for platform security capabilities."""
+    """Centralized enterprise provider for platform cryptography capabilities."""
 
     _cached_ephemeral_key: bytes | None = None
-
-    @classmethod
-    def get_secret_store(cls, secrets_mount_path: str | None = None) -> SecretStorePort:
-        mount_path: str = secrets_mount_path or os.getenv("SECRETS_MOUNT_PATH") or "/mnt/secrets"
-        return AwsSecretsManagerAdapter(secrets_mount_path=mount_path)
 
     @staticmethod
     def _is_ephemeral_allowed() -> bool:

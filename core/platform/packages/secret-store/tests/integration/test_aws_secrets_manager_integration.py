@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 from botocore.exceptions import ClientError
-from security.adapters.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store.adapters.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store.adapters.mounted_path_resolver import MountedSecretPathResolver
 
 pytestmark = pytest.mark.integration
 
@@ -18,8 +19,8 @@ RETRIEVAL_RETRY_INTERVAL_SECONDS = 0.1
 def setup_localstack_env(monkeypatch: pytest.MonkeyPatch) -> None:
     endpoint = os.getenv("AWS_ENDPOINT_URL") or "http://localhost:4566"
     monkeypatch.setenv("AWS_ENDPOINT_URL", endpoint)
-    monkeypatch.setenv("AWS_ACCESS_KEY_ID", os.getenv("AWS_ACCESS_KEY_ID") or "test")
-    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", os.getenv("AWS_SECRET_ACCESS_KEY") or "test")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
     monkeypatch.setenv("AWS_DEFAULT_REGION", os.getenv("AWS_DEFAULT_REGION") or "us-east-1")
 
 
@@ -52,7 +53,7 @@ async def test_aws_secrets_manager_integration(temp_secrets_dir: str) -> None:
     category = "test_category"
 
     ref = await adapter.store_private_key(test_key_data, category=category)
-    assert ref.startswith(f"soopa/{category}/")
+    assert ref.startswith(f"{category}/")
 
     # 2. Retrieve secret bytes
     retrieved_data = await retrieve_secret_with_retry(adapter, ref)
@@ -66,5 +67,39 @@ async def test_aws_secrets_manager_integration(temp_secrets_dir: str) -> None:
     await adapter.delete_secret(ref)
 
     # 5. Verify secret is no longer retrievable (fails fast with ValueError)
+    with pytest.raises(ValueError, match="Secret not found"):
+        await adapter.retrieve_secret(ref)
+
+
+@pytest.mark.asyncio
+async def test_aws_secrets_manager_integration_with_mounted_file(
+    temp_secrets_dir: str,
+) -> None:
+    adapter = AwsSecretsManagerAdapter(
+        secrets_mount_path=temp_secrets_dir,
+        path_resolver=MountedSecretPathResolver(),
+    )
+    category = "sidecar_cat"
+    test_data = b"INTEGRATION_SIDECAR_DATA"
+
+    # 1. Store secret in LocalStack
+    ref = await adapter.store_private_key(test_data, category=category)
+    secret_id = ref.split("/")[-1]
+
+    # 2. Simulate sidecar mounting file to {mount}/{category}/{id} (1:1 deterministic mapping)
+    mounted_file = Path(temp_secrets_dir) / category / secret_id
+    mounted_file.parent.mkdir(parents=True, exist_ok=True)
+    mounted_file.write_bytes(test_data)
+
+    assert mounted_file.is_file()
+
+    # 3. Retrieve secret should hit the mounted file
+    retrieved = await adapter.retrieve_secret(ref)
+    assert retrieved == test_data
+
+    # 4. Delete secret should remove the local mounted file AND delete from LocalStack
+    await adapter.delete_secret(ref)
+    assert not mounted_file.exists()
+
     with pytest.raises(ValueError, match="Secret not found"):
         await adapter.retrieve_secret(ref)

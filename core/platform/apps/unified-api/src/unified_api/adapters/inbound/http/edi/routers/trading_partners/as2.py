@@ -5,7 +5,7 @@ from edi.domain.exceptions import OrchestrationError
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,

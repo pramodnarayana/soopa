@@ -56,8 +56,12 @@ def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str
     if not secret_string:
         return None
 
-    parts = secret_name.split("/")
-    if len(parts) != 3:
+    parts = secret_name.strip("/").split("/")
+    if len(parts) == 2:
+        category_str, ref_id = parts[0], parts[1]
+    elif len(parts) == 3:
+        category_str, ref_id = parts[1], parts[2]
+    else:
         logger.debug(
             "ignoring_non_certificate_secret",
             secret_name=secret_name,
@@ -65,16 +69,13 @@ def _process_secret(client: SecretsManagerClient, secret: dict[str, Any]) -> str
         )
         return None
 
-    category_str = parts[1]
-    ref_id = parts[2]
-
     try:
-        validated_category = SecretCategory(category_str)
+        SecretCategory(category_str)
     except ValueError:
         logger.warning("unknown_secret_category", category=category_str)
         return None
 
-    file_path = os.path.join(SECRETS_MOUNT_PATH, validated_category.value, f"{ref_id}.pem")
+    file_path = os.path.join(SECRETS_MOUNT_PATH, *parts)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
 
     tmp_path = file_path + ".tmp"
@@ -97,25 +98,28 @@ def _reconcile_files(active_files: set[str]) -> None:
     mount_path = os.path.realpath(SECRETS_MOUNT_PATH)
     for root, _, files in os.walk(mount_path):
         for filename in files:
-            if filename.endswith(".pem"):
-                local_file = os.path.realpath(os.path.join(root, filename))
-                if local_file not in active_files:
-                    try:
-                        os.remove(local_file)
-                        logger.info("removed_revoked_secret_file", path=local_file)
-                    except OSError as e:
-                        logger.warning(
-                            "failed_to_remove_revoked_secret_file",
-                            path=local_file,
-                            error=str(e),
-                        )
+            if filename.endswith(".tmp"):
+                continue
+            local_file = os.path.realpath(os.path.join(root, filename))
+            if local_file not in active_files:
+                try:
+                    os.remove(local_file)
+                    logger.info("removed_revoked_secret_file", path=local_file)
+                except OSError as e:
+                    logger.warning(
+                        "failed_to_remove_revoked_secret_file",
+                        path=local_file,
+                        error=str(e),
+                    )
 
 
 def sync_secrets() -> None:
     client = get_client()
     try:
         paginator = client.get_paginator("list_secrets")
-        page_iterator = paginator.paginate(Filters=[{"Key": "name", "Values": ["edi/"]}])
+        filter_prefix = os.getenv("SECRETS_FILTER_PREFIX")
+        filters = [{"Key": "name", "Values": [filter_prefix]}] if filter_prefix else []
+        page_iterator = paginator.paginate(Filters=filters) if filters else paginator.paginate()
 
         active_files: set[str] = set()
 

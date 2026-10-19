@@ -18,7 +18,7 @@ from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from security.adapters.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
+from secret_store import AwsSecretsManagerAdapter
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text

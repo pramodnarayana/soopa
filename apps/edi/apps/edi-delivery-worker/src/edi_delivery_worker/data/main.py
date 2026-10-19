@@ -47,7 +47,7 @@ from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.provider import PubSubProvider
-from security import AwsSecretsManagerAdapter, SecretStorePort
+from secret_store import SecretStorePort, SecretStoreProvider
 
 from edi_delivery_worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -171,7 +171,7 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
         assert self.db_router is not None
         resolver = TenantResolver(self.db_router)
 
-        vault = AwsSecretsManagerAdapter(secrets_mount_path=settings.secrets.mount_path)
+        vault = SecretStoreProvider.get_secret_store(secrets_mount_path=settings.secrets.mount_path)
 
         uow_provider = TenantUowProvider(
             resolver=resolver,

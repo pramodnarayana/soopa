@@ -144,6 +144,9 @@ importers:
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/observability
+      '@soopa/secret-store':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/secret-store
       '@soopa/security':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/security
@@ -207,6 +210,9 @@ importers:
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/observability
+      '@soopa/secret-store':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/secret-store
       '@soopa/security':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/security
@@ -279,6 +285,9 @@ importers:
       '@soopa/outbox':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/outbox
+      '@soopa/secret-store':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/secret-store
       '@soopa/security':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/security
@@ -602,6 +611,9 @@ importers:
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../packages/observability
+      '@soopa/secret-store':
+        specifier: workspace:*
+        version: link:../../packages/secret-store
       '@soopa/security':
         specifier: workspace:*
         version: link:../../packages/security
@@ -717,6 +729,12 @@ importers:
       typescript:
         specifier: ~6.0.3
         version: 6.0.3
+
+  core/platform/packages/secret-store:
+    devDependencies:
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../seedwork
 
   core/platform/packages/security:
     devDependencies:

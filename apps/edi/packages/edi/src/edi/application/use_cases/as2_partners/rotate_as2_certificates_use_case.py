@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 import structlog
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 

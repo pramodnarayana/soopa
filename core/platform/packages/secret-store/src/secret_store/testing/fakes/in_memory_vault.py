@@ -3,7 +3,7 @@
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import SecretStorePort
 
 
 class InMemoryVaultAdapter(SecretStorePort):
@@ -18,8 +18,8 @@ class InMemoryVaultAdapter(SecretStorePort):
 
     async def store_private_key(self, private_key_pem: bytes, category: str | None = None) -> str:
         secret_id = generate_id(SystemIdPrefix.GENERIC)
-        cat = category if category else "as2_key"
-        ref = f"soopa/{cat}/{secret_id}"
+        cat = category if category else "keys"
+        ref = f"{cat}/{secret_id}"
         self.secrets[ref] = private_key_pem
         return ref
 

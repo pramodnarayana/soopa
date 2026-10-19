@@ -19,6 +19,7 @@
     "@soopa/api": "workspace:*",
     "@soopa/seedwork": "workspace:*",
     "@soopa/security": "workspace:*",
+    "@soopa/secret-store": "workspace:*",
     "@soopa/identity": "workspace:*",
     "@soopa/database": "workspace:*",
     "@soopa/observability": "workspace:*"

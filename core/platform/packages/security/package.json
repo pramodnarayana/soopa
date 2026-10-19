@@ -2,10 +2,9 @@
   "name": "@soopa/security",
   "version": "0.1.0",
   "private": true,
-  "description": "Centralized Platform Security, Secrets, and Cryptography",
+  "description": "Centralized Platform Cryptography and Security",
   "scripts": {
     "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
-    "test:integration": "uv run pytest tests/integration --cov=src",
     "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
     "cov": "uv run pytest -m \"not integration\" --cov=src --cov-report=term-missing --ignore=tests/integration --ignore=tests/e2e",
     "lint": "uv run ruff check .",

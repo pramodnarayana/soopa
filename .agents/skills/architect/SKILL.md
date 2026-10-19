@@ -23,6 +23,7 @@ You are a Principal Software Architect. Your job is to design systems that scale
     - **Outbox Relay vs Sweeper**: The relay handles real-time processing, the sweeper is the fallback poller, and both must be wired together.
 8. **Local Infrastructure**:
     - **Development Migrations**: We are still in development. Keep a single migration file. Do not create multiple consecutive migration files; squash or amend the existing one if possible.
+9. **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container or Provider) is the sole authority responsible for assembling concrete adapters together.
 
 ## Execution Workflow
 1. When asked to design a feature, deeply analyze the **Cost vs. Benefit** of open-source vs. custom builds. Favor lightweight, self-contained architecture over adding heavy database dependencies (like Mongo/Redis) unless absolutely necessary.
@@ -72,3 +73,7 @@ When designing any new module, bounded context, or Port, **DTOs MUST be defined 
 ### Strict Data Mappers (No Dynamic Reflection)
 - **Explicit Mapping**: NEVER use dynamic reflection loops (e.g., `dataclasses.fields()` or `__dict__.items()`) inside Repository Adapters to automatically map between SQLAlchemy ORM models and Domain Models.
 - **Type-Safety**: Always use strict, explicitly typed Data Mapper helper methods (e.g., `_to_domain_model` and `_update_record_from_domain`) that map each property individually via standard dot notation (`obj.field`). This guarantees that schema drift will be caught immediately by static analyzers (mypy) rather than causing silent runtime failures.
+
+### Zero Adapter-to-Adapter Coupling (Strictly Enforced)
+- **Decoupled Adapters**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces).
+- **Composition Root Assembly**: The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority responsible for assembling concrete adapters and injecting them into dependent adapters.

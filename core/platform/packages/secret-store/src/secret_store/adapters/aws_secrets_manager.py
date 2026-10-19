@@ -12,7 +12,8 @@ from botocore.exceptions import ClientError
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_path_resolver_port import MountedSecretPathResolverPort
+from secret_store.ports.secret_store_port import SecretStorePort
 
 logger = structlog.get_logger(__name__)
 
@@ -46,6 +47,8 @@ class AwsSecretsManagerAdapter(SecretStorePort):
         client: SecretsManagerClientProtocol | None = None,
         aws_access_key_id: str | None = None,
         aws_secret_access_key: str | None = None,
+        secrets_prefix: str | None = None,
+        path_resolver: MountedSecretPathResolverPort | None = None,
     ) -> None:
         if client is not None:
             self.client: SecretsManagerClientProtocol = client
@@ -66,6 +69,10 @@ class AwsSecretsManagerAdapter(SecretStorePort):
 
             self.client = boto3.client("secretsmanager", **client_kwargs)
         self._secrets_mount_path = secrets_mount_path
+        self._secrets_prefix = (
+            secrets_prefix if secrets_prefix is not None else os.getenv("SECRETS_PREFIX", "")
+        )
+        self._path_resolver: MountedSecretPathResolverPort | None = path_resolver
         self._cache: dict[str, tuple[bytes, float]] = {}
         self._cache_ttl_seconds = int(os.getenv("SECRETS_CACHE_TTL", "3600"))
         self._cache_max_size = int(os.getenv("SECRETS_CACHE_MAX_SIZE", "1000"))
@@ -79,9 +86,10 @@ class AwsSecretsManagerAdapter(SecretStorePort):
             return self._locks[vault_ref]
 
     async def store_private_key(self, private_key_pem: bytes, category: str | None = None) -> str:
-        category_val = category if category else "as2_key"
+        category_val = category if category else "keys"
         secret_id = generate_id(SystemIdPrefix.GENERIC)
-        secret_name = f"soopa/{category_val}/{secret_id}"
+        prefix = f"{self._secrets_prefix}/" if self._secrets_prefix else ""
+        secret_name = f"{prefix}{category_val}/{secret_id}"
         private_key_str = private_key_pem.decode("utf-8")
 
         await asyncio.to_thread(
@@ -142,21 +150,13 @@ class AwsSecretsManagerAdapter(SecretStorePort):
     def _resolve_mounted_path(self, vault_ref: str) -> Path | None:
         """Resolves and validates that a candidate secret path remains securely within _secrets_mount_path.
 
-        Prevents path traversal, absolute path escapes, and symlink escapes (CWE-22).
+        Delegates path resolution to the injected MountedSecretPathResolverPort strategy.
         """
+        if self._path_resolver is None:
+            return None
         try:
             mount_root = Path(self._secrets_mount_path).resolve()
-            clean_ref = vault_ref.lstrip("/\\")
-            candidate = (mount_root / clean_ref).resolve()
-            if candidate.is_relative_to(mount_root):
-                return candidate
-            logger.warning(
-                "secrets_mount_path_traversal_prevented",
-                vault_ref=vault_ref,
-                candidate=str(candidate),
-                mount_root=str(mount_root),
-            )
-            return None
+            return self._path_resolver.resolve(mount_root, vault_ref)
         except (ValueError, OSError, RuntimeError):
             return None
 

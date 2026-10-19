@@ -4,7 +4,7 @@ import re
 import typing
 
 import structlog
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.domain.exceptions import ErrorCode
 
 from edi.application.dtos.partners import AS2PartnershipDTO, LocalAS2PartnerDTO, RemoteAS2PartnerDTO

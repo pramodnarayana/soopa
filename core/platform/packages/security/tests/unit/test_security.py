@@ -4,11 +4,9 @@ import hashlib
 import pytest
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from security.adapters.ciphers.fernet_cipher import FernetCipher
-from security.adapters.secrets.aws_secrets_manager import AwsSecretsManagerAdapter
 from security.adapters.signatures.hmac_signer import HmacSigner
 from security.provider import SecurityProvider
 from security.sanitization.scrubber import sanitize_error
-from security.testing.fakes.in_memory_vault import InMemoryVaultAdapter
 
 
 def test_aes_gcm_cipher_dict_and_str_roundtrip() -> None:
@@ -61,22 +59,6 @@ def test_hmac_signer_verification() -> None:
     assert signer.verify(payload, "invalid_signature") is False
 
 
-@pytest.mark.asyncio
-async def test_in_memory_vault_lifecycle() -> None:
-    vault = InMemoryVaultAdapter()
-
-    key_bytes = b"-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"
-    ref = await vault.store_private_key(key_bytes, category="as2_partner")
-    assert ref.startswith("soopa/as2_partner/")
-
-    retrieved = await vault.retrieve_secret(ref)
-    assert retrieved == key_bytes
-
-    await vault.delete_secret(ref)
-    with pytest.raises(ValueError, match="Secret not found"):
-        await vault.retrieve_secret(ref)
-
-
 def test_security_provider_resolves_components(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ALLOW_EPHEMERAL_SECURITY_KEYS", "true")
     cipher = SecurityProvider.get_cipher()
@@ -106,60 +88,9 @@ def test_hmac_signer_non_ascii_and_malformed_signatures() -> None:
     payload = b"payload_bytes"
 
     # Non-ASCII unicode characters
-    assert signer.verify(payload, "invalid_sig_🔥") is False
-    assert signer.verify(payload, "éèêë") is False
+    assert signer.verify(payload, "invalid_sig_\U0001f525") is False
+    assert signer.verify(payload, "\xe9\xe8\xea\xeb") is False
     assert signer.verify(payload, "") is False
-
-
-class FakeSecretsManagerClient:
-    def __init__(self) -> None:
-        self.deleted_secrets: list[str] = []
-
-    def create_secret(
-        self, *, Name: str, SecretString: str, Description: str = ""
-    ) -> dict[str, object]:
-        return {"ARN": f"arn:aws:secretsmanager:::secret:{Name}", "Name": Name}
-
-    def get_secret_value(self, *, SecretId: str) -> dict[str, object]:
-        return {"SecretString": "mock_secret"}
-
-    def delete_secret(self, *, SecretId: str, RecoveryWindowInDays: int = 7) -> dict[str, object]:
-        self.deleted_secrets.append(SecretId)
-        return {"ARN": f"arn:aws:secretsmanager:::secret:{SecretId}", "Name": SecretId}
-
-
-@pytest.mark.asyncio
-async def test_aws_secrets_manager_path_traversal_and_sidecar_cleanup(
-    tmp_path: pytest.TempPathFactory,
-) -> None:
-    mount_dir = tmp_path / "secrets_mount"
-    mount_dir.mkdir()
-    secret_file = mount_dir / "soopa" / "as2" / "test_key"
-    secret_file.parent.mkdir(parents=True)
-    secret_file.write_bytes(b"mounted_secret_content")
-
-    fake_client = FakeSecretsManagerClient()
-    adapter = AwsSecretsManagerAdapter(
-        secrets_mount_path=str(mount_dir),
-        client=fake_client,
-    )
-
-    # Valid read from mounted directory
-    retrieved = await adapter.retrieve_secret("soopa/as2/test_key")
-    assert retrieved == b"mounted_secret_content"
-
-    # Path traversal attack attempts should be rejected (returning None from resolution)
-    assert adapter._resolve_mounted_path("../../etc/passwd") is None
-    assert adapter._resolve_mounted_path("/etc/passwd") is not None
-    # Resolved /etc/passwd is checked against mount_dir
-    resolved = adapter._resolve_mounted_path("../../../etc/shadow")
-    assert resolved is None
-
-    # Sidecar file cleanup on delete_secret
-    assert secret_file.exists()
-    await adapter.delete_secret("soopa/as2/test_key")
-    assert not secret_file.exists()
-    assert fake_client.deleted_secrets == ["soopa/as2/test_key"]
 
 
 def test_security_provider_decodes_hex_and_base64_keys() -> None:
@@ -196,19 +127,6 @@ def test_security_provider_decodes_hex_and_base64_keys() -> None:
     derived = SecurityProvider._decode_aes_key("legacy-arbitrary-password")
     assert len(derived) == 32
     assert derived == hashlib.sha256(b"legacy-arbitrary-password").digest()
-
-
-@pytest.mark.asyncio
-async def test_aws_secrets_manager_delete_secret_without_mounted_file(
-    tmp_path: pytest.TempPathFactory,
-) -> None:
-    fake_client = FakeSecretsManagerClient()
-    adapter = AwsSecretsManagerAdapter(
-        secrets_mount_path=str(tmp_path / "nonexistent"),
-        client=fake_client,
-    )
-    await adapter.delete_secret("soopa/as2/unmounted_key")
-    assert fake_client.deleted_secrets == ["soopa/as2/unmounted_key"]
 
 
 def test_security_provider_fails_fast_in_production(monkeypatch: pytest.MonkeyPatch) -> None:

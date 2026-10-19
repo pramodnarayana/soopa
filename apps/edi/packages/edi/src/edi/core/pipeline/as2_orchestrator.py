@@ -15,7 +15,7 @@ single reason to change (SRP):
 import functools
 
 import structlog
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import SecretStorePort
 
 from edi.adapters.inbound.as2.builder import build_outbound_message
 from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService

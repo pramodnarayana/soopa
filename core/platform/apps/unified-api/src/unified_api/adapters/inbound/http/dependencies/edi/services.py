@@ -12,7 +12,7 @@ from edi.ports.outbound.sftp_tester import SftpTesterPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
 from fastapi import Depends
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from security.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import SecretStorePort
 
 
 @inject

@@ -11,6 +11,7 @@ dependencies = [
     "observability",
     "notification",
     "security",
+    "secret-store",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +45,7 @@ edi = { workspace = true }
 observability = { workspace = true }
 notification = { workspace = true }
 security = { workspace = true }
+secret-store = { workspace = true }
 
 [dependency-groups]
 dev = [

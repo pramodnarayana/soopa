@@ -9,11 +9,16 @@ source_roots = [
     "core/platform/packages/identity/src",
     "core/platform/packages/schemas/python/src",
     "core/ucp/packages/models/src",
-    "core/platform/packages/security/src"
+    "core/platform/packages/security/src",
+    "core/platform/packages/secret-store/src"
 ]
 
 [[modules]]
 path = "security"
+depends_on = []
+
+[[modules]]
+path = "secret_store"
 depends_on = []
 
 
