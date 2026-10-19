@@ -10,7 +10,36 @@ source_roots = [
     "core/platform/packages/schemas/python/src",
     "core/ucp/packages/models/src",
     "core/platform/packages/security/src",
-    "core/platform/packages/secret-store/src"
+    "core/platform/packages/secret-store/src",
+    "apps/ip/packages/ip/src"
+]
+
+[[modules]]
+path = "ip.domain"
+depends_on = []
+
+[[modules]]
+path = "ip.ports"
+depends_on = [
+    "ip.domain"
+]
+
+[[modules]]
+path = "ip.application"
+depends_on = [
+    "ip.domain",
+    "ip.ports",
+    "security"
+]
+
+[[modules]]
+path = "ip.adapters"
+depends_on = [
+    "ip.domain",
+    "ip.ports",
+    "ip.application",
+    "security",
+    "database.models"
 ]
 
 [[modules]]

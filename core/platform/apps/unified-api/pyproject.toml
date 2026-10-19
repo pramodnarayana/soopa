@@ -12,6 +12,7 @@ dependencies = [
     "notification",
     "security",
     "secret-store",
+    "ip",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,7 @@ observability = { workspace = true }
 notification = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
+ip = { workspace = true }
 
 [dependency-groups]
 dev = [
