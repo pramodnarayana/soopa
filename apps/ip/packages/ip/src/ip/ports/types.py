@@ -75,3 +75,28 @@ class WriteResultDTO:
     record_id: str
     destination_id: str | None = None
     error_message: str | None = None
+
+
+@dataclass(frozen=True)
+class CatalogAppSummaryDTO:
+    """Summary representation of a connector catalog application."""
+
+    app_id: str
+    display_name: str
+    category: str
+    auth_type: str
+    description: str | None = None
+    connector_type: str = "DECLARATIVE_HTTP"
+    icon_url: str | None = None
+
+
+@dataclass(frozen=True)
+class AppSpecDTO:
+    """Specification schema for dynamic UI configuration form generation."""
+
+    app_id: str
+    display_name: str
+    auth_type: str
+    category: str
+    properties: Sequence[JsonDict]
+    description: str | None = None

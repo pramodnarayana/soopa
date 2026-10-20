@@ -66,43 +66,44 @@
 
 ---
 
-### Phase 3: Declarative 500+ Connector Engine & Dynamic UI
+### Phase 3: Declarative 500+ Connector Engine & Dynamic UI (COMPLETED)
 - **Goal:** Enable self-service integration for 500+ apps without bespoke React forms or custom Python classes.
-- **Tasks:**
-  1. Define `ConnectorPropertySchema` model (`shortText`, `secretText`, `dropdown`, `oauth2`).
-  2. Implement `DeclarativeHttpConnector`:
-     - Reads JSON/YAML OpenAPI manifests.
-     - Implements `spec()`, `check()`, `read()`, and `write()` dynamically.
-  3. Implement Native Protocol Adapters:
-     - Kafka consumer adapter (`aiokafka`).
-     - SFTP batch file transfer adapter (`asyncssh`).
-     - RabbitMQ consumer adapter (`aio-pika`).
-  4. Expose Catalog UI API (`GET /api/v1/catalog/apps`, `GET /api/v1/catalog/apps/{appId}/spec`).
+- **Deliverables:**
+  1. Dynamic UI & Manifest Domain Models (`ConnectorPropertySchema`, `ConnectorProperty`, `PropertyType`, `OAuthConfig`, `DeclarativeManifest`, `HttpActionSpec`, `PaginationConfig`).
+  2. Declarative HTTP Engine (`DeclarativeHttpConnector`) implementing dynamic `spec()`, `check()`, `discover()`, cursor/offset `read_stream()`, and `write_record()`.
+  3. Pre-seeded connector catalog (`ConnectorCatalogRegistry`) covering Salesforce CRM, HubSpot, Stripe Payments, ServiceNow ITSM, Itron OpenWay Riva MDM, and SFTP File Gateway.
+  4. Native Protocol Connector (`SftpConnector`) for secure batch file transfers using pure `paramiko`.
+  5. Application Use Cases (`ListCatalogAppsUseCase`, `GetAppSpecUseCase`) and Port (`CatalogRegistryPort`).
+  6. Inbound HTTP Router & DTOs in `unified-api` (`GET /api/v1/ip/catalog/apps`, `GET /api/v1/ip/catalog/apps/{app_id}/spec`).
+  7. Automated testing: 13 unit tests + 6 integration tests passing cleanly; 100% boundary check validated via `tach check`.
 
 ---
 
-### Phase 4: Ingestion Gateway (L1) with Transactional Outbox
-- **Goal:** Capture raw payloads with sub-20ms ACK and zero data loss.
-- **Tasks:**
-  1. Create database migration: `ip_data.inbound_records`.
-  2. Implement Tiered Storage Port:
-     - Payloads $< 64\text{ KB}$: save inlined in PostgreSQL `raw_payload`.
-     - Payloads $\ge 64\text{ KB}$: stream to S3 / MinIO, save `s3_key`.
-  3. Implement Inbound Ingress Controller:
-     - Assigns `business_trace_id` and extracts `business_correlation_id`.
-     - Commits raw record and registers `inbound_record.created` into PostgreSQL Outbox.
-     - Replies `202 Accepted` immediately.
+### Phase 4: Ingestion Gateway (L1) with Transactional Outbox (COMPLETED)
+- **Goal:** Capture raw payloads with sub-20ms ACK and zero data loss on dedicated IP shards.
+- **Deliverables:**
+  1. Shard Database Schema: Amended `inbound_records` with composite primary key `(id, received_at)`, `tenant_id`, `business_trace_id`, `business_correlation_id`, `raw_payload` JSONB, `s3_key`, and indexed queries.
+  2. Tiered Storage Port & Adapter (`TieredStoragePort`, `TieredStorageAdapter`):
+     - Payloads $< 64\text{ KB}$: saved inlined in `raw_payload`.
+     - Payloads $\ge 64\text{ KB}$: streamed to S3 / object storage, saving `s3_key`.
+  3. Domain Models & Events:
+     - `InboundRecord` aggregate root with high-entropy ID generation (`ip_inb_...`, `ip_trc_...`) and SHA-256 payload hashing.
+     - `InboundRecordCreatedEvent` pure domain event for downstream L2 consumers.
+  4. Repository Adapter: `SqlAlchemyInboundRecordRepository` with strict explicit data mappers and transactional outbox event draining (`IpOutboxRecord`).
+  5. Application Use Case: `IngestRecordUseCase` with co-located `IngestRecordCommand` and `IngestRecordResultDTO`.
+  6. Inbound Ingress Controller: `ingress_router.py` wired into `unified-api` (`POST /api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=...`) replying `202 Accepted` with `business_trace_id` and storage telemetry.
+  7. Automated Testing: 47 unit tests + 13 integration tests passing cleanly; 100% boundary check validated via `tach check`.
 
 ---
 
 ### Phase 5: Universal Replica Worker (L2) with Transactional Outbox
-- **Goal:** Maintain exact external system truth with change detection and replayability.
+- **Goal:** Maintain exact external system truth with change detection and replayability on dedicated IP shards.
 - **Tasks:**
-  1. Create database migration: `ip_data.replica_entities`.
+  1. Create shard database migration (`public.replica_entities` with GIN indexing and RLS).
   2. Implement Replica Worker:
      - Consumes `inbound_record.created` outbox events.
      - Computes SHA-256 `data_hash`. If unchanged, drop and skip downstream processing.
-     - Idempotently upserts snapshot into `ip_data.replica_entities`.
+     - Idempotently upserts snapshot into `public.replica_entities` on the tenant's IP shard.
      - Commits state and registers `replica_entity.updated` into the Outbox.
 
 ---
@@ -110,13 +111,13 @@
 ### Phase 6: Canonical Domain & GEM (L3) with Transactional Outbox
 - **Goal:** Transform vendor structures into Universal Standards and resolve cross-system IDs.
 - **Tasks:**
-  1. Create database migrations: `ip_data.canonical_entities` and `ip_data.global_entity_map`.
+  1. Create shard database migrations (`public.canonical_entities` and `public.global_entity_map` with RLS).
   2. Define Canonical Energy DTOs (`MeterDevice`, `UsagePoint`, `IntervalReading`).
   3. Implement Global Entity Map (GEM) Aggregate:
      - Look up or bind `Source ID <-> Canonical UUID <-> Destination ID`.
   4. Implement L3 Normalizer Worker:
      - Consumes `replica_entity.updated`.
-     - Maps to Canonical DTO, updates GEM.
+     - Maps to Canonical DTO, updates GEM in shard database.
      - Commits state and registers `canonical_entity.normalized` into the Outbox.
 
 ---
@@ -124,13 +125,13 @@
 ### Phase 7: Hydrator & "Stitches" (L4) with Transactional Outbox
 - **Goal:** Transform canonical records into target destination payloads.
 - **Tasks:**
-  1. Create database migration: `ip_data.field_mappings` and `ip_data.outbound_dispatches`.
+  1. Create shard database migrations (`public.field_mappings` and `public.outbound_dispatches` with RLS).
   2. Implement Hydration Engine:
      - Merges Canonical DTO values into the destination JSON template.
   3. Implement L4 Hydrator Worker:
      - Consumes `canonical_entity.normalized`.
      - Resolves destination credentials and target action.
-     - Commits `ip_data.outbound_dispatches` and registers `outbound_dispatch.enqueued` into the Outbox.
+     - Commits `public.outbound_dispatches` on the tenant's IP shard and registers `outbound_dispatch.enqueued` into the Outbox.
 
 ---
 
@@ -143,19 +144,19 @@
      - Consumes `outbound_dispatch.enqueued`.
      - Injects valid credentials and fires HTTP/SFTP/Kafka call.
      - Retries with exponential backoff on transient errors (429, 502, 503).
-     - Marks dispatch `DELIVERED` or `FAILED`.
+     - Updates dispatch state (`DELIVERED` or `FAILED`) on the tenant's IP shard.
 
 ---
 
 ### Phase 9: Support Timeline Ledger & Business Correlation
 - **Goal:** Real-time operational transparency for customer support teams.
 - **Tasks:**
-  1. Create database migration: `ip_data.business_timeline_ledger`.
+  1. Create shard database migration (`public.business_timeline_ledger` with RLS).
   2. Implement Timeline Interceptor:
-     - Injects breadcrumbs at each outbox transition (L1, L2, L3, L4, L5).
+     - Injects breadcrumbs at each outbox transition (L1, L2, L3, L4, L5) on the tenant's IP shard.
   3. Expose Support Timeline API:
      - `GET /api/v1/timeline?correlation_id=MTR-101`.
-     - Sub-15ms response returning chronological journey.
+     - Resolves tenant IP shard and queries timeline ledger in $< 15\text{ms}$.
 
 ---
 

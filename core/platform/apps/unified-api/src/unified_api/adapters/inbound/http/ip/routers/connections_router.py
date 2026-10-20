@@ -1,12 +1,13 @@
 """Inbound HTTP router for Integration Platform connections and catalogs."""
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from identity.domain.identity_context import IdentityContext
-from ip.adapters.outbound.connectors.itron_mdm_connector import ItronMdmConnector
+from ip.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
+from ip.adapters.outbound.connectors.registry_loader import create_default_catalog_registry
 from ip.adapters.outbound.database.catalog_repository import SqlAlchemyCatalogRepository
 from ip.adapters.outbound.database.connection_repository import SqlAlchemyConnectionRepository
 from ip.application.connections.check_connection_use_case import (
@@ -61,9 +62,31 @@ router = APIRouter(
 )
 
 
+class _ConnectorCatalogMapping(Mapping[str, ConnectorPort]):
+    """Dynamic mapping resolving connectors from the central ConnectorCatalogRegistry."""
+
+    def __init__(self, registry: ConnectorCatalogRegistry) -> None:
+        self._registry = registry
+
+    def __getitem__(self, key: str) -> ConnectorPort:
+        try:
+            return self._registry.get_connector(key)
+        except ConnectorNotFoundException as exc:
+            raise KeyError(key) from exc
+
+    def __len__(self) -> int:
+        return len(self._registry.list_apps())
+
+    def __iter__(self) -> Iterator[str]:
+        return (app.app_id for app in self._registry.list_apps())
+
+
+_catalog_registry = create_default_catalog_registry()
+_connector_mapping = _ConnectorCatalogMapping(_catalog_registry)
+
+
 def _get_connectors() -> Mapping[str, ConnectorPort]:
-    itron = ItronMdmConnector()
-    return {itron.app_id: itron}
+    return _connector_mapping
 
 
 def _map_connection_dto_to_response(dto: ConnectionDTO) -> ConnectionHttpResponse:

@@ -139,10 +139,69 @@ def upgrade() -> None:
         postgresql_where=sa.text("status = 'PENDING'"),
         schema="ip",
     )
+    op.create_table(
+        "inbound_records",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("business_trace_id", sa.String(length=64), nullable=False),
+        sa.Column("business_correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column("raw_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("s3_key", sa.String(length=512), nullable=True),
+        sa.Column("payload_size_bytes", sa.Integer(), nullable=False),
+        sa.Column("payload_sha256", sa.String(length=64), nullable=False),
+        sa.Column(
+            "headers",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id", "received_at"),
+        schema="ip",
+    )
+    op.create_index(
+        "idx_inbound_trace",
+        "inbound_records",
+        ["tenant_id", "business_trace_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_inbound_corr",
+        "inbound_records",
+        ["tenant_id", "business_correlation_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_inbound_conn",
+        "inbound_records",
+        ["tenant_id", "connection_id"],
+        unique=False,
+        schema="ip",
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index(
+        "idx_inbound_conn",
+        table_name="inbound_records",
+        schema="ip",
+    )
+    op.drop_index(
+        "idx_inbound_corr",
+        table_name="inbound_records",
+        schema="ip",
+    )
+    op.drop_index(
+        "idx_inbound_trace",
+        table_name="inbound_records",
+        schema="ip",
+    )
+    op.drop_table("inbound_records", schema="ip")
     op.drop_index(
         "ix_ip_outbox_pending",
         table_name="outbox",

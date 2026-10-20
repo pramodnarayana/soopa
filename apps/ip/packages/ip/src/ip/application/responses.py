@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from ip.domain.types import JsonDict
 from ip.ports.types import (
+    AppSpecDTO,
+    CatalogAppSummaryDTO,
     ConnectionCheckResultDTO,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
@@ -20,6 +22,8 @@ from ip.ports.types import (
 )
 
 __all__ = [
+    "AppSpecDTO",
+    "CatalogAppSummaryDTO",
     "ConnectionCheckResultDTO",
     "ConnectionDTO",
     "DiscoveredCatalogDTO",

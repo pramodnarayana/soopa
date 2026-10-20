@@ -7,6 +7,7 @@ import httpx
 import structlog
 from ip.adapters.outbound.connectors.base_connector import BaseConnector
 from ip.application.responses import (
+    CatalogAppSummaryDTO,
     ConnectionCheckResultDTO,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
@@ -23,6 +24,17 @@ logger = structlog.get_logger(__name__)
 
 class ItronMdmConnector(BaseConnector):
     """Production Energy MDM Connector communicating over HTTP REST with AMI Head-End systems."""
+
+    @classmethod
+    def default_catalog_summary(cls) -> CatalogAppSummaryDTO:
+        return CatalogAppSummaryDTO(
+            app_id="itron_mdm",
+            display_name="Itron OpenWay Riva MDM",
+            category="ENERGY",
+            auth_type="API_KEY",
+            description="Smart Grid AMI Head-End and Meter Data Management (MDM) connector",
+            connector_type="CUSTOM_PYTHON",
+        )
 
     def __init__(self, timeout_seconds: float = 10.0) -> None:
         self._timeout_seconds = timeout_seconds

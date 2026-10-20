@@ -11,5 +11,6 @@ class IpDomainIdPrefix(StrEnum):
     STREAM = "ip_strm"
     REPLICA = "ip_rep"
     INBOUND_RECORD = "ip_inb"
+    TRACE = "ip_trc"
     GEM = "ip_gem"
     TIMELINE = "ip_tml"

@@ -185,15 +185,19 @@ Enables autonomous AI assistants to inspect real-time state directly in connecte
 ## Submodule 8: Storage & Infrastructure Layer (`ip-storage`)
 
 ### Purpose:
-Encapsulates all database persistence, SQLAlchemy models, migration scripts, and polyglot time-series routing.
+Encapsulates all database persistence, SQLAlchemy models, migration scripts, and polyglot time-series routing following the platform's **Hybrid Multi-Tenancy Architecture**.
 
 ### Key Responsibilities:
-1. **Control Plane Repositories:**
-   - CRUD and state management for `ip.connections` and `ip.connection_catalogs`.
-2. **Data Pipeline Repositories:**
-   - High-throughput access to `inbound_records`, `replica_entities`, `canonical_entities`, `global_entity_map`, and `outbound_dispatches`.
-3. **Outbox Engine Adapter:**
+1. **Control Plane Repositories (`GlobalSession`):**
+   - CRUD and state management for `ip.connections`, `ip.connection_catalogs`, and `ip.outbox` residing on `global_db` under `schema="ip"`.
+2. **Dedicated Data Plane Repositories (`TenantSession`):**
+   - High-throughput access to `inbound_records`, `replica_entities`, `canonical_entities`, `global_entity_map`, and `outbound_dispatches` residing in the **`public` schema** of dedicated IP Shards (`ip_shard_1`, `ip_shard_2`, `ip_shard_enterprise_*`).
+   - Strictly isolated from other applications (never shared with EDI or UCP shards).
+   - Multi-tenancy on shared standard shards enforced via PostgreSQL Row-Level Security (`platform.current_tenant_id()`).
+3. **Dynamic Shard Resolution (`TenantShardResolver`):**
+   - Resolves tenant-to-shard DSN mappings dynamically using `ucp.shard_registry` on composite key `(tenant_id, app_id="ip")`.
+4. **Outbox Engine Adapter:**
    - Connects to platform outbox infrastructure (Postgres LISTEN/NOTIFY Relay + fallback Sweeper).
-4. **Polyglot Time-Series Storage Port (`TimeSeriesStoragePort`):**
-   - PostgreSQL Range Partitioning adapter for standard volume.
+5. **Polyglot Time-Series Storage Port (`TimeSeriesStoragePort`):**
+   - PostgreSQL Range Partitioning adapter for standard volume (declarative monthly partitioning for `public.inbound_records`).
    - Columnar Engine adapter (TimescaleDB / ClickHouse) for enterprise clients ($> 1\text{M meters}$).

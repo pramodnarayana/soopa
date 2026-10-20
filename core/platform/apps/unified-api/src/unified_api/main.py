@@ -146,8 +146,14 @@ setup_shell_exception_handlers(app)
 # UCP dependency injection (real adapters → router placeholders) is wired here
 # on the Shell app instance, since that is the app that owns the UCP routes.
 # ---------------------------------------------------------------------------
+from unified_api.adapters.inbound.http.ip.routers.catalog_router import (
+    router as ip_catalog_router,
+)
 from unified_api.adapters.inbound.http.ip.routers.connections_router import (
     router as ip_connections_router,
+)
+from unified_api.adapters.inbound.http.ip.routers.ingress_router import (
+    router as ip_ingress_router,
 )
 from unified_api.adapters.inbound.http.notifications.routers.in_app_notifications_router import (
     router as in_app_notifications_router,
@@ -173,6 +179,8 @@ app.include_router(notification_preferences_router)
 app.include_router(notification_templates_router)
 app.include_router(notification_user_preferences_router)
 app.include_router(ip_connections_router)
+app.include_router(ip_catalog_router)
+app.include_router(ip_ingress_router)
 
 ucp_container = UcpContainer()
 app.state.ucp_container = ucp_container

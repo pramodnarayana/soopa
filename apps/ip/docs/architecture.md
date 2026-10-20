@@ -295,20 +295,73 @@ The execution engine follows the **Staged Event-Driven Architecture (SEDA)**. Ev
 
 ---
 
-## 6. Comprehensive Multi-Layer Database Architecture
+## 6. Comprehensive Multi-Layer Database Architecture: Hybrid Multi-Tenancy (DD)
 
-All data tables reside in the dedicated `ip_data` schema:
+The Integration Platform implements a **Hybrid Multi-Tenancy Architecture** based on Domain-Driven Design (DDD). We strictly separate administrative configuration from high-throughput pipeline execution across two distinct database planes:
+
+```
+                      ┌──────────────────────────────────────────────┐
+                      │                 Unified API                  │
+                      └──────────────┬───────────────────────────────┘
+                                     │
+                 ┌───────────────────┴───────────────────┐
+                 ▼                                       ▼
+    ┌─────────────────────────┐             ┌─────────────────────────┐
+    │   Global Database       │             │   Dedicated IP Shards   │
+    │   (Control Plane)       │             │   (Data Plane)          │
+    │   via GlobalSession     │             │   via TenantSession     │
+    ├─────────────────────────┤             ├─────────────────────────┤
+    │ Schema: ucp             │             │ Database: ip_shard_1    │
+    │ Schema: edi             │             │ Database: ip_shard_2    │
+    │ Schema: ip              │             │ Database: ip_shard_ent* │
+    │   - connections         │             │                         │
+    │   - connection_catalogs │             │ Schema: public (with RLS)
+    │   - outbox              │             │   - inbound_records     │
+    │                         │             │   - replica_entities    │
+    │                         │             │   - canonical_entities  │
+    │                         │             │   - global_entity_map   │
+    │                         │             │   - field_mappings      │
+    │                         │             │   - outbound_dispatches │
+    │                         │             │   - timeline_ledger     │
+    └─────────────────────────┘             └─────────────────────────┘
+```
+
+### 6.1. Control Plane (`ip` Schema in `global_db`)
+- **Location:** The shared `global_db` instance under the dedicated `ip` schema.
+- **Access:** Injected as `GlobalSession` via `DatabaseRouterPort.get_global_session()`.
+- **Scope:** Administrative configuration, connection endpoints, envelope-encrypted credentials (AES-256-GCM), discovered catalog schemas, and connection lifecycle outbox events.
+- **Tables:**
+  - `ip.connections`
+  - `ip.connection_catalogs`
+  - `ip.outbox`
+
+### 6.2. Data Plane (`public` Schema in Dedicated `ip_shard` Databases)
+- **Location:** Dedicated IP Shard databases (`ip_shard_1`, `ip_shard_2`, `ip_shard_enterprise_<tenant>`). **This shard database is dedicated solely to IP and is never shared with EDI, UCP, or other applications.**
+- **Schema:** All IP pipeline execution tables reside in the **`public` schema** of each IP shard.
+- **Multi-Tenancy Isolation:**
+  - **Standard Tier:** Multiple tenants share a pooled shard (e.g. `ip_shard_1`), strictly isolated via PostgreSQL **Row-Level Security (RLS)** using `platform.current_tenant_id()`.
+  - **Enterprise Tier:** High-throughput enterprise tenants are allocated dedicated, isolated shard database instances (e.g. `ip_shard_enterprise_acme`).
+- **Dynamic Shard Resolution:**
+  - The platform routes requests dynamically via `ucp.shard_registry` on the composite key `(tenant_id, app_id="ip")`:
+    ```sql
+    SELECT s.name, s.dsn
+    FROM ucp.shard_registry r
+    JOIN ucp.database_shards s ON r.shard_id = s.id
+    JOIN ucp.apps a ON r.app_id = a.id
+    WHERE r.tenant_id = :tenant_id AND a.slug = 'ip';
+    ```
+- **Zero Cross-Database Foreign Keys:** Because Control Plane and Data Plane live on separate physical databases, Data Plane tables reference connections and tenants using logical string identifiers (`connection_id VARCHAR(64)`, `tenant_id VARCHAR(128)`) without physical database foreign keys.
+
+### 6.3. Data Plane Shard DDL (`public` Schema)
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS ip_data;
-
 -- ============================================================================
--- LAYER 1: INBOUND RAW AUDIT EVIDENCE (Immutable)
+-- LAYER 1: INBOUND RAW AUDIT EVIDENCE (Partitioned by Month)
 -- ============================================================================
-CREATE TABLE ip_data.inbound_records (
-    id VARCHAR(64) PRIMARY KEY,                         -- inb_<os.urandom(12).hex()>
-    tenant_id UUID NOT NULL,
-    connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id),
+CREATE TABLE public.inbound_records (
+    id VARCHAR(64) NOT NULL,                            -- inb_<os.urandom(12).hex()>
+    tenant_id VARCHAR(128) NOT NULL,
+    connection_id VARCHAR(64) NOT NULL,                 -- Logical ref to ip.connections(id)
     business_trace_id VARCHAR(64) NOT NULL,
     business_correlation_id VARCHAR(255),
     raw_payload JSONB,                                  -- Populated if size < 64 KB
@@ -316,18 +369,28 @@ CREATE TABLE ip_data.inbound_records (
     payload_size_bytes INT NOT NULL,
     payload_sha256 VARCHAR(64) NOT NULL,
     headers JSONB NOT NULL DEFAULT '{}'::jsonb,
-    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, received_at)
+) PARTITION BY RANGE (received_at);
 
-CREATE INDEX idx_inbound_trace ON ip_data.inbound_records (tenant_id, business_trace_id);
-CREATE INDEX idx_inbound_corr ON ip_data.inbound_records (tenant_id, business_correlation_id);
+-- Monthly partition template for high-throughput append logs
+CREATE TABLE public.inbound_records_default
+    PARTITION OF public.inbound_records DEFAULT;
+
+CREATE INDEX idx_inbound_trace ON public.inbound_records (tenant_id, business_trace_id);
+CREATE INDEX idx_inbound_corr ON public.inbound_records (tenant_id, business_correlation_id);
+
+-- Enable RLS for standard shared shards
+ALTER TABLE public.inbound_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY inbound_tenant_isolation ON public.inbound_records
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
 -- LAYER 2: UNIVERSAL SOURCE STATE REPLICA
 -- ============================================================================
-CREATE TABLE ip_data.replica_entities (
-    tenant_id UUID NOT NULL,
-    connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id),
+CREATE TABLE public.replica_entities (
+    tenant_id VARCHAR(128) NOT NULL,
+    connection_id VARCHAR(64) NOT NULL,                 -- Logical ref to ip.connections(id)
     stream_name VARCHAR(128) NOT NULL,                  -- 'meters', 'service_points', 'invoices'
     source_record_id VARCHAR(255) NOT NULL,             -- External primary key
     data JSONB NOT NULL,                                -- Parsed, structured source JSON
@@ -336,25 +399,29 @@ CREATE TABLE ip_data.replica_entities (
     PRIMARY KEY (tenant_id, connection_id, stream_name, source_record_id)
 );
 
-CREATE INDEX idx_replica_gin ON ip_data.replica_entities USING GIN (data);
+CREATE INDEX idx_replica_gin ON public.replica_entities USING GIN (data);
+
+ALTER TABLE public.replica_entities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY replica_tenant_isolation ON public.replica_entities
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
 -- LAYER 3: CANONICAL DOMAIN ENTITIES & GLOBAL ENTITY MAP (GEM)
 -- ============================================================================
-CREATE TABLE ip_data.canonical_entities (
-    id UUID PRIMARY KEY,                                -- Canonical Entity UUID
-    tenant_id UUID NOT NULL,
+CREATE TABLE public.canonical_entities (
+    id VARCHAR(64) PRIMARY KEY,                         -- can_<os.urandom(12).hex()>
+    tenant_id VARCHAR(128) NOT NULL,
     entity_domain VARCHAR(64) NOT NULL,                 -- 'ENERGY_METER', 'USAGE_POINT', 'INVOICE'
     canonical_data JSONB NOT NULL,                      -- Strongly-typed CIM / standard model
     version INT NOT NULL DEFAULT 1,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE ip_data.global_entity_map (
+CREATE TABLE public.global_entity_map (
     id VARCHAR(64) PRIMARY KEY,                         -- gem_<os.urandom(12).hex()>
-    tenant_id UUID NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
     entity_domain VARCHAR(64) NOT NULL,
-    canonical_id UUID NOT NULL REFERENCES ip_data.canonical_entities(id),
+    canonical_id VARCHAR(64) NOT NULL REFERENCES public.canonical_entities(id) ON DELETE CASCADE,
     source_connection_id VARCHAR(64) NOT NULL,
     source_entity_id VARCHAR(255) NOT NULL,             -- e.g. Itron 'MTR-101'
     dest_connection_id VARCHAR(64) NOT NULL,
@@ -365,16 +432,24 @@ CREATE TABLE ip_data.global_entity_map (
     )
 );
 
-CREATE INDEX idx_gem_lookup ON ip_data.global_entity_map (
+CREATE INDEX idx_gem_lookup ON public.global_entity_map (
     tenant_id, entity_domain, dest_connection_id, dest_entity_id
 );
+
+ALTER TABLE public.canonical_entities ENABLE ROW LEVEL SECURITY;
+CREATE POLICY canonical_tenant_isolation ON public.canonical_entities
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
+
+ALTER TABLE public.global_entity_map ENABLE ROW LEVEL SECURITY;
+CREATE POLICY gem_tenant_isolation ON public.global_entity_map
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
 -- LAYER 4: FIELD MAPPINGS & STITCHES (Customer Transformation Templates)
 -- ============================================================================
-CREATE TABLE ip_data.field_mappings (
+CREATE TABLE public.field_mappings (
     id VARCHAR(64) PRIMARY KEY,                         -- map_<os.urandom(12).hex()>
-    tenant_id UUID NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
     name VARCHAR(255) NOT NULL,
     source_domain VARCHAR(64) NOT NULL,                 -- 'ENERGY_METER'
     target_app_id VARCHAR(64) NOT NULL,                 -- 'sap_isu'
@@ -385,21 +460,25 @@ CREATE TABLE ip_data.field_mappings (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE public.field_mappings ENABLE ROW LEVEL SECURITY;
+CREATE POLICY field_mappings_tenant_isolation ON public.field_mappings
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
+
 -- ============================================================================
 -- LAYER 5: OUTBOUND DISPATCHES (Delivery Ledger)
 -- ============================================================================
-CREATE TYPE ip_data.dispatch_status AS ENUM (
+CREATE TYPE public.dispatch_status AS ENUM (
     'PENDING', 'PROCESSING', 'DELIVERED', 'FAILED', 'RETRY_SCHEDULED'
 );
 
-CREATE TABLE ip_data.outbound_dispatches (
+CREATE TABLE public.outbound_dispatches (
     id VARCHAR(64) PRIMARY KEY,                         -- dsp_<os.urandom(12).hex()>
-    tenant_id UUID NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
     business_trace_id VARCHAR(64) NOT NULL,
-    target_connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id),
+    target_connection_id VARCHAR(64) NOT NULL,
     target_action VARCHAR(64) NOT NULL,
     payload JSONB NOT NULL,
-    status ip_data.dispatch_status NOT NULL DEFAULT 'PENDING',
+    status public.dispatch_status NOT NULL DEFAULT 'PENDING',
     attempt_count INT NOT NULL DEFAULT 0,
     max_retries INT NOT NULL DEFAULT 5,
     next_retry_at TIMESTAMPTZ,
@@ -409,15 +488,19 @@ CREATE TABLE ip_data.outbound_dispatches (
     delivered_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_dispatches_pending ON ip_data.outbound_dispatches (status, next_retry_at)
+CREATE INDEX idx_dispatches_pending ON public.outbound_dispatches (status, next_retry_at)
     WHERE status IN ('PENDING', 'RETRY_SCHEDULED');
+
+ALTER TABLE public.outbound_dispatches ENABLE ROW LEVEL SECURITY;
+CREATE POLICY dispatches_tenant_isolation ON public.outbound_dispatches
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
 -- CROSS-CUTTING: CUSTOMER SUPPORT TIMELINE LEDGER
 -- ============================================================================
-CREATE TABLE ip_data.business_timeline_ledger (
+CREATE TABLE public.business_timeline_ledger (
     id VARCHAR(64) PRIMARY KEY,                         -- tml_<os.urandom(12).hex()>
-    tenant_id UUID NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
     business_trace_id VARCHAR(64) NOT NULL,
     business_correlation_id VARCHAR(255) NOT NULL,      -- 'MTR-54012', 'ACC-9821'
     layer VARCHAR(32) NOT NULL,                         -- 'L1_INGEST', 'L2_REPLICA', 'L3_NORM', 'L4_HYDRATE', 'L5_DELIVER'
@@ -427,13 +510,23 @@ CREATE TABLE ip_data.business_timeline_ledger (
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_timeline_lookup ON ip_data.business_timeline_ledger (
+CREATE INDEX idx_timeline_lookup ON public.business_timeline_ledger (
     tenant_id, business_correlation_id, occurred_at DESC
 );
-CREATE INDEX idx_timeline_trace ON ip_data.business_timeline_ledger (
+CREATE INDEX idx_timeline_trace ON public.business_timeline_ledger (
     tenant_id, business_trace_id, occurred_at ASC
 );
+
+ALTER TABLE public.business_timeline_ledger ENABLE ROW LEVEL SECURITY;
+CREATE POLICY timeline_tenant_isolation ON public.business_timeline_ledger
+    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 ```
+
+### 6.4. Enterprise Robustness Pillars
+1. **Centralized Platform Resolver (`TenantShardResolver`):** Cached resolution of `(tenant_id, app_id="ip")` ensures workers never query `global_db` per ingested record.
+2. **Declarative Partitioning & Pruning:** High-volume telemetry in `inbound_records` uses range partitioning by month, eliminating vacuum bloat by dropping expired partitions with instantaneous DDL (`DROP TABLE`).
+3. **Dedicated Shard Migration Runner:** `platform_migrator migrate --domain ip` runs global migrations on `global_db` (`ip` schema) and dynamically iterates over all active IP shards discovered via `ShardRegistry` to apply `public` schema migrations.
+4. **Isolated Connection Pools:** Shard connection pools are allocated dynamically via `DatabaseRouter` with tier-specific sizing (e.g. 20 connections for shared standard shards, dedicated pools for enterprise shards).
 
 ---
 
