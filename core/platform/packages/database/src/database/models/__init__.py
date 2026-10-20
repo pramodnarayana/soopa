@@ -1,4 +1,4 @@
-from .common import OutboxMixin, SoftDeleteMixin, TimestampMixin
+from .common import OutboxMixin, SoftDeleteMixin, TimestampMixin, TraceableMixin
 from .core import (
     IdentityBase,
     NotificationBase,
@@ -14,11 +14,14 @@ from .notifications import NotificationOutbox, NotificationTemplate, UserNotific
 from .observability import SystemAuditLog
 from .scheduling import ScheduledJob
 from .sharding import DatabaseShard, ShardRegistry
+from .subscriptions import App, AppSubscription
 from .webhooks import Webhook
 
 __all__ = [
     "ApiKey",
     "ApiToken",
+    "App",
+    "AppSubscription",
     "DatabaseShard",
     "IdempotencyResult",
     "IdentityBase",
@@ -37,6 +40,7 @@ __all__ = [
     "Tenant",
     "TenantUser",
     "TimestampMixin",
+    "TraceableMixin",
     "UcpBase",
     "UcpRegistry",
     "User",

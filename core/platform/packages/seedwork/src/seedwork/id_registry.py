@@ -60,3 +60,12 @@ class DomainIdPrefix(StrEnum):
     EDI_JSON = "edi_json"
     EDI_API_GATEWAY = "edi_api_gw"
     EDI_TRACE_EVENT = "edi_trace_evt"
+
+    # Integration Platform (IP)
+    IP_TRACE = "ip_trc"
+    IP_TRACE_EVENT = "ip_trace_evt"
+    IP_INBOUND_RECORD = "ip_inb_rec"
+    IP_CONNECTION = "ip_conn"
+    IP_REPLICA = "ip_rep"
+    IP_CANONICAL = "ip_canon"
+    IP_OUTBOUND_DISPATCH = "ip_disp"

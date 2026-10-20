@@ -1,81 +1,28 @@
-import contextlib
-import time
+from __future__ import annotations
 
-from sqlalchemy import select
-from ucp_models.sharding import DatabaseShard, ShardRegistry
-from ucp_models.subscriptions import App
-
-from database.models.identity import Tenant
-from database.router import DatabaseRouter
+from database.router import DatabaseRouterPort
+from database.tenant_shard_resolver import TenantNotFoundError, TenantShardResolver
 
 EDI_APP_SLUG = "edi"
 
+__all__ = ["EDI_APP_SLUG", "TenantNotFoundError", "TenantResolver"]
 
-class TenantResolver:
+
+class TenantResolver(TenantShardResolver):
     """
-    Caches tenant-to-shard mapping to avoid querying the Global DB on every SQS message.
+    EDI-specific TenantResolver inheriting from the platform TenantShardResolver.
     """
 
-    def __init__(self, db_router: DatabaseRouter, ttl_secs: int = 300, max_entries: int = 1000):
+    def __init__(
+        self,
+        db_router: DatabaseRouterPort,
+        ttl_secs: int = 300,
+        max_entries: int = 1000,
+    ) -> None:
+        super().__init__(
+            db_router=db_router,
+            app_slug=EDI_APP_SLUG,
+            ttl_secs=ttl_secs,
+            max_entries=max_entries,
+        )
         self.db_router = db_router
-        self._cache: dict[str, tuple[str, str, float]] = {}
-        self._ttl = ttl_secs
-        self._max_entries = max_entries
-
-    def _sweep(self, now: float) -> None:
-        expired = [k for k, v in self._cache.items() if v[2] <= now]
-        for k in expired:
-            del self._cache[k]
-
-        if len(self._cache) > self._max_entries:
-            sorted_entries = sorted(self._cache.items(), key=lambda x: x[1][2])
-            to_evict = len(self._cache) - self._max_entries
-            for k, _ in sorted_entries[:to_evict]:
-                del self._cache[k]
-
-    async def get_all_tenant_ids(self) -> list[str]:
-        global_gen = self.db_router.get_global_session()
-        global_session = await global_gen.__anext__()
-        try:
-            stmt = (
-                select(Tenant.id)
-                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
-                .join(App, App.id == ShardRegistry.app_id)
-                .where(App.slug == EDI_APP_SLUG)
-            )
-            result = await global_session.execute(stmt)
-            return [str(t_id) for t_id in result.scalars().all()]
-        finally:
-            with contextlib.suppress(StopAsyncIteration):
-                await global_gen.__anext__()
-
-    async def resolve_shard(self, tenant_id: str) -> tuple[str, str]:
-        now = time.monotonic()
-        self._sweep(now)
-
-        tid_str = tenant_id
-        if tid_str in self._cache:
-            shard_name, shard_dsn, expiry = self._cache[tid_str]
-            if now < expiry:
-                return shard_name, shard_dsn
-
-        global_gen = self.db_router.get_global_session()
-        global_session = await global_gen.__anext__()
-        try:
-            stmt = (
-                select(Tenant, DatabaseShard)
-                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
-                .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
-                .join(App, App.id == ShardRegistry.app_id)
-                .where(Tenant.id == tid_str, App.slug == EDI_APP_SLUG)
-            )
-            result = await global_session.execute(stmt)
-            row = result.first()
-            if not row:
-                raise ValueError(f"Tenant {tid_str} not found in Global DB")
-            _, shard_obj = row
-            self._cache[tid_str] = (str(shard_obj.id), str(shard_obj.dsn), now + self._ttl)
-            self._sweep(now)
-            return str(shard_obj.id), str(shard_obj.dsn)
-        finally:
-            await global_gen.aclose()

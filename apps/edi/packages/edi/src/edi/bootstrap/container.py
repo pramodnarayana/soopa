@@ -32,7 +32,10 @@ class Container(containers.DeclarativeContainer):
     # External Adapters & Providers (Stateless singletons / factories)
     # -----------------------------------------------------------------------
     crypto_service = providers.Singleton(SmimeCryptoService)
-    sftp_tester = providers.Singleton(ParamikoSftpTesterAdapter)
+    sftp_tester = providers.Singleton(
+        ParamikoSftpTesterAdapter,
+        allow_local=config.allow_private_ips,
+    )
     as2_tester = providers.Singleton(
         HttpxAS2TesterAdapter,
         allow_private_ips=config.allow_private_ips,
