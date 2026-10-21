@@ -233,15 +233,28 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
                     logger.error("manager_stop_failed", exc_info=res)
 
         if self.http_delivery:
-            await self.http_delivery.close()
-            self.http_delivery = None
+            try:
+                await self.http_delivery.close()
+            except Exception as exc:
+                logger.error("http_delivery_stop_failed", exc_info=exc)
+            finally:
+                self.http_delivery = None
 
         if self.as2_delivery:
-            await self.as2_delivery.close()
-            self.as2_delivery = None
+            try:
+                await self.as2_delivery.close()
+            except Exception as exc:
+                logger.error("as2_delivery_stop_failed", exc_info=exc)
+            finally:
+                self.as2_delivery = None
 
         if self.db_router:
-            await self.db_router.close_all()
+            try:
+                await self.db_router.close_all()
+            except Exception as exc:
+                logger.error("db_router_stop_failed", exc_info=exc)
+            finally:
+                self.db_router = None
 
 
 class EdiDeliveryDlqWorkerModule(EdiDeliveryWorkerModule):

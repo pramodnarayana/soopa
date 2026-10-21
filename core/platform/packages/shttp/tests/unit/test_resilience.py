@@ -101,7 +101,7 @@ async def test_http_backoff_handler_success_no_retry() -> None:
         call_count += 1
         return httpx.Response(200, request=httpx.Request("GET", "https://api.example.com"))
 
-    resp = await handler.execute(request_fn)
+    resp = await handler.execute(request_fn, method="GET")
     assert resp.status_code == 200
     assert call_count == 1
 
@@ -121,7 +121,7 @@ async def test_http_backoff_handler_retry_on_429() -> None:
             return httpx.Response(429, request=httpx.Request("GET", "https://api.example.com"))
         return httpx.Response(200, request=httpx.Request("GET", "https://api.example.com"))
 
-    resp = await handler.execute(request_fn)
+    resp = await handler.execute(request_fn, method="GET")
     assert resp.status_code == 200
     assert call_count == 2
 
@@ -139,7 +139,7 @@ async def test_http_backoff_handler_retries_exhausted() -> None:
         call_count += 1
         return httpx.Response(503, request=httpx.Request("GET", "https://api.example.com"))
 
-    resp = await handler.execute(request_fn)
+    resp = await handler.execute(request_fn, method="GET")
     assert resp.status_code == 503
     assert call_count == 3  # initial + 2 retries
 
@@ -159,7 +159,7 @@ async def test_http_backoff_handler_network_timeout_retry() -> None:
             raise httpx.ReadTimeout("Timed out reading data")
         return httpx.Response(200, request=httpx.Request("GET", "https://api.example.com"))
 
-    resp = await handler.execute(request_fn)
+    resp = await handler.execute(request_fn, method="GET")
     assert resp.status_code == 200
     assert call_count == 2
 
@@ -177,7 +177,7 @@ async def test_http_backoff_handler_network_timeout_retries_exhausted_raises_tim
         raise httpx.ReadTimeout("Timed out reading data")
 
     with pytest.raises(HttpTimeoutError) as exc_info:
-        await handler.execute(request_fn)
+        await handler.execute(request_fn, method="GET")
 
     assert exc_info.value.kind == TimeoutKind.READ
     assert exc_info.value.classify().value == "TIMEOUT"

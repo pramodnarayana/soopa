@@ -2,6 +2,7 @@ from collections.abc import Callable
 
 import httpx
 from shttp import (
+    HttpBackoffHandler,
     HttpClient,
     HttpError,
     HttpNetworkError,
@@ -38,6 +39,7 @@ class HttpxDeliveryClient(HttpDeliveryPort):
             self._client = HttpClient(
                 self._raw_client,
                 allow_private_ips=allow_private_ips,
+                backoff_handler=HttpBackoffHandler(max_retries=0),
             )
         else:
             self._raw_client = None

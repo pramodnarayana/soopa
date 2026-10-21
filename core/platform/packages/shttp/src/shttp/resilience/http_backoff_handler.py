@@ -94,8 +94,8 @@ class HttpBackoffHandler:
     async def execute(
         self,
         request_fn: Callable[[], Awaitable[httpx.Response]],
+        method: str,
         url: str = "",
-        method: str = "GET",
     ) -> httpx.Response:
         """Executes an asynchronous request callable, retrying transient faults with backoff."""
         is_idempotent = method.upper() in IDEMPOTENT_HTTP_METHODS

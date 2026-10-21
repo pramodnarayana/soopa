@@ -129,7 +129,7 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
         try:
             yield
         finally:
-            await shutdown()
+            await shutdown(app)
 
     app = FastAPI(
         title="EDI AS2 Platform API",

@@ -37,6 +37,7 @@ async def test_httpx_delivery_adapter_validator() -> None:
 async def test_httpx_delivery_adapter_ownership_and_close() -> None:
     adapter = HttpxDeliveryClient(allow_private_ips=True)
     assert adapter._owned_client is True
+    assert adapter._client._backoff_handler.max_retries == 0
     await adapter.close()
     assert adapter._client._client.is_closed
 
