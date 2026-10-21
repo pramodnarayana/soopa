@@ -29,3 +29,18 @@ async def test_worker_container_requires_database_url(monkeypatch):
         WorkerContainer(settings=bad_settings)
 
     get_settings.cache_clear()
+
+
+async def test_zitadel_settings_require_platform_org_id():
+
+    with pytest.raises(ValidationError, match="platform_org_id"):
+        AppSettings(
+            _env_file=None,
+            database={"global_url": "postgresql+asyncpg://user:pass@localhost:5432/db"},
+            identity={
+                "platform_org_id": "",
+                "api_url": "http://localhost:8080",
+                "machine_key": '{"type": "serviceaccount", "keyId": "k", "key": "key", "userId": "u"}',
+                "default_user_password": "password",
+            },
+        )

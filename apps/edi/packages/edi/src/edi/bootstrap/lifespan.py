@@ -21,10 +21,13 @@ from dependency_injector import providers
 from fastapi import FastAPI
 
 from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
+from edi.bootstrap.container import Container
 
 logger = structlog.get_logger(__name__)
 
 _db_router: DatabaseRouter | None = None
+_edi_container: Container | None = None
 
 
 async def startup(
@@ -33,7 +36,7 @@ async def startup(
     global_db_url: str,
     pool_size: int = 10,
     max_overflow: int = 20,
-    shard_overrides: dict | None = None,
+    shard_overrides: dict[str, str] | None = None,
 ) -> None:
     """
     Initializes the EDI DatabaseRouter and attaches it to the EDI sub-app's state.
@@ -44,7 +47,7 @@ async def startup(
     all database configuration as explicit keyword arguments (Dependency Inversion).
     The Shell is the sole composition root responsible for reading configuration.
     """
-    global _db_router
+    global _db_router, _edi_container
 
     logger.info("EDI: Initializing DatabaseRouter.")
     _db_router = DatabaseRouter(
@@ -60,18 +63,42 @@ async def startup(
 
     if hasattr(app, "container"):
         app.container.tenant_resolver.override(providers.Object(resolver))
+        _edi_container = app.container
 
     logger.info("EDI: DatabaseRouter initialized.")
 
 
-async def shutdown() -> None:
+async def shutdown(app: FastAPI | None = None) -> None:
     """
-    Gracefully closes the EDI DatabaseRouter connection pool.
-    Called by the Shell lifespan on application shutdown.
+    Gracefully closes the EDI DatabaseRouter connection pool and container resources.
+    Called by the Shell lifespan or sub-app lifespan on application shutdown.
     """
-    global _db_router
+    global _db_router, _edi_container
 
-    if _db_router:
+    container = getattr(app, "container", None) if app is not None else None
+    if container is None:
+        container = _edi_container
+
+    if container:
+        logger.info("EDI: Shutting down as2_tester adapter.")
+        try:
+            tester = container.as2_tester()
+            if isinstance(tester, HttpxAS2TesterAdapter):
+                await tester.close()
+        except Exception:
+            logger.exception("edi_as2_tester_close_failed")
+        _edi_container = None
+
+    db_router = (
+        getattr(app.state, "db_router", None) if app is not None and hasattr(app, "state") else None
+    )
+    if db_router is None:
+        db_router = _db_router
+
+    if db_router:
         logger.info("EDI: Shutting down DatabaseRouter.")
-        await _db_router.close_all()
+        try:
+            await db_router.close_all()
+        except Exception:
+            logger.exception("edi_db_router_close_failed")
         _db_router = None

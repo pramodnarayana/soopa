@@ -24,19 +24,16 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
-from edi.bootstrap.lifespan import shutdown as edi_shutdown
-from edi.bootstrap.lifespan import startup as edi_startup
+from edi.bootstrap.lifespan import shutdown, startup
 from fastapi import FastAPI
+from notification.bootstrap.lifespan import shutdown as notification_shutdown
+from notification.bootstrap.lifespan import startup as notification_startup
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
 from unified_api.settings import get_settings
 
 logger = structlog.get_logger(__name__)
-
-
-from notification.bootstrap.lifespan import shutdown as notification_shutdown
-from notification.bootstrap.lifespan import startup as notification_startup
 
 
 @asynccontextmanager
@@ -86,7 +83,7 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             logger.info("Shell startup: initializing EDI domain infrastructure.")
             edi_settings = get_settings()
-            await edi_startup(
+            await startup(
                 edi_app,
                 global_db_url=str(edi_settings.database.global_url),
                 pool_size=edi_settings.database.pool_size,
@@ -99,7 +96,7 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             finally:
                 # EDI started successfully, always clean it up
                 logger.info("Shell shutdown: stopping EDI domain infrastructure.")
-                await edi_shutdown()
+                await shutdown(edi_app)
         finally:
             # Notification Engine started successfully, always clean it up
             logger.info("Shell shutdown: stopping Notification Engine workers.")

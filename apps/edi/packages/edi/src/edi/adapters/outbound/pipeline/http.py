@@ -1,15 +1,23 @@
 from collections.abc import Callable
 
 import httpx
+from shttp import (
+    HttpBackoffHandler,
+    HttpClient,
+    HttpError,
+    HttpNetworkError,
+    HttpTimeoutError,
+    SsrfSecurityError,
+    create_http_client,
+)
 
-from edi.adapters.outbound.security.network import ssrf_safe_context
 from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 
 
 class HttpxDeliveryClient(HttpDeliveryPort):
     """
-    Concrete implementation of HttpDeliveryPort using HTTPX.
+    Concrete implementation of HttpDeliveryPort using HttpClient.
     """
 
     def __init__(
@@ -17,10 +25,25 @@ class HttpxDeliveryClient(HttpDeliveryPort):
         timeout_secs: int = 30,
         validator: Callable[[str], bool] | None = None,
         allow_private_ips: bool = False,
-    ):
+        client: HttpClient | None = None,
+    ) -> None:
         self.timeout = timeout_secs
         self.validator = validator
         self.allow_private_ips = allow_private_ips
+        self._owned_client = client is None
+        if client is None:
+            self._raw_client: httpx.AsyncClient | None = create_http_client(
+                timeout=httpx.Timeout(float(timeout_secs), connect=10.0),
+                follow_redirects=False,
+            )
+            self._client = HttpClient(
+                self._raw_client,
+                allow_private_ips=allow_private_ips,
+                backoff_handler=HttpBackoffHandler(max_retries=0),
+            )
+        else:
+            self._raw_client = None
+            self._client = client
 
     async def deliver(
         self,
@@ -38,14 +61,22 @@ class HttpxDeliveryClient(HttpDeliveryPort):
         if self.validator and not self.validator(url):
             raise ValueError("URL validation failed for provided destination.")
 
-        with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
-            try:
-                async with httpx.AsyncClient(
-                    timeout=self.timeout, follow_redirects=False
-                ) as client:
-                    response = await client.post(url, content=payload, headers=headers)
-                    return response.status_code, response.text
-            except httpx.TimeoutException as e:
-                raise PortTimeoutError(f"HTTP connection timed out: {e}") from e
-            except httpx.RequestError as e:
-                raise PortConnectionError(f"HTTP connection failed: {e}") from e
+        try:
+            response = await self._client.post(
+                url,
+                content=payload,
+                headers=headers,
+                timeout=float(self.timeout),
+                allow_private_ips=self.allow_private_ips,
+            )
+            return response.status_code, response.text
+        except SsrfSecurityError:
+            raise
+        except HttpTimeoutError as e:
+            raise PortTimeoutError(f"HTTP connection timed out: {e}") from e
+        except (HttpNetworkError, HttpError, httpx.RequestError) as e:
+            raise PortConnectionError(f"HTTP connection failed: {e}") from e
+
+    async def close(self) -> None:
+        if self._owned_client and self._raw_client:
+            await self._raw_client.aclose()

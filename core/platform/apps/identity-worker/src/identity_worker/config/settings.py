@@ -21,6 +21,13 @@ class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
     Settings required for mutating Zitadel (used ONLY by Identity Worker).
     """
 
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
+
+    platform_org_id: str = Field(
+        validation_alias="IDENTITY_PLATFORM_ORG_ID",
+        min_length=1,
+        description="The Zitadel organization ID for the platform (Flowwolf).",
+    )
     api_url: str = Field(
         validation_alias="IDENTITY_API_URL",
         description="The base URL of the Zitadel API.",
@@ -38,12 +45,12 @@ class PlatformIdentityProvisioningSettings(PlatformIdentitySettings):
 
 
 class SqsSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
     identity_sync_queue_url: str = Field(validation_alias="SQS_IDENTITY_SYNC_QUEUE_URL", default="")
 
 
 class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", populate_by_name=True)
 
     app_env: str = Field(validation_alias="ENV", default="production")
 
@@ -103,6 +110,11 @@ class AppSettings(BaseSettings):
     @property
     def zitadel_tenant_role_group(self) -> str:
         return self.identity.tenant_role_group
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def zitadel_platform_org_id(self) -> str:
+        return self.identity.platform_org_id
 
 
 @lru_cache

@@ -2,7 +2,6 @@ from typing import Any
 
 import structlog
 from identity.adapters.outbound.zitadel.client import ZitadelClient
-from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpConflictError
 
 from identity_worker.adapters.outbound.identity_provider.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
@@ -19,12 +18,17 @@ logger = structlog.get_logger(__name__)
 
 class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
     def __init__(self, settings: AppSettings) -> None:
+        self.settings = settings
         super().__init__(
             api_url=settings.zitadel_api_url,
             machine_key=settings.zitadel_machine_key,
             ucp_project_id=settings.zitadel_ucp_project_id,
             default_user_password=settings.zitadel_default_user_password,
+            platform_org_id=settings.zitadel_platform_org_id,
         )
+
+    def _platform_headers(self) -> dict[str, str]:
+        return {"x-zitadel-orgid": self.settings.zitadel_platform_org_id}
 
     _MAX_SEARCH_PAGES = 1_000
 
@@ -56,6 +60,17 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
                     "queries": queries or [],
                 },
             )
+            if response.is_error:
+                logger.error(
+                    "zitadel_search_failed",
+                    endpoint=endpoint,
+                    status_code=response.status_code,
+                    body=response.text,
+                )
+                raise IdentityProviderPortError(
+                    f"ZITADEL search to {endpoint} failed with HTTP {response.status_code}: {response.text}"
+                )
+
             data = response.json()
             page = data.get("result", [])
             if not isinstance(page, list):
@@ -84,28 +99,40 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
             org_id=org_id,
             project_id=project_id,
         )
+        headers = self._platform_headers()
 
-        try:
-            await self.fetch_with_auth(
-                endpoint=f"/management/v1/projects/{project_id}/grants",
-                method="POST",
-                json={
-                    "grantedOrgId": org_id,
-                    "roleKeys": role_keys,
-                },
-            )
+        response = await self.fetch_with_auth(
+            endpoint=f"/management/v1/projects/{project_id}/grants",
+            method="POST",
+            headers=headers,
+            json={
+                "grantedOrgId": org_id,
+                "roleKeys": role_keys,
+            },
+        )
 
+        if response.status_code in (200, 201):
             logger.info(
                 "successfully_granted_project_to_organization",
                 project_id=project_id,
                 org_id=org_id,
             )
-        except ZitadelHttpConflictError:
+            return
+
+        if response.status_code == 409:
             logger.info("project_grant_already_exists", org_id=org_id, project_id=project_id)
             return
-        except Exception as e:
-            logger.exception("error_creating_project_grant", org_id=org_id)
-            raise IdentityProviderPortError("Failed to create project grant") from e
+
+        logger.error(
+            "error_creating_project_grant",
+            org_id=org_id,
+            project_id=project_id,
+            status_code=response.status_code,
+            body=response.text,
+        )
+        raise IdentityProviderPortError(
+            f"Failed to create project grant: HTTP {response.status_code} {response.text}"
+        )
 
     async def delete_project_grant(self, org_id: str, project_id: str) -> None:
         logger.info(
@@ -113,49 +140,62 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
             org_id=org_id,
             project_id=project_id,
         )
+        headers = self._platform_headers()
 
-        try:
-            # First, search for the grant to get its ID
-            search_data = await self._search_all(
-                endpoint=f"/management/v1/projects/{project_id}/grants/_search"
+        # First, search for the grant to get its ID
+        search_data = await self._search_all(
+            endpoint=f"/management/v1/projects/{project_id}/grants/_search",
+            headers=headers,
+        )
+        parsed_search_data = ZitadelProjectGrantsResponse.model_validate({"result": search_data})
+
+        grant = next((g for g in parsed_search_data.result if g.granted_org_id == org_id), None)
+
+        if not grant:
+            logger.info(
+                "project_grant_not_found_skipping_deletion",
+                org_id=org_id,
+                project_id=project_id,
             )
-            parsed_search_data = ZitadelProjectGrantsResponse.model_validate(
-                {"result": search_data}
-            )
+            return
 
-            grant = next((g for g in parsed_search_data.result if g.granted_org_id == org_id), None)
+        grant_id = grant.grant_id or grant.id
 
-            if not grant:
-                logger.warning(
-                    "project_grant_not_found_skipping_deletion",
-                    org_id=org_id,
-                    project_id=project_id,
-                )
-                return
+        # Delete the grant
+        response = await self.fetch_with_auth(
+            endpoint=f"/management/v1/projects/{project_id}/grants/{grant_id}",
+            method="DELETE",
+            headers=headers,
+        )
 
-            grant_id = grant.grant_id or grant.id
-
-            # Delete the grant
-            await self.fetch_with_auth(
-                endpoint=f"/management/v1/projects/{project_id}/grants/{grant_id}", method="DELETE"
-            )
-
+        if response.status_code in (200, 204, 404):
             logger.info(
                 "successfully_revoked_project_from_organization",
                 project_id=project_id,
                 org_id=org_id,
             )
-        except Exception as e:
-            logger.exception("error_deleting_project_grant", org_id=org_id)
-            raise IdentityProviderPortError("Failed to delete project grant") from e
+            return
+
+        logger.error(
+            "error_deleting_project_grant",
+            org_id=org_id,
+            project_id=project_id,
+            status_code=response.status_code,
+            body=response.text,
+        )
+        raise IdentityProviderPortError(
+            f"Failed to delete project grant: HTTP {response.status_code} {response.text}"
+        )
 
     async def get_roles(self, project_id: str | None = None) -> list[IdpRole]:
         target_project_id = project_id or self.ucp_project_id
         logger.info("fetching_roles_for_project", project_id=target_project_id)
+        headers = self._platform_headers()
 
         try:
             data = await self._search_all(
-                endpoint=f"/management/v1/projects/{target_project_id}/roles/_search"
+                endpoint=f"/management/v1/projects/{target_project_id}/roles/_search",
+                headers=headers,
             )
             parsed_data = ZitadelRolesResponse.model_validate({"result": data})
             return [
@@ -164,6 +204,8 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
                 )
                 for role in parsed_data.result
             ]
+        except IdentityProviderPortError:
+            raise
         except Exception as e:
             logger.exception("error_fetching_roles", project_id=target_project_id)
             raise IdentityProviderPortError("Failed to fetch roles") from e
@@ -199,6 +241,8 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
                 )
 
             return users_with_roles
+        except IdentityProviderPortError:
+            raise
         except Exception as e:
             logger.exception("error_fetching_users", org_id=org_id)
             raise IdentityProviderPortError("Failed to fetch users") from e

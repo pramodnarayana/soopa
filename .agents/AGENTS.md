@@ -24,6 +24,7 @@
 - **No Magic Strings (Enterprise Constants)**: NEVER scatter raw "magic strings" or undocumented status codes throughout the codebase. Any string literal that holds semantic meaning (e.g., database error codes, state machine statuses, system event names) MUST be extracted into strongly-typed `Enum`s or explicit Constant classes.
 - **No Inline Imports**: NEVER use inline or lazy imports inside functions/methods (e.g., `import foo`). All imports MUST be at the top of the file to comply with PEP 8 and enterprise standards. Avoid circular dependencies through proper architectural separation, not lazy imports.
 - **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container, Provider, or Application Factory) is the sole authority responsible for assembling concrete adapters together.
+- **First-Class Error Handling (No Exceptions for Known Errors)**: Error handling must be treated as a first-class citizen. NEVER raise exceptions for known, expected operational or domain outcomes (e.g., HTTP 4xx/5xx status codes, expected missing records, validation failures). Core clients, adapters, and domain services must return structured responses or Result types by default, using the Strategy Pattern or polymorphic handlers. Raising exceptions is an explicit opt-in strategy, never default procedural flow control.
 
 # Package Manager
 - ALWAYS use `pnpm` for frontend/Node.js package management instead of `npm`. Do not use `npm install`.
@@ -56,6 +57,7 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Context Injection (No String Interpolation)**: NEVER use f-strings to inject variables into log messages. ALWAYS use structured context binding (e.g., `logger.info("event_processed", tenant_id=tenant_id, event_id=event.id)` or `bound_logger = logger.bind(tenant_id=tenant_id)`).
 - **Exceptions**: Use `logger.exception("operation_failed", reason=...)` inside except blocks to automatically capture the stack trace into the structured log payload.
 - **Comprehensive Coverage**: We should always put enough logs for observability. Log major state transitions (e.g., started, completed), skipped actions, and dropped events so that every operational flow is fully traceable.
+- **No Warning Logs for Actual Errors**: NEVER use `logger.warning()` for actual errors or failures (e.g., security violations, validation rejections, failed connections, exhausted retries). `logger.warning()` is strictly reserved for benign, in-flight transient events (such as an intermediate retry attempt). All terminal errors, security violations, and operational failures MUST be logged explicitly as `logger.error(...)` (or `logger.exception(...)`).
 
 # Architectural Consistency (No Dual-Architectures)
 
