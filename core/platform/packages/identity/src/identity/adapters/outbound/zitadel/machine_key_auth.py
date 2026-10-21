@@ -105,25 +105,23 @@ class ZitadelMachineTokenProvider:
                 "IDENTITY_MACHINE_KEY could not sign an authentication assertion"
             ) from exc
 
+        token_url = f"{self._api_url}/oauth/v2/token"
+        request_payload = {
+            "grant_type": self._JWT_BEARER_GRANT,
+            "scope": self._API_SCOPE,
+            "assertion": assertion,
+        }
         try:
             if isinstance(client, HttpClient):
                 response = await client.post(
-                    f"{self._api_url}/oauth/v2/token",
-                    data={
-                        "grant_type": self._JWT_BEARER_GRANT,
-                        "scope": self._API_SCOPE,
-                        "assertion": assertion,
-                    },
+                    token_url,
+                    data=request_payload,
                     allow_private_ips=True,
                 )
             else:
                 response = await client.post(
-                    f"{self._api_url}/oauth/v2/token",
-                    data={
-                        "grant_type": self._JWT_BEARER_GRANT,
-                        "scope": self._API_SCOPE,
-                        "assertion": assertion,
-                    },
+                    token_url,
+                    data=request_payload,
                 )
         except (httpx.HTTPError, HttpError) as exc:
             raise ZitadelMachineAuthenticationError(
@@ -135,16 +133,16 @@ class ZitadelMachineTokenProvider:
             )
 
         try:
-            payload: object = response.json()
+            body: object = response.json()
         except ValueError as exc:
             raise ZitadelMachineAuthenticationError(
                 "Zitadel token endpoint returned invalid JSON"
             ) from exc
-        if not isinstance(payload, dict):
+        if not isinstance(body, dict):
             raise ZitadelMachineAuthenticationError(
                 "Zitadel token endpoint returned an invalid response"
             )
-        token_response: Mapping[object, object] = payload
+        token_response: Mapping[object, object] = body
         access_token = token_response.get("access_token")
         expires_in = token_response.get("expires_in")
         if not isinstance(access_token, str) or not access_token:

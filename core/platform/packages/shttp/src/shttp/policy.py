@@ -168,7 +168,7 @@ class RaiseForStatusPolicy:
 
     def __init__(
         self,
-        body_predicates: Sequence[BodyErrorPredicate] = (StandardJsonBodyErrorPredicate(),),
+        body_predicates: Sequence[BodyErrorPredicate] = (),
     ) -> None:
         self._body_predicates = body_predicates
 

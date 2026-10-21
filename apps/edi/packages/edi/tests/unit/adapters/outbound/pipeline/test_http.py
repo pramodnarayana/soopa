@@ -1,11 +1,10 @@
 import pytest
+from pytest_httpserver import HTTPServer
+from shttp import HttpClient
 
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
 
 pytestmark = pytest.mark.asyncio
-
-
-from pytest_httpserver import HTTPServer
 
 
 async def test_httpx_delivery_adapter(
@@ -33,3 +32,17 @@ async def test_httpx_delivery_adapter_validator() -> None:
 
     with pytest.raises(ValueError, match=r"URL validation failed for provided destination\."):
         await adapter.deliver("https://bad.com", b"{}")
+
+
+async def test_httpx_delivery_adapter_ownership_and_close() -> None:
+    adapter = HttpxDeliveryClient(allow_private_ips=True)
+    assert adapter._owned_client is True
+    await adapter.close()
+    assert adapter._client._client.is_closed
+
+    shared_client = HttpClient(allow_private_ips=True)
+    adapter2 = HttpxDeliveryClient(client=shared_client)
+    assert adapter2._owned_client is False
+    await adapter2.close()
+    assert not shared_client._client.is_closed
+    await shared_client.close()

@@ -34,7 +34,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
 
         grant_succeeded = False
         if self.ucp_project_id:
-            grant_succeeded = await self._grant_ucp_project(org_id, name)
+            grant_succeeded = await self._grant_ucp_project(org_id)
 
         return org_id, grant_succeeded
 
@@ -99,7 +99,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
         )
         raise IdentityProviderPortError("Failed to recover existing organization")
 
-    async def _grant_ucp_project(self, org_id: str, name: str) -> bool:
+    async def _grant_ucp_project(self, org_id: str) -> bool:
         if not self.ucp_project_id:
             return False
         tenant_group = self.settings.zitadel_tenant_role_group

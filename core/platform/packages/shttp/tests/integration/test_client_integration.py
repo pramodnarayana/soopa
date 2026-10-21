@@ -18,7 +18,7 @@ from shttp.exceptions import (
     SsrfViolationReason,
     TimeoutKind,
 )
-from shttp.policy import RaiseForStatusPolicy
+from shttp.policy import RaiseForStatusPolicy, StandardJsonBodyErrorPredicate
 from shttp.resilience import ExponentialBackoffStrategy, HttpBackoffHandler
 from shttp.types import HttpRequest
 from werkzeug.wrappers import Request, Response
@@ -134,7 +134,7 @@ async def test_integration_pseudo_success_error_detection(httpserver: HTTPServer
 
     client = HttpClient(
         allow_private_ips=True,
-        response_policy=RaiseForStatusPolicy(),
+        response_policy=RaiseForStatusPolicy(body_predicates=[StandardJsonBodyErrorPredicate()]),
     )
 
     with pytest.raises(HttpAuthError) as exc_info:

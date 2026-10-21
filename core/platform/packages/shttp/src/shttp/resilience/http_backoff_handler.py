@@ -19,8 +19,17 @@ logger = structlog.get_logger(__name__)
 
 DEFAULT_TRANSIENT_STATUS_CODES: frozenset[int] = frozenset({429, 500, 502, 503, 504})
 
+IDEMPOTENT_HTTP_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS", "PUT", "DELETE"})
+
+PRE_SEND_NETWORK_EXCEPTIONS = (
+    httpx.ConnectTimeout,
+    httpx.ConnectError,
+    httpx.PoolTimeout,
+)
+
 TRANSIENT_NETWORK_EXCEPTIONS = (
     httpx.ConnectTimeout,
+    httpx.ConnectError,
     httpx.ReadTimeout,
     httpx.WriteTimeout,
     httpx.PoolTimeout,
@@ -66,6 +75,10 @@ class HttpBackoffHandler:
         )
         self._transient_status_codes = transient_status_codes
 
+    @property
+    def max_retries(self) -> int:
+        return self._max_retries
+
     def _determine_backoff(
         self,
         attempt: int,
@@ -82,8 +95,10 @@ class HttpBackoffHandler:
         self,
         request_fn: Callable[[], Awaitable[httpx.Response]],
         url: str = "",
+        method: str = "GET",
     ) -> httpx.Response:
         """Executes an asynchronous request callable, retrying transient faults with backoff."""
+        is_idempotent = method.upper() in IDEMPOTENT_HTTP_METHODS
         attempt = 0
         while True:
             response: httpx.Response | None = None
@@ -91,6 +106,14 @@ class HttpBackoffHandler:
                 response = await request_fn()
                 if response.status_code not in self._transient_status_codes:
                     return response
+
+                # Non-idempotent methods are only retried on 429 rate limit or 503 with explicit Retry-After
+                if not is_idempotent:
+                    is_safe_retry = response.status_code == 429 or (
+                        response.status_code == 503 and bool(response.headers.get("Retry-After"))
+                    )
+                    if not is_safe_retry:
+                        return response
 
                 if attempt >= self._max_retries:
                     logger.error(
@@ -114,6 +137,16 @@ class HttpBackoffHandler:
                 attempt += 1
 
             except TRANSIENT_NETWORK_EXCEPTIONS as exc:
+                # For non-idempotent methods, only pre-send connection failures are safe to retry
+                if not is_idempotent and not isinstance(exc, PRE_SEND_NETWORK_EXCEPTIONS):
+                    logger.error(
+                        "http_non_idempotent_post_send_failure_not_retried",
+                        method=method,
+                        error=str(exc),
+                        url=url,
+                    )
+                    raise _map_network_exception(exc, url=url) from exc
+
                 if attempt >= self._max_retries:
                     logger.error(
                         "http_network_retries_exhausted",

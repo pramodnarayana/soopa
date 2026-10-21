@@ -31,8 +31,7 @@ async def test_worker_container_requires_database_url(monkeypatch):
     get_settings.cache_clear()
 
 
-async def test_zitadel_settings_require_platform_org_id(monkeypatch):
-    monkeypatch.setenv("IDENTITY_PLATFORM_ORG_ID", "")
+async def test_zitadel_settings_require_platform_org_id():
 
     with pytest.raises(ValidationError, match="platform_org_id"):
         AppSettings(

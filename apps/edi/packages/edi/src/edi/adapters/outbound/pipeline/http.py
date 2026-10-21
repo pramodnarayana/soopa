@@ -29,13 +29,19 @@ class HttpxDeliveryClient(HttpDeliveryPort):
         self.timeout = timeout_secs
         self.validator = validator
         self.allow_private_ips = allow_private_ips
-        self._client = client or HttpClient(
-            create_http_client(
+        self._owned_client = client is None
+        if client is None:
+            self._raw_client: httpx.AsyncClient | None = create_http_client(
                 timeout=httpx.Timeout(float(timeout_secs), connect=10.0),
                 follow_redirects=False,
-            ),
-            allow_private_ips=allow_private_ips,
-        )
+            )
+            self._client = HttpClient(
+                self._raw_client,
+                allow_private_ips=allow_private_ips,
+            )
+        else:
+            self._raw_client = None
+            self._client = client
 
     async def deliver(
         self,
@@ -70,4 +76,5 @@ class HttpxDeliveryClient(HttpDeliveryPort):
             raise PortConnectionError(f"HTTP connection failed: {e}") from e
 
     async def close(self) -> None:
-        await self._client.close()
+        if self._owned_client and self._raw_client:
+            await self._raw_client.aclose()

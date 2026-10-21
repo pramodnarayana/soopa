@@ -181,3 +181,45 @@ async def test_http_backoff_handler_network_timeout_retries_exhausted_raises_tim
 
     assert exc_info.value.kind == TimeoutKind.READ
     assert exc_info.value.classify().value == "TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_http_backoff_handler_non_idempotent_post_not_retried_on_500() -> None:
+    handler = HttpBackoffHandler(
+        max_retries=2,
+        strategies=[ExponentialBackoffStrategy(factor=0.01, max_delay=0.05)],
+    )
+    call_count = 0
+
+    async def request_fn() -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        return httpx.Response(500, request=httpx.Request("POST", "https://api.example.com"))
+
+    resp = await handler.execute(request_fn, method="POST")
+    assert resp.status_code == 500
+    assert call_count == 1  # Not retried for non-idempotent POST
+
+
+@pytest.mark.asyncio
+async def test_http_backoff_handler_non_idempotent_post_retried_on_429() -> None:
+    handler = HttpBackoffHandler(
+        max_retries=2,
+        strategies=[HeaderWaitTimeStrategy(max_wait_seconds=0.01)],
+    )
+    call_count = 0
+
+    async def request_fn() -> httpx.Response:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "0"},
+                request=httpx.Request("POST", "https://api.example.com"),
+            )
+        return httpx.Response(200, request=httpx.Request("POST", "https://api.example.com"))
+
+    resp = await handler.execute(request_fn, method="POST")
+    assert resp.status_code == 200
+    assert call_count == 2

@@ -45,6 +45,10 @@ class HttpClient:
         allow_private_ips: bool = False,
         response_policy: HttpResponsePolicy | None = None,
     ) -> None:
+        if client is not None and getattr(client, "follow_redirects", False):
+            raise ValueError(
+                "Injected httpx.AsyncClient must have follow_redirects=False to prevent SSRF bypass via redirects."
+            )
         self._client = client or create_http_client()
         self._backoff_handler = backoff_handler or HttpBackoffHandler()
         self._allow_private_ips = allow_private_ips
@@ -62,6 +66,9 @@ class HttpClient:
     async def close(self) -> None:
         if self._owns_client:
             await self._client.aclose()
+
+    async def aclose(self) -> None:
+        await self.close()
 
     async def __aenter__(self) -> HttpClient:
         return self
@@ -112,6 +119,7 @@ class HttpClient:
         """Executes an HTTP request wrapped in SSRF IP pinning, transient backoff retries, and response policy."""
         check_private = self._allow_private_ips if allow_private_ips is None else allow_private_ips
         effective_policy = policy or self._response_policy
+        effective_timeout = timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT
 
         with ssrf_safe_context(url, allow_private_ips=check_private):
             response = await self._backoff_handler.execute(
@@ -123,9 +131,10 @@ class HttpClient:
                     data=data,
                     content=content,
                     json=json,
-                    timeout=timeout,
+                    timeout=effective_timeout,
                 ),
                 url=url,
+                method=method,
             )
 
         return effective_policy.handle_response(response)

@@ -4,6 +4,7 @@ import httpx
 import structlog
 from seedwork.domain.types import JsonDict
 from shttp import HttpClient, HttpError, create_http_client
+from shttp.exceptions import HttpStatusError
 
 from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpError
 from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
@@ -86,9 +87,10 @@ class ZitadelClient:
                 endpoint=endpoint,
                 error=str(exc),
             )
+            status_code = exc.status_code if isinstance(exc, HttpStatusError) else 500
             raise ZitadelHttpError(
                 message=f"Request to {endpoint} failed: {exc}",
-                status_code=500,
+                status_code=status_code,
                 original_error=exc,
             ) from exc
 

@@ -48,8 +48,25 @@ socket.getaddrinfo = _patched_getaddrinfo
 def is_ip_private_or_restricted(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Checks whether an IP address belongs to private, loopback, link-local, multicast, or reserved ranges."""
     return bool(
-        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
     )
+
+
+def is_allowed_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Allowed private addresses (RFC 1918 and loopback) when allow_private_ips is True.
+
+    Link-local (e.g. AWS IMDS 169.254.169.254, fe80::), multicast, and reserved addresses are strictly forbidden.
+    """
+    if ip.is_link_local or ip.is_multicast or ip.is_unspecified:
+        return False
+    if ip.is_reserved and not ip.is_loopback:
+        return False
+    return bool(ip.is_private or ip.is_loopback)
 
 
 def validate_target_url(url: str, allow_private_ips: bool = False) -> bool:
@@ -86,7 +103,7 @@ def validate_target_url(url: str, allow_private_ips: bool = False) -> bool:
                 return False
 
             if is_ip_private_or_restricted(ip):
-                if allow_private_ips and (ip.is_private or ip.is_loopback):
+                if allow_private_ips and is_allowed_private_ip(ip):
                     continue
                 logger.error(
                     "ssrf_check_restricted_ip_blocked",
@@ -117,7 +134,7 @@ def get_safe_ip(hostname: str, allow_private_ips: bool = False) -> str | None:
             continue
 
         if is_ip_private_or_restricted(ip):
-            if allow_private_ips and (ip.is_private or ip.is_loopback):
+            if allow_private_ips and is_allowed_private_ip(ip):
                 return ip_str
             continue
         return ip_str
@@ -164,7 +181,7 @@ def ssrf_safe_context(url: str, allow_private_ips: bool = False) -> Iterator[Non
             continue
 
         if is_ip_private_or_restricted(ip):
-            if allow_private_ips and (ip.is_private or ip.is_loopback):
+            if allow_private_ips and is_allowed_private_ip(ip):
                 safe_ip = ip_str
                 break
             continue

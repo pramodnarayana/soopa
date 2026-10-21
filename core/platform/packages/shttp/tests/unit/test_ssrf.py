@@ -43,6 +43,11 @@ def test_get_safe_ip() -> None:
     assert get_safe_ip("127.0.0.1", allow_private_ips=False) is None
     assert get_safe_ip("127.0.0.1", allow_private_ips=True) == "127.0.0.1"
 
+    # AWS IMDS and link-local must NEVER be allowed even if allow_private_ips=True
+    assert get_safe_ip("169.254.169.254", allow_private_ips=True) is None
+    assert get_safe_ip("fe80::1", allow_private_ips=True) is None
+    assert validate_target_url("http://169.254.169.254", allow_private_ips=True) is False
+
     # Test public IPs natively without mocking
     assert get_safe_ip("8.8.8.8") == "8.8.8.8"
     assert get_safe_ip("1.1.1.1") == "1.1.1.1"

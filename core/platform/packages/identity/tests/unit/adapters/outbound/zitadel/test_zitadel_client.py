@@ -6,7 +6,8 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pytest_httpserver import HTTPServer
-from shttp import HttpClient
+from shttp import HttpClient, create_http_client
+from shttp.resilience import HeaderWaitTimeStrategy, HttpBackoffHandler
 from werkzeug.wrappers import Request, Response
 
 from identity.adapters.outbound.zitadel.client import ZitadelClient
@@ -74,9 +75,18 @@ async def test_zitadel_client_handles_429_rate_limit_backoff(httpserver: HTTPSer
         flakey_handler
     )
 
+    # Use max_wait_seconds=0.0 to verify retry logic without real sleep
+    fast_backoff = HttpBackoffHandler(strategies=[HeaderWaitTimeStrategy(max_wait_seconds=0.0)])
+    fast_http_client = HttpClient(
+        client=create_http_client(follow_redirects=False),
+        backoff_handler=fast_backoff,
+        allow_private_ips=True,
+    )
+
     client = ZitadelClient(
         api_url=httpserver.url_for(""),
         machine_key=_generate_machine_key(),
+        client=fast_http_client,
     )
 
     resp = await client.fetch_with_auth("/management/v1/orgs/_search", method="POST")

@@ -213,7 +213,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             status_code=res.status_code,
             body=res.text,
         )
-        raise IdentityProviderPortError(f"Failed to assign role: {res.text}")
+        raise IdentityProviderPortError("Failed to assign role to user in identity provider")
 
     async def update_tenant_role(self, user_id: str, org_id: str, role: str) -> None:
         logger.info(

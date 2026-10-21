@@ -59,10 +59,19 @@ class HttpxAS2TesterAdapter:
         client: HttpClient | None = None,
     ) -> None:
         self.allow_private_ips = allow_private_ips
-        self._client = client or HttpClient(
-            create_http_client(timeout=30.0, follow_redirects=False),
-            allow_private_ips=allow_private_ips,
-        )
+        self._owned_client = client is None
+        if client is None:
+            self._raw_client: httpx.AsyncClient | None = create_http_client(
+                timeout=30.0,
+                follow_redirects=False,
+            )
+            self._client = HttpClient(
+                self._raw_client,
+                allow_private_ips=allow_private_ips,
+            )
+        else:
+            self._raw_client = None
+            self._client = client
 
     async def test_connection(
         self,
@@ -178,3 +187,7 @@ class HttpxAS2TesterAdapter:
         except (ValueError, KeyError, TypeError) as e:
             logger.error("as2_test_mdn_parse_failed", error=str(e))
             return False, f"MDN parse error: {e}", payload_str, full_mdn
+
+    async def close(self) -> None:
+        if self._owned_client and self._raw_client:
+            await self._raw_client.aclose()
