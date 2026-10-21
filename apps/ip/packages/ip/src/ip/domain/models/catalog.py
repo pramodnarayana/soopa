@@ -7,16 +7,12 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import ClassVar
 
-from ip.domain.constants import IpDomainIdPrefix
 from seedwork.models import AggregateRoot
 
-
-class SyncMode(StrEnum):
-    FULL_REFRESH = "FULL_REFRESH"
-    INCREMENTAL = "INCREMENTAL"
+from ip.domain.constants import IpDomainIdPrefix
+from ip.domain.enums import SyncMode
 
 
 @dataclass(frozen=True)

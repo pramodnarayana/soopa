@@ -25,7 +25,11 @@ class IngestRecordCommand:
     connection_id: str
     stream_name: str
     payload: JsonDict | Sequence[JsonValue] | bytes
+    app_id: str = ""
     headers: JsonDict = field(default_factory=dict)
+    response_status_code: int | None = None
+    response_body: JsonDict | None = None
+    duration_ms: int | None = None
     business_correlation_id: str | None = None
     business_trace_id: str | None = None
 
@@ -84,12 +88,16 @@ class IngestRecordUseCase:
         record = InboundRecord.create(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
+            app_id=command.app_id,
             stream_name=command.stream_name,
             payload_bytes=payload_bytes,
             is_inlined=storage_result.is_inlined,
-            raw_payload=storage_result.raw_payload,
-            s3_key=storage_result.s3_key,
-            headers=command.headers,
+            request_body=storage_result.raw_payload,
+            request_s3_key=storage_result.s3_key,
+            request_headers=command.headers,
+            response_status_code=command.response_status_code or 202,
+            response_body=command.response_body,
+            duration_ms=command.duration_ms,
             business_correlation_id=command.business_correlation_id,
             business_trace_id=trace_id,
         )

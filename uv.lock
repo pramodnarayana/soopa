@@ -1831,6 +1831,8 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "security" },
     { name = "seedwork" },
+    { name = "sftp" },
+    { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
 ]
@@ -1857,6 +1859,8 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sftp", editable = "core/platform/packages/sftp" },
+    { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "structlog", specifier = ">=24.1.0" },
 ]

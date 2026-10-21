@@ -25,6 +25,8 @@ from ip.application.ingress.ingest_record_use_case import (
     IngestRecordCommand,
     IngestRecordUseCase,
 )
+from ip.domain.enums import ConnectionStatus
+from seedwork.domain.types import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.bootstrap.dependencies import get_db_session
 
@@ -37,6 +39,38 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/ingress",
     tags=["Integration Platform - Ingestion Gateway (L1)"],
 )
+
+ALLOWED_INGRESS_HEADER_NAMES = frozenset(
+    {
+        "content-type",
+        "content-length",
+        "user-agent",
+        "host",
+        "stripe-signature",
+    }
+)
+
+SENSITIVE_HEADER_NAMES = frozenset(
+    {
+        "authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "proxy-authorization",
+        "proxy-authenticate",
+    }
+)
+
+
+def _is_allowed_ingress_header(header_name: str) -> bool:
+    normalized = header_name.strip().lower()
+    if normalized in SENSITIVE_HEADER_NAMES:
+        return False
+    return (
+        normalized in ALLOWED_INGRESS_HEADER_NAMES
+        or normalized.startswith("x-")
+        or normalized.endswith(("-signature", "-hmac"))
+    )
 
 
 @router.post(
@@ -65,17 +99,28 @@ async def ingest_record(
             detail=f"Connection '{connection_id}' not found.",
         )
 
+    if conn.status == ConnectionStatus.DEACTIVATED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Connection '{connection_id}' is deactivated and cannot accept ingress.",
+        )
+
     # Ingest record and drain domain events to outbox in the same transaction
     inbound_repo = SqlAlchemyInboundRecordRepository(session)
     tiered_storage = TieredStorageAdapter()
     use_case = IngestRecordUseCase(inbound_repo=inbound_repo, tiered_storage=tiered_storage)
 
+    safe_headers: dict[str, JsonValue] = {
+        k: v for k, v in request.headers.items() if _is_allowed_ingress_header(k)
+    }
+
     cmd = IngestRecordCommand(
         tenant_id=tenant_id,
         connection_id=connection_id,
+        app_id=conn.app_id,
         stream_name=stream_name,
         payload=body,
-        headers=dict(request.headers),
+        headers=safe_headers,
         business_correlation_id=correlation_id,
     )
 

@@ -179,6 +179,22 @@ async def test_check_connection_use_case(httpserver: HTTPServer) -> None:
 
 
 @pytest.mark.asyncio
+async def test_check_connection_unknown_connector_returns_structured_failure() -> None:
+    use_case = CheckConnectionUseCase(connectors={})
+    cmd = CheckConnectionCommand(
+        app_id="non_existent_app",
+        auth_type="API_KEY",
+        public_config={},
+        raw_credentials={},
+    )
+    result = await use_case.execute(cmd)
+    assert result.success is False
+    assert result.status == "FAILED"
+    assert result.error_code == "CONNECTOR_NOT_FOUND"
+    assert "non_existent_app" in result.message
+
+
+@pytest.mark.asyncio
 async def test_discover_catalog_use_case(cipher: AesGcmCipher, httpserver: HTTPServer) -> None:
     httpserver.expect_request(
         "/api/v1/schema/streams",

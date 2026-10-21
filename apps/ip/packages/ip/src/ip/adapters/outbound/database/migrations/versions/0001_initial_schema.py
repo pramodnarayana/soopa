@@ -144,19 +144,25 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("app_id", sa.String(length=64), server_default="", nullable=False),
         sa.Column("business_trace_id", sa.String(length=64), nullable=False),
         sa.Column("business_correlation_id", sa.String(length=255), nullable=True),
         sa.Column("stream_name", sa.String(length=128), nullable=False),
-        sa.Column("raw_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("s3_key", sa.String(length=512), nullable=True),
-        sa.Column("payload_size_bytes", sa.Integer(), nullable=False),
-        sa.Column("payload_sha256", sa.String(length=64), nullable=False),
         sa.Column(
-            "headers",
+            "request_headers",
             postgresql.JSONB(astext_type=sa.Text()),
             server_default=sa.text("'{}'::jsonb"),
             nullable=False,
         ),
+        sa.Column("request_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("request_s3_key", sa.String(length=512), nullable=True),
+        sa.Column("request_size_bytes", sa.Integer(), nullable=False),
+        sa.Column("request_sha256", sa.String(length=64), nullable=False),
+        sa.Column("response_status_code", sa.Integer(), nullable=True),
+        sa.Column("response_headers", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("response_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("response_s3_key", sa.String(length=512), nullable=True),
+        sa.Column("duration_ms", sa.Integer(), nullable=True),
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", "received_at"),
         schema="ip",
@@ -182,10 +188,155 @@ def upgrade() -> None:
         unique=False,
         schema="ip",
     )
+    op.create_index(
+        "idx_inbound_app",
+        "inbound_records",
+        ["tenant_id", "app_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_table(
+        "outbound_records",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("app_id", sa.String(length=64), nullable=False),
+        sa.Column("business_trace_id", sa.String(length=64), nullable=False),
+        sa.Column("business_correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column("target_url", sa.String(length=1024), nullable=False),
+        sa.Column("http_method", sa.String(length=16), nullable=False),
+        sa.Column(
+            "request_headers",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("request_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("request_s3_key", sa.String(length=512), nullable=True),
+        sa.Column("request_size_bytes", sa.Integer(), nullable=False),
+        sa.Column("request_sha256", sa.String(length=64), nullable=False),
+        sa.Column("response_status_code", sa.Integer(), nullable=True),
+        sa.Column("response_headers", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("response_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("response_s3_key", sa.String(length=512), nullable=True),
+        sa.Column("duration_ms", sa.Integer(), nullable=True),
+        sa.Column("attempt_number", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column("status", sa.String(length=32), server_default="PENDING", nullable=False),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("sent_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id", "sent_at"),
+        schema="ip",
+    )
+    op.create_index(
+        "idx_outbound_trace",
+        "outbound_records",
+        ["tenant_id", "business_trace_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_outbound_corr",
+        "outbound_records",
+        ["tenant_id", "business_correlation_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_outbound_conn",
+        "outbound_records",
+        ["tenant_id", "connection_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_outbound_app",
+        "outbound_records",
+        ["tenant_id", "app_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_outbound_status",
+        "outbound_records",
+        ["tenant_id", "status"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_table(
+        "connection_stream_states",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=64), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column("cursor_field", sa.String(length=128), nullable=True),
+        sa.Column("cursor_value", sa.Text(), nullable=True),
+        sa.Column(
+            "records_synced_count", sa.BigInteger(), server_default=sa.text("0"), nullable=False
+        ),
+        sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["connection_id"],
+            ["ip.connections.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "connection_id",
+            "stream_name",
+            name="uq_ip_stream_state_tenant_conn_stream",
+        ),
+        schema="ip",
+    )
+    op.create_index(
+        "idx_ip_stream_state_conn",
+        "connection_stream_states",
+        ["tenant_id", "connection_id"],
+        unique=False,
+        schema="ip",
+    )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
+    op.drop_index(
+        "idx_ip_stream_state_conn",
+        table_name="connection_stream_states",
+        schema="ip",
+    )
+    op.drop_table("connection_stream_states", schema="ip")
+    op.drop_index(
+        "idx_outbound_status",
+        table_name="outbound_records",
+        schema="ip",
+    )
+    op.drop_index(
+        "idx_outbound_app",
+        table_name="outbound_records",
+        schema="ip",
+    )
+    op.drop_index(
+        "idx_outbound_conn",
+        table_name="outbound_records",
+        schema="ip",
+    )
+    op.drop_index(
+        "idx_outbound_corr",
+        table_name="outbound_records",
+        schema="ip",
+    )
+    op.drop_index(
+        "idx_outbound_trace",
+        table_name="outbound_records",
+        schema="ip",
+    )
+    op.drop_table("outbound_records", schema="ip")
+    op.drop_index(
+        "idx_inbound_app",
+        table_name="inbound_records",
+        schema="ip",
+    )
     op.drop_index(
         "idx_inbound_conn",
         table_name="inbound_records",

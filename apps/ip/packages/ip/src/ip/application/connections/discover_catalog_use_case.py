@@ -35,7 +35,7 @@ class DiscoverCatalogUseCase:
     async def execute(self, connection_id: str) -> DiscoveredCatalogDTO:
         connection = await self._connection_repo.get_by_id(connection_id)
         if not connection:
-            logger.warning(
+            logger.error(
                 "catalog_discovery_connection_not_found",
                 connection_id=connection_id,
             )
@@ -43,7 +43,7 @@ class DiscoverCatalogUseCase:
 
         connector = self._connectors.get(connection.app_id)
         if not connector:
-            logger.warning(
+            logger.error(
                 "catalog_discovery_connector_not_found",
                 connection_id=connection_id,
                 app_id=connection.app_id,
@@ -62,24 +62,39 @@ class DiscoverCatalogUseCase:
             credentials=credentials,
         )
 
-        domain_streams = [
-            StreamSchema(
-                name=s.name,
-                fields=[
-                    StreamField(
-                        name=f.name,
-                        data_type=f.data_type,
-                        nullable=f.nullable,
-                        description=f.description,
+        domain_streams: list[StreamSchema] = []
+        for s in catalog_dto.streams:
+            parsed_sync_modes: list[SyncMode] = []
+            for m in s.supported_sync_modes:
+                try:
+                    parsed_sync_modes.append(SyncMode(m))
+                except ValueError:
+                    logger.warning(
+                        "unsupported_sync_mode_skipped",
+                        stream_name=s.name,
+                        mode=m,
+                        connection_id=connection_id,
                     )
-                    for f in s.fields
-                ],
-                primary_key=list(s.primary_key),
-                cursor_field=s.cursor_field,
-                supported_sync_modes=[SyncMode(m) for m in s.supported_sync_modes],
+            if not parsed_sync_modes:
+                parsed_sync_modes = [SyncMode.FULL_REFRESH]
+
+            domain_streams.append(
+                StreamSchema(
+                    name=s.name,
+                    fields=[
+                        StreamField(
+                            name=f.name,
+                            data_type=f.data_type,
+                            nullable=f.nullable,
+                            description=f.description,
+                        )
+                        for f in s.fields
+                    ],
+                    primary_key=list(s.primary_key),
+                    cursor_field=s.cursor_field,
+                    supported_sync_modes=parsed_sync_modes,
+                )
             )
-            for s in catalog_dto.streams
-        ]
 
         active_catalog = await self._catalog_repo.get_active_by_connection_id(connection_id)
         next_version = (active_catalog.catalog_version + 1) if active_catalog else 1

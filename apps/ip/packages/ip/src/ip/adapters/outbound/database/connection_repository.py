@@ -6,12 +6,14 @@ from datetime import UTC, datetime
 from database.outbox_serializer import serialize_domain_event
 from ip.adapters.outbound.database.models.connection_model import ConnectionRecord
 from ip.adapters.outbound.database.models.outbox_model import IpOutboxRecord
+from ip.domain.exceptions import DuplicateConnectionFingerprintException
 from ip.domain.models.connection import AuthType, Connection, ConnectionStatus
 from ip.domain.types import JsonDict
 from ip.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from outbox.domain.constants import OutboxStatus
 from seedwork.utils import generate_id
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -124,7 +126,14 @@ class SqlAlchemyConnectionRepository(ConnectionRepositoryPort):
             self._update_record_from_domain(record, connection)
 
         self._drain_events(connection)
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as exc:
+            if "uq_tenant_active_fingerprint" in str(exc):
+                raise DuplicateConnectionFingerprintException(
+                    f"An active connection already exists with fingerprint '{connection.connection_fingerprint}' for tenant '{connection.tenant_id}'."
+                ) from exc
+            raise
 
     async def get_by_id(self, connection_id: str) -> Connection | None:
         stmt = select(ConnectionRecord).where(ConnectionRecord.id == connection_id)

@@ -174,3 +174,45 @@ def test_relink_restores_deactivated_connection() -> None:
     assert connection.deactivated_at is None
     assert len(connection.domain_events) == 1
     assert isinstance(connection.domain_events[0], ConnectionRelinkedEvent)
+
+
+def test_compute_connection_fingerprint_preserves_path_case() -> None:
+    fp1 = compute_connection_fingerprint(
+        "ten_1", "app_1", "HTTPS://API.Example.com/Path/CaseSensitive"
+    )
+    fp2 = compute_connection_fingerprint(
+        "ten_1", "app_1", "https://api.example.com/Path/CaseSensitive"
+    )
+    fp3 = compute_connection_fingerprint(
+        "ten_1", "app_1", "https://api.example.com/path/casesensitive"
+    )
+
+    # Host/scheme normalized (fp1 == fp2)
+    assert fp1 == fp2
+    # Path is case-sensitive (fp1 != fp3)
+    assert fp1 != fp3
+
+
+def test_relink_recomputes_fingerprint_when_public_config_changes() -> None:
+    connection = Connection.create(
+        tenant_id="ten_1",
+        app_id="itron_mdm",
+        name="Test",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.example.com/v1"},
+        encrypted_credentials=None,
+        endpoint_for_fingerprint="https://api.example.com/v1",
+    )
+    old_fingerprint = connection.connection_fingerprint
+    connection.deactivate()
+
+    connection.relink(
+        new_name="Relinked Test",
+        updated_public_config={"endpoint_url": "https://api.example.com/v2"},
+    )
+    new_fingerprint = connection.connection_fingerprint
+
+    assert new_fingerprint != old_fingerprint
+    assert new_fingerprint == compute_connection_fingerprint(
+        "ten_1", "itron_mdm", "https://api.example.com/v2"
+    )

@@ -64,7 +64,7 @@ async def test_ingest_record_inline() -> None:
     saved = await repo.get_by_id(result.record_id, "ten_energy_1")
     assert saved is not None
     assert saved.business_correlation_id == "TXN-4040"
-    assert saved.raw_payload == {"meter": "MTR-9001", "kwh": 128.4}
+    assert saved.request_body == {"meter": "MTR-9001", "kwh": 128.4}
     assert saved.stream_name == "meter_readings"
 
 
@@ -92,6 +92,6 @@ async def test_ingest_record_s3_offload() -> None:
 
     saved = await repo.get_by_id(result.record_id, "ten_crm_2")
     assert saved is not None
-    assert saved.raw_payload is None
-    assert saved.s3_key is not None
-    assert saved.s3_key.startswith("s3://ip-payloads/ten_crm_2/")
+    assert saved.request_body is None
+    assert saved.request_s3_key is not None
+    assert saved.request_s3_key.startswith("s3://ip-payloads/ten_crm_2/")

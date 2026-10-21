@@ -99,3 +99,27 @@ async def test_tiered_storage_offload_in_memory_fallback() -> None:
 
     retrieved = await adapter.retrieve(result)
     assert retrieved == payload_bytes
+
+
+@pytest.mark.asyncio
+async def test_tiered_storage_inline_non_json_bytes_base64_roundtrip() -> None:
+    adapter = TieredStorageAdapter(threshold_bytes=10000)
+    # Binary non-UTF8 payload (e.g. gzip or raw protobuf)
+    binary_data = bytes([0x00, 0xFF, 0xFE, 0x80, 0x55, 0xAA, 0x12, 0x34])
+
+    result = await adapter.store(
+        tenant_id="ten_binary",
+        trace_id="trc_bin_1",
+        payload_bytes=binary_data,
+        parsed_payload=None,
+    )
+
+    assert result.is_inlined is True
+    assert result.s3_key is None
+    # Must be stored under raw_b64
+    assert isinstance(result.raw_payload, dict)
+    assert "raw_b64" in result.raw_payload
+
+    # Exact byte-for-byte roundtrip
+    retrieved = await adapter.retrieve(result)
+    assert retrieved == binary_data

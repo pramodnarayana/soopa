@@ -28,6 +28,7 @@ from ip.application.connections.relink_connection_use_case import (
     RelinkConnectionUseCase,
 )
 from ip.application.responses import ConnectionDTO, DiscoveredCatalogDTO
+from ip.domain.enums import ConnectionStatus
 from ip.domain.exceptions import (
     AuthenticationFailedException,
     CatalogDiscoveryFailedException,
@@ -36,7 +37,6 @@ from ip.domain.exceptions import (
     DuplicateConnectionFingerprintException,
     InvalidConnectionStateException,
 )
-from ip.domain.models.connection import ConnectionStatus
 from ip.ports.outbound.connector_port import ConnectorPort
 from security.provider import SecurityProvider
 from sqlalchemy.ext.asyncio import AsyncSession

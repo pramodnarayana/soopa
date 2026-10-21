@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 import structlog
 from ip.application.responses import ConnectionCheckResultDTO
-from ip.domain.exceptions import ConnectorNotFoundException
 from ip.domain.types import JsonDict
 from ip.ports.outbound.connector_port import ConnectorPort
 
@@ -31,11 +30,16 @@ class CheckConnectionUseCase:
     async def execute(self, command: CheckConnectionCommand) -> ConnectionCheckResultDTO:
         connector = self._connectors.get(command.app_id)
         if not connector:
-            logger.warning(
+            logger.error(
                 "connection_check_connector_not_found",
                 app_id=command.app_id,
             )
-            raise ConnectorNotFoundException(f"Connector '{command.app_id}' is not registered.")
+            return ConnectionCheckResultDTO(
+                success=False,
+                status="FAILED",
+                message=f"Connector '{command.app_id}' is not registered.",
+                error_code="CONNECTOR_NOT_FOUND",
+            )
 
         result = await connector.check(command.public_config, command.raw_credentials)
         logger.info(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ip.domain.models.connection import AuthType
+from ip.domain.enums import AuthType
 from pydantic import BaseModel, Field
 
 

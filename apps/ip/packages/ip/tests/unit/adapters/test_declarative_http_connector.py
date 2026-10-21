@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+
 import httpx
 import pytest
 from ip.adapters.outbound.connectors.declarative_http_connector import DeclarativeHttpConnector
@@ -192,3 +194,52 @@ async def test_declarative_connector_write_record(
         )
         assert result.success is True
         assert result.record_id == "new_c99"
+
+
+@pytest.mark.asyncio
+async def test_declarative_connector_write_record_rejects_unsupported_operation(
+    sample_manifest: DeclarativeManifest,
+) -> None:
+    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    result = await connector.write_record(
+        stream_name="contacts",
+        command=WriteRecordCommand(
+            stream_name="contacts",
+            operation="DELETE",
+            payload={"id": "c1"},
+        ),
+        public_config={"subdomain": "acme"},
+        credentials={"access_token": "token"},
+    )
+    assert result.success is False
+    assert result.record_id == "failed"
+    assert "Unsupported write operation" in (result.error_message or "")
+
+
+def test_declarative_connector_extract_nested_supports_negative_indices(
+    sample_manifest: DeclarativeManifest,
+) -> None:
+    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    data = {"data": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}
+    assert connector._extract_nested(data, "data.-1.id") == "3"
+    assert connector._extract_nested(data, "data.-2.id") == "2"
+    assert connector._extract_nested(data, "data.-5.id") is None
+
+
+def test_declarative_connector_basic_auth_header(sample_manifest: DeclarativeManifest) -> None:
+    manifest = dataclasses.replace(sample_manifest, auth_type="BASIC")
+    connector = DeclarativeHttpConnector(manifest=manifest)
+    headers = connector._build_auth_headers({"username": "user", "password": "secret_password"})
+    assert "Authorization" in headers
+    assert headers["Authorization"].startswith("Basic ")
+
+
+def test_declarative_connector_requires_https_and_rejects_restricted_hosts(
+    sample_manifest: DeclarativeManifest,
+) -> None:
+    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    with pytest.raises(ValueError, match="must use HTTPS"):
+        connector._interpolate_string("http://insecure.com/api", {}, {})
+
+    with pytest.raises(ValueError, match="Restricted hostname or IP address"):
+        connector._interpolate_string("https://localhost/api", {}, {})

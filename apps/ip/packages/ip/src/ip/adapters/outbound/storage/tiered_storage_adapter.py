@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 
 import structlog
+from ip.domain.constants import DEFAULT_INLINE_THRESHOLD_BYTES
 from ip.domain.types import JsonDict
 from ip.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
@@ -14,8 +16,6 @@ from ip.ports.outbound.tiered_storage_port import (
 from storage.ports.payload_storage_port import PayloadStoragePort
 
 logger = structlog.get_logger(__name__)
-
-DEFAULT_INLINE_THRESHOLD_BYTES = 64 * 1024  # 64 KB
 
 
 class TieredStorageAdapter(TieredStoragePort):
@@ -46,11 +46,14 @@ class TieredStorageAdapter(TieredStoragePort):
                 json_data = parsed_payload
             else:
                 try:
-                    json_data = json.loads(payload_bytes.decode("utf-8"))
-                    if not isinstance(json_data, dict):
-                        json_data = {"data": json_data}
+                    decoded_text = payload_bytes.decode("utf-8")
+                    parsed_val = json.loads(decoded_text)
+                    if isinstance(parsed_val, dict):
+                        json_data = parsed_val
+                    else:
+                        json_data = {"__wrapped_scalar__": parsed_val}
                 except (json.JSONDecodeError, UnicodeDecodeError):
-                    json_data = {"raw_b64": payload_bytes.hex()}
+                    json_data = {"raw_b64": base64.b64encode(payload_bytes).decode("ascii")}
 
             return TieredStorageResultDTO(
                 is_inlined=True,
@@ -90,6 +93,12 @@ class TieredStorageAdapter(TieredStoragePort):
 
     async def retrieve(self, result: TieredStorageResultDTO) -> bytes:
         if result.is_inlined and result.raw_payload is not None:
+            if "raw_b64" in result.raw_payload and len(result.raw_payload) == 1:
+                return base64.b64decode(str(result.raw_payload["raw_b64"]))
+            if "__wrapped_scalar__" in result.raw_payload and len(result.raw_payload) == 1:
+                return json.dumps(
+                    result.raw_payload["__wrapped_scalar__"], separators=(",", ":")
+                ).encode("utf-8")
             return json.dumps(result.raw_payload, separators=(",", ":")).encode("utf-8")
 
         if result.s3_key is not None:

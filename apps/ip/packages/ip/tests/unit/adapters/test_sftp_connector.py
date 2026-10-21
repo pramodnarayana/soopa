@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import paramiko
 import pytest
-from ip.adapters.outbound.connectors.sftp_connector import SftpConnector
+from ip.adapters.outbound.connectors.sftp_connector import (
+    FingerprintVerificationPolicy,
+    SftpConnector,
+)
 
 
 class _FakeSftpSSHClient:
@@ -69,3 +73,23 @@ async def test_sftp_connector_discover() -> None:
     assert len(catalog.streams) >= 1
     stream_names = [s.name for s in catalog.streams]
     assert "files" in stream_names
+
+
+def test_sftp_host_key_fingerprint_verification_policy() -> None:
+    policy = FingerprintVerificationPolicy(expected_fingerprint="aa:bb:cc:dd")
+    client = paramiko.SSHClient()
+
+    class FakeKey:
+        def get_fingerprint(self) -> bytes:
+            return bytes.fromhex("11223344")
+
+    # Mismatch raises SSHException
+    with pytest.raises(paramiko.SSHException, match="Host key mismatch"):
+        policy.missing_host_key(client, "sftp.example.com", FakeKey())
+
+    class MatchingKey:
+        def get_fingerprint(self) -> bytes:
+            return bytes.fromhex("aabbccdd")
+
+    # Matching does not raise
+    policy.missing_host_key(client, "sftp.example.com", MatchingKey())

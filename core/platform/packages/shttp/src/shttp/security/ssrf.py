@@ -88,6 +88,8 @@ def validate_target_url(url: str, allow_private_ips: bool = False) -> bool:
         try:
             addr_info = socket.getaddrinfo(parsed.hostname, None)
         except socket.gaierror as exc:
+            if allow_private_ips:
+                return True
             logger.error(
                 "ssrf_check_unresolvable_hostname",
                 hostname=parsed.hostname,
@@ -164,6 +166,9 @@ def ssrf_safe_context(url: str, allow_private_ips: bool = False) -> Iterator[Non
     try:
         addr_info = socket.getaddrinfo(parsed.hostname, None)
     except socket.gaierror as exc:
+        if allow_private_ips:
+            yield
+            return
         raise SsrfSecurityError(
             f"DNS resolution failed for target host '{parsed.hostname}'",
             url=url,

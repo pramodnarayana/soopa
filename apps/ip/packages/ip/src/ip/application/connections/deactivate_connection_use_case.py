@@ -27,7 +27,7 @@ class DeactivateConnectionUseCase:
     async def execute(self, command: DeactivateConnectionCommand) -> ConnectionDTO:
         connection = await self._connection_repo.get_by_id(command.connection_id)
         if not connection or connection.tenant_id != command.tenant_id:
-            logger.warning(
+            logger.error(
                 "connection_deactivation_target_not_found",
                 connection_id=command.connection_id,
                 tenant_id=command.tenant_id,

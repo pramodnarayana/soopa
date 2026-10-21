@@ -41,7 +41,9 @@ depends_on = [
     "ip.ports",
     "ip.application",
     "security",
-    "database.models"
+    "database.models",
+    "shttp",
+    "sftp"
 ]
 
 [[modules]]

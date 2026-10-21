@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
@@ -26,12 +27,34 @@ from ip.ports.types import (
     WriteRecordCommand,
     WriteResultDTO,
 )
+from sftp import (
+    SftpConnectionConfig,
+    SftpError,
+    create_ssh_client,
+)
 
 logger = structlog.get_logger(__name__)
 
 
+class FingerprintVerificationPolicy(paramiko.MissingHostKeyPolicy):
+    """Verifies that the server's public key fingerprint matches the expected SHA/hex fingerprint."""
+
+    def __init__(self, expected_fingerprint: str) -> None:
+        self._expected_fingerprint = expected_fingerprint
+
+    def missing_host_key(
+        self, client: paramiko.SSHClient, hostname: str, key: paramiko.PKey
+    ) -> None:
+        actual_fp = key.get_fingerprint().hex()
+        clean_expected = self._expected_fingerprint.replace(":", "").lower()
+        if actual_fp.lower() != clean_expected:
+            raise paramiko.SSHException(
+                f"Host key mismatch for {hostname}: expected {self._expected_fingerprint}, got {actual_fp}"
+            )
+
+
 class SftpConnector(BaseConnector):
-    """Native Protocol Connector for secure file transfer operations over SFTP using Paramiko."""
+    """Native Protocol Connector for secure file transfer operations over SFTP using centralized platform sftp."""
 
     @classmethod
     def default_catalog_summary(cls) -> CatalogAppSummaryDTO:
@@ -50,6 +73,24 @@ class SftpConnector(BaseConnector):
     @property
     def app_id(self) -> str:
         return "sftp"
+
+    def _build_config(
+        self,
+        public_config: JsonDict,
+        credentials: JsonDict,
+    ) -> SftpConnectionConfig:
+        return SftpConnectionConfig(
+            host=str(public_config.get("host", "")),
+            port=int(public_config.get("port", 22)),
+            username=str(credentials.get("username", "") or public_config.get("username", "")),
+            password=str(credentials.get("password", "")) if "password" in credentials else None,
+            private_key=str(credentials.get("private_key", ""))
+            if "private_key" in credentials
+            else None,
+            base_directory=str(public_config.get("base_directory", "/")),
+            timeout_seconds=self._timeout_seconds,
+            allow_local=True,
+        )
 
     def spec(self) -> JsonDict:
         schema = ConnectorPropertySchema(
@@ -112,38 +153,31 @@ class SftpConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> paramiko.SSHClient:
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 - Pluggable customer SFTP endpoints require dynamic host verification
-
-        host = str(public_config.get("host", ""))
-        port = int(public_config.get("port", 22))
-        username = str(credentials.get("username", "") or public_config.get("username", ""))
-        password = str(credentials.get("password", "")) if "password" in credentials else None
-        private_key_str = (
-            str(credentials.get("private_key", "")) if "private_key" in credentials else None
-        )
-
-        connect_kwargs: dict[str, Any] = {
-            "hostname": host,
-            "port": port,
-            "username": username,
-            "timeout": self._timeout_seconds,
-            "look_for_keys": False,
-            "allow_agent": False,
-        }
-
-        if private_key_str:
-            key_file = io.StringIO(private_key_str)
-            try:
-                connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key(key_file)
-            except (paramiko.SSHException, ValueError):
-                key_file.seek(0)
-                connect_kwargs["pkey"] = paramiko.Ed25519Key.from_private_key(key_file)
-        elif password:
-            connect_kwargs["password"] = password
-
-        client.connect(**connect_kwargs)
-        return client
+        expected_fingerprint = str(public_config.get("host_key_fingerprint", "")).strip()
+        config = self._build_config(public_config, credentials)
+        if expected_fingerprint:
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(FingerprintVerificationPolicy(expected_fingerprint))
+            connect_kwargs: dict[str, Any] = {
+                "hostname": config.host,
+                "port": config.port,
+                "username": config.username,
+                "timeout": config.timeout_seconds,
+                "look_for_keys": False,
+                "allow_agent": False,
+            }
+            if config.private_key:
+                key_file = io.StringIO(config.private_key)
+                try:
+                    connect_kwargs["pkey"] = paramiko.RSAKey.from_private_key(key_file)
+                except (paramiko.SSHException, ValueError):
+                    key_file.seek(0)
+                    connect_kwargs["pkey"] = paramiko.Ed25519Key.from_private_key(key_file)
+            elif config.password:
+                connect_kwargs["password"] = config.password
+            client.connect(**connect_kwargs)
+            return client
+        return create_ssh_client(config, diagnostic=True)
 
     async def check(
         self,
@@ -151,15 +185,15 @@ class SftpConnector(BaseConnector):
         credentials: JsonDict,
     ) -> ConnectionCheckResultDTO:
         try:
-            client = self._create_client(public_config, credentials)
-            client.close()
+            client = await asyncio.to_thread(self._create_client, public_config, credentials)
+            await asyncio.to_thread(client.close)
             return ConnectionCheckResultDTO(
                 success=True,
                 status="SUCCEEDED",
                 message="SFTP connection verified successfully",
             )
-        except (paramiko.SSHException, OSError, TimeoutError) as exc:
-            logger.warning("sftp_check_failed", error=str(exc))
+        except (SftpError, paramiko.SSHException, OSError, TimeoutError) as exc:
+            logger.error("sftp_check_failed", error=str(exc))
             return ConnectionCheckResultDTO(
                 success=False,
                 status="FAILED",
@@ -218,12 +252,12 @@ class SftpConnector(BaseConnector):
         cursor: str | None = None,
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
-        client = self._create_client(public_config, credentials)
+        client = await asyncio.to_thread(self._create_client, public_config, credentials)
         try:
-            sftp = client.open_sftp()
+            sftp = await asyncio.to_thread(client.open_sftp)
             try:
                 base_dir = str(public_config.get("base_directory", "/"))
-                files = sftp.listdir_attr(base_dir)
+                files = await asyncio.to_thread(sftp.listdir_attr, base_dir)
                 for count, f in enumerate(files):
                     if count >= limit:
                         break
@@ -240,9 +274,9 @@ class SftpConnector(BaseConnector):
                         emitted_at=datetime.now(UTC).isoformat(),
                     )
             finally:
-                sftp.close()
+                await asyncio.to_thread(sftp.close)
         finally:
-            client.close()
+            await asyncio.to_thread(client.close)
 
     async def write_record(
         self,
@@ -251,16 +285,20 @@ class SftpConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> WriteResultDTO:
-        client = self._create_client(public_config, credentials)
+        client = await asyncio.to_thread(self._create_client, public_config, credentials)
         try:
-            sftp = client.open_sftp()
+            sftp = await asyncio.to_thread(client.open_sftp)
             try:
                 filename = command.record_id or str(command.payload.get("filename", "upload.dat"))
                 content = str(command.payload.get("content", ""))
                 base_dir = str(public_config.get("base_directory", "/")).rstrip("/")
                 target_path = f"{base_dir}/{filename}"
-                with sftp.file(target_path, "w") as remote_file:
-                    remote_file.write(content)
+
+                def _write_sync() -> None:
+                    with sftp.file(target_path, "w") as remote_file:
+                        remote_file.write(content)
+
+                await asyncio.to_thread(_write_sync)
 
                 return WriteResultDTO(
                     success=True,
@@ -268,6 +306,6 @@ class SftpConnector(BaseConnector):
                     destination_id=target_path,
                 )
             finally:
-                sftp.close()
+                await asyncio.to_thread(sftp.close)
         finally:
-            client.close()
+            await asyncio.to_thread(client.close)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from database.outbox_serializer import serialize_domain_event
 from ip.adapters.outbound.database.models.inbound_record_model import InboundRecordModel
 from ip.adapters.outbound.database.models.outbox_model import IpOutboxRecord
 from ip.domain.models.inbound_record import InboundRecord
@@ -13,6 +12,8 @@ from outbox.domain.constants import OutboxStatus
 from seedwork.utils import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.outbox_serializer import serialize_domain_event
 
 
 class SqlAlchemyInboundRecordRepository(InboundRecordRepositoryPort):
@@ -28,14 +29,22 @@ class SqlAlchemyInboundRecordRepository(InboundRecordRepositoryPort):
             id=orm.id,
             tenant_id=orm.tenant_id,
             connection_id=orm.connection_id,
+            app_id=orm.app_id,
             business_trace_id=orm.business_trace_id,
             business_correlation_id=orm.business_correlation_id,
             stream_name=orm.stream_name,
-            raw_payload=dict(orm.raw_payload) if orm.raw_payload is not None else None,
-            s3_key=orm.s3_key,
-            payload_size_bytes=orm.payload_size_bytes,
-            payload_sha256=orm.payload_sha256,
-            headers=dict(orm.headers),
+            request_headers=dict(orm.request_headers),
+            request_body=dict(orm.request_body) if orm.request_body is not None else None,
+            request_s3_key=orm.request_s3_key,
+            request_size_bytes=orm.request_size_bytes,
+            request_sha256=orm.request_sha256,
+            response_status_code=orm.response_status_code,
+            response_headers=dict(orm.response_headers)
+            if orm.response_headers is not None
+            else None,
+            response_body=dict(orm.response_body) if orm.response_body is not None else None,
+            response_s3_key=orm.response_s3_key,
+            duration_ms=orm.duration_ms,
             received_at=orm.received_at,
         )
 
@@ -46,14 +55,20 @@ class SqlAlchemyInboundRecordRepository(InboundRecordRepositoryPort):
             id=domain.id,
             tenant_id=domain.tenant_id,
             connection_id=domain.connection_id,
+            app_id=domain.app_id,
             business_trace_id=domain.business_trace_id,
             business_correlation_id=domain.business_correlation_id,
             stream_name=domain.stream_name,
-            raw_payload=domain.raw_payload,
-            s3_key=domain.s3_key,
-            payload_size_bytes=domain.payload_size_bytes,
-            payload_sha256=domain.payload_sha256,
-            headers=domain.headers,
+            request_headers=domain.request_headers,
+            request_body=domain.request_body,
+            request_s3_key=domain.request_s3_key,
+            request_size_bytes=domain.request_size_bytes,
+            request_sha256=domain.request_sha256,
+            response_status_code=domain.response_status_code,
+            response_headers=domain.response_headers,
+            response_body=domain.response_body,
+            response_s3_key=domain.response_s3_key,
+            duration_ms=domain.duration_ms,
             received_at=domain.received_at,
         )
 

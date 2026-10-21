@@ -1,10 +1,11 @@
 """SQLAlchemy ORM model for ip.outbox table."""
 
-from database.models.common import OutboxMixin
 from ip.adapters.outbound.database.models.base import IpBase
 from seedwork.utils import generate_id
 from sqlalchemy import Index, String, text
 from sqlalchemy.orm import Mapped, mapped_column
+
+from database.models.common import OutboxMixin
 
 
 class IpOutboxRecord(IpBase, OutboxMixin):

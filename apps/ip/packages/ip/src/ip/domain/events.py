@@ -4,6 +4,8 @@ from dataclasses import dataclass
 
 from seedwork.events import DomainEvent
 
+from ip.domain.enums import IpEventType
+
 
 @dataclass(frozen=True)
 class ConnectionCreatedEvent(DomainEvent):
@@ -15,7 +17,7 @@ class ConnectionCreatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "ip.connection.created"
+        return IpEventType.CONNECTION_CREATED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -29,7 +31,7 @@ class ConnectionActivatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "ip.connection.activated"
+        return IpEventType.CONNECTION_ACTIVATED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -43,7 +45,7 @@ class ConnectionDeactivatedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "ip.connection.deactivated"
+        return IpEventType.CONNECTION_DEACTIVATED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -58,7 +60,7 @@ class ConnectionRelinkedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "ip.connection.relinked"
+        return IpEventType.CONNECTION_RELINKED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -73,7 +75,7 @@ class ConnectionErrorRecordedEvent(DomainEvent):
 
     @property
     def event_name(self) -> str:
-        return "ip.connection.error_recorded"
+        return IpEventType.CONNECTION_ERROR_RECORDED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -93,10 +95,52 @@ class InboundRecordCreatedEvent(DomainEvent):
     payload_sha256: str
     is_inlined: bool
     s3_key: str | None
+    app_id: str = ""
 
     @property
     def event_name(self) -> str:
-        return "ip.inbound_record.created"
+        return IpEventType.INBOUND_RECORD_CREATED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class OutboundRecordCreatedEvent(DomainEvent):
+    """Domain event emitted when an external outbound dispatch is executed."""
+
+    record_id: str
+    tenant_id: str
+    connection_id: str
+    app_id: str
+    business_trace_id: str
+    business_correlation_id: str | None
+    stream_name: str
+    status: str
+    response_status_code: int | None = None
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.OUTBOUND_RECORD_CREATED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class StreamStateCheckpointedEvent(DomainEvent):
+    """Domain event emitted when an incremental sync stream advances its cursor checkpoint."""
+
+    state_id: str
+    tenant_id: str
+    connection_id: str
+    stream_name: str
+    cursor_value: str
+    records_synced_count: int
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.STREAM_STATE_CHECKPOINTED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

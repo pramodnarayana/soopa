@@ -18,6 +18,7 @@ from ip.application.responses import (
 )
 from ip.domain.exceptions import CatalogDiscoveryFailedException
 from ip.domain.types import JsonDict
+from shttp import HttpClient, HttpError, PassThroughPolicy, create_http_client
 
 logger = structlog.get_logger(__name__)
 
@@ -36,8 +37,23 @@ class ItronMdmConnector(BaseConnector):
             connector_type="CUSTOM_PYTHON",
         )
 
-    def __init__(self, timeout_seconds: float = 10.0) -> None:
+    def __init__(
+        self,
+        timeout_seconds: float = 10.0,
+        http_client: HttpClient | None = None,
+        allow_private_ips: bool = True,
+    ) -> None:
         self._timeout_seconds = timeout_seconds
+        self._allow_private_ips = allow_private_ips
+        if http_client is not None:
+            self._http_client = http_client
+        else:
+            raw_client = create_http_client(timeout=timeout_seconds)
+            self._http_client = HttpClient(
+                client=raw_client,
+                allow_private_ips=allow_private_ips,
+                response_policy=PassThroughPolicy(),
+            )
 
     @property
     def app_id(self) -> str:
@@ -45,6 +61,8 @@ class ItronMdmConnector(BaseConnector):
 
     def spec(self) -> JsonDict:
         return {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "ItronOpenWayRivaConfig",
             "type": "object",
             "required": ["endpoint_url", "api_key"],
             "properties": {
@@ -161,30 +179,31 @@ class ItronMdmConnector(BaseConnector):
         headers = self._get_headers(credentials)
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.get(health_url, headers=headers)
+            response = await self._http_client.get(
+                health_url, headers=headers, timeout=self._timeout_seconds
+            )
 
-                if response.status_code == 200:
-                    return ConnectionCheckResultDTO(
-                        success=True,
-                        status="SUCCEEDED",
-                        message="Connection to Itron MDM system established successfully.",
-                    )
-                if response.status_code in (401, 403):
-                    return ConnectionCheckResultDTO(
-                        success=False,
-                        status="FAILED",
-                        message="Authentication failed: Invalid AMI access key.",
-                        error_code="UNAUTHORIZED",
-                    )
+            if response.status_code == 200:
+                return ConnectionCheckResultDTO(
+                    success=True,
+                    status="SUCCEEDED",
+                    message="Connection to Itron MDM system established successfully.",
+                )
+            if response.status_code in (401, 403):
                 return ConnectionCheckResultDTO(
                     success=False,
                     status="FAILED",
-                    message=f"Itron MDM returned HTTP {response.status_code}",
-                    error_code="HTTP_ERROR",
+                    message="Authentication failed: Invalid AMI access key.",
+                    error_code="UNAUTHORIZED",
                 )
-        except httpx.RequestError as exc:
-            logger.warning("itron_mdm_check_network_failure", endpoint=endpoint, error=str(exc))
+            return ConnectionCheckResultDTO(
+                success=False,
+                status="FAILED",
+                message=f"Itron MDM returned HTTP {response.status_code}",
+                error_code="HTTP_ERROR",
+            )
+        except (HttpError, httpx.HTTPError, OSError, ValueError) as exc:
+            logger.error("itron_mdm_check_network_failure", endpoint=endpoint, error=str(exc))
             return ConnectionCheckResultDTO(
                 success=False,
                 status="FAILED",
@@ -198,55 +217,59 @@ class ItronMdmConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> DiscoveredCatalogDTO:
-        endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
+        try:
+            endpoint = self._validate_endpoint(str(public_config.get("endpoint_url", "")))
+        except ValueError as exc:
+            raise CatalogDiscoveryFailedException(
+                f"Invalid endpoint URL for Itron MDM schema discovery: {exc}"
+            ) from exc
         schema_url = f"{endpoint}/api/v1/schema/streams"
         headers = self._get_headers(credentials)
 
         streams: list[StreamSchemaDTO] = []
         try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                response = await client.get(schema_url, headers=headers)
-                if response.status_code == 200:
-                    payload = response.json()
-                    for s in payload.get("streams", []):
-                        fields = [
-                            StreamFieldDTO(
-                                name=f["name"],
-                                data_type=f["data_type"],
-                                nullable=f.get("nullable", True),
-                                description=f.get("description"),
-                            )
-                            for f in s.get("fields", [])
-                        ]
-                        streams.append(
-                            StreamSchemaDTO(
-                                name=s["name"],
-                                fields=fields,
-                                primary_key=list(s.get("primary_key", ["id"])),
-                                cursor_field=s.get("cursor_field"),
-                                supported_sync_modes=tuple(
-                                    s.get("supported_sync_modes", ["FULL_REFRESH", "INCREMENTAL"])
-                                ),
-                            )
+            response = await self._http_client.get(
+                schema_url, headers=headers, timeout=self._timeout_seconds
+            )
+            if response.status_code == 200:
+                payload = response.json()
+                for s in payload.get("streams", []):
+                    fields = [
+                        StreamFieldDTO(
+                            name=f["name"],
+                            data_type=f["data_type"],
+                            nullable=f.get("nullable", True),
+                            description=f.get("description"),
                         )
-                elif response.status_code == 404:
-                    logger.info("itron_mdm_schema_endpoint_404_fallback", endpoint=endpoint)
-                    streams = self._get_default_streams()
-                elif response.status_code in (401, 403):
-                    raise CatalogDiscoveryFailedException(
-                        f"Authentication failed during schema discovery: HTTP {response.status_code}"
+                        for f in s.get("fields", [])
+                    ]
+                    streams.append(
+                        StreamSchemaDTO(
+                            name=s["name"],
+                            fields=fields,
+                            primary_key=list(s.get("primary_key", ["id"])),
+                            cursor_field=s.get("cursor_field"),
+                            supported_sync_modes=tuple(
+                                s.get("supported_sync_modes", ["FULL_REFRESH", "INCREMENTAL"])
+                            ),
+                        )
                     )
-                else:
-                    raise CatalogDiscoveryFailedException(
-                        f"Schema discovery failed with HTTP {response.status_code}: {response.text}"
-                    )
-        except httpx.RequestError as exc:
+            elif response.status_code == 404:
+                logger.info("itron_mdm_schema_endpoint_404_fallback", endpoint=endpoint)
+                streams = self._get_default_streams()
+            elif response.status_code in (401, 403):
+                raise CatalogDiscoveryFailedException(
+                    f"Authentication failed during schema discovery: HTTP {response.status_code}"
+                )
+            else:
+                raise CatalogDiscoveryFailedException(
+                    f"Schema discovery failed with HTTP {response.status_code}: {response.text}"
+                )
+        except CatalogDiscoveryFailedException:
+            raise
+        except Exception as exc:
             raise CatalogDiscoveryFailedException(
                 f"Network error during schema discovery for {endpoint}: {exc}"
-            ) from exc
-        except (ValueError, KeyError) as exc:
-            raise CatalogDiscoveryFailedException(
-                f"Malformed schema response from {endpoint}: {exc}"
             ) from exc
 
         return self.build_catalog_dto(connection_id, streams)
@@ -266,11 +289,21 @@ class ItronMdmConnector(BaseConnector):
         if cursor:
             params["cursor"] = cursor
 
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            resp = await client.get(url, headers=headers, params=params)
-            resp.raise_for_status()
-            data = resp.json()
-            return [str(item) for item in data.get("ids", [])]
+        resp = await self._http_client.get(
+            url, headers=headers, params=params, timeout=self._timeout_seconds
+        )
+        if not resp.is_success:
+            logger.error(
+                "itron_mdm_list_objects_failed",
+                endpoint=endpoint,
+                stream_name=stream_name,
+                status_code=resp.status_code,
+            )
+            return []
+
+        payload = resp.json()
+        ids = payload.get("ids", [])
+        return [str(i) for i in ids]
 
     async def read_stream(
         self,
@@ -287,11 +320,19 @@ class ItronMdmConnector(BaseConnector):
         if cursor:
             params["cursor"] = cursor
 
-        async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-            resp = await client.get(url, headers=headers, params=params)
-            resp.raise_for_status()
-            payload = resp.json()
+        resp = await self._http_client.get(
+            url, headers=headers, params=params, timeout=self._timeout_seconds
+        )
+        if not resp.is_success:
+            logger.error(
+                "itron_mdm_read_stream_failed",
+                endpoint=endpoint,
+                stream_name=stream_name,
+                status_code=resp.status_code,
+            )
+            return
 
+        payload = resp.json()
         for item in payload.get("records", []):
             rec_id = str(item.get("id") or item.get("meter_id", ""))
             yield RecordEnvelopeDTO(
@@ -328,49 +369,54 @@ class ItronMdmConnector(BaseConnector):
         op = command.operation.upper()
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout_seconds) as client:
-                if op == "CREATE":
-                    url = f"{endpoint}/api/v1/streams/{stream_name}/records"
-                    resp = await client.post(url, headers=headers, json=command.payload)
-                elif op in ("UPDATE", "UPSERT"):
-                    if not command.record_id:
-                        return WriteResultDTO(
-                            success=False,
-                            record_id="failed",
-                            error_message=f"Operation '{op}' requires a record_id.",
-                        )
-                    url = f"{endpoint}/api/v1/streams/{stream_name}/records/{command.record_id}"
-                    resp = await client.put(url, headers=headers, json=command.payload)
-                elif op == "DELETE":
-                    if not command.record_id:
-                        return WriteResultDTO(
-                            success=False,
-                            record_id="failed",
-                            error_message="Operation 'DELETE' requires a record_id.",
-                        )
-                    url = f"{endpoint}/api/v1/streams/{stream_name}/records/{command.record_id}"
-                    resp = await client.delete(url, headers=headers)
-                else:
+            if op == "CREATE":
+                url = f"{endpoint}/api/v1/streams/{stream_name}/records"
+                resp = await self._http_client.post(
+                    url, headers=headers, json=command.payload, timeout=self._timeout_seconds
+                )
+            elif op in ("UPDATE", "UPSERT"):
+                if not command.record_id:
                     return WriteResultDTO(
                         success=False,
                         record_id="failed",
-                        error_message=f"Unsupported write operation: {command.operation}",
+                        error_message=f"Operation '{op}' requires a record_id.",
                     )
-
-                resp.raise_for_status()
-                data = resp.json() if resp.content else {}
-                return WriteResultDTO(
-                    success=True,
-                    record_id=str(data.get("id", command.record_id or "written_rec")),
-                    destination_id=str(data.get("destination_id", f"{self.app_id}_{stream_name}")),
+                url = f"{endpoint}/api/v1/streams/{stream_name}/records/{command.record_id}"
+                resp = await self._http_client.request(
+                    "PUT", url, headers=headers, json=command.payload, timeout=self._timeout_seconds
                 )
-        except httpx.HTTPStatusError as exc:
+            elif op == "DELETE":
+                if not command.record_id:
+                    return WriteResultDTO(
+                        success=False,
+                        record_id="failed",
+                        error_message="Operation 'DELETE' requires a record_id.",
+                    )
+                url = f"{endpoint}/api/v1/streams/{stream_name}/records/{command.record_id}"
+                resp = await self._http_client.request(
+                    "DELETE", url, headers=headers, timeout=self._timeout_seconds
+                )
+            else:
+                return WriteResultDTO(
+                    success=False,
+                    record_id="failed",
+                    error_message=f"Unsupported write operation: {command.operation}",
+                )
+
+            if not resp.is_success:
+                return WriteResultDTO(
+                    success=False,
+                    record_id="failed",
+                    error_message=f"HTTP {resp.status_code}: {resp.text}",
+                )
+
+            data = resp.json() if resp.content else {}
             return WriteResultDTO(
-                success=False,
-                record_id="failed",
-                error_message=f"HTTP {exc.response.status_code}: {exc.response.text}",
+                success=True,
+                record_id=str(data.get("id", command.record_id or "written_rec")),
+                destination_id=str(data.get("destination_id", f"{self.app_id}_{stream_name}")),
             )
-        except httpx.RequestError as exc:
+        except (HttpError, httpx.HTTPError, OSError, ValueError) as exc:
             return WriteResultDTO(
                 success=False,
                 record_id="failed",

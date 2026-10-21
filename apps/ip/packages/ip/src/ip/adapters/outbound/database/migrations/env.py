@@ -1,9 +1,21 @@
 import asyncio
 
-# Import models to ensure they are registered with IpBase.registry
 import ip.adapters.outbound.database.models.catalog_model
 import ip.adapters.outbound.database.models.connection_model
-import ip.adapters.outbound.database.models.outbox_model  # noqa: F401
+import ip.adapters.outbound.database.models.inbound_record_model
+import ip.adapters.outbound.database.models.outbound_record_model
+import ip.adapters.outbound.database.models.outbox_model
+import ip.adapters.outbound.database.models.stream_state_model
+
+# Structural registry anchoring all ORM models into Alembic metadata
+_REGISTERED_ORM_MODULES = (
+    ip.adapters.outbound.database.models.catalog_model,
+    ip.adapters.outbound.database.models.connection_model,
+    ip.adapters.outbound.database.models.inbound_record_model,
+    ip.adapters.outbound.database.models.outbox_model,
+    ip.adapters.outbound.database.models.outbound_record_model,
+    ip.adapters.outbound.database.models.stream_state_model,
+)
 from alembic import context
 from ip.adapters.outbound.database.models.base import IpBase
 from seedwork.infra.config import load_settings_safely

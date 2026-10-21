@@ -4,19 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Literal
 
-
-class PropertyType(StrEnum):
-    """Dynamic UI input types for self-service connector configuration."""
-
-    SHORT_TEXT = "shortText"
-    SECRET_TEXT = "secretText"  # noqa: S105 - UI schema property type identifier, not a password credential
-    DROPDOWN = "dropdown"
-    OAUTH2 = "oauth2"
-    NUMBER = "number"
-    BOOLEAN = "boolean"
+from ip.domain.enums import PaginationType, PropertyType
 
 
 @dataclass(frozen=True)
@@ -106,16 +96,6 @@ class ConnectorPropertySchema:
         if self.description is not None:
             data["description"] = self.description
         return data
-
-
-class PaginationType(StrEnum):
-    """Pagination strategies for Declarative HTTP APIs."""
-
-    NONE = "none"
-    OFFSET_LIMIT = "offset_limit"
-    PAGE_NUMBER = "page_number"
-    CURSOR = "cursor"
-    LINK_HEADER = "link_header"
 
 
 @dataclass(frozen=True)

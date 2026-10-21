@@ -21,6 +21,8 @@ dependencies = [
     "security",
     "outbox",
     "pubsub",
+    "shttp",
+    "sftp",
 ]
 
 [tool.uv.sources]
@@ -30,6 +32,8 @@ observability = { workspace = true }
 security = { workspace = true }
 outbox = { workspace = true }
 pubsub = { workspace = true }
+shttp = { workspace = true }
+sftp = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

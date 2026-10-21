@@ -1,14 +1,8 @@
 """API Key authentication strategy (header or query parameter)."""
 
-from enum import StrEnum
-
 import httpx
+from ip.domain.enums import ApiKeyPlacement
 from ip.ports.outbound.auth_strategy_port import AuthenticatorPort
-
-
-class ApiKeyPlacement(StrEnum):
-    HEADER = "HEADER"
-    QUERY_PARAM = "QUERY_PARAM"
 
 
 class ApiKeyAuthStrategy(AuthenticatorPort):

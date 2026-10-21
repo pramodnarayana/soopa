@@ -5,10 +5,13 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from enum import StrEnum
 from typing import ClassVar
+from urllib.parse import urlparse
+
+from seedwork.models import AggregateRoot
 
 from ip.domain.constants import IpDomainIdPrefix
+from ip.domain.enums import AuthType, ConnectionStatus
 from ip.domain.events import (
     ConnectionActivatedEvent,
     ConnectionCreatedEvent,
@@ -18,29 +21,23 @@ from ip.domain.events import (
 )
 from ip.domain.exceptions import InvalidConnectionStateException
 from ip.domain.types import JsonDict
-from seedwork.models import AggregateRoot
-
-
-class ConnectionStatus(StrEnum):
-    PENDING_AUTH = "PENDING_AUTH"
-    ACTIVE = "ACTIVE"
-    ERROR = "ERROR"
-    DEACTIVATED = "DEACTIVATED"
-
-
-class AuthType(StrEnum):
-    NO_AUTH = "NO_AUTH"
-    BASIC_AUTH = "BASIC_AUTH"
-    BEARER_TOKEN = "BEARER_TOKEN"  # noqa: S105 - Enum constant for Bearer token auth strategy, not a secret
-    API_KEY = "API_KEY"
-    OAUTH2 = "OAUTH2"
-    MTLS = "MTLS"
-    CUSTOM = "CUSTOM"
 
 
 def compute_connection_fingerprint(tenant_id: str, app_id: str, endpoint: str) -> str:
-    """Computes a deterministic SHA-256 fingerprint for a connection."""
-    raw = f"{tenant_id.strip().lower()}:{app_id.strip().lower()}:{endpoint.strip().lower()}"
+    """Computes a deterministic SHA-256 fingerprint for a connection.
+
+    Normalizes scheme, host, and port to lowercase, while preserving case-sensitive URL paths.
+    """
+    cleaned_endpoint = endpoint.strip()
+    parsed = urlparse(cleaned_endpoint)
+    if parsed.scheme and parsed.netloc:
+        normalized_endpoint = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{parsed.path}"
+        if parsed.query:
+            normalized_endpoint = f"{normalized_endpoint}?{parsed.query}"
+    else:
+        normalized_endpoint = cleaned_endpoint
+
+    raw = f"{tenant_id.strip().lower()}:{app_id.strip().lower()}:{normalized_endpoint}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -192,6 +189,15 @@ class Connection(AggregateRoot):
             self.encrypted_credentials = updated_encrypted_credentials
         if updated_public_config is not None:
             self.public_config = updated_public_config
+            new_endpoint = (
+                updated_public_config.get("endpoint_url")
+                or updated_public_config.get("host")
+                or updated_public_config.get("base_url")
+                or self.app_id
+            )
+            self.connection_fingerprint = compute_connection_fingerprint(
+                self.tenant_id, self.app_id, str(new_endpoint)
+            )
 
         self.status = ConnectionStatus.ACTIVE
         self.deactivated_at = None
