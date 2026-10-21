@@ -138,7 +138,7 @@ def _provision_zitadel_resources(pat_token: str, root_dir: Path) -> dict[str, st
     load_dotenv(root_dir / ".env")
     base_url = "http://ucp.localhost:8080"
 
-    company_name = os.getenv("COMPANY_NAME", "FlowWolf")
+    company_name = os.getenv("COMPANY_NAME", "Flowwolf")
     company_domain = os.getenv("COMPANY_DOMAIN", "flowwolf.io")
     platform_admin_email = os.getenv("IDENTITY_PLATFORM_ADMIN_EMAIL", f"admin@{company_domain}")
     platform_admin_password = os.getenv(

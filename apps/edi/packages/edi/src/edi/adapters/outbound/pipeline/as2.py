@@ -7,8 +7,15 @@ from collections.abc import Callable
 
 import httpx
 import structlog
+from shttp import (
+    HttpClient,
+    HttpError,
+    HttpNetworkError,
+    HttpTimeoutError,
+    SsrfSecurityError,
+    create_http_client,
+)
 
-from edi.adapters.outbound.security.network import ssrf_safe_context
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 
@@ -17,7 +24,7 @@ logger = structlog.get_logger(__name__)
 
 class HttpxAS2DeliveryClient(AS2DeliveryPort):
     """
-    Concrete implementation of AS2DeliveryPort using HTTPX.
+    Concrete implementation of AS2DeliveryPort using HttpClient.
 
     Sends a raw AS2 HTTP POST to the trading partner's endpoint.
     Handles transport-level concerns only: timeouts, redirects, and
@@ -29,10 +36,18 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
         timeout_secs: int = 30,
         validator: Callable[[str], bool] | None = None,
         allow_private_ips: bool = False,
+        client: HttpClient | None = None,
     ) -> None:
         self.timeout = timeout_secs
         self.validator = validator
         self.allow_private_ips = allow_private_ips
+        self._client = client or HttpClient(
+            create_http_client(
+                timeout=httpx.Timeout(float(timeout_secs), connect=10.0),
+                follow_redirects=False,  # AS2 spec does not permit redirect following
+            ),
+            allow_private_ips=allow_private_ips,
+        )
 
     async def deliver(
         self,
@@ -44,31 +59,44 @@ class HttpxAS2DeliveryClient(AS2DeliveryPort):
         Executes the AS2 HTTP POST.
 
         Raises:
-            httpx.ConnectError: If the remote endpoint is unreachable.
-            httpx.TimeoutException: If the connection or read times out.
+            PortConnectionError: If the remote endpoint is unreachable.
+            PortTimeoutError: If the connection or read times out.
+            ValueError: If URL validation fails.
         """
-        logger.debug("AS2 HTTP POST → {url}, Content-Length={len(body)}", url=url, val_1=len(body))
+        logger.debug(
+            "as2_http_post_initiating",
+            url=url,
+            content_length=len(body),
+        )
 
         if self.validator and not self.validator(url):
             raise ValueError("URL validation failed for provided destination.")
 
         try:
-            with ssrf_safe_context(url, allow_private_ips=self.allow_private_ips):
-                async with httpx.AsyncClient(
-                    timeout=self.timeout,
-                    follow_redirects=False,  # AS2 spec does not permit redirect following
-                ) as client:
-                    response = await client.post(url, content=body, headers=headers)
-        except httpx.TimeoutException as e:
+            response = await self._client.post(
+                url,
+                content=body,
+                headers=headers,
+                timeout=float(self.timeout),
+                allow_private_ips=self.allow_private_ips,
+            )
+        except SsrfSecurityError:
+            raise
+        except HttpTimeoutError as e:
             raise PortTimeoutError(f"AS2 connection timed out: {e}") from e
-        except httpx.RequestError as e:
+        except (HttpNetworkError, HttpError, httpx.RequestError) as e:
             raise PortConnectionError(f"AS2 connection failed: {e}") from e
 
-        # Convert httpx headers to a standard dict
+        # Convert headers to a standard dict
         resp_headers = {k.lower(): v for k, v in response.headers.items()}
 
         logger.info(
-            "AS2 response from {url}: HTTP {response.status_code}, "
-            "Content-Length={len(response.content)}"
+            "as2_http_post_response",
+            url=url,
+            status_code=response.status_code,
+            content_length=len(response.content),
         )
         return response.status_code, resp_headers, response.content
+
+    async def close(self) -> None:
+        await self._client.close()

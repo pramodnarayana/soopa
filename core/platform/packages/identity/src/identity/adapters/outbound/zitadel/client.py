@@ -1,24 +1,14 @@
-from typing import Any
+from __future__ import annotations
 
 import httpx
 import structlog
+from seedwork.domain.types import JsonDict
+from shttp import HttpClient, HttpError, create_http_client
 
-from identity.adapters.outbound.zitadel.exceptions import (
-    HttpStatusCode,
-    ZitadelHttpBadRequestError,
-    ZitadelHttpConflictError,
-    ZitadelHttpError,
-    ZitadelHttpNotFoundError,
-)
+from identity.adapters.outbound.zitadel.exceptions import ZitadelHttpError
 from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
 
 logger = structlog.get_logger(__name__)
-
-ERROR_MAPPING: dict[int, type[ZitadelHttpError]] = {
-    HttpStatusCode.CONFLICT.value: ZitadelHttpConflictError,
-    HttpStatusCode.NOT_FOUND.value: ZitadelHttpNotFoundError,
-    HttpStatusCode.BAD_REQUEST.value: ZitadelHttpBadRequestError,
-}
 
 
 class ZitadelClient:
@@ -28,12 +18,18 @@ class ZitadelClient:
         machine_key: str,
         ucp_project_id: str | None = None,
         default_user_password: str | None = None,
+        platform_org_id: str | None = None,
+        client: HttpClient | None = None,
     ) -> None:
         self.api_url = api_url
         self.machine_key = machine_key
         self.ucp_project_id = ucp_project_id
         self.default_user_password = default_user_password
-        self._client: httpx.AsyncClient | None = None
+        self.platform_org_id = platform_org_id
+        self._client: HttpClient = client or HttpClient(
+            create_http_client(timeout=httpx.Timeout(30.0, connect=10.0)),
+            allow_private_ips=True,
+        )
         self._token_provider: ZitadelMachineTokenProvider | None = None
 
     def _assert_config(self) -> None:
@@ -42,32 +38,32 @@ class ZitadelClient:
         if not self.api_url.startswith("https://") and not self.api_url.startswith("http://"):
             raise ValueError("IDENTITY_API_URL must use HTTP or HTTPS scheme")
 
-    def _get_client(self) -> httpx.AsyncClient:
-        """Get or create a persistent AsyncClient with timeout configuration."""
-        if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(30.0))
+    def _get_client(self) -> HttpClient:
+        """Get the underlying HttpClient."""
         return self._client
+
+    @property
+    def raw_client(self) -> httpx.AsyncClient:
+        """Get the underlying httpx.AsyncClient if needed."""
+        return self._client.raw_client
 
     async def close(self) -> None:
         """Close the persistent client connection."""
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        await self._client.close()
 
     async def fetch_with_auth(
         self,
         endpoint: str,
         method: str = "GET",
-        json: dict[str, Any] | None = None,
+        json: JsonDict | None = None,
         headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         self._assert_config()
 
-        client = self._get_client()
         if self._token_provider is None:
             self._token_provider = ZitadelMachineTokenProvider(self.api_url, self.machine_key)
 
-        access_token = await self._token_provider.get_access_token(client)
+        access_token = await self._token_provider.get_access_token(self._client)
         req_headers = {
             "Authorization": f"Bearer {access_token}",
             "Accept": "application/json",
@@ -76,23 +72,24 @@ class ZitadelClient:
             req_headers.update(headers)
 
         url = f"{self.api_url}{endpoint}"
-        response = await client.request(method, url, headers=req_headers, json=json)
-
-        if response.status_code >= 400:
-            error_text = response.text
-            ExceptionClass = ERROR_MAPPING.get(response.status_code, ZitadelHttpError)
-
+        try:
+            response = await self._client.request(
+                method=method,
+                url=url,
+                headers=req_headers,
+                json=json,
+                allow_private_ips=True,
+            )
+        except HttpError as exc:
             logger.error(
-                "zitadel_http_request_failed",
+                "zitadel_http_request_exception",
                 endpoint=endpoint,
-                status_code=response.status_code,
-                error_text=error_text,
+                error=str(exc),
             )
-
-            raise ExceptionClass(
-                message=f"Request to {endpoint} failed with {response.status_code}: {error_text}",
-                status_code=response.status_code,
-                original_error=Exception(error_text),
-            )
+            raise ZitadelHttpError(
+                message=f"Request to {endpoint} failed: {exc}",
+                status_code=500,
+                original_error=exc,
+            ) from exc
 
         return response

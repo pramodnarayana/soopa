@@ -8,6 +8,7 @@ import jwt
 import structlog
 from jwt import PyJWK, PyJWKClient
 from seedwork.domain.types import JsonDict
+from shttp import HttpClient, HttpError, HttpStatusError, create_http_client
 
 from identity.adapters.outbound.zitadel.constants import ZitadelClaims
 from identity.domain.identity_context import PLATFORM_TENANT_ID, TokenClaims
@@ -31,13 +32,21 @@ class ZitadelTokenVerifierPortOptions:
 
 
 class ZitadelTokenVerifierPort(TokenVerifierPort):
-    def __init__(self, options: ZitadelTokenVerifierPortOptions) -> None:
+    def __init__(
+        self,
+        options: ZitadelTokenVerifierPortOptions,
+        client: HttpClient | None = None,
+    ) -> None:
         self._options = options
         self._jwks_url = options.jwks_url or f"{options.issuer}/oauth/v2/keys"
         jwks_headers: dict[str, str] | None = None
         if options.jwks_host_header:
             jwks_headers = {"Host": options.jwks_host_header}
         self._jwks_client = PyJWKClient(self._jwks_url, headers=jwks_headers)
+        self._client: HttpClient = client or HttpClient(
+            create_http_client(timeout=httpx.Timeout(5.0, connect=3.0)),
+            allow_private_ips=True,
+        )
         # Thread-safe async cache for userinfo to prevent network calls on every request
         # Format: {jti: (userinfo_dict, timestamp)}
         self._userinfo_cache: dict[str, tuple[JsonDict, float]] = {}
@@ -79,8 +88,8 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             try:
                 userinfo = await self._get_cached_userinfo(token, jti)
                 payload.update(userinfo)
-            except (httpx.RequestError, ValueError, TypeError) as e:
-                logger.warning("Failed to fetch userinfo", exc_info=e)
+            except (HttpError, ValueError, TypeError) as e:
+                logger.error("failed_to_fetch_userinfo", exc_info=e)
 
         # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
         roles_dict = payload.get(ZitadelClaims.PROJECT_ROLES)
@@ -158,14 +167,24 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             else:
                 del self._userinfo_cache[jti]
 
-        # Fetch from Zitadel asynchronously (no thread pool exhaustion)
+        # Fetch from Zitadel asynchronously using shttp HttpClient
         url = f"{self._options.issuer}/oidc/v1/userinfo"
         headers = {"Authorization": f"Bearer {token}"}
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            userinfo = response.json()
+        response = await self._client.get(
+            url,
+            headers=headers,
+            allow_private_ips=True,
+        )
+        if response.status_code >= 400:
+            logger.error(
+                "userinfo_request_failed",
+                url=url,
+                status_code=response.status_code,
+            )
+            raise HttpStatusError.from_response(response)
+
+        userinfo = response.json()
 
         if not isinstance(userinfo, dict):
             raise TypeError("userinfo response must be a JSON object")
@@ -181,3 +200,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             del self._userinfo_cache[oldest_key]
 
         return userinfo
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client."""
+        await self._client.close()
