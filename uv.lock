@@ -22,6 +22,7 @@ members = [
     "identity-worker",
     "infra-aws",
     "infra-seedwork",
+    "ip",
     "modular-monolith",
     "notification",
     "notification-channel-worker",
@@ -1811,6 +1812,61 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/33/f6/227c48c5fe47fa178ccf1fda8f047d16c97ba926567b661e9ce2045c600c/invoke-3.0.3.tar.gz", hash = "sha256:437b6a622223824380bfb4e64f612711a6b648c795f565efc8625af66fb57f0c", size = 343419, upload-time = "2026-04-07T15:17:48.307Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5a/de/bbc12563bbf979618d17625a4e753ff7a078523e28d870d3626daa97261a/invoke-3.0.3-py3-none-any.whl", hash = "sha256:f11327165e5cbb89b2ad1d88d3292b5113332c43b8553b494da435d6ec6f5053", size = 160958, upload-time = "2026-04-07T15:17:46.875Z" },
+]
+
+[[package]]
+name = "ip"
+version = "0.1.0"
+source = { editable = "apps/ip/packages/ip" }
+dependencies = [
+    { name = "asyncpg" },
+    { name = "cryptography" },
+    { name = "database" },
+    { name = "httpx" },
+    { name = "observability" },
+    { name = "outbox" },
+    { name = "paramiko" },
+    { name = "pubsub" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "security" },
+    { name = "seedwork" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-httpserver" },
+    { name = "pytest-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "asyncpg", specifier = ">=0.29.0" },
+    { name = "cryptography", specifier = ">=44.0.0" },
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "outbox", editable = "core/platform/packages/outbox" },
+    { name = "paramiko", specifier = ">=3.3.1" },
+    { name = "pubsub", editable = "core/platform/packages/pubsub" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "security", editable = "core/platform/packages/security" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "structlog", specifier = ">=24.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-httpserver", specifier = ">=1.0.0" },
+    { name = "pytest-mock", specifier = ">=3.12.0" },
 ]
 
 [[package]]
@@ -4246,6 +4302,7 @@ source = { editable = "core/platform/apps/unified-api" }
 dependencies = [
     { name = "edi" },
     { name = "fastapi" },
+    { name = "ip" },
     { name = "notification" },
     { name = "observability" },
     { name = "secret-store" },
@@ -4272,6 +4329,7 @@ dev = [
 requires-dist = [
     { name = "edi", editable = "apps/edi/packages/edi" },
     { name = "fastapi", specifier = "==0.136.0" },
+    { name = "ip", editable = "apps/ip/packages/ip" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "notification", editable = "core/platform/packages/notification" },
     { name = "observability", editable = "core/platform/packages/observability" },

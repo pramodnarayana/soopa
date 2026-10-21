@@ -18,6 +18,7 @@ from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
+from ip.adapters.outbound.database.models.base import IpBase
 from secret_store import AwsSecretsManagerAdapter
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
@@ -83,7 +84,9 @@ async def db_engine():
 
     # In integration tests, ensure schemas and tables exist on the test database
     async with engine.begin() as conn:
+        await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ip;"))
         await conn.run_sync(TenantBase.metadata.create_all)
+        await conn.run_sync(IpBase.metadata.create_all)
 
     yield engine
     await engine.dispose()

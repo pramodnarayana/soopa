@@ -58,6 +58,7 @@ members = [
     "infra/cloud/aws",
     "core/platform/packages/security",
     "core/platform/packages/secret-store",
+    "apps/ip/packages/ip",
 ]
 exclude = ["apps/edi/packages/ui"]
 
@@ -78,6 +79,7 @@ unified-api = { workspace = true }
 unified-worker = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
+ip = { workspace = true }
 shttp = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
@@ -164,6 +166,7 @@ mypy_path = [
     "core/platform/apps/unified-worker/src",
     "core/platform/packages/security/src",
     "core/platform/packages/secret-store/src",
+    "apps/ip/packages/ip/src",
     "core/platform/packages/sftp/src",
     "core/platform/packages/shttp/src",
 ]
@@ -316,6 +319,7 @@ extraPaths = [
     "apps/edi/apps/edi-config-sync-worker/src",
     "core/platform/packages/secret-store/src",
     "core/platform/packages/sftp/src",
+    "apps/ip/packages/ip/src",
     "core/platform/packages/shttp/src",
 ]
 
@@ -357,6 +361,7 @@ known_first_party = [
     "pubsub",
     "secret_store",
     "sftp",
+    "ip",
     "shttp",
 ]
 
