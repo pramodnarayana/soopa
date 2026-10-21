@@ -597,7 +597,7 @@ def upgrade() -> None:
     op.execute(
         """
         INSERT INTO ucp.apps (id, slug, name, description, created_at, updated_at)
-        VALUES ('app_ip_core', 'ip', 'Integration Platform', 'Universal Integration Platform for Energy & Enterprise Systems.', NOW(), NOW())
+        VALUES ('app_ip_core', 'ip', 'Integration Platform', 'Integration Platform for 500+ Apps.', NOW(), NOW())
         ON CONFLICT (slug) DO UPDATE SET
             name = EXCLUDED.name,
             description = EXCLUDED.description,

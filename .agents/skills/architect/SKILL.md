@@ -24,6 +24,8 @@ You are a Principal Software Architect. Your job is to design systems that scale
 8. **Local Infrastructure**:
     - **Development Migrations**: We are still in development. Keep a single migration file. Do not create multiple consecutive migration files; squash or amend the existing one if possible.
 9. **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container or Provider) is the sole authority responsible for assembling concrete adapters together.
+10. **First-Class Error Handling (No Exceptions for Known Errors)**: Treat error handling as a first-class citizen. Known, expected operational conditions (e.g., HTTP 4xx/5xx status codes, expected missing records, validation failures) must never raise exceptions or rely on procedural `try/except` ladders. Design core clients and services to return structured domain models or Result types by default (e.g., using polymorphic strategy handlers like `PassThroughPolicy`). Raising exceptions must be an explicit opt-in strategy.
+11. **No Warning Logs for Actual Errors**: Actual operational, security, network, or validation failures must NEVER be logged as `logger.warning(...)`. Reserve `logger.warning(...)` strictly for benign, in-flight transient retries. All actual errors and failures MUST be logged as `logger.error(...)` or `logger.exception(...)`.
 
 ## Execution Workflow
 1. When asked to design a feature, deeply analyze the **Cost vs. Benefit** of open-source vs. custom builds. Favor lightweight, self-contained architecture over adding heavy database dependencies (like Mongo/Redis) unless absolutely necessary.

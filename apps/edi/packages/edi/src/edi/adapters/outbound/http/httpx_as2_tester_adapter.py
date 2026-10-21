@@ -10,10 +10,17 @@ import functools
 
 import httpx
 import structlog
+from shttp import (
+    HttpClient,
+    HttpError,
+    HttpNetworkError,
+    HttpTimeoutError,
+    SsrfSecurityError,
+    create_http_client,
+)
 
 from edi.adapters.inbound.as2.builder import build_outbound_message
 from edi.adapters.outbound.security import encrypt_payload, sign_payload
-from edi.adapters.outbound.security.network import ssrf_safe_context
 from edi.domain.services.as2_protocol import parse_mdn
 
 logger = structlog.get_logger(__name__)
@@ -36,7 +43,7 @@ def build_synthetic_ping(as2_from: str, as2_to: str) -> bytes:
 
 class HttpxAS2TesterAdapter:
     """
-    Adapter that implements AS2TesterPort using httpx for the HTTP transport
+    Adapter that implements AS2TesterPort using HttpClient for the HTTP transport
     and the shared as2_core / security libraries for signing and encryption.
 
     Responsibility: transport only.
@@ -46,8 +53,25 @@ class HttpxAS2TesterAdapter:
     constitutes a business-level success.
     """
 
-    def __init__(self, allow_private_ips: bool = False):
+    def __init__(
+        self,
+        allow_private_ips: bool = False,
+        client: HttpClient | None = None,
+    ) -> None:
         self.allow_private_ips = allow_private_ips
+        self._owned_client = client is None
+        if client is None:
+            self._raw_client: httpx.AsyncClient | None = create_http_client(
+                timeout=30.0,
+                follow_redirects=False,
+            )
+            self._client = HttpClient(
+                self._raw_client,
+                allow_private_ips=allow_private_ips,
+            )
+        else:
+            self._raw_client = None
+            self._client = client
 
     async def test_connection(
         self,
@@ -99,24 +123,29 @@ class HttpxAS2TesterAdapter:
                 encrypt_fn=encrypt_fn,
             )
         except (ValueError, TypeError, KeyError, RuntimeError) as e:
-            logger.warning("as2_test_build_failed: {e}", e=e)
+            logger.error("as2_test_build_failed", error=str(e))
             return False, f"Failed to build AS2 message: {e}", payload_str, None
 
         try:
-            with ssrf_safe_context(remote_url, allow_private_ips=self.allow_private_ips):
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    response = await client.post(
-                        remote_url,
-                        content=as2_msg.body,
-                        headers=as2_msg.headers,
-                    )
-        except ValueError as e:
+            response = await self._client.post(
+                remote_url,
+                content=as2_msg.body,
+                headers=as2_msg.headers,
+                timeout=30.0,
+                allow_private_ips=self.allow_private_ips,
+            )
+        except (SsrfSecurityError, ValueError) as e:
+            logger.error("as2_test_ssrf_blocked", url=remote_url, error=str(e))
             return False, f"SSRF validation failed for destination URL: {e}", payload_str, None
-        except httpx.ConnectError as e:
-            return False, f"Connection refused: {e}", payload_str, None
-        except httpx.TimeoutException:
+        except HttpTimeoutError as e:
+            logger.error("as2_test_timeout", url=remote_url, error=str(e))
             return False, "Connection timed out after 30 seconds", payload_str, None
-        except httpx.RequestError as e:
+        except HttpNetworkError as e:
+            cause = e.cause or e
+            logger.error("as2_test_network_error", url=remote_url, error=str(cause))
+            return False, f"Connection refused: {cause}", payload_str, None
+        except (HttpError, httpx.RequestError) as e:
+            logger.error("as2_test_http_error", url=remote_url, error=str(e))
             return False, f"HTTP error: {e}", payload_str, None
 
         raw_resp = response.content.decode("utf-8", errors="replace")
@@ -124,6 +153,11 @@ class HttpxAS2TesterAdapter:
         full_mdn = headers_str + "\n\n" + raw_resp
 
         if not (200 <= response.status_code < 300):
+            logger.error(
+                "as2_test_remote_status_error",
+                url=remote_url,
+                status_code=response.status_code,
+            )
             return False, f"Remote returned HTTP {response.status_code}", payload_str, full_mdn
 
         content_type = response.headers.get("content-type", "").lower()
@@ -133,6 +167,11 @@ class HttpxAS2TesterAdapter:
             "multipart/report" in content_type or "multipart/signed" in content_type
         )
         if not is_valid_mdn_content_type:
+            logger.error(
+                "as2_test_invalid_mdn_content_type",
+                url=remote_url,
+                content_type=content_type,
+            )
             return (
                 False,
                 f"MDN parse error: missing Content-Type multipart/report or multipart/signed, got {content_type}",
@@ -146,5 +185,9 @@ class HttpxAS2TesterAdapter:
             # e.g. "automatic-action/MDN-sent-automatically; processed"
             return True, mdn.disposition or "", payload_str, full_mdn
         except (ValueError, KeyError, TypeError) as e:
-            logger.warning("as2_test_mdn_parse_failed error={e}", e=e)
+            logger.error("as2_test_mdn_parse_failed", error=str(e))
             return False, f"MDN parse error: {e}", payload_str, full_mdn
+
+    async def close(self) -> None:
+        if self._owned_client and self._raw_client:
+            await self._raw_client.aclose()

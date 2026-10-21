@@ -2,6 +2,16 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
+## [Architecture] Unified Domain Lifecycle & Sub-App Consolidation (Eradicate Mounted Sub-Apps)
+
+- **Date Added**: 2026-10-21
+- **Status**: TO DO
+- **Description**: The Modular Monolith currently exhibits a Dual Architecture in how bounded contexts are integrated into the Host Shell (`unified-api`). UCP and Notification are integrated as router modules (`app.include_router(...)`) with framework-decoupled lifecycle hooks (`startup() -> None`, `shutdown() -> None`). In contrast, EDI is instantiated as a standalone Starlette sub-app (`create_edi_app()`) mounted via `app.mount("/", edi_app)`. This forces EDI's lifespan hooks to accept the ASGI `FastAPI` instance (`startup(app)`, `shutdown(app)`) to manually mutate `app.state.db_router` and `app.container`, compensating for Starlette's lack of sub-app lifecycle propagation. Mounting sub-apps fragments OpenAPI schema generation, obscures global exception handling, and creates inconsistent DI container ownership.
+- **Action Item**: Standardize all bounded contexts on the pure Modular Monolith pattern (Shopify/Stripe industry standard):
+  1. Eliminate `app.mount("/", edi_app)` in `unified_api/main.py`. Export EDI routers and register them cleanly via `app.include_router()`.
+  2. Refactor EDI's lifecycle hooks (`edi.bootstrap.lifespan`) to adhere to the uniform, framework-agnostic protocol (`startup(*, ...) -> None`, `shutdown() -> None`), eliminating all references to `app: FastAPI`.
+  3. Replace untyped `request.app.state.db_router` lookups in EDI handlers with standard FastAPI dependency injection (`Depends(get_db_router)`) wired through the EDI container.
+
 ## [Architecture] Centralized Resilient HTTP Client
 
 - **Date Added**: 2026-09-12

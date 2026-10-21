@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import time
@@ -6,6 +8,7 @@ from dataclasses import dataclass
 
 import httpx
 import jwt
+from shttp import HttpClient, HttpError
 
 
 class ZitadelMachineAuthenticationError(RuntimeError):
@@ -19,7 +22,7 @@ class ZitadelMachineKey:
     user_id: str
 
     @classmethod
-    def from_json(cls, value: str) -> "ZitadelMachineKey":
+    def from_json(cls, value: str) -> ZitadelMachineKey:
         try:
             raw: object = json.loads(value)
         except json.JSONDecodeError as exc:
@@ -66,7 +69,7 @@ class ZitadelMachineTokenProvider:
         self._refresh_at = 0.0
         self._lock = asyncio.Lock()
 
-    async def get_access_token(self, client: httpx.AsyncClient) -> str:
+    async def get_access_token(self, client: HttpClient | httpx.AsyncClient) -> str:
         if self._cached_token is not None and time.monotonic() < self._refresh_at:
             return self._cached_token
 
@@ -82,7 +85,7 @@ class ZitadelMachineTokenProvider:
             )
             return token
 
-    async def _exchange(self, client: httpx.AsyncClient) -> tuple[str, int]:
+    async def _exchange(self, client: HttpClient | httpx.AsyncClient) -> tuple[str, int]:
         issued_at = int(time.time())
         try:
             assertion = jwt.encode(
@@ -102,16 +105,25 @@ class ZitadelMachineTokenProvider:
                 "IDENTITY_MACHINE_KEY could not sign an authentication assertion"
             ) from exc
 
+        token_url = f"{self._api_url}/oauth/v2/token"
+        request_payload = {
+            "grant_type": self._JWT_BEARER_GRANT,
+            "scope": self._API_SCOPE,
+            "assertion": assertion,
+        }
         try:
-            response = await client.post(
-                f"{self._api_url}/oauth/v2/token",
-                data={
-                    "grant_type": self._JWT_BEARER_GRANT,
-                    "scope": self._API_SCOPE,
-                    "assertion": assertion,
-                },
-            )
-        except httpx.HTTPError as exc:
+            if isinstance(client, HttpClient):
+                response = await client.post(
+                    token_url,
+                    data=request_payload,
+                    allow_private_ips=True,
+                )
+            else:
+                response = await client.post(
+                    token_url,
+                    data=request_payload,
+                )
+        except (httpx.HTTPError, HttpError) as exc:
             raise ZitadelMachineAuthenticationError(
                 "Zitadel machine authentication request failed"
             ) from exc
@@ -121,16 +133,16 @@ class ZitadelMachineTokenProvider:
             )
 
         try:
-            payload: object = response.json()
+            body: object = response.json()
         except ValueError as exc:
             raise ZitadelMachineAuthenticationError(
                 "Zitadel token endpoint returned invalid JSON"
             ) from exc
-        if not isinstance(payload, dict):
+        if not isinstance(body, dict):
             raise ZitadelMachineAuthenticationError(
                 "Zitadel token endpoint returned an invalid response"
             )
-        token_response: Mapping[object, object] = payload
+        token_response: Mapping[object, object] = body
         access_token = token_response.get("access_token")
         expires_in = token_response.get("expires_in")
         if not isinstance(access_token, str) or not access_token:

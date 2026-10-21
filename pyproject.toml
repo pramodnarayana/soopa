@@ -27,6 +27,7 @@ members = [
     "core/platform/packages/seedwork",
     "core/platform/packages/storage",
     "core/platform/packages/sftp",
+    "core/platform/packages/shttp",
     "core/ucp/packages/models",
     "core/ucp/packages/ucp",
     "core/platform/packages/schemas/python",
@@ -79,6 +80,7 @@ unified-worker = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
 ip = { workspace = true }
+shttp = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
 [tool.pytest.ini_options]
@@ -166,6 +168,7 @@ mypy_path = [
     "core/platform/packages/secret-store/src",
     "apps/ip/packages/ip/src",
     "core/platform/packages/sftp/src",
+    "core/platform/packages/shttp/src",
 ]
 
 [[tool.mypy.overrides]]
@@ -317,6 +320,7 @@ extraPaths = [
     "core/platform/packages/secret-store/src",
     "core/platform/packages/sftp/src",
     "apps/ip/packages/ip/src",
+    "core/platform/packages/shttp/src",
 ]
 
 [tool.vulture]
@@ -358,6 +362,7 @@ known_first_party = [
     "secret_store",
     "sftp",
     "ip",
+    "shttp",
 ]
 
 [[tool.mypy.overrides]]

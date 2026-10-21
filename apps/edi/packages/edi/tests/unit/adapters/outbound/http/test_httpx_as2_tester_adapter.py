@@ -2,6 +2,7 @@ import socket
 
 import pytest
 from pytest_httpserver import HTTPServer
+from shttp import HttpClient
 
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 
@@ -235,3 +236,18 @@ async def test_test_connection_signed_mdn(
     assert disposition == "automatic-action/MDN-sent-automatically; processed"
     assert payload_str is not None
     assert full_mdn is not None
+
+
+@pytest.mark.asyncio
+async def test_as2_tester_adapter_ownership_and_close() -> None:
+    adapter = HttpxAS2TesterAdapter(allow_private_ips=True)
+    assert adapter._owned_client is True
+    await adapter.close()
+    assert adapter._client._client.is_closed
+
+    shared_client = HttpClient(allow_private_ips=True)
+    adapter2 = HttpxAS2TesterAdapter(client=shared_client)
+    assert adapter2._owned_client is False
+    await adapter2.close()
+    assert not shared_client._client.is_closed
+    await shared_client.close()

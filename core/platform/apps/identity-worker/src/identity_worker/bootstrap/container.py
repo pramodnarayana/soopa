@@ -231,7 +231,7 @@ class WorkerContainer:
         idp = ZitadelIdentityProviderPort(
             org_provider=org_provider, session_factory=session_factory
         )
-        idp_users = ZitadelUsersAdapter()
+        idp_users = ZitadelUsersAdapter(settings=self.settings)
 
         identity_service = IdentitySyncService(
             identity_provider=idp,

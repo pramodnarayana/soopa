@@ -158,6 +158,8 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
         self.is_dlq = is_dlq
         self.db_router: DatabaseRouter | None = None
         self.deliver_manager: SqsConsumerManager | None = None
+        self.http_delivery: HttpxDeliveryClient | None = None
+        self.as2_delivery: HttpxAS2DeliveryClient | None = None
 
     async def start(self) -> None:
         settings = get_settings()
@@ -181,15 +183,21 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
             aws_endpoint=aws_endpoint,
         )
 
-        http_delivery = HttpxDeliveryClient(validator=validate_target_url)
+        self.http_delivery = HttpxDeliveryClient(validator=validate_target_url)
         sftp_delivery = ParamikoSftpClient()
-        as2_delivery = HttpxAS2DeliveryClient(
+        self.as2_delivery = HttpxAS2DeliveryClient(
             validator=partial(validate_target_url, allow_private_ips=settings.allow_private_ips),
             allow_private_ips=settings.allow_private_ips,
         )
 
         consumer = _setup_registry(
-            settings, uow_provider, http_delivery, sftp_delivery, as2_delivery, vault, self.is_dlq
+            settings,
+            uow_provider,
+            self.http_delivery,
+            sftp_delivery,
+            self.as2_delivery,
+            vault,
+            self.is_dlq,
         )
 
         if self.is_dlq:
@@ -224,8 +232,29 @@ class EdiDeliveryWorkerModule(LaunchableWorker):
                 if isinstance(res, Exception):
                     logger.error("manager_stop_failed", exc_info=res)
 
+        if self.http_delivery:
+            try:
+                await self.http_delivery.close()
+            except Exception as exc:
+                logger.error("http_delivery_stop_failed", exc_info=exc)
+            finally:
+                self.http_delivery = None
+
+        if self.as2_delivery:
+            try:
+                await self.as2_delivery.close()
+            except Exception as exc:
+                logger.error("as2_delivery_stop_failed", exc_info=exc)
+            finally:
+                self.as2_delivery = None
+
         if self.db_router:
-            await self.db_router.close_all()
+            try:
+                await self.db_router.close_all()
+            except Exception as exc:
+                logger.error("db_router_stop_failed", exc_info=exc)
+            finally:
+                self.db_router = None
 
 
 class EdiDeliveryDlqWorkerModule(EdiDeliveryWorkerModule):
