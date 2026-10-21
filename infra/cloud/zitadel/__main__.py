@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 config = pulumi.Config()
-company_name = os.environ.get("COMPANY_NAME", "FlowWolf")
+company_name = os.environ.get("COMPANY_NAME", "Flowwolf")
 company_domain = os.environ.get("COMPANY_DOMAIN", "flowwolf.io")
 ucp_project_name = os.environ.get("UCP_PROJECT_NAME", "UCP")
 edi_project_name = os.environ.get("EDI_PROJECT_NAME", "EDI")

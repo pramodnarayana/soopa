@@ -3,12 +3,12 @@ import threading
 import time
 from collections.abc import Generator
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from shttp import HttpError
 
 from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
     ZitadelTokenVerifierPort,
@@ -52,7 +52,7 @@ class JWKSRequestHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
-    def log_message(self, format: str, *args: Any) -> None:
+    def log_message(self, format: str, *args: object) -> None:
         pass
 
 
@@ -139,3 +139,44 @@ async def test_get_cached_userinfo_rejects_non_object_json(httpserver, userinfo:
         await verifier._get_cached_userinfo("token", "jti")
 
     assert "jti" not in verifier._userinfo_cache
+    await verifier.close()
+
+
+@pytest.mark.asyncio
+async def test_get_cached_userinfo_raises_http_error_on_status_error(httpserver) -> None:
+    httpserver.expect_request("/oidc/v1/userinfo").respond_with_data(
+        "Bad Request", status=400, content_type="text/plain"
+    )
+
+    options = ZitadelTokenVerifierPortOptions(
+        issuer=httpserver.url_for("/").rstrip("/"), audience="my-api"
+    )
+    verifier = ZitadelTokenVerifierPort(options)
+
+    with pytest.raises(HttpError) as exc_info:
+        await verifier._get_cached_userinfo("token", "jti")
+
+    assert exc_info.value.status_code == 400
+    assert "jti" not in verifier._userinfo_cache
+    await verifier.close()
+
+
+@pytest.mark.asyncio
+async def test_get_cached_userinfo_caches_and_returns_valid_object(httpserver) -> None:
+    httpserver.expect_request("/oidc/v1/userinfo").respond_with_json(
+        {"email": "user@example.com", "name": "Test User"}
+    )
+
+    options = ZitadelTokenVerifierPortOptions(
+        issuer=httpserver.url_for("/").rstrip("/"), audience="my-api"
+    )
+    verifier = ZitadelTokenVerifierPort(options)
+
+    userinfo = await verifier._get_cached_userinfo("token", "jti")
+    assert userinfo == {"email": "user@example.com", "name": "Test User"}
+    assert "jti" in verifier._userinfo_cache
+
+    # Subsequent call hits in-memory cache without hitting httpserver again
+    cached = await verifier._get_cached_userinfo("token", "jti")
+    assert cached == userinfo
+    await verifier.close()

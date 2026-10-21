@@ -200,7 +200,8 @@ async def test_identity_sync_service_app_subscribed_and_unsubscribed(
 
         # Verify grant exists
         search_data = await zitadel_projects_adapter._search_all(
-            endpoint=f"/management/v1/projects/{idp_project_id}/grants/_search"
+            endpoint=f"/management/v1/projects/{idp_project_id}/grants/_search",
+            headers=zitadel_projects_adapter._platform_headers(),
         )
         grant_exists = any(g.get("grantedOrgId") == org_id for g in search_data)
         assert grant_exists, "Project grant was not created in Zitadel"
@@ -210,7 +211,8 @@ async def test_identity_sync_service_app_subscribed_and_unsubscribed(
 
         # Verify grant removed
         search_data_after = await zitadel_projects_adapter._search_all(
-            endpoint=f"/management/v1/projects/{idp_project_id}/grants/_search"
+            endpoint=f"/management/v1/projects/{idp_project_id}/grants/_search",
+            headers=zitadel_projects_adapter._platform_headers(),
         )
         grant_exists_after = any(g.get("grantedOrgId") == org_id for g in search_data_after)
         assert not grant_exists_after, "Project grant was not removed from Zitadel"
