@@ -10,8 +10,8 @@ from ip.engine.domain.models.catalog import (
     StreamSchema,
     SyncMode,
 )
-from ip.engine.domain.types import JsonDict
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

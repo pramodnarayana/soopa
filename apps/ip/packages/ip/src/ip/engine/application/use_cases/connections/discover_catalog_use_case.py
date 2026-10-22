@@ -12,7 +12,9 @@ from ip.engine.application.responses import (
     StreamFieldDTO,
     StreamSchemaDTO,
 )
+from ip.engine.domain.enums import ConnectionStatus
 from ip.engine.domain.exceptions import (
+    ConnectionDeactivatedError,
     ConnectionNotFoundError,
     ConnectorNotFoundError,
     InvalidConnectionConfigError,
@@ -53,6 +55,16 @@ class DiscoverCatalogUseCase:
                 )
                 await self._uow.rollback()
                 return DiscoveredCatalogDTO.from_error(connection_id, not_found_err)
+
+            if connection.status == ConnectionStatus.DEACTIVATED:
+                deact_err = ConnectionDeactivatedError.for_id(connection_id)
+                logger.error(
+                    "catalog_discovery_connection_deactivated",
+                    connection_id=connection_id,
+                    error_code=deact_err.code.value,
+                )
+                await self._uow.rollback()
+                return DiscoveredCatalogDTO.from_error(connection_id, deact_err)
 
             connector = self._connectors.get(connection.app_id)
             if not connector:

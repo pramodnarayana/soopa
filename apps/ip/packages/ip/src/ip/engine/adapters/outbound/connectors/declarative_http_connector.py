@@ -31,7 +31,6 @@ from ip.engine.domain.models.connector_spec import (
     HttpActionSpec,
     PaginationType,
 )
-from ip.engine.domain.types import JsonDict
 from ip.engine.ports.types import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
@@ -42,6 +41,7 @@ from ip.engine.ports.types import (
     WriteRecordCommand,
     WriteResultDTO,
 )
+from seedwork.domain.types import JsonDict
 from shttp import (
     HttpClient,
     HttpError,
@@ -86,6 +86,12 @@ class DeclarativeHttpConnector(BaseConnector):
                 allow_private_ips=allow_private_ips,
                 response_policy=PassThroughPolicy(),
             )
+        self._last_error: IpError | None = None
+
+    @property
+    def last_error(self) -> IpError | None:
+        """Returns the last IpError encountered during stream reads or operations."""
+        return self._last_error
 
     @property
     def app_id(self) -> str:
@@ -455,7 +461,22 @@ class DeclarativeHttpConnector(BaseConnector):
                 )
             )
 
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            logger.error(
+                "declarative_connector_fetch_page_invalid_json",
+                app_id=self.app_id,
+                url=req_url,
+                error=str(exc),
+            )
+            return Result.fail(
+                UpstreamHttpError(
+                    status_code=resp.status_code,
+                    message=f"Invalid JSON response from '{req_url}': {exc}",
+                    disposition=FailureDisposition.FAIL,
+                )
+            )
         raw_records = self._extract_records_from_response(data, action.response_records_path)
 
         next_cursor = None
@@ -495,6 +516,7 @@ class DeclarativeHttpConnector(BaseConnector):
                 records_emitted,
             )
             if page_prep.error is not None or page_prep.value is None:
+                self._last_error = page_prep.error
                 logger.error(
                     "declarative_connector_invalid_page_url",
                     app_id=self.app_id,
@@ -504,10 +526,9 @@ class DeclarativeHttpConnector(BaseConnector):
                 break
 
             req_url, params = page_prep.value
-            page_res = await self._fetch_records_page(
-                action, credentials, req_url, params
-            )
+            page_res = await self._fetch_records_page(action, credentials, req_url, params)
             if page_res.error is not None or page_res.value is None:
+                self._last_error = page_res.error
                 break
 
             records, next_cursor, has_more = page_res.value
@@ -550,6 +571,7 @@ class DeclarativeHttpConnector(BaseConnector):
         cursor: str | None = None,
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        self._last_error = None
         action = self._manifest.streams.get(stream_name)
         if not action:
             stream_err = StreamNotFoundError(
@@ -557,6 +579,7 @@ class DeclarativeHttpConnector(BaseConnector):
                 stream_name=stream_name,
                 message=f"Stream '{stream_name}' not defined in manifest for {self.app_id}",
             )
+            self._last_error = stream_err
             logger.error(
                 "declarative_connector_stream_not_found",
                 app_id=self.app_id,
@@ -569,6 +592,7 @@ class DeclarativeHttpConnector(BaseConnector):
             self._manifest.base_url_template, public_config, credentials
         )
         if interp_res.error is not None or interp_res.value is None:
+            self._last_error = interp_res.error
             logger.error(
                 "declarative_connector_read_stream_invalid_url",
                 app_id=self.app_id,
@@ -640,17 +664,33 @@ class DeclarativeHttpConnector(BaseConnector):
                     app_id=self.app_id,
                     stream=stream_name,
                     status_code=resp.status_code,
-                    response_text=resp.text,
+                    response_text=resp.text[:200],
                 )
                 return WriteResultDTO.from_error(
                     UpstreamHttpError(
                         status_code=resp.status_code,
-                        message=f"HTTP request failed with status {resp.status_code}: {resp.text}",
+                        message=f"HTTP request failed with status {resp.status_code}: {resp.text[:200]}",
+                        disposition=(
+                            FailureDisposition.RETRY
+                            if resp.status_code == 429 or resp.status_code >= 500
+                            else FailureDisposition.FAIL
+                        ),
                     )
                 )
 
-            data = resp.json() if resp.content else {}
-            rec_id = str(data.get("id") or data.get("Id") or "written")
+            rec_id = "written"
+            if resp.content:
+                try:
+                    data = resp.json()
+                    if isinstance(data, dict):
+                        rec_id = str(data.get("id") or data.get("Id") or "written")
+                except ValueError:
+                    logger.info(
+                        "declarative_connector_write_non_json_response",
+                        app_id=self.app_id,
+                        stream=stream_name,
+                        status_code=resp.status_code,
+                    )
             return WriteResultDTO(
                 success=True,
                 record_id=rec_id,

@@ -6,10 +6,11 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from seedwork.domain.types import JsonDict
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.enums import (
     IpTraceEventType,
     NormalizedEntityType,
@@ -18,14 +19,13 @@ from ip.engine.domain.enums import (
 )
 from ip.engine.domain.events import NormalizedRecordCreatedEvent
 from ip.engine.domain.models.timeline_entry import IpTraceEvent
-from ip.engine.domain.types import JsonDict
 
 
 @dataclass(kw_only=True, eq=False)
 class NormalizedRecord(TracedAggregateRoot):
     """Traced Aggregate Root representing a normalized canonical record audit entry in Layer 3."""
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.NORMALIZED
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_NORMALIZED.value
 
     id: str
     connection_id: str

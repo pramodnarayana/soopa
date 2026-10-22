@@ -58,9 +58,7 @@ def _parse_property(
     if isinstance(raw_oauth, dict):
         oauth_scopes = raw_oauth.get("scopes")
         scopes = (
-            tuple(str(s) for s in oauth_scopes)
-            if isinstance(oauth_scopes, (list, tuple))
-            else ()
+            tuple(str(s) for s in oauth_scopes) if isinstance(oauth_scopes, (list, tuple)) else ()
         )
         oauth_config = OAuthConfig(
             auth_url=str(raw_oauth.get("auth_url", "")),
@@ -98,7 +96,13 @@ def _parse_pagination(
     try:
         pag_type = PaginationType(raw_pag_type)
     except ValueError:
-        pag_type = PaginationType.NONE
+        return Result.fail(
+            ManifestParseFailureError(
+                field_name="pagination_type",
+                message=f"Unknown pagination_type '{raw_pag_type}'. Supported: none, cursor, page_number, offset",
+                details={"pagination_type": raw_pag_type},
+            )
+        )
 
     cursor_param = (
         str(raw_pag["cursor_param"])
@@ -167,44 +171,54 @@ def _parse_pagination(
     )
 
 
-def _parse_http_method(raw_method: str) -> Literal["GET", "POST", "PUT", "PATCH", "DELETE"]:
+def _parse_http_method(
+    raw_method: str,
+) -> Result[Literal["GET", "POST", "PUT", "PATCH", "DELETE"], ManifestParseFailureError]:
     upper = raw_method.upper()
+    if upper == "GET":
+        return Result.ok("GET")
     if upper == "POST":
-        return "POST"
+        return Result.ok("POST")
     if upper == "PUT":
-        return "PUT"
+        return Result.ok("PUT")
     if upper == "PATCH":
-        return "PATCH"
+        return Result.ok("PATCH")
     if upper == "DELETE":
-        return "DELETE"
-    return "GET"
+        return Result.ok("DELETE")
+    return Result.fail(
+        ManifestParseFailureError(
+            field_name="method",
+            message=f"Unknown HTTP method '{raw_method}'. Supported methods: GET, POST, PUT, PATCH, DELETE",
+            details={"method": raw_method},
+        )
+    )
 
 
 def _parse_action_spec(
     raw_action: Mapping[str, object],
 ) -> Result[HttpActionSpec, ManifestParseFailureError]:
     path = raw_action.get("path", "/")
-    method = _parse_http_method(str(raw_action.get("method", "GET")))
+    raw_method = str(raw_action.get("method", "GET"))
+    method_res = _parse_http_method(raw_method)
+    if method_res.error is not None or method_res.value is None:
+        return Result.fail(
+            method_res.error
+            or ManifestParseFailureError(field_name="method", message="Invalid method")
+        )
+    method = method_res.value
     raw_headers = raw_action.get("headers")
     headers = (
-        {str(k): str(v) for k, v in raw_headers.items()}
-        if isinstance(raw_headers, dict)
-        else {}
+        {str(k): str(v) for k, v in raw_headers.items()} if isinstance(raw_headers, dict) else {}
     )
     raw_params = raw_action.get("query_params")
     query_params = (
-        {str(k): str(v) for k, v in raw_params.items()}
-        if isinstance(raw_params, dict)
-        else {}
+        {str(k): str(v) for k, v in raw_params.items()} if isinstance(raw_params, dict) else {}
     )
     raw_pagination = raw_action.get("pagination")
-    pag_res = _parse_pagination(
-        raw_pagination if isinstance(raw_pagination, dict) else None
-    )
+    pag_res = _parse_pagination(raw_pagination if isinstance(raw_pagination, dict) else None)
     if pag_res.error is not None or pag_res.value is None:
         return Result.fail(
-            pag_res.error
-            or ManifestParseFailureError(message="Invalid pagination configuration")
+            pag_res.error or ManifestParseFailureError(message="Invalid pagination configuration")
         )
     records_path = raw_action.get("response_records_path")
 

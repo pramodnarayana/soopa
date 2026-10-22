@@ -15,28 +15,6 @@ Rules:
 from enum import StrEnum
 
 
-class IpDomainIdPrefix(StrEnum):
-    """Domain-specific ID prefixes for the Integration Platform bounded context."""
-
-    CONNECTION = "ip_conn"
-    CATALOG = "ip_cat"
-    STREAM = "ip_strm"
-    REPLICA = "ip_rep"
-    NORMALIZED = "ip_nrm"
-    INBOUND_RECORD = "ip_inb"
-    OUTBOUND_RECORD = "ip_out"
-    OUTBOX = "ip_obx"
-    TRACE = "ip_trc"
-    TRACE_EVENT = "ip_trace_evt"
-    GEM = "ip_gem"
-    TIMELINE = "ip_trace_evt"
-    STREAM_STATE = "ip_cst"
-    MDM_READING = "ip_mdmr"
-    MDM_SERVICE_POINT = "ip_mdms"
-    TMS_LOAD = "ip_tmsl"
-    TMS_CARRIER = "ip_tmsc"
-
-
 class IpTraceEventType(StrEnum):
     """Canonical trace event types recorded in the TracedAggregateRoot audit ledger."""
 

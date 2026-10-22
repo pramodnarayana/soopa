@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.events import StreamStateCheckpointedEvent
 
 
@@ -17,7 +17,7 @@ from ip.engine.domain.events import StreamStateCheckpointedEvent
 class ConnectionStreamState(AggregateRoot):
     """Aggregate Root tracking cursor position and record counters for an individual stream."""
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.STREAM_STATE
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_STREAM_STATE.value
 
     id: str
     tenant_id: str

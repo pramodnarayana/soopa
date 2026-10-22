@@ -8,9 +8,10 @@ from datetime import UTC, datetime
 from typing import ClassVar
 from urllib.parse import urlparse
 
+from seedwork.domain.types import JsonDict
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.enums import AuthType, ConnectionStatus
 from ip.engine.domain.events import (
     ConnectionActivatedEvent,
@@ -24,7 +25,6 @@ from ip.engine.domain.exceptions import (
     InvalidConnectionStateError,
     Result,
 )
-from ip.engine.domain.types import JsonDict
 
 
 def compute_connection_fingerprint(tenant_id: str, app_id: str, endpoint: str) -> str:
@@ -59,7 +59,7 @@ def compute_connection_fingerprint(tenant_id: str, app_id: str, endpoint: str) -
 class Connection(AggregateRoot):
     """Aggregate Root representing an external application connection."""
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.CONNECTION
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_CONNECTION.value
 
     id: str
     tenant_id: str

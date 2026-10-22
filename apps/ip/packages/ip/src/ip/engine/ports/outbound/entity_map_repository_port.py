@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Sequence
 from typing import Protocol
 
 from ip.engine.domain.enums import NormalizedEntityType
@@ -33,6 +34,6 @@ class GlobalEntityMapRepositoryPort(Protocol):
         self,
         tenant_id: str,
         canonical_id: str,
-    ) -> GlobalEntityMap | None:
-        """Resolves a GlobalEntityMap entry by its canonical ID."""
+    ) -> Sequence[GlobalEntityMap]:
+        """Resolves all GlobalEntityMap entries associated with the given canonical ID."""
         ...

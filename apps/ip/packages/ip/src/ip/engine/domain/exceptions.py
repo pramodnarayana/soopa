@@ -13,18 +13,11 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Generic, TypeVar
 
-from ip.engine.domain.types import JsonDict
+from seedwork.domain.types import JsonDict
+from shttp import FailureDisposition
 
 T = TypeVar("T")
 E = TypeVar("E", bound="IpError")
-
-
-class FailureDisposition(StrEnum):
-    """Actionable engine disposition indicating how callers/workflows should handle a failure."""
-
-    RETRY = "RETRY"  # Transient fault: retry with backoff or NACK message
-    FAIL = "FAIL"  # Terminal/configuration/business fault: do not retry automatically
-    IGNORE = "IGNORE"  # Benign fault: log and skip without aborting
 
 
 class IpErrorCode(StrEnum):
@@ -130,9 +123,7 @@ class DuplicateConnectionFingerprintError(IpError):
             tenant_id=tenant_id,
             app_id=app_id,
             fingerprint=fingerprint,
-            message=(
-                f"A connection for {app_id} already exists with fingerprint {fingerprint}."
-            ),
+            message=(f"A connection for {app_id} already exists with fingerprint {fingerprint}."),
             details={
                 "tenant_id": tenant_id,
                 "app_id": app_id,
@@ -175,7 +166,9 @@ class InvalidCredentialsError(IpError):
     code: IpErrorCode = IpErrorCode.INVALID_CREDENTIALS
     disposition: FailureDisposition = FailureDisposition.FAIL
     http_status: int = 422
-    remediation: str | None = "Supply all required authentication credentials (e.g. api_key, token)."
+    remediation: str | None = (
+        "Supply all required authentication credentials (e.g. api_key, token)."
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -314,7 +307,9 @@ class ManifestParseFailureError(IpError):
     code: IpErrorCode = IpErrorCode.MANIFEST_PARSE_ERROR
     disposition: FailureDisposition = FailureDisposition.FAIL
     http_status: int = 400
-    remediation: str | None = "Ensure the declarative manifest contains valid JSON/YAML and required fields."
+    remediation: str | None = (
+        "Ensure the declarative manifest contains valid JSON/YAML and required fields."
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -326,7 +321,9 @@ class UnsupportedWriteOperationError(IpError):
     code: IpErrorCode = IpErrorCode.UNSUPPORTED_WRITE_OPERATION
     disposition: FailureDisposition = FailureDisposition.FAIL
     http_status: int = 400
-    remediation: str | None = "Use a supported write operation (e.g. CREATE, UPDATE, UPSERT, DELETE)."
+    remediation: str | None = (
+        "Use a supported write operation (e.g. CREATE, UPDATE, UPSERT, DELETE)."
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -349,7 +346,9 @@ class PayloadNotFoundError(IpError):
     code: IpErrorCode = IpErrorCode.PAYLOAD_NOT_FOUND
     disposition: FailureDisposition = FailureDisposition.FAIL
     http_status: int = 404
-    remediation: str | None = "Verify that the payload blob exists in tiered storage for the given s3_key."
+    remediation: str | None = (
+        "Verify that the payload blob exists in tiered storage for the given s3_key."
+    )
 
 
 @dataclass(frozen=True, kw_only=True)

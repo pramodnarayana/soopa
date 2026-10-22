@@ -6,8 +6,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Protocol
 
+from seedwork.domain.types import JsonDict
+
 from ip.engine.domain.exceptions import PayloadNotFoundError, Result
-from ip.engine.domain.types import JsonDict
 
 
 @dataclass(frozen=True)
@@ -36,8 +37,6 @@ class TieredStoragePort(Protocol):
         ...
 
     @abstractmethod
-    async def retrieve(
-        self, result: TieredStorageResultDTO
-    ) -> Result[bytes, PayloadNotFoundError]:
+    async def retrieve(self, result: TieredStorageResultDTO) -> Result[bytes, PayloadNotFoundError]:
         """Retrieves raw payload bytes regardless of whether inlined or in S3."""
         ...

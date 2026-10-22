@@ -2,8 +2,8 @@
 
 import asyncio
 
-from alembic import context
 import ip.engine.adapters.outbound.database.models.control_plane
+from alembic import context
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
@@ -13,9 +13,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlalchemy.schema import SchemaItem, Table
 
 # Structural registry anchoring all Control Plane ORM models into Alembic metadata
-_REGISTERED_GLOBAL_ORM_MODULES = (
-    ip.engine.adapters.outbound.database.models.control_plane,
-)
+_REGISTERED_GLOBAL_ORM_MODULES = (ip.engine.adapters.outbound.database.models.control_plane,)
 
 config = context.config
 
@@ -71,17 +69,6 @@ def do_run_migrations(connection: Connection) -> None:
 
     with context.begin_transaction():
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS ip;"))
-        has_version_table = connection.execute(
-            text("SELECT to_regclass('ip.alembic_version') IS NOT NULL")
-        ).scalar()
-        current_rev = (
-            connection.execute(text("SELECT version_num FROM ip.alembic_version")).scalar()
-            if has_version_table
-            else None
-        )
-        if current_rev != "0001_initial_global_schema":
-            connection.execute(text("DROP SCHEMA ip CASCADE;"))
-            connection.execute(text("CREATE SCHEMA ip;"))
         context.run_migrations()
 
 

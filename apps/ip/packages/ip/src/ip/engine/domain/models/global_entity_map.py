@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.enums import NormalizedEntityType
 
 
@@ -17,7 +17,7 @@ from ip.engine.domain.enums import NormalizedEntityType
 class GlobalEntityMap(TracedAggregateRoot):
     """Traced Aggregate Root resolving Source System ID <-> Canonical ID <-> Destination System ID."""
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.GEM
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_GEM.value
 
     id: str
     entity_domain: NormalizedEntityType

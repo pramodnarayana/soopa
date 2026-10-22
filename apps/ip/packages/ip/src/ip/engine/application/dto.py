@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from seedwork.domain.types import JsonDict
+
 from ip.engine.domain.exceptions import IpError
 from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.types import JsonDict
 from ip.engine.ports.types import (
     AppSpecDTO,
     AppSpecResultDTO,

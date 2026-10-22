@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase
-from ip.engine.domain.types import JsonDict
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from sqlalchemy import (
     BigInteger,
@@ -38,11 +38,12 @@ class ConnectionRecord(IpGlobalBase):
             unique=True,
             postgresql_where=text("status != 'DEACTIVATED'"),
         ),
+        Index("ix_ip_connections_tenant_id", "tenant_id"),
         {"schema": "ip"},
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     app_id: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     auth_type: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -72,11 +73,12 @@ class ConnectionCatalogRecord(IpGlobalBase):
         UniqueConstraint(
             "connection_id", "catalog_version", name="uq_ip_catalog_connection_version"
         ),
+        Index("ix_ip_connection_catalogs_connection_id", "connection_id"),
         {"schema": "ip"},
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    connection_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
     catalog_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     catalog_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_definition: Mapped[JsonDict] = mapped_column(JSONB, nullable=False)
@@ -124,9 +126,10 @@ class IpOutboxRecord(IpGlobalBase, OutboxMixin):
         primary_key=True,
         default=lambda: generate_id(IpOutboxRecord.ID_PREFIX),
     )
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
 
     __table_args__ = (
+        Index("ix_ip_outbox_tenant_id", "tenant_id"),
         Index(
             "ix_ip_outbox_pending",
             "status",

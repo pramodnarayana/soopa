@@ -22,10 +22,13 @@ class ConnectorCatalogRegistry(CatalogRegistryPort):
         self._allow_private_ips = allow_private_ips
         self._manifests: dict[str, DeclarativeManifest] = {}
         self._connectors: dict[str, ConnectorPort] = {}
+        self._cached_declarative_connectors: dict[str, DeclarativeHttpConnector] = {}
         self._summaries: dict[str, CatalogAppSummaryDTO] = {}
 
     def register_manifest(self, manifest: DeclarativeManifest) -> None:
         """Registers a declarative HTTP manifest in the catalog."""
+        self._connectors.pop(manifest.app_id, None)
+        self._cached_declarative_connectors.pop(manifest.app_id, None)
         self._manifests[manifest.app_id] = manifest
         self._summaries[manifest.app_id] = CatalogAppSummaryDTO(
             app_id=manifest.app_id,
@@ -42,6 +45,8 @@ class ConnectorCatalogRegistry(CatalogRegistryPort):
         summary: CatalogAppSummaryDTO,
     ) -> None:
         """Registers a native/custom connector instance along with its catalog summary."""
+        self._manifests.pop(connector.app_id, None)
+        self._cached_declarative_connectors.pop(connector.app_id, None)
         self._connectors[connector.app_id] = connector
         self._summaries[connector.app_id] = summary
 
@@ -49,6 +54,7 @@ class ConnectorCatalogRegistry(CatalogRegistryPort):
         """Removes a connector and its manifest/summary from the catalog."""
         self._manifests.pop(app_id, None)
         self._connectors.pop(app_id, None)
+        self._cached_declarative_connectors.pop(app_id, None)
         self._summaries.pop(app_id, None)
 
     def get_connector(self, app_id: str) -> Result[ConnectorPort, ConnectorNotFoundError]:
@@ -56,12 +62,12 @@ class ConnectorCatalogRegistry(CatalogRegistryPort):
         if app_id in self._connectors:
             return Result.ok(self._connectors[app_id])
         if app_id in self._manifests:
-            return Result.ok(
-                DeclarativeHttpConnector(
+            if app_id not in self._cached_declarative_connectors:
+                self._cached_declarative_connectors[app_id] = DeclarativeHttpConnector(
                     self._manifests[app_id],
                     allow_private_ips=self._allow_private_ips,
                 )
-            )
+            return Result.ok(self._cached_declarative_connectors[app_id])
         return Result.fail(ConnectorNotFoundError.for_app(app_id))
 
     def list_apps(

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import structlog
 from security.ports.cipher_port import CipherPort
+from seedwork.domain.types import JsonDict
 
 from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
 from ip.engine.domain.exceptions import (
@@ -18,7 +19,6 @@ from ip.engine.domain.models.connection import (
     ConnectionStatus,
     compute_connection_fingerprint,
 )
-from ip.engine.domain.types import JsonDict
 from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -73,7 +73,9 @@ class CreateConnectionUseCase:
                 or command.public_config.get("host")
                 or command.name
             )
-            fingerprint = compute_connection_fingerprint(command.tenant_id, command.app_id, endpoint)
+            fingerprint = compute_connection_fingerprint(
+                command.tenant_id, command.app_id, endpoint
+            )
 
             existing = await self._uow.connections.get_by_fingerprint(
                 command.tenant_id, fingerprint

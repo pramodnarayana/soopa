@@ -7,14 +7,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from seedwork.domain.types import JsonDict
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.enums import IpTraceEventType, PipelineLayer, TimelineStatus
 from ip.engine.domain.events import InboundRecordCreatedEvent
 from ip.engine.domain.models.timeline_entry import IpTraceEvent
-from ip.engine.domain.types import JsonDict
 
 
 def compute_payload_sha256(payload_bytes: bytes) -> str:
@@ -26,7 +26,7 @@ def compute_payload_sha256(payload_bytes: bytes) -> str:
 class InboundRecord(TracedAggregateRoot):
     """Traced Aggregate Root representing an immutable external raw record in Layer 1 Inbound Gateway."""
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.INBOUND_RECORD
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_INBOUND_RECORD.value
 
     id: str
     connection_id: str
@@ -69,7 +69,7 @@ class InboundRecord(TracedAggregateRoot):
         duration_ms: int | None = None,
     ) -> InboundRecord:
         record_id = generate_id(cls.ID_PREFIX)
-        resolved_trace_id = trace_id or generate_id(IpDomainIdPrefix.TRACE)
+        resolved_trace_id = trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
         size_bytes = len(payload_bytes)
         sha256_hash = compute_payload_sha256(payload_bytes)
 

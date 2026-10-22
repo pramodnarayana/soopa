@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ip.engine.adapters.outbound.database.models.base import IpTenantBase
-from ip.engine.domain.types import JsonDict
+from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from sqlalchemy import (
     BigInteger,

@@ -8,8 +8,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from seedwork.domain.types import JsonDict
+
 from ip.engine.domain.exceptions import IpError
-from ip.engine.domain.types import JsonDict
 
 
 @dataclass(frozen=True)

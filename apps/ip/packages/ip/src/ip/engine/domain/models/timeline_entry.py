@@ -6,12 +6,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from seedwork.domain.types import JsonDict
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import TraceEvent
 from seedwork.utils import generate_id
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.enums import IpTraceEventType, PipelineLayer, TimelineStatus
-from ip.engine.domain.types import JsonDict
 
 
 @dataclass(kw_only=True)
@@ -22,7 +22,7 @@ class IpTraceEvent(TraceEvent):
     ``event_type``, ``actor``, ``correlation_id``, ``created_at``, ``metadata``).
     """
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.TRACE_EVENT
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_TRACE_EVENT.value
 
     @property
     def layer(self) -> PipelineLayer:

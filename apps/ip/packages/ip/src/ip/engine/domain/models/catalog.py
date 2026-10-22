@@ -9,9 +9,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
+from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import AggregateRoot
 
-from ip.engine.domain.constants import IpDomainIdPrefix
 from ip.engine.domain.enums import SyncMode
 from ip.engine.domain.exceptions import InvalidConnectionConfigError, Result
 
@@ -40,7 +40,7 @@ class StreamSchema:
 class ConnectionCatalog(AggregateRoot):
     """Aggregate Root representing the discovered schema definition for a connection."""
 
-    ID_PREFIX: ClassVar[str] = IpDomainIdPrefix.CATALOG
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_CATALOG.value
 
     id: str
     connection_id: str

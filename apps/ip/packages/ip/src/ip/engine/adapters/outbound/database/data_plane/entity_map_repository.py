@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.data_plane import GlobalEntityMapModel
 from ip.engine.domain.enums import NormalizedEntityType
@@ -11,7 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-class SqlAlchemyGlobalEntityMapRepository(TenantSqlAlchemyRepository, GlobalEntityMapRepositoryPort):
+class SqlAlchemyGlobalEntityMapRepository(
+    TenantSqlAlchemyRepository, GlobalEntityMapRepositoryPort
+):
     """Repository persisting and querying GlobalEntityMap crosswalk aggregates."""
 
     def __init__(self, session: AsyncSession) -> None:
@@ -48,9 +52,22 @@ class SqlAlchemyGlobalEntityMapRepository(TenantSqlAlchemyRepository, GlobalEnti
         orm.replay_count = domain.replay_count
 
     async def save(self, entity_map: GlobalEntityMap) -> None:
-        stmt = select(GlobalEntityMapModel).where(GlobalEntityMapModel.id == entity_map.id)
+        stmt = select(GlobalEntityMapModel).where(
+            GlobalEntityMapModel.id == entity_map.id,
+            GlobalEntityMapModel.tenant_id == entity_map.tenant_id,
+        )
         result = await self._session.execute(stmt)
         existing = result.scalar_one_or_none()
+
+        if existing is None:
+            fallback_stmt = select(GlobalEntityMapModel).where(
+                GlobalEntityMapModel.tenant_id == entity_map.tenant_id,
+                GlobalEntityMapModel.entity_domain == entity_map.entity_domain.value,
+                GlobalEntityMapModel.source_connection_id == entity_map.source_connection_id,
+                GlobalEntityMapModel.source_entity_id == entity_map.source_entity_id,
+            )
+            fallback_res = await self._session.execute(fallback_stmt)
+            existing = fallback_res.scalar_one_or_none()
 
         if existing is None:
             orm = GlobalEntityMapModel(
@@ -100,13 +117,11 @@ class SqlAlchemyGlobalEntityMapRepository(TenantSqlAlchemyRepository, GlobalEnti
         self,
         tenant_id: str,
         canonical_id: str,
-    ) -> GlobalEntityMap | None:
+    ) -> Sequence[GlobalEntityMap]:
         stmt = select(GlobalEntityMapModel).where(
             GlobalEntityMapModel.tenant_id == tenant_id,
             GlobalEntityMapModel.canonical_id == canonical_id,
         )
         result = await self._session.execute(stmt)
-        orm = result.scalar_one_or_none()
-        if orm is None:
-            return None
-        return self._to_domain_model(orm)
+        rows = result.scalars().all()
+        return [self._to_domain_model(r) for r in rows]

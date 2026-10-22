@@ -93,9 +93,14 @@ class SqlAlchemyOutboundRecordRepository(TenantSqlAlchemyRepository, OutboundRec
         await self._session.flush()
 
     async def get_by_id(self, record_id: str, tenant_id: str) -> OutboundRecord | None:
-        stmt = select(OutboundRecordModel).where(
-            OutboundRecordModel.id == record_id,
-            OutboundRecordModel.tenant_id == tenant_id,
+        stmt = (
+            select(OutboundRecordModel)
+            .where(
+                OutboundRecordModel.id == record_id,
+                OutboundRecordModel.tenant_id == tenant_id,
+            )
+            .order_by(OutboundRecordModel.sent_at.desc())
+            .limit(1)
         )
         result = await self._session.execute(stmt)
         orm = result.scalar_one_or_none()
@@ -103,9 +108,7 @@ class SqlAlchemyOutboundRecordRepository(TenantSqlAlchemyRepository, OutboundRec
             return None
         return self._to_domain_model(orm)
 
-    async def get_by_trace_id(
-        self, trace_id: str, tenant_id: str
-    ) -> Sequence[OutboundRecord]:
+    async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[OutboundRecord]:
         stmt = (
             select(OutboundRecordModel)
             .where(

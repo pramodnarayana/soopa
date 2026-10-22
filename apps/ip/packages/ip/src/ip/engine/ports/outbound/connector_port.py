@@ -4,7 +4,8 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator, Sequence
 from typing import Protocol
 
-from ip.engine.domain.types import JsonDict
+from seedwork.domain.types import JsonDict
+
 from ip.engine.ports.types import (
     AppSpecDTO,
     ConnectionCheckResultDTO,

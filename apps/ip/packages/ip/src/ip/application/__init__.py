@@ -1,1 +1,1 @@
-"""Application layer for the Integration Platform."""
+"""Package root for Integration Platform Application Layer (ip.application)."""

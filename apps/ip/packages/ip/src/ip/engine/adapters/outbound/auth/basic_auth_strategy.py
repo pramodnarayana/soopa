@@ -30,7 +30,7 @@ class BasicAuthStrategy(AuthenticatorPort):
         return request
 
     async def is_valid(self) -> bool:
-        return bool(self._username and self._password)
+        return self.validate() is None
 
     async def refresh_if_needed(self) -> bool:
         return False

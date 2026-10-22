@@ -16,9 +16,7 @@ from shttp.resilience import HttpBackoffHandler
 
 logger = structlog.get_logger(__name__)
 
-TokenRefreshCallback = Callable[
-    [str, str | None, float | None], Awaitable[None] | None
-]
+TokenRefreshCallback = Callable[[str, str | None, float | None], Awaitable[None] | None]
 
 
 class OAuth2Strategy(AuthenticatorPort):
@@ -49,7 +47,7 @@ class OAuth2Strategy(AuthenticatorPort):
         self._allow_private_ips = allow_private_ips
         self._http_client = http_client or HttpClient(
             client=create_http_client(timeout=15.0),
-            backoff_handler=HttpBackoffHandler(max_retries=2),
+            backoff_handler=HttpBackoffHandler(max_retries=0),
             allow_private_ips=allow_private_ips,
             response_policy=PassThroughPolicy(),
         )
@@ -179,12 +177,24 @@ class OAuth2Strategy(AuthenticatorPort):
 
             self._last_error = None
             new_refresh_token = payload.get("refresh_token") or self._refresh_token
+            new_expires_epoch: float | None = None
             expires_in = payload.get("expires_in")
-            new_expires_epoch = (
-                datetime.now(UTC).timestamp() + float(expires_in)
-                if isinstance(expires_in, (int, float, str))
-                else None
-            )
+            if isinstance(expires_in, (int, float)):
+                new_expires_epoch = datetime.now(UTC).timestamp() + float(expires_in)
+            elif isinstance(expires_in, str):
+                try:
+                    new_expires_epoch = datetime.now(UTC).timestamp() + float(expires_in)
+                except ValueError:
+                    self._last_error = InvalidCredentialsError(
+                        field_name="expires_in",
+                        message=f"Malformed expires_in in token response: {expires_in}",
+                    )
+                    logger.error(
+                        "oauth2_token_response_invalid_expires_in",
+                        token_url=self._token_url,
+                        expires_in=expires_in,
+                    )
+                    return False
 
             self._access_token = str(new_access_token)
             self._refresh_token = str(new_refresh_token) if new_refresh_token else None

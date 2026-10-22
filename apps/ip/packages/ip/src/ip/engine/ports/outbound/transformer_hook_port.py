@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from seedwork.domain.types import JsonDict, JsonValue
+
 from ip.engine.domain.enums import NormalizedEntityType
-from ip.engine.domain.types import JsonDict, JsonValue
 
 
 @dataclass(frozen=True)

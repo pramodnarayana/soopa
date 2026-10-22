@@ -7,8 +7,8 @@ from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchem
 from ip.engine.adapters.outbound.database.models.control_plane import ConnectionRecord
 from ip.engine.domain.exceptions import DuplicateConnectionFingerprintError, Result
 from ip.engine.domain.models.connection import AuthType, Connection, ConnectionStatus
-from ip.engine.domain.types import JsonDict
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
+from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import structlog
 from ip.engine.adapters.outbound.transformers.transformer_registry import TransformerRegistry
-from ip.engine.domain.types import JsonDict, JsonValue
 from ip.engine.ports.outbound.transformer_hook_port import (
     ExtractedReplicaDTO,
     NormalizedRecordDTO,
 )
+from seedwork.domain.types import JsonDict, JsonValue
 
 logger = structlog.get_logger(__name__)
 
@@ -25,7 +25,9 @@ class TransformerBrokerAdapter:
         payload: JsonValue,
         context: JsonDict | None = None,
     ) -> ExtractedReplicaDTO | None:
-        stream_name = str(context.get("stream_name")) if context and "stream_name" in context else None
+        stream_name = (
+            str(context.get("stream_name")) if context and "stream_name" in context else None
+        )
         transformer = self._registry.resolve(app_id, stream_name)
         if transformer is None:
             logger.info(
