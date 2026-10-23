@@ -18,11 +18,16 @@ from sftp.exceptions import (
 )
 from sftp.keys import parse_client_private_key, setup_host_key
 from sftp.patches import apply_legacy_algorithm_support
-from sftp.policies import DiagnosticHostKeyPolicy
+from sftp.policies import (
+    DiagnosticHostKeyPolicy,
+    FingerprintHostKeyPolicy,
+    verify_host_key_fingerprint,
+)
 from sftp.security import resolve_and_validate_host
 
 __all__ = [
     "DiagnosticHostKeyPolicy",
+    "FingerprintHostKeyPolicy",
     "SftpAuthenticationError",
     "SftpConnectionConfig",
     "SftpConnectionError",
@@ -37,4 +42,5 @@ __all__ = [
     "resolve_and_validate_host",
     "setup_host_key",
     "test_sftp_connection",
+    "verify_host_key_fingerprint",
 ]

@@ -28,7 +28,8 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
             result = await conn.execute(text("SELECT id, dsn FROM ucp.database_shards"))
             for row in result.fetchall():
                 shard_id, dsn = row
-                shard_map[shard_id] = dsn
+                if str(shard_id).lower().startswith("edi_"):
+                    shard_map[str(shard_id).lower()] = dsn
     except Exception as e:
         # Check for SQLSTATE codes indicating missing database objects:
         # 42P01 = undefined_table, 3F000 = invalid_schema_name
@@ -45,7 +46,8 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
     # Merge overrides (they take precedence and add new ones like edi_shard_1)
     if overrides:
         for shard_id, dsn in overrides.items():
-            shard_map[shard_id] = dsn
+            if shard_id.lower().startswith("edi_"):
+                shard_map[shard_id.lower()] = dsn
 
     if not shard_map:
         logger.info(

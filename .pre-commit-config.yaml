@@ -22,7 +22,7 @@ repos:
     rev: v2.2.6
     hooks:
       - id: codespell
-        args: [--ignore-words-list, "aer,contrl,datas,gir,fpt,ptd,ded,lod,mis,ser,som,shttp"]
+        args: [--ignore-words-list, "aer,contrl,datas,gir,fpt,ptd,ded,lod,mis,ser,som,shttp,te"]
         exclude: '^(apps/edi/packages/edi/src/edi/core/grammar/|apps/edi/packages/edi/src/edi/core/bots/|pnpm-lock\.yaml|.*\.json$)'
         additional_dependencies:
           - tomli

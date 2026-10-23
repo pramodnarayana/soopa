@@ -7,6 +7,7 @@ from the Global Control Plane database across any bounded context (EDI, IP, etc.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import Protocol
 
@@ -85,21 +86,22 @@ class TenantShardResolver:
 
     async def get_all_tenant_ids(self) -> list[str]:
         """Queries the Global DB for all tenants registered for this app."""
-        async for session in self._db_router.get_global_session():
-            stmt = (
-                select(Tenant.id)
-                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
-                .join(App, App.id == ShardRegistry.app_id)
-                .where(App.slug == self._app_slug)
-            )
-            result = await session.execute(stmt)
-            tenant_ids = [str(t_id) for t_id in result.scalars().all()]
-            logger.debug(
-                "tenant_shard_resolver_fetched_all_tenants",
-                app_slug=self._app_slug,
-                count=len(tenant_ids),
-            )
-            return tenant_ids
+        async with contextlib.aclosing(self._db_router.get_global_session()) as session_gen:
+            async for session in session_gen:
+                stmt = (
+                    select(Tenant.id)
+                    .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+                    .join(App, App.id == ShardRegistry.app_id)
+                    .where(App.slug == self._app_slug)
+                )
+                result = await session.execute(stmt)
+                tenant_ids = [str(t_id) for t_id in result.scalars().all()]
+                logger.debug(
+                    "tenant_shard_resolver_fetched_all_tenants",
+                    app_slug=self._app_slug,
+                    count=len(tenant_ids),
+                )
+                return tenant_ids
         return []
 
     async def resolve_shard(self, tenant_id: str) -> tuple[str, str]:
@@ -116,37 +118,38 @@ class TenantShardResolver:
             if now < expiry:
                 return shard_name, shard_dsn
 
-        async for session in self._db_router.get_global_session():
-            stmt = (
-                select(Tenant, DatabaseShard)
-                .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
-                .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
-                .join(App, App.id == ShardRegistry.app_id)
-                .where(Tenant.id == tid_str, App.slug == self._app_slug)
-            )
-            result = await session.execute(stmt)
-            row = result.first()
-            if not row:
-                logger.warning(
-                    "tenant_shard_not_found",
+        async with contextlib.aclosing(self._db_router.get_global_session()) as session_gen:
+            async for session in session_gen:
+                stmt = (
+                    select(Tenant, DatabaseShard)
+                    .join(ShardRegistry, Tenant.id == ShardRegistry.tenant_id)
+                    .join(DatabaseShard, ShardRegistry.shard_id == DatabaseShard.id)
+                    .join(App, App.id == ShardRegistry.app_id)
+                    .where(Tenant.id == tid_str, App.slug == self._app_slug)
+                )
+                result = await session.execute(stmt)
+                row = result.first()
+                if not row:
+                    logger.warning(
+                        "tenant_shard_not_found",
+                        tenant_id=tid_str,
+                        app_slug=self._app_slug,
+                    )
+                    raise TenantNotFoundError(f"Tenant {tid_str} not found in Global DB")
+
+                _, shard_obj = row
+                shard_id = str(shard_obj.id)
+                shard_dsn = str(shard_obj.dsn)
+
+                self._cache[tid_str] = (shard_id, shard_dsn, now + self._ttl)
+                self._sweep(now)
+
+                logger.info(
+                    "tenant_shard_resolved",
                     tenant_id=tid_str,
                     app_slug=self._app_slug,
+                    shard_id=shard_id,
                 )
-                raise TenantNotFoundError(f"Tenant {tid_str} not found in Global DB")
-
-            _, shard_obj = row
-            shard_id = str(shard_obj.id)
-            shard_dsn = str(shard_obj.dsn)
-
-            self._cache[tid_str] = (shard_id, shard_dsn, now + self._ttl)
-            self._sweep(now)
-
-            logger.info(
-                "tenant_shard_resolved",
-                tenant_id=tid_str,
-                app_slug=self._app_slug,
-                shard_id=shard_id,
-            )
-            return shard_id, shard_dsn
+                return shard_id, shard_dsn
 
         raise TenantNotFoundError(f"Tenant {tid_str} not found in Global DB")

@@ -7,7 +7,6 @@ import io
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 import paramiko
 import structlog
@@ -19,7 +18,7 @@ from sftp.exceptions import (
 )
 from sftp.keys import parse_client_private_key, setup_host_key
 from sftp.patches import apply_legacy_algorithm_support
-from sftp.policies import DiagnosticHostKeyPolicy
+from sftp.policies import DiagnosticHostKeyPolicy, FingerprintHostKeyPolicy
 from sftp.security import resolve_and_validate_host
 
 logger = structlog.get_logger(__name__)
@@ -45,14 +44,33 @@ class SftpConnectionConfig:
     private_key: str | None = None
     private_key_passphrase: str | None = None
     host_key: str | None = None
+    host_key_fingerprint: str | None = None
     base_directory: str = "/"
     timeout_seconds: float = 15.0
     allow_local: bool = False
 
 
+def _configure_host_key_policy(
+    client: paramiko.SSHClient,
+    config: SftpConnectionConfig,
+    host_key_policy: paramiko.MissingHostKeyPolicy | None = None,
+) -> None:
+    if host_key_policy is not None:
+        client.set_missing_host_key_policy(host_key_policy)
+    elif config.host_key_fingerprint:
+        client.set_missing_host_key_policy(FingerprintHostKeyPolicy(config.host_key_fingerprint))
+    else:
+        setup_host_key(
+            client=client,
+            host=config.host,
+            port=config.port,
+            host_key_string=config.host_key,
+        )
+
+
 def create_ssh_client(
     config: SftpConnectionConfig,
-    diagnostic: bool = False,
+    host_key_policy: paramiko.MissingHostKeyPolicy | None = None,
 ) -> paramiko.SSHClient:
     """Creates, configures, and connects an enterprise-grade paramiko.SSHClient."""
     resolve_and_validate_host(
@@ -62,59 +80,39 @@ def create_ssh_client(
     )
 
     client = paramiko.SSHClient()
+    _configure_host_key_policy(client, config, host_key_policy=host_key_policy)
 
-    if diagnostic:
-        client.set_missing_host_key_policy(DiagnosticHostKeyPolicy())
+    pkey: paramiko.PKey | None = None
+    password: str | None = None
+    if config.private_key:
+        pkey = parse_client_private_key(config.private_key, password=config.private_key_passphrase)
+    elif config.password:
+        password = config.password
     else:
-        setup_host_key(
-            client=client,
-            host=config.host,
-            port=config.port,
-            host_key_string=config.host_key,
-        )
-
-    connect_kwargs: dict[str, Any] = {
-        "hostname": config.host,
-        "port": config.port,
-        "username": config.username,
-        "look_for_keys": False,
-        "allow_agent": False,
-        "timeout": config.timeout_seconds,
-    }
+        raise ValueError("Must provide either a password or private_key for SFTP authentication.")
 
     if config.host_key and "ssh-rsa" in config.host_key:
         apply_legacy_algorithm_support()
 
-        def legacy_transport_factory(*args: Any, **kwargs: Any) -> paramiko.Transport:
-            t = paramiko.Transport(*args, **kwargs)
-            if hasattr(t, "_preferred_keys") and "ssh-rsa" not in t._preferred_keys:
-                t._preferred_keys = (*t._preferred_keys, "ssh-rsa")
-            if hasattr(t, "_key_info") and "ssh-rsa" not in t._key_info:
-                t._key_info = dict(t._key_info)
-                t._key_info["ssh-rsa"] = paramiko.RSAKey
-            return t
-
-        connect_kwargs["transport_factory"] = legacy_transport_factory
-
-    if config.private_key:
-        connect_kwargs["pkey"] = parse_client_private_key(
-            config.private_key, password=config.private_key_passphrase
-        )
-    elif config.password:
-        connect_kwargs["password"] = config.password
-    else:
-        raise ValueError("Must provide either a password or private_key for SFTP authentication.")
-
     try:
-        client.connect(**connect_kwargs)
+        client.connect(
+            hostname=config.host,
+            port=config.port,
+            username=config.username,
+            password=password,
+            pkey=pkey,
+            look_for_keys=False,
+            allow_agent=False,
+            timeout=config.timeout_seconds,
+        )
         return client
     except paramiko.AuthenticationException as exc:
         client.close()
-        logger.warning("sftp_auth_failed", host=config.host, error=str(exc))
+        logger.error("sftp_auth_failed", host=config.host, error=str(exc))
         raise SftpAuthenticationError(f"SFTP authentication failed: {exc}") from exc
     except (paramiko.SSHException, OSError) as exc:
         client.close()
-        logger.warning("sftp_connection_failed", host=config.host, error=str(exc))
+        logger.error("sftp_connection_failed", host=config.host, error=str(exc))
         raise SftpConnectionError(
             f"SFTP connection failed for {config.host}:{config.port}: {exc}"
         ) from exc
@@ -131,12 +129,12 @@ def _test_sftp_connection_sync(config: SftpConnectionConfig) -> tuple[bool, str 
     client = None
     sftp = None
     try:
-        client = create_ssh_client(config, diagnostic=True)
+        client = create_ssh_client(config, host_key_policy=DiagnosticHostKeyPolicy())
         sftp = client.open_sftp()
         logger.info("sftp_diagnostic_ping_success", host=config.host)
         return True, None
     except Exception as exc:  # noqa: BLE001 - Diagnostic check maps all network/auth errors into result tuple
-        logger.warning("sftp_diagnostic_ping_failed", host=config.host, error=str(exc))
+        logger.error("sftp_diagnostic_ping_failed", host=config.host, error=str(exc))
         return False, str(exc)
     finally:
         if sftp is not None:
