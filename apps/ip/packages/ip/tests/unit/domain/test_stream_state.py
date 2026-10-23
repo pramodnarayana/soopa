@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ip.domain.events import StreamStateCheckpointedEvent
-from ip.domain.models.stream_state import ConnectionStreamState
+from ip.engine.domain.events import StreamStateCheckpointedEvent
+from ip.engine.domain.models.stream_state import ConnectionStreamState
 
 
 def test_create_connection_stream_state() -> None:

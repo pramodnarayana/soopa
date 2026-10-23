@@ -1,18 +1,20 @@
-"""Unit tests for InboundRecord domain aggregate root."""
+"""Unit tests for InboundRecord traced domain aggregate root."""
 
 from __future__ import annotations
 
 import json
 
-from ip.domain.events import InboundRecordCreatedEvent
-from ip.domain.models.inbound_record import (
+from ip.engine.domain.events import InboundRecordCreatedEvent
+from ip.engine.domain.models.inbound_record import (
     InboundRecord,
     compute_payload_sha256,
 )
+from seedwork.domain.types import JsonDict
+from seedwork.models import TracedAggregateRoot
 
 
 def test_inbound_record_create_inline() -> None:
-    data = {"meter_id": "MTR-101", "reading": 450.5}
+    data: JsonDict = {"meter_id": "MTR-101", "reading": 450.5}
     payload_bytes = json.dumps(data).encode("utf-8")
 
     record = InboundRecord.create(
@@ -26,11 +28,15 @@ def test_inbound_record_create_inline() -> None:
         request_s3_key=None,
         request_headers={"content-type": "application/json"},
         response_status_code=202,
-        business_correlation_id="CORR-999",
+        correlation_id="CORR-999",
+        parent_trace_id="ip_trc_parent",
+        original_trace_id="ip_trc_orig",
+        replay_count=1,
     )
 
+    assert isinstance(record, TracedAggregateRoot)
     assert record.id.startswith("ip_inb_")
-    assert record.business_trace_id.startswith("ip_trc_")
+    assert record.trace_id.startswith("ip_trc_")
     assert record.tenant_id == "ten_test_123"
     assert record.connection_id == "ip_conn_abc"
     assert record.app_id == "itron_mdm"
@@ -41,14 +47,23 @@ def test_inbound_record_create_inline() -> None:
     assert record.request_sha256 == compute_payload_sha256(payload_bytes)
     assert record.request_headers["content-type"] == "application/json"
     assert record.response_status_code == 202
-    assert record.business_correlation_id == "CORR-999"
+    assert record.correlation_id == "CORR-999"
+    assert record.parent_trace_id == "ip_trc_parent"
+    assert record.original_trace_id == "ip_trc_orig"
+    assert record.replay_count == 1
+    assert len(record.trace_events) == 1
+    assert record.trace_events[0].trace_id == record.trace_id
 
     # Verify Domain Event emission
     assert len(record.domain_events) == 1
     event = record.domain_events[0]
     assert isinstance(event, InboundRecordCreatedEvent)
     assert event.record_id == record.id
-    assert event.business_trace_id == record.business_trace_id
+    assert event.trace_id == record.trace_id
+    assert event.correlation_id == "CORR-999"
+    assert event.parent_trace_id == "ip_trc_parent"
+    assert event.original_trace_id == "ip_trc_orig"
+    assert event.replay_count == 1
     assert event.tenant_id == "ten_test_123"
     assert event.app_id == "itron_mdm"
     assert event.is_inlined is True

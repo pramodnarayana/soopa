@@ -21,7 +21,7 @@ async def test_list_catalog_apps(auth_client: httpx.AsyncClient) -> None:
     assert "hubspot" in app_ids
     assert "stripe" in app_ids
     assert "servicenow" in app_ids
-    assert "itron_mdm" in app_ids
+    assert "http" in app_ids
     assert "sftp" in app_ids
 
     # Validate structure
@@ -63,7 +63,7 @@ async def test_get_declarative_app_spec(auth_client: httpx.AsyncClient) -> None:
     assert len(spec["properties"]) > 0
 
     prop_names = [p["name"] for p in spec["properties"]]
-    assert "instance_url" in prop_names
+    assert "instance_host" in prop_names
     assert "environment" in prop_names
 
 

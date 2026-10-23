@@ -491,9 +491,24 @@ class GenericHttpConnector(BaseConnector):
         req_spec = stream_def.request
         url_res = self._build_safe_target_url(spec.base_url, req_spec.path)
         if url_res.is_err or url_res.value is None:
-            target_url = urljoin(spec.base_url.rstrip("/") + "/", req_spec.path.lstrip("/"))
-        else:
-            target_url = url_res.value
+            pk_strings = [".".join(p) for p in stream_def.replication.primary_key] or ["id"]
+            cursor_str = (
+                ".".join(stream_def.replication.cursor_field)
+                if stream_def.replication.cursor_field
+                else None
+            )
+            return StreamSchemaDTO(
+                name=stream_name,
+                fields=[
+                    StreamFieldDTO(name="id", data_type="string", nullable=False),
+                    StreamFieldDTO(name="data", data_type="json", nullable=True),
+                ],
+                primary_key=pk_strings,
+                cursor_field=cursor_str,
+                supported_sync_modes=[stream_def.replication.sync_mode.value],
+            )
+
+        target_url = url_res.value
 
         sample_params = dict(req_spec.query_params)
         sample_params["limit"] = "5"

@@ -172,3 +172,27 @@ async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
     )
     assert await fail_strategy.refresh_if_needed() is False
     assert isinstance(fail_strategy.last_error, InvalidCredentialsError)
+
+    # Supports client_credentials grant refresh without a refresh_token
+    httpserver.expect_request(
+        "/oauth/token_client_credentials",
+        method="POST",
+    ).respond_with_json(
+        {
+            "access_token": "tok_cc_123",
+            "expires_in": 1800,
+        },
+        status=200,
+    )
+    cc_strategy = OAuth2Strategy(
+        client_id="cid",
+        client_secret="sec",
+        token_url=httpserver.url_for("/oauth/token_client_credentials"),
+        access_token="tok_expired",
+        refresh_token=None,
+        grant_mode="client_credentials",
+        expires_at_epoch=past_epoch,
+        allow_private_ips=True,
+    )
+    assert await cc_strategy.refresh_if_needed() is True
+    assert cc_strategy.access_token == "tok_cc_123"

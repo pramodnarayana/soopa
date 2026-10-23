@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from ip.domain.enums import AuthType
+from ip.engine.domain.enums import AuthType
 from pydantic import BaseModel, Field
+from seedwork.domain.types import JsonDict
 
 
 class CreateConnectionHttpRequest(BaseModel):
@@ -16,11 +15,11 @@ class CreateConnectionHttpRequest(BaseModel):
     auth_type: AuthType = Field(
         ..., description="Authentication strategy (e.g. 'API_KEY', 'OAUTH2')"
     )
-    public_config: dict[str, Any] = Field(
+    public_config: JsonDict = Field(
         default_factory=dict,
         description="Public configuration dictionary (endpoints, ports, timeouts)",
     )
-    raw_credentials: dict[str, Any] = Field(
+    raw_credentials: JsonDict = Field(
         default_factory=dict,
         description="Raw credential secrets to be encrypted at rest",
     )
@@ -35,15 +34,15 @@ class CheckConnectionHttpRequest(BaseModel):
 
     app_id: str
     auth_type: AuthType
-    public_config: dict[str, Any] = Field(default_factory=dict)
-    raw_credentials: dict[str, Any] = Field(default_factory=dict)
+    public_config: JsonDict = Field(default_factory=dict)
+    raw_credentials: JsonDict = Field(default_factory=dict)
 
 
 class RelinkConnectionHttpRequest(BaseModel):
     """Payload to refresh credentials and reactivate a disconnected connection."""
 
     new_name: str | None = None
-    updated_raw_credentials: dict[str, Any] | None = None
+    updated_raw_credentials: JsonDict | None = None
 
 
 class ConnectionHttpResponse(BaseModel):
@@ -54,7 +53,7 @@ class ConnectionHttpResponse(BaseModel):
     app_id: str
     name: str
     auth_type: str
-    public_config: dict[str, Any]
+    public_config: dict[str, object]
     status: str
     connection_fingerprint: str
     token_expires_at: str | None = None

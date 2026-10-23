@@ -98,7 +98,7 @@ Handles external inbound traffic, guarantees sub-20ms HTTP acknowledgments, capt
      - Payloads $< 64\text{ KB}$: Inlined into PostgreSQL `public.inbound_records` on the tenant's IP shard.
      - Payloads $\ge 64\text{ KB}$: Uploaded directly to S3 / MinIO; only the pointer (`request_s3_key`) is stored in PostgreSQL.
 2. **Transactional Outbox Registration:**
-   - In the exact same DB transaction as the raw record insert, registers `inbound_record.created` into the Data Plane transactional outbox (`public.outbox`).
+   - In the exact same DB transaction as the raw record insert, registers `inbound_record.created` into the Data Plane transactional outbox (`public.ip_outbox`).
 
 ---
 
@@ -113,11 +113,11 @@ Maintains the raw, unadulterated state snapshot of external entities (L2), provi
 ### Key Responsibilities:
 1. **Replica Worker:**
    - Consumes `inbound_record.created` outbox events.
-   - Invokes the pure L2 extraction hook (`TransformerHookPort.extract_replica`) from `ip.application.transformers`.
+   - Invokes the pure L2 extraction hook (`RecordExtractorPort.extract_records`) from `ip.engine.ports.outbound.record_extractor_port`.
    - Computes SHA-256 `data_hash` for change detection. If the hash matches the existing record, redundant downstream processing is skipped.
-   - Idempotently upserts into `public.replica_records` on the tenant's IP shard keyed by `(tenant_id, connection_id, entity_type, entity_id)`.
+   - Idempotently upserts into `public.replica_records` on the tenant's IP shard keyed by `(tenant_id, connection_id, stream, record_key)`.
 2. **Transactional Outbox Registration:**
-   - Commits the replica snapshot and registers `replica_record.updated` into the Data Plane outbox.
+   - Commits the replica snapshot and registers `replica_record.updated` into the Data Plane outbox (`public.ip_outbox`).
 
 ---
 

@@ -195,7 +195,13 @@ class OAuth2Strategy(AuthenticatorPort):
             return False
 
         async with self._lock:
-            if await self.is_valid() or not self._refresh_token:
+            if await self.is_valid():
+                return False
+
+            can_use_client_credentials = self._grant_mode == "client_credentials" or (
+                not self._refresh_token and bool(self._client_id)
+            )
+            if not self._refresh_token and not can_use_client_credentials:
                 return False
 
             payload = await self._execute_token_refresh_request()

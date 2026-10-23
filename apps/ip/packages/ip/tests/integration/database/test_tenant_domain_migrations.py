@@ -16,6 +16,8 @@ from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+pytestmark = pytest.mark.integration
+
 
 def test_domain_migration_modules_ownership_and_invariants() -> None:
     """Verifies that every table in IpTenantBase.metadata is owned by exactly one domain branch."""

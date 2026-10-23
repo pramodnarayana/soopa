@@ -9,9 +9,7 @@ class IngressRecordHttpResponse(BaseModel):
     """Response returned upon successful acceptance (<20ms) of an inbound record."""
 
     record_id: str = Field(..., description="Unique inbound record identifier (ip_inb_...)")
-    business_trace_id: str = Field(
-        ..., description="End-to-end distributed business trace identifier (ip_trc_...)"
-    )
+    trace_id: str = Field(..., description="End-to-end distributed trace identifier (ip_trc_...)")
     status: str = Field("ACCEPTED", description="Ingestion status: ACCEPTED")
     payload_size_bytes: int = Field(..., description="Size of raw payload in bytes")
     is_inlined: bool = Field(

@@ -26,6 +26,8 @@ from contextlib import asynccontextmanager
 import structlog
 from edi.bootstrap.lifespan import shutdown, startup
 from fastapi import FastAPI
+from ip.bootstrap.lifespan import shutdown as ip_shutdown
+from ip.bootstrap.lifespan import startup as ip_startup
 from notification.bootstrap.lifespan import shutdown as notification_shutdown
 from notification.bootstrap.lifespan import startup as notification_startup
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
@@ -46,11 +48,13 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
       2. Notification Engine background workers.
       3. EDI DatabaseRouter — attached to the EDI sub-app's state so that
          ``request.app.state.db_router`` resolves correctly inside EDI routes.
+      4. IP IoC Container and TenantResolver.
 
     Shutdown order (reverse):
-      1. EDI DatabaseRouter.
-      2. Notification Engine background workers.
-      3. UCP background workers.
+      1. IP IoC Container and TenantResolver.
+      2. EDI DatabaseRouter.
+      3. Notification Engine background workers.
+      4. UCP background workers.
     """
     # Retrieve the EDI sub-app from the Shell's mounted routes.
     # The Shell created edi_app and passed it to app.mount("/", edi_app).
@@ -90,9 +94,20 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 max_overflow=edi_settings.database.max_overflow,
                 shard_overrides=edi_settings.database.shard_overrides,
             )
+            app.state.db_router = edi_app.state.db_router
             try:
-                # Normal operation
-                yield
+                logger.info("Shell startup: initializing IP domain infrastructure.")
+                await ip_startup(
+                    app,
+                    db_router=edi_app.state.db_router,
+                    allow_private_ips=edi_settings.allow_private_ips,
+                )
+                try:
+                    # Normal operation
+                    yield
+                finally:
+                    logger.info("Shell shutdown: stopping IP domain infrastructure.")
+                    await ip_shutdown(app)
             finally:
                 # EDI started successfully, always clean it up
                 logger.info("Shell shutdown: stopping EDI domain infrastructure.")

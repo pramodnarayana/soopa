@@ -126,7 +126,7 @@ class RunSyncUseCase:
             )
             ingestion_mode = self._resolve_ingestion_mode(kind)
 
-            await self._execute_stream_pull(
+            capped = await self._execute_stream_pull(
                 command=command,
                 sync_run=sync_run,
                 connection=connection,
@@ -157,6 +157,20 @@ class RunSyncUseCase:
                 trace_id=trace_id,
             )
             return await self._fail_run(sync_run, err.code.value, err.message)
+
+        if capped and sync_run.kind == SyncRunKind.FULL_REFRESH:
+            logger.error(
+                "sync_run_full_refresh_capped_incomplete",
+                run_id=sync_run.id,
+                stream=command.stream_name,
+                max_pages=command.max_pages,
+                trace_id=trace_id,
+            )
+            return await self._fail_run(
+                sync_run,
+                "MAX_PAGES_REACHED",
+                f"FULL_REFRESH reached maximum page limit of {command.max_pages} pages before stream completion.",
+            )
 
         return await self._complete_run(sync_run, start_cursor, trace_id)
 
@@ -270,10 +284,11 @@ class RunSyncUseCase:
         ingestion_mode: IngestionMode,
         generation_id: int,
         trace_id: str,
-    ) -> None:
+    ) -> bool:
         current_page: list[RecordEnvelopeDTO] = []
         page_index = 0
         latest_page_cursor: str | None = None
+        capped = False
 
         async for record_envelope in connector.read_stream(
             stream_name=command.stream_name,
@@ -309,6 +324,7 @@ class RunSyncUseCase:
                         max_pages=command.max_pages,
                         stream=command.stream_name,
                     )
+                    capped = True
                     break
 
         if current_page:
@@ -324,6 +340,8 @@ class RunSyncUseCase:
                 next_cursor=latest_page_cursor,
                 trace_id=trace_id,
             )
+
+        return capped
 
     async def _complete_run(
         self, sync_run: SyncRun, start_cursor: str | None, trace_id: str

@@ -1,47 +1,52 @@
 """Inbound HTTP router for Integration Platform connections and catalogs."""
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from typing import Annotated
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, Response, status
 from identity.domain.identity_context import IdentityContext
-from ip.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
-from ip.adapters.outbound.connectors.registry_loader import create_default_catalog_registry
-from ip.adapters.outbound.database.catalog_repository import SqlAlchemyCatalogRepository
-from ip.adapters.outbound.database.connection_repository import SqlAlchemyConnectionRepository
-from ip.application.connections.check_connection_use_case import (
+from ip.engine.application.dto import ConnectionDTO, DiscoveredCatalogDTO
+from ip.engine.application.use_cases.connections.check_connection_use_case import (
     CheckConnectionCommand,
     CheckConnectionUseCase,
 )
-from ip.application.connections.create_connection_use_case import (
+from ip.engine.application.use_cases.connections.create_connection_use_case import (
     CreateConnectionCommand,
     CreateConnectionUseCase,
 )
-from ip.application.connections.deactivate_connection_use_case import (
+from ip.engine.application.use_cases.connections.deactivate_connection_use_case import (
     DeactivateConnectionCommand,
     DeactivateConnectionUseCase,
 )
-from ip.application.connections.discover_catalog_use_case import DiscoverCatalogUseCase
-from ip.application.connections.relink_connection_use_case import (
+from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
+    DiscoverCatalogUseCase,
+)
+from ip.engine.application.use_cases.connections.get_connection_use_case import (
+    GetConnectionQuery,
+    GetConnectionUseCase,
+)
+from ip.engine.application.use_cases.connections.list_connections_use_case import (
+    ListConnectionsQuery,
+    ListConnectionsUseCase,
+)
+from ip.engine.application.use_cases.connections.relink_connection_use_case import (
     RelinkConnectionCommand,
     RelinkConnectionUseCase,
 )
-from ip.application.responses import ConnectionDTO, DiscoveredCatalogDTO
-from ip.domain.enums import ConnectionStatus
-from ip.domain.exceptions import (
-    AuthenticationFailedException,
-    CatalogDiscoveryFailedException,
-    ConnectionNotFoundException,
-    ConnectorNotFoundException,
-    DuplicateConnectionFingerprintException,
-    InvalidConnectionStateException,
-)
-from ip.ports.outbound.connector_port import ConnectorPort
-from security.provider import SecurityProvider
-from sqlalchemy.ext.asyncio import AsyncSession
-from ucp.bootstrap.dependencies import get_db_session
+from ip.engine.domain.enums import ConnectionStatus
+from ip.engine.domain.exceptions import ConnectionNotFoundError, IpErrorCode
+from ip.engine.ports.outbound.connector_port import ConnectorPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
+from security.ports.cipher_port import CipherPort
 
+from unified_api.adapters.inbound.http.dependencies.ip.database import (
+    get_ip_control_plane_uow,
+)
+from unified_api.adapters.inbound.http.dependencies.ip.services import (
+    get_cipher,
+    get_connectors,
+)
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from unified_api.adapters.inbound.http.ip.dtos.connection_dtos import (
     CheckConnectionHttpRequest,
@@ -53,6 +58,11 @@ from unified_api.adapters.inbound.http.ip.dtos.connection_dtos import (
     StreamFieldHttpResponse,
     StreamSchemaHttpResponse,
 )
+from unified_api.adapters.inbound.http.ip.dtos.error_dtos import (
+    ApiErrorHttpResponse,
+    from_ip_error,
+    to_error_response,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -60,33 +70,6 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/connections",
     tags=["Integration Platform - Connections"],
 )
-
-
-class _ConnectorCatalogMapping(Mapping[str, ConnectorPort]):
-    """Dynamic mapping resolving connectors from the central ConnectorCatalogRegistry."""
-
-    def __init__(self, registry: ConnectorCatalogRegistry) -> None:
-        self._registry = registry
-
-    def __getitem__(self, key: str) -> ConnectorPort:
-        try:
-            return self._registry.get_connector(key)
-        except ConnectorNotFoundException as exc:
-            raise KeyError(key) from exc
-
-    def __len__(self) -> int:
-        return len(self._registry.list_apps())
-
-    def __iter__(self) -> Iterator[str]:
-        return (app.app_id for app in self._registry.list_apps())
-
-
-_catalog_registry = create_default_catalog_registry()
-_connector_mapping = _ConnectorCatalogMapping(_catalog_registry)
-
-
-def _get_connectors() -> Mapping[str, ConnectorPort]:
-    return _connector_mapping
 
 
 def _map_connection_dto_to_response(dto: ConnectionDTO) -> ConnectionHttpResponse:
@@ -136,17 +119,24 @@ def _map_catalog_dto_to_response(dto: DiscoveredCatalogDTO) -> DiscoveredCatalog
     )
 
 
-@router.post("", response_model=ConnectionHttpResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ConnectionHttpResponse,
+    responses={
+        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
+    },
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_connection(
     tenant_id: str,
     request: CreateConnectionHttpRequest,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    session: AsyncSession = Depends(get_db_session),
-) -> ConnectionHttpResponse:
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    cipher: Annotated[CipherPort, Depends(get_cipher)],
+) -> ConnectionHttpResponse | Response:
     """Creates a new external system connection with encrypted credentials."""
-    connection_repo = SqlAlchemyConnectionRepository(session)
-    cipher = SecurityProvider.get_cipher()
-    use_case = CreateConnectionUseCase(connection_repo=connection_repo, cipher=cipher)
+    use_case = CreateConnectionUseCase(uow=ip_cp_uow, cipher=cipher)
 
     cmd = CreateConnectionCommand(
         tenant_id=tenant_id,
@@ -158,50 +148,42 @@ async def create_connection(
         endpoint_for_fingerprint=request.endpoint_for_fingerprint,
     )
 
-    try:
-        dto = await use_case.execute(cmd)
-        await session.commit()
-        return _map_connection_dto_to_response(dto)
-    except DuplicateConnectionFingerprintException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    result = await use_case.execute(cmd)
+    if not result.success:
+        if result.error is not None:
+            return from_ip_error(result.error)
+        status_code = (
+            status.HTTP_409_CONFLICT
+            if result.error_code == IpErrorCode.DUPLICATE_FINGERPRINT.value
+            else status.HTTP_400_BAD_REQUEST
+        )
+        return to_error_response(
+            status_code=status_code,
+            code=result.error_code or IpErrorCode.INVALID_CONFIG.value,
+            message=result.error_message or "Connection creation failed",
+        )
+    if result.connection is None:
+        return to_error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_ERROR",
+            message="Connection created but payload was omitted.",
+        )
+    return _map_connection_dto_to_response(result.connection)
 
 
 @router.get("", response_model=list[ConnectionHttpResponse], status_code=status.HTTP_200_OK)
 async def list_connections(
     tenant_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    session: AsyncSession = Depends(get_db_session),
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     connection_status: ConnectionStatus | None = Query(None, alias="status"),
 ) -> list[ConnectionHttpResponse]:
     """Lists connections configured for this tenant, optionally filtered by status."""
-    connection_repo = SqlAlchemyConnectionRepository(session)
-    connections = await connection_repo.list_by_tenant(
-        tenant_id=tenant_id, status=connection_status
+    use_case = ListConnectionsUseCase(uow=ip_cp_uow)
+    dtos = await use_case.execute(
+        ListConnectionsQuery(tenant_id=tenant_id, status=connection_status)
     )
-
-    return [
-        _map_connection_dto_to_response(
-            ConnectionDTO(
-                id=c.id,
-                tenant_id=c.tenant_id,
-                app_id=c.app_id,
-                name=c.name,
-                auth_type=c.auth_type.value,
-                public_config=dict(c.public_config),
-                status=c.status.value,
-                connection_fingerprint=c.connection_fingerprint,
-                token_expires_at=c.token_expires_at,
-                last_refreshed_at=c.last_refreshed_at,
-                last_error_code=c.last_error_code,
-                last_error_message=c.last_error_message,
-                created_at=c.created_at,
-                updated_at=c.updated_at,
-                deactivated_at=c.deactivated_at,
-            )
-        )
-        for c in connections
-    ]
+    return [_map_connection_dto_to_response(dto) for dto in dtos]
 
 
 @router.post("/check", response_model=ConnectionCheckHttpResponse, status_code=status.HTTP_200_OK)
@@ -209,9 +191,9 @@ async def check_connection_credentials(
     tenant_id: str,
     request: CheckConnectionHttpRequest,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    connectors: Annotated[Mapping[str, ConnectorPort], Depends(get_connectors)],
 ) -> ConnectionCheckHttpResponse:
     """Pre-flight connectivity and credential check without saving a connection."""
-    connectors = _get_connectors()
     use_case = CheckConnectionUseCase(connectors=connectors)
 
     cmd = CheckConnectionCommand(
@@ -233,122 +215,124 @@ async def check_connection_credentials(
 @router.get(
     "/{connection_id}",
     response_model=ConnectionHttpResponse,
+    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
     status_code=status.HTTP_200_OK,
 )
 async def get_connection(
     tenant_id: str,
     connection_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    session: AsyncSession = Depends(get_db_session),
-) -> ConnectionHttpResponse:
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ConnectionHttpResponse | Response:
     """Fetches details of a specific connection."""
-    connection_repo = SqlAlchemyConnectionRepository(session)
-    c = await connection_repo.get_by_id(connection_id)
-    if not c or c.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Connection '{connection_id}' not found.",
-        )
-
-    return _map_connection_dto_to_response(
-        ConnectionDTO(
-            id=c.id,
-            tenant_id=c.tenant_id,
-            app_id=c.app_id,
-            name=c.name,
-            auth_type=c.auth_type.value,
-            public_config=dict(c.public_config),
-            status=c.status.value,
-            connection_fingerprint=c.connection_fingerprint,
-            token_expires_at=c.token_expires_at,
-            last_refreshed_at=c.last_refreshed_at,
-            last_error_code=c.last_error_code,
-            last_error_message=c.last_error_message,
-            created_at=c.created_at,
-            updated_at=c.updated_at,
-            deactivated_at=c.deactivated_at,
-        )
+    use_case = GetConnectionUseCase(uow=ip_cp_uow)
+    result = await use_case.execute(
+        GetConnectionQuery(tenant_id=tenant_id, connection_id=connection_id)
     )
+    if not result.success or result.connection is None:
+        return from_ip_error(result.error or ConnectionNotFoundError.for_id(connection_id))
+
+    return _map_connection_dto_to_response(result.connection)
 
 
 @router.post(
     "/{connection_id}/discover",
     response_model=DiscoveredCatalogHttpResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_502_BAD_GATEWAY: {"model": ApiErrorHttpResponse},
+    },
     status_code=status.HTTP_200_OK,
 )
 async def discover_connection_catalog(
     tenant_id: str,
     connection_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    session: AsyncSession = Depends(get_db_session),
-) -> DiscoveredCatalogHttpResponse:
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    cipher: Annotated[CipherPort, Depends(get_cipher)],
+    connectors: Annotated[Mapping[str, ConnectorPort], Depends(get_connectors)],
+) -> DiscoveredCatalogHttpResponse | Response:
     """Introspects the external system and stores a new schema catalog version."""
-    connection_repo = SqlAlchemyConnectionRepository(session)
-    catalog_repo = SqlAlchemyCatalogRepository(session)
-    cipher = SecurityProvider.get_cipher()
-    connectors = _get_connectors()
-
-    # Pre-verify tenant ownership
-    conn = await connection_repo.get_by_id(connection_id)
-    if not conn or conn.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Connection '{connection_id}' not found.",
-        )
-
     use_case = DiscoverCatalogUseCase(
-        connection_repo=connection_repo,
-        catalog_repo=catalog_repo,
+        uow=ip_cp_uow,
         cipher=cipher,
         connectors=connectors,
     )
 
-    try:
-        dto = await use_case.execute(connection_id)
-        await session.commit()
-        return _map_catalog_dto_to_response(dto)
-    except ConnectionNotFoundException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except ConnectorNotFoundException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except CatalogDiscoveryFailedException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    dto = await use_case.execute(connection_id=connection_id, tenant_id=tenant_id)
+    if not dto.success:
+        if dto.error is not None:
+            status_override = (
+                status.HTTP_404_NOT_FOUND
+                if dto.error.code
+                in (IpErrorCode.CONNECTION_NOT_FOUND, IpErrorCode.CONNECTOR_NOT_FOUND)
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            return from_ip_error(dto.error, status_code_override=status_override)
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if dto.error_code
+            in (IpErrorCode.CONNECTION_NOT_FOUND.value, IpErrorCode.CONNECTOR_NOT_FOUND.value)
+            else status.HTTP_502_BAD_GATEWAY
+        )
+        return to_error_response(
+            status_code=status_code,
+            code=dto.error_code or IpErrorCode.CATALOG_DISCOVERY_FAILED.value,
+            message=dto.error_message or "Catalog discovery failed",
+        )
+    return _map_catalog_dto_to_response(dto)
 
 
 @router.delete(
     "/{connection_id}",
     response_model=ConnectionHttpResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
+    },
     status_code=status.HTTP_200_OK,
 )
 async def deactivate_connection(
     tenant_id: str,
     connection_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    session: AsyncSession = Depends(get_db_session),
-) -> ConnectionHttpResponse:
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ConnectionHttpResponse | Response:
     """Soft-deactivates an active connection."""
-    connection_repo = SqlAlchemyConnectionRepository(session)
-    use_case = DeactivateConnectionUseCase(connection_repo=connection_repo)
+    use_case = DeactivateConnectionUseCase(uow=ip_cp_uow)
 
     cmd = DeactivateConnectionCommand(connection_id=connection_id, tenant_id=tenant_id)
-    try:
-        dto = await use_case.execute(cmd)
-        await session.commit()
-        return _map_connection_dto_to_response(dto)
-    except ConnectionNotFoundException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except InvalidConnectionStateException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    result = await use_case.execute(cmd)
+    if not result.success:
+        if result.error is not None:
+            return from_ip_error(result.error)
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if result.error_code == IpErrorCode.CONNECTION_NOT_FOUND.value
+            else status.HTTP_409_CONFLICT
+        )
+        return to_error_response(
+            status_code=status_code,
+            code=result.error_code or IpErrorCode.INVALID_CONNECTION_STATE.value,
+            message=result.error_message or "Connection deactivation failed",
+        )
+    if result.connection is None:
+        return to_error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_ERROR",
+            message="Connection deactivated but payload was omitted.",
+        )
+    return _map_connection_dto_to_response(result.connection)
 
 
 @router.post(
     "/{connection_id}/relink",
     response_model=ConnectionHttpResponse,
+    responses={
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": ApiErrorHttpResponse},
+    },
     status_code=status.HTTP_200_OK,
 )
 async def relink_connection(
@@ -356,12 +340,11 @@ async def relink_connection(
     connection_id: str,
     request: RelinkConnectionHttpRequest,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    session: AsyncSession = Depends(get_db_session),
-) -> ConnectionHttpResponse:
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    cipher: Annotated[CipherPort, Depends(get_cipher)],
+) -> ConnectionHttpResponse | Response:
     """Updates credentials and reactivates a disconnected or suspended connection."""
-    connection_repo = SqlAlchemyConnectionRepository(session)
-    cipher = SecurityProvider.get_cipher()
-    use_case = RelinkConnectionUseCase(connection_repo=connection_repo, cipher=cipher)
+    use_case = RelinkConnectionUseCase(uow=ip_cp_uow, cipher=cipher)
 
     cmd = RelinkConnectionCommand(
         connection_id=connection_id,
@@ -369,15 +352,24 @@ async def relink_connection(
         new_name=request.new_name,
         updated_raw_credentials=request.updated_raw_credentials,
     )
-    try:
-        dto = await use_case.execute(cmd)
-        await session.commit()
-        return _map_connection_dto_to_response(dto)
-    except ConnectionNotFoundException as exc:
-        await session.rollback()
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except AuthenticationFailedException as exc:
-        await session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
-        ) from exc
+    result = await use_case.execute(cmd)
+    if not result.success:
+        if result.error is not None:
+            return from_ip_error(result.error)
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if result.error_code == IpErrorCode.CONNECTION_NOT_FOUND.value
+            else status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+        return to_error_response(
+            status_code=status_code,
+            code=result.error_code or IpErrorCode.INVALID_CONNECTION_STATE.value,
+            message=result.error_message or "Connection relink failed",
+        )
+    if result.connection is None:
+        return to_error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_ERROR",
+            message="Connection relinked but payload was omitted.",
+        )
+    return _map_connection_dto_to_response(result.connection)

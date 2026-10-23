@@ -385,6 +385,10 @@ CREATE TABLE public.inbound_records (
     original_trace_id VARCHAR(64),
     replay_count INT NOT NULL DEFAULT 0,
     stream_name VARCHAR(128) NOT NULL,
+    ingestion_mode VARCHAR(32) NOT NULL DEFAULT 'PUSH_FULL',
+    sync_run_id VARCHAR(64),
+    generation_id INT,
+    external_event_id VARCHAR(255),
     request_headers JSONB NOT NULL DEFAULT '{}'::jsonb,
     request_body JSONB,                                 -- Populated if size < 64 KB
     request_s3_key VARCHAR(512),                        -- Populated if size >= 64 KB
@@ -405,6 +409,10 @@ CREATE TABLE public.inbound_records_default
 
 CREATE INDEX idx_inbound_trace ON public.inbound_records (tenant_id, trace_id);
 CREATE INDEX idx_inbound_corr ON public.inbound_records (tenant_id, correlation_id);
+CREATE INDEX idx_inbound_conn ON public.inbound_records (tenant_id, connection_id);
+CREATE INDEX idx_inbound_app ON public.inbound_records (tenant_id, app_id);
+CREATE UNIQUE INDEX uq_inbound_external_event ON public.inbound_records (tenant_id, connection_id, external_event_id)
+    WHERE external_event_id IS NOT NULL;
 
 -- Enable RLS for standard shared shards
 ALTER TABLE public.inbound_records ENABLE ROW LEVEL SECURITY;
@@ -418,19 +426,24 @@ CREATE TABLE public.replica_records (
     id VARCHAR(64) PRIMARY KEY,                         -- ip_rep_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
     connection_id VARCHAR(64) NOT NULL,                 -- Logical ref to ip.connections(id)
-    app_id VARCHAR(64) NOT NULL,
-    entity_type VARCHAR(128) NOT NULL,                  -- 'meters', 'service_points', 'loads'
-    entity_id VARCHAR(255) NOT NULL,                    -- External primary key
+    stream VARCHAR(128) NOT NULL,                       -- Stream name (e.g. 'meters', 'loads')
+    record_key VARCHAR(64) NOT NULL,                    -- Deterministic composite key hash
+    primary_key_values JSONB NOT NULL DEFAULT '[]'::jsonb,
+    cursor_value VARCHAR(255),
+    cursor_kind VARCHAR(32),
     data JSONB NOT NULL,                                -- Parsed, structured source JSON
     data_hash VARCHAR(64) NOT NULL,                     -- SHA-256 for change detection (dedup)
+    version BIGINT NOT NULL DEFAULT 1,
+    generation_id BIGINT NOT NULL DEFAULT 1,
+    last_seen_generation BIGINT NOT NULL DEFAULT 1,
+    first_seen_at TIMESTAMPTZ NOT NULL,
+    extracted_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    deleted_at TIMESTAMPTZ,
+    source_inbound_record_id VARCHAR(64) NOT NULL DEFAULT '',
     trace_id VARCHAR(64) NOT NULL,
     correlation_id VARCHAR(255),
-    parent_trace_id VARCHAR(64),
-    original_trace_id VARCHAR(64),
-    replay_count INT NOT NULL DEFAULT 0,
-    version BIGINT NOT NULL DEFAULT 1,
-    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_ip_replica_record_identity UNIQUE (tenant_id, connection_id, entity_type, entity_id)
+    CONSTRAINT uq_ip_replica_record_identity UNIQUE (tenant_id, connection_id, stream, record_key)
 );
 
 CREATE INDEX idx_replica_trace ON public.replica_records (tenant_id, trace_id);
@@ -625,5 +638,5 @@ The system embeds a **Model Context Protocol (MCP)** tool caller that queries th
 4. **Zero-Mock Pure Testing:** Domain business logic and canonical normalizers are tested with 100% pure unit tests without mocks. Integration tests utilize PostgreSQL nested transactions (`SAVEPOINT`) with automatic rollbacks.
 5. **First-Class Error Handling (No Exceptions for Known Outcomes):**
    - Known domain, operational, and upstream integration failures **never** raise Python exceptions for control flow.
-   - `ip.engine.domain.errors` defines `FailureDisposition(StrEnum)` (`RETRYABLE`, `TERMINAL`, `REAUTH_REQUIRED`, `VALIDATION_FAILURE`, `NOT_FOUND`, `CONFLICT`), `IpErrorCode(StrEnum)`, `IpError` base class, and 20 dedicated immutable `@dataclass(frozen=True, kw_only=True)` error classes (`ConnectionNotFoundError`, `DuplicateConnectionFingerprintError`, `InvalidConnectionStateError`, `InvalidConnectionConfigError`, `InvalidCredentialsError`, `InvalidEndpointError`, `EndpointSecurityViolationError`, `ConnectorNotFoundError`, `StreamNotFoundError`, `AuthenticationFailedError`, `UpstreamHttpError`, `UpstreamRemoteError`, `UpstreamNetworkError`, `SftpConnectionError`, `CatalogDiscoveryError`, `ManifestParseFailureError`, `UnsupportedWriteOperationError`, `WriteActionNotConfiguredError`, `PayloadNotFoundError`, `ConnectionDeactivatedError`).
+   - `ip.engine.domain.exceptions` defines `FailureDisposition(StrEnum)` (`RETRYABLE`, `TERMINAL`, `REAUTH_REQUIRED`, `VALIDATION_FAILURE`, `NOT_FOUND`, `CONFLICT`), `IpErrorCode(StrEnum)`, `IpError` base class, and 20 dedicated immutable `@dataclass(frozen=True, kw_only=True)` error classes (`ConnectionNotFoundError`, `DuplicateConnectionFingerprintError`, `InvalidConnectionStateError`, `InvalidConnectionConfigError`, `InvalidCredentialsError`, `InvalidEndpointError`, `EndpointSecurityViolationError`, `ConnectorNotFoundError`, `StreamNotFoundError`, `AuthenticationFailedError`, `UpstreamHttpError`, `UpstreamRemoteError`, `UpstreamNetworkError`, `SftpConnectionError`, `CatalogDiscoveryError`, `ManifestParseFailureError`, `UnsupportedWriteOperationError`, `WriteActionNotConfiguredError`, `PayloadNotFoundError`, `ConnectionDeactivatedError`).
    - All domain aggregate transitions, outbound repository/storage/registry ports, connector operations, and application use cases return explicit `Result[T, E]` monads or structured boundary DTOs (`error: IpError | None`) that map deterministically to RFC 7807 Problem Details at the HTTP boundary (`ErrorResponseDTO.from_ip_error`).

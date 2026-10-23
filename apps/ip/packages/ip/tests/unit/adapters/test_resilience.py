@@ -63,12 +63,12 @@ async def test_http_backoff_handler_success_immediate() -> None:
     handler = HttpBackoffHandler(max_retries=2)
     calls = 0
 
-    async def _mock_request() -> httpx.Response:
+    async def _request_fn() -> httpx.Response:
         nonlocal calls
         calls += 1
         return httpx.Response(status_code=200, json={"status": "ok"})
 
-    resp = await handler.execute(_mock_request)
+    resp = await handler.execute(_request_fn)
     assert resp.status_code == 200
     assert calls == 1
 
@@ -78,12 +78,12 @@ async def test_http_backoff_handler_non_transient_no_retry() -> None:
     handler = HttpBackoffHandler(max_retries=3)
     calls = 0
 
-    async def _mock_request() -> httpx.Response:
+    async def _request_fn() -> httpx.Response:
         nonlocal calls
         calls += 1
         return httpx.Response(status_code=400, text="Bad Request")
 
-    resp = await handler.execute(_mock_request)
+    resp = await handler.execute(_request_fn)
     assert resp.status_code == 400
     assert calls == 1
 
@@ -96,14 +96,14 @@ async def test_http_backoff_handler_retry_on_429_success() -> None:
     )
     calls = 0
 
-    async def _mock_request() -> httpx.Response:
+    async def _request_fn() -> httpx.Response:
         nonlocal calls
         calls += 1
         if calls == 1:
             return httpx.Response(status_code=429, headers={"Retry-After": "0.01"})
         return httpx.Response(status_code=200, json={"result": "recovered"})
 
-    resp = await handler.execute(_mock_request)
+    resp = await handler.execute(_request_fn)
     assert resp.status_code == 200
     assert calls == 2
 
@@ -116,12 +116,12 @@ async def test_http_backoff_handler_exhausts_retries() -> None:
     )
     calls = 0
 
-    async def _mock_request() -> httpx.Response:
+    async def _request_fn() -> httpx.Response:
         nonlocal calls
         calls += 1
         return httpx.Response(status_code=503, text="Service Unavailable")
 
-    resp = await handler.execute(_mock_request)
+    resp = await handler.execute(_request_fn)
     assert resp.status_code == 503
     assert calls == 3  # Initial + 2 retries
 
@@ -134,13 +134,13 @@ async def test_http_backoff_handler_network_timeout_recovers() -> None:
     )
     calls = 0
 
-    async def _mock_request() -> httpx.Response:
+    async def _request_fn() -> httpx.Response:
         nonlocal calls
         calls += 1
         if calls == 1:
             raise httpx.ConnectTimeout("Connection timed out")
         return httpx.Response(status_code=200, json={"status": "online"})
 
-    resp = await handler.execute(_mock_request)
+    resp = await handler.execute(_request_fn)
     assert resp.status_code == 200
     assert calls == 2

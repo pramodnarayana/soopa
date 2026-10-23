@@ -86,7 +86,7 @@ Every ingestion path converges onto the **exact same downstream contract**:
 ### 4.2 Sync Run Lifecycle (`SyncRun` Aggregate)
 - **Modes**: `INITIAL` (resumable full scan), `INCREMENTAL` (cursor-based delta), `FULL_REFRESH` (overwrite fallback), `RECONCILIATION` (safety sweep for push/stream).
 - **Concurrency Guard**: PostgreSQL partial unique index on `(connection_id, stream) WHERE status IN ('PENDING', 'RUNNING')` guarantees zero overlapping runs for the same stream.
-- **Atomic Checkpoint Commit**: The cursor or page token in `stream_state` advances **in the same transaction** that writes the page to `inbound_records` and the outbox event.
+- **Atomic Checkpoint Commit**: In `RunSyncUseCase._persist_page`, data is committed across boundaries: Data Plane commits `inbound_records` and `ip_outbox` on the tenant shard, while Control Plane commits `sync_run` metrics and `stream_state` cursor on global_db. Delivery guarantees are at-least-once, and duplicate records across retries or lookback windows are safely resolved via L2 hash deduplication.
 - **Lookback Overlap Window**: Incremental syncs read from `checkpoint - 5 minutes` to eliminate clock skew and timestamp collision misses. L2 deduplicates redundant records via SHA-256 content hashes.
 
 ---
@@ -101,7 +101,7 @@ Every ingestion path converges onto the **exact same downstream contract**:
   - Shared Secret Header / Bearer Token.
   - Mutual TLS (mTLS) with client certificate verification.
   - Salesforce SOAP Organization ID / Session verification.
-- **Deduplication**: Unique constraint on `(connection_id, external_event_id)` drops network duplicate retries from webhook emitters without triggering duplicate downstream jobs.
+- **Deduplication**: Unique constraint on `(tenant_id, connection_id, external_event_id)` drops network duplicate retries from webhook emitters without triggering duplicate downstream jobs.
 - **Thin Webhooks (Fetch-on-Notify)**:
   - If a webhook contains only an ID notification (e.g. HubSpot, Salesforce CDC), L1 writes a `PUSH_THIN` record and emits `FetchRecordRequested`.
   - An ingestion worker invokes the connector's `fetch_one` spec and writes the hydrated record as `FETCH_ON_NOTIFY`.

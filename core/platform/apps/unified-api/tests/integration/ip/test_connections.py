@@ -3,8 +3,6 @@
 Tests real HTTP requests, perimeter authentication, tenant isolation, and live database persistence.
 """
 
-from typing import Any
-
 import httpx
 import pytest
 from pytest_httpserver import HTTPServer
@@ -15,7 +13,7 @@ pytestmark = pytest.mark.integration
 @pytest.mark.asyncio
 async def test_check_connection_credentials(
     auth_client: httpx.AsyncClient,
-    seeded_api_token: dict[str, Any],
+    seeded_api_token: dict[str, str],
     httpserver: HTTPServer,
 ) -> None:
     httpserver.expect_request(
@@ -28,9 +26,12 @@ async def test_check_connection_credentials(
     response = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/ip/connections/check",
         json={
-            "app_id": "itron_mdm",
+            "app_id": "http",
             "auth_type": "API_KEY",
-            "public_config": {"endpoint_url": httpserver.url_for("")},
+            "public_config": {
+                "endpoint_url": httpserver.url_for(""),
+                "check_path": "/api/v1/health",
+            },
             "raw_credentials": {"api_key": "test_secret_key"},
         },
     )
@@ -44,7 +45,7 @@ async def test_check_connection_credentials(
 @pytest.mark.asyncio
 async def test_create_and_get_connection_lifecycle(
     auth_client: httpx.AsyncClient,
-    seeded_api_token: dict[str, Any],
+    seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
 
@@ -52,7 +53,7 @@ async def test_create_and_get_connection_lifecycle(
     create_response = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/ip/connections",
         json={
-            "app_id": "itron_mdm",
+            "app_id": "http",
             "name": "Utility Main Grid Itron",
             "auth_type": "API_KEY",
             "public_config": {"endpoint_url": "https://ami.utility.com"},
@@ -91,14 +92,38 @@ async def test_create_and_get_connection_lifecycle(
 @pytest.mark.asyncio
 async def test_discover_connection_catalog(
     auth_client: httpx.AsyncClient,
-    seeded_api_token: dict[str, Any],
+    seeded_api_token: dict[str, str],
     httpserver: HTTPServer,
 ) -> None:
     httpserver.expect_request(
         "/api/v1/schema/streams",
         method="GET",
         headers={"X-API-Key": "valid_token"},
-    ).respond_with_data("Not found", status=404)
+    ).respond_with_json(
+        {
+            "streams": [
+                {
+                    "name": "meters",
+                    "fields": [{"name": "id", "data_type": "string", "nullable": False}],
+                    "primary_key": ["id"],
+                    "supported_sync_modes": ["FULL_REFRESH", "INCREMENTAL"],
+                },
+                {
+                    "name": "interval_reads",
+                    "fields": [{"name": "meter_id", "data_type": "string", "nullable": False}],
+                    "primary_key": ["meter_id"],
+                    "supported_sync_modes": ["FULL_REFRESH", "INCREMENTAL"],
+                },
+                {
+                    "name": "service_points",
+                    "fields": [{"name": "id", "data_type": "string", "nullable": False}],
+                    "primary_key": ["id"],
+                    "supported_sync_modes": ["FULL_REFRESH"],
+                },
+            ]
+        },
+        status=200,
+    )
 
     tenant_id = seeded_api_token["tenant_id"]
 
@@ -106,7 +131,7 @@ async def test_discover_connection_catalog(
     create_response = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/ip/connections",
         json={
-            "app_id": "itron_mdm",
+            "app_id": "http",
             "name": "Itron Introspect Connection",
             "auth_type": "API_KEY",
             "public_config": {"endpoint_url": httpserver.url_for("")},
@@ -133,14 +158,14 @@ async def test_discover_connection_catalog(
 @pytest.mark.asyncio
 async def test_deactivate_and_relink_connection(
     auth_client: httpx.AsyncClient,
-    seeded_api_token: dict[str, Any],
+    seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
 
     create_response = await auth_client.post(
         f"/api/v1/tenants/{tenant_id}/ip/connections",
         json={
-            "app_id": "itron_mdm",
+            "app_id": "http",
             "name": "Itron Deactivation Target",
             "auth_type": "API_KEY",
             "public_config": {"endpoint_url": "https://ami.gridpower.com"},
@@ -172,3 +197,88 @@ async def test_deactivate_and_relink_connection(
     relinked_data = relink_response.json()
     assert relinked_data["status"] == "ACTIVE"
     assert relinked_data["name"] == "Itron Re-activated"
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_active_connection_returns_409_conflict(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    payload = {
+        "app_id": "http",
+        "name": "Primary Grid Connection",
+        "auth_type": "API_KEY",
+        "public_config": {"endpoint_url": "https://duplicate-test.gridpower.com"},
+        "raw_credentials": {"api_key": "token_1"},
+        "endpoint_for_fingerprint": "https://duplicate-test.gridpower.com",
+    }
+
+    first_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json=payload,
+    )
+    assert first_res.status_code == 201, first_res.text
+
+    second_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={**payload, "name": "Duplicate Grid Connection"},
+    )
+    assert second_res.status_code == 409, second_res.text
+    assert second_res.json()["code"] == "DUPLICATE_FINGERPRINT"
+
+
+@pytest.mark.asyncio
+async def test_relink_non_deactivated_connection_returns_409_conflict(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+
+    create_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={
+            "app_id": "http",
+            "name": "Active Non-Deactivated Connection",
+            "auth_type": "API_KEY",
+            "public_config": {"endpoint_url": "https://active-relink.gridpower.com"},
+            "raw_credentials": {"api_key": "token_1"},
+            "endpoint_for_fingerprint": "https://active-relink.gridpower.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    connection_id = create_res.json()["id"]
+
+    relink_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/relink",
+        json={
+            "new_name": "Should Fail Relink",
+            "updated_raw_credentials": {"api_key": "token_2"},
+        },
+    )
+    assert relink_res.status_code == 409, relink_res.text
+    assert relink_res.json()["code"] == "INVALID_CONNECTION_STATE"
+
+
+@pytest.mark.asyncio
+async def test_create_connection_invalid_auth_type_returns_422(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+
+    res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={
+            "app_id": "itron_mdm",
+            "name": "Bad Auth Type",
+            "auth_type": "UNSUPPORTED_KERBEROS_V9",
+            "public_config": {"endpoint_url": "https://kerberos.gridpower.com"},
+            "raw_credentials": {},
+            "endpoint_for_fingerprint": "https://kerberos.gridpower.com",
+        },
+    )
+    assert res.status_code == 422, res.text
+    detail = res.json()["detail"]
+    assert isinstance(detail, list)
+    assert any("auth_type" in str(err.get("loc", [])) for err in detail)
