@@ -8,7 +8,7 @@ import structlog
 
 from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
 from ip.engine.domain.exceptions import ConnectionNotFoundError
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -24,7 +24,7 @@ class DeactivateConnectionCommand:
 class DeactivateConnectionUseCase:
     """Soft-deactivates connections inside a Control Plane UoW, stopping pollers while preserving history."""
 
-    def __init__(self, uow: ControlPlaneUnitOfWorkPort) -> None:
+    def __init__(self, uow: IpControlPlaneUnitOfWorkPort) -> None:
         self._uow = uow
 
     async def execute(self, command: DeactivateConnectionCommand) -> ConnectionOperationResultDTO:

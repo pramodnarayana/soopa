@@ -48,6 +48,10 @@ class MqttConsumerClientPort(Protocol):
         """Polls received MQTT messages from the client message buffer."""
         ...
 
+    async def reconnect(self) -> None:
+        """Disconnects and reconnects with persistent session to trigger broker redelivery."""
+        ...
+
 
 class MqttSubscribeTransport(SubscribeTransportPort):
     """MQTT subscriber transport for Smart Grid AMI interval readings and IoT streams.
@@ -120,10 +124,18 @@ class MqttSubscribeTransport(SubscribeTransportPort):
                     )
                 else:
                     logger.error(
-                        "mqtt_batch_nack_withholding_puback",
+                        "mqtt_batch_nack_triggering_redelivery",
                         topic_filter=self._topic_filter,
                         count=len(handles),
                     )
+                    try:
+                        await self._client.reconnect()
+                    except Exception as rec_exc:
+                        logger.exception(
+                            "mqtt_client_reconnect_failed",
+                            topic_filter=self._topic_filter,
+                            error=str(rec_exc),
+                        )
                     await asyncio.sleep(0.2)
 
             except asyncio.CancelledError:

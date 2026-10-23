@@ -34,10 +34,7 @@ class StandardInboundPayloadDecoder(InboundPayloadDecoderPort):
                 return Result.ok(parsed)
 
             # 2. Form-encoded
-            if clean_ct in (
-                "application/x-www-form-urlencoded",
-                "multipart/form-data",
-            ):
+            if clean_ct == "application/x-www-form-urlencoded":
                 text = raw_body.decode("utf-8")
                 raw_qs = parse_qs(text, keep_blank_values=True)
                 # Flatten single-item lists

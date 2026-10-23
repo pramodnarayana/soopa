@@ -19,7 +19,7 @@ from ip.engine.domain.models.connection import (
     ConnectionStatus,
     compute_connection_fingerprint,
 )
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -42,7 +42,7 @@ class CreateConnectionUseCase:
 
     def __init__(
         self,
-        uow: ControlPlaneUnitOfWorkPort,
+        uow: IpControlPlaneUnitOfWorkPort,
         cipher: CipherPort,
     ) -> None:
         self._uow = uow

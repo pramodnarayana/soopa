@@ -113,31 +113,6 @@ class InboundRecordCreatedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
-class ReplicaRecordUpdatedEvent(DomainEvent):
-    """Domain event emitted when an L2 universal replica snapshot is created or updated."""
-
-    record_id: str
-    tenant_id: str
-    connection_id: str
-    app_id: str
-    entity_type: str
-    entity_id: str
-    data_hash: str
-    trace_id: str
-    correlation_id: str | None = None
-    parent_trace_id: str | None = None
-    original_trace_id: str | None = None
-    replay_count: int = 0
-
-    @property
-    def event_name(self) -> str:
-        return IpEventType.REPLICA_RECORD_UPDATED
-
-    def get_routing_tenant_id(self) -> str | None:
-        return self.tenant_id
-
-
-@dataclass(frozen=True)
 class ReplicaRecordChangedEvent(DomainEvent):
     """Domain event emitted when an L2 universal replica changes (INSERT, UPDATE, TOMBSTONE)."""
 

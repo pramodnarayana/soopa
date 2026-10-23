@@ -86,12 +86,6 @@ class DeclarativeHttpConnector(BaseConnector):
                 allow_private_ips=allow_private_ips,
                 response_policy=PassThroughPolicy(),
             )
-        self._last_error: IpError | None = None
-
-    @property
-    def last_error(self) -> IpError | None:
-        """Returns the last IpError encountered during stream reads or operations."""
-        return self._last_error
 
     @property
     def app_id(self) -> str:

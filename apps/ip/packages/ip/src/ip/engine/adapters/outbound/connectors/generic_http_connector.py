@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 import structlog
@@ -29,9 +29,10 @@ from ip.engine.domain.enums import (
     SyncMode,
 )
 from ip.engine.domain.exceptions import (
+    EndpointSecurityViolationError,
     InvalidConnectionConfigError,
-    IpError,
     IpErrorCode,
+    Result,
     UpstreamHttpError,
     UpstreamNetworkError,
 )
@@ -108,15 +109,27 @@ class GenericHttpConnector(BaseConnector):
                 allow_private_ips=self._allow_private_ips,
                 response_policy=PassThroughPolicy(),
             )
-        self._last_error: IpError | None = None
 
     @property
     def app_id(self) -> str:
         return self._app_id
 
-    @property
-    def last_error(self) -> IpError | None:
-        return self._last_error
+    @staticmethod
+    def _build_safe_target_url(
+        base_url: str, path: str
+    ) -> Result[str, EndpointSecurityViolationError]:
+        """Combines base_url with relative path ensuring scheme and netloc do not deviate."""
+        base_parts = urlsplit(base_url)
+        joined = urljoin(base_url.rstrip("/") + "/", path.lstrip("/"))
+        joined_parts = urlsplit(joined)
+        if joined_parts.scheme != base_parts.scheme or joined_parts.netloc != base_parts.netloc:
+            return Result.fail(
+                EndpointSecurityViolationError(
+                    endpoint=joined,
+                    message=f"Target URL '{joined}' deviates from configured origin '{base_url}'",
+                )
+            )
+        return Result.ok(joined)
 
     async def _send_request(self, req: httpx.Request) -> httpx.Response:
         url_without_query = str(req.url).split("?")[0]
@@ -349,7 +362,13 @@ class GenericHttpConnector(BaseConnector):
 
         # 3. Assemble target request
         check_path = spec.check_request.path if spec.check_request else "/"
-        target_url = urljoin(spec.base_url.rstrip("/") + "/", check_path.lstrip("/"))
+        url_res = self._build_safe_target_url(spec.base_url, check_path)
+        if url_res.is_err or url_res.value is None:
+            assert url_res.error is not None
+            return ConnectionCheckResultDTO.from_error(
+                url_res.error, error_code_override="NETWORK_ERROR"
+            )
+        target_url = url_res.value
 
         req = httpx.Request(
             method="GET",
@@ -402,7 +421,13 @@ class GenericHttpConnector(BaseConnector):
         spec: HttpSourceSpec,
         authenticator: AuthenticatorPort,
     ) -> tuple[list[StreamSchemaDTO], DiscoveredCatalogDTO | None]:
-        schema_url = urljoin(spec.base_url.rstrip("/") + "/", "api/v1/schema/streams")
+        url_res = self._build_safe_target_url(spec.base_url, "api/v1/schema/streams")
+        if url_res.is_err or url_res.value is None:
+            assert url_res.error is not None
+            return [], DiscoveredCatalogDTO.from_error(
+                connection_id=connection_id, error=url_res.error
+            )
+        schema_url = url_res.value
         req = httpx.Request(
             method="GET",
             url=schema_url,
@@ -464,7 +489,11 @@ class GenericHttpConnector(BaseConnector):
     ) -> StreamSchemaDTO:
         stream_name = stream_def.replication.stream
         req_spec = stream_def.request
-        target_url = urljoin(spec.base_url.rstrip("/") + "/", req_spec.path.lstrip("/"))
+        url_res = self._build_safe_target_url(spec.base_url, req_spec.path)
+        if url_res.is_err or url_res.value is None:
+            target_url = urljoin(spec.base_url.rstrip("/") + "/", req_spec.path.lstrip("/"))
+        else:
+            target_url = url_res.value
 
         sample_params = dict(req_spec.query_params)
         sample_params["limit"] = "5"
@@ -530,7 +559,18 @@ class GenericHttpConnector(BaseConnector):
         credentials: JsonDict,
     ) -> DiscoveredCatalogDTO:
         """Introspects configured streams and samples data to infer schemas."""
-        spec = self._build_source_spec(public_config)
+        try:
+            spec = self._build_source_spec(public_config)
+        except ValueError as e:
+            err = InvalidConnectionConfigError(field_name="public_config", message=str(e))
+            return DiscoveredCatalogDTO.from_error(connection_id=connection_id, error=err)
+
+        egress_res = self._egress_policy.validate_url(spec.base_url)
+        if egress_res.is_err and egress_res.error:
+            return DiscoveredCatalogDTO.from_error(
+                connection_id=connection_id, error=egress_res.error
+            )
+
         authenticator = AuthStrategyResolver.resolve(
             spec.auth_type,
             credentials,
@@ -710,7 +750,11 @@ class GenericHttpConnector(BaseConnector):
         pagination_strat = PaginationStrategyResolver.resolve(stream_def.request.pagination)
         query_params = self._init_read_params(stream_def, cursor, limit)
         page_index = 0
-        target_url = urljoin(spec.base_url.rstrip("/") + "/", stream_def.request.path.lstrip("/"))
+        url_res = self._build_safe_target_url(spec.base_url, stream_def.request.path)
+        if url_res.is_err or url_res.value is None:
+            self._last_error = url_res.error
+            return
+        target_url = url_res.value
 
         while page_index <= 500:
             req = httpx.Request(
@@ -776,8 +820,13 @@ class GenericHttpConnector(BaseConnector):
             allow_private_ips=self._allow_private_ips,
         )
 
-        path = stream_def.fetch_one.path.replace("{record_id}", record_id)
-        target_url = urljoin(spec.base_url.rstrip("/") + "/", path.lstrip("/"))
+        encoded_record_id = quote(str(record_id), safe="")
+        path = stream_def.fetch_one.path.replace("{record_id}", encoded_record_id)
+        url_res = self._build_safe_target_url(spec.base_url, path)
+        if url_res.is_err or url_res.value is None:
+            self._last_error = url_res.error
+            return None
+        target_url = url_res.value
 
         req = httpx.Request(
             method=stream_def.fetch_one.method,
@@ -803,6 +852,7 @@ class GenericHttpConnector(BaseConnector):
         target_record_id: str,
         stream_name: str,
     ) -> tuple[str, str]:
+        encoded_record_id = quote(str(target_record_id), safe="") if target_record_id else ""
         fallback_prefix = (
             stream_def.request.path
             if stream_def and stream_def.request and stream_def.request.path
@@ -812,10 +862,10 @@ class GenericHttpConnector(BaseConnector):
         path = fallback_prefix
         if operation == "UPDATE":
             method = "PUT"
-            path = f"{fallback_prefix}/{target_record_id}"
+            path = f"{fallback_prefix}/{encoded_record_id}"
         elif operation == "DELETE":
             method = "DELETE"
-            path = f"{fallback_prefix}/{target_record_id}"
+            path = f"{fallback_prefix}/{encoded_record_id}"
 
         if stream_def and stream_def.write:
             try:
@@ -823,7 +873,7 @@ class GenericHttpConnector(BaseConnector):
                 if op_enum in stream_def.write.actions:
                     action = stream_def.write.actions[op_enum]
                     method = action.method
-                    path = action.path_template.replace("{record_id}", target_record_id)
+                    path = action.path_template.replace("{record_id}", encoded_record_id)
             except ValueError:
                 pass
         return method, path
@@ -851,14 +901,33 @@ class GenericHttpConnector(BaseConnector):
         credentials: JsonDict,
     ) -> WriteResultDTO:
         """Writes/mutates an individual record in the destination HTTP system."""
-        spec = self._build_source_spec(public_config)
-        stream_def = spec.get_stream(stream_name)
         target_record_id = command.record_id or ""
+        try:
+            spec = self._build_source_spec(public_config)
+        except ValueError as e:
+            err = InvalidConnectionConfigError(field_name="public_config", message=str(e))
+            self._last_error = err
+            return WriteResultDTO.from_error(err, record_id=target_record_id or "failed")
+
+        egress_res = self._egress_policy.validate_url(spec.base_url)
+        if egress_res.is_err and egress_res.error:
+            self._last_error = egress_res.error
+            return WriteResultDTO.from_error(
+                egress_res.error, record_id=target_record_id or "failed"
+            )
+
+        stream_def = spec.get_stream(stream_name)
 
         method, path = self._resolve_write_action(
             stream_def, command.operation, target_record_id, stream_name
         )
-        target_url = urljoin(spec.base_url.rstrip("/") + "/", path.lstrip("/"))
+        url_res = self._build_safe_target_url(spec.base_url, path)
+        if url_res.is_err or url_res.value is None:
+            assert url_res.error is not None
+            self._last_error = url_res.error
+            return WriteResultDTO.from_error(url_res.error, record_id=target_record_id or "failed")
+        target_url = url_res.value
+
         authenticator = AuthStrategyResolver.resolve(
             spec.auth_type,
             credentials,

@@ -21,7 +21,7 @@ from ip.engine.domain.exceptions import (
 )
 from ip.engine.domain.models.catalog import ConnectionCatalog, StreamField, StreamSchema, SyncMode
 from ip.engine.ports.outbound.connector_port import ConnectorMetadataPort
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -31,7 +31,7 @@ class DiscoverCatalogUseCase:
 
     def __init__(
         self,
-        uow: ControlPlaneUnitOfWorkPort,
+        uow: IpControlPlaneUnitOfWorkPort,
         cipher: CipherPort,
         connectors: Mapping[str, ConnectorMetadataPort],
     ) -> None:

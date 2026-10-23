@@ -6,7 +6,6 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.enums import NormalizedEntityType
 from ip.engine.domain.models.normalized_record import NormalizedRecord
 
 
@@ -27,7 +26,7 @@ class NormalizedRecordRepositoryPort(Protocol):
     async def list_by_source(
         self,
         tenant_id: str,
-        canonical_type: NormalizedEntityType,
+        canonical_type: str,
         source_id: str,
     ) -> Sequence[NormalizedRecord]:
         """Lists normalized audit records for a given canonical entity type and source ID."""

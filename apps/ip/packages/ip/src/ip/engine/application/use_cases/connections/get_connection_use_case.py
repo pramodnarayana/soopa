@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ip.engine.application.dto import ConnectionDTO, ConnectionOperationResultDTO
 from ip.engine.domain.exceptions import ConnectionNotFoundError
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class GetConnectionQuery:
 class GetConnectionUseCase:
     """Fetches a tenant-scoped connection and returns a structured result DTO inside a Control Plane UoW."""
 
-    def __init__(self, uow: ControlPlaneUnitOfWorkPort) -> None:
+    def __init__(self, uow: IpControlPlaneUnitOfWorkPort) -> None:
         self._uow = uow
 
     async def execute(self, query: GetConnectionQuery) -> ConnectionOperationResultDTO:

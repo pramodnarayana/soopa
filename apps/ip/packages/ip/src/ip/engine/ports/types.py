@@ -91,6 +91,7 @@ class RecordEnvelopeDTO:
     record_id: str
     data: JsonDict
     emitted_at: str  # ISO 8601 UTC
+    cursor_value: str | None = None
 
 
 @dataclass(frozen=True)

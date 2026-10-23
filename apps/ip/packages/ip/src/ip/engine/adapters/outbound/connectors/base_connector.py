@@ -2,6 +2,7 @@ import hashlib
 import json
 from abc import ABC
 from collections.abc import Sequence
+from contextvars import ContextVar
 from datetime import UTC, datetime
 
 import httpx
@@ -25,14 +26,30 @@ from shttp.exceptions import SsrfSecurityError
 
 _LOCAL_TEST_HOSTS = ("localhost", "127.0.0.1", "::1", "testserver")
 
+_last_stream_error: ContextVar[IpError | None] = ContextVar(
+    "connector_last_stream_error", default=None
+)
+
 
 class BaseConnector(ConnectorPort, ABC):
     """Abstract base connector encapsulating catalog hashing and shared URL/SSRF validation helpers."""
 
     @property
     def last_error(self) -> IpError | None:
-        """Returns the last domain/operational error encountered during stream reading, if any."""
-        return None
+        """Returns the task-isolated domain/operational error encountered during stream reading, if any."""
+        return _last_stream_error.get()
+
+    @last_error.setter
+    def last_error(self, err: IpError | None) -> None:
+        _last_stream_error.set(err)
+
+    @property
+    def _last_error(self) -> IpError | None:
+        return _last_stream_error.get()
+
+    @_last_error.setter
+    def _last_error(self, err: IpError | None) -> None:
+        _last_stream_error.set(err)
 
     @staticmethod
     def _parse_and_validate_url_structure(

@@ -7,25 +7,27 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import structlog
+from ip.engine.domain.constants import RESERVED_RAW_BYTES_KEY, WRAPPED_SCALAR_KEY
 from ip.engine.domain.enums import MergeOutcome
-from ip.engine.domain.exceptions import IpError, Result
+from ip.engine.domain.exceptions import IpError, PayloadNotFoundError, Result
 from ip.engine.domain.models.replica_record import (
     ReplicaRejection,
     compute_data_hash,
     compute_record_key,
 )
 from ip.engine.domain.models.stream_definition import StreamDefinition
-from ip.engine.ports.outbound.record_extractor_port import (
-    DEFAULT_EXTRACTOR_REGISTRY,
-    RecordExtractorRegistry,
+from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
+from ip.engine.ports.outbound.replica_record_repository_port import (
+    MergeResult,
+    ReplicaMergeCandidate,
 )
-from ip.engine.ports.outbound.replica_record_repository_port import ReplicaMergeCandidate
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort, TieredStorageResultDTO
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort, DataPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from seedwork.domain.types import JsonValue
-from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)
+
+REPLICA_MERGE_CHUNK_SIZE = 500
 
 
 @dataclass(frozen=True)
@@ -40,7 +42,6 @@ class ReplicateRecordsCommand:
     sync_id: str
     trace_id: str
     correlation_id: str | None = None
-    next_checkpoint: str | None = None
     raw_payload: JsonValue = None
     stream_definition: StreamDefinition | None = None
 
@@ -62,123 +63,170 @@ class ReplicateRecordsUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWorkPort,
+        uow: IpDataPlaneUnitOfWorkPort,
         extractor_registry: RecordExtractorRegistry | None = None,
-        control_plane_uow: ControlPlaneUnitOfWorkPort | None = None,
         tiered_storage: TieredStoragePort | None = None,
     ) -> None:
         self._uow = uow
-        self._extractor_registry = extractor_registry or DEFAULT_EXTRACTOR_REGISTRY
-        self._control_plane_uow = control_plane_uow
+        self._extractor_registry = (
+            extractor_registry if extractor_registry is not None else RecordExtractorRegistry()
+        )
         self._tiered_storage = tiered_storage
 
-    async def _resolve_raw_payload(self, command: ReplicateRecordsCommand) -> JsonValue:
+    @staticmethod
+    def _unwrap_inlined_body(body: JsonValue) -> JsonValue:
+        if isinstance(body, dict):
+            if WRAPPED_SCALAR_KEY in body:
+                return body[WRAPPED_SCALAR_KEY]
+            if RESERVED_RAW_BYTES_KEY in body:
+                clean_body = {k: v for k, v in body.items() if k != RESERVED_RAW_BYTES_KEY}
+                escaped_key = f"_escaped_{RESERVED_RAW_BYTES_KEY}"
+                if escaped_key in clean_body:
+                    clean_body[RESERVED_RAW_BYTES_KEY] = clean_body.pop(escaped_key)
+                return clean_body
+        return body
+
+    async def _retrieve_s3_payload(
+        self, s3_key: str, size_bytes: int, sha256: str, inbound_record_id: str
+    ) -> Result[JsonValue, IpError]:
+        if self._tiered_storage is None:
+            return Result.fail(
+                PayloadNotFoundError(
+                    s3_key=s3_key,
+                    message="Tiered storage adapter is not configured to retrieve S3 payload.",
+                )
+            )
+        storage_dto = TieredStorageResultDTO(
+            is_inlined=False,
+            raw_payload=None,
+            s3_key=s3_key,
+            payload_size_bytes=size_bytes,
+            payload_sha256=sha256,
+        )
+        retrieved = await self._tiered_storage.retrieve(storage_dto)
+        if retrieved.is_ok and retrieved.value is not None:
+            try:
+                parsed: JsonValue = json.loads(retrieved.value.decode("utf-8"))
+                return Result.ok(parsed)
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                return Result.fail(
+                    PayloadNotFoundError(
+                        s3_key=s3_key,
+                        message=f"Corrupt or non-JSON S3 payload for record '{inbound_record_id}': {e}",
+                    )
+                )
+        return Result.fail(
+            PayloadNotFoundError(
+                s3_key=s3_key,
+                message=f"Failed to retrieve S3 payload for record '{inbound_record_id}'.",
+            )
+        )
+
+    async def _resolve_raw_payload(
+        self, command: ReplicateRecordsCommand
+    ) -> Result[JsonValue, IpError]:
         if command.raw_payload is not None:
-            return command.raw_payload
+            return Result.ok(command.raw_payload)
         inbound = await self._uow.inbound_records.get_by_id(
             record_id=command.inbound_record_id,
             tenant_id=command.tenant_id,
         )
         if inbound is None:
-            return {}
-        if inbound.request_body is not None:
-            return inbound.request_body
-        if inbound.request_s3_key is not None and self._tiered_storage is not None:
-            storage_dto = TieredStorageResultDTO(
-                is_inlined=False,
-                raw_payload=None,
-                s3_key=inbound.request_s3_key,
-                payload_size_bytes=inbound.request_size_bytes,
-                payload_sha256=inbound.request_sha256,
+            return Result.fail(
+                PayloadNotFoundError(
+                    message=f"Inbound record '{command.inbound_record_id}' not found for tenant '{command.tenant_id}'."
+                )
             )
-            retrieved = await self._tiered_storage.retrieve(storage_dto)
-            if retrieved.is_ok and retrieved.value is not None:
-                try:
-                    parsed: JsonValue = json.loads(retrieved.value.decode("utf-8"))
-                    return parsed
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    return {}
-        return {}
+        if inbound.request_body is not None:
+            return Result.ok(self._unwrap_inlined_body(inbound.request_body))
+        if inbound.request_s3_key is not None:
+            return await self._retrieve_s3_payload(
+                s3_key=inbound.request_s3_key,
+                size_bytes=inbound.request_size_bytes,
+                sha256=inbound.request_sha256,
+                inbound_record_id=command.inbound_record_id,
+            )
+        return Result.fail(
+            PayloadNotFoundError(
+                message=f"No inline or S3 payload present for record '{command.inbound_record_id}'."
+            )
+        )
 
     async def execute(
         self, command: ReplicateRecordsCommand
     ) -> Result[ReplicationSummary, IpError]:
-        # 1. Resolve raw payload
-        raw_payload = await self._resolve_raw_payload(command)
-
-        # 2. Resolve stream definition
         stream_def = command.stream_definition or StreamDefinition(
             stream=command.stream,
             primary_key=(("id",),),
         )
-
-        # 3. Resolve extractor and run pure extraction
         extractor = self._extractor_registry.get(stream_def.extractor_id)
-        batch = extractor.extract(raw_payload, stream_def)
 
-        # 4. Assemble merge candidates
-        candidates: list[ReplicaMergeCandidate] = []
-        for rec in batch.records:
-            record_key = compute_record_key(rec.primary_key_values)
-            data_hash = compute_data_hash(rec.data)
-            candidates.append(
-                ReplicaMergeCandidate(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    stream=command.stream,
-                    record_key=record_key,
-                    primary_key_values=rec.primary_key_values,
-                    cursor_value=str(rec.cursor_value) if rec.cursor_value is not None else None,
-                    cursor_kind=stream_def.cursor_kind.value,
-                    data=rec.data,
-                    data_hash=data_hash,
-                    generation_id=command.generation_id,
-                    source_inbound_record_id=command.inbound_record_id,
-                    trace_id=command.trace_id,
-                    correlation_id=command.correlation_id,
-                    is_deleted=rec.is_deleted,
-                )
-            )
-
-        # 5. Merge batch into replica ledger
-        merge_results = await self._uow.replica_records.merge_batch(candidates)
-
-        # 6. Save rejections
+        merge_results: list[MergeResult] = []
         rejections: list[ReplicaRejection] = []
-        now = datetime.now(UTC)
-        for rej in batch.rejections:
-            rejections.append(
-                ReplicaRejection(
-                    id=generate_id("rej"),
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    stream=command.stream,
-                    inbound_record_id=command.inbound_record_id,
-                    record_index=rej.record_index,
-                    reason=rej.reason.value,
-                    detail=rej.detail,
-                    trace_id=command.trace_id,
-                    created_at=now,
-                )
-            )
-        if rejections:
-            await self._uow.replica_rejections.save_batch(rejections)
 
-        # 7. Advance checkpoint if requested and control plane UoW available
-        if command.next_checkpoint and self._control_plane_uow is not None:
-            state = await self._control_plane_uow.stream_states.get_by_stream(
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                stream_name=command.stream,
-            )
-            if state is not None:
-                state.advance_checkpoint(
-                    new_cursor_value=command.next_checkpoint,
-                    records_in_batch=len(candidates),
-                )
-                await self._control_plane_uow.stream_states.save(state)
+        async with self._uow:
+            # 1. Resolve raw payload inside opened Data Plane UoW
+            payload_res = await self._resolve_raw_payload(command)
+            if payload_res.is_err and payload_res.error is not None:
+                return Result.fail(payload_res.error)
+            raw_payload = payload_res.value
 
-        # 8. Tally summary counts
+            # 2. Run pure extraction
+            batch = extractor.extract(raw_payload, stream_def)
+
+            # 3. Assemble merge candidates
+            candidates: list[ReplicaMergeCandidate] = []
+            for rec in batch.records:
+                record_key = compute_record_key(rec.primary_key_values)
+                data_hash = compute_data_hash(rec.data)
+                candidates.append(
+                    ReplicaMergeCandidate(
+                        tenant_id=command.tenant_id,
+                        connection_id=command.connection_id,
+                        stream=command.stream,
+                        record_key=record_key,
+                        primary_key_values=rec.primary_key_values,
+                        cursor_value=(
+                            str(rec.cursor_value) if rec.cursor_value is not None else None
+                        ),
+                        cursor_kind=stream_def.cursor_kind.value,
+                        data=rec.data,
+                        data_hash=data_hash,
+                        generation_id=command.generation_id,
+                        source_inbound_record_id=command.inbound_record_id,
+                        trace_id=command.trace_id,
+                        correlation_id=command.correlation_id,
+                        is_deleted=rec.is_deleted,
+                    )
+                )
+
+            # 4. Merge candidates in chunks of REPLICA_MERGE_CHUNK_SIZE (500)
+            for idx in range(0, len(candidates), REPLICA_MERGE_CHUNK_SIZE):
+                chunk = candidates[idx : idx + REPLICA_MERGE_CHUNK_SIZE]
+                chunk_results = await self._uow.replica_records.merge_batch(chunk)
+                merge_results.extend(chunk_results)
+
+            # 5. Save rejections
+            now = datetime.now(UTC)
+            for rej in batch.rejections:
+                rejections.append(
+                    ReplicaRejection.create(
+                        tenant_id=command.tenant_id,
+                        connection_id=command.connection_id,
+                        stream=command.stream,
+                        inbound_record_id=command.inbound_record_id,
+                        record_index=rej.record_index,
+                        reason=rej.reason.value,
+                        detail=rej.detail,
+                        trace_id=command.trace_id,
+                        created_at=now,
+                    )
+                )
+            if rejections:
+                await self._uow.replica_rejections.save_batch(rejections)
+            await self._uow.commit()
+
+        # 6. Tally summary counts
         counts = {
             MergeOutcome.INSERT: 0,
             MergeOutcome.UPDATE: 0,

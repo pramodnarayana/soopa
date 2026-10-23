@@ -23,8 +23,16 @@ class InboundRecordRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def get_by_trace_id(
-        self, trace_id: str, tenant_id: str
-    ) -> Sequence[InboundRecord]:
+    async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         """Retrieves all inbound records associated with a trace ID."""
+        ...
+
+    @abstractmethod
+    async def get_by_external_event_id(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        external_event_id: str,
+    ) -> InboundRecord | None:
+        """Retrieves an inbound record by external push event ID for deduplication."""
         ...

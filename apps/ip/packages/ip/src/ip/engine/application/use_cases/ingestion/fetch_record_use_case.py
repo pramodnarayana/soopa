@@ -11,13 +11,13 @@ from security.ports.cipher_port import CipherPort
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import IngestionMode
+from ip.engine.domain.enums import ConnectionStatus, IngestionMode
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.connector_port import SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
-    ControlPlaneUnitOfWorkPort,
-    DataPlaneUnitOfWorkPort,
+    IpControlPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -52,8 +52,8 @@ class FetchRecordUseCase:
 
     def __init__(
         self,
-        control_plane_uow: ControlPlaneUnitOfWorkPort,
-        data_plane_uow: DataPlaneUnitOfWorkPort,
+        control_plane_uow: IpControlPlaneUnitOfWorkPort,
+        data_plane_uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         cipher: CipherPort,
         connectors: Mapping[str, SourceConnectorPort],
@@ -80,6 +80,20 @@ class FetchRecordUseCase:
                 )
                 return FetchRecordResultDTO(
                     status="CONNECTION_NOT_FOUND",
+                    trace_id=trace_id,
+                    record_id=command.record_id,
+                )
+
+            if connection.status is ConnectionStatus.DEACTIVATED:
+                logger.error(
+                    "fetch_record_connection_deactivated",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    record_id=command.record_id,
+                    trace_id=trace_id,
+                )
+                return FetchRecordResultDTO(
+                    status="CONNECTION_DEACTIVATED",
                     trace_id=trace_id,
                     record_id=command.record_id,
                 )

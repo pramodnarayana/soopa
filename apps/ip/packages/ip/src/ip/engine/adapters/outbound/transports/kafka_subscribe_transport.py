@@ -116,6 +116,14 @@ class KafkaSubscribeTransport(SubscribeTransportPort):
             except asyncio.CancelledError:
                 break
             except Exception as exc:
+                try:
+                    await self._client.seek_to_uncommitted()
+                except Exception as seek_exc:
+                    logger.exception(
+                        "kafka_seek_to_uncommitted_failed",
+                        stream=stream.stream,
+                        error=str(seek_exc),
+                    )
                 logger.exception(
                     "kafka_consumer_poll_error",
                     stream=stream.stream,

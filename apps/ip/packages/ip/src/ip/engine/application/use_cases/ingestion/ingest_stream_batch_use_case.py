@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 import structlog
-from seedwork.domain.types import JsonDict, JsonValue
+from seedwork.domain.types import JsonValue
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
@@ -15,7 +16,7 @@ from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.subscribe_transport_port import RawMessageBatchDTO
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
-from ip.engine.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -61,7 +62,7 @@ class IngestStreamBatchUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWorkPort,
+        uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         decoder: InboundPayloadDecoderPort,
     ) -> None:
@@ -102,9 +103,9 @@ class IngestStreamBatchUseCase:
                         content_type=msg.content_type,
                         raw_body=msg.raw_payload,
                     )
-                    decoded_dict: JsonDict | None = (
+                    decoded_payload: JsonValue | None = (
                         decode_res.value
-                        if decode_res.is_ok and isinstance(decode_res.value, dict)
+                        if decode_res.is_ok and isinstance(decode_res.value, (dict, list))
                         else None
                     )
 
@@ -113,7 +114,7 @@ class IngestStreamBatchUseCase:
                         tenant_id=command.tenant_id,
                         trace_id=trace_id,
                         payload_bytes=msg.raw_payload,
-                        parsed_payload=decoded_dict,
+                        parsed_payload=decoded_payload,
                     )
 
                     # 4. Construct and save InboundRecord
@@ -164,6 +165,22 @@ class IngestStreamBatchUseCase:
                 trace_id=trace_id,
             )
 
+        except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            logger.error(
+                "stream_batch_ingestion_data_rejected",
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+                stream_name=command.stream_name,
+                error=str(exc),
+                trace_id=trace_id,
+            )
+            return IngestStreamBatchResultDTO(
+                verdict=AckVerdict.REJECT,
+                records_ingested=0,
+                duplicates_skipped=duplicates_skipped,
+                trace_id=trace_id,
+                error_message=str(exc),
+            )
         except Exception as exc:
             logger.exception(
                 "stream_batch_ingestion_transaction_failed",

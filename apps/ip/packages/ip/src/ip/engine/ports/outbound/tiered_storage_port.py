@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Protocol
 
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonValue
 
 from ip.engine.domain.exceptions import PayloadNotFoundError, Result
 
@@ -31,7 +31,7 @@ class TieredStoragePort(Protocol):
         tenant_id: str,
         trace_id: str,
         payload_bytes: bytes,
-        parsed_payload: JsonDict | None = None,
+        parsed_payload: JsonValue | None = None,
     ) -> TieredStorageResultDTO:
         """Stores the payload inlined or offloaded to object storage based on threshold."""
         ...

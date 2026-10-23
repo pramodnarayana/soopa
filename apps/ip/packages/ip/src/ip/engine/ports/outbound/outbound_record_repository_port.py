@@ -23,8 +23,6 @@ class OutboundRecordRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def get_by_trace_id(
-        self, trace_id: str, tenant_id: str
-    ) -> Sequence[OutboundRecord]:
+    async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[OutboundRecord]:
         """Retrieves all outbound records associated with a trace ID."""
         ...

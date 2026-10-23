@@ -10,7 +10,7 @@ from seedwork.domain.types import JsonDict
 
 from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
 from ip.engine.domain.exceptions import ConnectionNotFoundError
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -31,7 +31,7 @@ class RelinkConnectionUseCase:
 
     def __init__(
         self,
-        uow: ControlPlaneUnitOfWorkPort,
+        uow: IpControlPlaneUnitOfWorkPort,
         cipher: CipherPort,
     ) -> None:
         self._uow = uow

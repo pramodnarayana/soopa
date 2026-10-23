@@ -17,7 +17,7 @@ from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
-from ip.engine.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -69,7 +69,7 @@ class ReceivePushUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWorkPort,
+        uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         verifier: InboundVerifierPort,
         decoder: InboundPayloadDecoderPort,
@@ -108,9 +108,8 @@ class ReceivePushUseCase:
             )
 
         # 2. Decode payload for storage and ACK formatting
-        content_type = (
-            str_headers.get("Content-Type") or str_headers.get("content-type") or "application/json"
-        )
+        lowercased_headers = {k.lower(): v for k, v in str_headers.items()}
+        content_type = lowercased_headers.get("content-type") or "application/json"
         decode_res = self._decoder.decode(
             content_type=content_type,
             raw_body=command.raw_payload,
@@ -127,10 +126,8 @@ class ReceivePushUseCase:
         else:
             ingestion_mode = IngestionMode.PUSH_THIN if command.is_thin else IngestionMode.PUSH_FULL
 
-        parsed_dict: JsonDict | None = (
-            {str(k): v for k, v in decoded_payload.items()}
-            if isinstance(decoded_payload, dict)
-            else None
+        parsed_payload: JsonValue | None = (
+            decoded_payload if isinstance(decoded_payload, (dict, list)) else None
         )
 
         # 4. Check deduplication, store payload, and commit atomically inside DataPlaneUnitOfWork
@@ -172,7 +169,7 @@ class ReceivePushUseCase:
                 tenant_id=command.tenant_id,
                 trace_id=trace_id,
                 payload_bytes=command.raw_payload,
-                parsed_payload=parsed_dict,
+                parsed_payload=parsed_payload,
             )
 
             # 5. Create immutable InboundRecord aggregate root

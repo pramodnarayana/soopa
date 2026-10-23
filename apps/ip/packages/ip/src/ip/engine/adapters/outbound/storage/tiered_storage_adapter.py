@@ -9,20 +9,23 @@ import json
 
 import structlog
 from botocore.exceptions import BotoCoreError, ClientError
-from ip.engine.domain.constants import DEFAULT_INLINE_THRESHOLD_BYTES
+from ip.engine.domain.constants import (
+    DEFAULT_INLINE_THRESHOLD_BYTES,
+    RESERVED_RAW_BYTES_KEY,
+    WRAPPED_SCALAR_KEY,
+)
 from ip.engine.domain.exceptions import PayloadNotFoundError, Result
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
     TieredStorageResultDTO,
 )
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonValue
 from storage.ports.payload_storage_port import PayloadStoragePort
 from storage.provider import StorageProvider
 
 logger = structlog.get_logger(__name__)
 
 DEFAULT_IP_PAYLOAD_BUCKET = "ip-payloads"
-RESERVED_RAW_BYTES_KEY = "__raw_payload_b64__"
 
 
 class TieredStorageAdapter(TieredStoragePort):
@@ -45,7 +48,7 @@ class TieredStorageAdapter(TieredStoragePort):
         tenant_id: str,
         trace_id: str,
         payload_bytes: bytes,
-        parsed_payload: JsonDict | None = None,
+        parsed_payload: JsonValue | None = None,
     ) -> TieredStorageResultDTO:
         size_bytes = len(payload_bytes)
         sha256_hash = hashlib.sha256(payload_bytes).hexdigest()
@@ -54,7 +57,10 @@ class TieredStorageAdapter(TieredStoragePort):
             # Inline storage (<64 KB)
             raw_b64 = base64.b64encode(payload_bytes).decode("ascii")
             if parsed_payload is not None:
-                json_data = dict(parsed_payload)
+                if isinstance(parsed_payload, dict):
+                    json_data = dict(parsed_payload)
+                else:
+                    json_data = {WRAPPED_SCALAR_KEY: parsed_payload}
             else:
                 try:
                     decoded_text = payload_bytes.decode("utf-8")
@@ -62,7 +68,7 @@ class TieredStorageAdapter(TieredStoragePort):
                     if isinstance(parsed_val, dict):
                         json_data = dict(parsed_val)
                     else:
-                        json_data = {"__wrapped_scalar__": parsed_val}
+                        json_data = {WRAPPED_SCALAR_KEY: parsed_val}
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     json_data = {}
 
@@ -140,10 +146,10 @@ class TieredStorageAdapter(TieredStoragePort):
                         )
                     )
 
-            if "__wrapped_scalar__" in result.raw_payload and len(result.raw_payload) == 1:
+            if WRAPPED_SCALAR_KEY in result.raw_payload:
                 return Result.ok(
                     json.dumps(
-                        result.raw_payload["__wrapped_scalar__"], separators=(",", ":")
+                        result.raw_payload[WRAPPED_SCALAR_KEY], separators=(",", ":")
                     ).encode("utf-8")
                 )
             return Result.ok(json.dumps(result.raw_payload, separators=(",", ":")).encode("utf-8"))

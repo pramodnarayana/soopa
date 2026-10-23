@@ -189,7 +189,7 @@ def upgrade() -> None:
         sa.Column("start_checkpoint", sa.Text(), nullable=True),
         sa.Column("end_checkpoint", sa.Text(), nullable=True),
         sa.Column("pages_synced", sa.Integer(), server_default=sa.text("0"), nullable=False),
-        sa.Column("records_synced", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("records_synced", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
         sa.Column("bytes_synced", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
         sa.Column("retries_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("error_code", sa.String(length=64), nullable=True),

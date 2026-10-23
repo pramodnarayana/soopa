@@ -144,8 +144,17 @@ class HmacSignatureVerifier(InboundVerifierPort):
                 )
 
         # 2. Cryptographic signature verification via platform HmacSigner
+        if not secret or not secret.strip():
+            logger.error("inbound_hmac_empty_secret")
+            return Result.fail(
+                InboundVerificationFailedError(message="Webhook secret is not configured or empty.")
+            )
+
+        payload_to_verify = (
+            f"{ts_str}.".encode() + raw_body if (self._timestamp_header and ts_str) else raw_body
+        )
         signer = HmacSigner(secret)
-        if not signer.verify(raw_body, raw_signature):
+        if not signer.verify(payload_to_verify, raw_signature):
             logger.error(
                 "inbound_hmac_signature_mismatch",
                 header=self._signature_header,

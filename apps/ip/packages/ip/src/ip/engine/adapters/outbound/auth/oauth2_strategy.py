@@ -36,6 +36,7 @@ class OAuth2Strategy(AuthenticatorPort):
         refresh_buffer_seconds: int = 900,
         http_client: HttpClient | None = None,
         allow_private_ips: bool = False,
+        grant_mode: str = "refresh_token",
     ) -> None:
         self._client_id = client_id
         self._client_secret = client_secret
@@ -46,6 +47,7 @@ class OAuth2Strategy(AuthenticatorPort):
         self._on_token_refreshed = on_token_refreshed
         self._refresh_buffer_seconds = refresh_buffer_seconds
         self._allow_private_ips = allow_private_ips
+        self._grant_mode = grant_mode
         self._http_client = http_client or HttpClient(
             client=create_http_client(timeout=15.0),
             backoff_handler=HttpBackoffHandler(max_retries=0),
@@ -92,15 +94,22 @@ class OAuth2Strategy(AuthenticatorPort):
 
     async def _execute_token_refresh_request(self) -> dict[str, object] | None:
         try:
+            data: dict[str, str] = {
+                "client_id": self._client_id,
+                "client_secret": self._client_secret,
+            }
+            if self._grant_mode == "client_credentials" or (
+                not self._refresh_token and self._client_id
+            ):
+                data["grant_type"] = "client_credentials"
+            else:
+                data["grant_type"] = "refresh_token"
+                data["refresh_token"] = self._refresh_token or ""
+
             resp = await self._http_client.request(
                 "POST",
                 self._token_url,
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self._refresh_token or "",
-                    "client_id": self._client_id,
-                    "client_secret": self._client_secret,
-                },
+                data=data,
             )
             if not resp.is_success:
                 self._last_error = InvalidCredentialsError(

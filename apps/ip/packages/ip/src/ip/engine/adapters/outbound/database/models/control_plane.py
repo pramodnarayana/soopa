@@ -121,14 +121,14 @@ class SyncRunRecord(IpGlobalBase):
     __tablename__ = "sync_runs"
     __table_args__ = (
         Index(
-            "uq_ip_sync_run_active",
+            "uq_ip_sync_runs_active_stream",
             "connection_id",
             "stream",
             unique=True,
             postgresql_where=text("status IN ('PENDING', 'RUNNING')"),
         ),
-        Index("idx_ip_sync_run_tenant", "tenant_id"),
-        Index("idx_ip_sync_run_conn_stream", "connection_id", "stream"),
+        Index("idx_ip_sync_runs_tenant_conn", "tenant_id", "connection_id"),
+        Index("idx_ip_sync_runs_status", "status", "created_at"),
         {"schema": "ip"},
     )
 

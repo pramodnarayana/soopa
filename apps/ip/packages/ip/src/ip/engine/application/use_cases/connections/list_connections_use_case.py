@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from ip.engine.application.dto import ConnectionDTO
 from ip.engine.domain.enums import ConnectionStatus
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,7 @@ class ListConnectionsQuery:
 class ListConnectionsUseCase:
     """Queries and maps tenant connections into read-only boundary DTOs inside a Control Plane UoW."""
 
-    def __init__(self, uow: ControlPlaneUnitOfWorkPort) -> None:
+    def __init__(self, uow: IpControlPlaneUnitOfWorkPort) -> None:
         self._uow = uow
 
     async def execute(self, query: ListConnectionsQuery) -> list[ConnectionDTO]:

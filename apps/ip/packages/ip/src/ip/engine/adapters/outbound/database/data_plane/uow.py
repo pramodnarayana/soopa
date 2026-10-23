@@ -30,13 +30,13 @@ from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecor
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
-from ip.engine.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.uow import BaseSqlAlchemyUnitOfWork
 
 
-class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, DataPlaneUnitOfWorkPort):
+class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitOfWorkPort):
     """Concrete Unit of Work for the Integration Platform Data Plane (tenant shards)."""
 
     inbound_records: InboundRecordRepositoryPort
@@ -57,4 +57,4 @@ class SqlAlchemyDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, DataPlaneUnitOfWor
         self.outbound_records = SqlAlchemyOutboundRecordRepository(tenant_session)
 
 
-__all__ = ["SqlAlchemyDataPlaneUnitOfWork"]
+__all__ = ["SqlAlchemyIpDataPlaneUnitOfWork"]

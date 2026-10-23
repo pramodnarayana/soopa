@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-from types import TracebackType
 from typing import Protocol
+
+from seedwork.uow import UnitOfWorkPort
 
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
@@ -16,10 +17,14 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
 from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecordRepositoryPort
+from ip.engine.ports.outbound.replica_rejection_repository_port import (
+    ReplicaRejectionRepositoryPort,
+)
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
+from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 
 
-class ControlPlaneUnitOfWorkPort(Protocol):
+class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     """Unit of Work Port for the Integration Platform Control Plane (global_db, schema 'ip').
 
     Exposes abstract Control Plane repository interfaces and transaction lifecycle methods.
@@ -28,22 +33,10 @@ class ControlPlaneUnitOfWorkPort(Protocol):
     connections: ConnectionRepositoryPort
     catalogs: CatalogRepositoryPort
     stream_states: StreamStateRepositoryPort
-
-    async def __aenter__(self) -> ControlPlaneUnitOfWorkPort: ...
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None: ...
-
-    async def commit(self) -> None: ...
-
-    async def rollback(self) -> None: ...
+    sync_runs: SyncRunRepositoryPort
 
 
-class DataPlaneUnitOfWorkPort(Protocol):
+class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     """Unit of Work Port for the Integration Platform Data Plane (tenant shards, public schema).
 
     Exposes abstract Data Plane repository interfaces and transaction lifecycle methods.
@@ -51,26 +44,14 @@ class DataPlaneUnitOfWorkPort(Protocol):
 
     inbound_records: InboundRecordRepositoryPort
     replica_records: ReplicaRecordRepositoryPort
+    replica_rejections: ReplicaRejectionRepositoryPort
     normalized_records: NormalizedRecordRepositoryPort
     entity_maps: GlobalEntityMapRepositoryPort
     outbound_records: OutboundRecordRepositoryPort
 
-    async def __aenter__(self) -> DataPlaneUnitOfWorkPort: ...
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None: ...
-
-    async def commit(self) -> None: ...
-
-    async def rollback(self) -> None: ...
-
-
-class DataPlaneUnitOfWorkProviderPort(Protocol):
-    """Port for resolving a tenant's Data Plane shard and provisioning a scoped DataPlaneUnitOfWorkPort."""
+class IpDataPlaneUnitOfWorkProviderPort(Protocol):
+    """Port for resolving a tenant's Data Plane shard and provisioning a scoped IpDataPlaneUnitOfWorkPort."""
 
     async def resolve_shard_info(
         self, tenant_id: str
@@ -81,11 +62,11 @@ class DataPlaneUnitOfWorkProviderPort(Protocol):
         tenant_id: str,
         shard_id: str,
         shard_dsn: str,
-    ) -> contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]: ...
+    ) -> contextlib.AbstractAsyncContextManager[IpDataPlaneUnitOfWorkPort]: ...
 
 
 __all__ = [
-    "ControlPlaneUnitOfWorkPort",
-    "DataPlaneUnitOfWorkPort",
-    "DataPlaneUnitOfWorkProviderPort",
+    "IpControlPlaneUnitOfWorkPort",
+    "IpDataPlaneUnitOfWorkPort",
+    "IpDataPlaneUnitOfWorkProviderPort",
 ]

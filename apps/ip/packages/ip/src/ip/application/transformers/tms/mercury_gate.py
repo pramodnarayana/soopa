@@ -1,21 +1,19 @@
-"""Pure functional L2/L3 transformer for MercuryGate TMS streams."""
+"""Pure functional Layer 3 normalizer for MercuryGate TMS streams."""
 
 from __future__ import annotations
 
 from decimal import Decimal
 
-from seedwork.domain.types import JsonDict, JsonValue
-
 from ip.application.domains.tms.canonical import TmsEntityType
 from ip.engine.ports.outbound.transformer_hook_port import (
-    ExtractedReplicaDTO,
     NormalizedRecordDTO,
+    ReplicaSnapshotDTO,
     TransformerHookPort,
 )
 
 
 class MercuryGateTransformer(TransformerHookPort):
-    """Pure transformer converting MercuryGate TMS payloads into L2 replicas and L3 canonical TMS records."""
+    """Pure normalizer converting MercuryGate TMS L2 replica snapshots into L3 canonical TMS records."""
 
     @property
     def app_id(self) -> str:
@@ -41,69 +39,18 @@ class MercuryGateTransformer(TransformerHookPort):
         except (ValueError, TypeError, ArithmeticError):
             return default
 
-    def extract_replica(
-        self,
-        payload: JsonValue,
-        context: JsonDict | None = None,
-    ) -> ExtractedReplicaDTO | None:
-        if not isinstance(payload, dict):
-            return None
-
-        stream_name = (
-            str(context["stream_name"])
-            if context and "stream_name" in context
-            else str(payload.get("stream_name", "loads"))
-        )
-
-        raw_items = payload.get("loads") or payload.get("carriers") or payload.get("records")
-        item: JsonDict
-        if isinstance(raw_items, list) and raw_items and isinstance(raw_items[0], dict):
-            item = raw_items[0]
-        else:
-            item = payload
-
-        if stream_name == "loads":
-            ext_id = str(
-                item.get("load_id") or item.get("reference_number") or item.get("id") or ""
-            )
-        elif stream_name == "carriers":
-            ext_id = str(
-                item.get("scac")
-                or item.get("scac_code")
-                or item.get("carrier_id")
-                or item.get("id")
-                or ""
-            )
-        else:
-            ext_id = str(
-                item.get("load_id")
-                or item.get("reference_number")
-                or item.get("scac")
-                or item.get("scac_code")
-                or item.get("id")
-                or ""
-            )
-
-        if not ext_id:
-            return None
-
-        return ExtractedReplicaDTO(
-            entity_type=stream_name,
-            entity_id=ext_id,
-            data=item,
-        )
-
     def normalize(
         self,
-        replica: ExtractedReplicaDTO,
+        replica: ReplicaSnapshotDTO,
     ) -> NormalizedRecordDTO | None:
         replica_payload = replica.data
-        if replica.entity_type == "loads":
+        if replica.stream == "loads":
             load_ref = str(
                 replica_payload.get("load_id")
                 or replica_payload.get("reference_number")
                 or replica_payload.get("id")
-                or replica.entity_id
+                or (replica.primary_key_values[0] if replica.primary_key_values else "")
+                or replica.record_key
             )
             if not load_ref:
                 return None
@@ -135,9 +82,12 @@ class MercuryGateTransformer(TransformerHookPort):
                 },
             )
 
-        if replica.entity_type == "carriers":
+        if replica.stream == "carriers":
             scac = str(
-                replica_payload.get("scac") or replica_payload.get("scac_code") or replica.entity_id
+                replica_payload.get("scac")
+                or replica_payload.get("scac_code")
+                or (replica.primary_key_values[0] if replica.primary_key_values else "")
+                or replica.record_key
             )
             if not scac:
                 return None

@@ -138,7 +138,6 @@ class IpEventType(StrEnum):
     SYNC_RUN_FAILED = "ip.sync_run.failed"
     GENERATION_COMPLETED = "ip.generation.completed"
     FETCH_RECORD_REQUESTED = "ip.fetch_record.requested"
-    REPLICA_RECORD_UPDATED = "ip.replica_record.updated"
     REPLICA_RECORD_CHANGED = "ip.replica_record.changed"
     NORMALIZED_RECORD_CREATED = "ip.normalized_record.created"
     OUTBOUND_RECORD_CREATED = "ip.outbound_record.created"

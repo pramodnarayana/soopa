@@ -14,7 +14,7 @@ from seedwork.utils import generate_id
 from ip.engine.domain.enums import IngestionMode
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
-from ip.engine.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -59,7 +59,7 @@ class IngestRecordUseCase:
 
     def __init__(
         self,
-        uow: DataPlaneUnitOfWorkPort,
+        uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
     ) -> None:
         self._uow = uow

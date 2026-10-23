@@ -36,10 +36,6 @@ def compute_data_hash(data: JsonDict) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
-# Backward compatibility alias
-compute_replica_hash = compute_data_hash
-
-
 def _is_cursor_stale(
     existing_cursor: str,
     incoming_cursor: str | int | float,
@@ -51,6 +47,13 @@ def _is_cursor_stale(
             return int(incoming_cursor) < int(existing_cursor)
         except (ValueError, TypeError):
             return False
+    if cursor_kind == CursorKind.DATETIME:
+        try:
+            dt_incoming = datetime.fromisoformat(str(incoming_cursor).replace("Z", "+00:00"))
+            dt_existing = datetime.fromisoformat(existing_cursor.replace("Z", "+00:00"))
+            return dt_incoming < dt_existing
+        except (ValueError, TypeError):
+            return str(incoming_cursor) < str(existing_cursor)
     return str(incoming_cursor) < str(existing_cursor)
 
 
@@ -66,6 +69,8 @@ class ReplicaMergePolicy:
         is_deleted: bool = False,
     ) -> MergeOutcome:
         if is_deleted:
+            if existing is not None and existing.deleted_at is not None:
+                return MergeOutcome.NOOP
             return MergeOutcome.TOMBSTONE
 
         if existing is None:
@@ -112,30 +117,13 @@ class ReplicaRecord(TracedAggregateRoot):
     deleted_at: datetime | None = None
     source_inbound_record_id: str = ""
 
-    # Backward-compatible convenience properties
-    @property
-    def entity_type(self) -> str:
-        return self.stream
-
-    @property
-    def entity_id(self) -> str:
-        return self.record_key
-
-    @property
-    def app_id(self) -> str:
-        return ""
-
-    @property
-    def synced_at(self) -> datetime:
-        return self.updated_at
-
     @classmethod
     def create(
         cls,
         *,
         tenant_id: str,
         connection_id: str,
-        stream: str | None = None,
+        stream: str,
         record_key: str | None = None,
         primary_key_values: tuple[JsonPrimitive, ...] = (),
         cursor_value: str | None = None,
@@ -148,17 +136,10 @@ class ReplicaRecord(TracedAggregateRoot):
         parent_trace_id: str | None = None,
         original_trace_id: str | None = None,
         replay_count: int = 0,
-        # Backward compatibility kwargs
-        entity_type: str | None = None,
-        entity_id: str | None = None,
-        app_id: str | None = None,
     ) -> ReplicaRecord:
         record_id = generate_id(cls.ID_PREFIX)
         data_hash = compute_data_hash(data)
-        actual_stream = stream or entity_type or "default"
-        actual_key = (
-            record_key or entity_id or compute_record_key(primary_key_values or (actual_stream,))
-        )
+        actual_key = record_key or compute_record_key(primary_key_values or (stream,))
 
         now = datetime.now(UTC)
         record = cls(
@@ -170,7 +151,7 @@ class ReplicaRecord(TracedAggregateRoot):
             original_trace_id=original_trace_id,
             replay_count=replay_count,
             connection_id=connection_id,
-            stream=actual_stream,
+            stream=stream,
             record_key=actual_key,
             primary_key_values=primary_key_values,
             cursor_value=cursor_value,
@@ -194,7 +175,7 @@ class ReplicaRecord(TracedAggregateRoot):
                 event_type=IpTraceEventType.L2_REPLICA_CREATED.value,
                 layer=PipelineLayer.L2_REPLICA,
                 status=TimelineStatus.SUCCESS,
-                summary_message=f"Created L2 replica snapshot for {actual_stream}/{actual_key}.",
+                summary_message=f"Created L2 replica snapshot for {stream}/{actual_key}.",
             )
         )
 
@@ -203,9 +184,92 @@ class ReplicaRecord(TracedAggregateRoot):
                 record_id=record_id,
                 tenant_id=tenant_id,
                 connection_id=connection_id,
-                stream=actual_stream,
+                stream=stream,
                 record_key=actual_key,
                 outcome=MergeOutcome.INSERT.value,
+                version=1,
+                data_hash=data_hash,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
+            )
+        )
+        return record
+
+    @classmethod
+    def create_tombstone(
+        cls,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        record_key: str | None = None,
+        primary_key_values: tuple[JsonPrimitive, ...] = (),
+        cursor_value: str | None = None,
+        cursor_kind: str | None = None,
+        data: JsonDict,
+        generation_id: int = 1,
+        source_inbound_record_id: str = "",
+        trace_id: str,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+    ) -> ReplicaRecord:
+        """Creates a new replica snapshot directly in the tombstoned (soft-deleted) state."""
+        record_id = generate_id(cls.ID_PREFIX)
+        data_hash = compute_data_hash(data)
+        actual_key = record_key or compute_record_key(primary_key_values or (stream,))
+
+        now = datetime.now(UTC)
+        record = cls(
+            id=record_id,
+            tenant_id=tenant_id,
+            trace_id=trace_id,
+            correlation_id=correlation_id,
+            parent_trace_id=parent_trace_id,
+            original_trace_id=original_trace_id,
+            replay_count=replay_count,
+            connection_id=connection_id,
+            stream=stream,
+            record_key=actual_key,
+            primary_key_values=primary_key_values,
+            cursor_value=cursor_value,
+            cursor_kind=cursor_kind,
+            data=dict(data),
+            data_hash=data_hash,
+            version=1,
+            generation_id=generation_id,
+            last_seen_generation=generation_id,
+            first_seen_at=now,
+            extracted_at=now,
+            updated_at=now,
+            deleted_at=now,
+            source_inbound_record_id=source_inbound_record_id,
+        )
+
+        record.add_trace_event(
+            IpTraceEvent.create(
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                event_type=IpTraceEventType.L2_REPLICA_TOMBSTONED.value,
+                layer=PipelineLayer.L2_REPLICA,
+                status=TimelineStatus.SUCCESS,
+                summary_message=f"Tombstoned L2 replica {stream}/{actual_key} (v1).",
+            )
+        )
+
+        record.add_domain_event(
+            ReplicaRecordChangedEvent(
+                record_id=record_id,
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                stream=stream,
+                record_key=actual_key,
+                outcome=MergeOutcome.TOMBSTONE.value,
                 version=1,
                 data_hash=data_hash,
                 trace_id=trace_id,
@@ -228,12 +292,15 @@ class ReplicaRecord(TracedAggregateRoot):
         replay_count: int | None = None,
         cursor_value: str | None = None,
         generation_id: int | None = None,
+        source_inbound_record_id: str | None = None,
     ) -> bool:
         """Updates the replica snapshot if data_hash changed. Returns True if mutated."""
+        now = datetime.now(UTC)
         new_hash = compute_data_hash(new_data)
-        if new_hash == self.data_hash:
+        if new_hash == self.data_hash and self.deleted_at is None:
             if generation_id is not None:
                 self.last_seen_generation = generation_id
+            self.extracted_at = now
             return False
 
         self.data = dict(new_data)
@@ -250,9 +317,12 @@ class ReplicaRecord(TracedAggregateRoot):
             self.cursor_value = cursor_value
         if generation_id is not None:
             self.last_seen_generation = generation_id
+        if source_inbound_record_id is not None:
+            self.source_inbound_record_id = source_inbound_record_id
 
         self.version += 1
-        self.updated_at = datetime.now(UTC)
+        self.extracted_at = now
+        self.updated_at = now
         self.deleted_at = None
 
         self.add_trace_event(
@@ -293,12 +363,17 @@ class ReplicaRecord(TracedAggregateRoot):
         correlation_id: str | None = None,
         parent_trace_id: str | None = None,
         original_trace_id: str | None = None,
+        generation_id: int | None = None,
+        source_inbound_record_id: str | None = None,
     ) -> None:
         """Marks the replica snapshot as tombstoned (soft-deleted)."""
         if self.deleted_at is not None:
             return
 
-        self.deleted_at = datetime.now(UTC)
+        now = datetime.now(UTC)
+        self.deleted_at = now
+        self.extracted_at = now
+        self.updated_at = now
         self.version += 1
         self.trace_id = trace_id
         self.correlation_id = correlation_id
@@ -306,6 +381,10 @@ class ReplicaRecord(TracedAggregateRoot):
             self.parent_trace_id = parent_trace_id
         if original_trace_id is not None:
             self.original_trace_id = original_trace_id
+        if generation_id is not None:
+            self.last_seen_generation = generation_id
+        if source_inbound_record_id is not None:
+            self.source_inbound_record_id = source_inbound_record_id
 
         self.add_trace_event(
             IpTraceEvent.create(
@@ -342,6 +421,8 @@ class ReplicaRecord(TracedAggregateRoot):
 class ReplicaRejection:
     """Represents a record that could not be extracted or merged at L2."""
 
+    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_REPLICA_REJECTION.value
+
     id: str
     tenant_id: str
     connection_id: str
@@ -352,3 +433,30 @@ class ReplicaRejection:
     detail: str
     trace_id: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        inbound_record_id: str,
+        record_index: int,
+        reason: str,
+        detail: str,
+        trace_id: str,
+        created_at: datetime | None = None,
+    ) -> ReplicaRejection:
+        return cls(
+            id=generate_id(cls.ID_PREFIX),
+            tenant_id=tenant_id,
+            connection_id=connection_id,
+            stream=stream,
+            inbound_record_id=inbound_record_id,
+            record_index=record_index,
+            reason=reason,
+            detail=detail,
+            trace_id=trace_id,
+            created_at=created_at or datetime.now(UTC),
+        )

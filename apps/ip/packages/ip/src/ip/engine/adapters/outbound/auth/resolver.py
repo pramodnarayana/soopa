@@ -17,6 +17,28 @@ from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
 from seedwork.domain.types import JsonDict
 
 
+def _parse_credentials_dict(credentials: JsonDict | bytes | str | None) -> JsonDict:
+    if isinstance(credentials, bytes):
+        try:
+            parsed = json.loads(credentials.decode("utf-8"))
+            return (
+                parsed
+                if isinstance(parsed, dict)
+                else {"api_key": credentials.decode("utf-8", errors="ignore")}
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
+            return {"api_key": credentials.decode("utf-8", errors="ignore")}
+    if isinstance(credentials, str):
+        try:
+            parsed = json.loads(credentials)
+            return parsed if isinstance(parsed, dict) else {"api_key": credentials}
+        except (json.JSONDecodeError, ValueError):
+            return {"api_key": credentials}
+    if isinstance(credentials, dict):
+        return credentials
+    return {}
+
+
 class AuthStrategyResolver:
     """Resolves and instantiates the appropriate AuthenticatorPort strategy for a connection."""
 
@@ -28,19 +50,7 @@ class AuthStrategyResolver:
         *,
         allow_private_ips: bool = False,
     ) -> AuthenticatorPort:
-        creds_dict: JsonDict = {}
-        if isinstance(credentials, bytes):
-            try:
-                creds_dict = json.loads(credentials.decode("utf-8"))
-            except (json.JSONDecodeError, UnicodeDecodeError, ValueError):
-                creds_dict = {"api_key": credentials.decode("utf-8", errors="ignore")}
-        elif isinstance(credentials, str):
-            try:
-                creds_dict = json.loads(credentials)
-            except (json.JSONDecodeError, ValueError):
-                creds_dict = {"api_key": credentials}
-        elif isinstance(credentials, dict):
-            creds_dict = credentials
+        creds_dict = _parse_credentials_dict(credentials)
 
         if auth_type == AuthType.BASIC_AUTH:
             return BasicAuthStrategy(
@@ -75,16 +85,27 @@ class AuthStrategyResolver:
         if auth_type in (AuthType.OAUTH2, AuthType.OAUTH2_CLIENT_CREDENTIALS):
             raw_refresh = creds_dict.get("refresh_token")
             raw_expires = creds_dict.get("expires_at_epoch")
+            expires_at: float | None = None
+            if isinstance(raw_expires, (int, float, str)):
+                try:
+                    expires_at = float(raw_expires)
+                except (ValueError, TypeError):
+                    expires_at = None
+
+            grant_mode = (
+                "client_credentials"
+                if auth_type == AuthType.OAUTH2_CLIENT_CREDENTIALS
+                else "refresh_token"
+            )
             return OAuth2Strategy(
                 client_id=str(creds_dict.get("client_id", "")),
                 client_secret=str(creds_dict.get("client_secret", "")),
                 token_url=str(creds_dict.get("token_url", "")),
                 access_token=str(creds_dict.get("access_token", "")),
                 refresh_token=str(raw_refresh) if raw_refresh is not None else None,
-                expires_at_epoch=(
-                    float(raw_expires) if isinstance(raw_expires, (int, float, str)) else None
-                ),
+                expires_at_epoch=expires_at,
                 allow_private_ips=allow_private_ips,
+                grant_mode=grant_mode,
             )
 
         return NoAuthStrategy()

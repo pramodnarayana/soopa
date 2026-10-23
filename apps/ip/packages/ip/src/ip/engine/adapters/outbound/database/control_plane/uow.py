@@ -18,13 +18,13 @@ from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPo
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
-from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.uow import BaseSqlAlchemyUnitOfWork
 
 
-class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, ControlPlaneUnitOfWorkPort):
+class SqlAlchemyIpControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpControlPlaneUnitOfWorkPort):
     """Concrete Unit of Work for the Integration Platform Control Plane (global_db, schema 'ip')."""
 
     connections: ConnectionRepositoryPort
@@ -41,4 +41,4 @@ class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, ControlPlaneUni
         self.sync_runs = SqlAlchemySyncRunRepository(global_session)
 
 
-__all__ = ["SqlAlchemyControlPlaneUnitOfWork"]
+__all__ = ["SqlAlchemyIpControlPlaneUnitOfWork"]

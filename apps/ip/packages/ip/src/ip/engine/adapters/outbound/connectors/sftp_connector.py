@@ -13,7 +13,6 @@ from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
 from ip.engine.application.responses import CatalogAppSummaryDTO
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
-    IpError,
     PayloadNotFoundError,
     Result,
     SftpConnectionError,
@@ -57,11 +56,6 @@ class SftpConnector(BaseConnector):
     def __init__(self, timeout_seconds: float = 15.0, allow_local: bool = False) -> None:
         self._timeout_seconds = timeout_seconds
         self._allow_local = allow_local
-        self._last_error: IpError | None = None
-
-    @property
-    def last_error(self) -> IpError | None:
-        return self._last_error
 
     @property
     def app_id(self) -> str:
@@ -300,6 +294,7 @@ class SftpConnector(BaseConnector):
                         record_id=filename,
                         data=data,
                         emitted_at=datetime.now(UTC).isoformat(),
+                        cursor_value=str(data["modified_at"]),
                     )
             finally:
                 await asyncio.to_thread(sftp.close)

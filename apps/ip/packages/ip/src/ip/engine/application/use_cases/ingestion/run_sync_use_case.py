@@ -13,7 +13,12 @@ from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import IngestionMode, SyncRunKind, SyncRunStatus
+from ip.engine.domain.enums import (
+    ConnectionStatus,
+    IngestionMode,
+    SyncRunKind,
+    SyncRunStatus,
+)
 from ip.engine.domain.models.connection import Connection
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.domain.models.stream_state import ConnectionStreamState
@@ -21,8 +26,8 @@ from ip.engine.domain.models.sync_run import SyncRun
 from ip.engine.ports.outbound.connector_port import SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
-    ControlPlaneUnitOfWorkPort,
-    DataPlaneUnitOfWorkPort,
+    IpControlPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkPort,
 )
 from ip.engine.ports.types import RecordEnvelopeDTO
 
@@ -85,8 +90,8 @@ class RunSyncUseCase:
 
     def __init__(
         self,
-        control_plane_uow: ControlPlaneUnitOfWorkPort,
-        data_plane_uow: DataPlaneUnitOfWorkPort,
+        control_plane_uow: IpControlPlaneUnitOfWorkPort,
+        data_plane_uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         cipher: CipherPort,
         connectors: Mapping[str, SourceConnectorPort],
@@ -104,21 +109,23 @@ class RunSyncUseCase:
             return init_res
         sync_run, start_cursor, kind, generation_id = init_res
 
-        conn_ctx = await self._resolve_connection_context(command)
-        if conn_ctx is None:
-            return await self._fail_run(
-                sync_run, "CONNECTION_NOT_FOUND", "Connection or connector could not be resolved"
-            )
-        connection, connector, credentials = conn_ctx
-
-        read_cursor = (
-            calculate_lookback_cursor(start_cursor, command.lookback_seconds)
-            if kind == SyncRunKind.INCREMENTAL
-            else start_cursor
-        )
-        ingestion_mode = self._resolve_ingestion_mode(kind)
-
         try:
+            conn_ctx = await self._resolve_connection_context(command)
+            if conn_ctx is None:
+                return await self._fail_run(
+                    sync_run,
+                    "CONNECTION_NOT_FOUND",
+                    "Connection or connector could not be resolved",
+                )
+            connection, connector, credentials = conn_ctx
+
+            read_cursor = (
+                calculate_lookback_cursor(start_cursor, command.lookback_seconds)
+                if kind == SyncRunKind.INCREMENTAL
+                else start_cursor
+            )
+            ingestion_mode = self._resolve_ingestion_mode(kind)
+
             await self._execute_stream_pull(
                 command=command,
                 sync_run=sync_run,
@@ -235,6 +242,9 @@ class RunSyncUseCase:
         async with self._control_plane_uow:
             connection = await self._control_plane_uow.connections.get_by_id(command.connection_id)
             if not connection or connection.tenant_id != command.tenant_id:
+                return None
+
+            if connection.status is ConnectionStatus.DEACTIVATED:
                 return None
 
             connector = self._connectors.get(connection.app_id)

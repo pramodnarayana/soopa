@@ -30,7 +30,7 @@ class StreamSubscriptionSupervisor:
 
     def __init__(
         self,
-        ingest_use_case: IngestStreamBatchUseCase | Callable[[], IngestStreamBatchUseCase],
+        ingest_use_case: Callable[[], IngestStreamBatchUseCase],
         transports: Mapping[str, SubscribeTransportPort],
         max_restart_attempts: int = 5,
         base_backoff_seconds: float = 0.2,
@@ -85,11 +85,7 @@ class StreamSubscriptionSupervisor:
                 stream_name=stream.stream,
                 batch=batch,
             )
-            use_case = (
-                self._ingest_use_case()
-                if callable(self._ingest_use_case)
-                else self._ingest_use_case
-            )
+            use_case = self._ingest_use_case()
             res = await use_case.execute(cmd)
             return res.verdict
 
