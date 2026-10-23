@@ -110,8 +110,15 @@ class SqlAlchemyEnergyDomainRepository:
         return [self._to_meter_reading_dto(r) for r in result.scalars().all()]
 
     async def save_service_point(self, dto: CanonicalServicePointDTO) -> None:
+        existing_stmt = select(MdmServicePointRecord.id).where(
+            MdmServicePointRecord.tenant_id == dto.tenant_id,
+            MdmServicePointRecord.service_point_external_id == dto.service_point_external_id,
+        )
+        existing_id = (await self._session.execute(existing_stmt)).scalar_one_or_none()
+        resolved_id = existing_id or dto.id
+
         orm = MdmServicePointRecord(
-            id=dto.id,
+            id=resolved_id,
             tenant_id=dto.tenant_id,
             trace_id=dto.trace_id,
             correlation_id=dto.correlation_id,

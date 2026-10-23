@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
+from enum import StrEnum
+
+
+class TmsEntityType(StrEnum):
+    """Canonical domain entity types for the TMS vertical."""
+
+    TMS_LOAD = "TMS_LOAD"
+    TMS_CARRIER = "TMS_CARRIER"
 
 
 @dataclass(frozen=True)
@@ -23,7 +32,7 @@ class CanonicalLoadDTO:
     destination_state: str
     status: str
     total_weight_lbs: float
-    freight_charge_usd: float
+    freight_charge_usd: Decimal
     pickup_scheduled_at: datetime | None
     delivery_scheduled_at: datetime | None
     updated_at: datetime

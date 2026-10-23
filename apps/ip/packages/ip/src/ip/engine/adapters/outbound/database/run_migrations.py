@@ -29,8 +29,11 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
                 shard_id, dsn = row
                 if str(shard_id).lower().startswith("ip_"):
                     shard_map[str(shard_id).lower()] = str(dsn)
-    except DBAPIError:
-        logger.info("ucp_database_shards_unavailable_using_overrides")
+    except DBAPIError as err:
+        if not overrides:
+            logger.error("ucp_database_shards_query_failed_no_overrides", error=str(err))
+            raise
+        logger.warning("ucp_database_shards_unavailable_using_overrides", error=str(err))
     finally:
         await engine.dispose()
 
@@ -110,7 +113,7 @@ def run_migrations() -> None:
         tenant_cfg = Config(str(tenant_ini))
         tenant_cfg.set_main_option("script_location", str(tenant_script_loc))
         tenant_cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
-        command.upgrade(tenant_cfg, "head")
+        command.upgrade(tenant_cfg, "heads")
 
     logger.info("ip_database_migrations_completed", shards_migrated=len(shard_urls))
 

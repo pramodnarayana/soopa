@@ -13,10 +13,13 @@ from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     InvalidConnectionConfigError,
     InvalidEndpointError,
+    IpError,
     IpErrorCode,
     Result,
 )
 from ip.engine.ports.outbound.connector_port import ConnectorPort
+from ip.engine.ports.types import RecordEnvelopeDTO
+from seedwork.domain.types import JsonDict
 from shttp import validate_target_url
 from shttp.exceptions import SsrfSecurityError
 
@@ -25,6 +28,11 @@ _LOCAL_TEST_HOSTS = ("localhost", "127.0.0.1", "::1", "testserver")
 
 class BaseConnector(ConnectorPort, ABC):
     """Abstract base connector encapsulating catalog hashing and shared URL/SSRF validation helpers."""
+
+    @property
+    def last_error(self) -> IpError | None:
+        """Returns the last domain/operational error encountered during stream reading, if any."""
+        return None
 
     @staticmethod
     def _parse_and_validate_url_structure(
@@ -186,3 +194,13 @@ class BaseConnector(ConnectorPort, ABC):
             streams=streams,
             discovered_at=discovered_at or datetime.now(UTC).isoformat(),
         )
+
+    async def fetch_record(
+        self,
+        stream_name: str,
+        record_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+    ) -> RecordEnvelopeDTO | None:
+        """Default fetch_record implementation returning None when unsupported."""
+        return None

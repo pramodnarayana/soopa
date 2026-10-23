@@ -26,7 +26,7 @@ class StreamField:
 
 @dataclass(frozen=True)
 class StreamSchema:
-    name: str  # e.g., 'meters', 'usage_points', 'interval_reads'
+    name: str  # e.g., 'records', 'events', 'users'
     fields: Sequence[StreamField]
     primary_key: Sequence[str]
     cursor_field: str | None = None

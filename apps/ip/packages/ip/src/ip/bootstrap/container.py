@@ -26,12 +26,6 @@ class Container(containers.DeclarativeContainer):
 
     config = providers.Configuration()
 
-    wiring_config = containers.WiringConfiguration(
-        packages=[
-            "unified_api.adapters.inbound.http.dependencies.ip",
-        ]
-    )
-
     # -----------------------------------------------------------------------
     # External Adapters & Providers (Stateless singletons / factories)
     # -----------------------------------------------------------------------

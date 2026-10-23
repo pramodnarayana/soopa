@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +38,7 @@ class SqlAlchemyTmsDomainRepository:
             destination_state=orm.destination_state,
             status=orm.status,
             total_weight_lbs=orm.total_weight_lbs,
-            freight_charge_usd=orm.freight_charge_usd,
+            freight_charge_usd=Decimal(str(orm.freight_charge_usd)),
             pickup_scheduled_at=orm.pickup_scheduled_at,
             delivery_scheduled_at=orm.delivery_scheduled_at,
             updated_at=orm.updated_at,
@@ -65,8 +66,15 @@ class SqlAlchemyTmsDomainRepository:
         )
 
     async def save_load(self, dto: CanonicalLoadDTO) -> None:
+        existing_stmt = select(TmsLoadRecord.id).where(
+            TmsLoadRecord.tenant_id == dto.tenant_id,
+            TmsLoadRecord.load_reference_number == dto.load_reference_number,
+        )
+        existing_id = (await self._session.execute(existing_stmt)).scalar_one_or_none()
+        resolved_id = existing_id or dto.id
+
         orm = TmsLoadRecord(
-            id=dto.id,
+            id=resolved_id,
             tenant_id=dto.tenant_id,
             trace_id=dto.trace_id,
             correlation_id=dto.correlation_id,
@@ -110,8 +118,15 @@ class SqlAlchemyTmsDomainRepository:
         return [self._to_load_dto(r) for r in result.scalars().all()]
 
     async def save_carrier(self, dto: CanonicalCarrierDTO) -> None:
+        existing_stmt = select(TmsCarrierRecord.id).where(
+            TmsCarrierRecord.tenant_id == dto.tenant_id,
+            TmsCarrierRecord.scac_code == dto.scac_code,
+        )
+        existing_id = (await self._session.execute(existing_stmt)).scalar_one_or_none()
+        resolved_id = existing_id or dto.id
+
         orm = TmsCarrierRecord(
-            id=dto.id,
+            id=resolved_id,
             tenant_id=dto.tenant_id,
             trace_id=dto.trace_id,
             correlation_id=dto.correlation_id,

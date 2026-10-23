@@ -10,8 +10,6 @@ from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import NormalizedEntityType
-
 
 @dataclass(kw_only=True, eq=False)
 class GlobalEntityMap(TracedAggregateRoot):
@@ -20,7 +18,7 @@ class GlobalEntityMap(TracedAggregateRoot):
     ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_GEM.value
 
     id: str
-    entity_domain: NormalizedEntityType
+    entity_domain: str
     canonical_id: str
     source_connection_id: str
     source_entity_id: str
@@ -34,7 +32,7 @@ class GlobalEntityMap(TracedAggregateRoot):
         *,
         tenant_id: str,
         trace_id: str,
-        entity_domain: NormalizedEntityType,
+        entity_domain: str,
         canonical_id: str,
         source_connection_id: str,
         source_entity_id: str,

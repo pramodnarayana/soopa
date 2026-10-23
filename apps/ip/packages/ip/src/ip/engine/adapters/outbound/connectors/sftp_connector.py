@@ -13,6 +13,7 @@ from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
 from ip.engine.application.responses import CatalogAppSummaryDTO
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
+    IpError,
     PayloadNotFoundError,
     Result,
     SftpConnectionError,
@@ -56,6 +57,11 @@ class SftpConnector(BaseConnector):
     def __init__(self, timeout_seconds: float = 15.0, allow_local: bool = False) -> None:
         self._timeout_seconds = timeout_seconds
         self._allow_local = allow_local
+        self._last_error: IpError | None = None
+
+    @property
+    def last_error(self) -> IpError | None:
+        return self._last_error
 
     @property
     def app_id(self) -> str:
@@ -238,9 +244,11 @@ class SftpConnector(BaseConnector):
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         host = str(public_config.get("host", ""))
+        self._last_error = None
         client_res = await asyncio.to_thread(self._create_client, public_config, credentials)
         if client_res.error is not None:
             sftp_err = client_res.error
+            self._last_error = sftp_err
             logger.error(
                 "sftp_read_stream_connection_failed",
                 host=host,
@@ -270,13 +278,17 @@ class SftpConnector(BaseConnector):
                         cursor_epoch = None
 
                 emitted = 0
+                last_emitted_mtime: float | None = None
                 for f in file_entries:
                     mtime = float(f.st_mtime or 0)
                     if cursor_epoch is not None and mtime <= cursor_epoch:
                         continue
-                    if emitted >= limit:
+                    if emitted >= limit and (
+                        last_emitted_mtime is None or mtime != last_emitted_mtime
+                    ):
                         break
                     emitted += 1
+                    last_emitted_mtime = mtime
                     filename = f.filename or ""
                     data: JsonDict = {
                         "filename": filename,

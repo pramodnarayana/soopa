@@ -12,7 +12,12 @@ from seedwork.id_registry import DomainIdPrefix
 from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import IpTraceEventType, PipelineLayer, TimelineStatus
+from ip.engine.domain.enums import (
+    IngestionMode,
+    IpTraceEventType,
+    PipelineLayer,
+    TimelineStatus,
+)
 from ip.engine.domain.events import InboundRecordCreatedEvent
 from ip.engine.domain.models.timeline_entry import IpTraceEvent
 
@@ -32,6 +37,10 @@ class InboundRecord(TracedAggregateRoot):
     connection_id: str
     app_id: str
     stream_name: str
+    ingestion_mode: IngestionMode = IngestionMode.PUSH_FULL
+    sync_run_id: str | None = None
+    generation_id: int | None = None
+    external_event_id: str | None = None
     request_headers: JsonDict = field(default_factory=dict)
     request_body: JsonDict | None = None
     request_s3_key: str | None = None
@@ -59,6 +68,10 @@ class InboundRecord(TracedAggregateRoot):
         parent_trace_id: str | None = None,
         original_trace_id: str | None = None,
         replay_count: int = 0,
+        ingestion_mode: IngestionMode = IngestionMode.PUSH_FULL,
+        sync_run_id: str | None = None,
+        generation_id: int | None = None,
+        external_event_id: str | None = None,
         request_headers: JsonDict | None = None,
         request_body: JsonDict | None = None,
         request_s3_key: str | None = None,
@@ -84,6 +97,10 @@ class InboundRecord(TracedAggregateRoot):
             connection_id=connection_id,
             app_id=app_id,
             stream_name=stream_name,
+            ingestion_mode=ingestion_mode,
+            sync_run_id=sync_run_id,
+            generation_id=generation_id,
+            external_event_id=external_event_id,
             request_headers=dict(request_headers or {}),
             request_body=request_body if is_inlined else None,
             request_s3_key=request_s3_key if not is_inlined else None,
@@ -105,7 +122,7 @@ class InboundRecord(TracedAggregateRoot):
                 event_type=IpTraceEventType.L1_INGEST_RECEIVED.value,
                 layer=PipelineLayer.L1_INGEST,
                 status=TimelineStatus.SUCCESS,
-                summary_message=f"Ingested inbound stream '{stream_name}' ({size_bytes} bytes).",
+                summary_message=f"Ingested inbound stream '{stream_name}' via {ingestion_mode.value} ({size_bytes} bytes).",
             )
         )
 
@@ -125,6 +142,10 @@ class InboundRecord(TracedAggregateRoot):
                 payload_sha256=sha256_hash,
                 is_inlined=is_inlined,
                 s3_key=request_s3_key if not is_inlined else None,
+                ingestion_mode=ingestion_mode.value,
+                sync_run_id=sync_run_id,
+                generation_id=generation_id,
+                external_event_id=external_event_id,
             )
         )
         return record

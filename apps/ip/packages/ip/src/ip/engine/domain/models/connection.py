@@ -79,6 +79,14 @@ class Connection(AggregateRoot):
     updated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     deactivated_at: str | None = None
 
+    @property
+    def resolved_public_config(self) -> JsonDict:
+        """Returns public_config augmented with auth_type if not explicitly set."""
+        cfg = dict(self.public_config)
+        if "auth_type" not in cfg and self.auth_type:
+            cfg["auth_type"] = self.auth_type.value
+        return cfg
+
     @staticmethod
     def validate_create_params(
         *,

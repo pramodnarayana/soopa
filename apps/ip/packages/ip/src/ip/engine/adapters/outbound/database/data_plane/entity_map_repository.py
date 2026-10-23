@@ -6,7 +6,6 @@ from collections.abc import Sequence
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.data_plane import GlobalEntityMapModel
-from ip.engine.domain.enums import NormalizedEntityType
 from ip.engine.domain.models.global_entity_map import GlobalEntityMap
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from sqlalchemy import select
@@ -31,7 +30,7 @@ class SqlAlchemyGlobalEntityMapRepository(
             parent_trace_id=orm.parent_trace_id,
             original_trace_id=orm.original_trace_id,
             replay_count=orm.replay_count,
-            entity_domain=NormalizedEntityType(orm.entity_domain),
+            entity_domain=orm.entity_domain,
             canonical_id=orm.canonical_id,
             source_connection_id=orm.source_connection_id,
             source_entity_id=orm.source_entity_id,
@@ -62,7 +61,7 @@ class SqlAlchemyGlobalEntityMapRepository(
         if existing is None:
             fallback_stmt = select(GlobalEntityMapModel).where(
                 GlobalEntityMapModel.tenant_id == entity_map.tenant_id,
-                GlobalEntityMapModel.entity_domain == entity_map.entity_domain.value,
+                GlobalEntityMapModel.entity_domain == str(entity_map.entity_domain),
                 GlobalEntityMapModel.source_connection_id == entity_map.source_connection_id,
                 GlobalEntityMapModel.source_entity_id == entity_map.source_entity_id,
             )
@@ -78,7 +77,7 @@ class SqlAlchemyGlobalEntityMapRepository(
                 parent_trace_id=entity_map.parent_trace_id,
                 original_trace_id=entity_map.original_trace_id,
                 replay_count=entity_map.replay_count,
-                entity_domain=entity_map.entity_domain.value,
+                entity_domain=str(entity_map.entity_domain),
                 canonical_id=entity_map.canonical_id,
                 source_connection_id=entity_map.source_connection_id,
                 source_entity_id=entity_map.source_entity_id,
@@ -97,13 +96,13 @@ class SqlAlchemyGlobalEntityMapRepository(
     async def get_by_source(
         self,
         tenant_id: str,
-        entity_domain: NormalizedEntityType,
+        entity_domain: str,
         source_connection_id: str,
         source_entity_id: str,
     ) -> GlobalEntityMap | None:
         stmt = select(GlobalEntityMapModel).where(
             GlobalEntityMapModel.tenant_id == tenant_id,
-            GlobalEntityMapModel.entity_domain == entity_domain.value,
+            GlobalEntityMapModel.entity_domain == str(entity_domain),
             GlobalEntityMapModel.source_connection_id == source_connection_id,
             GlobalEntityMapModel.source_entity_id == source_entity_id,
         )

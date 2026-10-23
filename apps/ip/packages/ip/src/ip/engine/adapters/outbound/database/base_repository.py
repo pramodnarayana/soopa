@@ -40,7 +40,11 @@ class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
 
     def __init__(self, session: AsyncSession | GlobalSession) -> None:
         info = session.info
-        if isinstance(info, dict) and "session_type" in info and info.get("session_type") != "global":
+        if (
+            isinstance(info, dict)
+            and "session_type" in info
+            and info.get("session_type") != "global"
+        ):
             raise ValueError(
                 f"Expected a GlobalSession but received a {info.get('session_type')} session. "
                 "Check the UnitOfWork or dependencies injection."
@@ -81,7 +85,11 @@ class TenantSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
 
     def __init__(self, session: AsyncSession | TenantSession) -> None:
         info = session.info
-        if isinstance(info, dict) and "session_type" in info and info.get("session_type") != "tenant":
+        if (
+            isinstance(info, dict)
+            and "session_type" in info
+            and info.get("session_type") != "tenant"
+        ):
             raise ValueError(
                 f"Expected a TenantSession but received a {info.get('session_type')} session. "
                 "Check the UnitOfWork or dependencies injection."

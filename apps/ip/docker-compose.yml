@@ -1,0 +1,25 @@
+services:
+  ip_postgres_shard:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ip
+      POSTGRES_PASSWORD: ip_password
+      POSTGRES_DB: ip_shard
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+    ports:
+      - "5434:5432"
+    volumes:
+      - ip_postgres_shard_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ip -d ip_shard
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  ip_postgres_shard_data: null

@@ -96,6 +96,10 @@ class InboundRecordCreatedEvent(DomainEvent):
     is_inlined: bool
     s3_key: str | None
     app_id: str = ""
+    ingestion_mode: str = "PUSH_FULL"
+    sync_run_id: str | None = None
+    generation_id: int | None = None
+    external_event_id: str | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
@@ -128,6 +132,32 @@ class ReplicaRecordUpdatedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return IpEventType.REPLICA_RECORD_UPDATED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ReplicaRecordChangedEvent(DomainEvent):
+    """Domain event emitted when an L2 universal replica changes (INSERT, UPDATE, TOMBSTONE)."""
+
+    record_id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    record_key: str
+    outcome: str
+    version: int
+    data_hash: str
+    trace_id: str
+    correlation_id: str | None = None
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.REPLICA_RECORD_CHANGED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
@@ -195,6 +225,110 @@ class StreamStateCheckpointedEvent(DomainEvent):
     @property
     def event_name(self) -> str:
         return IpEventType.STREAM_STATE_CHECKPOINTED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class SyncRunStartedEvent(DomainEvent):
+    """Domain event emitted when a pull sync run begins execution."""
+
+    run_id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    kind: str
+    generation_id: int
+    start_checkpoint: str | None
+    trace_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.SYNC_RUN_STARTED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class SyncRunCompletedEvent(DomainEvent):
+    """Domain event emitted when a pull sync run finishes successfully."""
+
+    run_id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    kind: str
+    generation_id: int
+    end_checkpoint: str | None
+    pages_count: int
+    records_count: int
+    bytes_count: int
+    trace_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.SYNC_RUN_COMPLETED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class SyncRunFailedEvent(DomainEvent):
+    """Domain event emitted when a pull sync run fails with a terminal error."""
+
+    run_id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    kind: str
+    generation_id: int
+    error_code: str
+    error_message: str
+    trace_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.SYNC_RUN_FAILED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class GenerationCompletedEvent(DomainEvent):
+    """Domain event emitted when a full refresh completes, triggering L2 tombstone sweep."""
+
+    tenant_id: str
+    connection_id: str
+    stream: str
+    generation_id: int
+    trace_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.GENERATION_COMPLETED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class FetchRecordRequestedEvent(DomainEvent):
+    """Domain event emitted when a PUSH_THIN notice requests an async fetch."""
+
+    tenant_id: str
+    connection_id: str
+    stream: str
+    record_id: str
+    notice_inbound_record_id: str
+    trace_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.FETCH_RECORD_REQUESTED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id

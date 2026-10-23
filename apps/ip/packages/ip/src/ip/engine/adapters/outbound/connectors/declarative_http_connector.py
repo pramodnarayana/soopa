@@ -136,6 +136,8 @@ class DeclarativeHttpConnector(BaseConnector):
             if val is None:
                 return match.group(0)
             cleaned = str(val).strip().rstrip("/")
+            if key in ("endpoint_url", "base_url") or cleaned.startswith(("http://", "https://")):
+                return cleaned
             if not re.match(r"^[a-zA-Z0-9_\-\.]+$", cleaned):
                 invalid_param_error = InvalidConnectionConfigError(
                     field_name=key,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from ip.engine.adapters.outbound.database.models.base import IpTenantBase
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonPrimitive
 from seedwork.utils import generate_id
 from sqlalchemy import (
     BigInteger,
@@ -34,6 +34,14 @@ class InboundRecordModel(IpTenantBase):
         Index("idx_inbound_corr", "tenant_id", "correlation_id"),
         Index("idx_inbound_conn", "tenant_id", "connection_id"),
         Index("idx_inbound_app", "tenant_id", "app_id"),
+        Index(
+            "uq_inbound_external_event",
+            "tenant_id",
+            "connection_id",
+            "external_event_id",
+            unique=True,
+            postgresql_where=text("external_event_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -46,6 +54,12 @@ class InboundRecordModel(IpTenantBase):
     original_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     replay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     stream_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    ingestion_mode: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="PUSH_FULL"
+    )
+    sync_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    generation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     request_headers: Mapped[JsonDict] = mapped_column(JSONB, nullable=False, default=dict)
     request_body: Mapped[JsonDict | None] = mapped_column(JSONB, nullable=True)
     request_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
@@ -67,31 +81,60 @@ class ReplicaRecordModel(IpTenantBase):
         UniqueConstraint(
             "tenant_id",
             "connection_id",
-            "entity_type",
-            "entity_id",
+            "stream",
+            "record_key",
             name="uq_ip_replica_record_identity",
         ),
-        Index("idx_replica_tenant_entity", "tenant_id", "entity_type"),
+        Index("idx_replica_tenant_stream", "tenant_id", "stream"),
         Index("idx_replica_data_hash", "tenant_id", "data_hash"),
         Index("idx_replica_trace", "tenant_id", "trace_id"),
         Index("idx_replica_corr", "tenant_id", "correlation_id"),
+        Index("idx_replica_gen", "tenant_id", "connection_id", "stream", "last_seen_generation"),
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
     connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    app_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    entity_type: Mapped[str] = mapped_column(String(128), nullable=False)
-    entity_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    stream: Mapped[str] = mapped_column(String(128), nullable=False)
+    record_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    primary_key_values: Mapped[list[JsonPrimitive]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    cursor_value: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    cursor_kind: Mapped[str | None] = mapped_column(String(32), nullable=True)
     data: Mapped[JsonDict] = mapped_column(JSONB, nullable=False, default=dict)
     data_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    generation_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    last_seen_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    extracted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_inbound_record_id: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
     correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    parent_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    version: Mapped[int] = mapped_column(BigInteger, nullable=False, default=1)
-    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReplicaRejectionModel(IpTenantBase):
+    """Database record representation of rejected records at Layer 2."""
+
+    __tablename__ = "replica_rejections"
+    __table_args__ = (
+        Index("idx_rejection_tenant_conn", "tenant_id", "connection_id", "stream"),
+        Index("idx_rejection_trace", "tenant_id", "trace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    stream: Mapped[str] = mapped_column(String(128), nullable=False)
+    inbound_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    record_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class NormalizedRecordModel(IpTenantBase):
@@ -247,5 +290,6 @@ __all__ = [
     "NormalizedRecordModel",
     "OutboundRecordModel",
     "ReplicaRecordModel",
+    "ReplicaRejectionModel",
     "TimelineEntryModel",
 ]

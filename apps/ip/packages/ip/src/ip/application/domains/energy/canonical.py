@@ -4,6 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import StrEnum
+
+
+class EnergyEntityType(StrEnum):
+    """Canonical domain entity types for the Energy vertical."""
+
+    MDM_METER_READING = "MDM_METER_READING"
+    MDM_SERVICE_POINT = "MDM_SERVICE_POINT"
 
 
 @dataclass(frozen=True)

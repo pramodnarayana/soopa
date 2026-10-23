@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.data_plane import InboundRecordModel
+from ip.engine.domain.enums import IngestionMode
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from sqlalchemy import select
@@ -32,6 +33,10 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
             connection_id=orm.connection_id,
             app_id=orm.app_id,
             stream_name=orm.stream_name,
+            ingestion_mode=IngestionMode(orm.ingestion_mode),
+            sync_run_id=orm.sync_run_id,
+            generation_id=orm.generation_id,
+            external_event_id=orm.external_event_id,
             request_headers=dict(orm.request_headers),
             request_body=dict(orm.request_body) if orm.request_body is not None else None,
             request_s3_key=orm.request_s3_key,
@@ -61,6 +66,10 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
             connection_id=domain.connection_id,
             app_id=domain.app_id,
             stream_name=domain.stream_name,
+            ingestion_mode=domain.ingestion_mode.value,
+            sync_run_id=domain.sync_run_id,
+            generation_id=domain.generation_id,
+            external_event_id=domain.external_event_id,
             request_headers=domain.request_headers,
             request_body=domain.request_body,
             request_s3_key=domain.request_s3_key,
@@ -92,9 +101,7 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
             return None
         return self._to_domain_model(orm)
 
-    async def get_by_trace_id(
-        self, trace_id: str, tenant_id: str
-    ) -> Sequence[InboundRecord]:
+    async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         stmt = (
             select(InboundRecordModel)
             .where(
@@ -105,3 +112,20 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
         )
         result = await self._session.execute(stmt)
         return [self._to_domain_model(orm) for orm in result.scalars().all()]
+
+    async def get_by_external_event_id(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        external_event_id: str,
+    ) -> InboundRecord | None:
+        stmt = select(InboundRecordModel).where(
+            InboundRecordModel.tenant_id == tenant_id,
+            InboundRecordModel.connection_id == connection_id,
+            InboundRecordModel.external_event_id == external_event_id,
+        )
+        result = await self._session.execute(stmt)
+        orm = result.scalar_one_or_none()
+        if orm is None:
+            return None
+        return self._to_domain_model(orm)

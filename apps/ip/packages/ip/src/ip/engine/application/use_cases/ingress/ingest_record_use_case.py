@@ -11,6 +11,7 @@ from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from ip.engine.domain.enums import IngestionMode
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -27,6 +28,10 @@ class IngestRecordCommand:
     stream_name: str
     payload: JsonDict | Sequence[JsonValue] | bytes
     app_id: str = ""
+    ingestion_mode: IngestionMode = IngestionMode.PUSH_FULL
+    sync_run_id: str | None = None
+    generation_id: int | None = None
+    external_event_id: str | None = None
     headers: JsonDict = field(default_factory=dict)
     response_status_code: int | None = None
     response_body: JsonDict | None = None
@@ -107,6 +112,10 @@ class IngestRecordUseCase:
             parent_trace_id=command.parent_trace_id,
             original_trace_id=command.original_trace_id,
             replay_count=command.replay_count,
+            ingestion_mode=command.ingestion_mode,
+            sync_run_id=command.sync_run_id,
+            generation_id=command.generation_id,
+            external_event_id=command.external_event_id,
         )
 
         # 4. Save to Repository inside DataPlaneUnitOfWork and commit atomically

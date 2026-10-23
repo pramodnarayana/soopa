@@ -22,17 +22,18 @@
 
 | Phase | Focus Area | Deliverables | Status | Target Submodules |
 | :--- | :--- | :--- | :--- | :--- |
-| **Phase 0** | Workspace & Scaffolding | Monorepo layout, `pyproject.toml`, database migration baseline | **DONE** | All |
-| **Phase 1** | Connection CDK & Auth Engine | Auth strategies, AES-256 cipher, reference Itron connector | **DONE** | `ip-connectors` |
-| **Phase 2** | Lifecycle Control Plane & Storage | `ip.connections` table, FastAPI control plane, deactivation/re-link | **DONE** | `ip-connectors`, `ip-storage` |
-| **Phase 3** | Declarative 500+ Connector Engine | JSON/OpenAPI action engine, dynamic UI property schemas, catalog API | Up Next | `ip-connectors` |
-| **Phase 4** | Ingestion Gateway (L1) & Outbox | Webhook/Kafka ingress, S3 tiered offloading, `inbound_record.created` | Up Next | `ip-gateway`, `ip-storage` |
-| **Phase 5** | Universal Replica Worker (L2) & Outbox | Parsing, SHA-256 deduplication, upsert `replica_entities`, outbox event | Up Next | `ip-replica`, `ip-storage` |
-| **Phase 6** | Canonical Domain & GEM (L3) & Outbox | Canonical Energy DTOs (CIM), GEM cross-reference resolution, outbox event | Up Next | `ip-domain`, `ip-engine` |
-| **Phase 7** | Hydrator & "Stitches" (L4) & Outbox | Dynamic mapping templates, payload hydration, `dispatch.enqueued` outbox | Up Next | `ip-engine` |
-| **Phase 8** | Delivery Worker (L5) & Token Lock | Redis auth distributed lock, HTTP/SFTP/Kafka dispatch, retries/circuit breaker | Up Next | `ip-engine`, `ip-connectors` |
-| **Phase 9** | Support Timeline Ledger | `business_trace_id`, correlation ledger across all 5 stages, support API | Up Next | `ip-timeline` |
-| **Phase 10** | AI Source-Introspection (MCP) | Model Context Protocol live query tools for support copilot | Up Next | `ip-ai` |
+| **Phase 0** | Workspace & Scaffolding | Monorepo layout, `pyproject.toml`, `ip.engine` & `ip.application` split, global/tenant migration baseline | **DONE** | All |
+| **Phase 1** | Connection CDK & Auth Engine | Auth strategies, AES-256 cipher, reference Itron connector | **DONE** | `connectors` |
+| **Phase 2** | Lifecycle Control Plane & Storage | `ip.connections` table, FastAPI control plane, deactivation/re-link | **DONE** | `connectors`, `storage` |
+| **Phase 3** | Declarative 500+ Connector Engine | JSON/OpenAPI action engine, dynamic UI property schemas, catalog API | **COMPLETED** | `connectors` |
+| **Phase 4** | Ingestion Gateway (L1) & Outbox | Webhook/Kafka ingress, S3 tiered offloading, `inbound_record.created` | **COMPLETED** | `gateway`, `storage` |
+| **Phase 4.5**| Engine/Application & Hybrid Multi-Tenancy Foundation | `ip.engine` vs `ip.application` package split, `IpGlobalBase` + `IpTenantBase`, canonical domain tables in `ip.application.domains` | **IN PROGRESS** | `engine`, `domain`, `storage` |
+| **Phase 5** | Universal Replica Worker (L2) & Outbox | Parsing via `TransformerHookPort`, SHA-256 deduplication, upsert `replica_records`, outbox event | Up Next | `replica`, `storage` |
+| **Phase 6** | Canonical Domain & GEM (L3) & Outbox | Canonical Domain tables (`mdm_meter_readings`, `tms_loads`), GEM cross-reference resolution, outbox event | Up Next | `domain`, `engine` |
+| **Phase 7** | Hydrator & "Stitches" (L4) & Outbox | Dynamic mapping templates, payload hydration, `dispatch.enqueued` outbox | Up Next | `engine` |
+| **Phase 8** | Delivery Worker (L5) & Token Lock | Redis auth distributed lock, HTTP/SFTP/Kafka dispatch, retries/circuit breaker | Up Next | `engine`, `connectors` |
+| **Phase 9** | Support Timeline Ledger | `trace_id`, `correlation_id`, `ip_trace_events` ledger across all 5 stages, support API | Up Next | `timeline` |
+| **Phase 10** | AI Source-Introspection (MCP) | Model Context Protocol live query tools for support copilot | Up Next | `ai` |
 | **Phase 11** | End-to-End Enterprise Hardening | Full E2E simulation (Itron AMI -> SAP IS-U sync, failure replays) | Up Next | All |
 
 ---
@@ -82,7 +83,7 @@
 ### Phase 4: Ingestion Gateway (L1) with Transactional Outbox (COMPLETED)
 - **Goal:** Capture raw payloads with sub-20ms ACK and zero data loss on dedicated IP shards.
 - **Deliverables:**
-  1. Shard Database Schema: Amended `inbound_records` with composite primary key `(id, received_at)`, `tenant_id`, `business_trace_id`, `business_correlation_id`, `raw_payload` JSONB, `s3_key`, and indexed queries.
+  1. Shard Database Schema: Amended `inbound_records` with composite primary key `(id, received_at)`, `tenant_id`, `trace_id`, `correlation_id`, `parent_trace_id`, `original_trace_id`, `replay_count`, `request_body` JSONB, `request_s3_key`, and indexed queries.
   2. Tiered Storage Port & Adapter (`TieredStoragePort`, `TieredStorageAdapter`):
      - Payloads $< 64\text{ KB}$: saved inlined in `raw_payload`.
      - Payloads $\ge 64\text{ KB}$: streamed to S3 / object storage, saving `s3_key`.
@@ -91,7 +92,7 @@
      - `InboundRecordCreatedEvent` pure domain event for downstream L2 consumers.
   4. Repository Adapter: `SqlAlchemyInboundRecordRepository` with strict explicit data mappers and transactional outbox event draining (`IpOutboxRecord`).
   5. Application Use Case: `IngestRecordUseCase` with co-located `IngestRecordCommand` and `IngestRecordResultDTO`.
-  6. Inbound Ingress Controller: `ingress_router.py` wired into `unified-api` (`POST /api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=...`) replying `202 Accepted` with `business_trace_id` and storage telemetry.
+  6. Inbound Ingress Controller: `ingress_router.py` wired into `unified-api` (`POST /api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=...`) replying `202 Accepted` with `trace_id` and storage telemetry.
   7. Automated Testing: 47 unit tests + 13 integration tests passing cleanly; 100% boundary check validated via `tach check`.
 
 ---
@@ -151,7 +152,7 @@
 ### Phase 9: Support Timeline Ledger & Business Correlation
 - **Goal:** Real-time operational transparency for customer support teams.
 - **Tasks:**
-  1. Create shard database migration (`public.business_timeline_ledger` with RLS).
+  1. Shard database migration (`public.ip_trace_events` with RLS, persisting `seedwork.models.TraceEvent`).
   2. Implement Timeline Interceptor:
      - Injects breadcrumbs at each outbox transition (L1, L2, L3, L4, L5) on the tenant's IP shard.
   3. Expose Support Timeline API:
@@ -163,7 +164,7 @@
 ### Phase 10: AI Source-Introspection Agent (MCP)
 - **Goal:** Live operational querying into external systems via Model Context Protocol.
 - **Tasks:**
-  1. Implement MCP endpoints and tools in `ip-ai`.
+  1. Implement MCP endpoints and tools in `ai`.
   2. Expose `tool_query_connector(connection_id, query)` calling connector's live `query()` method.
   3. Implement PII scrubbing filter before passing data to LLM context.
 

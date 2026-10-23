@@ -14,7 +14,8 @@ from enum import StrEnum
 from typing import Generic, TypeVar
 
 from seedwork.domain.types import JsonDict
-from shttp import FailureDisposition
+
+from ip.engine.domain.enums import FailureDisposition
 
 T = TypeVar("T")
 E = TypeVar("E", bound="IpError")
@@ -45,6 +46,11 @@ class IpErrorCode(StrEnum):
     WRITE_ACTION_NOT_CONFIGURED = "WRITE_ACTION_NOT_CONFIGURED"
     PAYLOAD_NOT_FOUND = "PAYLOAD_NOT_FOUND"
     TENANT_SHARD_NOT_FOUND = "TENANT_SHARD_NOT_FOUND"
+    ACTIVE_SYNC_RUN_EXISTS = "ACTIVE_SYNC_RUN_EXISTS"
+    INBOUND_VERIFICATION_FAILED = "INBOUND_VERIFICATION_FAILED"
+    INBOUND_PAYLOAD_DECODE_FAILED = "INBOUND_PAYLOAD_DECODE_FAILED"
+    DUPLICATE_EXTERNAL_EVENT = "DUPLICATE_EXTERNAL_EVENT"
+    RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -289,6 +295,16 @@ class SftpConnectionError(IpError):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ConnectionCheckError(IpError):
+    """Returned when a connection check to an external transport or broker fails."""
+
+    code: IpErrorCode = IpErrorCode.REMOTE_ERROR
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 502
+    remediation: str | None = "Verify host, port, credentials, and network firewall policies."
+
+
+@dataclass(frozen=True, kw_only=True)
 class CatalogDiscoveryError(IpError):
     """Returned when schema or stream discovery fails against the external system."""
 
@@ -372,6 +388,68 @@ class TenantShardNotFoundError(IpError):
         )
 
 
+@dataclass(frozen=True, kw_only=True)
+class ActiveSyncRunAlreadyExistsError(IpError):
+    """Returned when a sync run is already PENDING or RUNNING for the given connection and stream."""
+
+    connection_id: str = ""
+    stream: str = ""
+    code: IpErrorCode = IpErrorCode.ACTIVE_SYNC_RUN_EXISTS
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = "Wait for the active sync run to finish or cancel it."
+
+    @classmethod
+    def for_stream(cls, connection_id: str, stream: str) -> ActiveSyncRunAlreadyExistsError:
+        return cls(
+            connection_id=connection_id,
+            stream=stream,
+            message=f"An active sync run is already running for connection '{connection_id}', stream '{stream}'.",
+            details={"connection_id": connection_id, "stream": stream},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class InboundVerificationFailedError(IpError):
+    """Returned when an external webhook fails cryptographic signature or token verification."""
+
+    code: IpErrorCode = IpErrorCode.INBOUND_VERIFICATION_FAILED
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 401
+    remediation: str | None = "Verify the shared secret, signing algorithm, and webhook headers."
+
+
+@dataclass(frozen=True, kw_only=True)
+class InboundPayloadDecodeError(IpError):
+    """Returned when an incoming webhook body cannot be parsed according to its content-type."""
+
+    code: IpErrorCode = IpErrorCode.INBOUND_PAYLOAD_DECODE_FAILED
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 400
+    remediation: str | None = "Ensure payload matches the advertised Content-Type header."
+
+
+@dataclass(frozen=True, kw_only=True)
+class DuplicateExternalEventError(IpError):
+    """Returned when an external push event ID has already been recorded."""
+
+    code: IpErrorCode = IpErrorCode.DUPLICATE_EXTERNAL_EVENT
+    disposition: FailureDisposition = FailureDisposition.IGNORE
+    http_status: int = 200
+    remediation: str | None = "Duplicate event acknowledged as a no-op."
+
+
+@dataclass(frozen=True, kw_only=True)
+class RateLimitExceededError(IpError):
+    """Returned when the upstream API responds with HTTP 429 Too Many Requests."""
+
+    code: IpErrorCode = IpErrorCode.RATE_LIMIT_EXCEEDED
+    disposition: FailureDisposition = FailureDisposition.RETRY
+    http_status: int = 429
+    retry_after_seconds: int = 60
+    remediation: str | None = "Wait for the Retry-After interval before resuming synchronization."
+
+
 @dataclass(frozen=True)
 class Result(Generic[T, E]):
     """Generic, immutable Result monad for First-Class Error Handling without exceptions."""
@@ -397,14 +475,19 @@ class Result(Generic[T, E]):
 
 
 __all__ = [
+    "ActiveSyncRunAlreadyExistsError",
     "AuthenticationFailedError",
     "CatalogDiscoveryError",
+    "ConnectionCheckError",
     "ConnectionDeactivatedError",
     "ConnectionNotFoundError",
     "ConnectorNotFoundError",
     "DuplicateConnectionFingerprintError",
+    "DuplicateExternalEventError",
     "EndpointSecurityViolationError",
     "FailureDisposition",
+    "InboundPayloadDecodeError",
+    "InboundVerificationFailedError",
     "InvalidConnectionConfigError",
     "InvalidConnectionStateError",
     "InvalidCredentialsError",
@@ -413,6 +496,7 @@ __all__ = [
     "IpErrorCode",
     "ManifestParseFailureError",
     "PayloadNotFoundError",
+    "RateLimitExceededError",
     "Result",
     "SftpConnectionError",
     "StreamNotFoundError",

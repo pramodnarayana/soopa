@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.data_plane import NormalizedRecordModel
-from ip.engine.domain.enums import NormalizedEntityType
 from ip.engine.domain.models.normalized_record import NormalizedRecord
 from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
+from seedwork.domain.types import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -34,14 +35,31 @@ class SqlAlchemyNormalizedRecordRepository(
             original_trace_id=orm.original_trace_id,
             replay_count=orm.replay_count,
             connection_id=orm.connection_id,
-            canonical_type=NormalizedEntityType(orm.canonical_type),
+            canonical_type=orm.canonical_type,
             source_id=orm.source_id,
             canonical_data=dict(orm.canonical_data),
             normalized_at=orm.normalized_at,
         )
 
     @staticmethod
+    def _sanitize_for_json(val: object) -> JsonValue:
+        if isinstance(val, Decimal):
+            return float(val)
+        if isinstance(val, dict):
+            return {
+                str(k): SqlAlchemyNormalizedRecordRepository._sanitize_for_json(v)
+                for k, v in val.items()
+            }
+        if isinstance(val, list):
+            return [SqlAlchemyNormalizedRecordRepository._sanitize_for_json(item) for item in val]
+        if isinstance(val, (str, int, float, bool)) or val is None:
+            return val
+        return str(val)
+
+    @staticmethod
     def _to_orm_model(domain: NormalizedRecord) -> NormalizedRecordModel:
+        sanitized = SqlAlchemyNormalizedRecordRepository._sanitize_for_json(domain.canonical_data)
+        canonical_dict = sanitized if isinstance(sanitized, dict) else {}
         return NormalizedRecordModel(
             id=domain.id,
             tenant_id=domain.tenant_id,
@@ -51,9 +69,9 @@ class SqlAlchemyNormalizedRecordRepository(
             original_trace_id=domain.original_trace_id,
             replay_count=domain.replay_count,
             connection_id=domain.connection_id,
-            canonical_type=domain.canonical_type.value,
+            canonical_type=str(domain.canonical_type),
             source_id=domain.source_id,
-            canonical_data=dict(domain.canonical_data),
+            canonical_data=canonical_dict,
             normalized_at=domain.normalized_at,
         )
 
@@ -78,14 +96,14 @@ class SqlAlchemyNormalizedRecordRepository(
     async def list_by_source(
         self,
         tenant_id: str,
-        canonical_type: NormalizedEntityType,
+        canonical_type: str,
         source_id: str,
     ) -> Sequence[NormalizedRecord]:
         stmt = (
             select(NormalizedRecordModel)
             .where(
                 NormalizedRecordModel.tenant_id == tenant_id,
-                NormalizedRecordModel.canonical_type == canonical_type.value,
+                NormalizedRecordModel.canonical_type == str(canonical_type),
                 NormalizedRecordModel.source_id == source_id,
             )
             .order_by(NormalizedRecordModel.normalized_at.desc())

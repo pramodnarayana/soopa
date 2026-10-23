@@ -42,15 +42,16 @@ class DiscoverCatalogUseCase:
     async def execute(
         self,
         connection_id: str,
-        tenant_id: str | None = None,
+        tenant_id: str,
     ) -> DiscoveredCatalogDTO:
         async with self._uow:
             connection = await self._uow.connections.get_by_id(connection_id)
-            if not connection or (tenant_id is not None and connection.tenant_id != tenant_id):
+            if not connection or connection.tenant_id != tenant_id:
                 not_found_err = ConnectionNotFoundError.for_id(connection_id)
                 logger.error(
                     "catalog_discovery_connection_not_found",
                     connection_id=connection_id,
+                    tenant_id=tenant_id,
                     error_code=not_found_err.code.value,
                 )
                 await self._uow.rollback()
@@ -90,7 +91,7 @@ class DiscoverCatalogUseCase:
 
             catalog_dto = await connector.discover(
                 connection_id=connection.id,
-                public_config=connection.public_config,
+                public_config=connection.resolved_public_config,
                 credentials=credentials,
             )
             if not catalog_dto.success:

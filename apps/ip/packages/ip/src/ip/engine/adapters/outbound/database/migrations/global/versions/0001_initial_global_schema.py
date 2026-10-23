@@ -172,10 +172,85 @@ def upgrade() -> None:
         unique=False,
         schema="ip",
     )
+    op.create_table(
+        "sync_runs",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=64), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("stream", sa.String(length=128), nullable=False),
+        sa.Column("kind", sa.String(length=32), nullable=False),
+        sa.Column("generation_id", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column(
+            "status",
+            sa.String(length=32),
+            server_default="PENDING",
+            nullable=False,
+        ),
+        sa.Column("start_checkpoint", sa.Text(), nullable=True),
+        sa.Column("end_checkpoint", sa.Text(), nullable=True),
+        sa.Column("pages_synced", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("records_synced", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("bytes_synced", sa.BigInteger(), server_default=sa.text("0"), nullable=False),
+        sa.Column("retries_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("error_code", sa.String(length=64), nullable=True),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["connection_id"],
+            ["ip.connections.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        schema="ip",
+    )
+    op.create_index(
+        "uq_ip_sync_runs_active_stream",
+        "sync_runs",
+        ["connection_id", "stream"],
+        unique=True,
+        postgresql_where=sa.text("status IN ('PENDING', 'RUNNING')"),
+        schema="ip",
+    )
+    op.create_index(
+        "idx_ip_sync_runs_tenant_conn",
+        "sync_runs",
+        ["tenant_id", "connection_id"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_ip_sync_runs_status",
+        "sync_runs",
+        ["status", "created_at"],
+        unique=False,
+        schema="ip",
+    )
 
 
 def downgrade() -> None:
     """Downgrade Control Plane schema."""
+    op.drop_index(
+        "idx_ip_sync_runs_status",
+        table_name="sync_runs",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_index(
+        "idx_ip_sync_runs_tenant_conn",
+        table_name="sync_runs",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_index(
+        "uq_ip_sync_runs_active_stream",
+        table_name="sync_runs",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("sync_runs", schema="ip", if_exists=True)
     op.drop_index(
         "idx_ip_stream_state_conn",
         table_name="connection_stream_states",

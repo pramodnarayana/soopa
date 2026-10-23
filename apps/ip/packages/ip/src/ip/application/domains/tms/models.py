@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import DateTime, Float, Index, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, Float, Index, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ip.engine.adapters.outbound.database.models.base import IpTenantBase
@@ -42,7 +43,9 @@ class TmsLoadRecord(IpTenantBase):
     destination_state: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="TENDERED")
     total_weight_lbs: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    freight_charge_usd: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    freight_charge_usd: Mapped[Decimal] = mapped_column(
+        Numeric(14, 2), nullable=False, default=Decimal("0.00")
+    )
     pickup_scheduled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

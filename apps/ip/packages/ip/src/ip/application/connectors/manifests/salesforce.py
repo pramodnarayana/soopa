@@ -22,12 +22,12 @@ SALESFORCE_PROPERTY_SCHEMA = ConnectorPropertySchema(
     description="Sync Contacts, Accounts, and Opportunities with Salesforce Cloud",
     properties=(
         ConnectorProperty(
-            name="instance_url",
-            label="Instance URL",
+            name="instance_host",
+            label="Instance Host",
             type=PropertyType.SHORT_TEXT,
             required=True,
-            default="https://login.salesforce.com",
-            description="Use https://test.salesforce.com for sandbox environments",
+            default="login.salesforce.com",
+            description="Use test.salesforce.com for sandbox environments",
         ),
         ConnectorProperty(
             name="environment",
@@ -58,7 +58,7 @@ SALESFORCE_MANIFEST = DeclarativeManifest(
     display_name="Salesforce CRM",
     category="CRM",
     auth_type="OAUTH2",
-    base_url_template="{instance_url}/services/data/v58.0",
+    base_url_template="https://{instance_host}/services/data/v58.0",
     property_schema=SALESFORCE_PROPERTY_SCHEMA,
     check_action=HttpActionSpec(path="/sobjects", method="GET"),
     streams={

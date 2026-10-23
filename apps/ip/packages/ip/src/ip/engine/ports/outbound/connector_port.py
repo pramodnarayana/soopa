@@ -6,6 +6,7 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict
 
+from ip.engine.domain.exceptions import IpError
 from ip.engine.ports.types import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
@@ -22,7 +23,7 @@ class ConnectorMetadataPort(Protocol):
     @property
     @abstractmethod
     def app_id(self) -> str:
-        """Unique identifier of the external application (e.g. 'itron_mdm', 'sftp')."""
+        """Unique identifier of the external application (e.g. 'http', 'sftp')."""
         ...
 
     @abstractmethod
@@ -53,6 +54,11 @@ class ConnectorMetadataPort(Protocol):
 class SourceConnectorPort(ConnectorMetadataPort, Protocol):
     """Hexagonal outbound port for source (ingress/read) connectors."""
 
+    @property
+    def last_error(self) -> IpError | None:
+        """Returns the last domain/operational error encountered during stream reading, if any."""
+        return None
+
     @abstractmethod
     async def list_objects(
         self,
@@ -75,6 +81,17 @@ class SourceConnectorPort(ConnectorMetadataPort, Protocol):
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         """Streams records asynchronously from the external system."""
+        ...
+
+    @abstractmethod
+    async def fetch_record(
+        self,
+        stream_name: str,
+        record_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+    ) -> RecordEnvelopeDTO | None:
+        """Fetches a single record by primary key (Fetch-on-Notify / Thin Push)."""
         ...
 
 

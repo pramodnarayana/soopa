@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import math
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 
@@ -143,6 +144,35 @@ class OAuth2Strategy(AuthenticatorPort):
             )
             return None
 
+    def _parse_expires_in(
+        self, expires_in: object
+    ) -> tuple[float | None, InvalidCredentialsError | None]:
+        if expires_in is None:
+            return None, None
+        parsed: float
+        if isinstance(expires_in, (int, float)):
+            parsed = float(expires_in)
+        elif isinstance(expires_in, str):
+            try:
+                parsed = float(expires_in)
+            except ValueError:
+                return None, InvalidCredentialsError(
+                    field_name="expires_in",
+                    message=f"Malformed expires_in in token response: {expires_in}",
+                )
+        else:
+            return None, InvalidCredentialsError(
+                field_name="expires_in",
+                message=f"Unsupported expires_in type in token response: {type(expires_in).__name__}",
+            )
+
+        if math.isnan(parsed) or math.isinf(parsed) or parsed <= 0:
+            return None, InvalidCredentialsError(
+                field_name="expires_in",
+                message=f"Non-positive or non-finite expires_in in token response: {expires_in}",
+            )
+        return datetime.now(UTC).timestamp() + parsed, None
+
     async def refresh_if_needed(self) -> bool:
         """Refreshes the token if expired or nearing expiration using shttp.HttpClient."""
         url_err = self.validate()
@@ -177,24 +207,15 @@ class OAuth2Strategy(AuthenticatorPort):
 
             self._last_error = None
             new_refresh_token = payload.get("refresh_token") or self._refresh_token
-            new_expires_epoch: float | None = None
-            expires_in = payload.get("expires_in")
-            if isinstance(expires_in, (int, float)):
-                new_expires_epoch = datetime.now(UTC).timestamp() + float(expires_in)
-            elif isinstance(expires_in, str):
-                try:
-                    new_expires_epoch = datetime.now(UTC).timestamp() + float(expires_in)
-                except ValueError:
-                    self._last_error = InvalidCredentialsError(
-                        field_name="expires_in",
-                        message=f"Malformed expires_in in token response: {expires_in}",
-                    )
-                    logger.error(
-                        "oauth2_token_response_invalid_expires_in",
-                        token_url=self._token_url,
-                        expires_in=expires_in,
-                    )
-                    return False
+            new_expires_epoch, expires_err = self._parse_expires_in(payload.get("expires_in"))
+            if expires_err is not None:
+                self._last_error = expires_err
+                logger.error(
+                    "oauth2_token_response_invalid_expires_in",
+                    token_url=self._token_url,
+                    expires_in=str(payload.get("expires_in")),
+                )
+                return False
 
             self._access_token = str(new_access_token)
             self._refresh_token = str(new_refresh_token) if new_refresh_token else None

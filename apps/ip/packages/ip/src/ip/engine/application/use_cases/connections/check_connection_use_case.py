@@ -44,7 +44,10 @@ class CheckConnectionUseCase:
             )
             return ConnectionCheckResultDTO.from_error(err)
 
-        result = await connector.check(command.public_config, command.raw_credentials)
+        pub_config = dict(command.public_config)
+        if "auth_type" not in pub_config and command.auth_type:
+            pub_config["auth_type"] = command.auth_type
+        result = await connector.check(pub_config, command.raw_credentials)
         logger.info(
             "connection_checked",
             app_id=command.app_id,

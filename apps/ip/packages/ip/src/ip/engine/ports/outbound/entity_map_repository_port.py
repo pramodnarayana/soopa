@@ -6,7 +6,6 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.enums import NormalizedEntityType
 from ip.engine.domain.models.global_entity_map import GlobalEntityMap
 
 
@@ -22,7 +21,7 @@ class GlobalEntityMapRepositoryPort(Protocol):
     async def get_by_source(
         self,
         tenant_id: str,
-        entity_domain: NormalizedEntityType,
+        entity_domain: str,
         source_connection_id: str,
         source_entity_id: str,
     ) -> GlobalEntityMap | None:

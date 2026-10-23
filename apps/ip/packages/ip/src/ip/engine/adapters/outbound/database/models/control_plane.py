@@ -115,6 +115,50 @@ class ConnectionStreamStateRecord(IpGlobalBase):
     last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class SyncRunRecord(IpGlobalBase):
+    """Database representation of the ip.sync_runs table for pull sync tracking."""
+
+    __tablename__ = "sync_runs"
+    __table_args__ = (
+        Index(
+            "uq_ip_sync_run_active",
+            "connection_id",
+            "stream",
+            unique=True,
+            postgresql_where=text("status IN ('PENDING', 'RUNNING')"),
+        ),
+        Index("idx_ip_sync_run_tenant", "tenant_id"),
+        Index("idx_ip_sync_run_conn_stream", "connection_id", "stream"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("ip.connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    stream: Mapped[str] = mapped_column(String(128), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    generation_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    start_checkpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    end_checkpoint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    pages_count: Mapped[int] = mapped_column("pages_synced", Integer, nullable=False, default=0)
+    records_count: Mapped[int] = mapped_column(
+        "records_synced", BigInteger, nullable=False, default=0
+    )
+    bytes_count: Mapped[int] = mapped_column("bytes_synced", BigInteger, nullable=False, default=0)
+    retry_count: Mapped[int] = mapped_column("retries_count", Integer, nullable=False, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class IpOutboxRecord(IpGlobalBase, OutboxMixin):
     """Control Plane transactional Outbox table in global_db (ip.outbox)."""
 
@@ -145,4 +189,5 @@ __all__ = [
     "ConnectionRecord",
     "ConnectionStreamStateRecord",
     "IpOutboxRecord",
+    "SyncRunRecord",
 ]

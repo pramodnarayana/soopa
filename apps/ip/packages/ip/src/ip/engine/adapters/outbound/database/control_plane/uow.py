@@ -11,9 +11,13 @@ from ip.engine.adapters.outbound.database.control_plane.connection_repository im
 from ip.engine.adapters.outbound.database.control_plane.stream_state_repository import (
     SqlAlchemyStreamStateRepository,
 )
+from ip.engine.adapters.outbound.database.control_plane.sync_run_repository import (
+    SqlAlchemySyncRunRepository,
+)
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
+from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +30,7 @@ class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, ControlPlaneUni
     connections: ConnectionRepositoryPort
     catalogs: CatalogRepositoryPort
     stream_states: StreamStateRepositoryPort
+    sync_runs: SyncRunRepositoryPort
 
     def __init__(self, global_session: AsyncSession) -> None:
         super().__init__(global_session)
@@ -33,6 +38,7 @@ class SqlAlchemyControlPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, ControlPlaneUni
         self.connections = SqlAlchemyConnectionRepository(global_session)
         self.catalogs = SqlAlchemyCatalogRepository(global_session)
         self.stream_states = SqlAlchemyStreamStateRepository(global_session)
+        self.sync_runs = SqlAlchemySyncRunRepository(global_session)
 
 
 __all__ = ["SqlAlchemyControlPlaneUnitOfWork"]

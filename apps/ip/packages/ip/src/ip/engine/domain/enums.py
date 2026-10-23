@@ -20,9 +20,15 @@ class IpTraceEventType(StrEnum):
 
     L1_INGEST_RECEIVED = "L1_INGEST_RECEIVED"
     L1_INGEST_FAILED = "L1_INGEST_FAILED"
+    L1_PULL_PAGE_RECEIVED = "L1_PULL_PAGE_RECEIVED"
+    L1_PUSH_RECEIVED = "L1_PUSH_RECEIVED"
+    L1_PUSH_REJECTED = "L1_PUSH_REJECTED"
+    L1_FETCH_COMPLETED = "L1_FETCH_COMPLETED"
     L2_REPLICA_CREATED = "L2_REPLICA_CREATED"
     L2_REPLICA_UPDATED = "L2_REPLICA_UPDATED"
     L2_REPLICA_UNCHANGED = "L2_REPLICA_UNCHANGED"
+    L2_REPLICA_TOMBSTONED = "L2_REPLICA_TOMBSTONED"
+    L2_EXTRACTION_REJECTED = "L2_EXTRACTION_REJECTED"
     L3_NORMALIZED = "L3_NORMALIZED"
     L3_NORMALIZATION_FAILED = "L3_NORMALIZATION_FAILED"
     L4_DOMAIN_HYDRATED = "L4_DOMAIN_HYDRATED"
@@ -50,6 +56,7 @@ class AuthType(StrEnum):
     BEARER_TOKEN = "BEARER_TOKEN"  # noqa: S105 - Enum constant for Bearer token auth strategy, not a secret
     API_KEY = "API_KEY"
     OAUTH2 = "OAUTH2"
+    OAUTH2_CLIENT_CREDENTIALS = "OAUTH2_CLIENT_CREDENTIALS"
     MTLS = "MTLS"
     CUSTOM = "CUSTOM"
 
@@ -99,15 +106,6 @@ class OutboundDispatchStatus(StrEnum):
     RETRY_SCHEDULED = "RETRY_SCHEDULED"
 
 
-class NormalizedEntityType(StrEnum):
-    """Canonical domain entity types supported across IP application verticals."""
-
-    MDM_METER_READING = "MDM_METER_READING"
-    MDM_SERVICE_POINT = "MDM_SERVICE_POINT"
-    TMS_LOAD = "TMS_LOAD"
-    TMS_CARRIER = "TMS_CARRIER"
-
-
 class PipelineLayer(StrEnum):
     """Five-stage SEDA execution pipeline layers."""
 
@@ -135,7 +133,109 @@ class IpEventType(StrEnum):
     CONNECTION_RELINKED = "ip.connection.relinked"
     CONNECTION_ERROR_RECORDED = "ip.connection.error_recorded"
     INBOUND_RECORD_CREATED = "ip.inbound_record.created"
+    SYNC_RUN_STARTED = "ip.sync_run.started"
+    SYNC_RUN_COMPLETED = "ip.sync_run.completed"
+    SYNC_RUN_FAILED = "ip.sync_run.failed"
+    GENERATION_COMPLETED = "ip.generation.completed"
+    FETCH_RECORD_REQUESTED = "ip.fetch_record.requested"
     REPLICA_RECORD_UPDATED = "ip.replica_record.updated"
+    REPLICA_RECORD_CHANGED = "ip.replica_record.changed"
     NORMALIZED_RECORD_CREATED = "ip.normalized_record.created"
     OUTBOUND_RECORD_CREATED = "ip.outbound_record.created"
     STREAM_STATE_CHECKPOINTED = "ip.stream_state.checkpointed"
+
+
+class IngestionMode(StrEnum):
+    """Strategy and mode used to capture an inbound record."""
+
+    PULL_INITIAL = "PULL_INITIAL"
+    PULL_INCREMENTAL = "PULL_INCREMENTAL"
+    PULL_FULL_REFRESH = "PULL_FULL_REFRESH"
+    PULL_RECONCILIATION = "PULL_RECONCILIATION"
+    PUSH_FULL = "PUSH_FULL"
+    PUSH_THIN = "PUSH_THIN"
+    FETCH_ON_NOTIFY = "FETCH_ON_NOTIFY"
+    STREAM_SUBSCRIBE = "STREAM_SUBSCRIBE"
+
+
+class SyncRunKind(StrEnum):
+    """Execution mode of a Pull sync run."""
+
+    INITIAL = "INITIAL"
+    INCREMENTAL = "INCREMENTAL"
+    FULL_REFRESH = "FULL_REFRESH"
+    RECONCILIATION = "RECONCILIATION"
+
+
+class SyncRunStatus(StrEnum):
+    """Lifecycle state machine for a Pull sync run."""
+
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class CursorKind(StrEnum):
+    """Data type of the replication cursor field."""
+
+    DATETIME = "DATETIME"
+    INTEGER = "INTEGER"
+    STRING = "STRING"
+
+
+class RejectionReason(StrEnum):
+    """Reason code for why a record was rejected during extraction."""
+
+    MISSING_PRIMARY_KEY = "MISSING_PRIMARY_KEY"
+    EMPTY_PRIMARY_KEY = "EMPTY_PRIMARY_KEY"
+    INVALID_CURSOR = "INVALID_CURSOR"
+    NOT_AN_OBJECT = "NOT_AN_OBJECT"
+    EXTRACTION_FAILED = "EXTRACTION_FAILED"
+
+
+class MergeOutcome(StrEnum):
+    """Result of evaluating an incoming record against the current replica state."""
+
+    INSERT = "INSERT"
+    UPDATE = "UPDATE"
+    NOOP = "NOOP"
+    STALE = "STALE"
+    TOMBSTONE = "TOMBSTONE"
+
+
+class HttpWriteOperation(StrEnum):
+    """Supported outbound write operations for generic HTTP streams."""
+
+    CREATE = "CREATE"
+    UPDATE = "UPDATE"
+    DELETE = "DELETE"
+
+
+class FailureDisposition(StrEnum):
+    """Actionable engine disposition indicating how upstream workflows should handle this failure."""
+
+    RETRY = "RETRY"  # Transient fault: retry with backoff or NACK message
+    FAIL = "FAIL"  # Terminal/configuration fault: stop, dead-letter, alert user
+    IGNORE = "IGNORE"  # Benign fault: log and skip without aborting
+
+
+class TransportType(StrEnum):
+    """Transport protocol used to ingest data into Layer 1."""
+
+    HTTP = "HTTP"
+    SFTP = "SFTP"
+    DATABASE = "DATABASE"
+    KAFKA = "KAFKA"
+    RABBITMQ = "RABBITMQ"
+    MQTT = "MQTT"
+    SQS = "SQS"
+
+
+class AckVerdict(StrEnum):
+    """Broker acknowledgment decision dispatched strictly after L1 database commit."""
+
+    ACK = "ACK"
+    NACK = "NACK"
+    REJECT = "REJECT"
