@@ -19,11 +19,13 @@ async def drop_public_schema(dsn: str, db_name: str):
         conn = await asyncpg.connect(dsn)
         schemas = await conn.fetch("""
             SELECT schema_name FROM information_schema.schemata
-            WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast');
+            WHERE schema_name != 'information_schema'
+              AND schema_name NOT LIKE 'pg\\_%';
         """)
         for s in schemas:
             schema = s["schema_name"]
-            await conn.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
+            quoted_schema = schema.replace('"', '""')
+            await conn.execute(f'DROP SCHEMA IF EXISTS "{quoted_schema}" CASCADE;')
         await conn.execute("CREATE SCHEMA public;")
         # Re-grant standard permissions if necessary
         await conn.execute("GRANT ALL ON SCHEMA public TO public;")

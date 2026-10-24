@@ -10,7 +10,6 @@ dependencies = [
     "asyncpg>=0.29.0",
     "psycopg2-binary>=2.9.9",
     "database",
-    "edi",
 ]
 
 [build-system]
@@ -22,4 +21,3 @@ packages = ["src/platform_migrator"]
 
 [tool.uv.sources]
 database = { workspace = true }
-edi = { workspace = true }

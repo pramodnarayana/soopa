@@ -8,8 +8,6 @@ import sys
 import structlog
 from dotenv import load_dotenv
 
-from platform_migrator.runners.edi_runner import run_edi_domain_migrations
-from platform_migrator.runners.ip_runner import run_ip_domain_migrations
 from platform_migrator.runners.platform_runner import run_platform_domain_migrations
 from platform_migrator.runners.seed_runner import run_domain_seeds
 
@@ -18,24 +16,17 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-def handle_migrate(domain: str) -> None:
-    """Handle database schema migrations for a target domain."""
+def handle_migrate(domain: str = "platform") -> None:
+    """Handle database schema migrations for the platform Control Plane (global_db)."""
     domain = domain.lower()
     logger.info("migration_command_received", domain=domain)
 
     if domain in ("platform", "all"):
         run_platform_domain_migrations()
-
-    if domain in ("edi", "all"):
-        run_edi_domain_migrations()
-
-    if domain in ("ip", "all"):
-        run_ip_domain_migrations()
-
-    if domain not in ("platform", "edi", "ip", "all"):
+    else:
         logger.error("invalid_migration_domain", domain=domain)
         raise ValueError(
-            f"Unknown migration domain '{domain}'. Valid options: platform, edi, ip, all."
+            f"Unknown migration domain '{domain}'. Valid options for platform-migrator: platform, all."
         )
 
     logger.info("migration_command_completed", domain=domain)
@@ -57,13 +48,15 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="action", required=True, help="Action to execute")
 
     # migrate subparser
-    migrate_parser = subparsers.add_parser("migrate", help="Execute database schema migrations")
+    migrate_parser = subparsers.add_parser(
+        "migrate", help="Execute platform database schema migrations"
+    )
     migrate_parser.add_argument(
         "--domain",
         type=str,
-        default="all",
-        choices=["platform", "edi", "ip", "all"],
-        help="Domain scope to migrate (platform = global_db, edi = edi_shard, ip = ip_shard, all = all)",
+        default="platform",
+        choices=["platform", "all"],
+        help="Domain scope to migrate (platform/all = global_db Control Plane migrations)",
     )
 
     # seed subparser

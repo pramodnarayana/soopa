@@ -44,11 +44,11 @@ def setup_host_key(
 ) -> None:
     """Configures strict host-key verification on an SSHClient instance."""
     if not host_key_string:
-        logger.info(
+        logger.warning(
             "sftp_missing_host_key_autoadd",
             host=host,
             port=port,
-            message="No host key provided. Using AutoAddPolicy.",
+            message="No host key provided. Using AutoAddPolicy (vulnerable to MITM).",
         )
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         return

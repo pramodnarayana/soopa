@@ -66,6 +66,7 @@ def test_setup_host_key_autoadd_policy_when_none() -> None:
     client = paramiko.SSHClient()
     setup_host_key(client, "sftp.example.com", 22, host_key_string=None)
     assert len(client.get_host_keys()) == 0
+    assert isinstance(client._policy, paramiko.AutoAddPolicy)
 
 
 def test_setup_host_key_reject_policy_when_provided() -> None:
@@ -74,6 +75,7 @@ def test_setup_host_key_reject_policy_when_provided() -> None:
     host_key_str = f"ssh-rsa {rsa_key.get_base64()} test@example.com"
     setup_host_key(client, "sftp.example.com", 22, host_key_string=host_key_str)
     assert client.get_host_keys().lookup("sftp.example.com") is not None
+    assert isinstance(client._policy, paramiko.RejectPolicy)
 
 
 def test_diagnostic_host_key_policy() -> None:

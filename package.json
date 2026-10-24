@@ -36,7 +36,7 @@
     "db:reset:schemas": "uv run python infra/local/scripts/drop_schemas.py",
     "test:integration:pristine": "pnpm db:reset:schemas && pnpm db:migrate && pnpm test:integration",
     "db:migrate:platform": "uv run python -m platform_migrator migrate --domain platform",
-    "db:migrate:edi": "uv run python -m platform_migrator migrate --domain edi",
+    "db:migrate:edi": "uv run python -m edi.adapters.outbound.database.run_migrations",
     "db:migrate:ip": "uv run python -m platform_migrator migrate --domain ip",
     "db:seed": "uv run python -m platform_migrator seed --domain all",
     "db:seed:ucp": "(cd core/ucp/packages/ucp && uv run python scripts/seed.py) && (cd core/ucp/apps/ucp-jobs-worker && uv run python scripts/seed_jobs.py)",
