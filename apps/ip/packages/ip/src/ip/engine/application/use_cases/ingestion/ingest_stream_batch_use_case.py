@@ -174,6 +174,44 @@ class IngestStreamBatchUseCase:
                 error=str(exc),
                 trace_id=trace_id,
             )
+            try:
+                async with self._uow:
+                    raw_dump = b"".join(m.raw_payload for m in command.batch.messages)
+                    rejected_record = InboundRecord.create(
+                        tenant_id=command.tenant_id,
+                        connection_id=command.connection_id,
+                        app_id=command.app_id,
+                        stream_name=command.stream_name,
+                        payload_bytes=raw_dump,
+                        is_inlined=True,
+                        trace_id=trace_id,
+                        correlation_id=command.correlation_id,
+                        ingestion_mode=IngestionMode.STREAM_SUBSCRIBE,
+                        external_event_id=None,
+                        request_headers={"x-rejection-reason": str(exc)},
+                        request_body={"error": str(exc), "status": "REJECTED"},
+                        request_s3_key=None,
+                        response_status_code=422,
+                    )
+                    rejected_record.clear_domain_events()
+                    await self._uow.inbound_records.save(rejected_record)
+                    await self._uow.commit()
+            except Exception as persist_exc:
+                logger.exception(
+                    "stream_batch_rejection_record_failed",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    error=str(persist_exc),
+                    trace_id=trace_id,
+                )
+                return IngestStreamBatchResultDTO(
+                    verdict=AckVerdict.NACK,
+                    records_ingested=0,
+                    duplicates_skipped=duplicates_skipped,
+                    trace_id=trace_id,
+                    error_message=str(exc),
+                )
+
             return IngestStreamBatchResultDTO(
                 verdict=AckVerdict.REJECT,
                 records_ingested=0,

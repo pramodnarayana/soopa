@@ -589,3 +589,48 @@ async def test_run_sync_incremental_succeeds_when_page_cap_reached() -> None:
 
     assert res.status == SyncRunStatus.SUCCEEDED.value
     assert res.pages_synced == 1
+
+
+@pytest.mark.asyncio
+async def test_run_sync_full_refresh_succeeds_when_stream_ends_exactly_at_page_cap() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    dp_uow = FakeDataPlaneUnitOfWork()
+    cipher = FakeCipher()
+    storage = FakeTieredStorageAdapter()
+
+    # Exactly 1 page of 10 records = 10 records (stream finishes at limit without exceeding)
+    connector = FakePagingConnector([[{"id": f"rec_{i}"}] for i in range(10)])
+
+    conn = Connection(
+        id="conn_cap_exact",
+        tenant_id="tenant_a",
+        app_id="itron_mdm",
+        name="Test Conn",
+        auth_type=AuthType.NO_AUTH,
+        connection_fingerprint="fp_cap_exact",
+        status=ConnectionStatus.ACTIVE,
+    )
+    await cp_uow.connections.save(conn)
+
+    use_case = RunSyncUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=storage,
+        cipher=cipher,
+        connectors={"itron_mdm": connector},
+    )
+
+    cmd = RunSyncCommand(
+        tenant_id="tenant_a",
+        connection_id=conn.id,
+        stream_name="meters",
+        page_batch_size=10,
+        max_pages=1,
+        forced_kind=SyncRunKind.FULL_REFRESH,
+    )
+
+    res = await use_case.execute(cmd)
+
+    assert res.status == SyncRunStatus.SUCCEEDED.value
+    assert res.pages_synced == 1
+    assert res.records_synced == 10

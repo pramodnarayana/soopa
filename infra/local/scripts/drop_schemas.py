@@ -14,15 +14,21 @@ logger = structlog.get_logger()
 
 
 async def drop_public_schema(dsn: str, db_name: str):
-    logger.info("Dropping 'public' schema", db_name=db_name)
+    logger.info("Dropping schemas", db_name=db_name)
     try:
         conn = await asyncpg.connect(dsn)
-        await conn.execute("DROP SCHEMA IF EXISTS public CASCADE;")
+        schemas = await conn.fetch("""
+            SELECT schema_name FROM information_schema.schemata
+            WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast');
+        """)
+        for s in schemas:
+            schema = s["schema_name"]
+            await conn.execute(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE;')
         await conn.execute("CREATE SCHEMA public;")
         # Re-grant standard permissions if necessary
         await conn.execute("GRANT ALL ON SCHEMA public TO public;")
         await conn.close()
-        logger.info("Reset 'public' schema", db_name=db_name)
+        logger.info("Reset schemas", db_name=db_name)
     except (asyncpg.Error, OSError) as e:
         logger.exception("Failed to reset", db_name=db_name, error=str(e))
         sys.exit(1)
@@ -43,6 +49,10 @@ async def main():
     # Since this is purely for local dev test resets, we use the local docker exposed port (5433).
     edi_dsn = "postgresql://edi:edi_password@localhost:5433/edi_shard"
     await drop_public_schema(edi_dsn, "EDI Shard 1")
+
+    # 3. Drop IP Schema
+    ip_dsn = "postgresql://ip:ip_password@localhost:5434/ip_shard"
+    await drop_public_schema(ip_dsn, "IP Shard 1")
 
     logger.info("Local databases are perfectly clean. Ready for db:migrate!")
 

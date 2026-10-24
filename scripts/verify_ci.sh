@@ -69,10 +69,10 @@ pnpm run typecheck
 echo "✅ Linting All Workspaces (Node & Python)..."
 pnpm turbo lint
 
-echo "✅ Running Ruff lint across full EDI surface (including e2e, workers, and apps)..."
+echo "✅ Running Ruff lint across full application surfaces (including e2e, workers, and apps)..."
 # This runs unconditionally — bypasses turbo caching — to catch violations in all files
 # including e2e tests and worker entrypoints that pnpm test excludes from execution.
-uv run ruff check apps/edi
+uv run ruff check apps/edi apps/ip
 
 echo "✅ Running Tests (Node + Python Coverage)..."
 # Enterprise Standard: Hermetically sandbox ambient developer cloud credentials so tests run

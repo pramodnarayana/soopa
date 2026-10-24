@@ -97,7 +97,7 @@
       }
     }
   ],
-  "buckets": [{ "name": "observability-data" }],
+  "buckets": [{ "name": "observability-data" }, { "name": "ip-payloads" }],
   "secrets": [
     {
       "name": "edi/edi-shard-db-credentials",

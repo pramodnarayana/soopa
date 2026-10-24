@@ -305,3 +305,10 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
     assert result.verdict == AckVerdict.REJECT
     assert result.records_ingested == 0
     assert "Deterministic corrupt payload structure" in (result.error_message or "")
+    assert len(uow.inbound_records.records) == 1
+    saved_record = next(iter(uow.inbound_records.records.values()))
+    assert saved_record.response_status_code == 422
+    assert saved_record.request_body == {
+        "error": "Deterministic corrupt payload structure",
+        "status": "REJECTED",
+    }

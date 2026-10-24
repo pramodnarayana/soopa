@@ -17,33 +17,87 @@ source_roots = [
 ]
 
 [[modules]]
-path = "ip.domain"
+path = "ip.engine.domain"
 depends_on = []
 
 [[modules]]
-path = "ip.ports"
+path = "ip.engine.ports"
 depends_on = [
-    "ip.domain"
+    "ip.engine.domain"
 ]
 
 [[modules]]
-path = "ip.application"
+path = "ip.engine.application"
 depends_on = [
-    "ip.domain",
-    "ip.ports",
+    "ip.engine.domain",
+    "ip.engine.ports",
     "security"
 ]
 
 [[modules]]
-path = "ip.adapters"
+path = "ip.engine.adapters"
 depends_on = [
-    "ip.domain",
-    "ip.ports",
-    "ip.application",
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
     "security",
     "database.models",
     "shttp",
     "sftp"
+]
+
+[[modules]]
+path = "ip.engine.adapters.outbound.database.migrations"
+depends_on = [
+    "ip.engine.adapters",
+    "ip.engine.ports"
+]
+
+[[modules]]
+path = "ip.application.domains"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.adapters",
+    "ip.engine.adapters.outbound.database.migrations"
+]
+
+[[modules]]
+path = "ip.application.connectors"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.adapters",
+    "shttp",
+    "sftp"
+]
+
+[[modules]]
+path = "ip.application.transformers"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.application.domains"
+]
+
+[[modules]]
+path = "ip.application.stitches"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.application.domains"
+]
+
+[[modules]]
+path = "ip.bootstrap"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.adapters",
+    "ip.application.connectors",
+    "security"
 ]
 
 [[modules]]

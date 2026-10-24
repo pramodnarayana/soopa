@@ -103,6 +103,15 @@ class KafkaSubscribeTransport(SubscribeTransportPort):
                         stream=stream.stream,
                         message_count=len(messages),
                     )
+                elif verdict == AckVerdict.REJECT:
+                    # Batch was durably rejected; commit offsets to prevent infinite poison-pill loop
+                    await self._client.commit_offsets(messages)
+                    logger.error(
+                        "kafka_batch_rejected_terminal",
+                        stream=stream.stream,
+                        message_count=len(messages),
+                        verdict=verdict.value,
+                    )
                 else:
                     logger.error(
                         "kafka_batch_nack_received_seeking_rollback",

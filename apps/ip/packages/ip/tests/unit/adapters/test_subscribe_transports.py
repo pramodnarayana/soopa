@@ -98,6 +98,25 @@ async def test_kafka_subscribe_transport_nack_triggers_seek() -> None:
     assert client.seek_called is True
 
 
+@pytest.mark.asyncio
+async def test_kafka_subscribe_transport_reject_commits_offsets() -> None:
+    msg1 = RawMessageDTO(message_id="k1", raw_payload=b"INVALID")
+    client = FakeKafkaClient(batches=[[msg1]])
+    transport = KafkaSubscribeTransport(client=client, batch_size=10)
+
+    stop_signal = asyncio.Event()
+
+    async def handler(batch: RawMessageBatchDTO) -> AckVerdict:
+        stop_signal.set()
+        return AckVerdict.REJECT
+
+    stream = StreamDefinition(stream="meters")
+    await transport.start_consumer(stream, handler, stop_signal)
+
+    assert len(client.committed_messages) == 1
+    assert client.seek_called is False
+
+
 class FakeAmqpHandle(AmqpMessageHandlePort):
     def __init__(self, msg: RawMessageDTO) -> None:
         self._msg = msg
@@ -234,6 +253,26 @@ async def test_mqtt_subscribe_transport_nack_triggers_reconnect() -> None:
 
     assert h1.pubacked is False
     assert client.reconnected is True
+
+
+@pytest.mark.asyncio
+async def test_mqtt_subscribe_transport_reject_pubacks() -> None:
+    msg = RawMessageDTO(message_id="m1", raw_payload=b"INVALID")
+    h1 = FakeMqttHandle(msg)
+    client = FakeMqttClient([h1])
+    transport = MqttSubscribeTransport(client=client, topic_filter="grid/meters/+/reading")
+
+    stop_signal = asyncio.Event()
+
+    async def handler(batch: RawMessageBatchDTO) -> AckVerdict:
+        stop_signal.set()
+        return AckVerdict.REJECT
+
+    stream = StreamDefinition(stream="readings")
+    await transport.start_consumer(stream, handler, stop_signal)
+
+    assert h1.pubacked is True
+    assert client.reconnected is False
 
 
 class FakeCloudQueueHandle(CloudQueueMessageHandlePort):

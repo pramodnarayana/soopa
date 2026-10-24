@@ -9,6 +9,7 @@ import structlog
 from dotenv import load_dotenv
 
 from platform_migrator.runners.edi_runner import run_edi_domain_migrations
+from platform_migrator.runners.ip_runner import run_ip_domain_migrations
 from platform_migrator.runners.platform_runner import run_platform_domain_migrations
 from platform_migrator.runners.seed_runner import run_domain_seeds
 
@@ -28,9 +29,14 @@ def handle_migrate(domain: str) -> None:
     if domain in ("edi", "all"):
         run_edi_domain_migrations()
 
-    if domain not in ("platform", "edi", "all"):
+    if domain in ("ip", "all"):
+        run_ip_domain_migrations()
+
+    if domain not in ("platform", "edi", "ip", "all"):
         logger.error("invalid_migration_domain", domain=domain)
-        raise ValueError(f"Unknown migration domain '{domain}'. Valid options: platform, edi, all.")
+        raise ValueError(
+            f"Unknown migration domain '{domain}'. Valid options: platform, edi, ip, all."
+        )
 
     logger.info("migration_command_completed", domain=domain)
 
@@ -56,8 +62,8 @@ def main() -> None:
         "--domain",
         type=str,
         default="all",
-        choices=["platform", "edi", "all"],
-        help="Domain scope to migrate (platform = global_db, edi = edi_shard, all = both)",
+        choices=["platform", "edi", "ip", "all"],
+        help="Domain scope to migrate (platform = global_db, edi = edi_shard, ip = ip_shard, all = all)",
     )
 
     # seed subparser

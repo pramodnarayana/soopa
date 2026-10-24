@@ -122,6 +122,16 @@ class MqttSubscribeTransport(SubscribeTransportPort):
                         topic_filter=self._topic_filter,
                         count=len(handles),
                     )
+                elif verdict == AckVerdict.REJECT:
+                    # Batch was durably rejected; acknowledge publish so broker does not redeliver forever
+                    for h in handles:
+                        await h.acknowledge_publish()
+                    logger.error(
+                        "mqtt_batch_rejected_terminal",
+                        topic_filter=self._topic_filter,
+                        count=len(handles),
+                        verdict=verdict.value,
+                    )
                 else:
                     logger.error(
                         "mqtt_batch_nack_triggering_redelivery",

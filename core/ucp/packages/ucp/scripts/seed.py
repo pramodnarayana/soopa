@@ -56,6 +56,18 @@ async def main() -> None:
         )
         sys.exit(1)
 
+    ip_shard_db_url = (
+        os.environ.get("DATABASE__SHARD_OVERRIDES__IP_SHARD_1")
+        or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
+        or os.environ.get("IP_DATABASE_URL", "")
+    )
+    if not ip_shard_db_url:
+        logger.error(
+            "Neither DATABASE__SHARD_OVERRIDES__IP_SHARD_1 nor IP_DATABASE_URL environment variable is set."
+        )
+        sys.exit(1)
+    ip_shard_db_url = normalize_to_asyncpg(ip_shard_db_url)
+
     edi_project_id = os.environ.get("IDENTITY_EDI_PROJECT_ID", "")
     if not edi_project_id:
         logger.error("IDENTITY_EDI_PROJECT_ID environment variable is not set.")
@@ -181,6 +193,26 @@ async def main() -> None:
             )
             await conn.execute(stmt_shard)
             logger.info("Successfully seeded EDI primary shard.", shard_id="edi_shard_1")
+
+            stmt_ip_shard = (
+                pg_insert(DatabaseShard)
+                .values(
+                    id="ip_shard_1",
+                    name="IP Primary Shard",
+                    dsn=ip_shard_db_url,
+                    status="active",
+                )
+                .on_conflict_do_update(
+                    index_elements=[DatabaseShard.id],
+                    set_={
+                        "name": "IP Primary Shard",
+                        "dsn": ip_shard_db_url,
+                        "status": "active",
+                    },
+                )
+            )
+            await conn.execute(stmt_ip_shard)
+            logger.info("Successfully seeded IP primary shard.", shard_id="ip_shard_1")
 
             # Update the EDI app with the Zitadel Project ID from the environment
             stmt_app = (

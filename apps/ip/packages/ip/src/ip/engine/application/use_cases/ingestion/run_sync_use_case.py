@@ -297,6 +297,16 @@ class RunSyncUseCase:
             cursor=read_cursor,
             limit=command.page_batch_size,
         ):
+            if page_index >= command.max_pages:
+                logger.info(
+                    "sync_run_page_cap_reached",
+                    run_id=sync_run.id,
+                    max_pages=command.max_pages,
+                    stream=command.stream_name,
+                )
+                capped = True
+                break
+
             current_page.append(record_envelope)
             if record_envelope.cursor_value:
                 latest_page_cursor = record_envelope.cursor_value
@@ -316,16 +326,6 @@ class RunSyncUseCase:
                     trace_id=trace_id,
                 )
                 current_page = []
-
-                if page_index >= command.max_pages:
-                    logger.info(
-                        "sync_run_page_cap_reached",
-                        run_id=sync_run.id,
-                        max_pages=command.max_pages,
-                        stream=command.stream_name,
-                    )
-                    capped = True
-                    break
 
         if current_page:
             await self._persist_page(
