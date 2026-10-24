@@ -23,6 +23,9 @@ class SecurityProvider:
     @staticmethod
     def _is_ephemeral_allowed(env: Mapping[str, str] | None = None) -> bool:
         source = os.environ if env is None else env
+        env_name = (source.get("ENVIRONMENT") or source.get("APP_ENV") or "").lower()
+        if env_name == "production":
+            return False
         return source.get("ALLOW_EPHEMERAL_SECURITY_KEYS", "").lower() in ("true", "1")
 
     @classmethod
@@ -93,12 +96,17 @@ class SecurityProvider:
         if key is None:
             raw_key = source.get("SECURITY_AES_KEY") or source.get("DB_ENCRYPTION_KEY")
             if not raw_key:
+                env_name = (source.get("ENVIRONMENT") or source.get("APP_ENV") or "").lower()
+                if env_name == "production":
+                    raise RuntimeError(
+                        "Neither SECURITY_AES_KEY nor DB_ENCRYPTION_KEY is configured in production environment."
+                    )
                 if not cls._is_ephemeral_allowed(source):
                     raise RuntimeError(
                         "Neither SECURITY_AES_KEY nor DB_ENCRYPTION_KEY is configured in environment. "
                         "To enable ephemeral keys for local testing, set ALLOW_EPHEMERAL_SECURITY_KEYS=true."
                     )
-                logger.info("ephemeral_security_key_derived")
+                logger.warning("ephemeral_security_key_derived")
                 key = hashlib.sha256(_EPHEMERAL_DEV_SEED).digest()
             else:
                 key = cls._decode_aes_key(raw_key)

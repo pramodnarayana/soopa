@@ -14,28 +14,9 @@ def test_handle_migrate_platform(monkeypatch: pytest.MonkeyPatch) -> None:
         "platform_migrator.cli.run_platform_domain_migrations",
         lambda: calls.append("platform"),
     )
-    monkeypatch.setattr(
-        "platform_migrator.cli.run_edi_domain_migrations",
-        lambda: calls.append("edi"),
-    )
 
     handle_migrate("platform")
     assert calls == ["platform"]
-
-
-def test_handle_migrate_edi(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = []
-    monkeypatch.setattr(
-        "platform_migrator.cli.run_platform_domain_migrations",
-        lambda: calls.append("platform"),
-    )
-    monkeypatch.setattr(
-        "platform_migrator.cli.run_edi_domain_migrations",
-        lambda: calls.append("edi"),
-    )
-
-    handle_migrate("edi")
-    assert calls == ["edi"]
 
 
 def test_handle_migrate_all(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -44,13 +25,9 @@ def test_handle_migrate_all(monkeypatch: pytest.MonkeyPatch) -> None:
         "platform_migrator.cli.run_platform_domain_migrations",
         lambda: calls.append("platform"),
     )
-    monkeypatch.setattr(
-        "platform_migrator.cli.run_edi_domain_migrations",
-        lambda: calls.append("edi"),
-    )
 
     handle_migrate("all")
-    assert calls == ["platform", "edi"]
+    assert calls == ["platform"]
 
 
 def test_handle_migrate_invalid_domain() -> None:
@@ -71,14 +48,14 @@ def test_handle_seed_dispatches_domain(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_main_migrate_cli_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
-    monkeypatch.setattr(sys, "argv", ["platform-migrator", "migrate", "--domain", "edi"])
+    monkeypatch.setattr(sys, "argv", ["platform-migrator", "migrate", "--domain", "platform"])
     monkeypatch.setattr(
         "platform_migrator.cli.handle_migrate",
         lambda domain: calls.append(domain),
     )
 
     main()
-    assert calls == ["edi"]
+    assert calls == ["platform"]
 
 
 def test_main_seed_cli_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
