@@ -81,36 +81,37 @@ We borrow proven patterns from open-source automation leaders without importing 
 
 ## 4. 500+ App Connections Architecture & Lifecycle
 
-To support 500+ connectors alongside enterprise protocols (Kafka, SFTP, RabbitMQ), we divide the connector engine into three tiers:
+To support 500+ SaaS applications alongside streaming brokers and enterprise protocols, we divide the connector engine into two universal execution engines:
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        CONNECTOR ENGINE                                │
-├──────────────────────────┬─────────────────────────┬───────────────────┤
-│ 1. Declarative HTTP      │ 2. Native Protocols     │ 3. Custom Python  │
-│    (90% of SaaS apps)    │    (Streaming & Files)  │    (Legacy/Bespoke)│
-├──────────────────────────┼─────────────────────────┼───────────────────┤
-│ • Salesforce, HubSpot,   │ • Kafka, RabbitMQ       │ • Itron AMI       │
-│   Stripe, QuickBooks     │ • SFTP, AWS S3          │ • SAP RFC         │
-│ • JSON/OpenAPI manifests │ • Async event listeners │ • Specialized SDK │
-└──────────────────────────┴─────────────────────────┴───────────────────┘
+├────────────────────────────────────────┬───────────────────────────────┤
+│ 1. Generic HTTP Connector Engine       │ 2. Native Protocol Streaming  │
+│    (All REST/SOAP APIs & Webhooks)     │    (Brokers, Queues, & Files) │
+├────────────────────────────────────────┼───────────────────────────────┤
+│ • Universal execution engine           │ • Kafka, RabbitMQ, MQTT       │
+│ • User names connection (e.g. "Itron") │ • AWS SQS, Azure SB, Pub/Sub  │
+│ • Curated templates: Stripe, Hubspot   │ • SFTP file transfer, AWS S3  │
+│ • Runtime stream definitions (zero code│ • Continuous subscriber in    │
+│   and zero deployments needed)         │   dedicated ip-stream-worker  │
+└────────────────────────────────────────┴───────────────────────────────┘
 ```
 
-### 4.1. Three-Tier Connector Strategy
+### 4.1. Universal Connector Strategy
 
-1. **Declarative HTTP Action Engine (90% of SaaS Apps):**
-   - A single, generic Python execution engine (`DeclarativeHttpConnector`) driven by declarative JSON/YAML schemas or imported **OpenAPI 3.0 specs**.
-   - Encapsulates base URLs, auth parameter injection, pagination rules (cursor, page offset, token), and response record selectors.
-   - **Zero-Downtime Deployments:** New SaaS applications can be added to the catalog at runtime via administrative API or database seed without rebuilding or restarting application containers.
+1. **Generic HTTP Connector Engine (`GenericHttpConnector`):**
+   - A single, stateless, universal Python execution engine.
+   - **Marketplace Model:** The catalog exposes a universal "HTTP / REST API" entry. The user creates a connection, specifies the base URL, authentication, and stream definitions, and names the connection (e.g., "Itron", "QuickBooks", "InternalERP").
+   - **Curated Manifests as Templates:** Pre-built configurations for popular apps (Stripe, HubSpot, Salesforce, ServiceNow) are not separate code classes or static manifests; they are pre-filled configuration templates that hydrate into the exact same `HttpSourceSpec` contract.
+   - **Zero-Downtime Extensibility:** Support for new REST/SOAP APIs requires zero code changes and zero deployments.
 
-2. **Native Protocol Connectors (Streaming & File Brokers):**
-   - Built directly on enterprise async libraries:
-     - **Message Brokers:** Apache Kafka (`aiokafka`), RabbitMQ (`aio-pika`), AWS SQS.
-     - **File Transfer:** SFTP (`asyncssh`), AWS S3 / MinIO.
-     - **Webhook Ingress:** Generic HTTP listener with cryptographic signature verification (HMAC, JWT).
-
-3. **Custom Python Connectors (Escape Hatch):**
-   - Pure Python classes implementing the `ConnectorPort` protocol for complex, proprietary protocols (e.g. Itron OpenWay Riva AMI, Landis+Gyr Gridstream, SAP RFC).
+2. **Native Protocol Streaming & File Connectors:**
+   - Dedicated transports for persistent message brokers, cloud queues, and file gateways:
+     - **Streaming Message Brokers:** Apache Kafka (`aiokafka`), RabbitMQ / AMQP (`aio-pika`), MQTT 3.1.1/5.0 (`aiomqtt` for Smart Grid AMI meters).
+     - **Cloud Message Queues:** AWS SQS, Azure Service Bus, GCP Pub/Sub.
+     - **File Gateways:** SFTP (`asyncssh`), AWS S3 / MinIO chunked streaming.
+   - **Worker Physical Isolation:** Continuous broker subscribers run exclusively inside the dedicated `ip-stream-worker` container (strictly decoupled from the web API container per architectural invariants).
 
 ---
 
@@ -240,29 +241,34 @@ The execution engine follows the **Staged Event-Driven Architecture (SEDA)**. Ev
 │                                STAGED EXECUTION PIPELINE                               │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │                                                                                        │
-│   [ External Ingress (Webhook / Kafka / Poller) ]                                      │
+│   [ External Ingress: Pull (APIs/Files/DB) | Push (Webhooks) | Subscribe (Kafka/MQ) ]  │
 │                         │                                                              │
 │                         ▼                                                              │
 │   ┌───────────────────────────────────────────┐                                        │
-│   │ Stage 1: Inbound Gateway (L1)             │ ──► Reply HTTP 202 Accepted (<20ms)   │
-│   │   • Persist raw payload (or S3 pointer)   │                                        │
-│   │   • Commit & emit: inbound_record.created │                                        │
+│   │ Stage 1: Inbound Raw Ledger (L1)          │ ──► Fast Ack (<200ms) / Post-DB ACK    │
+│   │   • 3 Strategies: Pull, Push, Subscribe   │                                        │
+│   │   • Append-only inbound_records ledger    │                                        │
+│   │   • Commit & emit: InboundRecordReceived  │                                        │
 │   └─────────────────────┬─────────────────────┘                                        │
-│                         │ (Transactional Outbox)                                       │
+│                         │ (Transactional Outbox: InboundRecordReceived)                │
 │                         ▼                                                              │
 │   ┌───────────────────────────────────────────┐                                        │
-│   │ Stage 2: Universal Replica Worker (L2)    │                                        │
-│   │   • Parse vendor-specific structure       │                                        │
-│   │   • Upsert into replica_entities (SHA-256)│                                        │
-│   │   • Commit & emit: replica_entity.updated │                                        │
+│   │ Stage 2: Universal Replica Engine (L2)    │                                        │
+│   │   • Pure RecordExtractor strategies       │                                        │
+│   │   • Single ReplicateRecordsUseCase        │                                        │
+│   │   • SHA-256 hash dedupe + versioning      │                                        │
+│   │   • Upsert into replica_records (JSONB)   │                                        │
+│   │   • Commit & emit: ReplicaRecordChanged   │                                        │
 │   └─────────────────────┬─────────────────────┘                                        │
-│                         │ (Transactional Outbox)                                       │
+│                         │ (Transactional Outbox: ReplicaRecordChanged)                 │
 │                         ▼                                                              │
 │   ┌───────────────────────────────────────────┐                                        │
-│   │ Stage 3: Canonical Normalizer Worker (L3) │                                        │
-│   │   • Map to Domain Canonical Model (CIM)   │                                        │
-│   │   • Bind/Resolve Global Entity Map (GEM)  │                                        │
-│   │   • Commit & emit: entity.normalized      │                                        │
+│   │ Stage 3: Canonical Normalizer Engine (L3) │                                        │
+│   │   • Pure application-code MapperPort      │                                        │
+│   │   • Versioned replay from L2 & shadow diff│                                        │
+│   │   • Upsert into domain-owned typed tables │                                        │
+│   │     (mdm_meter_readings, tms_loads, ...)  │                                        │
+│   │   • Commit & emit: CanonicalRecordChanged │                                        │
 │   └─────────────────────┬─────────────────────┘                                        │
 │                         │ (Transactional Outbox)                                       │
 │                         ▼                                                              │
@@ -282,8 +288,8 @@ The execution engine follows the **Staged Event-Driven Architecture (SEDA)**. Ev
 │   └───────────────────────────────────────────┘                                        │
 │                                                                                        │
 │   ══════════════════════════════════════════════════════════════════════════════════   │
-│   Cross-Cutting: Every stage writes to ip_data.business_timeline_ledger                │
-│   linked by business_trace_id and business_correlation_id                              │
+│   Cross-Cutting: Every stage aggregate inherits seedwork.models.TracedAggregateRoot    │
+│   and drains TraceEvents to public.ip_trace_events linked by trace_id & correlation_id │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -316,13 +322,21 @@ The Integration Platform implements a **Hybrid Multi-Tenancy Architecture** base
     │ Schema: ip              │             │ Database: ip_shard_ent* │
     │   - connections         │             │                         │
     │   - connection_catalogs │             │ Schema: public (with RLS)
+    │   - stream_states       │             │  [ip.engine Core Shard]
     │   - outbox              │             │   - inbound_records     │
-    │                         │             │   - replica_entities    │
-    │                         │             │   - canonical_entities  │
+    │                         │             │   - replica_records     │
+    │                         │             │   - replica_rejections  │
+    │                         │             │   - normalization_ledger│
+    │                         │             │   - norm_rejections     │
     │                         │             │   - global_entity_map   │
-    │                         │             │   - field_mappings      │
-    │                         │             │   - outbound_dispatches │
-    │                         │             │   - timeline_ledger     │
+    │                         │             │   - outbound_records    │
+    │                         │             │   - ip_trace_events     │
+    │                         │             │   - ip_outbox           │
+    │                         │             │  [Domain Migration Shard│
+    │                         │             │   - mdm_meter_readings  │
+    │                         │             │   - mdm_service_points  │
+    │                         │             │   - tms_loads           │
+    │                         │             │   - tms_carriers        │
     └─────────────────────────┘             └─────────────────────────┘
 ```
 
@@ -352,23 +366,39 @@ The Integration Platform implements a **Hybrid Multi-Tenancy Architecture** base
     ```
 - **Zero Cross-Database Foreign Keys:** Because Control Plane and Data Plane live on separate physical databases, Data Plane tables reference connections and tenants using logical string identifiers (`connection_id VARCHAR(64)`, `tenant_id VARCHAR(128)`) without physical database foreign keys.
 
-### 6.3. Data Plane Shard DDL (`public` Schema)
+### 6.3. Data Plane Shard DDL (`public` Schema — `TracedAggregateRoot` Standardized)
+
+All 5 layer aggregates (`InboundRecord`, `ReplicaRecord`, `NormalizedRecord`, `GlobalEntityMap` + Canonical Domain tables, and `OutboundRecord`) inherit from `seedwork.models.TracedAggregateRoot`, propagating standard distributed lineage columns (`trace_id`, `correlation_id`, `parent_trace_id`, `original_trace_id`, `replay_count`) and draining `seedwork.models.TraceEvent` entries into `public.ip_trace_events`.
 
 ```sql
 -- ============================================================================
 -- LAYER 1: INBOUND RAW AUDIT EVIDENCE (Partitioned by Month)
 -- ============================================================================
 CREATE TABLE public.inbound_records (
-    id VARCHAR(64) NOT NULL,                            -- inb_<os.urandom(12).hex()>
+    id VARCHAR(64) NOT NULL,                            -- ip_inb_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
     connection_id VARCHAR(64) NOT NULL,                 -- Logical ref to ip.connections(id)
-    business_trace_id VARCHAR(64) NOT NULL,
-    business_correlation_id VARCHAR(255),
-    raw_payload JSONB,                                  -- Populated if size < 64 KB
-    s3_key VARCHAR(512),                                -- Populated if size >= 64 KB
-    payload_size_bytes INT NOT NULL,
-    payload_sha256 VARCHAR(64) NOT NULL,
-    headers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    app_id VARCHAR(64) NOT NULL DEFAULT '',
+    trace_id VARCHAR(64) NOT NULL,                      -- ip_trc_<os.urandom(12).hex()>
+    correlation_id VARCHAR(255),
+    parent_trace_id VARCHAR(64),
+    original_trace_id VARCHAR(64),
+    replay_count INT NOT NULL DEFAULT 0,
+    stream_name VARCHAR(128) NOT NULL,
+    ingestion_mode VARCHAR(32) NOT NULL DEFAULT 'PUSH_FULL',
+    sync_run_id VARCHAR(64),
+    generation_id INT,
+    external_event_id VARCHAR(255),
+    request_headers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    request_body JSONB,                                 -- Populated if size < 64 KB
+    request_s3_key VARCHAR(512),                        -- Populated if size >= 64 KB
+    request_size_bytes INT NOT NULL,
+    request_sha256 VARCHAR(64) NOT NULL,
+    response_status_code INT,
+    response_headers JSONB,
+    response_body JSONB,
+    response_s3_key VARCHAR(512),
+    duration_ms INT,
     received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (id, received_at)
 ) PARTITION BY RANGE (received_at);
@@ -377,8 +407,12 @@ CREATE TABLE public.inbound_records (
 CREATE TABLE public.inbound_records_default
     PARTITION OF public.inbound_records DEFAULT;
 
-CREATE INDEX idx_inbound_trace ON public.inbound_records (tenant_id, business_trace_id);
-CREATE INDEX idx_inbound_corr ON public.inbound_records (tenant_id, business_correlation_id);
+CREATE INDEX idx_inbound_trace ON public.inbound_records (tenant_id, trace_id);
+CREATE INDEX idx_inbound_corr ON public.inbound_records (tenant_id, correlation_id);
+CREATE INDEX idx_inbound_conn ON public.inbound_records (tenant_id, connection_id);
+CREATE INDEX idx_inbound_app ON public.inbound_records (tenant_id, app_id);
+CREATE UNIQUE INDEX uq_inbound_external_event ON public.inbound_records (tenant_id, connection_id, external_event_id)
+    WHERE external_event_id IS NOT NULL;
 
 -- Enable RLS for standard shared shards
 ALTER TABLE public.inbound_records ENABLE ROW LEVEL SECURITY;
@@ -388,56 +422,82 @@ CREATE POLICY inbound_tenant_isolation ON public.inbound_records
 -- ============================================================================
 -- LAYER 2: UNIVERSAL SOURCE STATE REPLICA
 -- ============================================================================
-CREATE TABLE public.replica_entities (
+CREATE TABLE public.replica_records (
+    id VARCHAR(64) PRIMARY KEY,                         -- ip_rep_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
     connection_id VARCHAR(64) NOT NULL,                 -- Logical ref to ip.connections(id)
-    stream_name VARCHAR(128) NOT NULL,                  -- 'meters', 'service_points', 'invoices'
-    source_record_id VARCHAR(255) NOT NULL,             -- External primary key
+    stream VARCHAR(128) NOT NULL,                       -- Stream name (e.g. 'meters', 'loads')
+    record_key VARCHAR(64) NOT NULL,                    -- Deterministic composite key hash
+    primary_key_values JSONB NOT NULL DEFAULT '[]'::jsonb,
+    cursor_value VARCHAR(255),
+    cursor_kind VARCHAR(32),
     data JSONB NOT NULL,                                -- Parsed, structured source JSON
     data_hash VARCHAR(64) NOT NULL,                     -- SHA-256 for change detection (dedup)
-    synced_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (tenant_id, connection_id, stream_name, source_record_id)
+    version BIGINT NOT NULL DEFAULT 1,
+    generation_id BIGINT NOT NULL DEFAULT 1,
+    last_seen_generation BIGINT NOT NULL DEFAULT 1,
+    first_seen_at TIMESTAMPTZ NOT NULL,
+    extracted_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL,
+    deleted_at TIMESTAMPTZ,
+    source_inbound_record_id VARCHAR(64) NOT NULL DEFAULT '',
+    trace_id VARCHAR(64) NOT NULL,
+    correlation_id VARCHAR(255),
+    CONSTRAINT uq_ip_replica_record_identity UNIQUE (tenant_id, connection_id, stream, record_key)
 );
 
-CREATE INDEX idx_replica_gin ON public.replica_entities USING GIN (data);
+CREATE INDEX idx_replica_trace ON public.replica_records (tenant_id, trace_id);
+CREATE INDEX idx_replica_corr ON public.replica_records (tenant_id, correlation_id);
 
-ALTER TABLE public.replica_entities ENABLE ROW LEVEL SECURITY;
-CREATE POLICY replica_tenant_isolation ON public.replica_entities
+ALTER TABLE public.replica_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY replica_tenant_isolation ON public.replica_records
     USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
--- LAYER 3: CANONICAL DOMAIN ENTITIES & GLOBAL ENTITY MAP (GEM)
+-- LAYER 3: CANONICAL NORMALIZED RECORDS & GLOBAL ENTITY MAP (GEM)
 -- ============================================================================
-CREATE TABLE public.canonical_entities (
-    id VARCHAR(64) PRIMARY KEY,                         -- can_<os.urandom(12).hex()>
+CREATE TABLE public.normalized_records (
+    id VARCHAR(64) PRIMARY KEY,                         -- ip_nrm_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
-    entity_domain VARCHAR(64) NOT NULL,                 -- 'ENERGY_METER', 'USAGE_POINT', 'INVOICE'
+    connection_id VARCHAR(64) NOT NULL,
+    canonical_type VARCHAR(64) NOT NULL,                -- 'MDM_METER_READING', 'TMS_LOAD'
+    source_id VARCHAR(255) NOT NULL,
     canonical_data JSONB NOT NULL,                      -- Strongly-typed CIM / standard model
-    version INT NOT NULL DEFAULT 1,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    trace_id VARCHAR(64) NOT NULL,
+    correlation_id VARCHAR(255),
+    parent_trace_id VARCHAR(64),
+    original_trace_id VARCHAR(64),
+    replay_count INT NOT NULL DEFAULT 0,
+    normalized_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE INDEX idx_norm_trace ON public.normalized_records (tenant_id, trace_id);
+CREATE INDEX idx_norm_corr ON public.normalized_records (tenant_id, correlation_id);
+
 CREATE TABLE public.global_entity_map (
-    id VARCHAR(64) PRIMARY KEY,                         -- gem_<os.urandom(12).hex()>
+    id VARCHAR(64) PRIMARY KEY,                         -- ip_gem_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    correlation_id VARCHAR(255),
+    parent_trace_id VARCHAR(64),
+    original_trace_id VARCHAR(64),
+    replay_count INT NOT NULL DEFAULT 0,
     entity_domain VARCHAR(64) NOT NULL,
-    canonical_id VARCHAR(64) NOT NULL REFERENCES public.canonical_entities(id) ON DELETE CASCADE,
+    canonical_id VARCHAR(64) NOT NULL,
     source_connection_id VARCHAR(64) NOT NULL,
     source_entity_id VARCHAR(255) NOT NULL,             -- e.g. Itron 'MTR-101'
-    dest_connection_id VARCHAR(64) NOT NULL,
-    dest_entity_id VARCHAR(255) NOT NULL,               -- e.g. SAP 'EQUIP-9988'
+    dest_connection_id VARCHAR(64),
+    dest_entity_id VARCHAR(255),                        -- e.g. SAP 'EQUIP-9988'
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_gem_link UNIQUE (
-        tenant_id, entity_domain, source_connection_id, source_entity_id, dest_connection_id
+    CONSTRAINT uq_ip_entity_map_source UNIQUE (
+        tenant_id, entity_domain, source_connection_id, source_entity_id
     )
 );
 
-CREATE INDEX idx_gem_lookup ON public.global_entity_map (
-    tenant_id, entity_domain, dest_connection_id, dest_entity_id
-);
+CREATE INDEX idx_entity_map_trace ON public.global_entity_map (tenant_id, trace_id);
 
-ALTER TABLE public.canonical_entities ENABLE ROW LEVEL SECURITY;
-CREATE POLICY canonical_tenant_isolation ON public.canonical_entities
+ALTER TABLE public.normalized_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY canonical_tenant_isolation ON public.normalized_records
     USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 ALTER TABLE public.global_entity_map ENABLE ROW LEVEL SECURITY;
@@ -445,87 +505,83 @@ CREATE POLICY gem_tenant_isolation ON public.global_entity_map
     USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
--- LAYER 4: FIELD MAPPINGS & STITCHES (Customer Transformation Templates)
+-- LAYER 4: DEDICATED APPLICATION CANONICAL DOMAIN TABLES (ip.application.domains)
 -- ============================================================================
-CREATE TABLE public.field_mappings (
-    id VARCHAR(64) PRIMARY KEY,                         -- map_<os.urandom(12).hex()>
+-- Every dedicated canonical domain table (mdm_meter_readings, mdm_service_points,
+-- tms_loads, tms_carriers) carries the standard TracedAggregateRoot lineage columns:
+-- trace_id, correlation_id, parent_trace_id, original_trace_id, replay_count.
+
+-- ============================================================================
+-- LAYER 5: OUTBOUND RECORDS (Delivery Ledger)
+-- ============================================================================
+CREATE TABLE public.outbound_records (
+    id VARCHAR(64) NOT NULL,                            -- ip_out_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    source_domain VARCHAR(64) NOT NULL,                 -- 'ENERGY_METER'
-    target_app_id VARCHAR(64) NOT NULL,                 -- 'sap_isu'
-    target_action VARCHAR(64) NOT NULL,                 -- 'create_device'
-    mapping_template JSONB NOT NULL,                    -- Template with dynamic expressions
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    connection_id VARCHAR(64) NOT NULL,
+    app_id VARCHAR(64) NOT NULL,
+    trace_id VARCHAR(64) NOT NULL,
+    correlation_id VARCHAR(255),
+    parent_trace_id VARCHAR(64),
+    original_trace_id VARCHAR(64),
+    replay_count INT NOT NULL DEFAULT 0,
+    stream_name VARCHAR(128) NOT NULL,
+    target_url VARCHAR(1024) NOT NULL,
+    http_method VARCHAR(16) NOT NULL,
+    request_headers JSONB NOT NULL DEFAULT '{}'::jsonb,
+    request_body JSONB,
+    request_s3_key VARCHAR(512),
+    request_size_bytes INT NOT NULL,
+    request_sha256 VARCHAR(64) NOT NULL,
+    response_status_code INT,
+    response_headers JSONB,
+    response_body JSONB,
+    response_s3_key VARCHAR(512),
+    duration_ms INT,
+    attempt_number INT NOT NULL DEFAULT 1,
+    status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+    error_message TEXT,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (id, sent_at)
 );
 
-ALTER TABLE public.field_mappings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY field_mappings_tenant_isolation ON public.field_mappings
+CREATE INDEX idx_outbound_trace ON public.outbound_records (tenant_id, trace_id);
+CREATE INDEX idx_outbound_corr ON public.outbound_records (tenant_id, correlation_id);
+
+ALTER TABLE public.outbound_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY dispatches_tenant_isolation ON public.outbound_records
     USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 
 -- ============================================================================
--- LAYER 5: OUTBOUND DISPATCHES (Delivery Ledger)
+-- CROSS-CUTTING: SEEDWORK TRACE EVENT LEDGER (public.ip_trace_events)
 -- ============================================================================
-CREATE TYPE public.dispatch_status AS ENUM (
-    'PENDING', 'PROCESSING', 'DELIVERED', 'FAILED', 'RETRY_SCHEDULED'
-);
-
-CREATE TABLE public.outbound_dispatches (
-    id VARCHAR(64) PRIMARY KEY,                         -- dsp_<os.urandom(12).hex()>
+CREATE TABLE public.ip_trace_events (
+    id VARCHAR(64) NOT NULL,                            -- ip_trace_evt_<os.urandom(12).hex()>
     tenant_id VARCHAR(128) NOT NULL,
-    business_trace_id VARCHAR(64) NOT NULL,
-    target_connection_id VARCHAR(64) NOT NULL,
-    target_action VARCHAR(64) NOT NULL,
-    payload JSONB NOT NULL,
-    status public.dispatch_status NOT NULL DEFAULT 'PENDING',
-    attempt_count INT NOT NULL DEFAULT 0,
-    max_retries INT NOT NULL DEFAULT 5,
-    next_retry_at TIMESTAMPTZ,
-    last_response_code INT,
-    last_error_message TEXT,
+    trace_id VARCHAR(64) NOT NULL,
+    correlation_id VARCHAR(255),                        -- 'MTR-54012', 'ACC-9821'
+    event_type VARCHAR(100) NOT NULL,                   -- 'L1_INGEST_RECEIVED', 'L3_NORMALIZED', etc.
+    actor VARCHAR(128) NOT NULL DEFAULT 'SYSTEM',
+    metadata_ JSONB,                                    -- {layer, status, summary_message, error_details}
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    delivered_at TIMESTAMPTZ
+    PRIMARY KEY (id, created_at)
 );
 
-CREATE INDEX idx_dispatches_pending ON public.outbound_dispatches (status, next_retry_at)
-    WHERE status IN ('PENDING', 'RETRY_SCHEDULED');
-
-ALTER TABLE public.outbound_dispatches ENABLE ROW LEVEL SECURITY;
-CREATE POLICY dispatches_tenant_isolation ON public.outbound_dispatches
-    USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
-
--- ============================================================================
--- CROSS-CUTTING: CUSTOMER SUPPORT TIMELINE LEDGER
--- ============================================================================
-CREATE TABLE public.business_timeline_ledger (
-    id VARCHAR(64) PRIMARY KEY,                         -- tml_<os.urandom(12).hex()>
-    tenant_id VARCHAR(128) NOT NULL,
-    business_trace_id VARCHAR(64) NOT NULL,
-    business_correlation_id VARCHAR(255) NOT NULL,      -- 'MTR-54012', 'ACC-9821'
-    layer VARCHAR(32) NOT NULL,                         -- 'L1_INGEST', 'L2_REPLICA', 'L3_NORM', 'L4_HYDRATE', 'L5_DELIVER'
-    status VARCHAR(32) NOT NULL,                        -- 'SUCCESS', 'FAILED', 'RETRIED'
-    summary_message TEXT NOT NULL,                      -- Human-readable message for support desk
-    error_details JSONB,
-    occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE INDEX idx_ip_trace_events_corr ON public.ip_trace_events (
+    tenant_id, correlation_id
+);
+CREATE INDEX idx_ip_trace_events_trace ON public.ip_trace_events (
+    tenant_id, trace_id, created_at ASC
 );
 
-CREATE INDEX idx_timeline_lookup ON public.business_timeline_ledger (
-    tenant_id, business_correlation_id, occurred_at DESC
-);
-CREATE INDEX idx_timeline_trace ON public.business_timeline_ledger (
-    tenant_id, business_trace_id, occurred_at ASC
-);
-
-ALTER TABLE public.business_timeline_ledger ENABLE ROW LEVEL SECURITY;
-CREATE POLICY timeline_tenant_isolation ON public.business_timeline_ledger
+ALTER TABLE public.ip_trace_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY timeline_tenant_isolation ON public.ip_trace_events
     USING (tenant_id = platform.current_tenant_id() OR platform.bypass_rls());
 ```
 
 ### 6.4. Enterprise Robustness Pillars
 1. **Centralized Platform Resolver (`TenantShardResolver`):** Cached resolution of `(tenant_id, app_id="ip")` ensures workers never query `global_db` per ingested record.
 2. **Declarative Partitioning & Pruning:** High-volume telemetry in `inbound_records` uses range partitioning by month, eliminating vacuum bloat by dropping expired partitions with instantaneous DDL (`DROP TABLE`).
-3. **Dedicated Shard Migration Runner:** `platform_migrator migrate --domain ip` runs global migrations on `global_db` (`ip` schema) and dynamically iterates over all active IP shards discovered via `ShardRegistry` to apply `public` schema migrations.
+3. **Dedicated Shard Migration Runner:** `python -m ip.engine.adapters.outbound.database.run_migrations` (via `pnpm db:migrate:ip`) runs global migrations on `global_db` (`ip` schema) and dynamically iterates over all active IP shards discovered via `ShardRegistry` to apply `public` schema migrations.
 4. **Isolated Connection Pools:** Shard connection pools are allocated dynamically via `DatabaseRouter` with tier-specific sizing (e.g. 20 connections for shared standard shards, dedicated pools for enterprise shards).
 
 ---
@@ -577,6 +633,10 @@ The system embeds a **Model Context Protocol (MCP)** tool caller that queries th
 ## 9. Security, Governance & Enterprise Compliance
 
 1. **Zero Raw Token Exposure:** Action and connector codes never receive decrypted OAuth secrets. Decryption occurs only at the HTTP client injection layer immediately before executing outgoing requests.
-2. **Key Rotation & Envelope Encryption:** Connection credentials use AES-256-GCM. The Key Encryption Key (KEK) is managed via AWS KMS.
-3. **Structured JSON Logging:** Python `structlog` injected via `ILogger` port. String interpolation in logs is strictly prohibited. Every log binds `tenant_id`, `connection_id`, and `business_trace_id`.
+2. **Key-Versioned Envelope Encryption & Zero-Downtime Rotation:** Connection credentials use authenticated AES-256-GCM (`security.AesGcmCipher`) stored in `ip.connections.encrypted_credentials` (`BYTEA`), avoiding external Secret Manager API throttling/costs during high-frequency OAuth2 token refreshes. Supports key-versioned headers (`kid:<key_id>:<nonce+ciphertext>`) bound via GCM Additional Authenticated Data (AAD) and multi-key keyring rotation (`SECURITY_AES_KEY_ID` + `SECURITY_AES_KEYRING`).
+3. **Structured JSON Logging:** Python `structlog` injected via `ILogger` port. String interpolation in logs is strictly prohibited. Every log binds `tenant_id`, `connection_id`, and `trace_id`.
 4. **Zero-Mock Pure Testing:** Domain business logic and canonical normalizers are tested with 100% pure unit tests without mocks. Integration tests utilize PostgreSQL nested transactions (`SAVEPOINT`) with automatic rollbacks.
+5. **First-Class Error Handling (No Exceptions for Known Outcomes):**
+   - Known domain, operational, and upstream integration failures **never** raise Python exceptions for control flow.
+   - `ip.engine.domain.exceptions` defines `FailureDisposition(StrEnum)` (`RETRYABLE`, `TERMINAL`, `REAUTH_REQUIRED`, `VALIDATION_FAILURE`, `NOT_FOUND`, `CONFLICT`), `IpErrorCode(StrEnum)`, `IpError` base class, and 20 dedicated immutable `@dataclass(frozen=True, kw_only=True)` error classes (`ConnectionNotFoundError`, `DuplicateConnectionFingerprintError`, `InvalidConnectionStateError`, `InvalidConnectionConfigError`, `InvalidCredentialsError`, `InvalidEndpointError`, `EndpointSecurityViolationError`, `ConnectorNotFoundError`, `StreamNotFoundError`, `AuthenticationFailedError`, `UpstreamHttpError`, `UpstreamRemoteError`, `UpstreamNetworkError`, `SftpConnectionError`, `CatalogDiscoveryError`, `ManifestParseFailureError`, `UnsupportedWriteOperationError`, `WriteActionNotConfiguredError`, `PayloadNotFoundError`, `ConnectionDeactivatedError`).
+   - All domain aggregate transitions, outbound repository/storage/registry ports, connector operations, and application use cases return explicit `Result[T, E]` monads or structured boundary DTOs (`error: IpError | None`) that map deterministically to RFC 7807 Problem Details at the HTTP boundary (`ErrorResponseDTO.from_ip_error`).

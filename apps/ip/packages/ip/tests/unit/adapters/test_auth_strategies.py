@@ -1,18 +1,23 @@
-"""Unit tests for authentication strategies."""
+"""Zero-mock tests for authentication strategies using local HTTP socket server (pytest_httpserver)."""
 
 import base64
 from datetime import UTC, datetime
 
 import httpx
 import pytest
-from ip.adapters.outbound.auth.api_key_auth_strategy import (
+from ip.engine.adapters.outbound.auth.api_key_auth_strategy import (
     ApiKeyAuthStrategy,
     ApiKeyPlacement,
 )
-from ip.adapters.outbound.auth.basic_auth_strategy import BasicAuthStrategy
-from ip.adapters.outbound.auth.bearer_auth_strategy import BearerAuthStrategy
-from ip.adapters.outbound.auth.no_auth_strategy import NoAuthStrategy
-from ip.adapters.outbound.auth.oauth2_strategy import OAuth2Strategy
+from ip.engine.adapters.outbound.auth.basic_auth_strategy import BasicAuthStrategy
+from ip.engine.adapters.outbound.auth.bearer_auth_strategy import BearerAuthStrategy
+from ip.engine.adapters.outbound.auth.no_auth_strategy import NoAuthStrategy
+from ip.engine.adapters.outbound.auth.oauth2_strategy import OAuth2Strategy
+from ip.engine.domain.exceptions import (
+    EndpointSecurityViolationError,
+    InvalidCredentialsError,
+)
+from pytest_httpserver import HTTPServer
 
 
 def test_no_auth_strategy_leaves_request_untouched() -> None:
@@ -95,3 +100,99 @@ async def test_oauth2_strategy_detects_expiration() -> None:
     )
 
     assert await strategy.is_valid() is False
+
+
+@pytest.mark.asyncio
+async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
+    httpserver: HTTPServer,
+) -> None:
+    past_epoch = datetime.now(UTC).timestamp() - 600
+    refreshed_values: list[tuple[str, str | None, float | None]] = []
+
+    async def on_refreshed(access_tok: str, refresh_tok: str | None, exp: float | None) -> None:
+        refreshed_values.append((access_tok, refresh_tok, exp))
+
+    httpserver.expect_request(
+        "/oauth/token",
+        method="POST",
+    ).respond_with_json(
+        {
+            "access_token": "tok_fresh_999",
+            "refresh_token": "ref_fresh_999",
+            "expires_in": 3600,
+        },
+        status=200,
+    )
+
+    strategy = OAuth2Strategy(
+        client_id="cid",
+        client_secret="sec",
+        token_url=httpserver.url_for("/oauth/token"),
+        access_token="tok_expired",
+        refresh_token="ref_old",
+        expires_at_epoch=past_epoch,
+        on_token_refreshed=on_refreshed,
+        allow_private_ips=True,
+    )
+
+    did_refresh = await strategy.refresh_if_needed()
+    assert did_refresh is True
+    assert strategy.access_token == "tok_fresh_999"
+    assert strategy.refresh_token == "ref_fresh_999"
+    assert strategy.last_error is None
+    assert len(refreshed_values) == 1
+    assert refreshed_values[0][0] == "tok_fresh_999"
+
+    # Rejects insecure non-localhost HTTP token_url without raising
+    insecure_strategy = OAuth2Strategy(
+        client_id="cid",
+        client_secret="sec",
+        token_url="http://insecure.example.com/oauth/token",
+        access_token="tok_expired",
+        refresh_token="ref_old",
+        expires_at_epoch=past_epoch,
+    )
+    assert await insecure_strategy.refresh_if_needed() is False
+    assert isinstance(insecure_strategy.last_error, EndpointSecurityViolationError)
+
+    # Handles 401 token refresh failure gracefully via PassThroughPolicy
+    httpserver.expect_request(
+        "/oauth/token_fail",
+        method="POST",
+    ).respond_with_json({"error": "invalid_grant"}, status=401)
+
+    fail_strategy = OAuth2Strategy(
+        client_id="cid",
+        client_secret="sec",
+        token_url=httpserver.url_for("/oauth/token_fail"),
+        access_token="tok_expired",
+        refresh_token="ref_old",
+        expires_at_epoch=past_epoch,
+        allow_private_ips=True,
+    )
+    assert await fail_strategy.refresh_if_needed() is False
+    assert isinstance(fail_strategy.last_error, InvalidCredentialsError)
+
+    # Supports client_credentials grant refresh without a refresh_token
+    httpserver.expect_request(
+        "/oauth/token_client_credentials",
+        method="POST",
+    ).respond_with_json(
+        {
+            "access_token": "tok_cc_123",
+            "expires_in": 1800,
+        },
+        status=200,
+    )
+    cc_strategy = OAuth2Strategy(
+        client_id="cid",
+        client_secret="sec",
+        token_url=httpserver.url_for("/oauth/token_client_credentials"),
+        access_token="tok_expired",
+        refresh_token=None,
+        grant_mode="client_credentials",
+        expires_at_epoch=past_epoch,
+        allow_private_ips=True,
+    )
+    assert await cc_strategy.refresh_if_needed() is True
+    assert cc_strategy.access_token == "tok_cc_123"

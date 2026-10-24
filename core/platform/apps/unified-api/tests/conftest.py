@@ -8,6 +8,10 @@ import tempfile
 import database.provider
 import edi.bootstrap.lifespan
 import httpx
+import ip.application.domains.energy.models as _ip_energy_models
+import ip.application.domains.tms.models as _ip_tms_models
+import ip.engine.adapters.outbound.database.models.control_plane as _ip_cp_models
+import ip.engine.adapters.outbound.database.models.data_plane as _ip_dp_models
 import pytest
 import pytest_asyncio
 from database.constants import DatabaseShardStatus
@@ -18,8 +22,15 @@ from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
-from ip.adapters.outbound.database.models.base import IpBase
+from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
 from secret_store import AwsSecretsManagerAdapter
+
+_IP_MODEL_MODULES = (
+    _ip_energy_models,
+    _ip_tms_models,
+    _ip_cp_models,
+    _ip_dp_models,
+)
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
@@ -86,7 +97,8 @@ async def db_engine():
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ip;"))
         await conn.run_sync(TenantBase.metadata.create_all)
-        await conn.run_sync(IpBase.metadata.create_all)
+        await conn.run_sync(IpGlobalBase.metadata.create_all)
+        await conn.run_sync(IpTenantBase.metadata.create_all)
 
     yield engine
     await engine.dispose()
@@ -183,14 +195,92 @@ async def client(app):
         yield c
 
 
+async def _seed_app_and_shard(
+    session: AsyncSession,
+    *,
+    tenant_id: str,
+    app_slug: str,
+    default_app_id: str,
+    app_name: str,
+    app_description: str,
+    tier: str,
+    shard_id: str,
+    shard_name: str,
+) -> None:
+    apps_res = await session.execute(
+        text("SELECT id FROM ucp.apps WHERE slug = :slug"),
+        {"slug": app_slug},
+    )
+    existing_app_id = str(apps_res.scalar() or default_app_id)
+
+    existing_app = await session.get(UcpApp, existing_app_id)
+    if not existing_app:
+        async with session.begin_nested():
+            session.add(
+                UcpApp(
+                    id=existing_app_id,
+                    slug=app_slug,
+                    name=app_name,
+                    description=app_description,
+                )
+            )
+            await session.flush()
+
+    existing_sub = await session.execute(
+        text(
+            "SELECT tenant_id FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = :app_id"
+        ),
+        {"tenant_id": tenant_id, "app_id": existing_app_id},
+    )
+    if not existing_sub.scalar():
+        async with session.begin_nested():
+            session.add(
+                UcpAppSubscription(
+                    tenant_id=tenant_id,
+                    app_id=existing_app_id,
+                    status=LifecycleStatus.ACTIVE,
+                    tier=tier,
+                )
+            )
+            await session.flush()
+
+    existing_shard = await session.get(UcpDatabaseShard, shard_id)
+    if not existing_shard:
+        async with session.begin_nested():
+            session.add(
+                UcpDatabaseShard(
+                    id=shard_id,
+                    name=shard_name,
+                    dsn=os.environ["TEST_SHARD_DB_URL"],
+                    status=DatabaseShardStatus.ACTIVE,
+                )
+            )
+            await session.flush()
+
+    existing_shard_reg = await session.execute(
+        text(
+            "SELECT tenant_id FROM ucp.shard_registry WHERE tenant_id = :tenant_id AND app_id = :app_id"
+        ),
+        {"tenant_id": tenant_id, "app_id": existing_app_id},
+    )
+    if not existing_shard_reg.scalar():
+        async with session.begin_nested():
+            session.add(
+                UcpShardRegistry(
+                    tenant_id=tenant_id,
+                    app_id=existing_app_id,
+                    shard_id=shard_id,
+                )
+            )
+            await session.flush()
+
+
 @pytest_asyncio.fixture(scope="function")
 async def seeded_api_token(db_session_factory):
     """
     Seeds a valid Tenant and API token into the database and returns the raw secret.
     """
     async with db_session_factory() as session:
-        # Seed global roles
-
         # Seed platform tenant
         platform_tenant = await session.get(TenantORM, PLATFORM_TENANT_ID)
         if not platform_tenant:
@@ -227,62 +317,28 @@ async def seeded_api_token(db_session_factory):
             session.add(tenant)
             await session.flush()
 
-        # Seed EDI app and subscription to allow EDI routes to pass the guard
-
-        apps_res = await session.execute(text("SELECT id FROM ucp.apps WHERE slug = 'edi'"))
-        existing_app_id = apps_res.scalar() or "app_edi_core"
-
-        existing_app = await session.get(UcpApp, existing_app_id)
-        if not existing_app:
-            async with session.begin_nested():
-                edi_app = UcpApp(
-                    id=existing_app_id, slug="edi", name="EDI Gateway", description="EDI"
-                )
-                session.add(edi_app)
-                await session.flush()
-
-        existing_sub = await session.execute(
-            text(
-                "SELECT tenant_id FROM ucp.app_subscriptions WHERE tenant_id = :tenant_id AND app_id = :app_id"
-            ),
-            {"tenant_id": tenant_id, "app_id": existing_app_id},
+        await _seed_app_and_shard(
+            session,
+            tenant_id=tenant_id,
+            app_slug="edi",
+            default_app_id="app_edi_core",
+            app_name="EDI Gateway",
+            app_description="EDI",
+            tier="free",
+            shard_id="edi_shard_1",
+            shard_name="EDI Primary Shard",
         )
-        if not existing_sub.scalar():
-            async with session.begin_nested():
-                edi_sub = UcpAppSubscription(
-                    tenant_id=tenant_id,
-                    app_id=existing_app_id,
-                    status=LifecycleStatus.ACTIVE,
-                    tier="free",
-                )
-                session.add(edi_sub)
-                await session.flush()
-
-        existing_shard = await session.get(UcpDatabaseShard, "edi_shard_1")
-        if not existing_shard:
-            async with session.begin_nested():
-                shard = UcpDatabaseShard(
-                    id="edi_shard_1",
-                    name="EDI Primary Shard",
-                    dsn=os.environ["TEST_SHARD_DB_URL"],
-                    status=DatabaseShardStatus.ACTIVE,
-                )
-                session.add(shard)
-                await session.flush()
-
-        existing_shard_reg = await session.execute(
-            text(
-                "SELECT tenant_id FROM ucp.shard_registry WHERE tenant_id = :tenant_id AND app_id = :app_id"
-            ),
-            {"tenant_id": tenant_id, "app_id": existing_app_id},
+        await _seed_app_and_shard(
+            session,
+            tenant_id=tenant_id,
+            app_slug="ip",
+            default_app_id="app_ip_core",
+            app_name="Integration Platform",
+            app_description="Enterprise Integration Platform",
+            tier="enterprise",
+            shard_id="ip_shard_1",
+            shard_name="IP Primary Shard",
         )
-        if not existing_shard_reg.scalar():
-            async with session.begin_nested():
-                shard_reg = UcpShardRegistry(
-                    tenant_id=tenant_id, app_id=existing_app_id, shard_id="edi_shard_1"
-                )
-                session.add(shard_reg)
-                await session.flush()
 
         # Create API token
         raw_secret = secrets.token_urlsafe(32)

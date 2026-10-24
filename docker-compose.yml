@@ -2,12 +2,15 @@ include:
   - infra/local/docker-compose.yml
   - infra/local/observability/docker-compose.yml
   - apps/edi/docker-compose.yml
+  - apps/ip/docker-compose.yml
 
 x-base-env: &base-env
   DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
   GLOBAL_DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
   EDI_DATABASE_URL: postgresql://edi:edi_password@edi_postgres_shard:5432/edi_shard
   SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
+  IP_DATABASE_URL: postgresql://ip:ip_password@ip_postgres_shard:5432/ip_shard
+  SHARD_OVERRIDES__IP_SHARD_1: postgresql+asyncpg://ip:ip_password@ip_postgres_shard:5432/ip_shard
   AWS_ENDPOINT_URL: http://localstack:4566
   AWS_REGION: us-east-1
 
@@ -29,6 +32,8 @@ x-modular-monolith-base: &modular-monolith-base
       condition: service_healthy
     edi_postgres_shard:
       condition: service_healthy
+    ip_postgres_shard:
+      condition: service_healthy
 
 services:
 
@@ -47,6 +52,7 @@ services:
       <<: *base-env
       DATABASE_URL: postgresql://ucp_admin:ucp_password@postgres_global:5432/global_db
       SHARD_OVERRIDES__EDI_SHARD_1: postgresql+asyncpg://edi:edi_password@edi_postgres_shard:5432/edi_shard
+      SHARD_OVERRIDES__IP_SHARD_1: postgresql+asyncpg://ip:ip_password@ip_postgres_shard:5432/ip_shard
     command: ["python", "-m", "platform_migrator", "seed", "--domain", "all"]
     restart: "no"
 
