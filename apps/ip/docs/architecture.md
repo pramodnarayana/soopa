@@ -581,7 +581,7 @@ CREATE POLICY timeline_tenant_isolation ON public.ip_trace_events
 ### 6.4. Enterprise Robustness Pillars
 1. **Centralized Platform Resolver (`TenantShardResolver`):** Cached resolution of `(tenant_id, app_id="ip")` ensures workers never query `global_db` per ingested record.
 2. **Declarative Partitioning & Pruning:** High-volume telemetry in `inbound_records` uses range partitioning by month, eliminating vacuum bloat by dropping expired partitions with instantaneous DDL (`DROP TABLE`).
-3. **Dedicated Shard Migration Runner:** `platform_migrator migrate --domain ip` runs global migrations on `global_db` (`ip` schema) and dynamically iterates over all active IP shards discovered via `ShardRegistry` to apply `public` schema migrations.
+3. **Dedicated Shard Migration Runner:** `python -m ip.engine.adapters.outbound.database.run_migrations` (via `pnpm db:migrate:ip`) runs global migrations on `global_db` (`ip` schema) and dynamically iterates over all active IP shards discovered via `ShardRegistry` to apply `public` schema migrations.
 4. **Isolated Connection Pools:** Shard connection pools are allocated dynamically via `DatabaseRouter` with tier-specific sizing (e.g. 20 connections for shared standard shards, dedicated pools for enterprise shards).
 
 ---

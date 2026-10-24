@@ -166,58 +166,11 @@ class IngestStreamBatchUseCase:
             )
 
         except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
-            logger.error(
-                "stream_batch_ingestion_data_rejected",
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                stream_name=command.stream_name,
-                error=str(exc),
+            return await self._handle_batch_rejection(
+                command=command,
                 trace_id=trace_id,
-            )
-            try:
-                async with self._uow:
-                    raw_dump = b"".join(m.raw_payload for m in command.batch.messages)
-                    rejected_record = InboundRecord.create(
-                        tenant_id=command.tenant_id,
-                        connection_id=command.connection_id,
-                        app_id=command.app_id,
-                        stream_name=command.stream_name,
-                        payload_bytes=raw_dump,
-                        is_inlined=True,
-                        trace_id=trace_id,
-                        correlation_id=command.correlation_id,
-                        ingestion_mode=IngestionMode.STREAM_SUBSCRIBE,
-                        external_event_id=None,
-                        request_headers={"x-rejection-reason": str(exc)},
-                        request_body={"error": str(exc), "status": "REJECTED"},
-                        request_s3_key=None,
-                        response_status_code=422,
-                    )
-                    rejected_record.clear_domain_events()
-                    await self._uow.inbound_records.save(rejected_record)
-                    await self._uow.commit()
-            except Exception as persist_exc:
-                logger.exception(
-                    "stream_batch_rejection_record_failed",
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    error=str(persist_exc),
-                    trace_id=trace_id,
-                )
-                return IngestStreamBatchResultDTO(
-                    verdict=AckVerdict.NACK,
-                    records_ingested=0,
-                    duplicates_skipped=duplicates_skipped,
-                    trace_id=trace_id,
-                    error_message=str(exc),
-                )
-
-            return IngestStreamBatchResultDTO(
-                verdict=AckVerdict.REJECT,
-                records_ingested=0,
+                exc=exc,
                 duplicates_skipped=duplicates_skipped,
-                trace_id=trace_id,
-                error_message=str(exc),
             )
         except Exception as exc:
             logger.exception(
@@ -235,3 +188,85 @@ class IngestStreamBatchUseCase:
                 trace_id=trace_id,
                 error_message=str(exc),
             )
+
+    async def _handle_batch_rejection(
+        self,
+        command: IngestStreamBatchCommand,
+        trace_id: str,
+        exc: Exception,
+        duplicates_skipped: int,
+    ) -> IngestStreamBatchResultDTO:
+        logger.error(
+            "stream_batch_ingestion_data_rejected",
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
+            stream_name=command.stream_name,
+            error=str(exc),
+            trace_id=trace_id,
+        )
+        try:
+            async with self._uow:
+                for msg in command.batch.messages:
+                    storage_result = await self._tiered_storage.store(
+                        tenant_id=command.tenant_id,
+                        trace_id=trace_id,
+                        payload_bytes=msg.raw_payload,
+                        parsed_payload=None,
+                    )
+                    headers_dict: dict[str, JsonValue] = {
+                        str(k): str(v) for k, v in msg.headers.items()
+                    }
+                    headers_dict["x-rejection-reason"] = str(exc)
+                    if msg.partition_id:
+                        headers_dict["x-stream-partition"] = str(msg.partition_id)
+                    if msg.broker_offset:
+                        headers_dict["x-stream-offset"] = str(msg.broker_offset)
+
+                    body_data = dict(storage_result.raw_payload or {})
+                    body_data["error"] = str(exc)
+                    body_data["status"] = "REJECTED"
+
+                    rejected_record = InboundRecord.create(
+                        tenant_id=command.tenant_id,
+                        connection_id=command.connection_id,
+                        app_id=command.app_id,
+                        stream_name=command.stream_name,
+                        payload_bytes=msg.raw_payload,
+                        is_inlined=storage_result.is_inlined,
+                        trace_id=trace_id,
+                        correlation_id=command.correlation_id,
+                        ingestion_mode=IngestionMode.STREAM_SUBSCRIBE,
+                        external_event_id=msg.message_id,
+                        request_headers=headers_dict,
+                        request_body=body_data if storage_result.is_inlined else None,
+                        request_s3_key=storage_result.s3_key
+                        if not storage_result.is_inlined
+                        else None,
+                        response_status_code=422,
+                    )
+                    rejected_record.clear_domain_events()
+                    await self._uow.inbound_records.save(rejected_record)
+                await self._uow.commit()
+        except Exception as persist_exc:
+            logger.exception(
+                "stream_batch_rejection_record_failed",
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+                error=str(persist_exc),
+                trace_id=trace_id,
+            )
+            return IngestStreamBatchResultDTO(
+                verdict=AckVerdict.NACK,
+                records_ingested=0,
+                duplicates_skipped=duplicates_skipped,
+                trace_id=trace_id,
+                error_message=str(exc),
+            )
+
+        return IngestStreamBatchResultDTO(
+            verdict=AckVerdict.REJECT,
+            records_ingested=0,
+            duplicates_skipped=duplicates_skipped,
+            trace_id=trace_id,
+            error_message=str(exc),
+        )

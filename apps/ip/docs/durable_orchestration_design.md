@@ -4,7 +4,7 @@
 **Scope:** `core/platform/packages/workflow` (new, generic durable workflow engine) and `apps/ip/packages/ip` (Stitches: business flows between apps, built on that engine)
 **Replaces:** the standalone L4 Hydrator and L5 Delivery workers in `architecture.md` §5 and `implementation_plan.md` Phases 7–8
 **Related:** `architecture.md`, `l1_ingestion_design.md`, `l2_replica_design.md`, `l3_normalization_design.md`
-**Reference implementations studied:** Hatchet (`/Users/apple/soopa/os_reference/hatchet`), Temporal, DBOS Transact, Airbyte, n8n, Activepieces
+**Reference implementations studied:** Hatchet (https://github.com/hatchet-dev/hatchet), Temporal, DBOS Transact, Airbyte, n8n, Activepieces
 
 ---
 
@@ -320,19 +320,24 @@ class ReconcilableStepHandlerPort[TInput, TOutput](StepHandlerPort[TInput, TOutp
 #### 7.5.2 Fair dequeue (illustrative)
 ```sql
 WITH candidates AS (
-    SELECT id, tenant_id, step_run_id, priority, concurrency_key, rate_limit_key
+    SELECT id, tenant_id, priority
     FROM workflow_queue_items
     WHERE queue_name = :queue AND available_at <= now()
     ORDER BY priority DESC, id
     LIMIT :scan_window                 -- e.g. 500
-    FOR UPDATE SKIP LOCKED
 ), ranked AS (
-    SELECT c.*, ROW_NUMBER() OVER (PARTITION BY c.tenant_id ORDER BY c.priority DESC, c.id) AS tenant_rank
+    SELECT c.id, ROW_NUMBER() OVER (PARTITION BY c.tenant_id ORDER BY c.priority DESC, c.id) AS tenant_rank
     FROM candidates c
+), selected AS (
+    SELECT r.id
+    FROM ranked r
+    ORDER BY r.tenant_rank, r.id
+    LIMIT :free_slots
 )
-SELECT * FROM ranked
-ORDER BY tenant_rank, priority DESC, id   -- round-robin across tenants: one per tenant, then the next
-LIMIT :free_slots;
+SELECT q.*
+FROM workflow_queue_items q
+JOIN selected s ON q.id = s.id
+FOR UPDATE SKIP LOCKED;               -- lock ONLY the free_slots rows selected, leaving unselected rows unlocked for concurrent workers
 ```
 Concurrency capacity and rate-limit tokens are checked for the selected rows in the same transaction. Rows that cannot run yet stay queued. Starvation-triggered fast wakeup (Hatchet's `onCapacityRestored`) is implemented by `NOTIFY` on slot release.
 
@@ -854,7 +859,7 @@ Each action is a use case with RBAC. Runbooks cover: target outage, credential e
 |---|---|---|
 | **A. Engine core** | Domain model, DAG validation, state machines, policies, Result types, codecs | 95% pure coverage, property tests green, `mypy --strict`, `tach check` |
 | **B. Engine persistence and runtime** | Postgres adapters, claim/complete, leases, fencing, reaper, LISTEN/NOTIFY plus poll, worker runtime, graceful drain | All §7.4 crash points pass fault injection. **Gate: build-vs-DBOS checkpoint review.** |
-| **C. Scheduling policies** | Fair dequeue, concurrency strategies, rate limits, circuit breaker, priority lanes | §3.2 targets met in the load test, noisy-neighbor test passes |
+| **C. Scheduling policies** | Fair dequeue, concurrency strategies, rate limits, circuit breaker, priority lanes | §3.2 targets met in the load test, noisy-neighbor test passes, multi-worker concurrent round-robin fairness test verified |
 | **D. IP Stitch foundation** | Step library, entity links (GEM v2), write intents, Trigger Router, bindings, static cycle and field-authority analysis. Retire L4/L5 workers. | E2E: CIS → HES (sync reply) → write-back, echo suppressed |
 | **E. Waits, timers, batching** | `WAIT_FOR_EVENT`, `SLEEP`, timeouts, late events, batch Stitches | E2E with an async HES confirmation and timeout branch. Batch interval-read Stitch at target volume. |
 | **F. Operations and production readiness** | Operator actions, timeline UI APIs, metrics, alerts, runbooks, retention jobs | First Energy Stitch live for a pilot tenant. SLO dashboards green for 2 weeks. |

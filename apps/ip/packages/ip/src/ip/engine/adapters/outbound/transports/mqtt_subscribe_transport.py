@@ -80,6 +80,46 @@ class MqttSubscribeTransport(SubscribeTransportPort):
     ) -> Result[None, ConnectionCheckError]:
         return await self._client.test_connection()
 
+    async def _safe_reconnect(self) -> None:
+        try:
+            await self._client.reconnect()
+        except Exception as rec_exc:
+            logger.exception(
+                "mqtt_client_reconnect_failed",
+                topic_filter=self._topic_filter,
+                error=str(rec_exc),
+            )
+
+    async def _handle_verdict(
+        self,
+        verdict: AckVerdict,
+        handles: Sequence[MqttMessageHandlePort],
+    ) -> None:
+        if verdict in (AckVerdict.ACK, AckVerdict.REJECT):
+            for h in handles:
+                await h.acknowledge_publish()
+            if verdict == AckVerdict.ACK:
+                logger.info(
+                    "mqtt_puback_dispatched",
+                    topic_filter=self._topic_filter,
+                    count=len(handles),
+                )
+            else:
+                logger.error(
+                    "mqtt_batch_rejected_terminal",
+                    topic_filter=self._topic_filter,
+                    count=len(handles),
+                    verdict=verdict.value,
+                )
+        else:
+            logger.error(
+                "mqtt_batch_nack_triggering_redelivery",
+                topic_filter=self._topic_filter,
+                count=len(handles),
+            )
+            await self._safe_reconnect()
+            await asyncio.sleep(0.2)
+
     async def start_consumer(
         self,
         stream: StreamDefinition,
@@ -110,43 +150,8 @@ class MqttSubscribeTransport(SubscribeTransportPort):
                     messages=raw_messages,
                 )
 
-                # Process batch through atomic L1 transaction
                 verdict = await message_handler(batch)
-
-                # Send PUBACK / PUBREC strictly after L1 commit
-                if verdict == AckVerdict.ACK:
-                    for h in handles:
-                        await h.acknowledge_publish()
-                    logger.info(
-                        "mqtt_puback_dispatched",
-                        topic_filter=self._topic_filter,
-                        count=len(handles),
-                    )
-                elif verdict == AckVerdict.REJECT:
-                    # Batch was durably rejected; acknowledge publish so broker does not redeliver forever
-                    for h in handles:
-                        await h.acknowledge_publish()
-                    logger.error(
-                        "mqtt_batch_rejected_terminal",
-                        topic_filter=self._topic_filter,
-                        count=len(handles),
-                        verdict=verdict.value,
-                    )
-                else:
-                    logger.error(
-                        "mqtt_batch_nack_triggering_redelivery",
-                        topic_filter=self._topic_filter,
-                        count=len(handles),
-                    )
-                    try:
-                        await self._client.reconnect()
-                    except Exception as rec_exc:
-                        logger.exception(
-                            "mqtt_client_reconnect_failed",
-                            topic_filter=self._topic_filter,
-                            error=str(rec_exc),
-                        )
-                    await asyncio.sleep(0.2)
+                await self._handle_verdict(verdict, handles)
 
             except asyncio.CancelledError:
                 break
@@ -156,6 +161,7 @@ class MqttSubscribeTransport(SubscribeTransportPort):
                     topic_filter=self._topic_filter,
                     error=str(exc),
                 )
+                await self._safe_reconnect()
                 await asyncio.sleep(0.5)
 
         logger.info("mqtt_consumer_loop_stopped", topic_filter=self._topic_filter)

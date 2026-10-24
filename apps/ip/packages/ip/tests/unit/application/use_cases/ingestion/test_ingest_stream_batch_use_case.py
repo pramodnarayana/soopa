@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 from collections.abc import Sequence
@@ -123,23 +124,24 @@ class FakeTieredStorageAdapter(TieredStoragePort):
         parsed_payload: JsonValue | None = None,
     ) -> TieredStorageResultDTO:
         is_inlined = len(payload_bytes) <= 65536
+        raw_b64 = base64.b64encode(payload_bytes).decode("ascii")
+        json_data: dict[str, object] = (
+            dict(parsed_payload)
+            if isinstance(parsed_payload, dict)
+            else ({"__wrapped_scalar__": parsed_payload} if parsed_payload is not None else {})
+        )
+        json_data["__raw_b64__"] = raw_b64
         return TieredStorageResultDTO(
             is_inlined=is_inlined,
-            raw_payload=(
-                (
-                    dict(parsed_payload)
-                    if isinstance(parsed_payload, dict)
-                    else {"__wrapped_scalar__": parsed_payload}
-                )
-                if (is_inlined and parsed_payload is not None)
-                else None
-            ),
+            raw_payload=json_data if is_inlined else None,
             s3_key="s3://lake/blobs/msg.bin" if not is_inlined else None,
             payload_size_bytes=len(payload_bytes),
             payload_sha256=hashlib.sha256(payload_bytes).hexdigest(),
         )
 
     async def retrieve(self, result: TieredStorageResultDTO) -> Result[bytes, PayloadNotFoundError]:
+        if result.raw_payload and "__raw_b64__" in result.raw_payload:
+            return Result.ok(base64.b64decode(str(result.raw_payload["__raw_b64__"])))
         return Result.ok(b"")
 
 
@@ -287,8 +289,12 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
 
     messages = [
         RawMessageDTO(
-            message_id="msg_corrupt",
-            raw_payload=b"INVALID_PAYLOAD",
+            message_id="msg_corrupt_1",
+            raw_payload=b"INVALID_PAYLOAD_1",
+        ),
+        RawMessageDTO(
+            message_id="msg_corrupt_2",
+            raw_payload=b"INVALID_PAYLOAD_2",
         ),
     ]
     batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
@@ -305,10 +311,16 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
     assert result.verdict == AckVerdict.REJECT
     assert result.records_ingested == 0
     assert "Deterministic corrupt payload structure" in (result.error_message or "")
-    assert len(uow.inbound_records.records) == 1
-    saved_record = next(iter(uow.inbound_records.records.values()))
-    assert saved_record.response_status_code == 422
-    assert saved_record.request_body == {
-        "error": "Deterministic corrupt payload structure",
-        "status": "REJECTED",
-    }
+    assert len(uow.inbound_records.records) == 2
+    for record in uow.inbound_records.records.values():
+        assert record.response_status_code == 422
+        assert record.request_body is not None
+        assert record.request_body.get("status") == "REJECTED"
+        assert record.request_body.get("error") == "Deterministic corrupt payload structure"
+        # Verify each rejected message's bytes are recoverable inline or via s3_key
+        if record.request_s3_key is not None:
+            assert record.request_s3_key.startswith("s3://")
+        else:
+            recovered_bytes = base64.b64decode(str(record.request_body["__raw_b64__"]))
+            assert recovered_bytes in (b"INVALID_PAYLOAD_1", b"INVALID_PAYLOAD_2")
+        assert record.external_event_id in ("msg_corrupt_1", "msg_corrupt_2")
