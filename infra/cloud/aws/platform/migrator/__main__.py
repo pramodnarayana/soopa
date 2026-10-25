@@ -55,51 +55,15 @@ notification_jobs_queue_url = notification.require_output("notification_jobs_que
 ucp_jobs_queue_url = ucp.require_output("ucp_jobs_queue_url")
 
 _region = aws.get_region()
+_identity = aws.get_caller_identity()
 
-# ── IAM Execution Role ────────────────────────────────────────────────────────
-execution_role = aws.iam.Role(
-    f"{_prefix}ecs-execution-role",
-    assume_role_policy=json.dumps(
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-                    "Action": "sts:AssumeRole",
-                }
-            ],
-        }
-    ),
-    tags=_TAGS,
-)
-aws.iam.RolePolicy(
-    f"{_prefix}ecs-exec-role-secrets-policy",
-    role=execution_role.id,
-    policy=global_db_secret_arn.apply(
-        lambda arn: json.dumps(
-            {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [arn],
-                    },
-                    {
-                        "Effect": "Allow",
-                        "Action": ["logs:CreateLogGroup"],
-                        "Resource": "*",
-                    },
-                ],
-            }
-        )
-    ),
-)
-aws.iam.RolePolicyAttachment(
-    f"{_prefix}ecs-exec-role-attach",
-    role=execution_role.name,
-    policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+# ── IAM Execution Role (Platform Infrastructure Owned) ───────────────────────
+# The ECS Task Execution Role is an infrastructure concern owned and pre-provisioned
+# by the Platform stack (provision-infra.yml) to guarantee global IAM propagation
+# before application rollout commences.
+# Uses get_output with safe fallback during speculative previews before platform is deployed.
+execution_role_arn = platform.get_output("ecs_execution_role_arn").apply(
+    lambda arn: arn or f"arn:aws:iam::{_identity.account_id}:role/{_prefix}ecs-execution-role"
 )
 
 # ── Task Definition ───────────────────────────────────────────────────────────
@@ -110,8 +74,8 @@ migrator_task = aws.ecs.TaskDefinition(
     memory="1024",
     network_mode="awsvpc",
     requires_compatibilities=["FARGATE"],
-    execution_role_arn=execution_role.arn,
-    task_role_arn=execution_role.arn,
+    execution_role_arn=execution_role_arn,
+    task_role_arn=execution_role_arn,
     container_definitions=pulumi.Output.all(
         placeholder_image,
         global_db_secret_arn,

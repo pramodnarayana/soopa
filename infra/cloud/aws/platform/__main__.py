@@ -20,10 +20,16 @@ _env = pulumi.get_stack()
 _prefix = f"{_env}-"
 _TAGS = {"ManagedBy": "pulumi", "Component": "platform", "Environment": _env}
 
-# ── Stack Reference to Foundation ─────────────────────────────────────────────
+# ── Stack Reference to Foundation & Data ──────────────────────────────────────
 config = pulumi.Config()
 foundation_stack_ref = config.get("foundation_stack") or f"organization/foundation/{_env}"
 foundation = pulumi.StackReference(foundation_stack_ref)
+
+data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
+data = pulumi.StackReference(data_stack_ref)
+
+global_db_secret_arn = data.require_output("global_db_secret_arn")
+edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 
 vpc_id = foundation.require_output("vpc_id")
 public_subnets = [
@@ -101,6 +107,65 @@ aws.secretsmanager.SecretVersion(
     ),
 )
 
+# ── Shared Platform ECS Task Execution Role ──────────────────────────────────
+# Used by the Amazon ECS container agent across all compute stacks in the cluster.
+# Grants permissions to pull images from ECR, stream logs to CloudWatch, and
+# retrieve container secrets from Secrets Manager.
+# Provisioned once by the Platform/Infra pipeline to guarantee global propagation
+# before any application rollout begins.
+_region = aws.get_region()
+
+ecs_execution_role = aws.iam.Role(
+    f"{_prefix}ecs-execution-role",
+    assume_role_policy=json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
+                    "Action": "sts:AssumeRole",
+                }
+            ],
+        }
+    ),
+    tags=_TAGS,
+)
+
+aws.iam.RolePolicyAttachment(
+    f"{_prefix}ecs-execution-role-attach",
+    role=ecs_execution_role.name,
+    policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+)
+
+aws.iam.RolePolicy(
+    f"{_prefix}ecs-execution-role-secrets-policy",
+    role=ecs_execution_role.id,
+    policy=pulumi.Output.all(
+        global_db_secret_arn,
+        edi_shard_db_secret_arn,
+        app_defaults_secret.arn,
+    ).apply(
+        lambda args: json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": ["secretsmanager:GetSecretValue"],
+                        "Resource": [arn for arn in args if arn],
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": ["logs:CreateLogGroup"],
+                        "Resource": "*",
+                    },
+                ],
+            }
+        )
+    ),
+)
+
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("ecs_cluster_arn", ecs_cluster.arn)
 pulumi.export("ecs_cluster_name", ecs_cluster.name)
@@ -119,3 +184,5 @@ pulumi.export("ecr_repository_url", app_ecr_repo.repository_url)
 pulumi.export("openobserve_ecr_repo_url", openobserve_ecr_repo.repository_url)
 
 pulumi.export("app_defaults_secret_arn", app_defaults_secret.arn)
+pulumi.export("ecs_execution_role_arn", ecs_execution_role.arn)
+pulumi.export("ecs_execution_role_name", ecs_execution_role.name)
