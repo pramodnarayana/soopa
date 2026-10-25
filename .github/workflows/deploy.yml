@@ -102,7 +102,10 @@ jobs:
       - name: Execute Platform Database Migrations (global_db)
         shell: bash
         run: |
-          uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain platform
+          uv run python -m infra_seedwork.tasks.run_ecs_task \
+            --env "${{ env.TARGET_ENV }}" \
+            --stack-dir infra/cloud/aws/platform/migrator \
+            --command "python -m platform_migrator migrate --domain platform"
 
       - name: Deploy EDI Migrator Stack
         uses: ./.github/actions/pulumi-stack-up
@@ -114,7 +117,10 @@ jobs:
       - name: Execute EDI Shard Database Migrations (edi_shard)
         shell: bash
         run: |
-          uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain edi
+          uv run python -m infra_seedwork.tasks.run_ecs_task \
+            --env "${{ env.TARGET_ENV }}" \
+            --stack-dir infra/cloud/aws/apps/edi/migrator \
+            --command "python -m edi.adapters.outbound.database.run_migrations"
 
       # Step 2: Main HTTP API Service
       - name: Deploy Unified API Stack
