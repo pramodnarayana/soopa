@@ -319,13 +319,29 @@ class ReconcilableStepHandlerPort[TInput, TOutput](StepHandlerPort[TInput, TOutp
 
 #### 7.5.2 Fair dequeue (illustrative)
 ```sql
-WITH active_tenants AS (
-    SELECT DISTINCT tenant_id
-    FROM workflow_queue_items
-    WHERE queue_name = :queue AND available_at <= now()
+WITH current_cursor AS (
+    SELECT COALESCE(
+        (SELECT last_serviced_tenant_id FROM workflow_queue_fairness_state WHERE queue_name = :queue),
+        ''
+    ) AS last_tenant_id
+), active_tenants AS (
+    SELECT tenant_id
+    FROM (
+        SELECT DISTINCT tenant_id
+        FROM workflow_queue_items
+        WHERE queue_name = :queue AND available_at <= now()
+    ) ready
+    CROSS JOIN current_cursor c
+    -- Rotate eligible tenants starting immediately after last_serviced_tenant_id
+    ORDER BY (ready.tenant_id > c.last_tenant_id) DESC, ready.tenant_id ASC
     LIMIT :max_active_tenants
 ), tenant_candidates AS (
-    SELECT c.*
+    SELECT
+        c.*,
+        ROW_NUMBER() OVER (
+            PARTITION BY c.tenant_id
+            ORDER BY c.priority DESC, c.id ASC
+        ) AS tenant_rank
     FROM active_tenants t
     CROSS JOIN LATERAL (
         SELECT q.id, q.tenant_id, q.priority
@@ -338,11 +354,14 @@ WITH active_tenants AS (
         FOR UPDATE SKIP LOCKED         -- lock candidates per tenant so concurrent workers skip locked rows and pick other ready rows
     ) c
 )
-SELECT *
+SELECT id, tenant_id, priority
 FROM tenant_candidates
-ORDER BY priority DESC, id
+-- Balance slots across tenants first (round-robin interleaving), then break ties by priority and id
+ORDER BY tenant_rank ASC, priority DESC, id ASC
 LIMIT :free_slots;
 ```
+Following the dequeue claim, the transaction advances the cursor state in `workflow_queue_fairness_state` to the highest `tenant_id` serviced in the selected batch (`INSERT INTO workflow_queue_fairness_state (queue_name, last_serviced_tenant_id, updated_at) VALUES (:queue, :highest_serviced_tenant_id, now()) ON CONFLICT (queue_name) DO UPDATE SET last_serviced_tenant_id = EXCLUDED.last_serviced_tenant_id, updated_at = EXCLUDED.updated_at`), guaranteeing that subsequent dequeue batches rotate fairly across all active tenants.
+
 Concurrency capacity and rate-limit tokens are checked for the selected rows in the same transaction. Rows that cannot run yet stay queued. Starvation-triggered fast wakeup (Hatchet's `onCapacityRestored`) is implemented by `NOTIFY` on slot release.
 
 #### 7.5.3 Concurrency strategies (`ConcurrencyPolicy`, Strategy pattern)
@@ -698,6 +717,12 @@ CREATE TABLE workflow_queue_items (
     enqueued_at TIMESTAMPTZ NOT NULL
 ) WITH (fillfactor = 70);
 CREATE INDEX idx_queue_ready ON workflow_queue_items (queue_name, available_at, priority DESC, id);
+
+CREATE TABLE workflow_queue_fairness_state (
+    queue_name VARCHAR(128) PRIMARY KEY,
+    last_serviced_tenant_id VARCHAR(128) NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 CREATE TABLE workflow_wait_conditions (
     id VARCHAR(64) PRIMARY KEY,
