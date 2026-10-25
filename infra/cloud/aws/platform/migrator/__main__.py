@@ -1,11 +1,9 @@
 """
-Application Layer (Layer 3) - Database Migrator
-===============================================
+Platform Layer (Control Plane) - Database Migrator & Seeder
+===========================================================
 Provisions the dedicated ECS Task Definition used by the CI/CD pipeline
-(Release Phase) to run Alembic database migrations.
-
-This stack ONLY provisions the template. The actual execution is triggered
-via `aws ecs run-task` by the CI/CD workflow.
+(Release Phase) to run Alembic database migrations and bootstrap seeding
+for the Platform Control Plane (global_db).
 """
 
 import json
@@ -14,8 +12,8 @@ import pulumi
 import pulumi_aws as aws
 
 _env = pulumi.get_stack()
-_prefix = f"{_env}-migrator-"
-_TAGS = {"ManagedBy": "pulumi", "Component": "migrator", "Environment": _env}
+_prefix = f"{_env}-platform-migrator-"
+_TAGS = {"ManagedBy": "pulumi", "Component": "platform-migrator", "Environment": _env}
 
 # ── Stack References ──────────────────────────────────────────────────────────
 config = pulumi.Config()
@@ -43,7 +41,6 @@ private_subnets = [
 app_sg_id = foundation.require_output("app_sg_id")
 
 ecr_repository_url = platform.require_output("ecr_repository_url")
-edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 image_tag = config.get("image_tag") or "latest"
@@ -79,15 +76,15 @@ execution_role = aws.iam.Role(
 aws.iam.RolePolicy(
     f"{_prefix}ecs-exec-role-secrets-policy",
     role=execution_role.id,
-    policy=pulumi.Output.all(edi_shard_db_secret_arn, global_db_secret_arn).apply(
-        lambda args: json.dumps(
+    policy=global_db_secret_arn.apply(
+        lambda arn: json.dumps(
             {
                 "Version": "2012-10-17",
                 "Statement": [
                     {
                         "Effect": "Allow",
                         "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1]],
+                        "Resource": [arn],
                     },
                     {
                         "Effect": "Allow",
@@ -118,7 +115,6 @@ migrator_task = aws.ecs.TaskDefinition(
     container_definitions=pulumi.Output.all(
         placeholder_image,
         global_db_secret_arn,
-        edi_shard_db_secret_arn,
         identity_platform_org_id,
         identity_platform_admin_id,
         identity_edi_project_id,
@@ -135,29 +131,24 @@ migrator_task = aws.ecs.TaskDefinition(
                     "command": [
                         "sh",
                         "-c",
-                        "python -m platform_migrator migrate --domain all && python -m platform_migrator seed --domain all",
+                        "python -m platform_migrator migrate --domain platform && python -m platform_migrator seed --domain all",
                     ],
                     "environment": [
-                        {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[3]},
-                        {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[4]},
-                        {"name": "IDENTITY_EDI_PROJECT_ID", "value": args[5]},
-                        {"name": "SQS_IDENTITY_JOBS_QUEUE_URL", "value": args[6]},
-                        {"name": "SQS_NOTIFICATION_JOBS_QUEUE_URL", "value": args[7]},
-                        {"name": "SQS_UCP_JOBS_QUEUE_URL", "value": args[8]},
+                        {"name": "IDENTITY_PLATFORM_ORG_ID", "value": args[2]},
+                        {"name": "IDENTITY_PLATFORM_ADMIN_ID", "value": args[3]},
+                        {"name": "IDENTITY_EDI_PROJECT_ID", "value": args[4]},
+                        {"name": "SQS_IDENTITY_JOBS_QUEUE_URL", "value": args[5]},
+                        {"name": "SQS_NOTIFICATION_JOBS_QUEUE_URL", "value": args[6]},
+                        {"name": "SQS_UCP_JOBS_QUEUE_URL", "value": args[7]},
                     ],
                     "secrets": [
                         {"name": "GLOBAL_DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
                         {"name": "DATABASE_URL", "valueFrom": f"{args[1]}:url::"},
-                        {"name": "EDI_DATABASE_URL", "valueFrom": f"{args[2]}:url::"},
-                        {
-                            "name": "DATABASE__SHARD_OVERRIDES__EDI_SHARD_1",
-                            "valueFrom": f"{args[2]}:url::",
-                        },
                     ],
                     "logConfiguration": {
                         "logDriver": "awslogs",
                         "options": {
-                            "awslogs-group": f"/ecs/{_prefix}migrator",
+                            "awslogs-group": f"/ecs/{_prefix}platform-migrator",
                             "awslogs-region": _region.name,
                             "awslogs-stream-prefix": "migrator",
                             "awslogs-create-group": "true",
@@ -173,6 +164,8 @@ migrator_task = aws.ecs.TaskDefinition(
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("task_definition_family", migrator_task.family)
 pulumi.export("task_definition_arn", migrator_task.arn)
+pulumi.export("log_group", f"/ecs/{_prefix}platform-migrator")
+pulumi.export("log_stream_prefix", "migrator")
 
 pulumi.export(
     "cli_network_configuration",

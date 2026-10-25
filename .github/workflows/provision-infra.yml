@@ -11,7 +11,7 @@ on:
       - '!infra/cloud/aws/apps/api/**'
       - '!infra/cloud/aws/apps/ucp/**'
       - '!infra/cloud/aws/apps/edi/**'
-      - '!infra/cloud/aws/apps/migrator/**'
+      - '!infra/cloud/aws/platform/migrator/**'
       - 'infra/cloud/zitadel/**'
       - 'versions.env'
       - '.github/workflows/provision-infra.yml'

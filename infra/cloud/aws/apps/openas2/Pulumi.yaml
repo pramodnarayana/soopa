@@ -1,6 +1,3 @@
 name: openas2
-runtime:
-  name: python
-  options:
-    virtualenv: venv
+runtime: python
 description: Mock AS2 Partner for Integration Testing

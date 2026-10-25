@@ -7,8 +7,11 @@ name = "infra-seedwork"
 version = "0.1.0"
 description = "Reusable Pulumi infrastructure seedwork modules"
 dependencies = [
+    "boto3",
+    "botocore",
     "pulumi",
-    "pulumi-aws"
+    "pulumi-aws",
+    "structlog",
 ]
 
 [tool.setuptools]

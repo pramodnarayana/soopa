@@ -25,6 +25,10 @@ You are a senior, enterprise-grade software engineer. Your primary focus is writ
 10. **Zero Adapter-to-Adapter Coupling**: Infrastructure adapters MUST NEVER import or depend on other concrete adapters. All dependencies required by an adapter must be abstract Ports (Protocols/Interfaces). The Composition Root (IoC Container or Provider) is the sole authority responsible for assembling concrete adapters together.
 11. **First-Class Error Handling (No Exceptions for Known Errors)**: Error handling must be treated as a first-class citizen. NEVER raise exceptions for known, expected operational or domain outcomes (e.g., HTTP 4xx/5xx status codes, expected missing records, validation failures). Core clients, adapters, and domain services must return structured models or Result types by default. Raising exceptions is an explicit opt-in strategy (e.g. `RaiseForStatusPolicy`), never default behavior.
 12. **No Warning Logs for Actual Errors**: NEVER log actual errors, validation rejections, security violations, or exhausted retries as `logger.warning(...)`. Warnings are strictly reserved for benign, in-flight transient retries. All actual errors and failures MUST be logged as `logger.error(...)` or `logger.exception(...)`.
+13. **Pure & Independent Seedwork**:
+    - `seedwork` (e.g., `infra_seedwork`, platform seedwork) MUST be 100% pure, generic, and completely independent of any bounded context or business domain.
+    - NEVER hardcode, list, or validate domain names (e.g., `platform`, `edi`, `ucp`, `identity`, `notification`, `ip`), domain paths, or domain-specific container commands inside `seedwork`.
+    - Always design seedwork components via Inversion of Control (IoC) so they accept generic parameters (e.g. `--stack-dir`, `--command`) from callers without having any awareness of concrete bounded contexts.
 
 ## Execution Workflow
 1. When asked to implement a feature, first define the **DTOs** in `application/dto.py` before writing any port, use case, or adapter.

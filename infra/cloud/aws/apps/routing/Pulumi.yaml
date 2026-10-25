@@ -1,6 +1,3 @@
 name: organization-routing
-runtime:
-  name: python
-  options:
-    virtualenv: ../../../../.venv
+runtime: python
 description: Global DNS Routing and Edge layer

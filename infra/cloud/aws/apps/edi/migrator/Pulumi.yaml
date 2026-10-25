@@ -1,0 +1,3 @@
+name: edi-migrator
+runtime: python
+description: "EDI Bounded Context: Database Migrator Task Definition (Control Plane & Tenant Shards)"

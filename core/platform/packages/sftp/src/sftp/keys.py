@@ -30,7 +30,7 @@ def parse_client_private_key(
             try:
                 return paramiko.Ed25519Key.from_private_key(key_io, password=password)
             except (paramiko.SSHException, ValueError) as exc:
-                logger.warning("sftp_private_key_parse_failed", error=str(exc))
+                logger.error("sftp_private_key_parse_failed", error=str(exc))
                 raise SftpAuthenticationError(
                     f"Failed to parse private key (unsupported format or bad passphrase): {exc}"
                 ) from exc

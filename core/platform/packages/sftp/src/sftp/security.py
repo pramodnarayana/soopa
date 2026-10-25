@@ -29,7 +29,7 @@ def resolve_and_validate_host(
     try:
         addr_infos = socket.getaddrinfo(clean_host, port, type=socket.SOCK_STREAM)
     except socket.gaierror as exc:
-        logger.warning("sftp_dns_resolution_failed", host=clean_host, error=str(exc))
+        logger.error("sftp_dns_resolution_failed", host=clean_host, error=str(exc))
         raise SftpHostValidationError(f"Failed to resolve host '{clean_host}': {exc}") from exc
 
     if not addr_infos:
@@ -46,7 +46,7 @@ def resolve_and_validate_host(
             ) from exc
 
         if not allow_local and not ip.is_global:
-            logger.warning(
+            logger.error(
                 "sftp_ssrf_blocked",
                 host=clean_host,
                 resolved_ip=ip_str,
