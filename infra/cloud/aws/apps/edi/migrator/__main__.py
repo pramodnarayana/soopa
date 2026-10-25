@@ -43,51 +43,11 @@ placeholder_image = pulumi.Output.concat(ecr_repository_url, f":{image_tag}")
 
 _region = aws.get_region()
 
-# ── IAM Execution Role ────────────────────────────────────────────────────────
-execution_role = aws.iam.Role(
-    f"{_prefix}ecs-execution-role",
-    assume_role_policy=json.dumps(
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {"Service": "ecs-tasks.amazonaws.com"},
-                    "Action": "sts:AssumeRole",
-                }
-            ],
-        }
-    ),
-    tags=_TAGS,
-)
-aws.iam.RolePolicy(
-    f"{_prefix}ecs-exec-role-secrets-policy",
-    role=execution_role.id,
-    policy=pulumi.Output.all(global_db_secret_arn, edi_shard_db_secret_arn).apply(
-        lambda args: json.dumps(
-            {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Action": ["secretsmanager:GetSecretValue"],
-                        "Resource": [args[0], args[1]],
-                    },
-                    {
-                        "Effect": "Allow",
-                        "Action": ["logs:CreateLogGroup"],
-                        "Resource": "*",
-                    },
-                ],
-            }
-        )
-    ),
-)
-aws.iam.RolePolicyAttachment(
-    f"{_prefix}ecs-exec-role-attach",
-    role=execution_role.name,
-    policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
-)
+# ── IAM Execution Role (Platform Infrastructure Owned) ───────────────────────
+# The ECS Task Execution Role is an infrastructure concern owned and pre-provisioned
+# by the Platform stack (provision-infra.yml) to guarantee global IAM propagation
+# before application rollout commences.
+execution_role_arn = platform.require_output("ecs_execution_role_arn")
 
 # ── Task Definition ───────────────────────────────────────────────────────────
 edi_migrator_task = aws.ecs.TaskDefinition(
@@ -97,8 +57,8 @@ edi_migrator_task = aws.ecs.TaskDefinition(
     memory="1024",
     network_mode="awsvpc",
     requires_compatibilities=["FARGATE"],
-    execution_role_arn=execution_role.arn,
-    task_role_arn=execution_role.arn,
+    execution_role_arn=execution_role_arn,
+    task_role_arn=execution_role_arn,
     container_definitions=pulumi.Output.all(
         placeholder_image,
         global_db_secret_arn,
