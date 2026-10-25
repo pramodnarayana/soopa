@@ -66,8 +66,8 @@ def main() -> None:
     seed_parser.add_argument(
         "--domain",
         type=str,
-        default="all",
-        choices=["ucp", "identity", "notification", "edi", "all"],
+        default="platform",
+        choices=["platform", "ucp", "identity", "notification", "edi", "all"],
         help="Domain scope to seed",
     )
 

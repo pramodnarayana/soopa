@@ -46,14 +46,14 @@ def run_domain_seeds(domain: str) -> None:
     domain = domain.lower()
     logger.info("domain_seeding_started", domain=domain)
 
-    if domain in ("ucp", "all"):
+    if domain in ("ucp", "platform", "all"):
         execute_seed_script("core/ucp/packages/ucp/scripts/seed.py")
         execute_seed_script("core/ucp/apps/ucp-jobs-worker/scripts/seed_jobs.py")
 
-    if domain in ("identity", "all"):
+    if domain in ("identity", "platform", "all"):
         execute_seed_script("core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py")
 
-    if domain in ("notification", "all"):
+    if domain in ("notification", "platform", "all"):
         execute_seed_script("core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py")
 
     if domain in ("edi", "all"):

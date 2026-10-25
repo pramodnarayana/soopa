@@ -62,3 +62,15 @@ def test_main_seed_cli_arguments(monkeypatch: pytest.MonkeyPatch) -> None:
 
     main()
     assert calls == ["ucp"]
+
+
+def test_main_seed_default_platform(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    monkeypatch.setattr(sys, "argv", ["platform-migrator", "seed"])
+    monkeypatch.setattr(
+        "platform_migrator.cli.handle_seed",
+        lambda domain: calls.append(domain),
+    )
+
+    main()
+    assert calls == ["platform"]
