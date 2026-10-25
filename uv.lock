@@ -1774,14 +1774,20 @@ name = "infra-seedwork"
 version = "0.1.0"
 source = { editable = "infra/cloud/aws/packages/seedwork" }
 dependencies = [
+    { name = "boto3" },
+    { name = "botocore" },
     { name = "pulumi" },
     { name = "pulumi-aws" },
+    { name = "structlog" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "boto3" },
+    { name = "botocore" },
     { name = "pulumi" },
     { name = "pulumi-aws" },
+    { name = "structlog" },
 ]
 
 [[package]]

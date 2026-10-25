@@ -143,6 +143,8 @@ edi_migrator_task = aws.ecs.TaskDefinition(
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("task_definition_family", edi_migrator_task.family)
 pulumi.export("task_definition_arn", edi_migrator_task.arn)
+pulumi.export("log_group", f"/ecs/{_prefix}edi-migrator")
+pulumi.export("log_stream_prefix", "migrator")
 
 pulumi.export(
     "cli_network_configuration",

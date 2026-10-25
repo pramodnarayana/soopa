@@ -164,6 +164,8 @@ migrator_task = aws.ecs.TaskDefinition(
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("task_definition_family", migrator_task.family)
 pulumi.export("task_definition_arn", migrator_task.arn)
+pulumi.export("log_group", f"/ecs/{_prefix}platform-migrator")
+pulumi.export("log_stream_prefix", "migrator")
 
 pulumi.export(
     "cli_network_configuration",

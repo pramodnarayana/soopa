@@ -103,9 +103,17 @@ jobs:
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_task \
-            --env "${{ env.TARGET_ENV }}" \
+            --env "$TARGET_ENV" \
             --stack-dir infra/cloud/aws/platform/migrator \
             --command "python -m platform_migrator migrate --domain platform"
+
+      - name: Seed Platform Database Data
+        shell: bash
+        run: |
+          uv run python -m infra_seedwork.tasks.run_ecs_task \
+            --env "$TARGET_ENV" \
+            --stack-dir infra/cloud/aws/platform/migrator \
+            --command "python -m platform_migrator seed --domain all"
 
       - name: Deploy EDI Migrator Stack
         uses: ./.github/actions/pulumi-stack-up
@@ -118,7 +126,7 @@ jobs:
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_task \
-            --env "${{ env.TARGET_ENV }}" \
+            --env "$TARGET_ENV" \
             --stack-dir infra/cloud/aws/apps/edi/migrator \
             --command "python -m edi.adapters.outbound.database.run_migrations"
 
