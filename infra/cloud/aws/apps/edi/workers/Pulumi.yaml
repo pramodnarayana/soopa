@@ -1,6 +1,3 @@
 name: edi-workers
-runtime:
-  name: python
-  options:
-    virtualenv: ../../../.venv
+runtime: python
 description: "EDI Bounded Context: DP Workers ECS Compute. Tier 6 — deploy on code push, scales independently for high-volume EDI processing."

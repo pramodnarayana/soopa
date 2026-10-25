@@ -21,12 +21,12 @@ def handle_migrate(domain: str = "platform") -> None:
     domain = domain.lower()
     logger.info("migration_command_received", domain=domain)
 
-    if domain in ("platform", "all"):
+    if domain == "platform":
         run_platform_domain_migrations()
     else:
         logger.error("invalid_migration_domain", domain=domain)
         raise ValueError(
-            f"Unknown migration domain '{domain}'. Valid options for platform-migrator: platform, all."
+            f"Unknown migration domain '{domain}'. Valid options for platform-migrator: platform."
         )
 
     logger.info("migration_command_completed", domain=domain)
@@ -55,8 +55,8 @@ def main() -> None:
         "--domain",
         type=str,
         default="platform",
-        choices=["platform", "all"],
-        help="Domain scope to migrate (platform/all = global_db Control Plane migrations)",
+        choices=["platform"],
+        help="Domain scope to migrate (platform = global_db Control Plane migrations)",
     )
 
     # seed subparser

@@ -45,29 +45,33 @@ class CloudWatchLogsClientProtocol(Protocol):
     ) -> Mapping[str, Sequence[CloudWatchLogsEvent]]: ...
 
 
-def find_migrator_stack_dir() -> Path:
-    """Dynamically search for the migrator Pulumi stack directory."""
+def find_migrator_stack_dir(domain: str = "platform") -> Path:
+    """Dynamically search for the migrator Pulumi stack directory for the given domain."""
     current = Path(__file__).resolve()
     for parent in current.parents:
-        candidate = parent / "infra" / "cloud" / "aws" / "apps" / "migrator"
-        if candidate.exists():
-            return candidate.resolve()
-        candidate2 = parent / "apps" / "migrator"
-        if candidate2.exists():
-            return candidate2.resolve()
-    raise FileNotFoundError("Could not locate infra/cloud/aws/apps/migrator directory")
+        if domain == "edi":
+            candidate = parent / "infra" / "cloud" / "aws" / "apps" / "edi" / "migrator"
+            if candidate.exists():
+                return candidate.resolve()
+        else:
+            candidate = parent / "infra" / "cloud" / "aws" / "platform" / "migrator"
+            if candidate.exists():
+                return candidate.resolve()
+    raise FileNotFoundError(f"Could not locate migrator directory for domain '{domain}'")
 
 
-def get_migrator_stack_outputs(env: str) -> dict[str, str | dict[str, object]]:
-    """Fetch outputs from the Pulumi migrator stack."""
-    migrator_dir = find_migrator_stack_dir()
+def get_migrator_stack_outputs(
+    env: str, domain: str = "platform"
+) -> dict[str, str | dict[str, object]]:
+    """Fetch outputs from the Pulumi migrator stack for the given domain."""
+    migrator_dir = find_migrator_stack_dir(domain)
 
     pulumi_bin = shutil.which("pulumi")
     if not pulumi_bin:
         raise FileNotFoundError("Pulumi CLI binary not found in PATH")
 
     cmd = [pulumi_bin, "stack", "output", "--stack", env, "--json"]
-    logger.info("fetching_migrator_stack_outputs", stack=env, dir=str(migrator_dir))
+    logger.info("fetching_migrator_stack_outputs", stack=env, domain=domain, dir=str(migrator_dir))
 
     result = subprocess.run(  # noqa: S603 - Executing trusted pulumi binary resolved via shutil.which
         cmd,
@@ -82,6 +86,7 @@ def get_migrator_stack_outputs(env: str) -> dict[str, str | dict[str, object]]:
             "failed_to_fetch_pulumi_outputs",
             error=result.stderr,
             stack=env,
+            domain=domain,
         )
         raise RuntimeError(f"Pulumi stack output failed: {result.stderr}")
 
@@ -138,9 +143,11 @@ def run_migration_task(
     Returns the container's exit code.
     """
     cluster = f"{env}-cluster"
-    log_group = f"/ecs/{env}-migrator-migrator"
+    migrator_stack_domain = "edi" if (action == "migrate" and domain == "edi") else "platform"
+    log_component = "edi-migrator" if migrator_stack_domain == "edi" else "platform-migrator"
+    log_group = f"/ecs/{env}-{log_component}-{log_component}"
 
-    outputs = get_migrator_stack_outputs(env)
+    outputs = get_migrator_stack_outputs(env, domain=migrator_stack_domain)
     for required_key in ("task_definition_arn", "cli_network_configuration"):
         if required_key not in outputs:
             logger.error("missing_migrator_stack_output", missing_key=required_key, env=env)
@@ -152,14 +159,30 @@ def run_migration_task(
     net_config_raw = outputs["cli_network_configuration"]
     net_config = json.loads(net_config_raw) if isinstance(net_config_raw, str) else net_config_raw
 
-    command_override = [
-        "python",
-        "-m",
-        "platform_migrator",
-        action,
-        "--domain",
-        domain,
-    ]
+    if action == "migrate" and domain == "edi":
+        command_override = [
+            "python",
+            "-m",
+            "edi.adapters.outbound.database.run_migrations",
+        ]
+    elif action == "seed":
+        command_override = [
+            "python",
+            "-m",
+            "platform_migrator",
+            "seed",
+            "--domain",
+            domain,
+        ]
+    else:
+        command_override = [
+            "python",
+            "-m",
+            "platform_migrator",
+            "migrate",
+            "--domain",
+            "platform",
+        ]
 
     logger.info(
         "dispatching_ecs_task",

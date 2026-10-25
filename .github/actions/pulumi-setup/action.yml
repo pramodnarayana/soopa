@@ -27,7 +27,7 @@ runs:
           grep -v '^#' "$GITHUB_WORKSPACE/versions.env" | grep -v '^[[:space:]]*$' >> "$GITHUB_ENV"
         fi
 
-    - name: Setup AWS Infra Virtualenv & Symlinks
+    - name: Setup AWS Infra Virtualenv
       shell: bash
       run: |
         echo "Setting up AWS Pulumi virtual environment..."
@@ -37,10 +37,9 @@ runs:
           uv pip install --python .venv -e . -e packages/seedwork
         fi
 
-        # Create symlinks for micro-stacks to share the AWS virtual environment
-        mkdir -p "$GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork"
-        ln -sfn "$GITHUB_WORKSPACE/infra/cloud/aws/.venv" "$GITHUB_WORKSPACE/infra/cloud/aws/packages/seedwork/.venv"
-        ln -sfn "$GITHUB_WORKSPACE/infra/cloud/aws/.venv" "$GITHUB_WORKSPACE/infra/.venv"
+        # Export active environment for all Pulumi stacks (Gold Standard)
+        echo "VIRTUAL_ENV=$GITHUB_WORKSPACE/infra/cloud/aws/.venv" >> "$GITHUB_ENV"
+        echo "$GITHUB_WORKSPACE/infra/cloud/aws/.venv/bin" >> "$GITHUB_PATH"
 
     - name: Setup Zitadel Provider Virtualenv
       if: inputs.setup-zitadel == 'true'

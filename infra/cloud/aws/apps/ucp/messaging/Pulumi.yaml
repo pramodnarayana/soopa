@@ -1,6 +1,3 @@
 name: ucp
-runtime:
-  name: python
-  options:
-    virtualenv: ../../../.venv
+runtime: python
 description: Application Layer (Layer 3) - UCP Bounded Context infrastructure.
