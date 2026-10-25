@@ -7,7 +7,7 @@ on:
       - 'infra/cloud/aws/apps/api/**'
       - 'infra/cloud/aws/apps/ucp/**'
       - 'infra/cloud/aws/apps/edi/**'
-      - 'infra/cloud/aws/apps/migrator/**'
+      - 'infra/cloud/aws/platform/migrator/**'
       - 'infra/cloud/aws/packages/seedwork/**'
       - '.github/actions/pulumi-setup/**'
       - '.github/actions/pulumi-stack-preview/**'
@@ -89,12 +89,19 @@ jobs:
           pulumi-config-passphrase: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
           setup-zitadel: "true"
 
-      # Step 1: Database Migrator Stack
-      - name: Preview Database Migrator Stack
+      # Step 1: Database Migrators (Platform & EDI)
+      - name: Preview Platform Migrator Stack
         if: steps.check-fork.outputs.is_fork != 'true'
         uses: ./.github/actions/pulumi-stack-preview
         with:
-          stack-dir: infra/cloud/aws/apps/migrator
+          stack-dir: infra/cloud/aws/platform/migrator
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview EDI Migrator Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/migrator
           stack-name: ${{ env.TARGET_ENV }}
 
       # Step 2: Main HTTP API Service

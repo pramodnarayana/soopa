@@ -1,6 +1,3 @@
 name: dashboard
-runtime:
-  name: python
-  options:
-    virtualenv: ../../packages/seedwork/.venv
+runtime: python
 description: Dashboard Vite Frontend Stack (S3 + CloudFront)

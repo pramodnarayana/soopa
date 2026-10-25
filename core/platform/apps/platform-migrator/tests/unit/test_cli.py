@@ -19,15 +19,9 @@ def test_handle_migrate_platform(monkeypatch: pytest.MonkeyPatch) -> None:
     assert calls == ["platform"]
 
 
-def test_handle_migrate_all(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = []
-    monkeypatch.setattr(
-        "platform_migrator.cli.run_platform_domain_migrations",
-        lambda: calls.append("platform"),
-    )
-
-    handle_migrate("all")
-    assert calls == ["platform"]
+def test_handle_migrate_rejects_all_domain() -> None:
+    with pytest.raises(ValueError, match="Unknown migration domain 'all'"):
+        handle_migrate("all")
 
 
 def test_handle_migrate_invalid_domain() -> None:

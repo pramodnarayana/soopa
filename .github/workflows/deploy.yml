@@ -91,11 +91,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Step 1: Database Migrator Stack & Domain-Scoped Migrations
-      - name: Deploy Database Migrator Stack
+      # Step 1: Database Migrators (Platform & EDI)
+      - name: Deploy Platform Migrator Stack
         uses: ./.github/actions/pulumi-stack-up
         with:
-          stack-dir: infra/cloud/aws/apps/migrator
+          stack-dir: infra/cloud/aws/platform/migrator
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
 
@@ -103,6 +103,13 @@ jobs:
         shell: bash
         run: |
           uv run python -m infra_seedwork.tasks.run_ecs_migrator --env "${{ env.TARGET_ENV }}" --action migrate --domain platform
+
+      - name: Deploy EDI Migrator Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/migrator
+          stack-name: ${{ env.TARGET_ENV }}
+          image-tag: ${{ env.IMAGE_TAG }}
 
       - name: Execute EDI Shard Database Migrations (edi_shard)
         shell: bash

@@ -38,6 +38,7 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
                 )
                 edi_shard_ids = {str(row[0]).lower() for row in registry_res.fetchall()}
             except SQLAlchemyError as reg_err:
+                await conn.rollback()
                 sqlstate = getattr(reg_err, "orig", reg_err)
                 pgcode = getattr(sqlstate, "pgcode", None)
                 if pgcode in ("42P01", "3F000"):
@@ -45,7 +46,7 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
                         "ucp.shard_registry does not exist yet. Falling back to shard ID convention."
                     )
                 else:
-                    logger.warning("failed_to_query_edi_shard_registry", error=str(reg_err))
+                    logger.error("failed_to_query_edi_shard_registry", error=str(reg_err))
 
             # We don't use ORM here to keep migration runner simple and resilient
             result = await conn.execute(text("SELECT id, dsn FROM ucp.database_shards"))

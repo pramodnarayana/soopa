@@ -73,12 +73,14 @@ Now that the core infrastructure and identity configurations are deployed, we mu
 ```bash
 # From the bastion host, local machine (via VPN), or ECS run-task:
 
-# 1. Deploy the Database Migrator Task Template
-# IMPORTANT: This must be deployed first so the task definition exists in AWS!
-pulumi up -s <env> -C infra/cloud/aws/apps/migrator
+# 1. Deploy the Database Migrator Task Templates (Platform & EDI)
+# IMPORTANT: These must be deployed first so the task definitions exist in AWS!
+pulumi up -s <env> -C infra/cloud/aws/platform/migrator
+pulumi up -s <env> -C infra/cloud/aws/apps/edi/migrator
 
 # 2. Run Database Migrations safely via the Typed Migrator Task Runner
-uv run python -m infra_seedwork.tasks.run_ecs_migrator --env <env> --action migrate --domain all
+uv run python -m infra_seedwork.tasks.run_ecs_migrator --env <env> --action migrate --domain platform
+uv run python -m infra_seedwork.tasks.run_ecs_migrator --env <env> --action migrate --domain edi
 ```
 
 ---
