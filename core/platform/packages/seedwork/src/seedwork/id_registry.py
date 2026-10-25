@@ -16,6 +16,11 @@ class SystemIdPrefix(StrEnum):
     CLIENT = "sys_client"
     TRACE = "sys_trace"
     TX = "sys_tx"
+    WORKFLOW_RUN = "wf_run"
+    WORKFLOW_STEP = "wf_step"
+    WORKFLOW_ATTEMPT = "wf_att"
+    WORKFLOW_MATCH = "wf_mtch"
+    WORKFLOW_CONDITION = "wf_cond"
 
 
 class DomainIdPrefix(StrEnum):
@@ -82,3 +87,8 @@ class DomainIdPrefix(StrEnum):
     IP_TMS_LOAD = "ip_tmsl"
     IP_TMS_CARRIER = "ip_tmsc"
     IP_SYNC_RUN = "ip_sync"
+    IP_MAPPING_BINDING = "ip_bind"
+    IP_NORMALIZATION_LEDGER = "ip_nlg"
+    IP_NORMALIZATION_REJECTION = "ip_nrj"
+    IP_SHADOW_DIFF = "ip_sdiff"
+    IP_PENDING_REFERENCE = "ip_pref"

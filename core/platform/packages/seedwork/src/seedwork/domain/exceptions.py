@@ -1,6 +1,51 @@
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import Generic, TypeVar
 
 from seedwork.domain.types import JsonDict
+
+T = TypeVar("T")
+E = TypeVar("E")
+T_co = TypeVar("T_co", covariant=True)
+E_co = TypeVar("E_co", covariant=True)
+
+
+@dataclass(frozen=True)
+class Result(Generic[T_co, E_co]):
+    """Generic, immutable Result monad for First-Class Error Handling without exceptions."""
+
+    value: T_co | None = None
+    error: E_co | None = None
+
+    @property
+    def is_ok(self) -> bool:
+        return self.error is None
+
+    @property
+    def is_err(self) -> bool:
+        return self.error is not None
+
+    def unwrap(self) -> T_co:
+        if self.error is not None or self.value is None:
+            raise ValueError(f"Called unwrap on an Err Result: {self.error}")
+        return self.value
+
+    def unwrap_err(self) -> E_co:
+        if self.error is None:
+            raise ValueError("Called unwrap_err on an Ok Result")
+        return self.error
+
+    @staticmethod
+    def ok(value: T) -> "Result[T, E]":
+        return Result(value=value, error=None)
+
+    @staticmethod
+    def fail(error: E) -> "Result[T, E]":
+        return Result(value=None, error=error)
+
+    @staticmethod
+    def err(error: E) -> "Result[T, E]":
+        return Result(value=None, error=error)
 
 
 class ErrorCode(StrEnum):

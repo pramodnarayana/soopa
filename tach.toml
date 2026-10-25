@@ -13,17 +13,55 @@ source_roots = [
     "core/platform/packages/secret-store/src",
     "core/platform/packages/sftp/src",
     "apps/ip/packages/ip/src",
-    "core/platform/packages/shttp/src"
+    "core/platform/packages/shttp/src",
+    "core/platform/packages/orchestration/src"
+]
+
+[[modules]]
+path = "orchestration.domain"
+depends_on = []
+
+[[modules]]
+path = "orchestration.ports"
+depends_on = [
+    "orchestration.domain"
+]
+
+[[modules]]
+path = "orchestration.application"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports"
+]
+
+[[modules]]
+path = "orchestration.adapters"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "database.models"
+]
+
+[[modules]]
+path = "orchestration.testing"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports"
 ]
 
 [[modules]]
 path = "ip.engine.domain"
-depends_on = []
+depends_on = [
+    "orchestration.domain"
+]
 
 [[modules]]
 path = "ip.engine.ports"
 depends_on = [
-    "ip.engine.domain"
+    "ip.engine.domain",
+    "orchestration.domain",
+    "orchestration.ports"
 ]
 
 [[modules]]
@@ -31,7 +69,10 @@ path = "ip.engine.application"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
-    "security"
+    "security",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application"
 ]
 
 [[modules]]
@@ -43,7 +84,11 @@ depends_on = [
     "security",
     "database.models",
     "shttp",
-    "sftp"
+    "sftp",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "orchestration.adapters"
 ]
 
 [[modules]]
@@ -96,8 +141,11 @@ depends_on = [
     "ip.engine.ports",
     "ip.engine.application",
     "ip.engine.adapters",
-    "ip.application.connectors",
-    "security"
+    "security",
+    "workflow.domain",
+    "workflow.ports",
+    "workflow.application",
+    "workflow.adapters"
 ]
 
 [[modules]]
