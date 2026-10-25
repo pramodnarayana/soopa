@@ -55,12 +55,16 @@ notification_jobs_queue_url = notification.require_output("notification_jobs_que
 ucp_jobs_queue_url = ucp.require_output("ucp_jobs_queue_url")
 
 _region = aws.get_region()
+_identity = aws.get_caller_identity()
 
 # ── IAM Execution Role (Platform Infrastructure Owned) ───────────────────────
 # The ECS Task Execution Role is an infrastructure concern owned and pre-provisioned
 # by the Platform stack (provision-infra.yml) to guarantee global IAM propagation
 # before application rollout commences.
-execution_role_arn = platform.require_output("ecs_execution_role_arn")
+# Uses get_output with safe fallback during speculative previews before platform is deployed.
+execution_role_arn = platform.get_output("ecs_execution_role_arn").apply(
+    lambda arn: arn or f"arn:aws:iam::{_identity.account_id}:role/{_prefix}ecs-execution-role"
+)
 
 # ── Task Definition ───────────────────────────────────────────────────────────
 migrator_task = aws.ecs.TaskDefinition(
