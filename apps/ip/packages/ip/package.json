@@ -1,0 +1,23 @@
+{
+  "name": "@soopa/ip",
+  "private": true,
+  "scripts": {
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
+    "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
+    "deadcode:deptry": "uv run deptry .",
+    "cov:business": "uv run pytest tests/unit/domain tests/unit/application --cov=ip.engine.domain --cov=ip.application.transformers --cov=ip.application.domains.energy.canonical --cov=ip.application.domains.tms.canonical --cov-report=term-missing --cov-fail-under=95",
+    "test:integration": "uv run pytest tests/integration --cov=src",
+    "test:e2e": "uv run pytest tests/e2e",
+    "cov": "uv run pytest -m \"not integration\" --cov=src --cov-report=term-missing --ignore=tests/integration --ignore=tests/e2e"
+  },
+  "devDependencies": {
+    "@soopa/database": "workspace:*",
+    "@soopa/observability": "workspace:*",
+    "@soopa/outbox": "workspace:*",
+    "@soopa/seedwork": "workspace:*",
+    "@soopa/security": "workspace:*",
+    "@soopa/pubsub": "workspace:*"
+  }
+}

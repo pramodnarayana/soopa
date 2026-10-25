@@ -1,6 +1,0 @@
-name: migrator
-runtime:
-  name: python
-  options:
-    virtualenv: ../../.venv
-description: Application Layer (Layer 3) - Database Migration Task Definition

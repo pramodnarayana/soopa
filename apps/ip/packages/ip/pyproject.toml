@@ -21,6 +21,14 @@ dependencies = [
     "security",
     "outbox",
     "pubsub",
+    "shttp",
+    "sftp",
+    "pyyaml>=6.0.2",
+    "aioboto3>=13.1.0",
+    "botocore",
+    "dependency-injector>=4.41.0",
+    "fastapi==0.136.0",
+    "alembic>=1.13.0",
 ]
 
 [tool.uv.sources]
@@ -30,6 +38,8 @@ observability = { workspace = true }
 security = { workspace = true }
 outbox = { workspace = true }
 pubsub = { workspace = true }
+shttp = { workspace = true }
+sftp = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -47,3 +57,19 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "-v --tb=short --import-mode=importlib"
+markers = [
+    "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",
+    "e2e: end-to-end multi-stage pipeline tests",
+]
+
+[tool.coverage.run]
+source = ["ip"]
+omit = [
+    "*/migrations/*",
+    "*/run_migrations.py",
+    "*/bootstrap/*",
+]
+
+[tool.coverage.report]
+show_missing = true

@@ -3,6 +3,7 @@ from .domain.types import UNSET, JsonDict, JsonPrimitive, JsonValue, UnsetType
 from .events import DomainEvent, EventEnvelope
 from .id_registry import DomainIdPrefix, SystemIdPrefix
 from .models import AggregateRoot, TracedAggregateRoot, TraceEvent
+from .uow import UnitOfWorkPort
 from .utils import generate_id, generate_random_hex
 
 __all__ = [
@@ -19,6 +20,7 @@ __all__ = [
     "SystemIdPrefix",
     "TraceEvent",
     "TracedAggregateRoot",
+    "UnitOfWorkPort",
     "UnsetType",
     "generate_id",
     "generate_random_hex",

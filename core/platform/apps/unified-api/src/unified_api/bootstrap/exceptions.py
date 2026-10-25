@@ -15,6 +15,8 @@ Architecture note:
     exceptions that propagate out of any mounted sub-app.
   - UCP exceptions (e.g. IdentityProviderPortError) are only registered here since
     UCP routers are inlined on the Shell, not a sub-app.
+  - IP follows strict First-Class Error Handling (`IpError` value objects and `Result[T, E]`),
+    handling all known domain and operational errors explicitly at the router boundary without raising exceptions.
 """
 
 import structlog
@@ -22,13 +24,6 @@ from edi.domain.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from ip.domain.exceptions import (
-    AuthenticationFailedException,
-    ConnectionNotFoundException,
-    ConnectorNotFoundException,
-    DuplicateConnectionFingerprintException,
-    InvalidConnectionStateException,
-)
 from ucp.domain.exceptions import (
     IdentityProviderPortError,
     ResourceNotFoundError,
@@ -131,51 +126,6 @@ def _register_edi_exception_handlers(app: FastAPI) -> None:
         )
 
 
-def _register_ip_exception_handlers(app: FastAPI) -> None:
-    @app.exception_handler(ConnectionNotFoundException)
-    async def connection_not_found_handler(
-        request: Request, exc: ConnectionNotFoundException
-    ) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.warning("connection_not_found", path=sanitized_path, error=str(exc))
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-    @app.exception_handler(DuplicateConnectionFingerprintException)
-    async def duplicate_connection_handler(
-        request: Request, exc: DuplicateConnectionFingerprintException
-    ) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.warning("duplicate_connection_fingerprint", path=sanitized_path, error=str(exc))
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-    @app.exception_handler(InvalidConnectionStateException)
-    async def invalid_connection_state_handler(
-        request: Request, exc: InvalidConnectionStateException
-    ) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.warning("invalid_connection_state", path=sanitized_path, error=str(exc))
-        return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-    @app.exception_handler(ConnectorNotFoundException)
-    async def connector_not_found_handler(
-        request: Request, exc: ConnectorNotFoundException
-    ) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.warning("connector_not_found", path=sanitized_path, error=str(exc))
-        return JSONResponse(status_code=404, content={"detail": str(exc)})
-
-    @app.exception_handler(AuthenticationFailedException)
-    async def auth_failed_handler(
-        request: Request, exc: AuthenticationFailedException
-    ) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.warning("authentication_failed", path=sanitized_path, error=str(exc))
-        return JSONResponse(
-            status_code=422,
-            content={"detail": str(exc), "code": "EXTERNAL_AUTHENTICATION_FAILED"},
-        )
-
-
 def setup_shell_exception_handlers(app: FastAPI) -> None:
     """
     Registers all exception handlers on the Shell (Host) application.
@@ -184,9 +134,7 @@ def setup_shell_exception_handlers(app: FastAPI) -> None:
       - Framework validation & unhandled exceptions
       - UCP domain exceptions
       - EDI domain exceptions (backstop only)
-      - IP domain exceptions
     """
     _register_framework_exception_handlers(app)
     _register_ucp_exception_handlers(app)
     _register_edi_exception_handlers(app)
-    _register_ip_exception_handlers(app)

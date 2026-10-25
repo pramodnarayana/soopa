@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from database.provider import get_async_engine
 
@@ -22,13 +23,38 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
     """
     engine = get_async_engine(global_url)
     shard_map: dict[str, str] = {}
+    edi_shard_ids: set[str] = set()
     try:
         async with engine.connect() as conn:
+            # First attempt to query ShardRegistry for all shards associated with the EDI app
+            try:
+                registry_res = await conn.execute(
+                    text("""
+                        SELECT DISTINCT sr.shard_id
+                        FROM ucp.shard_registry sr
+                        JOIN ucp.apps a ON sr.app_id = a.id
+                        WHERE a.slug = 'edi' OR a.id = 'app_edi_core'
+                    """)
+                )
+                edi_shard_ids = {str(row[0]).lower() for row in registry_res.fetchall()}
+            except SQLAlchemyError as reg_err:
+                await conn.rollback()
+                sqlstate = getattr(reg_err, "orig", reg_err)
+                pgcode = getattr(sqlstate, "pgcode", None)
+                if pgcode in ("42P01", "3F000"):
+                    logger.info(
+                        "ucp.shard_registry does not exist yet. Falling back to shard ID convention."
+                    )
+                else:
+                    logger.error("failed_to_query_edi_shard_registry", error=str(reg_err))
+
             # We don't use ORM here to keep migration runner simple and resilient
             result = await conn.execute(text("SELECT id, dsn FROM ucp.database_shards"))
             for row in result.fetchall():
                 shard_id, dsn = row
-                shard_map[shard_id] = dsn
+                shard_key = str(shard_id).lower()
+                if shard_key in edi_shard_ids or shard_key.startswith("edi_"):
+                    shard_map[shard_key] = dsn
     except Exception as e:
         # Check for SQLSTATE codes indicating missing database objects:
         # 42P01 = undefined_table, 3F000 = invalid_schema_name
@@ -45,7 +71,9 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
     # Merge overrides (they take precedence and add new ones like edi_shard_1)
     if overrides:
         for shard_id, dsn in overrides.items():
-            shard_map[shard_id] = dsn
+            shard_key = shard_id.lower()
+            if shard_key in edi_shard_ids or shard_key.startswith("edi_"):
+                shard_map[shard_key] = dsn
 
     if not shard_map:
         logger.info(

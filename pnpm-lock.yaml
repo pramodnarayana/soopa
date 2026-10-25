@@ -407,6 +407,27 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.13.3)(@vitest/coverage-v8@4.1.11)(vite@8.2.2(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.49.0)(tsx@4.23.12)(yaml@2.9.0))
 
+  apps/ip/packages/ip:
+    devDependencies:
+      '@soopa/database':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/database
+      '@soopa/observability':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/observability
+      '@soopa/outbox':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/outbox
+      '@soopa/pubsub':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/pubsub
+      '@soopa/security':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/security
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/seedwork
+
   core/packages/ui:
     dependencies:
       '@hookform/resolvers':
@@ -605,6 +626,9 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:../../../../apps/edi/packages/edi
+      '@soopa/ip':
+        specifier: workspace:*
+        version: link:../../../../apps/ip/packages/ip
       '@soopa/notification':
         specifier: workspace:*
         version: link:../../packages/notification
