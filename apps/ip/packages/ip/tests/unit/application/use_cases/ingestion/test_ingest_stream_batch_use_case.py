@@ -42,23 +42,32 @@ from seedwork.domain.types import JsonDict, JsonValue
 class FakeInboundRecordRepository(InboundRecordRepositoryPort):
     def __init__(self) -> None:
         self.records: dict[str, InboundRecord] = {}
+        self._uncommitted: dict[str, InboundRecord] = {}
 
     async def save(self, record: InboundRecord) -> None:
-        self.records[record.id] = record
+        self._uncommitted[record.id] = record
+
+    def commit(self) -> None:
+        self.records.update(self._uncommitted)
+        self._uncommitted.clear()
+
+    def rollback(self) -> None:
+        self._uncommitted.clear()
 
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
-        rec = self.records.get(record_id)
+        all_recs = {**self.records, **self._uncommitted}
+        rec = all_recs.get(record_id)
         return rec if rec and rec.tenant_id == tenant_id else None
 
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
-        return [
-            r for r in self.records.values() if r.trace_id == trace_id and r.tenant_id == tenant_id
-        ]
+        all_recs = {**self.records, **self._uncommitted}
+        return [r for r in all_recs.values() if r.trace_id == trace_id and r.tenant_id == tenant_id]
 
     async def get_by_external_event_id(
         self, tenant_id: str, connection_id: str, external_event_id: str
     ) -> InboundRecord | None:
-        for r in self.records.values():
+        all_recs = {**self.records, **self._uncommitted}
+        for r in all_recs.values():
             if (
                 r.tenant_id == tenant_id
                 and r.connection_id == connection_id
@@ -104,15 +113,18 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        pass
+        if exc_type is not None:
+            await self.rollback()
 
     async def commit(self) -> None:
         if self._should_fail_commit:
             raise RuntimeError("Database connection lost during commit")
         self.committed = True
+        self.inbound_records.commit()
 
     async def rollback(self) -> None:
         self.rolled_back = True
+        self.inbound_records.rollback()
 
 
 class FakeTieredStorageAdapter(TieredStoragePort):
@@ -219,6 +231,7 @@ async def test_ingest_stream_batch_deduplication_skips_existing() -> None:
         external_event_id="msg_001",
     )
     await uow.inbound_records.save(existing)
+    uow.inbound_records.commit()
 
     messages = [
         RawMessageDTO(
@@ -324,3 +337,73 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
             recovered_bytes = base64.b64decode(str(record.request_body["__raw_b64__"]))
             assert recovered_bytes in (b"INVALID_PAYLOAD_1", b"INVALID_PAYLOAD_2")
         assert record.external_event_id in ("msg_corrupt_1", "msg_corrupt_2")
+
+
+@pytest.mark.asyncio
+async def test_ingest_stream_batch_partial_failure_processes_valid_and_rejects_failing() -> None:
+    class ConditionalFailingDecoder(InboundPayloadDecoderPort):
+        def decode(self, *, content_type: str, raw_body: bytes) -> Result[JsonDict, Exception]:
+            if b"INVALID" in raw_body:
+                raise ValueError("Malformed payload structure")
+            parsed = json.loads(raw_body)
+            if isinstance(parsed, dict):
+                return Result.ok(parsed)
+            return Result.ok({"data": parsed})
+
+    uow = FakeDataPlaneUnitOfWork()
+    storage = FakeTieredStorageAdapter()
+    decoder = ConditionalFailingDecoder()
+    use_case = IngestStreamBatchUseCase(uow=uow, tiered_storage=storage, decoder=decoder)
+
+    messages = [
+        RawMessageDTO(
+            message_id="msg_valid",
+            raw_payload=b'{"device_id":"meter_1","kwh":10.5}',
+        ),
+        RawMessageDTO(
+            message_id="msg_valid",  # in-batch duplicate of msg_valid
+            raw_payload=b'{"device_id":"meter_1_duplicate","kwh":99.9}',
+        ),
+        RawMessageDTO(
+            message_id="msg_failing",  # triggers ValueError in decoder
+            raw_payload=b"INVALID_PAYLOAD",
+        ),
+    ]
+    batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
+    cmd = IngestStreamBatchCommand(
+        tenant_id="tenant_x",
+        connection_id="conn_kafka",
+        app_id="grid_streamer",
+        stream_name="readings",
+        batch=batch,
+    )
+
+    result = await use_case.execute(cmd)
+
+    # 1. Assert batch outcome: 1 ingested, 1 duplicate skipped, 1 failing rejected
+    assert result.verdict == AckVerdict.REJECT
+    assert result.records_ingested == 1
+    assert result.duplicates_skipped == 1
+    assert len(result.record_ids) == 1
+
+    # 2. Assert UoW persisted records: only valid message and failing message
+    assert len(uow.inbound_records.records) == 2
+
+    valid_record = next(
+        r for r in uow.inbound_records.records.values() if r.external_event_id == "msg_valid"
+    )
+    assert valid_record.response_status_code == 200
+    assert valid_record.id == result.record_ids[0]
+
+    failing_record = next(
+        r for r in uow.inbound_records.records.values() if r.external_event_id == "msg_failing"
+    )
+    assert failing_record.response_status_code == 422
+    assert failing_record.request_body is not None
+    assert failing_record.request_body.get("status") == "REJECTED"
+    assert failing_record.request_body.get("error") == "Malformed payload structure"
+
+    # 3. Assert duplicate message was skipped and NOT persisted
+    persisted_event_ids = [r.external_event_id for r in uow.inbound_records.records.values()]
+    assert persisted_event_ids.count("msg_valid") == 1
+    assert uow.committed is True

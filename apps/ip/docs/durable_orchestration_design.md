@@ -319,25 +319,29 @@ class ReconcilableStepHandlerPort[TInput, TOutput](StepHandlerPort[TInput, TOutp
 
 #### 7.5.2 Fair dequeue (illustrative)
 ```sql
-WITH candidates AS (
-    SELECT id, tenant_id, priority
+WITH active_tenants AS (
+    SELECT DISTINCT tenant_id
     FROM workflow_queue_items
     WHERE queue_name = :queue AND available_at <= now()
-    ORDER BY priority DESC, id
-    LIMIT :scan_window                 -- e.g. 500
-), ranked AS (
-    SELECT c.id, ROW_NUMBER() OVER (PARTITION BY c.tenant_id ORDER BY c.priority DESC, c.id) AS tenant_rank
-    FROM candidates c
-), selected AS (
-    SELECT r.id
-    FROM ranked r
-    ORDER BY r.tenant_rank, r.id
-    LIMIT :free_slots
+    LIMIT :max_active_tenants
+), tenant_candidates AS (
+    SELECT c.*
+    FROM active_tenants t
+    CROSS JOIN LATERAL (
+        SELECT q.id, q.tenant_id, q.priority
+        FROM workflow_queue_items q
+        WHERE q.queue_name = :queue
+          AND q.tenant_id = t.tenant_id
+          AND q.available_at <= now()
+        ORDER BY q.priority DESC, q.id
+        LIMIT :per_tenant_cap
+        FOR UPDATE SKIP LOCKED         -- lock candidates per tenant so concurrent workers skip locked rows and pick other ready rows
+    ) c
 )
-SELECT q.*
-FROM workflow_queue_items q
-JOIN selected s ON q.id = s.id
-FOR UPDATE SKIP LOCKED;               -- lock ONLY the free_slots rows selected, leaving unselected rows unlocked for concurrent workers
+SELECT *
+FROM tenant_candidates
+ORDER BY priority DESC, id
+LIMIT :free_slots;
 ```
 Concurrency capacity and rate-limit tokens are checked for the selected rows in the same transaction. Rows that cannot run yet stay queued. Starvation-triggered fast wakeup (Hatchet's `onCapacityRestored`) is implemented by `NOTIFY` on slot release.
 
@@ -859,7 +863,7 @@ Each action is a use case with RBAC. Runbooks cover: target outage, credential e
 |---|---|---|
 | **A. Engine core** | Domain model, DAG validation, state machines, policies, Result types, codecs | 95% pure coverage, property tests green, `mypy --strict`, `tach check` |
 | **B. Engine persistence and runtime** | Postgres adapters, claim/complete, leases, fencing, reaper, LISTEN/NOTIFY plus poll, worker runtime, graceful drain | All §7.4 crash points pass fault injection. **Gate: build-vs-DBOS checkpoint review.** |
-| **C. Scheduling policies** | Fair dequeue, concurrency strategies, rate limits, circuit breaker, priority lanes | §3.2 targets met in the load test, noisy-neighbor test passes, multi-worker concurrent round-robin fairness test verified |
+| **C. Scheduling policies** | Fair dequeue, concurrency strategies, rate limits, circuit breaker, priority lanes | §3.2 targets met in the load test, noisy-neighbor test passes, concurrent multi-worker fairness test with several workers running concurrently verified |
 | **D. IP Stitch foundation** | Step library, entity links (GEM v2), write intents, Trigger Router, bindings, static cycle and field-authority analysis. Retire L4/L5 workers. | E2E: CIS → HES (sync reply) → write-back, echo suppressed |
 | **E. Waits, timers, batching** | `WAIT_FOR_EVENT`, `SLEEP`, timeouts, late events, batch Stitches | E2E with an async HES confirmation and timeout branch. Batch interval-read Stitch at target volume. |
 | **F. Operations and production readiness** | Operator actions, timeline UI APIs, metrics, alerts, runbooks, retention jobs | First Energy Stitch live for a pilot tenant. SLO dashboards green for 2 weeks. |
