@@ -78,9 +78,9 @@ Now that the core infrastructure and identity configurations are deployed, we mu
 pulumi up -s <env> -C infra/cloud/aws/platform/migrator
 pulumi up -s <env> -C infra/cloud/aws/apps/edi/migrator
 
-# 2. Run Database Migrations safely via the Typed Migrator Task Runner
-uv run python -m infra_seedwork.tasks.run_ecs_migrator --env <env> --action migrate --domain platform
-uv run python -m infra_seedwork.tasks.run_ecs_migrator --env <env> --action migrate --domain edi
+# 2. Run Database Migrations safely via the Generic ECS Task Runner
+uv run python -m infra_seedwork.tasks.run_ecs_task --env <env> --stack-dir infra/cloud/aws/platform/migrator --command "python -m platform_migrator migrate --domain platform"
+uv run python -m infra_seedwork.tasks.run_ecs_task --env <env> --stack-dir infra/cloud/aws/apps/edi/migrator --command "python -m edi.adapters.outbound.database.run_migrations"
 ```
 
 ---
@@ -143,7 +143,7 @@ Deployments and infrastructure provisioning are orchestrated entirely via native
    - **App IaC Preview (`preview-app-iac.yml`)**: Event-driven speculative diff workflow triggered when app infrastructure (`infra/cloud/aws/apps/**`) is modified, generating real Pulumi diffs against the staging cluster.
    - **App Service Rollout (`deploy.yml`)**: Triggered post-CI via `cd-staging.yml` / `cd-prod.yml`.
    - Builds and tags the single modular monolith container image (`sha-*`).
-   - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_migrator`).
+   - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_task`).
    - Executes rolling updates for API, UCP workers, EDI workers, and AS2 servers.
    - Builds and deploys frontend dashboard assets to S3/CloudFront (`deploy-dashboard.sh`).
 

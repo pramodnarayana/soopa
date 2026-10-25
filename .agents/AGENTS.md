@@ -75,6 +75,11 @@ The following paradigms define the entire system structure. Any new design or mo
 - **Enterprise Naming**: Platform packages must be named by their capability (e.g., `database`, `pubsub`, `outbox`) and NEVER by technical implementation detail (like `orm` or `sqs`).
 - **Centralized Database Engine & Connection Pooling**: NEVER use `create_async_engine` or `async_sessionmaker` directly inside a bounded context or worker container. ALWAYS import and inject the centralized `DatabaseProvider` from `core/platform/packages/database`.
 
+# Pure & Independent Seedwork (Strictly Enforced)
+- **Zero Domain Leakage into Seedwork**: `seedwork` (e.g., `infra_seedwork`, platform seedwork) MUST be 100% pure, generic, and completely independent of any business domain or bounded context.
+- **Zero Bounded Domain References**: NEVER hardcode, list, or validate domain names (e.g., `platform`, `edi`, `ucp`, `identity`, `notification`, `ip`), domain paths, or domain-specific container commands inside `seedwork`.
+- **Inversion of Control (IoC)**: Seedwork components (such as ECS task runners, stack inspectors, or base adapters) MUST be driven purely by generic inputs passed by the caller (such as `--stack-dir` and `--command`), adhering strictly to the Open-Closed Principle (OCP). Adding or modifying bounded contexts must NEVER require altering seedwork packages.
+
 # Strict Boundary DTOs / Command Objects
 - **Co-located CQRS Standard**: Command and Query DTOs (as `@dataclass(frozen=True)`) MUST be co-located directly inside the Use Case file that handles them (e.g., `CreateUserCommand` at the top of `create_user_use_case.py`). Shared queries/responses can be placed in `queries.py` or `responses.py`. Do NOT use a single massive `dto.py` file or arbitrary entity-based folders like `dtos/users.py`.
 - **No Infrastructure Leaks**: NEVER pass web-specific framework models (e.g., FastAPI/Pydantic `BaseModel`) or ORM models directly into the Application Layer (Use Cases/Services).
