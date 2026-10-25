@@ -4,6 +4,7 @@ Command Line Interface for Platform Migrations and Domain Seeding
 
 import argparse
 import sys
+from collections.abc import Callable, Sequence
 
 import structlog
 from dotenv import load_dotenv
@@ -16,31 +17,8 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-def handle_migrate(domain: str = "platform") -> None:
-    """Handle database schema migrations for the platform Control Plane (global_db)."""
-    domain = domain.lower()
-    logger.info("migration_command_received", domain=domain)
-
-    if domain == "platform":
-        run_platform_domain_migrations()
-    else:
-        logger.error("invalid_migration_domain", domain=domain)
-        raise ValueError(
-            f"Unknown migration domain '{domain}'. Valid options for platform-migrator: platform."
-        )
-
-    logger.info("migration_command_completed", domain=domain)
-
-
-def handle_seed(domain: str) -> None:
-    """Handle data seeding for a target domain."""
-    domain = domain.lower()
-    logger.info("seed_command_received", domain=domain)
-    run_domain_seeds(domain)
-    logger.info("seed_command_completed", domain=domain)
-
-
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build and configure the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="platform-migrator",
         description="Enterprise Programmatic Database Migration & Seeding CLI",
@@ -66,25 +44,65 @@ def main() -> None:
     seed_parser.add_argument(
         "--domain",
         type=str,
-        default="all",
-        choices=["ucp", "identity", "notification", "edi", "all"],
+        default="platform",
+        choices=["platform", "ucp", "identity", "notification", "edi", "all"],
         help="Domain scope to seed",
     )
+    return parser
 
-    args = parser.parse_args()
+
+def handle_migrate(
+    domain: str = "platform",
+    migration_runner: Callable[[], None] = run_platform_domain_migrations,
+) -> None:
+    """Handle database schema migrations for the platform Control Plane (global_db)."""
+    domain = domain.lower()
+    logger.info("migration_command_received", domain=domain)
+
+    if domain == "platform":
+        migration_runner()
+    else:
+        logger.error("invalid_migration_domain", domain=domain)
+        raise ValueError(
+            f"Unknown migration domain '{domain}'. Valid options for platform-migrator: platform."
+        )
+
+    logger.info("migration_command_completed", domain=domain)
+
+
+def handle_seed(
+    domain: str,
+    seed_runner: Callable[[str], None] = run_domain_seeds,
+) -> None:
+    """Handle data seeding for a target domain."""
+    domain = domain.lower()
+    logger.info("seed_command_received", domain=domain)
+    seed_runner(domain)
+    logger.info("seed_command_completed", domain=domain)
+
+
+def main(
+    args: Sequence[str] | None = None,
+    migration_runner: Callable[[], None] = run_platform_domain_migrations,
+    seed_runner: Callable[[str], None] = run_domain_seeds,
+) -> int:
+    """CLI Entrypoint with full Inversion of Control."""
+    parser = build_parser()
+    parsed_args = parser.parse_args(args)
 
     try:
-        if args.action == "migrate":
-            handle_migrate(args.domain)
-        elif args.action == "seed":
-            handle_seed(args.domain)
+        if parsed_args.action == "migrate":
+            handle_migrate(parsed_args.domain, migration_runner=migration_runner)
+        elif parsed_args.action == "seed":
+            handle_seed(parsed_args.domain, seed_runner=seed_runner)
         else:
             parser.print_help()
-            sys.exit(1)
+            return 1
+        return 0
     except Exception as exc:
-        logger.exception("platform_migrator_failed", action=args.action, error=str(exc))
-        sys.exit(1)
+        logger.exception("platform_migrator_failed", action=parsed_args.action, error=str(exc))
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -22,8 +22,8 @@ pulumi up -s <env> -C infra/cloud/aws/foundation
 # 2. Data (Postgres RDS, Database Secrets)
 pulumi up -s <env> -C infra/cloud/aws/data
 
-# 3. Platform (ECS Cluster, ECR Repo, Application Load Balancers)
-# IMPORTANT: This provisions the ECR Repositories required for the next phase.
+# 3. Platform (ECS Cluster, ECR Repo, Application Load Balancers, ECS Task Execution Role)
+# IMPORTANT: This provisions the ECR Repositories and shared ECS Task Execution Role.
 pulumi up -s <env> -C infra/cloud/aws/platform
 ```
 

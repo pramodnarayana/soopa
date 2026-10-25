@@ -50,28 +50,18 @@ async def main() -> None:
     shard_db_url = os.environ.get("DATABASE__SHARD_OVERRIDES__EDI_SHARD_1") or os.environ.get(
         "SHARD_OVERRIDES__EDI_SHARD_1", ""
     )
-    if not shard_db_url:
-        logger.error(
-            "Neither DATABASE__SHARD_OVERRIDES__EDI_SHARD_1 nor SHARD_OVERRIDES__EDI_SHARD_1 environment variable is set."
-        )
-        sys.exit(1)
+    if shard_db_url:
+        shard_db_url = normalize_to_asyncpg(shard_db_url)
 
     ip_shard_db_url = (
         os.environ.get("DATABASE__SHARD_OVERRIDES__IP_SHARD_1")
         or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
         or os.environ.get("IP_DATABASE_URL", "")
     )
-    if not ip_shard_db_url:
-        logger.error(
-            "Neither DATABASE__SHARD_OVERRIDES__IP_SHARD_1 nor IP_DATABASE_URL environment variable is set."
-        )
-        sys.exit(1)
-    ip_shard_db_url = normalize_to_asyncpg(ip_shard_db_url)
+    if ip_shard_db_url:
+        ip_shard_db_url = normalize_to_asyncpg(ip_shard_db_url)
 
     edi_project_id = os.environ.get("IDENTITY_EDI_PROJECT_ID", "")
-    if not edi_project_id:
-        logger.error("IDENTITY_EDI_PROJECT_ID environment variable is not set.")
-        sys.exit(1)
 
     engine = create_async_engine(database_url)
 
@@ -171,57 +161,66 @@ async def main() -> None:
             await conn.execute(stmt_user_role)
             logger.info("Successfully seeded platform admin user and mapped to tenant roles.")
 
-            # Seed the EDI primary shard using the environment-provided DSN.
-            # This belongs here (not in the migration) because the DSN is
-            # environment-specific — it differs between local, CI, and production.
-            stmt_shard = (
-                pg_insert(DatabaseShard)
-                .values(
-                    id="edi_shard_1",
-                    name="EDI Primary Shard",
-                    dsn=shard_db_url,
-                    status="active",
+            # Seed the EDI primary shard if DSN is provided in the environment.
+            if shard_db_url:
+                stmt_shard = (
+                    pg_insert(DatabaseShard)
+                    .values(
+                        id="edi_shard_1",
+                        name="EDI Primary Shard",
+                        dsn=shard_db_url,
+                        status="active",
+                    )
+                    .on_conflict_do_update(
+                        index_elements=[DatabaseShard.id],
+                        set_={
+                            "name": "EDI Primary Shard",
+                            "dsn": shard_db_url,
+                            "status": "active",
+                        },
+                    )
                 )
-                .on_conflict_do_update(
-                    index_elements=[DatabaseShard.id],
-                    set_={
-                        "name": "EDI Primary Shard",
-                        "dsn": shard_db_url,
-                        "status": "active",
-                    },
-                )
-            )
-            await conn.execute(stmt_shard)
-            logger.info("Successfully seeded EDI primary shard.", shard_id="edi_shard_1")
+                await conn.execute(stmt_shard)
+                logger.info("Successfully seeded EDI primary shard.", shard_id="edi_shard_1")
+            else:
+                logger.info("Skipping EDI primary shard seeding (no shard DSN provided).")
 
-            stmt_ip_shard = (
-                pg_insert(DatabaseShard)
-                .values(
-                    id="ip_shard_1",
-                    name="IP Primary Shard",
-                    dsn=ip_shard_db_url,
-                    status="active",
+            if ip_shard_db_url:
+                stmt_ip_shard = (
+                    pg_insert(DatabaseShard)
+                    .values(
+                        id="ip_shard_1",
+                        name="IP Primary Shard",
+                        dsn=ip_shard_db_url,
+                        status="active",
+                    )
+                    .on_conflict_do_update(
+                        index_elements=[DatabaseShard.id],
+                        set_={
+                            "name": "IP Primary Shard",
+                            "dsn": ip_shard_db_url,
+                            "status": "active",
+                        },
+                    )
                 )
-                .on_conflict_do_update(
-                    index_elements=[DatabaseShard.id],
-                    set_={
-                        "name": "IP Primary Shard",
-                        "dsn": ip_shard_db_url,
-                        "status": "active",
-                    },
-                )
-            )
-            await conn.execute(stmt_ip_shard)
-            logger.info("Successfully seeded IP primary shard.", shard_id="ip_shard_1")
+                await conn.execute(stmt_ip_shard)
+                logger.info("Successfully seeded IP primary shard.", shard_id="ip_shard_1")
+            else:
+                logger.info("Skipping IP primary shard seeding (no shard DSN provided).")
 
-            # Update the EDI app with the Zitadel Project ID from the environment
-            stmt_app = (
-                update(App).where(App.id == "app_edi_core").values(idp_project_id=edi_project_id)
-            )
-            await conn.execute(stmt_app)
-            logger.info(
-                "Successfully seeded EDI app IDP project ID.", idp_project_id=edi_project_id
-            )
+            # Update the EDI app with the Zitadel Project ID if provided
+            if edi_project_id:
+                stmt_app = (
+                    update(App)
+                    .where(App.id == "app_edi_core")
+                    .values(idp_project_id=edi_project_id)
+                )
+                await conn.execute(stmt_app)
+                logger.info(
+                    "Successfully seeded EDI app IDP project ID.", idp_project_id=edi_project_id
+                )
+            else:
+                logger.info("Skipping EDI app project ID seeding (no project ID provided).")
 
     except Exception:
         logger.exception("Failed to seed platform tenant.")
