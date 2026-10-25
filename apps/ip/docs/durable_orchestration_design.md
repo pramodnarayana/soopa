@@ -314,16 +314,27 @@ class ReconcilableStepHandlerPort[TInput, TOutput](StepHandlerPort[TInput, TOutp
 
 #### 7.5.1 Queue and wakeups
 - `workflow_queue_items` is a **small, hot table** (rows exist only while ready or delayed). It uses aggressive autovacuum and `fillfactor` tuning.
+- Indexed for efficient dequeue: `idx_queue_ready` on `(queue_name, available_at, priority DESC, id)` scans ready candidate tenants, while `idx_queue_tenant_priority` on `(queue_name, tenant_id, priority DESC, id)` supports the per-tenant lateral lookup's filtering and ordered `LIMIT`.
 - Each claim is one short transaction. Workers wake on `LISTEN workflow_ready_<queue>` (`NOTIFY` is issued in the enqueue transaction), with a **fallback poll** (default 1 s). This is the same relay-plus-sweeper dual mechanism mandated for the outbox.
 - Retry backoff, `SLEEP` and wait timeouts are all just queue items with a future `available_at`. **There is one timer mechanism, not three.**
 
 #### 7.5.2 Fair dequeue (illustrative)
 ```sql
+-- 1. Ensure the fairness cursor row exists and acquire an exclusive row lock BEFORE tenant selection
+INSERT INTO workflow_queue_fairness_state (queue_name, last_serviced_tenant_id, updated_at)
+VALUES (:queue, '', now())
+ON CONFLICT (queue_name) DO NOTHING;
+
+SELECT last_serviced_tenant_id
+FROM workflow_queue_fairness_state
+WHERE queue_name = :queue
+FOR UPDATE;
+
+-- 2. Select and interleave candidates fairly
 WITH current_cursor AS (
-    SELECT COALESCE(
-        (SELECT last_serviced_tenant_id FROM workflow_queue_fairness_state WHERE queue_name = :queue),
-        ''
-    ) AS last_tenant_id
+    SELECT last_serviced_tenant_id AS last_tenant_id
+    FROM workflow_queue_fairness_state
+    WHERE queue_name = :queue
 ), active_tenants AS (
     SELECT tenant_id
     FROM (
@@ -360,7 +371,14 @@ FROM tenant_candidates
 ORDER BY tenant_rank ASC, priority DESC, id ASC
 LIMIT :free_slots;
 ```
-Following the dequeue claim, the transaction advances the cursor state in `workflow_queue_fairness_state` to the highest `tenant_id` serviced in the selected batch (`INSERT INTO workflow_queue_fairness_state (queue_name, last_serviced_tenant_id, updated_at) VALUES (:queue, :highest_serviced_tenant_id, now()) ON CONFLICT (queue_name) DO UPDATE SET last_serviced_tenant_id = EXCLUDED.last_serviced_tenant_id, updated_at = EXCLUDED.updated_at`), guaranteeing that subsequent dequeue batches rotate fairly across all active tenants.
+Following the dequeue claim, the transaction advances the cursor state in `workflow_queue_fairness_state` to the tenant at the **end of the selected rotation order** (the last tenant yielded by the rotated `active_tenants` order in the selected batch, rather than lexicographically highest `MAX(tenant_id)`), ensuring wraparound cursor integrity:
+```sql
+UPDATE workflow_queue_fairness_state
+SET last_serviced_tenant_id = :last_rotated_tenant_id,
+    updated_at = now()
+WHERE queue_name = :queue;
+```
+Because the fairness row is locked `FOR UPDATE` prior to tenant selection, concurrent dequeue transactions are serialized around cursor advancement, preventing concurrent claims from moving the rotation cursor backward.
 
 Concurrency capacity and rate-limit tokens are checked for the selected rows in the same transaction. Rows that cannot run yet stay queued. Starvation-triggered fast wakeup (Hatchet's `onCapacityRestored`) is implemented by `NOTIFY` on slot release.
 
@@ -717,6 +735,7 @@ CREATE TABLE workflow_queue_items (
     enqueued_at TIMESTAMPTZ NOT NULL
 ) WITH (fillfactor = 70);
 CREATE INDEX idx_queue_ready ON workflow_queue_items (queue_name, available_at, priority DESC, id);
+CREATE INDEX idx_queue_tenant_priority ON workflow_queue_items (queue_name, tenant_id, priority DESC, id);
 
 CREATE TABLE workflow_queue_fairness_state (
     queue_name VARCHAR(128) PRIMARY KEY,
