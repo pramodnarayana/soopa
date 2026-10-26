@@ -68,7 +68,7 @@ class FakeEdiMessageRepository:
     def __init__(self) -> None:
         self._messages: list[EdiMessageDTO] = []
         self._message_dtos: dict[str, EdiMessageDTO] = {}
-        self._json_dtos: dict[str, list[EdiJsonDTO]] = [] if False else {}
+        self._json_dtos: dict[str, list[EdiJsonDTO]] = {}
         self._api_gateway_dtos: dict[str, list[ApiGatewayDTO]] = {}
         self._models: dict[str, EdiMessageDomainModel] = {}
         self._json_models: dict[str, EdiJsonDomainModel] = {}

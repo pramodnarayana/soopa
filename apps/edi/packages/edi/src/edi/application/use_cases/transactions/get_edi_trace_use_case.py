@@ -1,6 +1,7 @@
 import structlog
 
 from edi.application.dtos.trace import EdiTraceDTO
+from edi.application.dtos.transactions import EdiJsonDTO, EdiMessageDTO
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -10,6 +11,62 @@ logger = structlog.get_logger(__name__)
 class GetEdiTraceUseCase:
     def __init__(self, uow: DataPlaneUnitOfWorkPort) -> None:
         self.uow = uow
+
+    async def _hydrate_edi_message(
+        self, tenant_id: str, edi_jsons: list[EdiJsonDTO]
+    ) -> EdiMessageDTO | None:
+        if not edi_jsons:
+            return None
+        curr_parent_id = edi_jsons[0].parent_trace_id
+        visited: set[str] = set()
+        for _ in range(10):
+            if not curr_parent_id or curr_parent_id in visited:
+                break
+            visited.add(curr_parent_id)
+            parent_msg = await self.uow.transactions.get_edi_message_dto(tenant_id, curr_parent_id)
+            if parent_msg is not None:
+                return parent_msg
+            parent_jsons = await self.uow.transactions.get_edi_json_dtos_by_trace_id(
+                tenant_id, curr_parent_id
+            )
+            curr_parent_id = (
+                parent_jsons[0].parent_trace_id
+                if (parent_jsons and parent_jsons[0].parent_trace_id)
+                else None
+            )
+
+        if edi_jsons[0].original_trace_id and edi_jsons[0].original_trace_id not in visited:
+            return await self.uow.transactions.get_edi_message_dto(
+                tenant_id, edi_jsons[0].original_trace_id
+            )
+        return None
+
+    async def _hydrate_edi_jsons(
+        self, tenant_id: str, edi_message: EdiMessageDTO | None
+    ) -> list[EdiJsonDTO]:
+        if edi_message is None:
+            return []
+        curr_parent_id = edi_message.parent_trace_id
+        visited: set[str] = set()
+        for _ in range(10):
+            if not curr_parent_id or curr_parent_id in visited:
+                break
+            visited.add(curr_parent_id)
+            parent_jsons = await self.uow.transactions.get_edi_json_dtos_by_trace_id(
+                tenant_id, curr_parent_id
+            )
+            if parent_jsons:
+                return parent_jsons
+            parent_msg = await self.uow.transactions.get_edi_message_dto(tenant_id, curr_parent_id)
+            curr_parent_id = (
+                parent_msg.parent_trace_id if (parent_msg and parent_msg.parent_trace_id) else None
+            )
+
+        if edi_message.original_trace_id and edi_message.original_trace_id not in visited:
+            return await self.uow.transactions.get_edi_json_dtos_by_trace_id(
+                tenant_id, edi_message.original_trace_id
+            )
+        return []
 
     async def get_edi_trace(
         self, tenant_id: str, trace_id: str, _routing_resolver: object | None = None
@@ -24,19 +81,11 @@ class GetEdiTraceUseCase:
             tenant_id, trace_id
         )
 
-        # Enterprise Hydration: If an upstream stage is missing on this trace attempt
-        # (e.g. Delivery retry where Stage 1 was not duplicated), hydrate it from parent_trace_id.
-        if edi_message is None and edi_jsons and edi_jsons[0].parent_trace_id:
-            edi_message = await self.uow.transactions.get_edi_message_dto(
-                tenant_id,
-                edi_jsons[0].parent_trace_id,
-            )
+        if edi_message is None and edi_jsons:
+            edi_message = await self._hydrate_edi_message(tenant_id, edi_jsons)
 
-        if not edi_jsons and edi_message is not None and edi_message.parent_trace_id:
-            edi_jsons = await self.uow.transactions.get_edi_json_dtos_by_trace_id(
-                tenant_id,
-                edi_message.parent_trace_id,
-            )
+        if not edi_jsons and edi_message is not None:
+            edi_jsons = await self._hydrate_edi_jsons(tenant_id, edi_message)
 
         logger.info(
             "get_edi_trace.assembled",

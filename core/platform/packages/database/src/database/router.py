@@ -198,6 +198,9 @@ class DatabaseRouter(DatabaseRouterPort):
         # Dynamically query the active database shards registered in the control plane
         async for session in self.get_global_session():
             if app_slug:
+                escaped_slug = (
+                    app_slug.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                )
                 stmt = (
                     select(DatabaseShard.id, DatabaseShard.name, DatabaseShard.dsn)
                     .outerjoin(ShardRegistry, DatabaseShard.id == ShardRegistry.shard_id)
@@ -206,7 +209,7 @@ class DatabaseRouter(DatabaseRouterPort):
                         DatabaseShard.status == DatabaseShardStatus.ACTIVE,
                         or_(
                             App.slug == app_slug,
-                            DatabaseShard.id.ilike(f"{app_slug}_%"),
+                            DatabaseShard.id.ilike(f"{escaped_slug}\\_%", escape="\\"),
                         ),
                     )
                     .distinct()

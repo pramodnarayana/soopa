@@ -2,7 +2,7 @@
 name = "strace"
 version = "0.1.0"
 description = "Enterprise-grade cross-stage distributed business trace, lineage, and replay capability package for Soopa platform"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "seedwork",
     "database",
