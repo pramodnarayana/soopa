@@ -1,10 +1,7 @@
-"""Layer-5 Outbound Delivery Use Case with 2-phase idempotency ledger, S3 tiered offloading, and reactive 401 replay."""
-
-from __future__ import annotations
-
+import contextlib
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, field
 
 import structlog
@@ -38,7 +35,10 @@ from ip.engine.domain.models.outbound_record import OutboundRecord
 from ip.engine.domain.services.outbound_error_classifier import classify_outbound_http_outcome
 from ip.engine.ports.outbound.connector_port import DestinationConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
-from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
+from ip.engine.ports.outbound.uow import (
+    IpDataPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkProviderPort,
+)
 from ip.engine.ports.types import WriteRecordCommand, WriteResultDTO
 
 logger = structlog.get_logger(__name__)
@@ -140,15 +140,34 @@ class DeliverOutboundRecordUseCase:
     def __init__(
         self,
         *,
-        data_plane_uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         token_manager: TokenManagerService,
         connectors: Mapping[str, DestinationConnectorPort],
+        data_plane_uow: IpDataPlaneUnitOfWorkPort | None = None,
+        data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
     ) -> None:
-        self._data_plane_uow = data_plane_uow
         self._tiered_storage = tiered_storage
         self._token_manager = token_manager
         self._connectors = connectors
+        self._data_plane_uow = data_plane_uow
+        self._data_plane_uow_provider = data_plane_uow_provider
+
+    @contextlib.asynccontextmanager
+    async def _open_uow(self, tenant_id: str) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+        if self._data_plane_uow is not None:
+            async with self._data_plane_uow as uow:
+                yield uow
+        elif self._data_plane_uow_provider is not None:
+            shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+            if shard_info_res.is_err:
+                raise RuntimeError(shard_info_res.unwrap_err().message)
+            shard_id, shard_dsn = shard_info_res.unwrap()
+            async with self._data_plane_uow_provider.get_data_plane_uow(
+                tenant_id, shard_id, shard_dsn
+            ) as uow:
+                yield uow
+        else:
+            raise RuntimeError("Neither data_plane_uow nor data_plane_uow_provider was configured.")
 
     async def _store_response_tier(
         self,
@@ -185,8 +204,8 @@ class DeliverOutboundRecordUseCase:
         idempotency_key = compute_deterministic_idempotency_key(command)
 
         # ── Phase 1A: Idempotency Short-Circuit Check ────────────────────────
-        async with self._data_plane_uow:
-            existing = await self._data_plane_uow.outbound_records.get_by_idempotency_key(
+        async with self._open_uow(command.tenant_id) as uow:
+            existing = await uow.outbound_records.get_by_idempotency_key(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 idempotency_key=idempotency_key,
@@ -265,7 +284,7 @@ class DeliverOutboundRecordUseCase:
             command.idempotency_header_name: idempotency_key,
         }
 
-        async with self._data_plane_uow:
+        async with self._open_uow(command.tenant_id) as uow:
             if existing is not None:
                 outbound_record = existing
                 outbound_record.mark_in_flight_attempt(attempt_number=command.attempt_number)
@@ -292,8 +311,8 @@ class DeliverOutboundRecordUseCase:
                     request_s3_key=req_storage.s3_key,
                     attempt_number=command.attempt_number,
                 )
-            await self._data_plane_uow.outbound_records.save(outbound_record)
-            await self._data_plane_uow.commit()
+            await uow.outbound_records.save(outbound_record)
+            await uow.commit()
 
         # ── Phase 2A: Execute Outbound Write & Reactive 401 Single-Replay ────
         write_cmd = WriteRecordCommand(
@@ -366,9 +385,9 @@ class DeliverOutboundRecordUseCase:
                 duration_ms=write_result.duration_ms,
                 external_record_id=external_id,
             )
-            async with self._data_plane_uow:
-                await self._data_plane_uow.outbound_records.save(outbound_record)
-                await self._data_plane_uow.commit()
+            async with self._open_uow(command.tenant_id) as uow:
+                await uow.outbound_records.save(outbound_record)
+                await uow.commit()
 
             logger.info(
                 "outbound_delivery_succeeded",
@@ -415,9 +434,9 @@ class DeliverOutboundRecordUseCase:
                 failure_category=failure_cat.value,
                 retry_after_seconds=retry_after,
             )
-            async with self._data_plane_uow:
-                await self._data_plane_uow.outbound_records.save(outbound_record)
-                await self._data_plane_uow.commit()
+            async with self._open_uow(command.tenant_id) as uow:
+                await uow.outbound_records.save(outbound_record)
+                await uow.commit()
 
             logger.warning(
                 "outbound_delivery_retry_scheduled",
@@ -460,9 +479,9 @@ class DeliverOutboundRecordUseCase:
             duration_ms=write_result.duration_ms,
             failure_category=failure_cat.value,
         )
-        async with self._data_plane_uow:
-            await self._data_plane_uow.outbound_records.save(outbound_record)
-            await self._data_plane_uow.commit()
+        async with self._open_uow(command.tenant_id) as uow:
+            await uow.outbound_records.save(outbound_record)
+            await uow.commit()
 
         logger.error(
             "outbound_delivery_terminal_failure",

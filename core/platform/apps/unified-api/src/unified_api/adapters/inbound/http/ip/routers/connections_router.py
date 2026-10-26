@@ -34,6 +34,9 @@ from ip.engine.application.use_cases.connections.relink_connection_use_case impo
     RelinkConnectionCommand,
     RelinkConnectionUseCase,
 )
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    TokenManagerService,
+)
 from ip.engine.domain.enums import ConnectionStatus
 from ip.engine.domain.exceptions import ConnectionNotFoundError, IpErrorCode
 from ip.engine.ports.outbound.connector_port import ConnectorPort
@@ -46,6 +49,7 @@ from unified_api.adapters.inbound.http.dependencies.ip.database import (
 from unified_api.adapters.inbound.http.dependencies.ip.services import (
     get_cipher,
     get_connectors,
+    get_token_manager,
 )
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 from unified_api.adapters.inbound.http.ip.dtos.connection_dtos import (
@@ -251,12 +255,14 @@ async def discover_connection_catalog(
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     cipher: Annotated[CipherPort, Depends(get_cipher)],
     connectors: Annotated[Mapping[str, ConnectorPort], Depends(get_connectors)],
+    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
 ) -> DiscoveredCatalogHttpResponse | Response:
     """Introspects the external system and stores a new schema catalog version."""
     use_case = DiscoverCatalogUseCase(
         uow=ip_cp_uow,
         cipher=cipher,
         connectors=connectors,
+        token_manager=token_manager,
     )
 
     dto = await use_case.execute(connection_id=connection_id, tenant_id=tenant_id)

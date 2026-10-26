@@ -1,4 +1,4 @@
-"""API Key authentication strategy (header or query parameter)."""
+from collections.abc import Sequence
 
 import httpx
 from ip.engine.domain.enums import ApiKeyPlacement
@@ -18,6 +18,18 @@ class ApiKeyAuthStrategy(AuthenticatorPort):
         self._api_key = api_key.strip()
         self._param_name = param_name.strip()
         self._placement = placement
+
+    @property
+    def param_name(self) -> str:
+        return self._param_name
+
+    @property
+    def placement(self) -> ApiKeyPlacement:
+        return self._placement
+
+    @property
+    def sensitive_header_names(self) -> Sequence[str]:
+        return (self._param_name,) if self._placement == ApiKeyPlacement.HEADER else ()
 
     def validate(self) -> InvalidCredentialsError | None:
         if not self._api_key:

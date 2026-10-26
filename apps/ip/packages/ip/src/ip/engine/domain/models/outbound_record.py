@@ -174,7 +174,6 @@ class OutboundRecord(TracedAggregateRoot):
         """Marks an existing retryable OutboundRecord as PENDING in-flight prior to wire dispatch."""
         self.status = OutboundDispatchStatus.PENDING
         self.attempt_number = max(attempt_number, self.attempt_number)
-        self.sent_at = datetime.now(UTC)
 
     def mark_delivered(
         self,

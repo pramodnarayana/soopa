@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 import structlog
@@ -652,7 +652,8 @@ class DeclarativeHttpConnector(BaseConnector):
             )
 
         base_url = interp_res.value
-        action_path = action.path.replace("{record_id}", str(command.record_id or ""))
+        encoded_record_id = quote(str(command.record_id or ""), safe="")
+        action_path = action.path.replace("{record_id}", encoded_record_id)
         url = f"{base_url.rstrip('/')}/{action_path.lstrip('/')}"
         headers: dict[str, str] = {
             **self._build_auth_headers(credentials),

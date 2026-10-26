@@ -281,7 +281,7 @@ async def test_429_rate_limit_parking_releases_concurrency_slot_and_preserves_ap
         workflow_id="energy.itron_sync",
         version=1,
         workflow_concurrency=ConcurrencyPolicy(
-            strategy_id="strat.serial_tenant",
+            strategy_id="strategy.serial_tenant",
             strategy=ConcurrencyStrategy.SERIAL,
             max_runs=1,
             key_template="itron_conn_1",

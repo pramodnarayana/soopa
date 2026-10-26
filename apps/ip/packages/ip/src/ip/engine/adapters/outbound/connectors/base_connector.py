@@ -262,15 +262,20 @@ class BaseConnector(ConnectorPort, ABC):
         request_headers: dict[str, str],
         default_record_id: str,
         error_record_id: str,
+        extra_sensitive_headers: Sequence[str] | None = None,
     ) -> WriteResultDTO:
         """Shared Layer-5 outbound HTTP execution with timing, header redaction, and error classification."""
-        redacted_req_headers = redact_sensitive_headers(request_headers)
+        redacted_req_headers = redact_sensitive_headers(
+            request_headers, extra_sensitive_names=extra_sensitive_headers
+        )
         started_at = time.perf_counter()
         try:
             resp = await send_fn()
             duration_ms = max(1, int((time.perf_counter() - started_at) * 1000))
             resp_headers_raw = dict(resp.headers)
-            redacted_resp_headers = redact_sensitive_headers(resp_headers_raw)
+            redacted_resp_headers = redact_sensitive_headers(
+                resp_headers_raw, extra_sensitive_names=extra_sensitive_headers
+            )
             result_record_id, destination_id, parsed_body = self._parse_json_write_response(
                 resp, default_record_id
             )

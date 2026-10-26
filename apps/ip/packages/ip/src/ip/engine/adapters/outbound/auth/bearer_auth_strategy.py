@@ -1,4 +1,4 @@
-"""Bearer token authentication strategy."""
+from collections.abc import Sequence
 
 import httpx
 from ip.engine.domain.exceptions import InvalidCredentialsError
@@ -10,6 +10,10 @@ class BearerAuthStrategy(AuthenticatorPort):
 
     def __init__(self, token: str) -> None:
         self._token = token.strip()
+
+    @property
+    def sensitive_header_names(self) -> Sequence[str]:
+        return ("Authorization",)
 
     def validate(self) -> InvalidCredentialsError | None:
         if not self._token:

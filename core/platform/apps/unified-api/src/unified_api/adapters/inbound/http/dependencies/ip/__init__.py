@@ -10,6 +10,7 @@ from unified_api.adapters.inbound.http.dependencies.ip.services import (
     get_cipher,
     get_connectors,
     get_tiered_storage,
+    get_token_manager,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "get_ip_data_plane_uow_provider",
     "get_ip_global_session",
     "get_tiered_storage",
+    "get_token_manager",
 ]

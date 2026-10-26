@@ -134,6 +134,9 @@ class SqlAlchemyNormalizationLedgerRepository(
                 NormalizationLedgerModel.tenant_id == tenant_id,
                 NormalizationLedgerModel.replica_record_id == replica_record_id,
                 NormalizationLedgerModel.mapping_id == mapping_id,
+                NormalizationLedgerModel.outcome.in_(
+                    [NormalizationOutcome.NORMALIZED.value, NormalizationOutcome.TOMBSTONED.value]
+                ),
             )
             .order_by(
                 NormalizationLedgerModel.created_at.desc(),

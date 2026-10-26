@@ -25,16 +25,26 @@ from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolve
 from ip.engine.adapters.outbound.database.tenant_uow_provider import IpTenantUoWProvider
 from ip.engine.adapters.outbound.stitches.step_handlers import (
     ExecuteHttpActionStepHandler,
+    TenantAwareOutboundRecordLookupAdapter,
 )
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     DEFAULT_IP_PAYLOAD_BUCKET,
     TieredStorageAdapter,
+)
+from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
+    DiscoverCatalogUseCase,
 )
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
 from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case import (
     DeliverOutboundRecordUseCase,
+)
+from ip.engine.application.use_cases.ingestion.fetch_record_use_case import (
+    FetchRecordUseCase,
+)
+from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
+    RunSyncUseCase,
 )
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationUseCase,
@@ -167,7 +177,7 @@ class Container(containers.DeclarativeContainer):
     )
 
     # -----------------------------------------------------------------------
-    # OAuth2 Token Refresh Manager & Outbound Delivery (Layer 0 / Layer 5)
+    # OAuth2 Token Refresh Manager & Ingestion/Delivery (Layer 0, Layer 1, Layer 5)
     # -----------------------------------------------------------------------
     token_refresh_lock = providers.Singleton(InMemoryTokenRefreshLockAdapter)
     oauth2_token_refresher = providers.Factory(
@@ -179,20 +189,48 @@ class Container(containers.DeclarativeContainer):
         control_plane_uow=cp_uow,
         cipher=cipher,
         token_refresher=oauth2_token_refresher,
-        refresh_lock=token_refresh_lock,
+        lock_port=token_refresh_lock,
+    )
+    discover_catalog_use_case = providers.Factory(
+        DiscoverCatalogUseCase,
+        uow=cp_uow,
+        cipher=cipher,
+        connectors=catalog_registry,
+        token_manager=token_manager,
+    )
+    fetch_record_use_case = providers.Factory(
+        FetchRecordUseCase,
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=tiered_storage,
+        cipher=cipher,
+        connectors=catalog_registry,
+        token_manager=token_manager,
+    )
+    run_sync_use_case = providers.Factory(
+        RunSyncUseCase,
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=tiered_storage,
+        cipher=cipher,
+        connectors=catalog_registry,
+        token_manager=token_manager,
     )
     deliver_outbound_record_use_case = providers.Factory(
         DeliverOutboundRecordUseCase,
-        control_plane_uow=cp_uow,
         data_plane_uow_provider=dp_uow_provider,
-        cipher=cipher,
         connectors=catalog_registry,
         tiered_storage=tiered_storage,
         token_manager=token_manager,
     )
+    outbound_record_lookup = providers.Factory(
+        TenantAwareOutboundRecordLookupAdapter,
+        uow_provider=dp_uow_provider,
+    )
     execute_http_action_step_handler = providers.Factory(
         ExecuteHttpActionStepHandler,
-        deliver_use_case=deliver_outbound_record_use_case,
+        delivery_executor=deliver_outbound_record_use_case,
+        outbound_lookup=outbound_record_lookup,
     )
 
     # -----------------------------------------------------------------------

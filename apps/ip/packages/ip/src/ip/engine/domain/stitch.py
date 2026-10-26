@@ -209,6 +209,17 @@ class ExecuteHttpActionStepInput:
                 )
             )
 
+        op_str = raw_op.strip().upper()
+        try:
+            validated_op = HttpWriteOperation(op_str)
+        except ValueError:
+            return Result.err(
+                WorkflowError(
+                    code=WorkflowErrorCode.CODEC_ERROR,
+                    message=f"Unsupported HTTP write operation '{raw_op}' for ExecuteHttpActionStepInput",
+                )
+            )
+
         payload_dict: JsonDict = dict(raw_payload) if isinstance(raw_payload, dict) else {}
         headers_dict: dict[str, str] = (
             {str(k): str(v) for k, v in raw_headers.items()}
@@ -224,7 +235,7 @@ class ExecuteHttpActionStepInput:
             cls(
                 connection_id=conn_id.strip(),
                 stream_name=stream_name.strip(),
-                operation=raw_op.strip().upper(),
+                operation=validated_op.value,
                 payload=payload_dict,
                 record_id=str(raw_record_id).strip()
                 if isinstance(raw_record_id, (str, int)) and str(raw_record_id).strip()

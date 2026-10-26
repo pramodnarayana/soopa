@@ -297,15 +297,19 @@ class RateLimitBucket:
 
     def apply_upstream_pause(self, retry_after: timedelta, now: datetime) -> RateLimitBucket:
         """Apply an upstream 429 Retry-After pause monotonically (`GREATEST(paused_until, now + retry_after)`)."""
+        settled = self.settle_and_refill(now)
         candidate_until = now + retry_after
+        is_currently_paused = settled.paused_until is not None and settled.paused_until > now
         new_paused_until = (
-            max(self.paused_until, candidate_until)
-            if self.paused_until is not None
+            max(settled.paused_until, candidate_until)
+            if is_currently_paused and settled.paused_until is not None
             else candidate_until
         )
-        new_paused_at = self.paused_at if self.paused_at is not None else now
+        new_paused_at = (
+            settled.paused_at if is_currently_paused and settled.paused_at is not None else now
+        )
         return replace(
-            self,
+            settled,
             paused_at=new_paused_at,
             paused_until=new_paused_until,
         )

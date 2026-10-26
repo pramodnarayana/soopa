@@ -967,6 +967,10 @@ class GenericHttpConnector(BaseConnector):
             json=command.payload if method != "DELETE" else None,
         )
         req = authenticator.authenticate_request(req)
+        custom_sensitive: list[str] = []
+        param_name = getattr(authenticator, "param_name", None)
+        if isinstance(param_name, str) and param_name:
+            custom_sensitive.append(param_name)
 
         return await self._execute_tracked_write_request(
             send_fn=lambda: self._send_request(req),
@@ -975,4 +979,5 @@ class GenericHttpConnector(BaseConnector):
             request_headers=dict(req.headers),
             default_record_id=target_record_id,
             error_record_id=target_record_id,
+            extra_sensitive_headers=custom_sensitive,
         )

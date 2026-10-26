@@ -1,7 +1,8 @@
 import asyncio
 import inspect
+import json
 import math
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -42,6 +43,10 @@ class OAuth2TokenResponseDTO:
 
 class OAuth2Strategy(AuthenticatorPort):
     """Handles OAuth 2.0 bearer authorization and token renewal via centralized shttp.HttpClient."""
+
+    @property
+    def sensitive_header_names(self) -> Sequence[str]:
+        return ("Authorization",)
 
     def __init__(
         self,
@@ -116,40 +121,120 @@ class OAuth2Strategy(AuthenticatorPort):
         now = datetime.now(UTC).timestamp()
         return now < (self._expires_at_epoch - self._refresh_buffer_seconds)
 
+    def _build_token_request_payload(self) -> dict[str, str]:
+        form_payload: dict[str, str] = {
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+        }
+        if self._grant_mode == "client_credentials" or (
+            not self._refresh_token and self._client_id
+        ):
+            form_payload["grant_type"] = "client_credentials"
+        else:
+            form_payload["grant_type"] = "refresh_token"
+            form_payload["refresh_token"] = self._refresh_token or ""
+        return form_payload
+
+    def _classify_token_error_response(self, resp: httpx.Response) -> IpError:
+        if resp.status_code == 429 or resp.status_code >= 500:
+            return UpstreamHttpError(
+                status_code=resp.status_code,
+                message=f"OAuth2 token endpoint transient HTTP {resp.status_code}",
+                disposition=FailureDisposition.RETRY,
+            )
+
+        error_code: str = ""
+        error_description: str = ""
+        try:
+            error_body = resp.json()
+            if isinstance(error_body, dict):
+                error_code = str(error_body.get("error") or "").strip().lower()
+                error_description = str(error_body.get("error_description") or "").strip()
+        except (ValueError, json.JSONDecodeError):
+            logger.debug(
+                "oauth2_token_error_response_not_json",
+                status_code=resp.status_code,
+                token_url=self._token_url,
+            )
+
+        if error_code == "invalid_grant":
+            return InvalidCredentialsError(
+                field_name="refresh_token",
+                message=f"OAuth2 refresh token revoked or expired: {error_description or 'invalid_grant'}",
+            )
+
+        detail = error_description or error_code or f"HTTP {resp.status_code}"
+        return UpstreamHttpError(
+            status_code=resp.status_code,
+            message=f"OAuth2 token refresh failed: {detail}",
+            disposition=FailureDisposition.FAIL,
+        )
+
+    def _parse_token_success_response(
+        self, resp: httpx.Response
+    ) -> Result[OAuth2TokenResponseDTO, IpError]:
+        try:
+            payload = resp.json()
+        except (ValueError, json.JSONDecodeError):
+            return Result.fail(
+                UpstreamHttpError(
+                    status_code=resp.status_code,
+                    message="Token response was not valid JSON",
+                    disposition=FailureDisposition.FAIL,
+                )
+            )
+        if not isinstance(payload, dict):
+            return Result.fail(
+                UpstreamHttpError(
+                    status_code=resp.status_code,
+                    message="Token response was not a JSON object",
+                    disposition=FailureDisposition.FAIL,
+                )
+            )
+
+        new_access_token = payload.get("access_token")
+        if not new_access_token:
+            logger.error(
+                "oauth2_token_response_missing_access_token",
+                token_url=self._token_url,
+            )
+            return Result.fail(
+                InvalidCredentialsError(
+                    field_name="access_token",
+                    message="Token response did not include access_token",
+                )
+            )
+
+        new_expires_epoch, expires_err = self._parse_expires_in(payload.get("expires_in"))
+        if expires_err is not None:
+            logger.error(
+                "oauth2_token_response_invalid_expires_in",
+                token_url=self._token_url,
+                expires_in=str(payload.get("expires_in")),
+            )
+            return Result.fail(expires_err)
+
+        raw_rt = payload.get("refresh_token") or self._refresh_token
+        return Result.ok(
+            OAuth2TokenResponseDTO(
+                access_token=str(new_access_token),
+                refresh_token=str(raw_rt) if raw_rt else None,
+                expires_at_epoch=new_expires_epoch,
+            )
+        )
+
     async def _execute_token_refresh_request(
         self,
     ) -> Result[OAuth2TokenResponseDTO, IpError]:
         try:
-            form_payload: dict[str, str] = {
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-            }
-            if self._grant_mode == "client_credentials" or (
-                not self._refresh_token and self._client_id
-            ):
-                form_payload["grant_type"] = "client_credentials"
-            else:
-                form_payload["grant_type"] = "refresh_token"
-                form_payload["refresh_token"] = self._refresh_token or ""
-
+            form_payload = self._build_token_request_payload()
             resp = await self._http_client.request(
                 "POST",
                 self._token_url,
                 data=form_payload,
             )
             if not resp.is_success:
-                err: IpError
-                if resp.status_code == 429 or resp.status_code >= 500:
-                    err = UpstreamHttpError(
-                        status_code=resp.status_code,
-                        message=f"OAuth2 token endpoint transient HTTP {resp.status_code}",
-                        disposition=FailureDisposition.RETRY,
-                    )
-                else:
-                    err = InvalidCredentialsError(
-                        field_name="refresh_token",
-                        message=f"OAuth2 token refresh failed with HTTP {resp.status_code}",
-                    )
+                err = self._classify_token_error_response(resp)
                 logger.error(
                     "oauth2_token_refresh_http_error",
                     token_url=self._token_url,
@@ -157,45 +242,7 @@ class OAuth2Strategy(AuthenticatorPort):
                 )
                 return Result.fail(err)
 
-            payload = resp.json()
-            if not isinstance(payload, dict):
-                return Result.fail(
-                    InvalidCredentialsError(
-                        field_name="access_token",
-                        message="Token response was not a JSON object",
-                    )
-                )
-
-            new_access_token = payload.get("access_token")
-            if not new_access_token:
-                logger.error(
-                    "oauth2_token_response_missing_access_token",
-                    token_url=self._token_url,
-                )
-                return Result.fail(
-                    InvalidCredentialsError(
-                        field_name="access_token",
-                        message="Token response did not include access_token",
-                    )
-                )
-
-            new_expires_epoch, expires_err = self._parse_expires_in(payload.get("expires_in"))
-            if expires_err is not None:
-                logger.error(
-                    "oauth2_token_response_invalid_expires_in",
-                    token_url=self._token_url,
-                    expires_in=str(payload.get("expires_in")),
-                )
-                return Result.fail(expires_err)
-
-            raw_rt = payload.get("refresh_token") or self._refresh_token
-            return Result.ok(
-                OAuth2TokenResponseDTO(
-                    access_token=str(new_access_token),
-                    refresh_token=str(raw_rt) if raw_rt else None,
-                    expires_at_epoch=new_expires_epoch,
-                )
-            )
+            return self._parse_token_success_response(resp)
         except SsrfSecurityError as exc:
             logger.error(
                 "oauth2_token_refresh_ssrf_violation",
@@ -314,7 +361,12 @@ class OAuth2StrategyTokenRefresher(OAuth2TokenRefresherPort):
         http_client: HttpClient | None = None,
         allow_private_ips: bool = False,
     ) -> None:
-        self._http_client = http_client
+        self._http_client = http_client or HttpClient(
+            client=create_http_client(timeout=15.0),
+            backoff_handler=HttpBackoffHandler(max_retries=0),
+            allow_private_ips=allow_private_ips,
+            response_policy=PassThroughPolicy(),
+        )
         self._allow_private_ips = allow_private_ips
 
     async def refresh_tokens(

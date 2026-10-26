@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -30,13 +30,22 @@ class OutboundHttpClassification:
     retry_after_seconds: int | None = None
 
 
-def redact_sensitive_headers(headers: Mapping[str, object] | None) -> JsonDict:
+def redact_sensitive_headers(
+    headers: Mapping[str, object] | None,
+    extra_sensitive_names: Iterable[str] | None = None,
+) -> JsonDict:
     """Case-insensitively masks sensitive authentication/cookie headers before audit persistence."""
     if not headers:
         return {}
+    extra_set = (
+        {n.strip().lower() for n in extra_sensitive_names if n and n.strip()}
+        if extra_sensitive_names
+        else set()
+    )
     redacted: JsonDict = {}
     for key, value in headers.items():
-        if key.strip().lower() in SENSITIVE_HTTP_HEADERS:
+        key_lower = key.strip().lower()
+        if key_lower in SENSITIVE_HTTP_HEADERS or key_lower in extra_set:
             redacted[key] = REDACTED_SECRET_VALUE
         else:
             redacted[key] = str(value) if not isinstance(value, (str, int, float, bool)) else value
@@ -73,7 +82,7 @@ def parse_retry_after_seconds(
         try:
             delta_sec = int(float(retry_after_raw))
             return max(1, min(delta_sec, MAX_RETRY_AFTER_SECONDS))
-        except ValueError:
+        except (ValueError, OverflowError):
             try:
                 parsed_dt = parsedate_to_datetime(retry_after_raw)
                 if parsed_dt.tzinfo is None:
@@ -93,7 +102,7 @@ def parse_retry_after_seconds(
             # Values > 1_000_000_000 represent UTC epoch timestamps; smaller values are delta-seconds
             delta = int(val - now_epoch) if val > 1_000_000_000 else int(val)
             return max(1, min(delta, MAX_RETRY_AFTER_SECONDS))
-        except ValueError:
+        except (ValueError, OverflowError):
             pass
 
     return None

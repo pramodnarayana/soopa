@@ -219,6 +219,7 @@ class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
             if e.tenant_id == tenant_id
             and e.replica_record_id == replica_record_id
             and e.mapping_id == mapping_id
+            and e.outcome in (NormalizationOutcome.NORMALIZED, NormalizationOutcome.TOMBSTONED)
         ]
         if not matching:
             return ()

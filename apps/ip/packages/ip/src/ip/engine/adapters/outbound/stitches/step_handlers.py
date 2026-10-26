@@ -27,6 +27,7 @@ from ip.engine.domain.stitch import (
     QueryReplicaStepOutput,
     StitchStepType,
 )
+from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 from notification.facade import notify
 from orchestration.domain.constants import EffectPolicy, StepFailureCode
 from orchestration.domain.exceptions import Result
@@ -81,6 +82,30 @@ class OutboundRecordLookupPort(Protocol):
         connection_id: str,
         idempotency_key: str,
     ) -> OutboundRecord | None: ...
+
+
+class TenantAwareOutboundRecordLookupAdapter(OutboundRecordLookupPort):
+    """Adapter fulfilling OutboundRecordLookupPort by routing to the tenant shard via IpDataPlaneUnitOfWorkProviderPort."""
+
+    def __init__(self, uow_provider: IpDataPlaneUnitOfWorkProviderPort) -> None:
+        self._provider = uow_provider
+
+    async def get_by_idempotency_key(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        idempotency_key: str,
+    ) -> OutboundRecord | None:
+        shard_info_res = await self._provider.resolve_shard_info(tenant_id)
+        if shard_info_res.is_err:
+            return None
+        shard_id, shard_dsn = shard_info_res.unwrap()
+        async with self._provider.get_data_plane_uow(tenant_id, shard_id, shard_dsn) as uow:
+            return await uow.outbound_records.get_by_idempotency_key(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                idempotency_key=idempotency_key,
+            )
 
 
 class QueryReplicaStepHandler(StepHandlerPort[JsonDict, JsonDict]):
