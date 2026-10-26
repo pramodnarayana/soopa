@@ -1,0 +1,43 @@
+"""Domain enums for the centralized Soopa platform trace capability."""
+
+from __future__ import annotations
+
+from enum import StrEnum
+
+
+class TraceStatus(StrEnum):
+    """End-to-end lifecycle status of a business transaction trace across bounded contexts."""
+
+    INGESTED = "INGESTED"
+    REPLICATED = "REPLICATED"
+    NORMALIZED = "NORMALIZED"
+    REJECTED = "REJECTED"
+    PENDING = "PENDING"
+    DELIVERED = "DELIVERED"
+    RETRY_SCHEDULED = "RETRY_SCHEDULED"
+    FAILED = "FAILED"
+    DEAD_LETTERED = "DEAD_LETTERED"
+    RECEIVED = "RECEIVED"
+    PROCESSED = "PROCESSED"
+    UNKNOWN = "UNKNOWN"
+
+
+class TraceEventType(StrEnum):
+    """Canonical event types for immutable audit ledger trace events."""
+
+    RECEIVED = "RECEIVED"
+    TRANSFORMATION_SUCCESSFUL = "TRANSFORMATION_SUCCESSFUL"
+    TRANSFORMATION_FAILED = "TRANSFORMATION_FAILED"
+    DELIVERY_SUCCESSFUL = "DELIVERY_SUCCESSFUL"
+    DELIVERY_ATTEMPT_FAILED = "DELIVERY_ATTEMPT_FAILED"
+    DELIVERY_FAILED = "DELIVERY_FAILED"
+    REPLAY_TRIGGERED = "REPLAY_TRIGGERED"
+    REPLAY_TRANSFORM = "REPLAY_TRANSFORM"
+    REPLAY_DELIVER = "REPLAY_DELIVER"
+    MODIFY_AND_REPLAY_TRANSFORM = "MODIFY_AND_REPLAY_TRANSFORM"
+    MODIFY_AND_REPLAY_DELIVER = "MODIFY_AND_REPLAY_DELIVER"
+    CREATED_FROM_MODIFICATION = "CREATED_FROM_MODIFICATION"
+    MODIFIED_AND_REPLAYED = "MODIFIED_AND_REPLAYED"
+
+
+__all__ = ["TraceEventType", "TraceStatus"]

@@ -1,9 +1,10 @@
 from typing import cast
 
 import pytest
+from database.types import TenantSession
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.outbound.database.trace_repository import SqlAlchemyTraceRepository
+from edi.adapters.outbound.database.transaction_repository import SqlAlchemyTransactionRepository
 
 
 class UnusedStorage:
@@ -18,7 +19,7 @@ class EmptyScalars:
     def first(self) -> None:
         return None
 
-    def all(self) -> list:
+    def all(self) -> list[object]:
         return []
 
 
@@ -29,6 +30,7 @@ class EmptyResult:
 
 class RecordingSession:
     def __init__(self) -> None:
+        self.info: dict[str, str] = {"session_type": "tenant"}
         self.statements: list[object] = []
 
     async def execute(self, statement: object) -> EmptyResult:
@@ -37,11 +39,14 @@ class RecordingSession:
 
 
 @pytest.mark.asyncio
-async def test_trace_selects_only_the_newest_edi_message() -> None:
+async def test_get_edi_message_dto_selects_only_the_newest_edi_message() -> None:
     session = RecordingSession()
-    repository = SqlAlchemyTraceRepository(cast(AsyncSession, session), UnusedStorage())
+    repository = SqlAlchemyTransactionRepository(
+        TenantSession(cast(AsyncSession, session)),
+        UnusedStorage(),
+    )
 
-    assert await repository.get_edi_trace("tenant-1", "trace-1") is None
+    assert await repository.get_edi_message_dto("tenant-1", "trace-1") is None
 
     compiled = str(session.statements[0].compile(compile_kwargs={"literal_binds": True}))
     assert "ORDER BY edi_messages.created_at DESC" in compiled

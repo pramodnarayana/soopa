@@ -4,11 +4,11 @@ import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
+from strace.domain import TraceEvent, TraceEventType
 
-from edi.domain.enums import TraceEventType, TransactionEntityType
+from edi.domain.enums import TransactionEntityType
 from edi.domain.events import DeliverRequestedEvent, TransformRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
-from edi.domain.models.transactions import TraceEventDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -51,7 +51,7 @@ class BulkReplayTransactionsUseCase:
             actor=actor,
         )
 
-        audit_events: list[TraceEventDomainModel] = []
+        audit_events: list[TraceEvent] = []
 
         for i, original in enumerate(originals):
             idempotency_key = (
@@ -72,7 +72,7 @@ class BulkReplayTransactionsUseCase:
                 original.add_domain_event(transform_event)
 
             audit_events.append(
-                TraceEventDomainModel(
+                TraceEvent(
                     id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
                     tenant_id=tenant_id,
                     trace_id=original.trace_id,
@@ -85,7 +85,7 @@ class BulkReplayTransactionsUseCase:
             await asyncio.sleep(0)  # Yield to event loop between iterations
 
         envelopes = await self.uow.transactions.save_all(list(originals))
-        await self.uow.transactions.save_all_trace_events(audit_events)
+        await self.uow.traces.save_all_trace_events(audit_events)
         await self.uow.transactions.increment_replay_count(
             tenant_id,
             unique_trace_ids,
@@ -137,7 +137,7 @@ class BulkReplayTransactionsUseCase:
             actor=actor,
         )
 
-        audit_events: list[TraceEventDomainModel] = []
+        audit_events: list[TraceEvent] = []
 
         for i, original in enumerate(originals):
             idempotency_key = (
@@ -155,7 +155,7 @@ class BulkReplayTransactionsUseCase:
             original.add_domain_event(deliver_event)
 
             audit_events.append(
-                TraceEventDomainModel(
+                TraceEvent(
                     id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
                     tenant_id=tenant_id,
                     trace_id=original.trace_id,
@@ -168,7 +168,7 @@ class BulkReplayTransactionsUseCase:
             await asyncio.sleep(0)
 
         envelopes = await self.uow.transactions.save_all(list(originals))
-        await self.uow.transactions.save_all_trace_events(audit_events)
+        await self.uow.traces.save_all_trace_events(audit_events)
         await self.uow.transactions.increment_replay_count(
             tenant_id, unique_trace_ids, [TransactionEntityType.EDI_MESSAGE]
         )

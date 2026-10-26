@@ -3,7 +3,7 @@ import datetime
 from typing import Any, cast
 
 import structlog
-from database.router import DatabaseRouter
+from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from sqlalchemy import CursorResult, delete, select
@@ -12,14 +12,15 @@ logger = structlog.get_logger(__name__)
 
 
 class SqlAlchemyEdiDataPlaneOutboxCleanupRepository(OutboxCleanupRepositoryPort):
-    def __init__(self, db_router: DatabaseRouter) -> None:
+    def __init__(self, db_router: DatabaseRouterPort, app_slug: str = "edi") -> None:
         self.db_router = db_router
+        self.app_slug = app_slug
 
     async def cleanup_outbox(self, retention_days: int, concurrency_limit: int = 5) -> int:
         if concurrency_limit <= 0:
             raise ValueError("concurrency_limit must be strictly positive")
         sem = asyncio.Semaphore(concurrency_limit)
-        shards = await self.db_router.get_all_shards()
+        shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
 
         async def _bounded_cleanup(shard_name: str, shard_dsn: str) -> int:
             async with sem:

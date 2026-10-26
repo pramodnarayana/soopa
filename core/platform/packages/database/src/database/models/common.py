@@ -102,23 +102,3 @@ class SoftDeleteMixin:
     @declared_attr
     def deleted_by(cls) -> Mapped[str | None]:
         return mapped_column(String, nullable=True)
-
-
-class TraceableMixin:
-    """Standard columns for database tables participating in distributed business tracing."""
-
-    @declared_attr
-    def trace_id(cls) -> Mapped[str]:
-        return mapped_column(String(128), nullable=False, index=True)
-
-    @declared_attr
-    def correlation_id(cls) -> Mapped[str | None]:
-        return mapped_column(String(255), nullable=True, index=True)
-
-    @declared_attr
-    def parent_trace_id(cls) -> Mapped[str | None]:
-        return mapped_column(String(128), nullable=True)
-
-    @declared_attr
-    def original_trace_id(cls) -> Mapped[str | None]:
-        return mapped_column(String(128), nullable=True)

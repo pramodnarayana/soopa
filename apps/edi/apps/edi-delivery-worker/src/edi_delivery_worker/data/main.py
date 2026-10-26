@@ -7,6 +7,7 @@ from typing import cast
 
 import structlog
 from database.router import DatabaseRouter
+from database.tenant_shard_resolver import TenantNotFoundError
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.encryption import db_encryption
 from edi.adapters.outbound.database.tenant_resolver import (
@@ -31,9 +32,11 @@ from edi.application.use_cases.pipeline.fail_delivery_use_case import (
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.sftp import SftpDeliveryStrategy
 from edi.core.pipeline.delivery.webhook import WebhookDeliveryStrategy
-from edi.domain.enums import PipelineEventType, TraceEventType
+from edi.domain.enums import PipelineEventType
 from observability import ObservabilityProvider
 from pubsub.enums import ConsumerAction
+from pubsub.exceptions import ConsumerTerminalError
+from strace.domain import TraceEventType
 
 DELIVERY_OUTCOME_TO_CONSUMER_ACTION: dict[TraceEventType, ConsumerAction] = {
     TraceEventType.DELIVERY_SUCCESSFUL: ConsumerAction.ACK,
@@ -45,9 +48,11 @@ from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.provider import PubSubProvider
 from secret_store import SecretStorePort, SecretStoreProvider
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from edi_delivery_worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -62,24 +67,14 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-def _setup_registry(
-    settings: WorkerSettings,
-    uow_provider: TenantUowProvider,
+def _build_delivery_route_registry(
+    publisher: OutboxPublisherPort,
     http_delivery: HttpDeliveryPort,
     sftp_delivery: SftpDeliveryPort,
     as2_delivery: AS2DeliveryPort,
     vault: SecretStorePort,
     is_dlq: bool = False,
-) -> EdiDataPlaneEventDispatcher:
-
-    publisher = create_edi_pipeline_publisher(
-        compute_queue_url=settings.sqs.compute_queue_url,
-        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
-        deliver_queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=settings.aws.endpoint_url,
-    )
-
+) -> EdiDataPlaneRouteRegistry:
     registry = EdiDataPlaneRouteRegistry()
 
     def use_case_factory(uow_fact: UowFactory) -> ExecuteDeliveryUseCase:
@@ -117,7 +112,6 @@ def _setup_registry(
         )
         return DELIVERY_OUTCOME_TO_CONSUMER_ACTION.get(outcome, ConsumerAction.DLQ)
 
-    # DLQ Use Case
     def dlq_use_case_factory(uow_fact: UowFactory) -> FailDeliveryUseCase:
         return FailDeliveryUseCase(uow_factory=uow_fact, publisher=publisher)
 
@@ -136,21 +130,57 @@ def _setup_registry(
         await dlq_use_case_factory(uow_fact).execute(command=command)
         return ConsumerAction.ACK
 
-    # Note: EXECUTE_DELIVERY_COMMAND is the only event this worker listens to
     registry.register(
         event_type=PipelineEventType.EXECUTE_DELIVERY_COMMAND.value,
         direction=None,
         factory=run_dlq if is_dlq else run_deliver,
     )
+    return registry
+
+
+def _setup_registry(
+    settings: WorkerSettings,
+    uow_provider: TenantUowProvider,
+    http_delivery: HttpDeliveryPort,
+    sftp_delivery: SftpDeliveryPort,
+    as2_delivery: AS2DeliveryPort,
+    vault: SecretStorePort,
+    is_dlq: bool = False,
+    publisher: OutboxPublisherPort | None = None,
+) -> EdiDataPlaneEventDispatcher:
+
+    if publisher is None:
+        publisher = create_edi_pipeline_publisher(
+            compute_queue_url=settings.sqs.compute_queue_url,
+            orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+            deliver_queue_url=settings.sqs.deliver_queue_url,
+            region_name=settings.aws.resolved_region,
+            endpoint_url=settings.aws.endpoint_url,
+        )
+
+    registry = _build_delivery_route_registry(
+        publisher=publisher,
+        http_delivery=http_delivery,
+        sftp_delivery=sftp_delivery,
+        as2_delivery=as2_delivery,
+        vault=vault,
+        is_dlq=is_dlq,
+    )
 
     async def route_event(event: EdiDataPlaneEventMessage) -> ConsumerAction:
-        uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
+        try:
+            uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
+        except TenantNotFoundError as exc:
+            logger.error(
+                "edi_delivery_worker.tenant_not_found_terminal_error",
+                tenant_id=event.tenant_id,
+                trace_id=event.trace_id,
+                error=str(exc),
+            )
+            raise ConsumerTerminalError(f"Tenant {event.tenant_id} not found in Global DB") from exc
         return await registry.route(event, uow_factory)
 
     return EdiDataPlaneEventDispatcher(callback=route_event)
-
-
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiDeliveryWorkerModule(LaunchableWorker):

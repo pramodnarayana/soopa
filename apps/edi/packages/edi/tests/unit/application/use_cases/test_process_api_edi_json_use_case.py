@@ -76,7 +76,14 @@ class FakeTransactionRepository:
 class FakeTraceRepository:
     """Minimal TraceRepositoryPort-conforming in-memory store."""
 
-    async def get_edi_trace(self, tenant_id: str, trace_id: str) -> None:
+    async def get_trace(
+        self,
+        tenant_id: str,
+        trace_id: str,
+        *,
+        hydrate_payloads: bool = False,
+    ) -> None:
+        _ = (tenant_id, trace_id, hydrate_payloads)
         return None
 
 

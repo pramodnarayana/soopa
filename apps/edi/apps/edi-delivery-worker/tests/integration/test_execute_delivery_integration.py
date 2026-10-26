@@ -6,6 +6,7 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 from pytest_httpserver import HTTPServer
 from seedwork import generate_random_hex
 from sqlalchemy import text
@@ -119,6 +120,7 @@ async def test_execute_delivery_integration(
         sftp_delivery=FakeSftpDeliveryClient(),
         as2_delivery=FakeAs2DeliveryClient(),
         vault=FakeVault(),
+        publisher=FakeOutboxPublisher(),
     )
 
     event = {

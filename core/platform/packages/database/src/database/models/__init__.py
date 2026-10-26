@@ -1,4 +1,4 @@
-from .common import OutboxMixin, SoftDeleteMixin, TimestampMixin, TraceableMixin
+from .common import OutboxMixin, SoftDeleteMixin, TimestampMixin
 from .core import (
     IdentityBase,
     NotificationBase,
@@ -40,7 +40,6 @@ __all__ = [
     "Tenant",
     "TenantUser",
     "TimestampMixin",
-    "TraceableMixin",
     "UcpBase",
     "UcpRegistry",
     "User",

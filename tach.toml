@@ -11,8 +11,41 @@ source_roots = [
     "core/ucp/packages/models/src",
     "core/platform/packages/security/src",
     "core/platform/packages/secret-store/src",
-    "core/platform/packages/sftp/src",
-    "core/platform/packages/shttp/src"
+    "core/platform/packages/shttp/src",
+    "core/platform/packages/strace/src"
+]
+
+[[modules]]
+path = "strace.domain"
+depends_on = []
+
+[[modules]]
+path = "strace.ports"
+depends_on = [
+    "strace.domain"
+]
+
+[[modules]]
+path = "strace.application"
+depends_on = [
+    "strace.domain",
+    "strace.ports"
+]
+
+[[modules]]
+path = "strace.adapters"
+depends_on = [
+    "strace.domain",
+    "strace.ports",
+    "strace.application",
+    "database.models"
+]
+
+[[modules]]
+path = "strace.testing"
+depends_on = [
+    "strace.domain",
+    "strace.ports"
 ]
 
 [[modules]]
@@ -40,7 +73,9 @@ depends_on = [
 
 [[modules]]
 path = "edi.domain"
-depends_on = []
+depends_on = [
+    "strace.domain"
+]
 
 [[modules]]
 path = "edi.adapters"
@@ -49,7 +84,10 @@ depends_on = [
     "edi.ports",
     "schemas",
     "sftp",
-    "shttp"
+    "shttp",
+    "strace.domain",
+    "strace.ports",
+    "strace.adapters"
 ]
 
 [[modules]]

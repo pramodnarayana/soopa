@@ -3,6 +3,7 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict, JsonValue
 
+from edi.application.dtos.transactions import ApiGatewayDTO
 from edi.domain.enums import EdiDirection, MessageStatus
 
 
@@ -49,6 +50,14 @@ class ApiGatewayRepositoryPort(Protocol):
     async def get_api_payload(self, trace_id: str) -> ApiGatewayPayloadDTO | None:
         """
         Fetches the latest API Gateway record for the given trace_id.
+        """
+        ...
+
+    async def get_api_gateways_by_trace_id(
+        self, tenant_id: str, trace_id: str
+    ) -> list[ApiGatewayDTO]:
+        """
+        Fetches all API Gateway records for the given tenant_id and trace_id in chronological order.
         """
         ...
 

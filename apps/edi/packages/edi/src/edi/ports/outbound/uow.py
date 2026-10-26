@@ -1,6 +1,8 @@
 from types import TracebackType
 from typing import Protocol
 
+from strace.ports import TraceRepositoryPort
+
 from edi.ports.outbound.api_gateway_repository import ApiGatewayRepositoryPort
 from edi.ports.outbound.as2_partner_repository import AS2TradingPartnerRepositoryPort
 from edi.ports.outbound.as2_partnership_repository import AS2PartnershipRepositoryPort
@@ -14,7 +16,6 @@ from edi.ports.outbound.outbound_route_repository import OutboundRouteRepository
 from edi.ports.outbound.settings_repository import SettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
-from edi.ports.outbound.trace_repository import TraceRepositoryPort
 from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 from edi.ports.outbound.webhook_repository import WebhookRepositoryPort
 
@@ -60,6 +61,7 @@ class DataPlaneUnitOfWorkPort(Protocol):
     transactions: TransactionRepositoryPort
     traces: TraceRepositoryPort
     outbox: DataPlaneOutboxRepositoryPort
+
     inbound_routes: InboundRouteRepositoryPort
     outbound_routes: OutboundRouteRepositoryPort
     sftp_partners: SFTPPartnerRepositoryPort
