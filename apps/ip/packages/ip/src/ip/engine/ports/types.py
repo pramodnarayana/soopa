@@ -22,6 +22,15 @@ from ip.engine.domain.normalization import NormalizationRejectionEntry
 
 
 @dataclass(frozen=True)
+class ConnectorAuthPayload:
+    """Resolved authentication credentials and sensitive metadata for wire requests."""
+
+    headers: dict[str, str] = field(default_factory=dict)
+    params: dict[str, str] = field(default_factory=dict)
+    sensitive_header_names: Sequence[str] = ()
+
+
+@dataclass(frozen=True)
 class ConnectionCheckResultDTO:
     """Result of a connection connectivity and health check."""
 

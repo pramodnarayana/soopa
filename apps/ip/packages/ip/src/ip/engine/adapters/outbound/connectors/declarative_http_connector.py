@@ -34,6 +34,7 @@ from ip.engine.domain.models.connector_spec import (
 from ip.engine.ports.types import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
+    ConnectorAuthPayload,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
     StreamFieldDTO,
@@ -147,8 +148,8 @@ class DeclarativeHttpConnector(BaseConnector):
             return Result.fail(invalid_param_error)
         return self._validate_url(interpolated)
 
-    def _build_auth_headers(self, credentials: JsonDict) -> tuple[dict[str, str], list[str]]:
-        """Injects authentication headers via unified AuthStrategyResolver, returning headers and sensitive names."""
+    def _build_auth_payload(self, credentials: JsonDict) -> ConnectorAuthPayload:
+        """Injects authentication headers and query parameters via unified AuthStrategyResolver."""
         authenticator = AuthStrategyResolver.resolve(
             self._manifest.auth_type,
             credentials,
@@ -165,7 +166,12 @@ class DeclarativeHttpConnector(BaseConnector):
             for k, v in authed_req.headers.items()
             if k.lower() not in ("host", "user-agent", "accept", "accept-encoding", "connection")
         }
-        return headers, list(authenticator.sensitive_header_names)
+        auth_params = dict(authed_req.url.params)
+        return ConnectorAuthPayload(
+            headers=headers,
+            params=auth_params,
+            sensitive_header_names=tuple(authenticator.sensitive_header_names),
+        )
 
     @staticmethod
     def _extract_nested(data: object | None, path: str | None) -> object | None:
@@ -218,18 +224,19 @@ class DeclarativeHttpConnector(BaseConnector):
 
         base_url = interp_res.value
         url = f"{base_url.rstrip('/')}/{action.path.lstrip('/')}"
-        auth_headers, _ = self._build_auth_headers(credentials)
+        auth = self._build_auth_payload(credentials)
         headers = {
-            **auth_headers,
+            **auth.headers,
             **action.headers,
         }
+        merged_check_params = {**auth.params, **(action.query_params or {})}
 
         try:
             resp = await self._http_client.request(
                 method=action.method,
                 url=url,
                 headers=headers,
-                params=action.query_params or None,
+                params=merged_check_params or None,
                 timeout=self._timeout_seconds,
             )
             if resp.is_success:
@@ -405,17 +412,18 @@ class DeclarativeHttpConnector(BaseConnector):
         req_url: str,
         params: dict[str, str | int],
     ) -> Result[tuple[list[JsonDict], str | None, bool], IpError]:
-        auth_headers, _ = self._build_auth_headers(credentials)
+        auth = self._build_auth_payload(credentials)
         headers = {
-            **auth_headers,
+            **auth.headers,
             **action.headers,
         }
+        merged_page_params = {**auth.params, **params}
         try:
             resp = await self._http_client.request(
                 method=action.method,
                 url=req_url,
                 headers=headers,
-                params=params or None,
+                params=merged_page_params or None,
                 timeout=self._timeout_seconds,
             )
         except (HttpError, httpx.HTTPError, OSError) as exc:
@@ -658,9 +666,9 @@ class DeclarativeHttpConnector(BaseConnector):
         encoded_record_id = quote(str(command.record_id or ""), safe="")
         action_path = action.path.replace("{record_id}", encoded_record_id)
         url = f"{base_url.rstrip('/')}/{action_path.lstrip('/')}"
-        auth_headers, sensitive_names = self._build_auth_headers(credentials)
+        auth = self._build_auth_payload(credentials)
         headers: dict[str, str] = {
-            **auth_headers,
+            **auth.headers,
             **action.headers,
             **command.headers,
             "Content-Type": "application/json",
@@ -673,6 +681,7 @@ class DeclarativeHttpConnector(BaseConnector):
                 method=action.method,
                 url=url,
                 headers=headers,
+                params=auth.params or None,
                 json=command.payload if action.method.upper() != "DELETE" else None,
                 timeout=self._timeout_seconds,
             ),
@@ -681,5 +690,5 @@ class DeclarativeHttpConnector(BaseConnector):
             request_headers=headers,
             default_record_id=command.record_id or "written",
             error_record_id=command.record_id or "failed",
-            extra_sensitive_headers=sensitive_names,
+            extra_sensitive_headers=auth.sensitive_header_names,
         )

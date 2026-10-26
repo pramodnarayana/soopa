@@ -79,15 +79,21 @@ class FetchRecordUseCase:
         )
 
     @contextlib.asynccontextmanager
-    async def _open_uow(self, tenant_id: str) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+    async def _open_uow(
+        self,
+        tenant_id: str,
+        shard_info: tuple[str, str] | None = None,
+    ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
         if self._data_plane_uow is not None:
             async with self._data_plane_uow as uow:
                 yield uow
         elif self._data_plane_uow_provider is not None:
-            shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
-            if shard_info_res.is_err:
-                raise RuntimeError(shard_info_res.unwrap_err().message)
-            shard_id, shard_dsn = shard_info_res.unwrap()
+            if shard_info is None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+                if shard_info_res.is_err:
+                    raise RuntimeError(shard_info_res.unwrap_err().message)
+                shard_info = shard_info_res.unwrap()
+            shard_id, shard_dsn = shard_info
             async with self._data_plane_uow_provider.get_data_plane_uow(
                 tenant_id, shard_id, shard_dsn
             ) as uow:
@@ -97,6 +103,26 @@ class FetchRecordUseCase:
 
     async def execute(self, command: FetchRecordCommand) -> FetchRecordResultDTO:
         trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+
+        # 0. Pre-resolve tenant shard before pulling remote record or offloading payload
+        shard_info: tuple[str, str] | None = None
+        if self._data_plane_uow is None and self._data_plane_uow_provider is not None:
+            shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(
+                command.tenant_id
+            )
+            if shard_info_res.is_err:
+                logger.error(
+                    "fetch_record_shard_resolution_failed",
+                    tenant_id=command.tenant_id,
+                    error=shard_info_res.unwrap_err().message,
+                    trace_id=trace_id,
+                )
+                return FetchRecordResultDTO(
+                    status="TENANT_SHARD_NOT_FOUND",
+                    trace_id=trace_id,
+                    record_id=command.record_id,
+                )
+            shard_info = shard_info_res.unwrap()
 
         # 1. Retrieve connection config & valid credentials via unified TokenManagerService
         creds_res = await self._token_manager.get_valid_credentials(
@@ -185,7 +211,7 @@ class FetchRecordUseCase:
         )
 
         # 5. Persist to Data Plane and commit
-        async with self._open_uow(command.tenant_id) as uow:
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
             await uow.inbound_records.save(inbound)
             await uow.commit()
 

@@ -116,15 +116,21 @@ class RunSyncUseCase:
         )
 
     @contextlib.asynccontextmanager
-    async def _open_uow(self, tenant_id: str) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+    async def _open_uow(
+        self,
+        tenant_id: str,
+        shard_info: tuple[str, str] | None = None,
+    ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
         if self._data_plane_uow is not None:
             async with self._data_plane_uow as uow:
                 yield uow
         elif self._data_plane_uow_provider is not None:
-            shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
-            if shard_info_res.is_err:
-                raise RuntimeError(shard_info_res.unwrap_err().message)
-            shard_id, shard_dsn = shard_info_res.unwrap()
+            if shard_info is None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+                if shard_info_res.is_err:
+                    raise RuntimeError(shard_info_res.unwrap_err().message)
+                shard_info = shard_info_res.unwrap()
+            shard_id, shard_dsn = shard_info
             async with self._data_plane_uow_provider.get_data_plane_uow(
                 tenant_id, shard_id, shard_dsn
             ) as uow:
@@ -149,6 +155,26 @@ class RunSyncUseCase:
                 )
             connection, connector, credentials = conn_ctx
 
+            # Pre-resolve Data Plane shard info before pulling the stream
+            shard_info: tuple[str, str] | None = None
+            if self._data_plane_uow is None and self._data_plane_uow_provider is not None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(
+                    command.tenant_id
+                )
+                if shard_info_res.is_err:
+                    logger.error(
+                        "sync_run_shard_resolution_failed",
+                        tenant_id=command.tenant_id,
+                        error=shard_info_res.unwrap_err().message,
+                        trace_id=trace_id,
+                    )
+                    return await self._fail_run(
+                        sync_run,
+                        "TENANT_SHARD_NOT_FOUND",
+                        shard_info_res.unwrap_err().message,
+                    )
+                shard_info = shard_info_res.unwrap()
+
             read_cursor = (
                 calculate_lookback_cursor(start_cursor, command.lookback_seconds)
                 if kind == SyncRunKind.INCREMENTAL
@@ -166,6 +192,7 @@ class RunSyncUseCase:
                 ingestion_mode=ingestion_mode,
                 generation_id=generation_id,
                 trace_id=trace_id,
+                shard_info=shard_info,
             )
         except Exception as exc:
             logger.exception(
@@ -309,6 +336,7 @@ class RunSyncUseCase:
         ingestion_mode: IngestionMode,
         generation_id: int,
         trace_id: str,
+        shard_info: tuple[str, str] | None = None,
     ) -> bool:
         current_page: list[RecordEnvelopeDTO] = []
         page_index = 0
@@ -349,6 +377,7 @@ class RunSyncUseCase:
                     generation_id=generation_id,
                     next_cursor=latest_page_cursor,
                     trace_id=trace_id,
+                    shard_info=shard_info,
                 )
                 current_page = []
 
@@ -364,6 +393,7 @@ class RunSyncUseCase:
                 generation_id=generation_id,
                 next_cursor=latest_page_cursor,
                 trace_id=trace_id,
+                shard_info=shard_info,
             )
 
         return capped
@@ -415,6 +445,7 @@ class RunSyncUseCase:
         generation_id: int,
         next_cursor: str | None,
         trace_id: str,
+        shard_info: tuple[str, str] | None = None,
     ) -> None:
         """Stores page in Data Plane and atomically updates checkpoint and sync run counters in Control Plane."""
         page_payload: list[JsonValue] = [envelope.data for envelope in page]
@@ -447,7 +478,7 @@ class RunSyncUseCase:
         )
 
         # 3. Persist to Data Plane
-        async with self._open_uow(tenant_id) as dp_uow:
+        async with self._open_uow(tenant_id, shard_info=shard_info) as dp_uow:
             await dp_uow.inbound_records.save(inbound_record)
             await dp_uow.commit()
 
