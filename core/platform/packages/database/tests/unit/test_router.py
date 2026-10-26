@@ -99,9 +99,10 @@ async def test_get_all_shards_with_app_slug() -> None:
     shards = await router.get_all_shards(app_slug="edi")
     assert len(shards) == 1
     assert shards[0] == ("edi_shard_1", "postgresql+asyncpg://override/dsn")
-    assert len(fake_session.executed_stmts) == 1
     stmt_str = str(fake_session.executed_stmts[0])
-    assert "apps.slug = :slug_1" in stmt_str or "database_shards.id" in stmt_str
+    assert "apps.slug = :slug_1" in stmt_str
+    assert "database_shards.id = ucp.shard_registry.shard_id" in stmt_str
+    assert "database_shards.id) LIKE" in stmt_str
 
 
 @pytest.mark.asyncio

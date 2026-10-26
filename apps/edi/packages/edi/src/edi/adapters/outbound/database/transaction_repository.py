@@ -570,7 +570,7 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
             format_standard=edi_msg.format_standard,
             storage_uri=edi_msg.storage_uri,
             file_size_bytes=edi_msg.file_size_bytes,
-            msg_headers=None,
+            msg_headers=json.loads(edi_msg.msg_headers) if edi_msg.msg_headers else None,
             state=edi_msg.state,
             status_message=edi_msg.status_message,
             error_code=edi_msg.error_code,
