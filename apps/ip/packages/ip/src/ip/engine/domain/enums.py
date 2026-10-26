@@ -30,13 +30,19 @@ class IpTraceEventType(StrEnum):
     L2_REPLICA_TOMBSTONED = "L2_REPLICA_TOMBSTONED"
     L2_EXTRACTION_REJECTED = "L2_EXTRACTION_REJECTED"
     L3_NORMALIZED = "L3_NORMALIZED"
+    L3_REJECTED = "L3_REJECTED"
     L3_NORMALIZATION_FAILED = "L3_NORMALIZATION_FAILED"
+    L3_SKIPPED_STALE = "L3_SKIPPED_STALE"
+    L3_TOMBSTONED = "L3_TOMBSTONED"
+    L3_REFERENCE_PENDING = "L3_REFERENCE_PENDING"
+    L3_REFERENCE_RESOLVED = "L3_REFERENCE_RESOLVED"
     L4_DOMAIN_HYDRATED = "L4_DOMAIN_HYDRATED"
     L5_DISPATCH_PENDING = "L5_DISPATCH_PENDING"
     L5_DISPATCH_DELIVERED = "L5_DISPATCH_DELIVERED"
     L5_DISPATCH_RETRY_SCHEDULED = "L5_DISPATCH_RETRY_SCHEDULED"
     L5_DISPATCH_FAILED = "L5_DISPATCH_FAILED"
     REPLAY_TRIGGERED = "REPLAY_TRIGGERED"
+    MODIFIED_AND_REPLAYED = "MODIFIED_AND_REPLAYED"
 
 
 class ConnectionStatus(StrEnum):
@@ -140,8 +146,61 @@ class IpEventType(StrEnum):
     FETCH_RECORD_REQUESTED = "ip.fetch_record.requested"
     REPLICA_RECORD_CHANGED = "ip.replica_record.changed"
     NORMALIZED_RECORD_CREATED = "ip.normalized_record.created"
+    CANONICAL_RECORD_CHANGED = "ip.canonical_record.changed"
+    MAPPING_BINDING_CHANGED = "ip.mapping_binding.changed"
+    MAPPING_VERSION_PROMOTED = "ip.mapping_version.promoted"
     OUTBOUND_RECORD_CREATED = "ip.outbound_record.created"
     STREAM_STATE_CHECKPOINTED = "ip.stream_state.checkpointed"
+
+
+class MappingMode(StrEnum):
+    """Execution mode of a stream mapping binding."""
+
+    ACTIVE = "ACTIVE"
+    SHADOW = "SHADOW"
+    DISABLED = "DISABLED"
+
+
+class NormalizationOutcome(StrEnum):
+    """Result of normalizing an L2 replica snapshot into canonical domain records."""
+
+    NORMALIZED = "NORMALIZED"
+    REJECTED = "REJECTED"
+    SKIPPED_STALE = "SKIPPED_STALE"
+    TOMBSTONED = "TOMBSTONED"
+    SKIPPED_NO_BINDING = "SKIPPED_NO_BINDING"
+
+
+class RuleSeverity(StrEnum):
+    """Action severity for a canonical entity quality validation rule."""
+
+    REJECT = "REJECT"
+    FLAG = "FLAG"
+
+
+class NormalizationRejectionReason(StrEnum):
+    """Typed failure code for a canonical mapping or validation rejection."""
+
+    MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
+    SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
+    QUALITY_RULE_REJECTED = "QUALITY_RULE_REJECTED"
+    MAPPER_ERROR = "MAPPER_ERROR"
+    UNRESOLVED_REFERENCE = "UNRESOLVED_REFERENCE"
+    MISSING_MAPPING_BINDING = "MISSING_MAPPING_BINDING"
+
+
+class PendingReferenceStatus(StrEnum):
+    """Resolution status of a late-arriving canonical source reference."""
+
+    PENDING = "PENDING"
+    RESOLVED = "RESOLVED"
+
+
+class CanonicalAction(StrEnum):
+    """Mutation action applied to a canonical domain record."""
+
+    UPSERT = "UPSERT"
+    TOMBSTONE = "TOMBSTONE"
 
 
 class IngestionMode(StrEnum):
@@ -209,7 +268,40 @@ class HttpWriteOperation(StrEnum):
 
     CREATE = "CREATE"
     UPDATE = "UPDATE"
+    UPSERT = "UPSERT"
     DELETE = "DELETE"
+
+
+class OutboundFailureCategory(StrEnum):
+    """First-class semantic failure classification for Layer-5 outbound dispatches."""
+
+    RATE_LIMITED = "RATE_LIMITED"
+    AUTH_EXPIRED = "AUTH_EXPIRED"
+    TRANSIENT = "TRANSIENT"
+    CONFLICT_IDEMPOTENT = "CONFLICT_IDEMPOTENT"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    TERMINAL = "TERMINAL"
+
+
+class OutboundConflictStrategy(StrEnum):
+    """Policy governing how HTTP 409 Conflict responses are handled during outbound writes."""
+
+    FAIL = "FAIL"
+    IDEMPOTENT_SUCCESS = "IDEMPOTENT_SUCCESS"
+
+
+class TokenRefreshPolicy(StrEnum):
+    """Strategy governing OAuth2 token evaluation inside TokenManagerService."""
+
+    PROACTIVE_IF_EXPIRING = "PROACTIVE_IF_EXPIRING"
+    FORCE_ROTATION = "FORCE_ROTATION"
+
+
+class BatchFailurePolicy(StrEnum):
+    """Strategy governing batch execution behavior when a single item fails terminally."""
+
+    CONTINUE_ALL = "CONTINUE_ALL"
+    HALT_ON_TERMINAL = "HALT_ON_TERMINAL"
 
 
 class FailureDisposition(StrEnum):
@@ -238,3 +330,12 @@ class AckVerdict(StrEnum):
     ACK = "ACK"
     NACK = "NACK"
     REJECT = "REJECT"
+
+
+class ReplayStage(StrEnum):
+    """Target execution stage for deterministic transaction replay."""
+
+    RETRY_INGEST = "RETRY_INGEST"
+    RETRY_NORMALIZE = "RETRY_NORMALIZE"
+    RETRY_STITCH = "RETRY_STITCH"
+    RETRY_DELIVER = "RETRY_DELIVER"

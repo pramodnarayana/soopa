@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from seedwork.models import TracedAggregateRoot
+from strace.domain import TracedAggregateRoot
 
 
 def test_global_entity_map_create_and_bind_destination() -> None:

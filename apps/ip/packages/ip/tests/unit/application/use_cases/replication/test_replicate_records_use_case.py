@@ -60,6 +60,12 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
         key = (record.tenant_id, record.connection_id, record.stream, record.record_key)
         self.records[key] = record
 
+    async def get_by_id(self, tenant_id: str, record_id: str) -> ReplicaRecord | None:
+        for r in self.records.values():
+            if r.tenant_id == tenant_id and r.id == record_id:
+                return r
+        return None
+
     async def get_by_key(
         self,
         tenant_id: str,
@@ -215,6 +221,17 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
         if self.sweep_counts_queue:
             return self.sweep_counts_queue.pop(0)
         return 0
+
+    async def list_by_stream_chunk(
+        self,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        after_id: str | None = None,
+        limit: int = 100,
+    ) -> list[ReplicaRecord]:
+        return []
 
 
 class FakeReplicaRejectionRepository(ReplicaRejectionRepositoryPort):

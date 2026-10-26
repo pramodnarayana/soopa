@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from ip.engine.adapters.outbound.database.data_plane.uow import SqlAlchemyIpDataPlaneUnitOfWork
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
+from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
+    IpTenantResolverPort,
 )
 
 from database.router import DatabaseRouterPort
@@ -22,13 +23,14 @@ class IpTenantUoWProvider(
 
     def __init__(
         self,
-        resolver: IpTenantResolver,
+        resolver: IpTenantResolverPort,
         db_router: DatabaseRouterPort,
+        storage: TieredStoragePort | None = None,
     ) -> None:
         super().__init__(
             resolver=resolver,
             db_router=db_router,
-            uow_factory=SqlAlchemyIpDataPlaneUnitOfWork,
+            uow_factory=lambda session: SqlAlchemyIpDataPlaneUnitOfWork(session, storage=storage),
         )
         self._ip_resolver = resolver
 

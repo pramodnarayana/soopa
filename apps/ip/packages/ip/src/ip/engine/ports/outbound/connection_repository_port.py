@@ -23,6 +23,10 @@ class ConnectionRepositoryPort(Protocol):
         """Retrieves a Connection aggregate by its unique ID."""
         ...
 
+    async def get_by_id_for_update(self, connection_id: str) -> Connection | None:
+        """Retrieves and row-locks (`SELECT ... FOR UPDATE`) a Connection aggregate for token rotation."""
+        return await self.get_by_id(connection_id)
+
     @abstractmethod
     async def get_by_fingerprint(
         self,

@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 
+from seedwork.domain.types import JsonDict, JsonValue
+
 from ip.engine.domain.enums import PaginationType, PropertyType
 
 
@@ -32,11 +34,12 @@ class OAuthConfig:
     scopes: Sequence[str] = ()
     client_id: str | None = None
 
-    def to_dict(self) -> dict[str, object]:
-        data: dict[str, object] = {
+    def to_dict(self) -> JsonDict:
+        scopes_val: list[JsonValue] = list(self.scopes)
+        data: JsonDict = {
             "authUrl": self.auth_url,
             "tokenUrl": self.token_url,
-            "scopes": list(self.scopes),
+            "scopes": scopes_val,
         }
         if self.client_id is not None:
             data["clientId"] = self.client_id
@@ -56,8 +59,8 @@ class ConnectorProperty:
     options: Sequence[DropdownOption] = ()
     oauth_config: OAuthConfig | None = None
 
-    def to_dict(self) -> dict[str, object]:
-        data: dict[str, object] = {
+    def to_dict(self) -> JsonDict:
+        data: JsonDict = {
             "name": self.name,
             "label": self.label,
             "type": self.type.value,
@@ -68,7 +71,10 @@ class ConnectorProperty:
         if self.description is not None:
             data["description"] = self.description
         if self.options:
-            data["options"] = [opt.to_dict() for opt in self.options]
+            options_val: list[JsonValue] = [
+                {"label": opt.label, "value": opt.value} for opt in self.options
+            ]
+            data["options"] = options_val
         if self.oauth_config is not None:
             data["oauthConfig"] = self.oauth_config.to_dict()
         return data
@@ -85,13 +91,14 @@ class ConnectorPropertySchema:
     properties: Sequence[ConnectorProperty]
     description: str | None = None
 
-    def to_dict(self) -> dict[str, object]:
-        data: dict[str, object] = {
+    def to_dict(self) -> JsonDict:
+        props_val: list[JsonValue] = [p.to_dict() for p in self.properties]
+        data: JsonDict = {
             "appId": self.app_id,
             "displayName": self.display_name,
             "authType": self.auth_type,
             "category": self.category,
-            "properties": [p.to_dict() for p in self.properties],
+            "properties": props_val,
         }
         if self.description is not None:
             data["description"] = self.description

@@ -5,13 +5,14 @@ from typing import Any
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from strace.domain import TraceEventType
 
 from edi.core.pipeline.delivery.base import (
     BaseDeliveryStrategy,
     TerminalDeliveryError,
     TransientDeliveryError,
 )
-from edi.domain.enums import EdiDirection, TraceEventType
+from edi.domain.enums import EdiDirection
 from edi.domain.events import DeliveryFailed, DeliverySuccessful, DomainEvent
 from edi.domain.models.transactions import EdiMessageDomainModel
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort

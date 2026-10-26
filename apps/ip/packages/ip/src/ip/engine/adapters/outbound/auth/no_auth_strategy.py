@@ -1,4 +1,4 @@
-"""No-authentication strategy for public or network-isolated endpoints."""
+from collections.abc import Sequence
 
 import httpx
 from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
@@ -6,6 +6,10 @@ from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
 
 class NoAuthStrategy(AuthenticatorPort):
     """Pass-through strategy that performs no modification on outgoing requests."""
+
+    @property
+    def sensitive_header_names(self) -> Sequence[str]:
+        return ()
 
     def authenticate_request(self, request: httpx.Request) -> httpx.Request:
         return request

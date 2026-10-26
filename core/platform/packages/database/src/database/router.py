@@ -1,8 +1,3 @@
-from sqlalchemy import select, text
-
-from database.constants import DatabaseShardStatus
-from database.models.sharding import DatabaseShard
-
 """
 Enterprise Database Routing and Provisioning.
 
@@ -12,13 +7,19 @@ application to depend on the interface while the infrastructure provides the
 production engine manager or a transactional test double.
 """
 
+from __future__ import annotations
+
 import asyncio
 from collections.abc import AsyncGenerator
 from typing import Protocol, cast
 
 import structlog
+from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from database.constants import DatabaseShardStatus
+from database.models.sharding import DatabaseShard, ShardRegistry
+from database.models.subscriptions import App
 from database.provider import get_async_engine
 from database.types import GlobalSession, TenantSession
 from database.utils import shard_connect_args
@@ -42,7 +43,7 @@ class DatabaseRouterPort(Protocol):
         self, shard_key: str, shard_url: str
     ) -> AsyncGenerator[TenantSession, None]: ...
 
-    async def get_all_shards(self) -> list[tuple[str, str]]: ...
+    async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]: ...
 
     async def close_all(self) -> None: ...
 
@@ -189,17 +190,35 @@ class DatabaseRouter(DatabaseRouterPort):
             session.info["session_type"] = "tenant"
             yield cast(TenantSession, session)
 
-    async def get_all_shards(self) -> list[tuple[str, str]]:
+    async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
         """
         Retrieves all active shards (key, dsn) from the global database.
+        If app_slug is specified, only returns shards dedicated to that application.
         """
         # Dynamically query the active database shards registered in the control plane
         async for session in self.get_global_session():
-            result = await session.execute(
-                select(DatabaseShard.id, DatabaseShard.name, DatabaseShard.dsn).where(
+            if app_slug:
+                escaped_slug = (
+                    app_slug.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                )
+                stmt = (
+                    select(DatabaseShard.id, DatabaseShard.name, DatabaseShard.dsn)
+                    .outerjoin(ShardRegistry, DatabaseShard.id == ShardRegistry.shard_id)
+                    .outerjoin(App, ShardRegistry.app_id == App.id)
+                    .where(
+                        DatabaseShard.status == DatabaseShardStatus.ACTIVE,
+                        or_(
+                            App.slug == app_slug,
+                            DatabaseShard.id.ilike(f"{escaped_slug}\\_%", escape="\\"),
+                        ),
+                    )
+                    .distinct()
+                )
+            else:
+                stmt = select(DatabaseShard.id, DatabaseShard.name, DatabaseShard.dsn).where(
                     DatabaseShard.status == DatabaseShardStatus.ACTIVE
                 )
-            )
+            result = await session.execute(stmt)
             shards = []
             for row in result:
                 dsn = self._resolve_dsn(row.dsn, row.id, getattr(row, "name", None))

@@ -13,17 +13,92 @@ source_roots = [
     "core/platform/packages/secret-store/src",
     "core/platform/packages/sftp/src",
     "apps/ip/packages/ip/src",
-    "core/platform/packages/shttp/src"
+    "core/platform/packages/shttp/src",
+    "core/platform/packages/orchestration/src",
+    "core/platform/packages/strace/src"
+]
+
+[[modules]]
+path = "strace.domain"
+depends_on = []
+
+[[modules]]
+path = "strace.ports"
+depends_on = [
+    "strace.domain"
+]
+
+[[modules]]
+path = "strace.application"
+depends_on = [
+    "strace.domain",
+    "strace.ports"
+]
+
+[[modules]]
+path = "strace.adapters"
+depends_on = [
+    "strace.domain",
+    "strace.ports",
+    "strace.application",
+    "database.models"
+]
+
+[[modules]]
+path = "strace.testing"
+depends_on = [
+    "strace.domain",
+    "strace.ports"
+]
+
+[[modules]]
+path = "orchestration.domain"
+depends_on = []
+
+[[modules]]
+path = "orchestration.ports"
+depends_on = [
+    "orchestration.domain"
+]
+
+[[modules]]
+path = "orchestration.application"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports"
+]
+
+[[modules]]
+path = "orchestration.adapters"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "database.models"
+]
+
+[[modules]]
+path = "orchestration.testing"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports"
 ]
 
 [[modules]]
 path = "ip.engine.domain"
-depends_on = []
+depends_on = [
+    "orchestration.domain",
+    "strace.domain"
+]
 
 [[modules]]
 path = "ip.engine.ports"
 depends_on = [
-    "ip.engine.domain"
+    "ip.engine.domain",
+    "orchestration.domain",
+    "orchestration.ports",
+    "strace.domain",
+    "strace.ports"
 ]
 
 [[modules]]
@@ -31,7 +106,13 @@ path = "ip.engine.application"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
-    "security"
+    "security",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "strace.domain",
+    "strace.ports",
+    "strace.application"
 ]
 
 [[modules]]
@@ -43,7 +124,15 @@ depends_on = [
     "security",
     "database.models",
     "shttp",
-    "sftp"
+    "sftp",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "orchestration.adapters",
+    "strace.domain",
+    "strace.ports",
+    "strace.application",
+    "strace.adapters"
 ]
 
 [[modules]]
@@ -96,8 +185,12 @@ depends_on = [
     "ip.engine.ports",
     "ip.engine.application",
     "ip.engine.adapters",
-    "ip.application.connectors",
-    "security"
+    "security",
+    "storage",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "orchestration.adapters"
 ]
 
 [[modules]]
@@ -125,7 +218,9 @@ depends_on = [
 
 [[modules]]
 path = "edi.domain"
-depends_on = []
+depends_on = [
+    "strace.domain"
+]
 
 [[modules]]
 path = "edi.adapters"
@@ -134,7 +229,10 @@ depends_on = [
     "edi.ports",
     "schemas",
     "sftp",
-    "shttp"
+    "shttp",
+    "strace.domain",
+    "strace.ports",
+    "strace.adapters"
 ]
 
 [[modules]]

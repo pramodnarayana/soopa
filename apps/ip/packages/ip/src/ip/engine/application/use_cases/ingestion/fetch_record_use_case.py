@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 
 import structlog
@@ -11,13 +12,18 @@ from security.ports.cipher_port import CipherPort
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import ConnectionStatus, IngestionMode
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    GetValidCredentialsCommand,
+    TokenManagerService,
+)
+from ip.engine.domain.enums import IngestionMode
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.connector_port import SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkProviderPort,
 )
 
 logger = structlog.get_logger(__name__)
@@ -53,71 +59,102 @@ class FetchRecordUseCase:
     def __init__(
         self,
         control_plane_uow: IpControlPlaneUnitOfWorkPort,
-        data_plane_uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         cipher: CipherPort,
         connectors: Mapping[str, SourceConnectorPort],
+        *,
+        data_plane_uow: IpDataPlaneUnitOfWorkPort | None = None,
+        data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
+        token_manager: TokenManagerService | None = None,
     ) -> None:
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow = data_plane_uow
+        self._data_plane_uow_provider = data_plane_uow_provider
         self._tiered_storage = tiered_storage
         self._cipher = cipher
         self._connectors = connectors
+        self._token_manager = token_manager or TokenManagerService(
+            control_plane_uow=control_plane_uow,
+            cipher=cipher,
+        )
+
+    @contextlib.asynccontextmanager
+    async def _open_uow(
+        self,
+        tenant_id: str,
+        shard_info: tuple[str, str] | None = None,
+    ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+        if self._data_plane_uow is not None:
+            async with self._data_plane_uow as uow:
+                yield uow
+        elif self._data_plane_uow_provider is not None:
+            if shard_info is None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+                if shard_info_res.is_err:
+                    raise RuntimeError(shard_info_res.unwrap_err().message)
+                shard_info = shard_info_res.unwrap()
+            shard_id, shard_dsn = shard_info
+            async with self._data_plane_uow_provider.get_data_plane_uow(
+                tenant_id, shard_id, shard_dsn
+            ) as uow:
+                yield uow
+        else:
+            raise RuntimeError("Neither data_plane_uow nor data_plane_uow_provider was configured.")
 
     async def execute(self, command: FetchRecordCommand) -> FetchRecordResultDTO:
         trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
 
-        # 1. Retrieve connection config from Control Plane
-        async with self._control_plane_uow:
-            connection = await self._control_plane_uow.connections.get_by_id(command.connection_id)
-            if not connection or connection.tenant_id != command.tenant_id:
-                logger.error(
-                    "fetch_record_connection_not_found",
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    record_id=command.record_id,
-                    trace_id=trace_id,
-                )
-                return FetchRecordResultDTO(
-                    status="CONNECTION_NOT_FOUND",
-                    trace_id=trace_id,
-                    record_id=command.record_id,
-                )
-
-            if connection.status is ConnectionStatus.DEACTIVATED:
-                logger.error(
-                    "fetch_record_connection_deactivated",
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    record_id=command.record_id,
-                    trace_id=trace_id,
-                )
-                return FetchRecordResultDTO(
-                    status="CONNECTION_DEACTIVATED",
-                    trace_id=trace_id,
-                    record_id=command.record_id,
-                )
-
-            connector = self._connectors.get(connection.app_id)
-            if not connector:
-                logger.error(
-                    "fetch_record_connector_not_found",
-                    app_id=connection.app_id,
-                    connection_id=command.connection_id,
-                    trace_id=trace_id,
-                )
-                return FetchRecordResultDTO(
-                    status="CONNECTOR_NOT_FOUND",
-                    trace_id=trace_id,
-                    record_id=command.record_id,
-                )
-
-            credentials = (
-                self._cipher.decrypt(connection.encrypted_credentials)
-                if connection.encrypted_credentials
-                else {}
+        # 0. Pre-resolve tenant shard before pulling remote record or offloading payload
+        shard_info: tuple[str, str] | None = None
+        if self._data_plane_uow is None and self._data_plane_uow_provider is not None:
+            shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(
+                command.tenant_id
             )
-            public_config = connection.resolved_public_config
+            if shard_info_res.is_err:
+                logger.error(
+                    "fetch_record_shard_resolution_failed",
+                    tenant_id=command.tenant_id,
+                    error=shard_info_res.unwrap_err().message,
+                    trace_id=trace_id,
+                )
+                return FetchRecordResultDTO(
+                    status="TENANT_SHARD_NOT_FOUND",
+                    trace_id=trace_id,
+                    record_id=command.record_id,
+                )
+            shard_info = shard_info_res.unwrap()
+
+        # 1. Retrieve connection config & valid credentials via unified TokenManagerService
+        creds_res = await self._token_manager.get_valid_credentials(
+            GetValidCredentialsCommand(
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+            )
+        )
+        if creds_res.is_err or creds_res.value is None:
+            err_code = creds_res.error.code.value if creds_res.error else "CONNECTION_NOT_FOUND"
+            return FetchRecordResultDTO(
+                status=err_code,
+                trace_id=trace_id,
+                record_id=command.record_id,
+            )
+        resolved = creds_res.value
+        connector = self._connectors.get(resolved.app_id)
+        if not connector:
+            logger.error(
+                "fetch_record_connector_not_found",
+                app_id=resolved.app_id,
+                connection_id=command.connection_id,
+                trace_id=trace_id,
+            )
+            return FetchRecordResultDTO(
+                status="CONNECTOR_NOT_FOUND",
+                trace_id=trace_id,
+                record_id=command.record_id,
+            )
+        resolved_app_id = resolved.app_id
+        credentials = resolved.credentials
+        public_config = resolved.public_config
 
         # 2. Fetch the discrete record from external app
         record_envelope = await connector.fetch_record(
@@ -160,7 +197,7 @@ class FetchRecordUseCase:
         inbound = InboundRecord.create(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
-            app_id=connection.app_id,
+            app_id=resolved_app_id,
             stream_name=command.stream_name,
             payload_bytes=payload_bytes,
             is_inlined=storage_result.is_inlined,
@@ -174,9 +211,9 @@ class FetchRecordUseCase:
         )
 
         # 5. Persist to Data Plane and commit
-        async with self._data_plane_uow:
-            await self._data_plane_uow.inbound_records.save(inbound)
-            await self._data_plane_uow.commit()
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+            await uow.inbound_records.save(inbound)
+            await uow.commit()
 
         logger.info(
             "fetch_record_completed",

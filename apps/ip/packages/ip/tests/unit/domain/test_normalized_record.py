@@ -5,7 +5,7 @@ from __future__ import annotations
 from ip.engine.domain.enums import IpTraceEventType
 from ip.engine.domain.events import NormalizedRecordCreatedEvent
 from ip.engine.domain.models.normalized_record import NormalizedRecord
-from seedwork.models import TracedAggregateRoot
+from strace.domain import TracedAggregateRoot
 
 
 def test_normalized_record_create_emits_trace_and_domain_event() -> None:

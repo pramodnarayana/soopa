@@ -240,9 +240,23 @@ def test_declarative_connector_extract_nested_supports_negative_indices(
 def test_declarative_connector_basic_auth_header(sample_manifest: DeclarativeManifest) -> None:
     manifest = dataclasses.replace(sample_manifest, auth_type="BASIC")
     connector = DeclarativeHttpConnector(manifest=manifest)
-    headers = connector._build_auth_headers({"username": "user", "password": "secret_password"})
-    assert "Authorization" in headers
-    assert headers["Authorization"].startswith("Basic ")
+    auth = connector._build_auth_payload({"username": "user", "password": "secret_password"})
+    assert "Authorization" in auth.headers
+    assert auth.headers["Authorization"].startswith("Basic ")
+    assert "Authorization" in auth.sensitive_header_names
+    assert auth.params == {}
+
+
+def test_declarative_connector_query_param_auth(sample_manifest: DeclarativeManifest) -> None:
+    manifest = dataclasses.replace(sample_manifest, auth_type="API_KEY")
+    connector = DeclarativeHttpConnector(manifest=manifest)
+    auth = connector._build_auth_payload(
+        {"api_key": "secret_key_123", "param_name": "apiKey", "placement": "query"}
+    )
+    assert auth.headers == {}
+    assert "apiKey" in auth.params
+    assert auth.params["apiKey"] == "secret_key_123"
+    assert tuple(auth.sensitive_header_names) == ()
 
 
 def test_declarative_connector_requires_https_and_rejects_restricted_hosts(
@@ -325,3 +339,48 @@ async def test_declarative_connector_fetch_page_handles_http_error(
     assert isinstance(page_res.error, UpstreamHttpError)
     assert page_res.error.status_code == 500
     assert page_res.error.disposition == FailureDisposition.RETRY
+
+
+@pytest.mark.asyncio
+async def test_declarative_connector_write_record_injects_idempotency_key_and_extracts_retry_after(
+    httpserver: HTTPServer,
+) -> None:
+    httpserver.expect_request(
+        "/contacts",
+        method="POST",
+        headers={"Idempotency-Key": "idem-decl-429"},
+    ).respond_with_json(
+        {"error": "rate_limit_exceeded"},
+        status=429,
+        headers={"Retry-After": "30"},
+    )
+
+    http_client = HttpClient(
+        client=create_http_client(timeout=1.0),
+        backoff_handler=HttpBackoffHandler(max_retries=0),
+        allow_private_ips=True,
+        response_policy=PassThroughPolicy(),
+    )
+    manifest = _build_manifest(httpserver.url_for(""))
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        http_client=http_client,
+        allow_private_ips=True,
+    )
+
+    result = await connector.write_record(
+        stream_name="contacts",
+        command=WriteRecordCommand(
+            stream_name="contacts",
+            operation="CREATE",
+            payload={"name": "Throttled Contact"},
+            idempotency_key="idem-decl-429",
+        ),
+        public_config={"tenant_slug": "acme"},
+        credentials={"api_key": "test_key"},
+    )
+    assert result.success is False
+    assert result.response_status_code == 429
+    assert result.retry_after_seconds == 30.0
+    assert result.request_headers is not None
+    assert result.request_headers.get("Idempotency-Key") == "idem-decl-429"

@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from database.router import DatabaseRouter
+from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
 from outbox.domain.constants import OutboxStatus
 from sqlalchemy import select
@@ -15,14 +15,14 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 @pytest.fixture
 async def sweeper_repo(
-    db_router: DatabaseRouter,
+    db_router: DatabaseRouterPort,
 ) -> SqlAlchemyEdiDataPlaneOutboxSweeperRepository:
     return SqlAlchemyEdiDataPlaneOutboxSweeperRepository(db_router)
 
 
 async def test_sweep_stuck_events(
     sweeper_repo: SqlAlchemyEdiDataPlaneOutboxSweeperRepository,
-    db_router: DatabaseRouter,
+    db_router: DatabaseRouterPort,
 ) -> None:
     tenant_id = "test_tenant_sweep"
     now = datetime.now(UTC)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from database.types import GlobalSession
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
@@ -115,3 +117,42 @@ async def test_connection_partial_unique_index_enforces_active_fingerprint_and_a
     active_list = await repo.list_by_tenant(seeded_ip_tenant, status=ConnectionStatus.PENDING_AUTH)
     assert len(active_list) == 1
     assert active_list[0].id == conn_replacement.id
+
+
+@pytest.mark.asyncio
+async def test_connection_repository_get_by_id_for_update_and_update_tokens(
+    global_session: GlobalSession,
+    seeded_ip_tenant: str,
+) -> None:
+    """Verifies SELECT ... FOR UPDATE row locking and OAuth2 token rotation persistence."""
+    repo = SqlAlchemyConnectionRepository(global_session)
+
+    conn = Connection.create(
+        tenant_id=seeded_ip_tenant,
+        app_id="salesforce",
+        name="Salesforce OAuth Connection",
+        auth_type=AuthType.OAUTH2,
+        public_config={"token_url": "https://login.salesforce.com/services/oauth2/token"},
+        encrypted_credentials=b"kid:k1:initial_oauth_tokens",
+        endpoint_for_fingerprint="https://login.salesforce.com",
+    )
+    save_res = await repo.save(conn)
+    assert save_res.is_ok is True
+
+    locked_conn = await repo.get_by_id_for_update(conn.id)
+    assert locked_conn is not None
+    assert locked_conn.id == conn.id
+
+    new_expires = (datetime.now(tz=UTC) + timedelta(hours=2)).isoformat()
+    locked_conn.update_tokens(
+        encrypted_credentials=b"kid:k1:rotated_oauth_tokens",
+        token_expires_at=new_expires,
+    )
+    rot_res = await repo.save(locked_conn)
+    assert rot_res.is_ok is True
+
+    reloaded = await repo.get_by_id(conn.id)
+    assert reloaded is not None
+    assert reloaded.encrypted_credentials == b"kid:k1:rotated_oauth_tokens"
+    assert reloaded.token_expires_at == new_expires
+    assert reloaded.last_refreshed_at is not None

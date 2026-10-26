@@ -4,7 +4,7 @@ from collections.abc import Callable
 from typing import Any, cast
 
 import structlog
-from database.router import DatabaseRouter
+from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.models.data_plane import ProcessedEvent, TraceEvent
 from sqlalchemy import CursorResult, Delete, delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +21,9 @@ _StmtFactory = Callable[[datetime.datetime], Delete]
 class SqlAlchemyEdiDataRetentionCleanupRepository(EdiDataRetentionCleanupRepositoryPort):
     _BATCH_SIZE: int = 5000
 
-    def __init__(self, db_router: DatabaseRouter) -> None:
+    def __init__(self, db_router: DatabaseRouterPort, app_slug: str = "edi") -> None:
         self.db_router = db_router
+        self.app_slug = app_slug
 
     async def cleanup_processed_events(
         self, retention_days: int, concurrency_limit: int = 5
@@ -74,7 +75,7 @@ class SqlAlchemyEdiDataRetentionCleanupRepository(EdiDataRetentionCleanupReposit
             raise ValueError("concurrency_limit must be strictly positive")
 
         sem = asyncio.Semaphore(concurrency_limit)
-        shards = await self.db_router.get_all_shards()
+        shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
 
         async def _bounded_cleanup(shard_name: str, shard_dsn: str) -> None:
             async with sem:

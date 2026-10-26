@@ -65,7 +65,7 @@ class FakeDatabaseRouter(DatabaseRouterPort):
         if False:
             yield cast(TenantSession, None)
 
-    async def get_all_shards(self) -> list[tuple[str, str]]:
+    async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
         return []
 
     async def close_all(self) -> None:

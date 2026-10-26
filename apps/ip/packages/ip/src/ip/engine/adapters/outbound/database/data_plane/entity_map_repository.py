@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
+from ip.engine.adapters.outbound.database.data_plane.mappers import entity_map_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import GlobalEntityMapModel
 from ip.engine.domain.models.global_entity_map import GlobalEntityMap
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
@@ -22,22 +23,7 @@ class SqlAlchemyGlobalEntityMapRepository(
 
     @staticmethod
     def _to_domain_model(orm: GlobalEntityMapModel) -> GlobalEntityMap:
-        return GlobalEntityMap(
-            id=orm.id,
-            tenant_id=orm.tenant_id,
-            trace_id=orm.trace_id,
-            correlation_id=orm.correlation_id,
-            parent_trace_id=orm.parent_trace_id,
-            original_trace_id=orm.original_trace_id,
-            replay_count=orm.replay_count,
-            entity_domain=orm.entity_domain,
-            canonical_id=orm.canonical_id,
-            source_connection_id=orm.source_connection_id,
-            source_entity_id=orm.source_entity_id,
-            dest_connection_id=orm.dest_connection_id,
-            dest_entity_id=orm.dest_entity_id,
-            created_at=orm.created_at,
-        )
+        return entity_map_to_domain(orm)
 
     @staticmethod
     def _update_record_from_domain(orm: GlobalEntityMapModel, domain: GlobalEntityMap) -> None:
@@ -124,3 +110,19 @@ class SqlAlchemyGlobalEntityMapRepository(
         result = await self._session.execute(stmt)
         rows = result.scalars().all()
         return [self._to_domain_model(r) for r in rows]
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[GlobalEntityMap]:
+        stmt = (
+            select(GlobalEntityMapModel)
+            .where(
+                GlobalEntityMapModel.trace_id == trace_id,
+                GlobalEntityMapModel.tenant_id == tenant_id,
+            )
+            .order_by(GlobalEntityMapModel.created_at.asc())
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_model(r) for r in result.scalars().all()]

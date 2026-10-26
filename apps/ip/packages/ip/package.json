@@ -18,6 +18,8 @@
     "@soopa/outbox": "workspace:*",
     "@soopa/seedwork": "workspace:*",
     "@soopa/security": "workspace:*",
-    "@soopa/pubsub": "workspace:*"
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/notification": "workspace:*",
+    "@soopa/orchestration": "workspace:*"
   }
 }

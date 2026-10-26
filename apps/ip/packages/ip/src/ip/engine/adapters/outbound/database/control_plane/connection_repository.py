@@ -130,6 +130,16 @@ class SqlAlchemyConnectionRepository(GlobalSqlAlchemyRepository, ConnectionRepos
             return None
         return self._to_domain_model(record)
 
+    async def get_by_id_for_update(self, connection_id: str) -> Connection | None:
+        stmt = (
+            select(ConnectionRecord).where(ConnectionRecord.id == connection_id).with_for_update()
+        )
+        result = await self._session.execute(stmt)
+        record = result.scalar_one_or_none()
+        if record is None:
+            return None
+        return self._to_domain_model(record)
+
     async def get_by_fingerprint(
         self,
         tenant_id: str,

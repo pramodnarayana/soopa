@@ -1,6 +1,5 @@
-"""HTTP Basic Authentication strategy."""
-
 import base64
+from collections.abc import Sequence
 
 import httpx
 from ip.engine.domain.exceptions import InvalidCredentialsError
@@ -15,6 +14,10 @@ class BasicAuthStrategy(AuthenticatorPort):
         self._password = password
         raw = f"{self._username}:{self._password}"
         self._encoded = base64.b64encode(raw.encode("utf-8")).decode("ascii")
+
+    @property
+    def sensitive_header_names(self) -> Sequence[str]:
+        return ("Authorization",)
 
     def validate(self) -> InvalidCredentialsError | None:
         if not self._username:

@@ -412,9 +412,15 @@ importers:
       '@soopa/database':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/database
+      '@soopa/notification':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/notification
       '@soopa/observability':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/observability
+      '@soopa/orchestration':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/orchestration
       '@soopa/outbox':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/outbox
@@ -714,6 +720,18 @@ importers:
         version: link:../../../ucp/packages/models
 
   core/platform/packages/observability: {}
+
+  core/platform/packages/orchestration:
+    devDependencies:
+      '@soopa/database':
+        specifier: workspace:*
+        version: link:../database
+      '@soopa/observability':
+        specifier: workspace:*
+        version: link:../observability
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../seedwork
 
   core/platform/packages/outbox:
     devDependencies:

@@ -6,11 +6,28 @@ All types are pure Python @dataclass(frozen=True) instances.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from seedwork.domain.types import JsonDict
+from strace.domain import TraceEvent, TraceLineageItemDTO, TraceStatus
 
+from ip.engine.domain.constants import DEFAULT_IDEMPOTENCY_HEADER
 from ip.engine.domain.exceptions import IpError
+from ip.engine.domain.models.global_entity_map import GlobalEntityMap
+from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.models.normalized_record import NormalizedRecord
+from ip.engine.domain.models.outbound_record import OutboundRecord
+from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.normalization import NormalizationRejectionEntry
+
+
+@dataclass(frozen=True)
+class ConnectorAuthPayload:
+    """Resolved authentication credentials and sensitive metadata for wire requests."""
+
+    headers: dict[str, str] = field(default_factory=dict)
+    params: dict[str, str] = field(default_factory=dict)
+    sensitive_header_names: Sequence[str] = ()
 
 
 @dataclass(frozen=True)
@@ -102,11 +119,15 @@ class WriteRecordCommand:
     operation: str  # 'CREATE' | 'UPDATE' | 'UPSERT' | 'DELETE'
     payload: JsonDict
     record_id: str | None = None
+    idempotency_key: str | None = None
+    idempotency_header_name: str = DEFAULT_IDEMPOTENCY_HEADER
+    headers: dict[str, str] = field(default_factory=dict)
+    correlation_id: str | None = None
 
 
 @dataclass(frozen=True)
 class WriteResultDTO:
-    """Outcome of writing a record to a target external application."""
+    """Outcome of writing a record to a target external application with wire telemetry."""
 
     success: bool
     record_id: str
@@ -114,15 +135,50 @@ class WriteResultDTO:
     error_message: str | None = None
     error_code: str | None = None
     error: IpError | None = None
+    target_url: str = ""
+    http_method: str = "POST"
+    request_headers: JsonDict = field(default_factory=dict)
+    response_status_code: int | None = None
+    response_headers: JsonDict | None = None
+    response_body: JsonDict | None = None
+    raw_response_bytes: bytes | None = None
+    duration_ms: int | None = None
+    retry_after_seconds: int | None = None
+    failure_category: str | None = None
 
     @classmethod
-    def from_error(cls, error: IpError, record_id: str = "failed") -> WriteResultDTO:
+    def from_error(
+        cls,
+        error: IpError,
+        record_id: str = "failed",
+        *,
+        target_url: str = "",
+        http_method: str = "POST",
+        request_headers: JsonDict | None = None,
+        response_status_code: int | None = None,
+        response_headers: JsonDict | None = None,
+        response_body: JsonDict | None = None,
+        raw_response_bytes: bytes | None = None,
+        duration_ms: int | None = None,
+        retry_after_seconds: int | None = None,
+        failure_category: str | None = None,
+    ) -> WriteResultDTO:
         return cls(
             success=False,
             record_id=record_id,
             error=error,
             error_code=error.code.value,
             error_message=error.message,
+            target_url=target_url,
+            http_method=http_method,
+            request_headers=dict(request_headers or {}),
+            response_status_code=response_status_code,
+            response_headers=response_headers,
+            response_body=response_body,
+            raw_response_bytes=raw_response_bytes,
+            duration_ms=duration_ms,
+            retry_after_seconds=retry_after_seconds,
+            failure_category=failure_category,
         )
 
 
@@ -205,3 +261,27 @@ class AppSpecResultDTO:
             error_code=error.code.value,
             error_message=error.message,
         )
+
+
+IpTraceLineageItemDTO = TraceLineageItemDTO
+
+
+@dataclass(frozen=True, kw_only=True)
+class IpTraceDTO:
+    """End-to-end 5-layer waterfall snapshot of a single Integration Platform trace."""
+
+    trace_id: str
+    tenant_id: str
+    correlation_id: str | None
+    original_trace_id: str
+    parent_trace_id: str | None
+    replay_count: int
+    status: TraceStatus
+    inbound_record: InboundRecord | None = None
+    replica_records: tuple[ReplicaRecord, ...] = ()
+    replica_rejections: tuple[ReplicaRejection, ...] = ()
+    normalized_records: tuple[NormalizedRecord, ...] = ()
+    normalization_rejections: tuple[NormalizationRejectionEntry, ...] = ()
+    entity_mappings: tuple[GlobalEntityMap, ...] = ()
+    outbound_records: tuple[OutboundRecord, ...] = ()
+    trace_events: tuple[TraceEvent, ...] = ()

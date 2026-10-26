@@ -8,12 +8,12 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
 from seedwork.utils import generate_deterministic_id, generate_id
+from strace.domain import TraceEventType
 
 from edi.domain.enums import (
     EdiDirection,
     EdiStandard,
     PipelineEventType,
-    TraceEventType,
 )
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.headers import EdiEnvelopeHeaders

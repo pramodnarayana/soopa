@@ -11,14 +11,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Generic, TypeVar
 
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonDict
 
 from ip.engine.domain.enums import FailureDisposition
-
-T = TypeVar("T")
-E = TypeVar("E", bound="IpError")
 
 
 class IpErrorCode(StrEnum):
@@ -51,6 +48,12 @@ class IpErrorCode(StrEnum):
     INBOUND_PAYLOAD_DECODE_FAILED = "INBOUND_PAYLOAD_DECODE_FAILED"
     DUPLICATE_EXTERNAL_EVENT = "DUPLICATE_EXTERNAL_EVENT"
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+    MAPPING_BINDING_NOT_FOUND = "MAPPING_BINDING_NOT_FOUND"
+    REPLICA_RECORD_NOT_FOUND = "REPLICA_RECORD_NOT_FOUND"
+    NORMALIZATION_FAILED = "NORMALIZATION_FAILED"
+    TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
+    REPLAY_STAGE_NOT_AVAILABLE = "REPLAY_STAGE_NOT_AVAILABLE"
+    INVALID_REPLAY_PAYLOAD = "INVALID_REPLAY_PAYLOAD"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -450,28 +453,124 @@ class RateLimitExceededError(IpError):
     remediation: str | None = "Wait for the Retry-After interval before resuming synchronization."
 
 
-@dataclass(frozen=True)
-class Result(Generic[T, E]):
-    """Generic, immutable Result monad for First-Class Error Handling without exceptions."""
+@dataclass(frozen=True, kw_only=True)
+class MappingBindingNotFoundError(IpError):
+    """Returned when a stream mapping binding configuration does not exist."""
 
-    value: T | None = None
-    error: E | None = None
-
-    @property
-    def is_ok(self) -> bool:
-        return self.error is None
-
-    @property
-    def is_err(self) -> bool:
-        return self.error is not None
+    connection_id: str = ""
+    stream: str = ""
+    code: IpErrorCode = IpErrorCode.MAPPING_BINDING_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Configure a mapping binding for this stream before normalizing."
 
     @classmethod
-    def ok(cls, value: T) -> Result[T, E]:
-        return cls(value=value, error=None)
+    def for_stream(cls, connection_id: str, stream: str) -> MappingBindingNotFoundError:
+        return cls(
+            connection_id=connection_id,
+            stream=stream,
+            message=f"No mapping binding configured for connection '{connection_id}', stream '{stream}'.",
+            details={"connection_id": connection_id, "stream": stream},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReplicaRecordNotFoundError(IpError):
+    """Returned when a requested replica record cannot be located on the tenant shard."""
+
+    replica_record_id: str = ""
+    code: IpErrorCode = IpErrorCode.REPLICA_RECORD_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify that the replica record ID exists."
 
     @classmethod
-    def fail(cls, error: E) -> Result[T, E]:
-        return cls(value=None, error=error)
+    def for_id(cls, replica_record_id: str) -> ReplicaRecordNotFoundError:
+        return cls(
+            replica_record_id=replica_record_id,
+            message=f"Replica record '{replica_record_id}' was not found.",
+            details={"replica_record_id": replica_record_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class NormalizationFailedError(IpError):
+    """Returned when an unrecoverable failure occurs during replica normalization."""
+
+    code: IpErrorCode = IpErrorCode.NORMALIZATION_FAILED
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 500
+    remediation: str | None = "Check the error details and mapper implementation."
+
+    @classmethod
+    def with_message(
+        cls, message: str, details: JsonDict | None = None
+    ) -> NormalizationFailedError:
+        return cls(
+            message=message,
+            details=details or {},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class TraceNotFoundError(IpError):
+    """Returned when a requested trace_id cannot be located on the tenant shard."""
+
+    trace_id: str = ""
+    code: IpErrorCode = IpErrorCode.TRACE_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify that the trace_id exists and belongs to the active tenant."
+
+    @classmethod
+    def for_trace(cls, trace_id: str) -> TraceNotFoundError:
+        return cls(
+            trace_id=trace_id,
+            message=f"Transaction trace '{trace_id}' was not found.",
+            details={"trace_id": trace_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReplayStageNotAvailableError(IpError):
+    """Returned when a replay is requested at a stage whose source artifacts do not exist for the trace."""
+
+    trace_id: str = ""
+    stage: str = ""
+    code: IpErrorCode = IpErrorCode.REPLAY_STAGE_NOT_AVAILABLE
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = (
+        "Select an earlier replay stage (e.g. RETRY_INGEST) that has a persisted source record."
+    )
+
+    @classmethod
+    def for_stage(cls, trace_id: str, stage: str, reason: str) -> ReplayStageNotAvailableError:
+        return cls(
+            trace_id=trace_id,
+            stage=stage,
+            message=reason,
+            details={"trace_id": trace_id, "stage": stage},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class InvalidReplayPayloadError(IpError):
+    """Returned when a modified payload supplied to ModifyAndReplay is structurally invalid."""
+
+    trace_id: str = ""
+    code: IpErrorCode = IpErrorCode.INVALID_REPLAY_PAYLOAD
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 400
+    remediation: str | None = "Supply a non-empty JSON object for the modified replay payload."
+
+    @classmethod
+    def for_trace(cls, trace_id: str, reason: str) -> InvalidReplayPayloadError:
+        return cls(
+            trace_id=trace_id,
+            message=reason,
+            details={"trace_id": trace_id},
+        )
 
 
 __all__ = [
@@ -492,15 +591,21 @@ __all__ = [
     "InvalidConnectionStateError",
     "InvalidCredentialsError",
     "InvalidEndpointError",
+    "InvalidReplayPayloadError",
     "IpError",
     "IpErrorCode",
     "ManifestParseFailureError",
+    "MappingBindingNotFoundError",
+    "NormalizationFailedError",
     "PayloadNotFoundError",
     "RateLimitExceededError",
+    "ReplayStageNotAvailableError",
+    "ReplicaRecordNotFoundError",
     "Result",
     "SftpConnectionError",
     "StreamNotFoundError",
     "TenantShardNotFoundError",
+    "TraceNotFoundError",
     "UnsupportedWriteOperationError",
     "UpstreamHttpError",
     "UpstreamNetworkError",

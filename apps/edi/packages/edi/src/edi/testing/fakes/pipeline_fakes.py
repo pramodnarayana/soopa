@@ -10,10 +10,12 @@ from database.outbox_serializer import serialize_domain_event
 from seedwork.domain.types import JsonValue
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from strace.testing import InMemoryTraceRepository
 
 if TYPE_CHECKING:
     from edi.domain.models.headers import EdiEnvelopeHeaders
 
+from edi.application.dtos.transactions import ApiGatewayDTO
 from edi.ports.outbound.api_gateway_repository import (
     ApiGatewayPayloadDTO,
     ApiGatewayRepositoryPort,
@@ -781,7 +783,7 @@ class FakeDataPlaneUnitOfWork:
         self.api_gateway_transactions = FakeApiGatewayRepository()
 
         self.transactions = self.repository
-        self.traces = self.repository
+        self.traces = InMemoryTraceRepository()
         self.outbound_routes = self.repository
         self.inbound_routes = self.repository
         self.edi_headers = self.repository
@@ -874,6 +876,12 @@ class FakeApiGatewayRepository(ApiGatewayRepositoryPort):
             error_code=str(data["error_code"]) if data.get("error_code") else None,
             error_details=typing.cast(dict[str, JsonValue] | None, data.get("error_details")),
         )
+
+    async def get_api_gateways_by_trace_id(
+        self, tenant_id: str, trace_id: str
+    ) -> list[ApiGatewayDTO]:
+        _ = (tenant_id, trace_id)
+        return []
 
     async def update_api_payload_status(
         self,

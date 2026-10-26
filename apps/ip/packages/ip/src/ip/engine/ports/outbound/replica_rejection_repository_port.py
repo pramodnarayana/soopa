@@ -16,3 +16,11 @@ class ReplicaRejectionRepositoryPort(Protocol):
     async def save_batch(self, rejections: Sequence[ReplicaRejection]) -> None:
         """Persists a batch of rejected records into the replica_rejections audit table."""
         ...
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[ReplicaRejection]:
+        """Retrieves all replica rejections associated with a trace ID."""
+        return ()

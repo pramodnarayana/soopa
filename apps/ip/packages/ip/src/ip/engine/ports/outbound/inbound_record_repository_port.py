@@ -23,7 +23,13 @@ class InboundRecordRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+        *,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[InboundRecord]:
         """Retrieves all inbound records associated with a trace ID."""
         ...
 

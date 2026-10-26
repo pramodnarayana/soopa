@@ -12,12 +12,16 @@ from ip.engine.application.responses import (
     StreamFieldDTO,
     StreamSchemaDTO,
 )
-from ip.engine.domain.enums import ConnectionStatus
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    GetValidCredentialsCommand,
+    ResolvedConnectionCredentialsDTO,
+    TokenManagerService,
+)
 from ip.engine.domain.exceptions import (
-    ConnectionDeactivatedError,
     ConnectionNotFoundError,
     ConnectorNotFoundError,
     InvalidConnectionConfigError,
+    Result,
 )
 from ip.engine.domain.models.catalog import ConnectionCatalog, StreamField, StreamSchema, SyncMode
 from ip.engine.ports.outbound.connector_port import ConnectorMetadataPort
@@ -34,65 +38,90 @@ class DiscoverCatalogUseCase:
         uow: IpControlPlaneUnitOfWorkPort,
         cipher: CipherPort,
         connectors: Mapping[str, ConnectorMetadataPort],
+        *,
+        token_manager: TokenManagerService | None = None,
     ) -> None:
         self._uow = uow
         self._cipher = cipher
         self._connectors = connectors
+        self._token_manager = token_manager or TokenManagerService(
+            control_plane_uow=uow,
+            cipher=cipher,
+        )
+
+    async def _resolve_credentials(
+        self,
+        connection_id: str,
+        tenant_id: str,
+    ) -> Result[ResolvedConnectionCredentialsDTO, DiscoveredCatalogDTO]:
+        creds_res = await self._token_manager.get_valid_credentials(
+            GetValidCredentialsCommand(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+            )
+        )
+        if creds_res.is_err or creds_res.value is None:
+            err = creds_res.error or ConnectionNotFoundError.for_id(connection_id)
+            return Result.fail(DiscoveredCatalogDTO.from_error(connection_id, err))
+        return Result.ok(creds_res.value)
+
+    @staticmethod
+    def _parse_stream_sync_modes(
+        stream_dto: StreamSchemaDTO,
+        connection_id: str,
+    ) -> list[SyncMode]:
+        parsed_sync_modes: list[SyncMode] = []
+        for m in stream_dto.supported_sync_modes:
+            try:
+                parsed_sync_modes.append(SyncMode(m))
+            except ValueError:
+                logger.info(
+                    "unsupported_sync_mode_skipped",
+                    stream_name=stream_dto.name,
+                    mode=m,
+                    connection_id=connection_id,
+                )
+        if not parsed_sync_modes:
+            logger.info(
+                "stream_skipped_no_supported_sync_modes",
+                stream_name=stream_dto.name,
+                connection_id=connection_id,
+            )
+        return parsed_sync_modes
 
     async def execute(
         self,
         connection_id: str,
         tenant_id: str,
     ) -> DiscoveredCatalogDTO:
+        creds_res = await self._resolve_credentials(connection_id, tenant_id)
+        if creds_res.is_err or creds_res.value is None:
+            return creds_res.error or DiscoveredCatalogDTO.from_error(
+                connection_id, ConnectionNotFoundError.for_id(connection_id)
+            )
+        resolved = creds_res.value
+
         async with self._uow:
-            connection = await self._uow.connections.get_by_id(connection_id)
-            if not connection or connection.tenant_id != tenant_id:
-                not_found_err = ConnectionNotFoundError.for_id(connection_id)
-                logger.error(
-                    "catalog_discovery_connection_not_found",
-                    connection_id=connection_id,
-                    tenant_id=tenant_id,
-                    error_code=not_found_err.code.value,
-                )
-                await self._uow.rollback()
-                return DiscoveredCatalogDTO.from_error(connection_id, not_found_err)
-
-            if connection.status == ConnectionStatus.DEACTIVATED:
-                deact_err = ConnectionDeactivatedError.for_id(connection_id)
-                logger.error(
-                    "catalog_discovery_connection_deactivated",
-                    connection_id=connection_id,
-                    error_code=deact_err.code.value,
-                )
-                await self._uow.rollback()
-                return DiscoveredCatalogDTO.from_error(connection_id, deact_err)
-
-            connector = self._connectors.get(connection.app_id)
+            connector = self._connectors.get(resolved.app_id)
             if not connector:
                 conn_err = ConnectorNotFoundError(
-                    app_id=connection.app_id,
-                    message=f"Connector '{connection.app_id}' is not registered.",
-                    details={"app_id": connection.app_id},
+                    app_id=resolved.app_id,
+                    message=f"Connector '{resolved.app_id}' is not registered.",
+                    details={"app_id": resolved.app_id},
                 )
                 logger.error(
                     "catalog_discovery_connector_not_found",
                     connection_id=connection_id,
-                    app_id=connection.app_id,
+                    app_id=resolved.app_id,
                     error_code=conn_err.code.value,
                 )
                 await self._uow.rollback()
                 return DiscoveredCatalogDTO.from_error(connection_id, conn_err)
 
-            credentials = (
-                self._cipher.decrypt(connection.encrypted_credentials)
-                if connection.encrypted_credentials
-                else {}
-            )
-
             catalog_dto = await connector.discover(
-                connection_id=connection.id,
-                public_config=connection.resolved_public_config,
-                credentials=credentials,
+                connection_id=resolved.connection_id,
+                public_config=resolved.public_config,
+                credentials=resolved.credentials,
             )
             if not catalog_dto.success:
                 await self._uow.rollback()
@@ -100,23 +129,8 @@ class DiscoverCatalogUseCase:
 
             domain_streams: list[StreamSchema] = []
             for s in catalog_dto.streams:
-                parsed_sync_modes: list[SyncMode] = []
-                for m in s.supported_sync_modes:
-                    try:
-                        parsed_sync_modes.append(SyncMode(m))
-                    except ValueError:
-                        logger.info(
-                            "unsupported_sync_mode_skipped",
-                            stream_name=s.name,
-                            mode=m,
-                            connection_id=connection_id,
-                        )
+                parsed_sync_modes = self._parse_stream_sync_modes(s, connection_id)
                 if not parsed_sync_modes:
-                    logger.info(
-                        "stream_skipped_no_supported_sync_modes",
-                        stream_name=s.name,
-                        connection_id=connection_id,
-                    )
                     continue
 
                 domain_streams.append(
@@ -141,7 +155,7 @@ class DiscoverCatalogUseCase:
             next_version = (active_catalog.catalog_version + 1) if active_catalog else 1
 
             catalog_res = ConnectionCatalog.try_create(
-                connection_id=connection.id,
+                connection_id=resolved.connection_id,
                 catalog_version=next_version,
                 streams=domain_streams,
             )
@@ -178,7 +192,7 @@ class DiscoverCatalogUseCase:
 
             logger.info(
                 "catalog_discovered",
-                connection_id=connection.id,
+                connection_id=resolved.connection_id,
                 catalog_id=catalog_entity.id,
                 catalog_version=next_version,
                 stream_count=len(domain_streams),

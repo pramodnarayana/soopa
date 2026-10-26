@@ -54,6 +54,15 @@ class ReplicaRecordRepositoryPort(Protocol):
         ...
 
     @abstractmethod
+    async def get_by_id(
+        self,
+        tenant_id: str,
+        record_id: str,
+    ) -> ReplicaRecord | None:
+        """Retrieves an existing replica snapshot by primary record ID."""
+        ...
+
+    @abstractmethod
     async def get_by_key(
         self,
         tenant_id: str,
@@ -84,3 +93,24 @@ class ReplicaRecordRepositoryPort(Protocol):
     ) -> int:
         """Tombstones rows where last_seen_generation < current_generation for full-refresh syncs."""
         ...
+
+    @abstractmethod
+    async def list_by_stream_chunk(
+        self,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        after_id: str | None = None,
+        limit: int = 100,
+    ) -> list[ReplicaRecord]:
+        """Retrieves a deterministic keyset-paginated chunk of replica records for a stream."""
+        ...
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[ReplicaRecord]:
+        """Retrieves all replica records last updated under a given trace ID."""
+        return ()

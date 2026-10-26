@@ -29,6 +29,7 @@ members = [
     "notification-jobs-worker",
     "notification-worker",
     "observability",
+    "orchestration",
     "orchestrator-worker",
     "outbox",
     "platform-migrator",
@@ -43,6 +44,7 @@ members = [
     "sftp",
     "shttp",
     "storage",
+    "strace",
     "ucp",
     "ucp-jobs-worker",
     "ucp-models",
@@ -1089,6 +1091,7 @@ dependencies = [
     { name = "sftp" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "strace" },
     { name = "structlog" },
     { name = "ucp" },
     { name = "ucp-models" },
@@ -1130,6 +1133,7 @@ requires-dist = [
     { name = "sftp", editable = "core/platform/packages/sftp" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog", specifier = ">=24.1.0" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
@@ -1207,6 +1211,7 @@ dependencies = [
     { name = "security" },
     { name = "seedwork" },
     { name = "sqlalchemy" },
+    { name = "strace" },
     { name = "structlog" },
     { name = "ucp-models" },
 ]
@@ -1231,6 +1236,7 @@ requires-dist = [
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
 ]
@@ -1822,7 +1828,9 @@ dependencies = [
     { name = "dependency-injector" },
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "notification" },
     { name = "observability" },
+    { name = "orchestration" },
     { name = "outbox" },
     { name = "paramiko" },
     { name = "pubsub" },
@@ -1834,6 +1842,7 @@ dependencies = [
     { name = "sftp" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "strace" },
     { name = "structlog" },
 ]
 
@@ -1856,7 +1865,9 @@ requires-dist = [
     { name = "dependency-injector", specifier = ">=4.41.0" },
     { name = "fastapi", specifier = "==0.136.0" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "notification", editable = "core/platform/packages/notification" },
     { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "orchestration", editable = "core/platform/packages/orchestration" },
     { name = "outbox", editable = "core/platform/packages/outbox" },
     { name = "paramiko", specifier = ">=3.3.1" },
     { name = "pubsub", editable = "core/platform/packages/pubsub" },
@@ -1868,6 +1879,7 @@ requires-dist = [
     { name = "sftp", editable = "core/platform/packages/sftp" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog", specifier = ">=24.1.0" },
 ]
 
@@ -2746,6 +2758,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7c/b5/df4b61da899f6ebdffdbdf0c8b0f3189ee57151694ccd5b7d50ee2906241/opentelemetry_util_http-0.66b1.tar.gz", hash = "sha256:047dea1a628031f857a5a32261dc0e955bc162d39993ed1cffb8f2cff5ba8a62", size = 11586, upload-time = "2026-10-06T17:36:46.572Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/9b/c77ecaea79ba0de1a11e7f06a7f5eea7043ec23f1860dcf5f03536698e4c/opentelemetry_util_http-0.66b1-py3-none-any.whl", hash = "sha256:8f443d7abcaf29c4a07b373bbd31b5b39132c0ed3c27d015a59dc0323d5b1c58", size = 8387, upload-time = "2026-10-06T17:36:06.984Z" },
+]
+
+[[package]]
+name = "orchestration"
+version = "0.1.0"
+source = { editable = "core/platform/packages/orchestration" }
+dependencies = [
+    { name = "database" },
+    { name = "observability" },
+    { name = "seedwork" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sqlalchemy", specifier = ">=2.0.51" },
 ]
 
 [[package]]
@@ -4016,6 +4047,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "strace"
+version = "0.1.0"
+source = { editable = "core/platform/packages/strace" }
+dependencies = [
+    { name = "database" },
+    { name = "observability" },
+    { name = "seedwork" },
+    { name = "sqlalchemy" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "structlog", specifier = ">=24.0.0" },
+]
+
+[[package]]
 name = "structlog"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4327,6 +4379,7 @@ dependencies = [
     { name = "observability" },
     { name = "secret-store" },
     { name = "security" },
+    { name = "strace" },
     { name = "ucp" },
     { name = "uvicorn" },
 ]
@@ -4358,6 +4411,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
     { name = "secret-store", editable = "core/platform/packages/secret-store" },
     { name = "security", editable = "core/platform/packages/security" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
     { name = "uvicorn", specifier = ">=0.30.1" },
 ]

@@ -2,7 +2,7 @@ import asyncio
 from typing import Any, cast
 
 import structlog
-from database.router import DatabaseRouter
+from database.router import DatabaseRouterPort
 from outbox.domain.constants import OutboxStatus
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from seedwork.events import EventEnvelope
@@ -16,13 +16,14 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(OutboxRepositoryPort):
     SQLAlchemy implementation for sweeping stranded outbox events across tenant shards.
     """
 
-    def __init__(self, db_router: DatabaseRouter) -> None:
+    def __init__(self, db_router: DatabaseRouterPort, app_slug: str = "edi") -> None:
         self.db_router = db_router
+        self.app_slug = app_slug
 
     async def sweep_stuck_events(self, lock_lease_ms: int = 30000) -> int:
         total_swept = 0
         try:
-            shards = await self.db_router.get_all_shards()
+            shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
             for shard_name, shard_dsn in shards:
                 async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                     while True:
@@ -65,7 +66,7 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(OutboxRepositoryPort):
     ) -> list[EventEnvelope]:
         events: list[EventEnvelope] = []
         try:
-            shards = await self.db_router.get_all_shards()
+            shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
             for shard_name, shard_dsn in shards:
                 if len(events) >= limit:
                     break
@@ -115,7 +116,7 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(OutboxRepositoryPort):
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
         try:
-            shards = await self.db_router.get_all_shards()
+            shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
             for shard_name, shard_dsn in shards:
                 async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                     query = text("""
@@ -141,7 +142,7 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(OutboxRepositoryPort):
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
         try:
-            shards = await self.db_router.get_all_shards()
+            shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
             for shard_name, shard_dsn in shards:
                 async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
                     query = text("""

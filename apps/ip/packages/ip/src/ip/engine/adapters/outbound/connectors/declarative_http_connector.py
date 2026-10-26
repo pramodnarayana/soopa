@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import base64
 import re
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 import structlog
+from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
 from ip.engine.adapters.outbound.connectors.spec_mapper import schema_to_app_spec_dto
 from ip.engine.domain.exceptions import (
@@ -34,6 +34,7 @@ from ip.engine.domain.models.connector_spec import (
 from ip.engine.ports.types import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
+    ConnectorAuthPayload,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
     StreamFieldDTO,
@@ -147,32 +148,30 @@ class DeclarativeHttpConnector(BaseConnector):
             return Result.fail(invalid_param_error)
         return self._validate_url(interpolated)
 
-    def _build_auth_headers(self, credentials: JsonDict) -> dict[str, str]:
-        """Injects authentication headers based on manifest auth_type."""
-        headers: dict[str, str] = {}
-        auth_type = self._manifest.auth_type.upper()
-
-        if auth_type in ("BEARER", "OAUTH2"):
-            token = (
-                credentials.get("access_token")
-                or credentials.get("token")
-                or credentials.get("api_key")
-            )
-            if token:
-                headers["Authorization"] = f"Bearer {token}"
-        elif auth_type == "BASIC":
-            username = str(credentials.get("username", ""))
-            password = str(credentials.get("password", ""))
-            if username and password:
-                basic_token = base64.b64encode(f"{username}:{password}".encode()).decode("ascii")
-                headers["Authorization"] = f"Basic {basic_token}"
-        elif auth_type == "API_KEY":
-            api_key = credentials.get("api_key") or credentials.get("key")
-            header_name = str(credentials.get("api_key_header", "X-API-Key"))
-            if api_key:
-                headers[header_name] = str(api_key)
-
-        return headers
+    def _build_auth_payload(self, credentials: JsonDict) -> ConnectorAuthPayload:
+        """Injects authentication headers and query parameters via unified AuthStrategyResolver."""
+        authenticator = AuthStrategyResolver.resolve(
+            self._manifest.auth_type,
+            credentials,
+            allow_private_ips=self._allow_private_ips,
+        )
+        dummy_req = httpx.Request("GET", "https://auth.internal")
+        authed_req = authenticator.authenticate_request(dummy_req)
+        canonical_names = {
+            "authorization": "Authorization",
+            "x-api-key": "X-API-Key",
+        }
+        headers = {
+            canonical_names.get(k.lower(), k): v
+            for k, v in authed_req.headers.items()
+            if k.lower() not in ("host", "user-agent", "accept", "accept-encoding", "connection")
+        }
+        auth_params = dict(authed_req.url.params)
+        return ConnectorAuthPayload(
+            headers=headers,
+            params=auth_params,
+            sensitive_header_names=tuple(authenticator.sensitive_header_names),
+        )
 
     @staticmethod
     def _extract_nested(data: object | None, path: str | None) -> object | None:
@@ -225,17 +224,19 @@ class DeclarativeHttpConnector(BaseConnector):
 
         base_url = interp_res.value
         url = f"{base_url.rstrip('/')}/{action.path.lstrip('/')}"
+        auth = self._build_auth_payload(credentials)
         headers = {
-            **self._build_auth_headers(credentials),
+            **auth.headers,
             **action.headers,
         }
+        merged_check_params = {**auth.params, **(action.query_params or {})}
 
         try:
             resp = await self._http_client.request(
                 method=action.method,
                 url=url,
                 headers=headers,
-                params=action.query_params or None,
+                params=merged_check_params or None,
                 timeout=self._timeout_seconds,
             )
             if resp.is_success:
@@ -411,16 +412,18 @@ class DeclarativeHttpConnector(BaseConnector):
         req_url: str,
         params: dict[str, str | int],
     ) -> Result[tuple[list[JsonDict], str | None, bool], IpError]:
+        auth = self._build_auth_payload(credentials)
         headers = {
-            **self._build_auth_headers(credentials),
+            **auth.headers,
             **action.headers,
         }
+        merged_page_params = {**auth.params, **params}
         try:
             resp = await self._http_client.request(
                 method=action.method,
                 url=req_url,
                 headers=headers,
-                params=params or None,
+                params=merged_page_params or None,
                 timeout=self._timeout_seconds,
             )
         except (HttpError, httpx.HTTPError, OSError) as exc:
@@ -603,6 +606,34 @@ class DeclarativeHttpConnector(BaseConnector):
         ):
             yield r
 
+    def _resolve_declarative_write_action(
+        self,
+        stream_name: str,
+        operation: str,
+    ) -> Result[HttpActionSpec, IpError]:
+        action = self._manifest.write_actions.get(f"{stream_name}:{operation}")
+        if action is None and operation == "CREATE":
+            action = self._manifest.write_actions.get(stream_name)
+        if action is not None:
+            return Result.ok(action)
+        if operation != "CREATE":
+            return Result.fail(
+                UnsupportedWriteOperationError(
+                    operation=operation,
+                    stream_name=stream_name,
+                    message=(
+                        f"Unsupported write operation '{operation}' for declarative connector"
+                    ),
+                )
+            )
+        return Result.fail(
+            WriteActionNotConfiguredError(
+                app_id=self.app_id,
+                stream_name=stream_name,
+                message=f"No write action configured for stream '{stream_name}' in {self.app_id}",
+            )
+        )
+
     async def write_record(
         self,
         stream_name: str,
@@ -610,24 +641,17 @@ class DeclarativeHttpConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> WriteResultDTO:
-        if command.operation != "CREATE":
+        action_res = self._resolve_declarative_write_action(stream_name, command.operation)
+        if action_res.error is not None or action_res.value is None:
             return WriteResultDTO.from_error(
-                UnsupportedWriteOperationError(
-                    operation=command.operation,
-                    stream_name=stream_name,
-                    message=f"Unsupported write operation '{command.operation}' for declarative connector",
-                )
-            )
-
-        action = self._manifest.write_actions.get(stream_name)
-        if not action:
-            return WriteResultDTO.from_error(
-                WriteActionNotConfiguredError(
+                action_res.error
+                or WriteActionNotConfiguredError(
                     app_id=self.app_id,
                     stream_name=stream_name,
-                    message=f"No write action configured for stream '{stream_name}' in {self.app_id}",
+                    message=f"No write action configured for stream '{stream_name}'",
                 )
             )
+        action = action_res.value
 
         interp_res = self._interpolate_string(
             self._manifest.base_url_template, public_config, credentials
@@ -639,69 +663,32 @@ class DeclarativeHttpConnector(BaseConnector):
             )
 
         base_url = interp_res.value
-        url = f"{base_url.rstrip('/')}/{action.path.lstrip('/')}"
-        headers = {
-            **self._build_auth_headers(credentials),
+        encoded_record_id = quote(str(command.record_id or ""), safe="")
+        action_path = action.path.replace("{record_id}", encoded_record_id)
+        url = f"{base_url.rstrip('/')}/{action_path.lstrip('/')}"
+        auth = self._build_auth_payload(credentials)
+        headers: dict[str, str] = {
+            **auth.headers,
             **action.headers,
+            **command.headers,
             "Content-Type": "application/json",
         }
+        if command.idempotency_key:
+            headers[command.idempotency_header_name] = command.idempotency_key
 
-        try:
-            resp = await self._http_client.request(
+        return await self._execute_tracked_write_request(
+            send_fn=lambda: self._http_client.request(
                 method=action.method,
                 url=url,
                 headers=headers,
-                json=command.payload,
+                params=auth.params or None,
+                json=command.payload if action.method.upper() != "DELETE" else None,
                 timeout=self._timeout_seconds,
-            )
-            if not resp.is_success:
-                logger.error(
-                    "declarative_connector_write_failed",
-                    app_id=self.app_id,
-                    stream=stream_name,
-                    status_code=resp.status_code,
-                    response_text=resp.text[:200],
-                )
-                return WriteResultDTO.from_error(
-                    UpstreamHttpError(
-                        status_code=resp.status_code,
-                        message=f"HTTP request failed with status {resp.status_code}: {resp.text[:200]}",
-                        disposition=(
-                            FailureDisposition.RETRY
-                            if resp.status_code == 429 or resp.status_code >= 500
-                            else FailureDisposition.FAIL
-                        ),
-                    )
-                )
-
-            rec_id = "written"
-            if resp.content:
-                try:
-                    data = resp.json()
-                    if isinstance(data, dict):
-                        rec_id = str(data.get("id") or data.get("Id") or "written")
-                except ValueError:
-                    logger.info(
-                        "declarative_connector_write_non_json_response",
-                        app_id=self.app_id,
-                        stream=stream_name,
-                        status_code=resp.status_code,
-                    )
-            return WriteResultDTO(
-                success=True,
-                record_id=rec_id,
-                destination_id=rec_id,
-            )
-        except (HttpError, httpx.HTTPError, OSError, ValueError) as exc:
-            logger.error(
-                "declarative_connector_write_exception",
-                app_id=self.app_id,
-                stream=stream_name,
-                error=str(exc),
-            )
-            return WriteResultDTO.from_error(
-                UpstreamNetworkError(
-                    endpoint=url,
-                    message=f"HTTP request failed: {exc}",
-                )
-            )
+            ),
+            target_url=url,
+            http_method=action.method,
+            request_headers=headers,
+            default_record_id=command.record_id or "written",
+            error_record_id=command.record_id or "failed",
+            extra_sensitive_headers=auth.sensitive_header_names,
+        )

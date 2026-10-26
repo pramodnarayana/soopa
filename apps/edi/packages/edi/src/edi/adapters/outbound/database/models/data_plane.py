@@ -18,6 +18,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
+from strace.adapters import TenantTraceLineageOrmModel, TraceEventMixin
 
 from database.models.common import OutboxMixin, TimestampMixin
 from edi.domain.enums import MessageStatus
@@ -181,13 +182,12 @@ class OutboundEdiHeader(TenantBase, TenantAwareMixin, OutboundEdiHeaderMixin, Ti
 # ---------------------------------------------------------------------------
 
 
-class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
+class EdiMessage(TenantBase, TenantAwareMixin, TenantTraceLineageOrmModel, TimestampMixin):
     __tablename__ = "edi_messages"
 
     id: Mapped[str] = mapped_column(
         String(128), primary_key=True, default=lambda: generate_id("edi_msg")
     )
-    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     connection_type: Mapped[str | None] = mapped_column(String(50), nullable=True)  # AS2, SFTP, FTP
 
@@ -221,9 +221,6 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     file_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
-    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_edi_msgs_sender_recv", "sender_id", "receiver_id", "created_at"),
@@ -234,13 +231,12 @@ class EdiMessage(TenantBase, TenantAwareMixin, TimestampMixin):
     )
 
 
-class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
+class EdiJson(TenantBase, TenantAwareMixin, TenantTraceLineageOrmModel, TimestampMixin):
     __tablename__ = "edi_json"
 
     id: Mapped[str] = mapped_column(
         String(128), primary_key=True, default=lambda: generate_id(DomainIdPrefix.EDI_JSON.value)
     )
-    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
 
     trading_partner_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
@@ -257,9 +253,6 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     error_details: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
-    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         Index("ix_edi_json_business_metadata", "business_metadata", postgresql_using="gin"),
@@ -270,25 +263,20 @@ class EdiJson(TenantBase, TenantAwareMixin, TimestampMixin):
     )
 
 
-class TraceEvent(TenantBase, TenantAwareMixin, TimestampMixin):
+class TraceEvent(TenantBase, TenantAwareMixin, TimestampMixin, TraceEventMixin):
     __tablename__ = "trace_events"
 
     id: Mapped[str] = mapped_column(
         String(128), primary_key=True, default=lambda: generate_id(DomainIdPrefix.EDI_TRACE_EVENT)
     )
-    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
-    event_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    actor: Mapped[str] = mapped_column(String(128), nullable=False)
-    metadata_: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
 
-class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
+class ApiGateway(TenantBase, TenantAwareMixin, TenantTraceLineageOrmModel, TimestampMixin):
     __tablename__ = "api_gateway"
 
     id: Mapped[str] = mapped_column(
         String(128), primary_key=True, default=lambda: generate_id("edi_api_gw")
     )
-    trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     direction: Mapped[str] = mapped_column(String(50), nullable=False)  # INBOUND, OUTBOUND
     transaction_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
@@ -304,9 +292,6 @@ class ApiGateway(TenantBase, TenantAwareMixin, TimestampMixin):
     headers: Mapped[dict[str, JsonValue] | None] = mapped_column(JSONB, nullable=True)
 
     status: Mapped[str] = mapped_column(String(50), nullable=False, default=MessageStatus.RECEIVED)
-    replay_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    parent_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
-    original_trace_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     __table_args__ = (
         CheckConstraint(

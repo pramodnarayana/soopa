@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -13,8 +14,11 @@ from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    GetValidCredentialsCommand,
+    TokenManagerService,
+)
 from ip.engine.domain.enums import (
-    ConnectionStatus,
     IngestionMode,
     SyncRunKind,
     SyncRunStatus,
@@ -28,6 +32,7 @@ from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkProviderPort,
 )
 from ip.engine.ports.types import RecordEnvelopeDTO
 
@@ -91,16 +96,47 @@ class RunSyncUseCase:
     def __init__(
         self,
         control_plane_uow: IpControlPlaneUnitOfWorkPort,
-        data_plane_uow: IpDataPlaneUnitOfWorkPort,
         tiered_storage: TieredStoragePort,
         cipher: CipherPort,
         connectors: Mapping[str, SourceConnectorPort],
+        *,
+        data_plane_uow: IpDataPlaneUnitOfWorkPort | None = None,
+        data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
+        token_manager: TokenManagerService | None = None,
     ) -> None:
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow = data_plane_uow
+        self._data_plane_uow_provider = data_plane_uow_provider
         self._tiered_storage = tiered_storage
         self._cipher = cipher
         self._connectors = connectors
+        self._token_manager = token_manager or TokenManagerService(
+            control_plane_uow=control_plane_uow,
+            cipher=cipher,
+        )
+
+    @contextlib.asynccontextmanager
+    async def _open_uow(
+        self,
+        tenant_id: str,
+        shard_info: tuple[str, str] | None = None,
+    ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+        if self._data_plane_uow is not None:
+            async with self._data_plane_uow as uow:
+                yield uow
+        elif self._data_plane_uow_provider is not None:
+            if shard_info is None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+                if shard_info_res.is_err:
+                    raise RuntimeError(shard_info_res.unwrap_err().message)
+                shard_info = shard_info_res.unwrap()
+            shard_id, shard_dsn = shard_info
+            async with self._data_plane_uow_provider.get_data_plane_uow(
+                tenant_id, shard_id, shard_dsn
+            ) as uow:
+                yield uow
+        else:
+            raise RuntimeError("Neither data_plane_uow nor data_plane_uow_provider was configured.")
 
     async def execute(self, command: RunSyncCommand) -> RunSyncResultDTO:
         trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
@@ -119,6 +155,26 @@ class RunSyncUseCase:
                 )
             connection, connector, credentials = conn_ctx
 
+            # Pre-resolve Data Plane shard info before pulling the stream
+            shard_info: tuple[str, str] | None = None
+            if self._data_plane_uow is None and self._data_plane_uow_provider is not None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(
+                    command.tenant_id
+                )
+                if shard_info_res.is_err:
+                    logger.error(
+                        "sync_run_shard_resolution_failed",
+                        tenant_id=command.tenant_id,
+                        error=shard_info_res.unwrap_err().message,
+                        trace_id=trace_id,
+                    )
+                    return await self._fail_run(
+                        sync_run,
+                        "TENANT_SHARD_NOT_FOUND",
+                        shard_info_res.unwrap_err().message,
+                    )
+                shard_info = shard_info_res.unwrap()
+
             read_cursor = (
                 calculate_lookback_cursor(start_cursor, command.lookback_seconds)
                 if kind == SyncRunKind.INCREMENTAL
@@ -136,6 +192,7 @@ class RunSyncUseCase:
                 ingestion_mode=ingestion_mode,
                 generation_id=generation_id,
                 trace_id=trace_id,
+                shard_info=shard_info,
             )
         except Exception as exc:
             logger.exception(
@@ -253,24 +310,19 @@ class RunSyncUseCase:
     async def _resolve_connection_context(
         self, command: RunSyncCommand
     ) -> tuple[Connection, SourceConnectorPort, JsonDict] | None:
-        async with self._control_plane_uow:
-            connection = await self._control_plane_uow.connections.get_by_id(command.connection_id)
-            if not connection or connection.tenant_id != command.tenant_id:
-                return None
-
-            if connection.status is ConnectionStatus.DEACTIVATED:
-                return None
-
-            connector = self._connectors.get(connection.app_id)
-            if not connector:
-                return None
-
-            credentials = (
-                self._cipher.decrypt(connection.encrypted_credentials)
-                if connection.encrypted_credentials
-                else {}
+        creds_res = await self._token_manager.get_valid_credentials(
+            GetValidCredentialsCommand(
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
             )
-            return connection, connector, credentials
+        )
+        if creds_res.is_err or creds_res.value is None:
+            return None
+        resolved = creds_res.value
+        connector = self._connectors.get(resolved.app_id)
+        if not connector or resolved.connection is None:
+            return None
+        return resolved.connection, connector, resolved.credentials
 
     async def _execute_stream_pull(
         self,
@@ -284,6 +336,7 @@ class RunSyncUseCase:
         ingestion_mode: IngestionMode,
         generation_id: int,
         trace_id: str,
+        shard_info: tuple[str, str] | None = None,
     ) -> bool:
         current_page: list[RecordEnvelopeDTO] = []
         page_index = 0
@@ -324,6 +377,7 @@ class RunSyncUseCase:
                     generation_id=generation_id,
                     next_cursor=latest_page_cursor,
                     trace_id=trace_id,
+                    shard_info=shard_info,
                 )
                 current_page = []
 
@@ -339,6 +393,7 @@ class RunSyncUseCase:
                 generation_id=generation_id,
                 next_cursor=latest_page_cursor,
                 trace_id=trace_id,
+                shard_info=shard_info,
             )
 
         return capped
@@ -390,6 +445,7 @@ class RunSyncUseCase:
         generation_id: int,
         next_cursor: str | None,
         trace_id: str,
+        shard_info: tuple[str, str] | None = None,
     ) -> None:
         """Stores page in Data Plane and atomically updates checkpoint and sync run counters in Control Plane."""
         page_payload: list[JsonValue] = [envelope.data for envelope in page]
@@ -422,9 +478,9 @@ class RunSyncUseCase:
         )
 
         # 3. Persist to Data Plane
-        async with self._data_plane_uow:
-            await self._data_plane_uow.inbound_records.save(inbound_record)
-            await self._data_plane_uow.commit()
+        async with self._open_uow(tenant_id, shard_info=shard_info) as dp_uow:
+            await dp_uow.inbound_records.save(inbound_record)
+            await dp_uow.commit()
 
         # 4. Update cursor checkpoint and SyncRun counters in Control Plane
         async with self._control_plane_uow:

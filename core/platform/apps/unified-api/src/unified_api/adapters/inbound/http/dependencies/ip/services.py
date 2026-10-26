@@ -5,15 +5,26 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from security.ports.cipher_port import CipherPort
 from security.provider import SecurityProvider
 
 from ip.application.connectors.registry_loader import create_default_catalog_registry
+from ip.engine.adapters.outbound.auth.oauth2_strategy import OAuth2StrategyTokenRefresher
+from ip.engine.adapters.outbound.auth.token_refresh_lock import (
+    InMemoryTokenRefreshLockAdapter,
+)
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import TieredStorageAdapter
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    TokenManagerService,
+)
 from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
 from ip.engine.ports.outbound.connector_port import ConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
+from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
+from unified_api.adapters.inbound.http.dependencies.ip.database import (
+    get_ip_control_plane_uow,
+)
 from unified_api.settings import get_settings
 
 
@@ -59,9 +70,50 @@ def get_tiered_storage() -> TieredStoragePort:
     return TieredStorageAdapter()
 
 
+def get_token_refresh_lock(request: Request) -> InMemoryTokenRefreshLockAdapter:
+    """Resolves the in-memory token refresh lock adapter from application state."""
+    state = request.app.state
+    if not hasattr(state, "ip_token_refresh_lock") or state.ip_token_refresh_lock is None:
+        state.ip_token_refresh_lock = InMemoryTokenRefreshLockAdapter()
+    lock = state.ip_token_refresh_lock
+    assert isinstance(lock, InMemoryTokenRefreshLockAdapter)
+    return lock
+
+
+def get_token_refresher(request: Request) -> OAuth2StrategyTokenRefresher:
+    """Resolves the OAuth2StrategyTokenRefresher configured with app settings from application state."""
+    state = request.app.state
+    if not hasattr(state, "ip_token_refresher") or state.ip_token_refresher is None:
+        settings = get_settings()
+        state.ip_token_refresher = OAuth2StrategyTokenRefresher(
+            allow_private_ips=settings.allow_private_ips
+        )
+    refresher = state.ip_token_refresher
+    assert isinstance(refresher, OAuth2StrategyTokenRefresher)
+    return refresher
+
+
+def get_token_manager(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    cipher: Annotated[CipherPort, Depends(get_cipher)],
+    token_refresher: Annotated[OAuth2StrategyTokenRefresher, Depends(get_token_refresher)],
+    lock_port: Annotated[InMemoryTokenRefreshLockAdapter, Depends(get_token_refresh_lock)],
+) -> TokenManagerService:
+    """Resolves the configured TokenManagerService for OAuth2 token freshness across IP operations."""
+    return TokenManagerService(
+        control_plane_uow=cp_uow,
+        cipher=cipher,
+        token_refresher=token_refresher,
+        lock_port=lock_port,
+    )
+
+
 __all__ = [
     "get_catalog_registry",
     "get_cipher",
     "get_connectors",
     "get_tiered_storage",
+    "get_token_manager",
+    "get_token_refresh_lock",
+    "get_token_refresher",
 ]

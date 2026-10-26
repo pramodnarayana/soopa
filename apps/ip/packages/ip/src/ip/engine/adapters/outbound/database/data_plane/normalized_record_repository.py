@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from decimal import Decimal
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
+from ip.engine.adapters.outbound.database.data_plane.mappers import normalized_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import NormalizedRecordModel
 from ip.engine.domain.models.normalized_record import NormalizedRecord
 from ip.engine.ports.outbound.normalized_record_repository_port import (
@@ -26,20 +27,7 @@ class SqlAlchemyNormalizedRecordRepository(
 
     @staticmethod
     def _to_domain_model(orm: NormalizedRecordModel) -> NormalizedRecord:
-        return NormalizedRecord(
-            id=orm.id,
-            tenant_id=orm.tenant_id,
-            trace_id=orm.trace_id,
-            correlation_id=orm.correlation_id,
-            parent_trace_id=orm.parent_trace_id,
-            original_trace_id=orm.original_trace_id,
-            replay_count=orm.replay_count,
-            connection_id=orm.connection_id,
-            canonical_type=orm.canonical_type,
-            source_id=orm.source_id,
-            canonical_data=dict(orm.canonical_data),
-            normalized_at=orm.normalized_at,
-        )
+        return normalized_record_to_domain(orm)
 
     @staticmethod
     def _sanitize_for_json(val: object) -> JsonValue:
@@ -107,6 +95,22 @@ class SqlAlchemyNormalizedRecordRepository(
                 NormalizedRecordModel.source_id == source_id,
             )
             .order_by(NormalizedRecordModel.normalized_at.desc())
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_model(orm) for orm in result.scalars().all()]
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[NormalizedRecord]:
+        stmt = (
+            select(NormalizedRecordModel)
+            .where(
+                NormalizedRecordModel.trace_id == trace_id,
+                NormalizedRecordModel.tenant_id == tenant_id,
+            )
+            .order_by(NormalizedRecordModel.normalized_at.asc())
         )
         result = await self._session.execute(stmt)
         return [self._to_domain_model(orm) for orm in result.scalars().all()]

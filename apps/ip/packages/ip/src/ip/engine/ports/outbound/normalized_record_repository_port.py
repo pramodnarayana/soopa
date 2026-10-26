@@ -31,3 +31,11 @@ class NormalizedRecordRepositoryPort(Protocol):
     ) -> Sequence[NormalizedRecord]:
         """Lists normalized audit records for a given canonical entity type and source ID."""
         ...
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[NormalizedRecord]:
+        """Retrieves all normalized records associated with a trace ID."""
+        return ()

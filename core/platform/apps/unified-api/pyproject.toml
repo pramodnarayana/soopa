@@ -13,6 +13,7 @@ dependencies = [
     "security",
     "secret-store",
     "ip",
+    "strace",
 ]
 
 [project.optional-dependencies]
@@ -48,6 +49,7 @@ notification = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
 ip = { workspace = true }
+strace = { workspace = true }
 
 [dependency-groups]
 dev = [

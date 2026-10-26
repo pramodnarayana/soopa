@@ -67,6 +67,7 @@ async def startup(
     container = Container()
     container.config.allow_private_ips.from_value(allow_private_ips)
     container.tenant_resolver.override(providers.Object(resolver))
+    container.db_router.override(providers.Object(db_router))
     app.state.ip_container = container
     _ip_container = container
     logger.info("ip_startup_completed")

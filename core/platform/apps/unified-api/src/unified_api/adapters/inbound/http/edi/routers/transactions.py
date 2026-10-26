@@ -8,7 +8,6 @@ from edi.application.dtos.transactions import (
     ApiGatewayDTO,
     EdiJsonDTO,
     EdiMessageDTO,
-    EdiTraceLineageItemDTO,
 )
 from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
 from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
@@ -39,6 +38,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
+from strace.domain import TraceLineageItemDTO
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import (
@@ -240,12 +240,12 @@ async def get_edi_trace(
             raise HTTPException(status_code=404, detail=str(e))
 
 
-@router.get("/{trace_id}/lineage", response_model=list[EdiTraceLineageItemDTO])
+@router.get("/{trace_id}/lineage", response_model=list[TraceLineageItemDTO])
 async def get_edi_trace_lineage(
     trace_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
-) -> list[EdiTraceLineageItemDTO]:
+) -> list[TraceLineageItemDTO]:
     """
     Returns the full lineage of replay attempts for a given trace.
     Returns lightweight summaries suitable for UI breadcrumbs.

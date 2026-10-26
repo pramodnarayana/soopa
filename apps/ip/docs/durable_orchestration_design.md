@@ -1,7 +1,7 @@
 # Design: Durable Business Flow Orchestration (Stitch Engine)
 
 **Status:** Proposed. For architecture review.
-**Scope:** `core/platform/packages/workflow` (new, generic durable workflow engine) and `apps/ip/packages/ip` (Stitches: business flows between apps, built on that engine)
+**Scope:** `core/platform/packages/orchestration` (new, generic durable workflow engine) and `apps/ip/packages/ip` (Stitches: business flows between apps, built on that engine)
 **Replaces:** the standalone L4 Hydrator and L5 Delivery workers in `architecture.md` §5 and `implementation_plan.md` Phases 7–8
 **Related:** `architecture.md`, `l1_ingestion_design.md`, `l2_replica_design.md`, `l3_normalization_design.md`
 **Reference implementations studied:** Hatchet (https://github.com/hatchet-dev/hatchet), Temporal, DBOS Transact, Airbyte, n8n, Activepieces
@@ -20,7 +20,7 @@ Each of these is a multi-step conversation between systems that fail, throttle, 
 
 This document specifies:
 
-1. A **generic, Postgres-native durable workflow engine** in `core/platform/packages/workflow`. It is modelled on Hatchet's proven architecture and written in Python with Hexagonal Architecture.
+1. A **generic, Postgres-native durable workflow engine** in `core/platform/packages/orchestration`. It is modelled on Hatchet's proven architecture and written in Python with Hexagonal Architecture.
 2. **Stitches**: IP's business flows (our existing ubiquitous language). They are typed, versioned DAGs of steps built on the engine. They replace the separate L4/L5 workers.
 3. The **integration intelligence** that generic engines lack: cross-app identity, write-back, echo/loop prevention, field authority, batching for high-volume Energy data, and Standard/Enterprise tier isolation.
 
@@ -161,20 +161,24 @@ This removes what would otherwise be a **dual architecture**: a linear L4/L5 cha
 
 | Hatchet pattern | Decision |
 |---|---|
-| Postgres as the durable queue (`FOR UPDATE SKIP LOCKED`, `LISTEN/NOTIFY` wakeups) | **Adopt** |
+| Postgres as the durable queue (`FOR UPDATE SKIP LOCKED`, `LISTEN/NOTIFY` wakeups, sliding `min_unprocessed_id` cursor) | **Adopt** |
+| Unified CNF Condition-Matching Engine (`v1_match` / `v1_match_condition` with `or_group_id`, `SKIP > CANCEL > CREATE > QUEUE > CREATE_MATCH` precedence, and two-stage `CREATE_MATCH` for parent-then-sleep/wait) | **Adopt** (unifies parent dependencies, `ON_FAILURE`, `SKIP_IF`, `CANCEL_IF`, `SLEEP`, and `WAIT_FOR_EVENT` into one state machine) |
 | Static DAG of steps with parent dependencies | **Adopt** as the primary model |
 | Durable sleep / durable event wait with released worker slots | **Adopt** |
-| Concurrency strategies `GROUP_ROUND_ROBIN`, `CANCEL_IN_PROGRESS`, `CANCEL_NEWEST` | **Adopt**, plus our own `COALESCE_LATEST` and `SERIAL` (§7.5.3) |
-| Token-bucket rate limits keyed dynamically | **Adopt** (per connection) |
+| Three separate retry counters: `retry_count` (fencing token), `app_retry_count` (user budget), and `internal_retry_count` (worker crash / lease loss budget) | **Adopt** (worker crashes never burn user retry budgets) |
+| Compact unpartitioned active lease table (`v1_task_runtime` / `workflow_active_leases`) separate from partitioned attempt history | **Adopt** (heartbeats and timeout sweeps never scan partitioned history tables) |
+| Unified Concurrency Slot table (`is_filled`, `sort_id`, chained `next_strategy_ids`) with window-function strategies `GROUP_ROUND_ROBIN`, `CANCEL_IN_PROGRESS`, `CANCEL_NEWEST`, `CANCEL_QUEUED_EXCEPT_NEWEST` (`COALESCE_LATEST`), `CANCEL_QUEUED_EXCEPT_OLDEST` | **Adopt** (§7.5.3) |
+| Token-bucket rate limits + `429 Retry-After` pause with automatic concurrency slot release while paused | **Adopt** (a rate-limited target never holds concurrency slots hostage for unpaused work) |
+| Dedicated unpartitioned `workflow_idempotency_keys` (`v1_idempotency_key`) with `TTL` and `STATUS` eviction modes | **Adopt** (enforces cross-partition idempotency that partitioned unique indexes cannot) |
+| Decoupled `workflow_payloads` (`v1_payload`) with zero-copy `payload_reference_id` and async S3 partition cutover | **Adopt** (keeps `workflow_runs` and `workflow_step_runs` ultra-narrow and vacuum-friendly) |
 | Range-partitioned history tables, partition drop instead of `DELETE` | **Adopt** |
-| Leases with heartbeat and reassignment | **Adopt**, plus fencing tokens |
 | In-memory per-tenant slot scheduler | **Defer.** Start with SQL-side fair dequeue. Add the in-memory scheduler behind the same port only if load tests require it. |
 | External gRPC dispatcher and multi-language SDK workers | **Reject.** Our workers are in-cluster Python in the single image. The extra hop adds latency and failure modes without benefit. |
 | Imperative "durable task" with replay (Temporal-style) | **Reject for now.** Replay determinism is a known source of production incidents, and static DAGs are inspectable, renderable on the timeline and statically validated. Revisit only with a concrete need. |
 
 ---
 
-## 7. Platform Engine Design (`core/platform/packages/workflow`)
+## 7. Platform Engine Design (`core/platform/packages/orchestration`)
 
 The engine is **domain-agnostic**. It has no knowledge of connections, apps, canonical types or IP. It follows the platform's hexagonal taxonomy (same layout as `scheduler` and `outbox`).
 
@@ -382,33 +386,58 @@ Because the fairness row is locked `FOR UPDATE` prior to tenant selection, concu
 
 Concurrency capacity and rate-limit tokens are checked for the selected rows in the same transaction. Rows that cannot run yet stay queued. Starvation-triggered fast wakeup (Hatchet's `onCapacityRestored`) is implemented by `NOTIFY` on slot release.
 
-#### 7.5.3 Concurrency strategies (`ConcurrencyPolicy`, Strategy pattern)
-| Strategy | Semantics | Typical Stitch |
-|---|---|---|
-| `SERIAL` | Max N running per key. The rest queue in order. | Financial or ordered events (meter exchange then activation) |
-| `COALESCE_LATEST` | Max one running and one queued per key. A newer trigger **replaces** the queued run (`CANCELLED: SUPERSEDED`). | State sync: only the latest state of a meter matters |
-| `CANCEL_IN_PROGRESS` | A new trigger cancels the running run at its next step boundary | Recomputations where stale work is waste |
-| `CANCEL_NEWEST` | Reject new triggers while the key is at capacity | Idempotent "ensure exists" flows |
-| `GROUP_ROUND_ROBIN` | Fair interleaving across group keys | Tenant fairness (always on in pooled shards), connection fairness within a tenant |
+#### 7.5.3 Concurrency strategies (`ConcurrencyPolicy`, Strategy pattern, modeled on Hatchet `v1_concurrency_slot`)
+- Queued and running slots share one unpartitioned table `workflow_concurrency_slots` with `is_filled BOOLEAN`, `sort_id BIGINT`, and `next_strategy_ids VARCHAR(64)[]`.
+- Multi-level concurrency rules (e.g., tenant quota + connection concurrency + entity concurrency) chain via `next_strategy_ids`: satisfying strategy $i$ pops the head of `next_strategy_ids` and inserts a slot into strategy $i+1$, only enqueuing into `workflow_queue_items` when `cardinality(next_strategy_ids) = 0`.
+- Window-function evaluation (`ROW_NUMBER() OVER (PARTITION BY concurrency_key ORDER BY sort_id ...)`) governs both active (`is_filled = TRUE`) and queued (`is_filled = FALSE`) slots atomically:
 
-#### 7.5.4 Rate limits and circuit breakers
-- **Token bucket per rate-limit key** (default: target `connection_id`): `capacity`, `refill_per_second`, `tokens`, `paused_until`. Consumed atomically in the claim transaction.
-- A `429`/`503` with `Retry-After` sets `paused_until` on the bucket. Queued steps for that connection wait **without consuming attempts**.
+| Strategy | Semantics (Hatchet v1 equivalent) | Typical Stitch |
+|---|---|---|
+| `SERIAL` | Max N running per key (`GROUP_ROUND_ROBIN` with `max_runs = N`). The rest queue in `sort_id ASC` order. | Financial or ordered events (meter exchange then activation) |
+| `COALESCE_LATEST` | Max N running and N newest queued per key (`CANCEL_QUEUED_EXCEPT_NEWEST`). Intermediate queued slots are cancelled (`CANCELLED: SUPERSEDED`) without interrupting active work. | State sync: only the latest state of a meter matters |
+| `CANCEL_QUEUED_EXCEPT_OLDEST` | Max N running and N oldest queued per key (`CANCEL_QUEUED_EXCEPT_OLDEST`). | First-writer-wins batch windows |
+| `CANCEL_IN_PROGRESS` | Ranks by `sort_id DESC`; top `max_runs` run while older queued *and* running slots are cancelled (`CANCEL_IN_PROGRESS`). | Recomputations where stale work is waste |
+| `CANCEL_NEWEST` | Ranks by `sort_id ASC`; oldest `max_runs` run while newer triggers are rejected/cancelled (`CANCEL_NEWEST`). | Idempotent "ensure exists" flows |
+| `GROUP_ROUND_ROBIN` | Fair interleaving across group keys (`SELECT DISTINCT key ... CROSS JOIN LATERAL`). | Tenant fairness (always on in pooled shards), connection fairness within a tenant |
+
+#### 7.5.4 Rate limits, `429 Retry-After` pauses, and circuit breakers
+- **Token bucket per rate-limit key** (default: target `connection_id`): `capacity`, `refill_per_second`, `tokens`, `refilled_at`, `paused_until`. Consumed atomically in the claim transaction.
+- **Zero-Retry Rate-Limit Parking & Slot Release (Hatchet `v1_rate_limit_pause` + `HoldQueueItems`):**
+  - When a bucket is exhausted or a step returns `RetryableFailure(code=RATE_LIMITED, retry_after=...)`, `paused_until` is updated monotonically (`GREATEST(paused_until, EXCLUDED.paused_until)`).
+  - Waiting steps for that rate-limit key are parked until `next_refill_at` / `paused_until`, **their `workflow_concurrency_slots` rows are released immediately** so a rate-limited target connection never holds concurrency slots hostage for unpaused work, and **`app_retry_count` is not incremented**.
+  - When the pause expires, `refilled_at` is shifted forward by `paused_until - paused_at` so token bucket math is unaffected by the pause duration, and parked steps re-enter through concurrency slot evaluation.
 - **Circuit breaker per connection:** if the failure ratio over a sliding window passes a threshold, the connection's queue is paused, an alert fires, and probe attempts are scheduled. This prevents thousands of runs from burning retries against a down system.
 
 #### 7.5.5 Priority lanes
 `priority` is an Enum: `INTERACTIVE` (operator retries, UI actions) > `REALTIME` (live triggers) > `BULK` (backfills, replays, batch catch-up). Enterprise bindings may reserve slots per lane.
 
-### 7.6 Retries and error policy
+### 7.6 Three-Counter Retries, Active Leases, and Error Policy
+- **Three Separate Retry Counters (Hatchet `v1_task` invariant):**
+  1. `retry_count`: Monotonic fencing token incremented (`retry_count + 1`) on every retry or operator replay (`ReplayTasks`). Propagated into `workflow_active_leases`, `workflow_queue_items`, and `workflow_concurrency_slots` to fence stale workers.
+  2. `app_retry_count`: Incremented **only** on application/step failures and step execution timeouts (`is_app_error = True`). Evaluated against `RetryPolicy.max_attempts` and used for exponential backoff calculation.
+  3. `internal_retry_count`: Incremented **only** on infrastructure/worker crashes (when the lease reaper reassigns an expired `workflow_active_leases` row with `is_app_error = False`), bounded by `max_internal_retries`. **Worker crashes never consume the user's `app_retry_count` budget.**
+  - On operator replay, `retry_count` increments by 1 while `app_retry_count` and `internal_retry_count` reset to `0`.
+- **Compact Unpartitioned Active Lease Table (`workflow_active_leases` / Hatchet `v1_task_runtime`):**
+  - Active leases (`step_run_id`, `step_created_at`, `retry_count`, `worker_id`, `tenant_id`, `lease_expires_at`, `timeout_at`) live in a small, unpartitioned hot table rather than inside the partitioned `workflow_step_attempts` history table.
+  - Presence in `workflow_active_leases` is the authoritative lease lock; heartbeats and lease-reaper queries scan only this compact hot table and delete in deterministic `(step_run_id, step_created_at, retry_count)` order to prevent deadlocks.
 - A `RetryPolicy` value object per step: `max_attempts`, exponential backoff with full jitter, `max_backoff`, and per-`StepFailureCode` overrides.
 - An injected `StepErrorPolicyPort` (Strategy) decides **retry, fail, or route to the `ON_FAILURE` edge**. There is no boolean control coupling.
 - Attempts exhausted → the step is `FAILED` → the run follows the `ON_FAILURE` edge if defined (e.g. write the failure status back to the source app), otherwise the run is `FAILED` and appears in the operator queue with the full attempt history.
 - **Terminal domain failures are data**: typed codes, visible on the timeline, actionable. Only infrastructure failures are retried.
 
-### 7.7 Durable waits and timers
-- A `WAIT_FOR_EVENT` node writes a `workflow_wait_conditions` row: `match_kind`, `match_key` (e.g. `entity:energy.work_order:<canonical_id>` or `external:<connection_id>:<external_id>`), an optional `match_predicate_id` (a registered pure predicate, e.g. "status in {CONFIRMED, REJECTED}"), and `timeout_at`. It also enqueues a timeout queue item.
-- Resolution: the IP Trigger Router calls `ResolveWaitConditionsUseCase` for each `CanonicalRecordChanged`. A matching condition is resolved, the event reference becomes the step output, and the children are enqueued, **in one transaction**. The timeout item becomes a no-op through a status guard.
-- **Late events** (arriving after a timeout) are recorded as `WAIT_LATE_EVENT` on the timeline and do not resume the run. The Stitch's timeout branch decides the business outcome.
+### 7.7 Unified CNF Condition-Matching Engine (DAG Parents, Branches, Durable Sleeps & Event Waits)
+Modelled directly on Hatchet's `v1_match` and `v1_match_condition` (`pkg/repository/match.go`, `sqlcv1/matches.sql`):
+- Instead of maintaining a fragile `pending_parent_count` integer alongside a separate `workflow_wait_conditions` table, **all** step activation conditions—parent completions (`PARENT_OVERRIDE`), durable timers (`SLEEP`), and external/canonical business events (`CANONICAL_EVENT`)—are unified in `workflow_matches` and `workflow_match_conditions`.
+- **CNF Boolean Logic (`or_group_id`) & Action Precedence:**
+  - Every condition belongs to an `or_group_id` and specifies an `action` (`SKIP`, `CANCEL`, `CREATE`, `QUEUE`, `CREATE_MATCH`).
+  - For a given `action`, **any** satisfied condition in an `or_group_id` satisfies that OR-group, and **all** distinct `or_group_id`s for that action must be satisfied (**Conjunctive Normal Form: AND of OR-groups**).
+  - When multiple actions become satisfied simultaneously, they resolve in strict precedence order: **`SKIP` > `CANCEL` > `CREATE` > `QUEUE` > `CREATE_MATCH`**.
+  - Standard child DAG nodes assign a distinct `or_group_id` per parent for `QUEUE`/`CREATE_MATCH` on `COMPLETED` (AND across all parents), a **shared** `or_group_id` across all parents for `SKIP` on `SKIPPED` (any parent being skipped skips the child), and a **shared** `or_group_id` across all parents for `FAILED`/`TIMED_OUT`/`CANCELLED` with action `CANCEL` (any parent failing or cancelling cancels the child). `ON_FAILURE` compensation nodes invert this (shared `or_group_id` across parents for `QUEUE`/`CREATE_MATCH` when ANY parent matches the failure/timeout event, and a distinct `or_group_id` per parent for `SKIP` when ALL parents succeed or skip without triggering the failure edge).
+- **Two-Stage `CREATE_MATCH` for Parent-then-Wait/Sleep Nodes:**
+  - When a DAG node has parent steps *and* a `SLEEP` or `WAIT_FOR_EVENT` condition, stage 1 waits for parent completion with `action = 'CREATE_MATCH'`, aggregating parent outputs (`jsonb_object_agg` by parent node key) into `existing_data`, and **only then** creates the stage-2 `SLEEP` or `CANONICAL_EVENT` match and starts the timer.
+- **Event & Timeout Resolution:**
+  - The IP Trigger Router calls `ResolveMatchConditionsUseCase` for each `CanonicalRecordChanged`. Matching conditions are marked satisfied, aggregated parent + event data becomes the step input/output, and ready steps are enqueued **in one transaction**.
+  - **Late events** (arriving after a timeout condition already triggered `TIMED_OUT` / `CANCEL`) are recorded as `FLOW_WAIT_LATE_EVENT` on the timeline and do not resume the run.
 
 ### 7.8 Versioning
 - A run **pins** `(workflow_id, workflow_version)` at start. Steps execute on the definition they started with.
@@ -416,13 +445,17 @@ Concurrency capacity and rate-limit tokens are checked for the selected rows in 
 - **Startup safety check:** a worker refuses to claim steps of an unregistered version. Those runs move to `BLOCKED_VERSION_UNAVAILABLE` (alerted) instead of failing silently. CI checks that removed versions have zero non-terminal runs in any environment before merge.
 - Input/output codecs are versioned. A step reads checkpoints written by the previous version of its parents.
 
-### 7.9 Payloads
-- Step inputs and outputs under 64 KB are stored inline (`JSONB`). Larger ones are offloaded through the platform `storage` package (S3/MinIO), using the same threshold as L1.
+### 7.9 Decoupled Payloads (`workflow_payloads`), Zero-Copy References, and S3 Cutover
+Modelled on Hatchet's `v1_payload` (`pkg/repository/payloadstore.go`):
+- `workflow_runs` and `workflow_step_runs` do **not** inline wide `input JSONB` / `output JSONB` columns; keeping those tables `< 200 bytes/row` eliminates TOAST bloat and keeps index/autovacuum scans fast.
+- All payloads (`RUN_INPUT`, `RUN_OUTPUT`, `STEP_INPUT`, `STEP_OUTPUT`, `MATCH_EVENT_DATA`) are stored in a dedicated range-partitioned `workflow_payloads` table (`location`: `INLINE` | `EXTERNAL`).
+- **Zero-Copy Root Input Consolidation (`payload_reference_id`):** Root steps of a run set `payload_reference_id` pointing to the run's `RUN_INPUT` rather than duplicating the JSONB payload across every root step.
+- **Hot Inline Write + Async S3 Cutover:** Normal payloads (`< 64 KB`) write `INLINE` in Postgres within the step transaction (zero synchronous S3 network hop on the hot path); payloads $\ge 64\text{ KB}$ offload via `TieredStoragePort`, and a chunked background cutover job packs aged partitions into S3 objects.
 - **Secrets never enter checkpoints.** Steps carry `connection_id` references. Credentials are resolved at the HTTP client injection layer (`architecture.md` §9).
 
 ### 7.10 Package structure
 ```
-core/platform/packages/workflow/src/workflow/
+core/platform/packages/orchestration/src/orchestration/
 ├── domain/
 │   ├── constants.py            # RunStatus, StepStatus, NodeKind, EdgeCondition, ConcurrencyStrategy,
 │   │                           # EffectPolicy, Priority, StepFailureCode
@@ -667,9 +700,27 @@ Workers cache active versions in memory and resolve pinned versions by ID. Pinne
 ## 10. Storage Schema (tenant shard, `public` schema, RLS on every table)
 
 ```sql
--- Engine (generic; owned by core/platform/packages/workflow)
+-- ============================================================================
+-- Engine (generic; owned by core/platform/packages/orchestration, modelled on Hatchet v1)
+-- ============================================================================
+
+-- 1. Unpartitioned Cross-Partition Idempotency Key Table (Hatchet v1_idempotency_key)
+-- Enforces global uniqueness across partition boundaries with TTL and STATUS eviction modes.
+CREATE TABLE workflow_idempotency_keys (
+    tenant_id VARCHAR(128) NOT NULL,
+    workflow_id VARCHAR(128) NOT NULL,
+    key VARCHAR(255) NOT NULL,
+    claimed_by_run_id VARCHAR(64) NOT NULL,
+    eviction_policy VARCHAR(32) NOT NULL DEFAULT 'TTL', -- 'TTL' | 'ON_TERMINAL_STATUS'
+    expires_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, workflow_id, key)
+);
+CREATE INDEX idx_workflow_idem_expires ON workflow_idempotency_keys (expires_at);
+
+-- 2. Partitioned Run & Step History Tables (ultra-narrow rows; payloads stored in workflow_payloads)
 CREATE TABLE workflow_runs (
-    id VARCHAR(64) NOT NULL,                     -- wf_run_<os.urandom(12).hex()>
+    id VARCHAR(64) NOT NULL,                     -- wf_run_<uuid7>
     tenant_id VARCHAR(128) NOT NULL,
     workflow_id VARCHAR(128) NOT NULL,
     workflow_version INT NOT NULL,
@@ -678,28 +729,25 @@ CREATE TABLE workflow_runs (
     concurrency_key VARCHAR(255),
     idempotency_key VARCHAR(255) NOT NULL,
     parent_run_id VARCHAR(64),
-    input JSONB, input_ref VARCHAR(512),
-    output JSONB, output_ref VARCHAR(512),
     trace_id VARCHAR(64) NOT NULL,
     correlation_id VARCHAR(255),
     failure_code VARCHAR(64), failure_detail TEXT,
     created_at TIMESTAMPTZ NOT NULL, started_at TIMESTAMPTZ, finished_at TIMESTAMPTZ,
     PRIMARY KEY (id, created_at)
 ) PARTITION BY RANGE (created_at);
-CREATE UNIQUE INDEX uq_workflow_runs_idem ON workflow_runs (tenant_id, workflow_id, idempotency_key, created_at);
 CREATE INDEX idx_workflow_runs_active ON workflow_runs (tenant_id, status) WHERE status IN ('QUEUED','RUNNING','WAITING');
 CREATE INDEX idx_workflow_runs_corr ON workflow_runs (tenant_id, correlation_id);
 
 CREATE TABLE workflow_step_runs (
-    id VARCHAR(64) NOT NULL,                     -- wf_step_<...>; also the stable idempotency key
+    id VARCHAR(64) NOT NULL,                     -- wf_step_<uuid7>; also the stable step idempotency key
     run_id VARCHAR(64) NOT NULL,
+    run_created_at TIMESTAMPTZ NOT NULL,
     tenant_id VARCHAR(128) NOT NULL,
     node_key VARCHAR(128) NOT NULL,
     status VARCHAR(32) NOT NULL,                 -- StepStatus Enum
-    pending_parent_count SMALLINT NOT NULL,
-    attempt_count SMALLINT NOT NULL DEFAULT 0,
-    input JSONB, input_ref VARCHAR(512),
-    output JSONB, output_ref VARCHAR(512),
+    retry_count SMALLINT NOT NULL DEFAULT 0,          -- Monotonic fencing token across all attempts/replays
+    app_retry_count SMALLINT NOT NULL DEFAULT 0,      -- Incremented only on app errors/timeouts (checked vs max_attempts)
+    internal_retry_count SMALLINT NOT NULL DEFAULT 0, -- Incremented only on worker crash/lease loss (never burns user retries)
     failure_code VARCHAR(64), failure_detail TEXT,
     created_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ,
     PRIMARY KEY (id, created_at),
@@ -710,27 +758,63 @@ CREATE TABLE workflow_step_attempts (
     id VARCHAR(64) NOT NULL,
     step_run_id VARCHAR(64) NOT NULL,
     tenant_id VARCHAR(128) NOT NULL,
-    attempt_no SMALLINT NOT NULL,
+    retry_count SMALLINT NOT NULL,               -- Matches workflow_step_runs.retry_count fencing token
+    app_retry_count SMALLINT NOT NULL,
+    internal_retry_count SMALLINT NOT NULL,
     worker_id VARCHAR(128) NOT NULL,
-    fencing_token BIGINT NOT NULL,
     status VARCHAR(32) NOT NULL,
-    lease_expires_at TIMESTAMPTZ NOT NULL,
+    is_app_error BOOLEAN,
     outcome_code VARCHAR(64), outcome_detail TEXT,
     started_at TIMESTAMPTZ NOT NULL, finished_at TIMESTAMPTZ,
     PRIMARY KEY (id, started_at)
 ) PARTITION BY RANGE (started_at);
-CREATE INDEX idx_attempts_lease ON workflow_step_attempts (lease_expires_at) WHERE status = 'RUNNING';
 
--- Hot tables: not partitioned, kept small
+-- 3. Decoupled Payload Store with Zero-Copy Reference & S3 Offload (Hatchet v1_payload)
+CREATE TABLE workflow_payloads (
+    tenant_id VARCHAR(128) NOT NULL,
+    owner_id VARCHAR(64) NOT NULL,               -- run_id or step_run_id
+    owner_created_at TIMESTAMPTZ NOT NULL,
+    payload_type VARCHAR(32) NOT NULL,           -- 'RUN_INPUT' | 'RUN_OUTPUT' | 'STEP_INPUT' | 'STEP_OUTPUT' | 'MATCH_EVENT_DATA'
+    location VARCHAR(32) NOT NULL,               -- 'INLINE' | 'EXTERNAL' | 'REFERENCE'
+    inline_content JSONB,
+    external_ref VARCHAR(512),                   -- S3 key when offloaded
+    payload_reference_id VARCHAR(64),            -- Zero-copy reference to RUN_INPUT for root steps
+    payload_reference_created_at TIMESTAMPTZ,
+    size_bytes INT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, owner_id, payload_type, owner_created_at)
+) PARTITION BY RANGE (owner_created_at);
+
+-- 4. Hot Unpartitioned Tables (kept small, fillfactor-tuned for high-churn updates)
+-- Active Lease Runtime Table (Hatchet v1_task_runtime): heartbeats & timeout sweeps never scan partitioned tables
+CREATE TABLE workflow_active_leases (
+    step_run_id VARCHAR(64) NOT NULL,
+    step_created_at TIMESTAMPTZ NOT NULL,
+    retry_count SMALLINT NOT NULL,               -- Authoritative fencing token
+    run_id VARCHAR(64) NOT NULL,
+    tenant_id VARCHAR(128) NOT NULL,
+    worker_id VARCHAR(128) NOT NULL,
+    lease_expires_at TIMESTAMPTZ NOT NULL,
+    timeout_at TIMESTAMPTZ NOT NULL,
+    evicted_at TIMESTAMPTZ,
+    PRIMARY KEY (step_run_id, step_created_at, retry_count)
+) WITH (fillfactor = 70);
+CREATE INDEX idx_active_leases_expiry ON workflow_active_leases (lease_expires_at);
+CREATE INDEX idx_active_leases_timeout ON workflow_active_leases (timeout_at);
+
 CREATE TABLE workflow_queue_items (
     id BIGSERIAL PRIMARY KEY,
     tenant_id VARCHAR(128) NOT NULL,
+    run_id VARCHAR(64) NOT NULL,
     step_run_id VARCHAR(64) NOT NULL,
+    step_created_at TIMESTAMPTZ NOT NULL,
+    retry_count SMALLINT NOT NULL,
     item_kind VARCHAR(32) NOT NULL,              -- EXECUTE, WAIT_TIMEOUT, SLEEP_WAKE
     queue_name VARCHAR(128) NOT NULL,
     priority SMALLINT NOT NULL,
     concurrency_key VARCHAR(255),
     rate_limit_key VARCHAR(255),
+    rate_limit_units INT NOT NULL DEFAULT 1,
     available_at TIMESTAMPTZ NOT NULL,
     enqueued_at TIMESTAMPTZ NOT NULL
 ) WITH (fillfactor = 70);
@@ -740,30 +824,67 @@ CREATE INDEX idx_queue_tenant_priority ON workflow_queue_items (queue_name, tena
 CREATE TABLE workflow_queue_fairness_state (
     queue_name VARCHAR(128) PRIMARY KEY,
     last_serviced_tenant_id VARCHAR(128) NOT NULL DEFAULT '',
+    min_unprocessed_id BIGINT NOT NULL DEFAULT 0, -- Sliding lower-bound cursor (Hatchet GetMinUnprocessedQueueItemId)
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE workflow_wait_conditions (
+-- 5. Unified CNF Condition-Matching Engine (Hatchet v1_match + v1_match_condition)
+CREATE TABLE workflow_matches (
     id VARCHAR(64) PRIMARY KEY,
     tenant_id VARCHAR(128) NOT NULL,
     run_id VARCHAR(64) NOT NULL,
     step_run_id VARCHAR(64) NOT NULL,
-    match_key VARCHAR(255) NOT NULL,
-    match_predicate_id VARCHAR(128),
-    status VARCHAR(32) NOT NULL,                 -- WAITING, RESOLVED, TIMED_OUT, CANCELLED
-    timeout_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL
+    step_created_at TIMESTAMPTZ NOT NULL,
+    node_key VARCHAR(128) NOT NULL,
+    kind VARCHAR(32) NOT NULL,                   -- 'DAG_DEPENDENCY' | 'SIGNAL_WAIT'
+    existing_data JSONB,                         -- Aggregated parent outputs for 2-stage CREATE_MATCH -> SLEEP/WAIT
+    is_satisfied BOOLEAN NOT NULL DEFAULT FALSE,
+    resolved_action VARCHAR(32),                 -- 'SKIP' | 'CANCEL' | 'CREATE' | 'QUEUE' | 'CREATE_MATCH'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX idx_wait_match ON workflow_wait_conditions (tenant_id, match_key) WHERE status = 'WAITING';
 
-CREATE TABLE workflow_concurrency_slots (
+CREATE TABLE workflow_match_conditions (
+    id VARCHAR(64) PRIMARY KEY,
+    match_id VARCHAR(64) NOT NULL REFERENCES workflow_matches(id) ON DELETE CASCADE,
     tenant_id VARCHAR(128) NOT NULL,
+    or_group_id VARCHAR(64) NOT NULL,            -- CNF: ANY condition in an or_group_id satisfies the group; ALL groups must be satisfied
+    condition_kind VARCHAR(32) NOT NULL,         -- 'PARENT_OVERRIDE' | 'SLEEP' | 'CANONICAL_EVENT'
+    event_key VARCHAR(255) NOT NULL,             -- e.g. 'step.completed', 'step.failed', 'sleep.<id>', 'canonical.<type>'
+    event_resource_hint VARCHAR(255),            -- parent step_run_id or entity match key
+    predicate_id VARCHAR(128),                   -- Registered pure predicate (replaces CEL)
+    readable_data_key VARCHAR(128) NOT NULL,     -- Key under which matched payload is merged into jsonb_object_agg
+    action VARCHAR(32) NOT NULL,                 -- Precedence: 'SKIP' > 'CANCEL' > 'CREATE' > 'QUEUE' > 'CREATE_MATCH'
+    is_satisfied BOOLEAN NOT NULL DEFAULT FALSE,
+    matched_data JSONB,
+    timeout_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_match_cond_lookup ON workflow_match_conditions (tenant_id, condition_kind, event_key, event_resource_hint)
+    WHERE is_satisfied = FALSE;
+
+-- 6. Unified Concurrency Slot State Machine (Hatchet v1_concurrency_slot)
+CREATE TABLE workflow_concurrency_slots (
+    sort_id BIGSERIAL,
+    tenant_id VARCHAR(128) NOT NULL,
+    strategy_id VARCHAR(128) NOT NULL,
     concurrency_key VARCHAR(255) NOT NULL,
     run_id VARCHAR(64) NOT NULL,
-    acquired_at TIMESTAMPTZ NOT NULL,
-    PRIMARY KEY (tenant_id, concurrency_key, run_id)
-);
+    step_run_id VARCHAR(64) NOT NULL,
+    step_created_at TIMESTAMPTZ NOT NULL,
+    retry_count SMALLINT NOT NULL,
+    priority SMALLINT NOT NULL DEFAULT 2,
+    is_filled BOOLEAN NOT NULL DEFAULT FALSE,    -- FALSE = waiting for slot; TRUE = currently running
+    next_strategy_ids VARCHAR(128)[] NOT NULL DEFAULT '{}', -- Multi-level strategy chaining
+    queue_name VARCHAR(128) NOT NULL,
+    rate_limit_key VARCHAR(255),
+    rate_limit_units INT NOT NULL DEFAULT 1,
+    acquired_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (tenant_id, strategy_id, concurrency_key, step_run_id, retry_count)
+) WITH (fillfactor = 70);
+CREATE INDEX idx_concurrency_window ON workflow_concurrency_slots (tenant_id, strategy_id, concurrency_key, sort_id);
 
+-- 7. Token-Bucket Rate Limits & Paused Queue Parking (Hatchet v1_rate_limit + v1_paused_workflow_queue_item)
 CREATE TABLE workflow_rate_limits (
     tenant_id VARCHAR(128) NOT NULL,
     rate_limit_key VARCHAR(255) NOT NULL,
@@ -771,11 +892,31 @@ CREATE TABLE workflow_rate_limits (
     refill_per_second NUMERIC(12,4) NOT NULL,
     tokens NUMERIC(12,4) NOT NULL,
     refilled_at TIMESTAMPTZ NOT NULL,
-    paused_until TIMESTAMPTZ,
+    paused_at TIMESTAMPTZ,
+    paused_until TIMESTAMPTZ,                    -- Updated monotonically via GREATEST on 429 Retry-After
     PRIMARY KEY (tenant_id, rate_limit_key)
 );
 
+CREATE TABLE workflow_paused_queue_items (
+    id BIGSERIAL PRIMARY KEY,
+    tenant_id VARCHAR(128) NOT NULL,
+    rate_limit_key VARCHAR(255) NOT NULL,
+    run_id VARCHAR(64) NOT NULL,
+    step_run_id VARCHAR(64) NOT NULL,
+    step_created_at TIMESTAMPTZ NOT NULL,
+    retry_count SMALLINT NOT NULL,
+    queue_name VARCHAR(128) NOT NULL,
+    priority SMALLINT NOT NULL,
+    concurrency_key VARCHAR(255),
+    rate_limit_units INT NOT NULL DEFAULT 1,
+    requeue_after TIMESTAMPTZ NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_paused_requeue ON workflow_paused_queue_items (tenant_id, rate_limit_key, requeue_after);
+
+-- ============================================================================
 -- IP (owned by apps/ip engine core)
+-- ============================================================================
 CREATE TABLE entity_links (...);           -- §8.3, replaces global_entity_map
 CREATE TABLE write_intents (
     id VARCHAR(64) PRIMARY KEY,
@@ -933,7 +1074,7 @@ Each action is a use case with RBAC. Runbooks cover: target outage, credential e
 | # | Decision | Recommendation |
 |---|---|---|
 | 1 | Build a Hatchet-inspired Python engine vs. adopt Temporal/Hatchet/DBOS | **Build** (atomic commit with shard state, no new infrastructure). DBOS is the fallback at the Phase B gate. |
-| 2 | Engine package name | `core/platform/packages/workflow` (named by capability) |
+| 2 | Engine package name | `core/platform/packages/orchestration` (named by capability) |
 | 3 | Ubiquitous language for IP business flows | **Stitch** (already used in `architecture.md`) |
 | 4 | Static DAG vs. imperative replayed workflows | **Static DAG** with branches, waits and child workflows |
 | 5 | Workflow state location | **Tenant data plane shard** (same transaction as replica, entity links and outbox) |
