@@ -33,12 +33,12 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
+from strace.domain import TraceEventType
 
 from edi.domain.enums import (
     EdiConnectionType,
     EdiDirection,
     MessageStatus,
-    TraceEventType,
 )
 
 

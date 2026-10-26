@@ -5,6 +5,7 @@ from typing import Any
 
 import structlog
 from database.router import DatabaseRouter
+from database.tenant_shard_resolver import TenantNotFoundError
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.tenant_resolver import (
     TenantResolver,
@@ -27,6 +28,7 @@ from edi.domain.enums import EdiDirection, PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.exceptions import ConsumerTerminalError
 from pubsub.provider import PubSubProvider
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
@@ -42,19 +44,11 @@ load_dotenv()
 logger = structlog.get_logger(__name__)
 
 
-def _setup_registry(
+def _build_orchestrator_route_registry(
     transformer: TransformerPort,
     settings: WorkerSettings,
-    uow_provider: TenantUowProvider,
-) -> EdiDataPlaneEventDispatcher:
-    publisher = create_edi_pipeline_publisher(
-        compute_queue_url=settings.sqs.compute_queue_url,
-        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
-        deliver_queue_url=settings.sqs.deliver_queue_url,
-        region_name=settings.aws.resolved_region,
-        endpoint_url=settings.aws.endpoint_url,
-    )
-
+    publisher: Any,
+) -> EdiDataPlaneRouteRegistry:
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(uow_factory=uow_fact, publisher=publisher)
 
@@ -138,9 +132,34 @@ def _setup_registry(
         direction=None,
         factory=run_delivery_failed,
     )
+    return registry
+
+
+def _setup_registry(
+    transformer: TransformerPort,
+    settings: WorkerSettings,
+    uow_provider: TenantUowProvider,
+) -> EdiDataPlaneEventDispatcher:
+    publisher = create_edi_pipeline_publisher(
+        compute_queue_url=settings.sqs.compute_queue_url,
+        orchestrator_queue_url=settings.sqs.orchestrator_queue_url,
+        deliver_queue_url=settings.sqs.deliver_queue_url,
+        region_name=settings.aws.resolved_region,
+        endpoint_url=settings.aws.endpoint_url,
+    )
+    registry = _build_orchestrator_route_registry(transformer, settings, publisher)
 
     async def route_event(event: EdiDataPlaneEventMessage) -> None:
-        uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
+        try:
+            uow_factory = await uow_provider.get_uow_factory(event.tenant_id)
+        except TenantNotFoundError as exc:
+            logger.error(
+                "edi_orchestrator_worker.tenant_not_found_terminal_error",
+                tenant_id=event.tenant_id,
+                trace_id=event.trace_id,
+                error=str(exc),
+            )
+            raise ConsumerTerminalError(f"Tenant {event.tenant_id} not found in Global DB") from exc
         await registry.route(event, uow_factory)
 
     return EdiDataPlaneEventDispatcher(callback=route_event)

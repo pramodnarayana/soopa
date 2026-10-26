@@ -44,6 +44,7 @@ members = [
     "sftp",
     "shttp",
     "storage",
+    "strace",
     "ucp",
     "ucp-jobs-worker",
     "ucp-models",
@@ -1090,6 +1091,7 @@ dependencies = [
     { name = "sftp" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "strace" },
     { name = "structlog" },
     { name = "ucp" },
     { name = "ucp-models" },
@@ -1131,6 +1133,7 @@ requires-dist = [
     { name = "sftp", editable = "core/platform/packages/sftp" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog", specifier = ">=24.1.0" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
@@ -1208,6 +1211,7 @@ dependencies = [
     { name = "security" },
     { name = "seedwork" },
     { name = "sqlalchemy" },
+    { name = "strace" },
     { name = "structlog" },
     { name = "ucp-models" },
 ]
@@ -1232,6 +1236,7 @@ requires-dist = [
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
 ]
@@ -1837,6 +1842,7 @@ dependencies = [
     { name = "sftp" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "strace" },
     { name = "structlog" },
 ]
 
@@ -1873,6 +1879,7 @@ requires-dist = [
     { name = "sftp", editable = "core/platform/packages/sftp" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog", specifier = ">=24.1.0" },
 ]
 
@@ -4040,6 +4047,27 @@ requires-dist = [
 ]
 
 [[package]]
+name = "strace"
+version = "0.1.0"
+source = { editable = "core/platform/packages/strace" }
+dependencies = [
+    { name = "database" },
+    { name = "observability" },
+    { name = "seedwork" },
+    { name = "sqlalchemy" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "structlog", specifier = ">=24.0.0" },
+]
+
+[[package]]
 name = "structlog"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4351,6 +4379,7 @@ dependencies = [
     { name = "observability" },
     { name = "secret-store" },
     { name = "security" },
+    { name = "strace" },
     { name = "ucp" },
     { name = "uvicorn" },
 ]
@@ -4382,6 +4411,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
     { name = "secret-store", editable = "core/platform/packages/secret-store" },
     { name = "security", editable = "core/platform/packages/security" },
+    { name = "strace", editable = "core/platform/packages/strace" },
     { name = "ucp", editable = "core/ucp/packages/ucp" },
     { name = "uvicorn", specifier = ">=0.30.1" },
 ]

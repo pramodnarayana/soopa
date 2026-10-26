@@ -59,6 +59,7 @@ members = [
     "core/platform/packages/security",
     "core/platform/packages/secret-store",
     "core/platform/packages/orchestration",
+    "core/platform/packages/strace",
     "apps/ip/packages/ip",
 ]
 exclude = ["apps/edi/packages/ui"]
@@ -81,6 +82,7 @@ unified-worker = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
 orchestration = { workspace = true }
+strace = { workspace = true }
 ip = { workspace = true }
 shttp = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
@@ -93,6 +95,7 @@ addopts = "-v --tb=short --ignore=services/worker --import-mode=importlib"
 pythonpath = [
     "core/platform/packages/orchestration/src",
     "core/platform/packages/orchestration",
+    "core/platform/packages/strace/src",
     "core/platform/packages/notification/src",
     "apps/ip/packages/ip/src",
 ]
@@ -178,6 +181,7 @@ mypy_path = [
     "core/platform/packages/sftp/src",
     "core/platform/packages/shttp/src",
     "core/platform/packages/orchestration/src",
+    "core/platform/packages/strace/src",
     "core/platform/packages/seedwork/src",
 ]
 
@@ -333,6 +337,7 @@ extraPaths = [
     "apps/ip/packages/ip/src",
     "core/platform/packages/shttp/src",
     "core/platform/packages/orchestration/src",
+    "core/platform/packages/strace/src",
     "core/platform/packages/seedwork/src",
 ]
 
@@ -376,6 +381,7 @@ known_first_party = [
     "sftp",
     "ip",
     "shttp",
+    "strace",
     "workflow",
 ]
 

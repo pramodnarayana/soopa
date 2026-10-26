@@ -4,15 +4,14 @@ import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
+from strace.domain import TraceEvent, TraceEventType
 
-from edi.domain.enums import TraceEventType
 from edi.domain.events import DeliverRequestedEvent, TransformRequestedEvent
 from edi.domain.exceptions import TransactionNotFoundError
 from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import (
     EdiJsonDomainModel,
     EdiMessageDomainModel,
-    TraceEventDomainModel,
 )
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -127,7 +126,7 @@ class ModifyAndReplayTransactionUseCase:
         envelopes = await self.uow.transactions.save(new_msg)
 
         # Audit event on the OLD trace
-        old_audit = TraceEventDomainModel(
+        old_audit = TraceEvent(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
             tenant_id=tenant_id,
             trace_id=original_trace_id,
@@ -135,10 +134,10 @@ class ModifyAndReplayTransactionUseCase:
             actor=actor,
             metadata={"new_trace_id": new_trace_id},
         )
-        await self.uow.transactions.save_trace_event(old_audit)
+        await self.uow.traces.save_trace_event(old_audit)
 
         # Audit event on the NEW trace
-        new_audit = TraceEventDomainModel(
+        new_audit = TraceEvent(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
             tenant_id=tenant_id,
             trace_id=new_trace_id,
@@ -146,7 +145,7 @@ class ModifyAndReplayTransactionUseCase:
             actor=actor,
             metadata={"parent_trace_id": original_trace_id, "original_trace_id": root_trace_id},
         )
-        await self.uow.transactions.save_trace_event(new_audit)
+        await self.uow.traces.save_trace_event(new_audit)
 
         await self.uow.commit()
         for env in envelopes:
@@ -211,7 +210,7 @@ class ModifyAndReplayTransactionUseCase:
 
         envelopes = await self.uow.transactions.save_json(new_json)
 
-        old_audit = TraceEventDomainModel(
+        old_audit = TraceEvent(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
             tenant_id=tenant_id,
             trace_id=original_trace_id,
@@ -219,9 +218,9 @@ class ModifyAndReplayTransactionUseCase:
             actor=actor,
             metadata={"new_trace_id": new_trace_id},
         )
-        await self.uow.transactions.save_trace_event(old_audit)
+        await self.uow.traces.save_trace_event(old_audit)
 
-        new_audit = TraceEventDomainModel(
+        new_audit = TraceEvent(
             id=generate_id(DomainIdPrefix.EDI_TRACE_EVENT),
             tenant_id=tenant_id,
             trace_id=new_trace_id,
@@ -229,7 +228,7 @@ class ModifyAndReplayTransactionUseCase:
             actor=actor,
             metadata={"parent_trace_id": original_trace_id, "original_trace_id": root_trace_id},
         )
-        await self.uow.transactions.save_trace_event(new_audit)
+        await self.uow.traces.save_trace_event(new_audit)
 
         await self.uow.commit()
         for env in envelopes:

@@ -2,6 +2,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
+from database.tenant_shard_resolver import TenantNotFoundError
 from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
     ComputeOutboundTransformCommand,
     ComputeOutboundTransformUseCase,
@@ -140,6 +141,16 @@ class EdiComputeDispatcher:
 
             logger.info("edi_transformed_successfully", trace_id=command.trace_id)
 
+        except TenantNotFoundError as exc:
+            logger.error(
+                "compute_worker.tenant_not_found_terminal_error",
+                tenant_id=command.tenant_id,
+                trace_id=command.trace_id,
+                error=str(exc),
+            )
+            raise ConsumerTerminalError(
+                f"Tenant {command.tenant_id} not found in Global DB"
+            ) from exc
         except Exception:
             logger.exception("edi_message_processing_failed")
             # Re-raise to prevent message deletion

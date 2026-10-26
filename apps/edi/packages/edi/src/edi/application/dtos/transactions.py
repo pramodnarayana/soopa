@@ -7,14 +7,6 @@ from seedwork.domain.types import JsonDict, JsonValue
 
 
 @dataclass(frozen=True, kw_only=True)
-class EdiTraceLineageItemDTO:
-    trace_id: str
-    status: str | None
-    created_at: str | None
-    replay_count: int
-
-
-@dataclass(frozen=True, kw_only=True)
 class EdiMessageDTO:
     id: str
     trace_id: str

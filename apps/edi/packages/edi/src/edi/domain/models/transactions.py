@@ -1,6 +1,6 @@
 from dataclasses import dataclass, replace
 
-from seedwork.models import AggregateRoot, TraceEvent
+from seedwork.models import AggregateRoot
 
 from edi.domain.enums import EdiDirection, MessageStatus
 from edi.domain.events import TransformRequestedEvent
@@ -259,8 +259,3 @@ class TransactionListDomainModel(AggregateRoot):
     replay_count: int = 0
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
-
-
-@dataclass(kw_only=True)
-class TraceEventDomainModel(TraceEvent):
-    """Domain model representing an audit trace event in the immutable transaction ledger."""

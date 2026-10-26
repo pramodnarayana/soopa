@@ -1,0 +1,27 @@
+[project]
+name = "strace"
+version = "0.1.0"
+description = "Enterprise-grade cross-stage distributed business trace, lineage, and replay capability package for Soopa platform"
+requires-python = ">=3.12"
+dependencies = [
+    "seedwork",
+    "database",
+    "observability",
+    "sqlalchemy>=2.0.0",
+    "structlog>=24.0.0",
+]
+
+[tool.uv.sources]
+seedwork = { workspace = true }
+database = { workspace = true }
+observability = { workspace = true }
+
+[tool.ruff]
+extend = "../../../../pyproject.toml"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/strace"]
