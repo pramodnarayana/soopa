@@ -13,8 +13,11 @@ from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    GetValidCredentialsCommand,
+    TokenManagerService,
+)
 from ip.engine.domain.enums import (
-    ConnectionStatus,
     IngestionMode,
     SyncRunKind,
     SyncRunStatus,
@@ -95,12 +98,18 @@ class RunSyncUseCase:
         tiered_storage: TieredStoragePort,
         cipher: CipherPort,
         connectors: Mapping[str, SourceConnectorPort],
+        *,
+        token_manager: TokenManagerService | None = None,
     ) -> None:
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow = data_plane_uow
         self._tiered_storage = tiered_storage
         self._cipher = cipher
         self._connectors = connectors
+        self._token_manager = token_manager or TokenManagerService(
+            control_plane_uow=control_plane_uow,
+            cipher=cipher,
+        )
 
     async def execute(self, command: RunSyncCommand) -> RunSyncResultDTO:
         trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
@@ -253,24 +262,19 @@ class RunSyncUseCase:
     async def _resolve_connection_context(
         self, command: RunSyncCommand
     ) -> tuple[Connection, SourceConnectorPort, JsonDict] | None:
-        async with self._control_plane_uow:
-            connection = await self._control_plane_uow.connections.get_by_id(command.connection_id)
-            if not connection or connection.tenant_id != command.tenant_id:
-                return None
-
-            if connection.status is ConnectionStatus.DEACTIVATED:
-                return None
-
-            connector = self._connectors.get(connection.app_id)
-            if not connector:
-                return None
-
-            credentials = (
-                self._cipher.decrypt(connection.encrypted_credentials)
-                if connection.encrypted_credentials
-                else {}
+        creds_res = await self._token_manager.get_valid_credentials(
+            GetValidCredentialsCommand(
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
             )
-            return connection, connector, credentials
+        )
+        if creds_res.is_err or creds_res.value is None:
+            return None
+        resolved = creds_res.value
+        connector = self._connectors.get(resolved.app_id)
+        if not connector or resolved.connection is None:
+            return None
+        return resolved.connection, connector, resolved.credentials
 
     async def _execute_stream_pull(
         self,

@@ -94,7 +94,7 @@ from ip.engine.ports.outbound.uow import (
 )
 from seedwork.domain.types import JsonDict
 from seedwork.events import DomainEvent
-from seedwork.models import TraceEvent
+from strace.domain import TraceEvent
 
 # ---------------------------------------------------------------------------
 # In-Memory Test Fakes
@@ -209,6 +209,21 @@ class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
         key = (tenant_id, replica_record_id, mapping_id, mapping_version)
         entry = self.entries.get(key)
         return entry.produced_canonical_refs if entry else ()
+
+    async def get_latest_produced_refs(
+        self, *, tenant_id: str, replica_record_id: str, mapping_id: str
+    ) -> tuple[tuple[str, str], ...]:
+        matching = [
+            e
+            for e in self.entries.values()
+            if e.tenant_id == tenant_id
+            and e.replica_record_id == replica_record_id
+            and e.mapping_id == mapping_id
+        ]
+        if not matching:
+            return ()
+        matching.sort(key=lambda e: (e.created_at, e.replica_version), reverse=True)
+        return matching[0].produced_canonical_refs
 
     async def record_entry(self, entry: NormalizationLedgerEntry) -> None:
         key = (entry.tenant_id, entry.replica_record_id, entry.mapping_id, entry.mapping_version)

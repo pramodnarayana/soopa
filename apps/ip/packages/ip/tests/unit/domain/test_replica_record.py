@@ -10,7 +10,7 @@ from ip.engine.domain.models.replica_record import (
     _is_cursor_stale,
     compute_data_hash,
 )
-from seedwork.models import TracedAggregateRoot
+from strace.domain import TracedAggregateRoot
 
 
 def test_compute_data_hash_is_canonical_and_key_order_independent() -> None:

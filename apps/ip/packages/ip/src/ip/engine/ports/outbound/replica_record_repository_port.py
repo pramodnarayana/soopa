@@ -106,3 +106,11 @@ class ReplicaRecordRepositoryPort(Protocol):
     ) -> list[ReplicaRecord]:
         """Retrieves a deterministic keyset-paginated chunk of replica records for a stream."""
         ...
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[ReplicaRecord]:
+        """Retrieves all replica records last updated under a given trace ID."""
+        return ()

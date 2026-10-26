@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from ip.engine.adapters.outbound.stitches import (
     EmitNotificationStepHandler,
     InMemoryStitchCatalogRegistry,
@@ -17,9 +18,12 @@ from ip.engine.application.use_cases.stitch import (
     ExecuteStitchWorkerTickCommand,
     ExecuteStitchWorkerTickUseCase,
 )
+from ip.engine.domain.enums import HttpWriteOperation, OutboundConflictStrategy
 from ip.engine.domain.models.replica_record import ReplicaRecord
 from ip.engine.domain.stitch import (
     EmitNotificationStepInput,
+    ExecuteHttpActionStepInput,
+    ExecuteHttpActionStepOutput,
     QueryReplicaStepInput,
     StitchStepType,
     StitchSubscription,
@@ -169,6 +173,50 @@ def test_stitch_dto_codecs_validate_inputs_without_raising_exceptions() -> None:
         }
     )
     assert good_notif.is_ok
+
+    bad_http = ExecuteHttpActionStepInput.from_payload(
+        {
+            "connection_id": "",
+            "stream_name": "orders",
+            "operation": "CREATE",
+            "payload": {"id": "ord-1"},
+        }
+    )
+    assert bad_http.is_err
+
+    good_http = ExecuteHttpActionStepInput.from_payload(
+        {
+            "connection_id": "conn_1",
+            "stream_name": "orders",
+            "operation": "UPSERT",
+            "payload": {"id": "ord-1", "amount": 500},
+            "record_id": "ord-1",
+            "headers": {"X-Source": "Soopa"},
+            "conflict_strategy": "IDEMPOTENT_SUCCESS",
+        }
+    )
+    assert good_http.is_ok
+    parsed_http = good_http.unwrap()
+    assert parsed_http.operation == HttpWriteOperation.UPSERT.value
+    assert parsed_http.record_id == "ord-1"
+    assert parsed_http.headers == {"X-Source": "Soopa"}
+    assert parsed_http.conflict_strategy == OutboundConflictStrategy.IDEMPOTENT_SUCCESS
+
+    http_out = ExecuteHttpActionStepOutput(
+        outbound_record_id="out_123",
+        status="DELIVERED",
+        record_id="ord-1",
+        destination_id="sf_ord_1",
+        response_status_code=200,
+        response_body={"ok": True},
+        was_deduplicated=False,
+        was_token_refreshed=True,
+    )
+    payload_out = http_out.to_payload()
+    assert payload_out["outbound_record_id"] == "out_123"
+    assert payload_out["record_id"] == "ord-1"
+    assert payload_out["was_deduplicated"] is False
+    assert payload_out["was_token_refreshed"] is True
 
 
 async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1_notification() -> (
@@ -514,4 +562,113 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     tick_res = (
         await worker_tick.execute(ExecuteStitchWorkerTickCommand(worker_id="wrk_1", now=now))
     ).unwrap()
+    assert len(tick_res.failed_or_retried_step_ids) == 1
+
+
+class _CrashingStepHandler(StepHandlerPort[JsonDict, JsonDict]):
+    @property
+    def step_type(self) -> str:
+        return "ip.stitch.crash"
+
+    @property
+    def effect_policy(self) -> EffectPolicy:
+        return EffectPolicy.PURE
+
+    async def execute(
+        self, context: StepContext, step_input: JsonDict
+    ) -> Result[JsonDict, StepFailure]:
+        raise RuntimeError("Boom! Unhandled handler crash")
+
+
+@pytest.mark.asyncio
+async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
+    now = datetime(2026, 4, 1, 12, 0, 0, tzinfo=UTC)
+    uow = InMemoryWorkflowUnitOfWork()
+
+    def uow_factory() -> InMemoryWorkflowUnitOfWork:
+        return uow
+
+    definitions = InMemoryWorkflowDefinitionRegistry()
+    handlers = InMemoryStepHandlerRegistry()
+    handlers.register(_CrashingStepHandler())
+
+    sched = WorkflowStepSchedulerService()
+    match_resolver = ResolveMatchConditionsUseCase(
+        uow_factory=uow_factory,
+        definition_registry=definitions,
+        step_scheduler=sched,
+    )
+    start_run = StartRunUseCase(
+        uow_factory=uow_factory,
+        definition_registry=definitions,
+        step_scheduler=sched,
+    )
+    claim_steps = ClaimStepsUseCase(
+        uow_factory=uow_factory,
+        definition_registry=definitions,
+        step_scheduler=sched,
+        match_resolver=match_resolver,
+    )
+    complete_step = CompleteStepUseCase(
+        uow_factory=uow_factory,
+        definition_registry=definitions,
+        step_scheduler=sched,
+        match_resolver=match_resolver,
+    )
+    fail_step = FailStepUseCase(
+        uow_factory=uow_factory,
+        definition_registry=definitions,
+        error_policy=DefaultStepErrorPolicy(),
+        step_scheduler=sched,
+        match_resolver=match_resolver,
+    )
+
+    defn = WorkflowDefinition(
+        workflow_id="energy.crash_stitch",
+        version=1,
+        nodes=(
+            NodeDefinition(
+                node_key="step_crash",
+                step_type="ip.stitch.crash",
+                kind=NodeKind.TASK,
+            ),
+        ),
+    )
+    definitions.register(defn)
+    stitch_catalog = InMemoryStitchCatalogRegistry()
+    sub = StitchSubscription(
+        id="sub_crash",
+        tenant_id="ten_energy",
+        workflow_id="energy.crash_stitch",
+        workflow_version=1,
+        canonical_event_type="canonical.test.event",
+        is_trigger=True,
+    )
+    stitch_catalog.register_subscription(sub)
+
+    dispatcher = DispatchCanonicalEventToStitchesUseCase(
+        stitch_catalog=stitch_catalog,
+        start_run_use_case=start_run,
+        resolve_matches_use_case=match_resolver,
+    )
+    await dispatcher.execute(
+        DispatchCanonicalEventToStitchesCommand(
+            tenant_id="ten_energy",
+            canonical_event_type="canonical.test.event",
+            event_id="evt_crash",
+            payload={"k": "v"},
+            trace_id="trc_crash",
+            now=now,
+        )
+    )
+    worker_tick = ExecuteStitchWorkerTickUseCase(
+        claim_steps_use_case=claim_steps,
+        complete_step_use_case=complete_step,
+        fail_step_use_case=fail_step,
+        handler_registry=handlers,
+    )
+    tick_res = (
+        await worker_tick.execute(ExecuteStitchWorkerTickCommand(worker_id="wrk_1", now=now))
+    ).unwrap()
+    assert len(tick_res.completed_step_ids) == 0
     assert len(tick_res.failed_or_retried_step_ids) == 1

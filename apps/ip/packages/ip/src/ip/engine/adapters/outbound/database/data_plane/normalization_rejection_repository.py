@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
+from ip.engine.adapters.outbound.database.data_plane.mappers import (
+    normalization_rejection_to_domain,
+)
 from ip.engine.adapters.outbound.database.models.data_plane import (
     NormalizationRejectionModel,
     NormalizationShadowDiffModel,
@@ -14,6 +19,7 @@ from ip.engine.domain.normalization import (
 from ip.engine.ports.outbound.normalization_rejection_repository_port import (
     NormalizationRejectionRepositoryPort,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -44,20 +50,7 @@ class SqlAlchemyNormalizationRejectionRepository(
 
     @staticmethod
     def _to_domain_model(record: NormalizationRejectionModel) -> NormalizationRejectionEntry:
-        return NormalizationRejectionEntry(
-            id=record.id,
-            tenant_id=record.tenant_id,
-            replica_record_id=record.replica_record_id,
-            stream=record.stream,
-            mapping_id=record.mapping_id,
-            mapping_version=record.mapping_version,
-            reason_code=record.reason_code,
-            field_path=record.field_path,
-            detail=record.detail,
-            trace_id=record.trace_id,
-            correlation_id=record.correlation_id,
-            created_at=record.created_at,
-        )
+        return normalization_rejection_to_domain(record)
 
     @staticmethod
     def _shadow_diff_to_orm_model(
@@ -94,3 +87,19 @@ class SqlAlchemyNormalizationRejectionRepository(
     async def record_shadow_diff(self, diff: NormalizationShadowDiffEntry) -> None:
         """Persist a candidate mapper difference entry in shadow mode."""
         self.session.add(self._shadow_diff_to_orm_model(diff))
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[NormalizationRejectionEntry]:
+        stmt = (
+            select(NormalizationRejectionModel)
+            .where(
+                NormalizationRejectionModel.trace_id == trace_id,
+                NormalizationRejectionModel.tenant_id == tenant_id,
+            )
+            .order_by(NormalizationRejectionModel.created_at.asc())
+        )
+        res = await self._session.execute(stmt)
+        return [self._to_domain_model(r) for r in res.scalars().all()]

@@ -94,6 +94,9 @@ class CompleteStepUseCase:
                 return Result.err(defn_res.unwrap_err())
             definition = defn_res.unwrap()
 
+            if run.restore_from_blocked_version(now=command.now):
+                await uow.runs.save(run)
+
             step_res = run.get_step(command.node_key)
             if step_res.is_err:
                 return Result.err(step_res.unwrap_err())

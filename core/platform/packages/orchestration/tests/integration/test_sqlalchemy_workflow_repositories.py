@@ -144,9 +144,7 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
 
     # 2. Claim root step, then report 429 rate-limit failure -> parks in paused queue without burning app_retry_count
     claimed1 = (
-        await claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_pg_1", now=now)
-        )
+        await claim_steps.execute(ClaimStepsCommand(worker_id="wrk_pg_1", now=now))
     ).unwrap()
     assert len(claimed1.claimed_steps) == 1
     assert claimed1.claimed_steps[0].input_payload == {
@@ -179,9 +177,7 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     # 3. Advance clock past 30s -> unpauses and claims root step, then completes
     t_unpause = now + timedelta(seconds=35)
     claimed2 = (
-        await claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_pg_1", now=t_unpause)
-        )
+        await claim_steps.execute(ClaimStepsCommand(worker_id="wrk_pg_1", now=t_unpause))
     ).unwrap()
     assert len(claimed2.claimed_steps) == 1
     assert claimed2.claimed_steps[0].context.retry_count == 0
@@ -202,9 +198,7 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     # 4. Claim and complete child step `emit_alert` -> run reaches SUCCEEDED
     t_child = t_unpause + timedelta(seconds=2)
     claimed3 = (
-        await claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_pg_1", now=t_child)
-        )
+        await claim_steps.execute(ClaimStepsCommand(worker_id="wrk_pg_1", now=t_child))
     ).unwrap()
     assert len(claimed3.claimed_steps) == 1
     assert claimed3.claimed_steps[0].context.node_key == "emit_alert"

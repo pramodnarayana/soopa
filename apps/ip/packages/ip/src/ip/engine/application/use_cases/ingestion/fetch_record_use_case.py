@@ -11,7 +11,11 @@ from security.ports.cipher_port import CipherPort
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import ConnectionStatus, IngestionMode
+from ip.engine.application.use_cases.connections.token_manager_service import (
+    GetValidCredentialsCommand,
+    TokenManagerService,
+)
+from ip.engine.domain.enums import IngestionMode
 from ip.engine.domain.models.inbound_record import InboundRecord
 from ip.engine.ports.outbound.connector_port import SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
@@ -57,67 +61,53 @@ class FetchRecordUseCase:
         tiered_storage: TieredStoragePort,
         cipher: CipherPort,
         connectors: Mapping[str, SourceConnectorPort],
+        *,
+        token_manager: TokenManagerService | None = None,
     ) -> None:
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow = data_plane_uow
         self._tiered_storage = tiered_storage
         self._cipher = cipher
         self._connectors = connectors
+        self._token_manager = token_manager or TokenManagerService(
+            control_plane_uow=control_plane_uow,
+            cipher=cipher,
+        )
 
     async def execute(self, command: FetchRecordCommand) -> FetchRecordResultDTO:
         trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
 
-        # 1. Retrieve connection config from Control Plane
-        async with self._control_plane_uow:
-            connection = await self._control_plane_uow.connections.get_by_id(command.connection_id)
-            if not connection or connection.tenant_id != command.tenant_id:
-                logger.error(
-                    "fetch_record_connection_not_found",
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    record_id=command.record_id,
-                    trace_id=trace_id,
-                )
-                return FetchRecordResultDTO(
-                    status="CONNECTION_NOT_FOUND",
-                    trace_id=trace_id,
-                    record_id=command.record_id,
-                )
-
-            if connection.status is ConnectionStatus.DEACTIVATED:
-                logger.error(
-                    "fetch_record_connection_deactivated",
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    record_id=command.record_id,
-                    trace_id=trace_id,
-                )
-                return FetchRecordResultDTO(
-                    status="CONNECTION_DEACTIVATED",
-                    trace_id=trace_id,
-                    record_id=command.record_id,
-                )
-
-            connector = self._connectors.get(connection.app_id)
-            if not connector:
-                logger.error(
-                    "fetch_record_connector_not_found",
-                    app_id=connection.app_id,
-                    connection_id=command.connection_id,
-                    trace_id=trace_id,
-                )
-                return FetchRecordResultDTO(
-                    status="CONNECTOR_NOT_FOUND",
-                    trace_id=trace_id,
-                    record_id=command.record_id,
-                )
-
-            credentials = (
-                self._cipher.decrypt(connection.encrypted_credentials)
-                if connection.encrypted_credentials
-                else {}
+        # 1. Retrieve connection config & valid credentials via unified TokenManagerService
+        creds_res = await self._token_manager.get_valid_credentials(
+            GetValidCredentialsCommand(
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
             )
-            public_config = connection.resolved_public_config
+        )
+        if creds_res.is_err or creds_res.value is None:
+            err_code = creds_res.error.code.value if creds_res.error else "CONNECTION_NOT_FOUND"
+            return FetchRecordResultDTO(
+                status=err_code,
+                trace_id=trace_id,
+                record_id=command.record_id,
+            )
+        resolved = creds_res.value
+        connector = self._connectors.get(resolved.app_id)
+        if not connector:
+            logger.error(
+                "fetch_record_connector_not_found",
+                app_id=resolved.app_id,
+                connection_id=command.connection_id,
+                trace_id=trace_id,
+            )
+            return FetchRecordResultDTO(
+                status="CONNECTOR_NOT_FOUND",
+                trace_id=trace_id,
+                record_id=command.record_id,
+            )
+        resolved_app_id = resolved.app_id
+        credentials = resolved.credentials
+        public_config = resolved.public_config
 
         # 2. Fetch the discrete record from external app
         record_envelope = await connector.fetch_record(
@@ -160,7 +150,7 @@ class FetchRecordUseCase:
         inbound = InboundRecord.create(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
-            app_id=connection.app_id,
+            app_id=resolved_app_id,
             stream_name=command.stream_name,
             payload_bytes=payload_bytes,
             is_inlined=storage_result.is_inlined,

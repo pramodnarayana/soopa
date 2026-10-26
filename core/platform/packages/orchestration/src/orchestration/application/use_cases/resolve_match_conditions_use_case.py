@@ -195,14 +195,14 @@ class ResolveMatchConditionsUseCase:
             return run_res.unwrap_err()
         run = run_res.unwrap()
 
-        defn_res = self._definition_registry.get(
-            run.workflow_id, run.workflow_version
-        )
+        defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
         if defn_res.is_err:
             run.status = RunStatus.BLOCKED_VERSION_UNAVAILABLE
             await uow.runs.save(run)
             return defn_res.unwrap_err()
         definition = defn_res.unwrap()
+        if run.restore_from_blocked_version(now=now):
+            await uow.runs.save(run)
         node = definition.get_node(updated_match.node_key)
         if node is None:
             return None
@@ -316,10 +316,7 @@ class ResolveMatchConditionsUseCase:
         acc: _ResolutionAccumulator,
         now: datetime,
     ) -> None:
-        if (
-            updated_match.kind == MatchKind.SIGNAL_WAIT
-            and node.kind == NodeKind.WAIT_FOR_EVENT
-        ):
+        if updated_match.kind == MatchKind.SIGNAL_WAIT and node.kind == NodeKind.WAIT_FOR_EVENT:
             to_res = run.timeout_step(node_key=node.node_key, now=now)
             if to_res.is_ok:
                 timed_out_step = to_res.unwrap()
@@ -511,9 +508,7 @@ class ResolveMatchConditionsUseCase:
     ) -> WorkflowError | None:
         assert node.branch_predicate_id is not None
         branch_passed = (
-            self._predicate_evaluator.evaluate(
-                node.branch_predicate_id, aggregated_input
-            )
+            self._predicate_evaluator.evaluate(node.branch_predicate_id, aggregated_input)
             if self._predicate_evaluator is not None
             else False
         )
@@ -564,10 +559,7 @@ class ResolveMatchConditionsUseCase:
         node_queue_name: str,
     ) -> None:
         for cond in signal_match.conditions:
-            if (
-                cond.condition_kind == ConditionKind.SLEEP
-                and cond.timeout_at is not None
-            ):
+            if cond.condition_kind == ConditionKind.SLEEP and cond.timeout_at is not None:
                 item_kind = (
                     QueueItemKind.SLEEP_WAKE
                     if cond.action == MatchAction.QUEUE

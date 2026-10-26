@@ -8,6 +8,7 @@ from typing import TypedDict
 
 import structlog
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
+from ip.engine.adapters.outbound.database.data_plane.mappers import replica_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRecordModel
 from ip.engine.domain.enums import CursorKind, MergeOutcome
 from ip.engine.domain.models.replica_record import ReplicaMergePolicy, ReplicaRecord
@@ -59,28 +60,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
 
     @staticmethod
     def _to_domain_model(orm: ReplicaRecordModel) -> ReplicaRecord:
-        return ReplicaRecord(
-            id=orm.id,
-            tenant_id=orm.tenant_id,
-            trace_id=orm.trace_id,
-            correlation_id=orm.correlation_id,
-            connection_id=orm.connection_id,
-            stream=orm.stream,
-            record_key=orm.record_key,
-            primary_key_values=tuple(orm.primary_key_values or ()),
-            cursor_value=orm.cursor_value,
-            cursor_kind=orm.cursor_kind,
-            data=dict(orm.data),
-            data_hash=orm.data_hash,
-            version=orm.version,
-            generation_id=orm.generation_id,
-            last_seen_generation=orm.last_seen_generation,
-            first_seen_at=orm.first_seen_at,
-            extracted_at=orm.extracted_at,
-            updated_at=orm.updated_at,
-            deleted_at=orm.deleted_at,
-            source_inbound_record_id=orm.source_inbound_record_id,
-        )
+        return replica_record_to_domain(orm)
 
     @staticmethod
     def _update_record_from_domain(orm: ReplicaRecordModel, domain: ReplicaRecord) -> None:
@@ -489,5 +469,21 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         if after_id is not None:
             stmt = stmt.where(ReplicaRecordModel.id > after_id)
         stmt = stmt.order_by(ReplicaRecordModel.id.asc()).limit(limit)
+        res = await self._session.execute(stmt)
+        return [self._to_domain_model(orm) for orm in res.scalars().all()]
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[ReplicaRecord]:
+        stmt = (
+            select(ReplicaRecordModel)
+            .where(
+                ReplicaRecordModel.trace_id == trace_id,
+                ReplicaRecordModel.tenant_id == tenant_id,
+            )
+            .order_by(ReplicaRecordModel.updated_at.asc())
+        )
         res = await self._session.execute(stmt)
         return [self._to_domain_model(orm) for orm in res.scalars().all()]

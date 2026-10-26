@@ -115,6 +115,27 @@ async def test_normalization_ledger_repository_operations(
     assert len(refs_v2) == 1
     assert refs_v2[0] == ("energy.meter_reading", "mr_1")
 
+    # 6. Query latest produced refs across mapping versions
+    entry_m2 = NormalizationLedgerEntry.create(
+        tenant_id=seeded_ip_tenant,
+        replica_record_id="rep_test_1",
+        replica_version=3,
+        mapping_id="energy.ami_meter_reading",
+        mapping_version=2,
+        produced_canonical_refs=(("energy.meter_reading", "mr_cross_version"),),
+        outcome=NormalizationOutcome.NORMALIZED,
+        trace_id="trc_ledg_3",
+    )
+    await repo.record_entry(entry_m2)
+
+    latest_refs = await repo.get_latest_produced_refs(
+        tenant_id=seeded_ip_tenant,
+        replica_record_id="rep_test_1",
+        mapping_id="energy.ami_meter_reading",
+    )
+    assert len(latest_refs) == 1
+    assert latest_refs[0] == ("energy.meter_reading", "mr_cross_version")
+
 
 @pytest.mark.asyncio
 async def test_normalization_rejection_and_shadow_diff_repository(

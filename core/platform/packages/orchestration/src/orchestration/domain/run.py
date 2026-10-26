@@ -904,6 +904,15 @@ class WorkflowRun(AggregateRoot):
         """Re-evaluate overall WorkflowRun status after DAG match propagation settles."""
         self._recompute_run_status(now=now)
 
+    def restore_from_blocked_version(self, now: datetime | None = None) -> bool:
+        """Restores a BLOCKED_VERSION_UNAVAILABLE run back to RUNNING or QUEUED when definition is available."""
+        if self.status != RunStatus.BLOCKED_VERSION_UNAVAILABLE:
+            return False
+        timestamp = now or datetime.now(UTC)
+        self.status = RunStatus.RUNNING if self.started_at is not None else RunStatus.QUEUED
+        self._recompute_run_status(now=timestamp)
+        return True
+
     def reschedule_step_repeat_until(
         self,
         *,

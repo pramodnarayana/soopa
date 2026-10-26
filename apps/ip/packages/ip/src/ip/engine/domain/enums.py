@@ -42,6 +42,7 @@ class IpTraceEventType(StrEnum):
     L5_DISPATCH_RETRY_SCHEDULED = "L5_DISPATCH_RETRY_SCHEDULED"
     L5_DISPATCH_FAILED = "L5_DISPATCH_FAILED"
     REPLAY_TRIGGERED = "REPLAY_TRIGGERED"
+    MODIFIED_AND_REPLAYED = "MODIFIED_AND_REPLAYED"
 
 
 class ConnectionStatus(StrEnum):
@@ -267,7 +268,40 @@ class HttpWriteOperation(StrEnum):
 
     CREATE = "CREATE"
     UPDATE = "UPDATE"
+    UPSERT = "UPSERT"
     DELETE = "DELETE"
+
+
+class OutboundFailureCategory(StrEnum):
+    """First-class semantic failure classification for Layer-5 outbound dispatches."""
+
+    RATE_LIMITED = "RATE_LIMITED"
+    AUTH_EXPIRED = "AUTH_EXPIRED"
+    TRANSIENT = "TRANSIENT"
+    CONFLICT_IDEMPOTENT = "CONFLICT_IDEMPOTENT"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    TERMINAL = "TERMINAL"
+
+
+class OutboundConflictStrategy(StrEnum):
+    """Policy governing how HTTP 409 Conflict responses are handled during outbound writes."""
+
+    FAIL = "FAIL"
+    IDEMPOTENT_SUCCESS = "IDEMPOTENT_SUCCESS"
+
+
+class TokenRefreshPolicy(StrEnum):
+    """Strategy governing OAuth2 token evaluation inside TokenManagerService."""
+
+    PROACTIVE_IF_EXPIRING = "PROACTIVE_IF_EXPIRING"
+    FORCE_ROTATION = "FORCE_ROTATION"
+
+
+class BatchFailurePolicy(StrEnum):
+    """Strategy governing batch execution behavior when a single item fails terminally."""
+
+    CONTINUE_ALL = "CONTINUE_ALL"
+    HALT_ON_TERMINAL = "HALT_ON_TERMINAL"
 
 
 class FailureDisposition(StrEnum):
@@ -296,3 +330,12 @@ class AckVerdict(StrEnum):
     ACK = "ACK"
     NACK = "NACK"
     REJECT = "REJECT"
+
+
+class ReplayStage(StrEnum):
+    """Target execution stage for deterministic transaction replay."""
+
+    RETRY_INGEST = "RETRY_INGEST"
+    RETRY_NORMALIZE = "RETRY_NORMALIZE"
+    RETRY_STITCH = "RETRY_STITCH"
+    RETRY_DELIVER = "RETRY_DELIVER"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from ip.engine.adapters.outbound.stitches.step_handlers import (
     EmitNotificationStepHandler,
+    ExecuteHttpActionStepHandler,
     NotificationOutboxPort,
     QueryReplicaStepHandler,
     ReplicaLookupPort,
@@ -14,6 +15,7 @@ from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
 
 __all__ = [
     "EmitNotificationStepHandler",
+    "ExecuteHttpActionStepHandler",
     "InMemoryStitchCatalogRegistry",
     "NotificationOutboxPort",
     "QueryReplicaStepHandler",

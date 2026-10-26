@@ -25,6 +25,7 @@ dependencies = [
     "sftp",
     "notification",
     "orchestration",
+    "strace",
     "pyyaml>=6.0.2",
     "aioboto3>=13.1.0",
     "botocore",
@@ -44,6 +45,7 @@ shttp = { workspace = true }
 sftp = { workspace = true }
 notification = { workspace = true }
 orchestration = { workspace = true }
+strace = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -60,7 +62,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src", "../../../../core/platform/packages/orchestration/src"]
+pythonpath = ["src", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src"]
 addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",

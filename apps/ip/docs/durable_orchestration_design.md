@@ -432,7 +432,7 @@ Modelled directly on Hatchet's `v1_match` and `v1_match_condition` (`pkg/reposit
   - Every condition belongs to an `or_group_id` and specifies an `action` (`SKIP`, `CANCEL`, `CREATE`, `QUEUE`, `CREATE_MATCH`).
   - For a given `action`, **any** satisfied condition in an `or_group_id` satisfies that OR-group, and **all** distinct `or_group_id`s for that action must be satisfied (**Conjunctive Normal Form: AND of OR-groups**).
   - When multiple actions become satisfied simultaneously, they resolve in strict precedence order: **`SKIP` > `CANCEL` > `CREATE` > `QUEUE` > `CREATE_MATCH`**.
-  - Standard child DAG nodes assign a distinct `or_group_id` per parent for `QUEUE` (AND across parents), a distinct `or_group_id` per parent for `SKIP` (child skips if all parents skip), and a **shared** `or_group_id` across all parents for `FAILED`/`CANCELLED` with action `CANCEL` (any parent failing cancels the child). `ON_FAILURE` compensation nodes invert this (shared `or_group_id` for `QUEUE` on `FAILED`).
+  - Standard child DAG nodes assign a distinct `or_group_id` per parent for `QUEUE`/`CREATE_MATCH` on `COMPLETED` (AND across all parents), a **shared** `or_group_id` across all parents for `SKIP` on `SKIPPED` (any parent being skipped skips the child), and a **shared** `or_group_id` across all parents for `FAILED`/`TIMED_OUT`/`CANCELLED` with action `CANCEL` (any parent failing or cancelling cancels the child). `ON_FAILURE` compensation nodes invert this (shared `or_group_id` across parents for `QUEUE`/`CREATE_MATCH` when ANY parent matches the failure/timeout event, and a distinct `or_group_id` per parent for `SKIP` when ALL parents succeed or skip without triggering the failure edge).
 - **Two-Stage `CREATE_MATCH` for Parent-then-Wait/Sleep Nodes:**
   - When a DAG node has parent steps *and* a `SLEEP` or `WAIT_FOR_EVENT` condition, stage 1 waits for parent completion with `action = 'CREATE_MATCH'`, aggregating parent outputs (`jsonb_object_agg` by parent node key) into `existing_data`, and **only then** creates the stage-2 `SLEEP` or `CANONICAL_EVENT` match and starts the timer.
 - **Event & Timeout Resolution:**
@@ -455,7 +455,7 @@ Modelled on Hatchet's `v1_payload` (`pkg/repository/payloadstore.go`):
 
 ### 7.10 Package structure
 ```
-core/platform/packages/orchestration/src/workflow/
+core/platform/packages/orchestration/src/orchestration/
 ├── domain/
 │   ├── constants.py            # RunStatus, StepStatus, NodeKind, EdgeCondition, ConcurrencyStrategy,
 │   │                           # EffectPolicy, Priority, StepFailureCode

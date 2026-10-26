@@ -87,14 +87,10 @@ class ReapExpiredLeasesUseCase:
 
         async with self._uow_factory() as uow:
             expired_leases = list(
-                await uow.runs.list_expired_leases(
-                    now=command.now, limit=command.batch_limit
-                )
+                await uow.runs.list_expired_leases(now=command.now, limit=command.batch_limit)
             )
             timed_out_leases = list(
-                await uow.runs.list_timed_out_leases(
-                    now=command.now, limit=command.batch_limit
-                )
+                await uow.runs.list_timed_out_leases(now=command.now, limit=command.batch_limit)
             )
 
         timed_out_step_set = {lease.step_run_id for lease in timed_out_leases}
@@ -129,9 +125,7 @@ class ReapExpiredLeasesUseCase:
             )
         )
 
-    async def _reap_timed_out_lease(
-        self, *, lease: ActiveLease, now: datetime
-    ) -> bool:
+    async def _reap_timed_out_lease(self, *, lease: ActiveLease, now: datetime) -> bool:
         resolved = await self._load_lease_target(lease)
         if resolved is None:
             return False
@@ -234,14 +228,8 @@ class ReapExpiredLeasesUseCase:
             )
             if step is None:
                 return None
-            defn_res = self._definition_registry.get(
-                run.workflow_id, run.workflow_version
-            )
-            node = (
-                defn_res.unwrap().get_node(step.node_key)
-                if defn_res.is_ok
-                else None
-            )
+            defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
+            node = defn_res.unwrap().get_node(step.node_key) if defn_res.is_ok else None
             input_payload = await uow.payloads.resolve_step_input(
                 tenant_id=run.tenant_id, step_run_id=step.id
             )

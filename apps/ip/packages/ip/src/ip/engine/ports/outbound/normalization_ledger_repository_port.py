@@ -32,6 +32,16 @@ class NormalizationLedgerRepositoryPort(Protocol):
         """Retrieve the canonical references produced by the most recent normalization run."""
         ...
 
+    async def get_latest_produced_refs(
+        self,
+        *,
+        tenant_id: str,
+        replica_record_id: str,
+        mapping_id: str,
+    ) -> tuple[tuple[str, str], ...]:
+        """Retrieve canonical references produced by the most recent normalization run across all mapping versions."""
+        ...
+
     async def record_entry(self, entry: NormalizationLedgerEntry) -> None:
         """Insert or update a normalization ledger entry."""
         ...

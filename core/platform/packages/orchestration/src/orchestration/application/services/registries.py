@@ -57,9 +57,7 @@ class InMemoryStepHandlerRegistry(StepHandlerRegistryPort):
     def register(self, handler: StepHandlerPort[JsonDict, JsonDict]) -> None:
         self._handlers[handler.step_type] = handler
 
-    def get(
-        self, step_type: str
-    ) -> Result[StepHandlerPort[JsonDict, JsonDict], WorkflowError]:
+    def get(self, step_type: str) -> Result[StepHandlerPort[JsonDict, JsonDict], WorkflowError]:
         handler = self._handlers.get(step_type)
         if handler is None:
             return Result.err(

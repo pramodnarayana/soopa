@@ -82,9 +82,7 @@ class WorkflowMatchRepositoryPort(Protocol):
 
     async def save_match(self, match: WorkflowMatch) -> None: ...
 
-    async def list_by_run(
-        self, tenant_id: str, run_id: str
-    ) -> Sequence[WorkflowMatch]: ...
+    async def list_by_run(self, tenant_id: str, run_id: str) -> Sequence[WorkflowMatch]: ...
 
     async def find_unsatisfied_for_event(
         self,

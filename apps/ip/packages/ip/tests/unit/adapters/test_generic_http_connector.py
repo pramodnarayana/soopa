@@ -9,6 +9,7 @@ import pytest
 from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
 from ip.engine.application.responses import WriteRecordCommand
 from pytest_httpserver import HTTPServer
+from seedwork.domain.types import JsonDict
 from shttp import HttpClient, PassThroughPolicy, create_http_client
 from shttp.resilience import HttpBackoffHandler
 
@@ -184,7 +185,7 @@ async def test_generic_http_connector_list_and_read_records(httpserver: HTTPServ
         }
     )
 
-    public_config = {
+    public_config: JsonDict = {
         "base_url": httpserver.url_for(""),
         "auth_type": "API_KEY",
         "streams": [
@@ -236,7 +237,7 @@ async def test_generic_http_connector_read_records_handle_error_gracefully(
         response_policy=PassThroughPolicy(),
     )
     connector = GenericHttpConnector(http_client=fast_client)
-    public_config = {
+    public_config: JsonDict = {
         "base_url": httpserver.url_for(""),
         "auth_type": "API_KEY",
         "streams": [
@@ -295,7 +296,7 @@ async def test_generic_http_connector_write_record(httpserver: HTTPServer) -> No
     ).respond_with_json({"id": "mtr_new_77", "destination_id": "api_meters_77"})
 
     connector = GenericHttpConnector(allow_private_ips=True)
-    public_config = {
+    public_config: JsonDict = {
         "base_url": httpserver.url_for(""),
         "auth_type": "API_KEY",
         "streams": [
@@ -319,3 +320,73 @@ async def test_generic_http_connector_write_record(httpserver: HTTPServer) -> No
 
     assert result.success is True
     assert result.record_id == "mtr_new_77"
+
+
+@pytest.mark.asyncio
+async def test_generic_http_connector_write_record_upsert_and_rate_limit_extraction(
+    httpserver: HTTPServer,
+) -> None:
+    httpserver.expect_request(
+        "/api/v1/streams/meters/records/mtr_99",
+        method="PUT",
+        headers={"Idempotency-Key": "idem-mtr-99", "X-Custom": "grid"},
+    ).respond_with_json({"id": "mtr_99", "updated": True}, status=200)
+
+    fast_client = HttpClient(
+        client=create_http_client(timeout=1.0),
+        backoff_handler=HttpBackoffHandler(max_retries=0),
+        allow_private_ips=True,
+        response_policy=PassThroughPolicy(),
+    )
+    connector = GenericHttpConnector(http_client=fast_client, allow_private_ips=True)
+    public_config: JsonDict = {
+        "base_url": httpserver.url_for(""),
+        "auth_type": "API_KEY",
+        "streams": [
+            {
+                "name": "meters",
+                "path": "/api/v1/streams/meters/records",
+            }
+        ],
+    }
+
+    upsert_res = await connector.write_record(
+        stream_name="meters",
+        command=WriteRecordCommand(
+            stream_name="meters",
+            operation="UPSERT",
+            payload={"id": "mtr_99", "serial_number": "ITR-99"},
+            record_id="mtr_99",
+            idempotency_key="idem-mtr-99",
+            headers={"X-Custom": "grid"},
+        ),
+        public_config=public_config,
+        credentials={"api_key": "secret"},
+    )
+    assert upsert_res.success is True
+    assert upsert_res.record_id == "mtr_99"
+    assert upsert_res.http_method == "PUT"
+    assert upsert_res.target_url.endswith("/api/v1/streams/meters/records/mtr_99")
+
+    # Rate limit 429 with Retry-After header
+    httpserver.expect_request(
+        "/api/v1/streams/meters/records",
+        method="POST",
+    ).respond_with_json(
+        {"error": "slow_down"},
+        status=429,
+        headers={"Retry-After": "15"},
+    )
+    throttled_res = await connector.write_record(
+        stream_name="meters",
+        command=WriteRecordCommand(
+            stream_name="meters",
+            operation="CREATE",
+            payload={"serial_number": "ITR-100"},
+        ),
+        public_config=public_config,
+        credentials={"api_key": "secret"},
+    )
+    assert throttled_res.success is False
+    assert throttled_res.response_status_code == 429
+    assert throttled_res.retry_after_seconds == 15.0

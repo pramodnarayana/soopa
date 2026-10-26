@@ -325,3 +325,48 @@ async def test_declarative_connector_fetch_page_handles_http_error(
     assert isinstance(page_res.error, UpstreamHttpError)
     assert page_res.error.status_code == 500
     assert page_res.error.disposition == FailureDisposition.RETRY
+
+
+@pytest.mark.asyncio
+async def test_declarative_connector_write_record_injects_idempotency_key_and_extracts_retry_after(
+    httpserver: HTTPServer,
+) -> None:
+    httpserver.expect_request(
+        "/contacts",
+        method="POST",
+        headers={"Idempotency-Key": "idem-decl-429"},
+    ).respond_with_json(
+        {"error": "rate_limit_exceeded"},
+        status=429,
+        headers={"Retry-After": "30"},
+    )
+
+    http_client = HttpClient(
+        client=create_http_client(timeout=1.0),
+        backoff_handler=HttpBackoffHandler(max_retries=0),
+        allow_private_ips=True,
+        response_policy=PassThroughPolicy(),
+    )
+    manifest = _build_manifest(httpserver.url_for(""))
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        http_client=http_client,
+        allow_private_ips=True,
+    )
+
+    result = await connector.write_record(
+        stream_name="contacts",
+        command=WriteRecordCommand(
+            stream_name="contacts",
+            operation="CREATE",
+            payload={"name": "Throttled Contact"},
+            idempotency_key="idem-decl-429",
+        ),
+        public_config={"tenant_slug": "acme"},
+        credentials={"api_key": "test_key"},
+    )
+    assert result.success is False
+    assert result.response_status_code == 429
+    assert result.retry_after_seconds == 30.0
+    assert result.request_headers is not None
+    assert result.request_headers.get("Idempotency-Key") == "idem-decl-429"

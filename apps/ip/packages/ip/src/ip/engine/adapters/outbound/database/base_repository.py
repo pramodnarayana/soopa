@@ -2,32 +2,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from typing import Protocol
-
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
 from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
     IpTraceEventModel,
 )
 from outbox.domain.constants import OutboxStatus
-from seedwork.models import TraceEvent
 from seedwork.utils import generate_id
 from sqlalchemy.ext.asyncio import AsyncSession
+from strace.adapters import HasTraceEvents, drain_trace_events
 
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository as PlatformBaseSqlAlchemyRepository
 from database.repository import HasDomainEvents
 from database.types import GlobalSession, TenantSession
-
-
-class HasTraceEvents(Protocol):
-    """Structural protocol for TracedAggregateRoot entities exposing trace_events."""
-
-    @property
-    def trace_events(self) -> Sequence[TraceEvent]: ...
-
-    def clear_trace_events(self) -> None: ...
 
 
 class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
@@ -99,19 +87,7 @@ class TenantSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
 
     def _drain_trace_events(self, aggregate: HasTraceEvents) -> None:
         """Drains TracedAggregateRoot trace events into the ip_trace_events ledger."""
-        for t_event in aggregate.trace_events:
-            trace_orm = IpTraceEventModel(
-                id=t_event.id,
-                tenant_id=t_event.tenant_id,
-                trace_id=t_event.trace_id,
-                correlation_id=t_event.correlation_id,
-                event_type=t_event.event_type,
-                actor=t_event.actor,
-                metadata_=dict(t_event.metadata) if t_event.metadata is not None else None,
-                created_at=t_event.created_at,
-            )
-            self._session.add(trace_orm)
-        aggregate.clear_trace_events()
+        drain_trace_events(self._session, aggregate, IpTraceEventModel)
 
     def _drain_events(
         self,

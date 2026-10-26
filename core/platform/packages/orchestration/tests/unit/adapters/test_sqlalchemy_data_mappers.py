@@ -65,9 +65,7 @@ def test_workflow_run_and_step_and_attempt_and_lease_data_mappers_roundtrip() ->
     run.steps["s1"].status = StepStatus.RUNNING
     run.steps["s1"].retry_count = 2
     SqlAlchemyWorkflowRunRepository._update_record_from_domain(orm_run, run)
-    SqlAlchemyWorkflowRunRepository._update_step_record_from_domain(
-        orm_step, run.steps["s1"]
-    )
+    SqlAlchemyWorkflowRunRepository._update_step_record_from_domain(orm_step, run.steps["s1"])
 
     restored = SqlAlchemyWorkflowRunRepository._to_domain_model(orm_run, (orm_step,))
     assert restored.id == run.id
@@ -95,9 +93,7 @@ def test_workflow_run_and_step_and_attempt_and_lease_data_mappers_roundtrip() ->
         outcome_code="OK",
         finished_at=now + timedelta(seconds=2),
     )
-    SqlAlchemyWorkflowRunRepository._update_attempt_record_from_domain(
-        orm_att, updated_att
-    )
+    SqlAlchemyWorkflowRunRepository._update_attempt_record_from_domain(orm_att, updated_att)
     restored_att = SqlAlchemyWorkflowRunRepository._attempt_to_domain_model(orm_att)
     assert restored_att.status == AttemptStatus.SUCCEEDED
     assert restored_att.outcome_code == "OK"
@@ -156,16 +152,10 @@ def test_workflow_match_and_condition_data_mappers_roundtrip() -> None:
         is_satisfied=True,
         resolved_action=MatchAction.QUEUE,
     )
-    SqlAlchemyWorkflowMatchRepository._update_record_from_domain(
-        orm_match, satisfied_match
-    )
-    SqlAlchemyWorkflowMatchRepository._update_condition_record_from_domain(
-        orm_cond, satisfied_cond
-    )
+    SqlAlchemyWorkflowMatchRepository._update_record_from_domain(orm_match, satisfied_match)
+    SqlAlchemyWorkflowMatchRepository._update_condition_record_from_domain(orm_cond, satisfied_cond)
 
-    restored = SqlAlchemyWorkflowMatchRepository._to_domain_model(
-        orm_match, (orm_cond,)
-    )
+    restored = SqlAlchemyWorkflowMatchRepository._to_domain_model(orm_match, (orm_cond,))
     assert restored.is_satisfied
     assert restored.resolved_action == MatchAction.QUEUE
     assert restored.conditions[0].matched_data == {"val": 42}
@@ -228,9 +218,7 @@ def test_queue_concurrency_rate_limit_payload_and_idempotency_mappers() -> None:
     )
     orm_slot = SqlAlchemyWorkflowConcurrencyRepository._to_orm_model(slot)
     filled_slot = replace(slot, is_filled=True, acquired_at=now, next_strategy_ids=())
-    SqlAlchemyWorkflowConcurrencyRepository._update_record_from_domain(
-        orm_slot, filled_slot
-    )
+    SqlAlchemyWorkflowConcurrencyRepository._update_record_from_domain(orm_slot, filled_slot)
     restored_slot = SqlAlchemyWorkflowConcurrencyRepository._to_domain_model(orm_slot)
     assert restored_slot.is_filled
     assert restored_slot.next_strategy_ids == ()
@@ -246,9 +234,7 @@ def test_queue_concurrency_rate_limit_payload_and_idempotency_mappers() -> None:
     )
     orm_bucket = SqlAlchemyWorkflowRateLimitRepository._to_orm_model(bucket)
     paused_bucket = bucket.apply_upstream_pause(timedelta(seconds=15), now)
-    SqlAlchemyWorkflowRateLimitRepository._update_record_from_domain(
-        orm_bucket, paused_bucket
-    )
+    SqlAlchemyWorkflowRateLimitRepository._update_record_from_domain(orm_bucket, paused_bucket)
     restored_bucket = SqlAlchemyWorkflowRateLimitRepository._to_domain_model(orm_bucket)
     assert restored_bucket.paused_until == now + timedelta(seconds=15)
 
@@ -266,9 +252,7 @@ def test_queue_concurrency_rate_limit_payload_and_idempotency_mappers() -> None:
     SqlAlchemyWorkflowPayloadStoreRepository._update_record_from_domain(
         orm_payload, updated_payload
     )
-    restored_payload = SqlAlchemyWorkflowPayloadStoreRepository._to_domain_model(
-        orm_payload
-    )
+    restored_payload = SqlAlchemyWorkflowPayloadStoreRepository._to_domain_model(orm_payload)
     assert restored_payload.inline_content == {"k": "v2"}
 
     # 5. IdempotencyKeyRecord
@@ -283,8 +267,6 @@ def test_queue_concurrency_rate_limit_payload_and_idempotency_mappers() -> None:
     )
     orm_idem = SqlAlchemyWorkflowIdempotencyRepository._to_orm_model(idem)
     updated_idem = replace(idem, claimed_by_run_id="wfr_2")
-    SqlAlchemyWorkflowIdempotencyRepository._update_record_from_domain(
-        orm_idem, updated_idem
-    )
+    SqlAlchemyWorkflowIdempotencyRepository._update_record_from_domain(orm_idem, updated_idem)
     restored_idem = SqlAlchemyWorkflowIdempotencyRepository._to_domain_model(orm_idem)
     assert restored_idem.claimed_by_run_id == "wfr_2"

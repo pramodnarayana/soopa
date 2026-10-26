@@ -6,6 +6,7 @@ import contextlib
 from typing import Protocol
 
 from seedwork.uow import UnitOfWorkPort
+from strace.ports import TraceRepositoryPort
 
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
@@ -20,6 +21,9 @@ from ip.engine.ports.outbound.normalization_ledger_repository_port import (
 )
 from ip.engine.ports.outbound.normalization_rejection_repository_port import (
     NormalizationRejectionRepositoryPort,
+)
+from ip.engine.ports.outbound.normalized_record_repository_port import (
+    NormalizedRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
 from ip.engine.ports.outbound.pending_reference_repository_port import (
@@ -55,11 +59,13 @@ class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     inbound_records: InboundRecordRepositoryPort
     replica_records: ReplicaRecordRepositoryPort
     replica_rejections: ReplicaRejectionRepositoryPort
+    normalized_records: NormalizedRecordRepositoryPort
     entity_maps: GlobalEntityMapRepositoryPort
     outbound_records: OutboundRecordRepositoryPort
     normalization_ledger: NormalizationLedgerRepositoryPort
     normalization_rejections: NormalizationRejectionRepositoryPort
     pending_references: PendingReferenceRepositoryPort
+    traces: TraceRepositoryPort
 
 
 class IpTenantResolverPort(Protocol):

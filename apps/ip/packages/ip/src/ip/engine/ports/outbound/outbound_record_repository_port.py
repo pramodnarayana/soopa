@@ -23,6 +23,21 @@ class OutboundRecordRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[OutboundRecord]:
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+        *,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[OutboundRecord]:
         """Retrieves all outbound records associated with a trace ID."""
         ...
+
+    async def get_by_idempotency_key(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        idempotency_key: str,
+    ) -> OutboundRecord | None:
+        """Retrieves the most recent outbound record matching (tenant_id, connection_id, idempotency_key)."""
+        return None

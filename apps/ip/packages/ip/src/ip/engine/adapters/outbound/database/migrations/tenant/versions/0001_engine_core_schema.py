@@ -102,6 +102,9 @@ def upgrade() -> None:
         sa.Column("original_trace_id", sa.String(length=64), nullable=True),
         sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column("operation", sa.String(length=32), server_default="CREATE", nullable=False),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=True),
+        sa.Column("external_record_id", sa.String(length=255), nullable=True),
         sa.Column("target_url", sa.String(length=1024), nullable=False),
         sa.Column("http_method", sa.String(length=16), nullable=False),
         sa.Column(
@@ -121,6 +124,8 @@ def upgrade() -> None:
         sa.Column("duration_ms", sa.Integer(), nullable=True),
         sa.Column("attempt_number", sa.Integer(), server_default=sa.text("1"), nullable=False),
         sa.Column("status", sa.String(length=32), server_default="PENDING", nullable=False),
+        sa.Column("failure_category", sa.String(length=64), nullable=True),
+        sa.Column("retry_after_seconds", sa.Integer(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", "sent_at"),
@@ -130,6 +135,11 @@ def upgrade() -> None:
     op.create_index("idx_outbound_conn", "outbound_records", ["tenant_id", "connection_id"])
     op.create_index("idx_outbound_app", "outbound_records", ["tenant_id", "app_id"])
     op.create_index("idx_outbound_status", "outbound_records", ["tenant_id", "status"])
+    op.create_index(
+        "idx_outbound_idempotency",
+        "outbound_records",
+        ["tenant_id", "connection_id", "idempotency_key"],
+    )
 
     # 3. Layer 2: replica_records & replica_rejections
     op.create_table(

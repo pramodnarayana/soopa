@@ -64,10 +64,8 @@ class ConcurrencyWindowEvaluator:
             ConcurrencyStrategy.SERIAL,
             ConcurrencyStrategy.GROUP_ROUND_ROBIN,
         ):
-            newly_filled, cancelled, remaining = (
-                ConcurrencyWindowEvaluator._eval_fifo_fill(
-                    ordered_asc, max_runs, timestamp
-                )
+            newly_filled, cancelled, remaining = ConcurrencyWindowEvaluator._eval_fifo_fill(
+                ordered_asc, max_runs, timestamp
             )
         elif strategy == ConcurrencyStrategy.CANCEL_IN_PROGRESS:
             newly_filled, cancelled, remaining = (
@@ -76,16 +74,12 @@ class ConcurrencyWindowEvaluator:
                 )
             )
         elif strategy == ConcurrencyStrategy.CANCEL_NEWEST:
-            newly_filled, cancelled, remaining = (
-                ConcurrencyWindowEvaluator._eval_cancel_newest(
-                    ordered_asc, max_runs, timestamp
-                )
+            newly_filled, cancelled, remaining = ConcurrencyWindowEvaluator._eval_cancel_newest(
+                ordered_asc, max_runs, timestamp
             )
         elif strategy == ConcurrencyStrategy.COALESCE_LATEST:
-            newly_filled, cancelled, remaining = (
-                ConcurrencyWindowEvaluator._eval_coalesce_latest(
-                    ordered_asc, max_runs, timestamp
-                )
+            newly_filled, cancelled, remaining = ConcurrencyWindowEvaluator._eval_coalesce_latest(
+                ordered_asc, max_runs, timestamp
             )
         else:
             newly_filled, cancelled, remaining = (
@@ -94,8 +88,8 @@ class ConcurrencyWindowEvaluator:
                 )
             )
 
-        promoted_next, ready_enqueue = (
-            ConcurrencyWindowEvaluator._partition_newly_filled(newly_filled)
+        promoted_next, ready_enqueue = ConcurrencyWindowEvaluator._partition_newly_filled(
+            newly_filled
         )
 
         return ConcurrencyEvaluationResult(
@@ -120,9 +114,7 @@ class ConcurrencyWindowEvaluator:
             if slot.is_filled:
                 continue
             if available_capacity > 0:
-                newly_filled.append(
-                    replace(slot, is_filled=True, acquired_at=timestamp)
-                )
+                newly_filled.append(replace(slot, is_filled=True, acquired_at=timestamp))
                 available_capacity -= 1
             else:
                 remaining.append(slot)
@@ -140,9 +132,7 @@ class ConcurrencyWindowEvaluator:
         for idx, slot in enumerate(ordered_desc):
             if idx < max_runs:
                 if not slot.is_filled:
-                    newly_filled.append(
-                        replace(slot, is_filled=True, acquired_at=timestamp)
-                    )
+                    newly_filled.append(replace(slot, is_filled=True, acquired_at=timestamp))
             else:
                 cancelled.append(slot)
         return newly_filled, cancelled, []
@@ -158,9 +148,7 @@ class ConcurrencyWindowEvaluator:
         for idx, slot in enumerate(ordered_asc):
             if idx < max_runs:
                 if not slot.is_filled:
-                    newly_filled.append(
-                        replace(slot, is_filled=True, acquired_at=timestamp)
-                    )
+                    newly_filled.append(replace(slot, is_filled=True, acquired_at=timestamp))
             else:
                 cancelled.append(slot)
         return newly_filled, cancelled, []
@@ -182,9 +170,7 @@ class ConcurrencyWindowEvaluator:
             winners = waiting_slots[-available_capacity:]
             superseded = waiting_slots[:-available_capacity]
             for w in winners:
-                newly_filled.append(
-                    replace(w, is_filled=True, acquired_at=timestamp)
-                )
+                newly_filled.append(replace(w, is_filled=True, acquired_at=timestamp))
             cancelled.extend(superseded)
         elif len(waiting_slots) > max_runs:
             remaining.extend(waiting_slots[-max_runs:])
@@ -208,9 +194,7 @@ class ConcurrencyWindowEvaluator:
 
         for slot in waiting_slots:
             if available_capacity > 0:
-                newly_filled.append(
-                    replace(slot, is_filled=True, acquired_at=timestamp)
-                )
+                newly_filled.append(replace(slot, is_filled=True, acquired_at=timestamp))
                 available_capacity -= 1
             elif len(remaining) < max_runs:
                 remaining.append(slot)
@@ -306,16 +290,12 @@ class RateLimitBucket:
 
         deficit = units - refilled.tokens
         wait_seconds = (
-            deficit / refilled.refill_per_second
-            if refilled.refill_per_second > 0
-            else 60.0
+            deficit / refilled.refill_per_second if refilled.refill_per_second > 0 else 60.0
         )
         requeue_after = now + timedelta(seconds=max(0.05, wait_seconds))
         return refilled, False, requeue_after
 
-    def apply_upstream_pause(
-        self, retry_after: timedelta, now: datetime
-    ) -> RateLimitBucket:
+    def apply_upstream_pause(self, retry_after: timedelta, now: datetime) -> RateLimitBucket:
         """Apply an upstream 429 Retry-After pause monotonically (`GREATEST(paused_until, now + retry_after)`)."""
         candidate_until = now + retry_after
         new_paused_until = (
@@ -436,9 +416,7 @@ class FairQueueSelector:
         if selected:
             # Advance cursor to the tenant of the last selected item in rotated tenant order
             selected_tenants_in_rotation = [
-                tid
-                for tid in rotated_tenants
-                if any(item.tenant_id == tid for item in selected)
+                tid for tid in rotated_tenants if any(item.tenant_id == tid for item in selected)
             ]
             next_cursor = selected_tenants_in_rotation[-1]
         else:

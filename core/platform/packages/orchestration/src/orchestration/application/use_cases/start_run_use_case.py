@@ -51,9 +51,7 @@ class StartRunCommand:
     concurrency_key: str | None = None
     priority: Priority | None = None
     parent_run_id: str | None = None
-    idempotency_eviction_policy: IdempotencyEvictionPolicy = (
-        IdempotencyEvictionPolicy.TTL
-    )
+    idempotency_eviction_policy: IdempotencyEvictionPolicy = IdempotencyEvictionPolicy.TTL
     idempotency_ttl: timedelta = timedelta(hours=24)
     deduplicate_if_exists: bool = False
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -87,12 +85,8 @@ class StartRunUseCase:
         self._definition_registry = definition_registry
         self._step_scheduler = step_scheduler
 
-    async def execute(
-        self, command: StartRunCommand
-    ) -> Result[StartRunResultDTO, WorkflowError]:
-        defn_res = self._definition_registry.get(
-            command.workflow_id, command.workflow_version
-        )
+    async def execute(self, command: StartRunCommand) -> Result[StartRunResultDTO, WorkflowError]:
+        defn_res = self._definition_registry.get(command.workflow_id, command.workflow_version)
         if defn_res.is_err:
             return Result.err(defn_res.unwrap_err())
         definition = defn_res.unwrap()
@@ -171,9 +165,7 @@ class StartRunUseCase:
         dup_err: DuplicateIdempotencyKeyError,
     ) -> Result[StartRunResultDTO, WorkflowError]:
         if command.deduplicate_if_exists and dup_err.existing_run_id:
-            existing_res = await uow.runs.get_by_id(
-                command.tenant_id, dup_err.existing_run_id
-            )
+            existing_res = await uow.runs.get_by_id(command.tenant_id, dup_err.existing_run_id)
             if existing_res.is_ok:
                 existing_run = existing_res.unwrap()
                 return Result.ok(
@@ -228,8 +220,7 @@ class StartRunUseCase:
         now: datetime,
     ) -> None:
         step_ids_by_node_key = {
-            node_key: (step.id, step.created_at)
-            for node_key, step in run.steps.items()
+            node_key: (step.id, step.created_at) for node_key, step in run.steps.items()
         }
         initial_matches = DagMatchCompiler.compile_initial_matches(
             tenant_id=run.tenant_id,
@@ -274,10 +265,7 @@ class StartRunUseCase:
             node = definition.get_node(match.node_key)
             queue_name = node.queue_name if node is not None else "default"
             for cond in match.conditions:
-                if (
-                    cond.condition_kind == ConditionKind.SLEEP
-                    and cond.timeout_at is not None
-                ):
+                if cond.condition_kind == ConditionKind.SLEEP and cond.timeout_at is not None:
                     item_kind = (
                         QueueItemKind.SLEEP_WAKE
                         if cond.action == MatchAction.QUEUE

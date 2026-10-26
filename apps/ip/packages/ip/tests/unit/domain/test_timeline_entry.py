@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from ip.engine.domain.enums import PipelineLayer, TimelineStatus
 from ip.engine.domain.models.timeline_entry import IpTraceEvent, TimelineEntry
-from seedwork.models import TraceEvent
+from strace.domain import TraceEvent
 
 
 def test_timeline_entry_creation() -> None:

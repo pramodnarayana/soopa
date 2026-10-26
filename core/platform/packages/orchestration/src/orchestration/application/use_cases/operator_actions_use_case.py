@@ -63,9 +63,7 @@ class CancelRunUseCase:
         self._definition_registry = definition_registry
         self._step_scheduler = step_scheduler
 
-    async def execute(
-        self, command: CancelRunCommand
-    ) -> Result[CancelRunResultDTO, WorkflowError]:
+    async def execute(self, command: CancelRunCommand) -> Result[CancelRunResultDTO, WorkflowError]:
         async with self._uow_factory() as uow:
             run_res = await uow.runs.get_by_id(command.tenant_id, command.run_id)
             if run_res.is_err:
@@ -86,9 +84,7 @@ class CancelRunUseCase:
                 tenant_id=run.tenant_id,
                 run_id=run.id,
             )
-            defn_res = self._definition_registry.get(
-                run.workflow_id, run.workflow_version
-            )
+            defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
             if defn_res.is_ok:
                 definition = defn_res.unwrap()
                 for strat_id, conc_key in released_keys:
@@ -164,9 +160,7 @@ class ReplayFailedStepUseCase:
                 return Result.err(run_res.unwrap_err())
             run = run_res.unwrap()
 
-            defn_res = self._definition_registry.get(
-                run.workflow_id, run.workflow_version
-            )
+            defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
             if defn_res.is_err:
                 return Result.err(defn_res.unwrap_err())
             definition = defn_res.unwrap()

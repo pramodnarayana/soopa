@@ -9,6 +9,8 @@ from orchestration.domain.constants import WorkflowErrorCode
 from orchestration.domain.exceptions import Result, WorkflowError
 from seedwork.domain.types import JsonDict
 
+from ip.engine.domain.enums import HttpWriteOperation, OutboundConflictStrategy
+
 
 class StitchStepType(StrEnum):
     """Enterprise constant step_type identifiers for built-in IP Stitch handlers."""
@@ -167,9 +169,105 @@ class EmitNotificationStepOutput:
         }
 
 
+@dataclass(frozen=True, kw_only=True)
+class ExecuteHttpActionStepInput:
+    """Strongly-typed input DTO for dispatching an L5 outbound mutation from a Stitch step."""
+
+    connection_id: str
+    stream_name: str
+    operation: str = HttpWriteOperation.CREATE.value
+    payload: JsonDict = field(default_factory=dict)
+    record_id: str | None = None
+    headers: dict[str, str] = field(default_factory=dict)
+    conflict_strategy: OutboundConflictStrategy = OutboundConflictStrategy.FAIL
+
+    @classmethod
+    def from_payload(cls, data: JsonDict) -> Result[ExecuteHttpActionStepInput, WorkflowError]:
+        conn_id = data.get("connection_id")
+        stream_name = data.get("stream_name") or data.get("stream")
+        raw_op = data.get("operation", HttpWriteOperation.CREATE.value)
+        raw_payload = data.get("payload")
+        raw_record_id = data.get("record_id")
+        raw_headers = data.get("headers")
+        raw_conflict = data.get("conflict_strategy", OutboundConflictStrategy.FAIL.value)
+
+        if (
+            not isinstance(conn_id, str)
+            or not conn_id.strip()
+            or not isinstance(stream_name, str)
+            or not stream_name.strip()
+            or not isinstance(raw_op, str)
+            or not raw_op.strip()
+        ):
+            return Result.err(
+                WorkflowError(
+                    code=WorkflowErrorCode.CODEC_ERROR,
+                    message=(
+                        "ExecuteHttpActionStepInput requires non-empty connection_id, "
+                        "stream_name, and operation."
+                    ),
+                )
+            )
+
+        payload_dict: JsonDict = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+        headers_dict: dict[str, str] = (
+            {str(k): str(v) for k, v in raw_headers.items()}
+            if isinstance(raw_headers, dict)
+            else {}
+        )
+        try:
+            conflict_strat = OutboundConflictStrategy(str(raw_conflict))
+        except ValueError:
+            conflict_strat = OutboundConflictStrategy.FAIL
+
+        return Result.ok(
+            cls(
+                connection_id=conn_id.strip(),
+                stream_name=stream_name.strip(),
+                operation=raw_op.strip().upper(),
+                payload=payload_dict,
+                record_id=str(raw_record_id).strip()
+                if isinstance(raw_record_id, (str, int)) and str(raw_record_id).strip()
+                else None,
+                headers=headers_dict,
+                conflict_strategy=conflict_strat,
+            )
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ExecuteHttpActionStepOutput:
+    """Strongly-typed output DTO returned after an L5 outbound dispatch completes."""
+
+    outbound_record_id: str
+    status: str
+    record_id: str
+    destination_id: str | None = None
+    response_status_code: int | None = None
+    response_body: JsonDict | None = None
+    response_s3_key: str | None = None
+    was_deduplicated: bool = False
+    was_token_refreshed: bool = False
+
+    def to_payload(self) -> JsonDict:
+        return {
+            "outbound_record_id": self.outbound_record_id,
+            "status": self.status,
+            "record_id": self.record_id,
+            "destination_id": self.destination_id,
+            "response_status_code": self.response_status_code,
+            "response_body": dict(self.response_body) if self.response_body is not None else None,
+            "response_s3_key": self.response_s3_key,
+            "was_deduplicated": self.was_deduplicated,
+            "was_token_refreshed": self.was_token_refreshed,
+        }
+
+
 __all__ = [
     "EmitNotificationStepInput",
     "EmitNotificationStepOutput",
+    "ExecuteHttpActionStepInput",
+    "ExecuteHttpActionStepOutput",
     "QueryReplicaStepInput",
     "QueryReplicaStepOutput",
     "StitchStepType",

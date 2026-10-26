@@ -12,10 +12,15 @@ from ip.engine.adapters.outbound.auth.api_key_auth_strategy import (
 from ip.engine.adapters.outbound.auth.basic_auth_strategy import BasicAuthStrategy
 from ip.engine.adapters.outbound.auth.bearer_auth_strategy import BearerAuthStrategy
 from ip.engine.adapters.outbound.auth.no_auth_strategy import NoAuthStrategy
-from ip.engine.adapters.outbound.auth.oauth2_strategy import OAuth2Strategy
+from ip.engine.adapters.outbound.auth.oauth2_strategy import (
+    OAuth2Strategy,
+    OAuth2StrategyTokenRefresher,
+)
+from ip.engine.domain.enums import FailureDisposition
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     InvalidCredentialsError,
+    UpstreamHttpError,
 )
 from pytest_httpserver import HTTPServer
 
@@ -196,3 +201,73 @@ async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
     )
     assert await cc_strategy.refresh_if_needed() is True
     assert cc_strategy.access_token == "tok_cc_123"
+
+
+@pytest.mark.asyncio
+async def test_oauth2_strategy_token_refresher_distinguishes_503_transient_vs_400_terminal(
+    httpserver: HTTPServer,
+) -> None:
+    refresher = OAuth2StrategyTokenRefresher(allow_private_ips=True)
+
+    # 1. 503 Service Unavailable from IdP -> UpstreamHttpError (FailureDisposition.RETRY)
+    httpserver.expect_request(
+        "/oauth/token_503",
+        method="POST",
+    ).respond_with_json({"error": "temporarily_unavailable"}, status=503)
+
+    res_503 = await refresher.refresh_tokens(
+        public_config={"token_url": httpserver.url_for("/oauth/token_503")},
+        credentials={
+            "client_id": "cid",
+            "client_secret": "sec",
+            "refresh_token": "ref_1",
+        },
+    )
+    assert res_503.is_err is True
+    assert isinstance(res_503.error, UpstreamHttpError)
+    assert res_503.error.disposition == FailureDisposition.RETRY
+
+    # 2. 400 invalid_grant from IdP -> InvalidCredentialsError (FailureDisposition.FAIL)
+    httpserver.expect_request(
+        "/oauth/token_400",
+        method="POST",
+    ).respond_with_json({"error": "invalid_grant"}, status=400)
+
+    res_400 = await refresher.refresh_tokens(
+        public_config={"token_url": httpserver.url_for("/oauth/token_400")},
+        credentials={
+            "client_id": "cid",
+            "client_secret": "sec",
+            "refresh_token": "ref_revoked",
+        },
+    )
+    assert res_400.is_err is True
+    assert isinstance(res_400.error, InvalidCredentialsError)
+    assert res_400.error.disposition == FailureDisposition.FAIL
+
+    # 3. 200 OK from IdP -> RefreshedOAuth2TokensDTO with rotated refresh_token
+    httpserver.expect_request(
+        "/oauth/token_200",
+        method="POST",
+    ).respond_with_json(
+        {
+            "access_token": "tok_rotated_200",
+            "refresh_token": "ref_rotated_200",
+            "expires_in": 3600,
+        },
+        status=200,
+    )
+
+    res_200 = await refresher.refresh_tokens(
+        public_config={"token_url": httpserver.url_for("/oauth/token_200")},
+        credentials={
+            "client_id": "cid",
+            "client_secret": "sec",
+            "refresh_token": "ref_valid",
+        },
+    )
+    assert res_200.is_ok is True
+    token_set = res_200.unwrap()
+    assert token_set.access_token == "tok_rotated_200"
+    assert token_set.refresh_token == "ref_rotated_200"
+    assert token_set.expires_at_epoch is not None

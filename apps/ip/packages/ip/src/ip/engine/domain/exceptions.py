@@ -51,6 +51,9 @@ class IpErrorCode(StrEnum):
     MAPPING_BINDING_NOT_FOUND = "MAPPING_BINDING_NOT_FOUND"
     REPLICA_RECORD_NOT_FOUND = "REPLICA_RECORD_NOT_FOUND"
     NORMALIZATION_FAILED = "NORMALIZATION_FAILED"
+    TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
+    REPLAY_STAGE_NOT_AVAILABLE = "REPLAY_STAGE_NOT_AVAILABLE"
+    INVALID_REPLAY_PAYLOAD = "INVALID_REPLAY_PAYLOAD"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -509,6 +512,67 @@ class NormalizationFailedError(IpError):
         )
 
 
+@dataclass(frozen=True, kw_only=True)
+class TraceNotFoundError(IpError):
+    """Returned when a requested trace_id cannot be located on the tenant shard."""
+
+    trace_id: str = ""
+    code: IpErrorCode = IpErrorCode.TRACE_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify that the trace_id exists and belongs to the active tenant."
+
+    @classmethod
+    def for_trace(cls, trace_id: str) -> TraceNotFoundError:
+        return cls(
+            trace_id=trace_id,
+            message=f"Transaction trace '{trace_id}' was not found.",
+            details={"trace_id": trace_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReplayStageNotAvailableError(IpError):
+    """Returned when a replay is requested at a stage whose source artifacts do not exist for the trace."""
+
+    trace_id: str = ""
+    stage: str = ""
+    code: IpErrorCode = IpErrorCode.REPLAY_STAGE_NOT_AVAILABLE
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = (
+        "Select an earlier replay stage (e.g. RETRY_INGEST) that has a persisted source record."
+    )
+
+    @classmethod
+    def for_stage(cls, trace_id: str, stage: str, reason: str) -> ReplayStageNotAvailableError:
+        return cls(
+            trace_id=trace_id,
+            stage=stage,
+            message=reason,
+            details={"trace_id": trace_id, "stage": stage},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class InvalidReplayPayloadError(IpError):
+    """Returned when a modified payload supplied to ModifyAndReplay is structurally invalid."""
+
+    trace_id: str = ""
+    code: IpErrorCode = IpErrorCode.INVALID_REPLAY_PAYLOAD
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 400
+    remediation: str | None = "Supply a non-empty JSON object for the modified replay payload."
+
+    @classmethod
+    def for_trace(cls, trace_id: str, reason: str) -> InvalidReplayPayloadError:
+        return cls(
+            trace_id=trace_id,
+            message=reason,
+            details={"trace_id": trace_id},
+        )
+
+
 __all__ = [
     "ActiveSyncRunAlreadyExistsError",
     "AuthenticationFailedError",
@@ -527,6 +591,7 @@ __all__ = [
     "InvalidConnectionStateError",
     "InvalidCredentialsError",
     "InvalidEndpointError",
+    "InvalidReplayPayloadError",
     "IpError",
     "IpErrorCode",
     "ManifestParseFailureError",
@@ -534,11 +599,13 @@ __all__ = [
     "NormalizationFailedError",
     "PayloadNotFoundError",
     "RateLimitExceededError",
+    "ReplayStageNotAvailableError",
     "ReplicaRecordNotFoundError",
     "Result",
     "SftpConnectionError",
     "StreamNotFoundError",
     "TenantShardNotFoundError",
+    "TraceNotFoundError",
     "UnsupportedWriteOperationError",
     "UpstreamHttpError",
     "UpstreamNetworkError",

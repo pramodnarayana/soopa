@@ -10,7 +10,7 @@ from ip.engine.domain.models.inbound_record import (
     compute_payload_sha256,
 )
 from seedwork.domain.types import JsonDict
-from seedwork.models import TracedAggregateRoot
+from strace.domain import TracedAggregateRoot
 
 
 def test_inbound_record_create_inline() -> None:

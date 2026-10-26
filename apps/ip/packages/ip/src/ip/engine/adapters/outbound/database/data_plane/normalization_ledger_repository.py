@@ -120,6 +120,34 @@ class SqlAlchemyNormalizationLedgerRepository(
         domain = self._to_domain_model(record)
         return domain.produced_canonical_refs
 
+    async def get_latest_produced_refs(
+        self,
+        *,
+        tenant_id: str,
+        replica_record_id: str,
+        mapping_id: str,
+    ) -> tuple[tuple[str, str], ...]:
+        """Retrieve canonical references produced by the most recent normalization run across all mapping versions."""
+        stmt = (
+            select(NormalizationLedgerModel)
+            .where(
+                NormalizationLedgerModel.tenant_id == tenant_id,
+                NormalizationLedgerModel.replica_record_id == replica_record_id,
+                NormalizationLedgerModel.mapping_id == mapping_id,
+            )
+            .order_by(
+                NormalizationLedgerModel.created_at.desc(),
+                NormalizationLedgerModel.replica_version.desc(),
+            )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        record = result.scalars().first()
+        if record is None:
+            return ()
+        domain = self._to_domain_model(record)
+        return domain.produced_canonical_refs
+
     async def record_entry(self, entry: NormalizationLedgerEntry) -> None:
         """Insert or update a normalization ledger entry."""
         stmt = select(NormalizationLedgerModel).where(

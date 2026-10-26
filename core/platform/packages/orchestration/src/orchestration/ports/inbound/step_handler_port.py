@@ -78,13 +78,9 @@ class ReconcilableStepHandlerPort(StepHandlerPort[TInput_contra, TOutput_co], Pr
 class StepHandlerRegistryPort(Protocol):
     """Registry mapping `step_type` identifiers to `StepHandlerPort` implementations."""
 
-    def register(
-        self, handler: StepHandlerPort[JsonDict, JsonDict]
-    ) -> None: ...
+    def register(self, handler: StepHandlerPort[JsonDict, JsonDict]) -> None: ...
 
-    def get(
-        self, step_type: str
-    ) -> Result[StepHandlerPort[JsonDict, JsonDict], WorkflowError]: ...
+    def get(self, step_type: str) -> Result[StepHandlerPort[JsonDict, JsonDict], WorkflowError]: ...
 
 
 class WorkflowDefinitionRegistryPort(Protocol):

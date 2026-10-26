@@ -193,9 +193,7 @@ async def test_end_to_end_dag_execution_with_zero_copy_payload_and_idempotency_r
     assert dup_res.unwrap_err().code == WorkflowErrorCode.DUPLICATE_IDEMPOTENCY_KEY
 
     # 2. Claim root step `validate_account` and verify zero-copy RUN_INPUT payload resolution
-    claim1 = await harness.claim_steps.execute(
-        ClaimStepsCommand(worker_id="wrk_1", now=now)
-    )
+    claim1 = await harness.claim_steps.execute(ClaimStepsCommand(worker_id="wrk_1", now=now))
     assert claim1.is_ok
     claimed_root = claim1.unwrap().claimed_steps[0]
     assert claimed_root.context.node_key == "validate_account"
@@ -273,7 +271,9 @@ async def test_end_to_end_dag_execution_with_zero_copy_payload_and_idempotency_r
     assert re_start.is_ok
 
 
-async def test_429_rate_limit_parking_releases_concurrency_slot_and_preserves_app_retry_count() -> None:
+async def test_429_rate_limit_parking_releases_concurrency_slot_and_preserves_app_retry_count() -> (
+    None
+):
     harness = _EngineHarness()
     now = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
 
@@ -335,9 +335,7 @@ async def test_429_rate_limit_parking_releases_concurrency_slot_and_preserves_ap
 
     # Claim Run 1's step
     claimed_batch = (
-        await harness.claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_1", now=now)
-        )
+        await harness.claim_steps.execute(ClaimStepsCommand(worker_id="wrk_1", now=now))
     ).unwrap()
     assert len(claimed_batch.claimed_steps) == 1
     assert claimed_batch.claimed_steps[0].context.run_id == r1.run_id
@@ -428,18 +426,13 @@ async def test_lease_expiry_on_operator_gated_effect_halts_and_allows_operator_s
 
     # Simulate worker crash: at now + 35s lease is expired -> ReapExpiredLeasesUseCase halts step with AMBIGUOUS_EFFECT!
     reap_res = (
-        await harness.reap_leases.execute(
-            ReapExpiredLeasesCommand(now=now + timedelta(seconds=35))
-        )
+        await harness.reap_leases.execute(ReapExpiredLeasesCommand(now=now + timedelta(seconds=35)))
     ).unwrap()
     assert len(reap_res.reaped_lease_step_ids) == 1
 
     run_state = (await harness.uow.runs.get_by_id("ten_1", run_dto.run_id)).unwrap()
     assert run_state.status == RunStatus.FAILED
-    assert (
-        run_state.steps["open_breaker"].failure_code
-        == StepFailureCode.AMBIGUOUS_EFFECT.value
-    )
+    assert run_state.steps["open_breaker"].failure_code == StepFailureCode.AMBIGUOUS_EFFECT.value
 
     # Operator verifies breaker opened in SCADA and invokes SkipFailedStepUseCase with manual output!
     skip_res = await harness.skip_step.execute(
@@ -522,10 +515,10 @@ async def test_branch_and_repeat_until_control_nodes() -> None:
 
     # Attempt 1 of poll_job returns {"ready": False} -> REPEAT_UNTIL re-schedules after 5s!
     c1 = (
-        await harness.claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_1", now=now)
-        )
-    ).unwrap().claimed_steps[0]
+        (await harness.claim_steps.execute(ClaimStepsCommand(worker_id="wrk_1", now=now)))
+        .unwrap()
+        .claimed_steps[0]
+    )
     comp1 = (
         await harness.complete_step.execute(
             CompleteStepCommand(
@@ -546,10 +539,14 @@ async def test_branch_and_repeat_until_control_nodes() -> None:
     # Attempt 2 at now + 6s returns {"ready": True, "voltage": "LOW"} ->
     # poll_job completes, voltage_branch evaluates False -> skips voltage_branch AND cascades SKIP to hv_handler -> run SUCCEEDED!
     c2 = (
-        await harness.claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_1", now=now + timedelta(seconds=6))
+        (
+            await harness.claim_steps.execute(
+                ClaimStepsCommand(worker_id="wrk_1", now=now + timedelta(seconds=6))
+            )
         )
-    ).unwrap().claimed_steps[0]
+        .unwrap()
+        .claimed_steps[0]
+    )
     assert c2.context.retry_count == 1
     poll_counter["count"] += 1
 
@@ -607,10 +604,10 @@ async def test_operator_cancel_and_replay_actions() -> None:
 
     # Claim and fail terminally (max_attempts=1)
     c1 = (
-        await harness.claim_steps.execute(
-            ClaimStepsCommand(worker_id="wrk_1", now=now)
-        )
-    ).unwrap().claimed_steps[0]
+        (await harness.claim_steps.execute(ClaimStepsCommand(worker_id="wrk_1", now=now)))
+        .unwrap()
+        .claimed_steps[0]
+    )
     fail_dto = (
         await harness.fail_step.execute(
             FailStepCommand(
@@ -676,9 +673,7 @@ class _ReconcilableInvoiceHandler(ReconcilableStepHandlerPort[JsonDict, JsonDict
     async def reconcile(
         self, context: StepContext, step_input: JsonDict
     ) -> Result[ReconcileOutcome[JsonDict], StepFailure]:
-        return Result.ok(
-            ReconcileOutcome.adopt({"invoice_id": "inv_reconciled_100"})
-        )
+        return Result.ok(ReconcileOutcome.adopt({"invoice_id": "inv_reconciled_100"}))
 
 
 async def test_reap_expired_leases_reconciles_external_effect_and_completes_step() -> None:
@@ -733,9 +728,7 @@ async def test_reap_expired_leases_reconciles_external_effect_and_completes_step
 
     # Lease expires after 31s; reaper reconciles external side effect and completes `create_invoice` -> queues `archive_invoice`!
     reap_res = (
-        await harness.reap_leases.execute(
-            ReapExpiredLeasesCommand(now=now + timedelta(seconds=31))
-        )
+        await harness.reap_leases.execute(ReapExpiredLeasesCommand(now=now + timedelta(seconds=31)))
     ).unwrap()
     assert len(reap_res.reconciled_step_ids) == 1
 
@@ -744,3 +737,66 @@ async def test_reap_expired_leases_reconciles_external_effect_and_completes_step
     assert run.steps["archive_invoice"].status == StepStatus.READY
     assert len(harness.uow.runs.drained_events) > 0
 
+
+async def test_blocked_version_unavailable_run_restores_when_definition_becomes_available() -> None:
+    harness = _EngineHarness()
+    now = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
+
+    defn_v2 = WorkflowDefinition(
+        workflow_id="energy.dynamic_version",
+        version=2,
+        nodes=(
+            NodeDefinition(
+                node_key="step_v2",
+                kind=NodeKind.TASK,
+                step_type="stitch.calc",
+            ),
+        ),
+    )
+    assert harness.definitions.register(defn_v2).is_ok
+    started = (
+        await harness.start_run.execute(
+            StartRunCommand(
+                tenant_id="ten_1",
+                workflow_id="energy.dynamic_version",
+                workflow_version=2,
+                idempotency_key="idem_dyn_1",
+                input_payload={"val": 42},
+                trace_id="trc_dyn_1",
+                now=now,
+            )
+        )
+    ).unwrap()
+
+    # Temporarily remove definition to simulate missing worker version
+    del harness.definitions._definitions[("energy.dynamic_version", 2)]
+
+    claimed_empty = (
+        await harness.claim_steps.execute(
+            ClaimStepsCommand(
+                worker_id="wrk_1",
+                now=now,
+            )
+        )
+    ).unwrap()
+    assert len(claimed_empty.claimed_steps) == 0
+
+    run_blocked = (await harness.uow.runs.get_by_id("ten_1", started.run_id)).unwrap()
+    assert run_blocked.status == RunStatus.BLOCKED_VERSION_UNAVAILABLE
+
+    # Definition becomes available
+    assert harness.definitions.register(defn_v2).is_ok
+
+    # Claim again after 5-minute delayed retry window
+    claimed_restored = (
+        await harness.claim_steps.execute(
+            ClaimStepsCommand(
+                worker_id="wrk_1",
+                now=now + timedelta(minutes=6),
+            )
+        )
+    ).unwrap()
+    assert len(claimed_restored.claimed_steps) == 1
+
+    run_restored = (await harness.uow.runs.get_by_id("ten_1", started.run_id)).unwrap()
+    assert run_restored.status == RunStatus.RUNNING

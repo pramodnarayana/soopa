@@ -36,3 +36,11 @@ class GlobalEntityMapRepositoryPort(Protocol):
     ) -> Sequence[GlobalEntityMap]:
         """Resolves all GlobalEntityMap entries associated with the given canonical ID."""
         ...
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[GlobalEntityMap]:
+        """Resolves all GlobalEntityMap entries created or updated under a trace ID."""
+        return ()

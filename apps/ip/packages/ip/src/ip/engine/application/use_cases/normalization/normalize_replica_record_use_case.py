@@ -33,7 +33,7 @@ from ip.engine.domain.exceptions import (
     Result,
 )
 from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.models.timeline_entry import IpTraceEvent
+from ip.engine.domain.models.timeline_entry import IpTraceEvent, TraceErrorDetails
 from ip.engine.domain.normalization import (
     CanonicalDraft,
     EntityShadowDiff,
@@ -528,7 +528,10 @@ class NormalizeReplicaRecordUseCase:
             event_type=IpTraceEventType.L3_REJECTED,
             status=TimelineStatus.FAILED,
             summary_message=detail,
-            error_details={"reason": NormalizationRejectionReason.MAPPER_ERROR.value},
+            error_details=TraceErrorDetails(
+                reason=NormalizationRejectionReason.MAPPER_ERROR.value,
+                detail=detail,
+            ),
         )
         await uow.replica_records.save(replica)
         await uow.commit()
@@ -548,11 +551,10 @@ class NormalizeReplicaRecordUseCase:
         binding: MappingBinding,
         bound_logger: FilteringBoundLogger,
     ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
-        previous_refs = await uow.normalization_ledger.get_produced_refs(
+        previous_refs = await uow.normalization_ledger.get_latest_produced_refs(
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
             mapping_id=binding.mapping_id,
-            mapping_version=binding.mapping_version,
         )
         for canonical_type, source_id in previous_refs:
             writer = self._writer_registry.get(canonical_type)
@@ -644,10 +646,10 @@ class NormalizeReplicaRecordUseCase:
                     event_type=IpTraceEventType.L3_REJECTED,
                     status=TimelineStatus.FAILED,
                     summary_message=f"Mapper execution failed: {exc}",
-                    error_details={
-                        "reason": NormalizationRejectionReason.MAPPER_ERROR.value,
-                        "detail": str(exc),
-                    },
+                    error_details=TraceErrorDetails(
+                        reason=NormalizationRejectionReason.MAPPER_ERROR.value,
+                        detail=str(exc),
+                    ),
                 )
                 await uow.replica_records.save(replica)
                 await uow.commit()
@@ -832,11 +834,10 @@ class NormalizeReplicaRecordUseCase:
         binding: MappingBinding,
         current_produced_refs: list[tuple[str, str]],
     ) -> None:
-        previous_refs = await uow.normalization_ledger.get_produced_refs(
+        previous_refs = await uow.normalization_ledger.get_latest_produced_refs(
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
             mapping_id=binding.mapping_id,
-            mapping_version=binding.mapping_version,
         )
         unseen_refs = set(previous_refs) - set(current_produced_refs)
         for canonical_type, source_id in unseen_refs:
@@ -1004,7 +1005,7 @@ class NormalizeReplicaRecordUseCase:
         event_type: IpTraceEventType,
         status: TimelineStatus,
         summary_message: str,
-        error_details: JsonDict | None = None,
+        error_details: TraceErrorDetails | None = None,
     ) -> None:
         replica.add_trace_event(
             IpTraceEvent.create(

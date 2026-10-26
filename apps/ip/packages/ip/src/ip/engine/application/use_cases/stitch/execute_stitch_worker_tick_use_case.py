@@ -108,9 +108,15 @@ class ExecuteStitchWorkerTickUseCase:
         worker_id: str,
         now: datetime,
     ) -> bool:
+        bound_logger = logger.bind(
+            tenant_id=claimed.context.tenant_id,
+            run_id=claimed.context.run_id,
+            step_run_id=claimed.context.step_run_id,
+            node_key=claimed.context.node_key,
+        )
         handler_res = self._handler_registry.get(claimed.step_type)
         if handler_res.is_err:
-            await self._fail_step.execute(
+            fail_res = await self._fail_step.execute(
                 FailStepCommand(
                     tenant_id=claimed.context.tenant_id,
                     run_id=claimed.context.run_id,
@@ -125,12 +131,45 @@ class ExecuteStitchWorkerTickUseCase:
                     now=now,
                 )
             )
+            if fail_res.is_err:
+                bound_logger.error(
+                    "stitch_fail_step_failed",
+                    error=fail_res.unwrap_err().message,
+                )
             return False
 
         handler = handler_res.unwrap()
-        exec_res = await handler.execute(claimed.context, claimed.input_payload)
+        try:
+            exec_res = await handler.execute(claimed.context, claimed.input_payload)
+        except Exception as exc:  # noqa: BLE001 - Worker loop catches all unhandled handler exceptions to mark step failed and prevent batch crash
+            bound_logger.error(
+                "stitch_step_handler_unhandled_exception",
+                error=str(exc),
+            )
+            fail_res = await self._fail_step.execute(
+                FailStepCommand(
+                    tenant_id=claimed.context.tenant_id,
+                    run_id=claimed.context.run_id,
+                    node_key=claimed.context.node_key,
+                    fencing_retry_count=claimed.context.retry_count,
+                    worker_id=worker_id,
+                    attempt_id=claimed.attempt_id,
+                    failure=TerminalFailure(
+                        code=StepFailureCode.UNHANDLED_EXCEPTION,
+                        detail=f"Unhandled exception in handler {claimed.context.node_key}: {exc}",
+                    ),
+                    now=now,
+                )
+            )
+            if fail_res.is_err:
+                bound_logger.error(
+                    "stitch_fail_step_failed",
+                    error=fail_res.unwrap_err().message,
+                )
+            return False
+
         if exec_res.is_ok:
-            await self._complete_step.execute(
+            comp_res = await self._complete_step.execute(
                 CompleteStepCommand(
                     tenant_id=claimed.context.tenant_id,
                     run_id=claimed.context.run_id,
@@ -142,9 +181,15 @@ class ExecuteStitchWorkerTickUseCase:
                     now=now,
                 )
             )
+            if comp_res.is_err:
+                bound_logger.error(
+                    "stitch_complete_step_failed",
+                    error=comp_res.unwrap_err().message,
+                )
+                return False
             return True
 
-        await self._fail_step.execute(
+        fail_res = await self._fail_step.execute(
             FailStepCommand(
                 tenant_id=claimed.context.tenant_id,
                 run_id=claimed.context.run_id,
@@ -156,6 +201,11 @@ class ExecuteStitchWorkerTickUseCase:
                 now=now,
             )
         )
+        if fail_res.is_err:
+            bound_logger.error(
+                "stitch_fail_step_failed",
+                error=fail_res.unwrap_err().message,
+            )
         return False
 
 

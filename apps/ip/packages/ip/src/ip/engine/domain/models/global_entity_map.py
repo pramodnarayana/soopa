@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 from typing import ClassVar
 
 from seedwork.id_registry import DomainIdPrefix
-from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
+from strace.domain import TracedAggregateRoot
 
 
 @dataclass(kw_only=True, eq=False)

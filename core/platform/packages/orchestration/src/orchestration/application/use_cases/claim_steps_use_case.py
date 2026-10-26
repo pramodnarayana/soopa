@@ -156,6 +156,8 @@ class ClaimStepsUseCase:
             if defn_res.is_err:
                 continue
             defn = defn_res.unwrap()
+            if run.restore_from_blocked_version(now=now):
+                await uow.runs.save(run)
             target_step = self._find_step_by_id(run, paused.step_run_id)
             if target_step is None:
                 continue
@@ -212,6 +214,9 @@ class ClaimStepsUseCase:
             )
             return
         definition = defn_res.unwrap()
+
+        if run.restore_from_blocked_version(now=command.now):
+            await uow.runs.save(run)
 
         step = self._find_step_by_id(run, item.step_run_id)
         if step is None or step.retry_count != item.retry_count:

@@ -10,8 +10,8 @@ from typing import ClassVar
 
 from seedwork.domain.types import JsonDict, JsonPrimitive
 from seedwork.id_registry import DomainIdPrefix
-from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
+from strace.domain import TracedAggregateRoot
 
 from ip.engine.domain.enums import (
     CursorKind,
@@ -21,7 +21,7 @@ from ip.engine.domain.enums import (
     TimelineStatus,
 )
 from ip.engine.domain.events import ReplicaRecordChangedEvent
-from ip.engine.domain.models.timeline_entry import IpTraceEvent
+from ip.engine.domain.models.timeline_entry import IpTraceEvent, TraceReplayMetadata
 
 
 def compute_record_key(primary_key_values: tuple[JsonPrimitive, ...]) -> str:
@@ -415,6 +415,63 @@ class ReplicaRecord(TracedAggregateRoot):
                 replay_count=self.replay_count,
             )
         )
+
+    def schedule_normalization_replay(
+        self,
+        *,
+        new_trace_id: str | None = None,
+        actor: str = "SYSTEM",
+    ) -> str:
+        """Schedules an L2 -> L3 normalization replay on the current replica snapshot."""
+        resolved_trace_id = new_trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        root_trace_id = self.original_trace_id or self.trace_id
+        prior_trace_id = self.trace_id
+        next_replay_count = self.replay_count + 1
+
+        self.parent_trace_id = prior_trace_id
+        self.original_trace_id = root_trace_id
+        self.replay_count = next_replay_count
+        self.trace_id = resolved_trace_id
+        self.updated_at = datetime.now(UTC)
+
+        self.add_trace_event(
+            IpTraceEvent.create(
+                tenant_id=self.tenant_id,
+                trace_id=resolved_trace_id,
+                correlation_id=self.correlation_id,
+                event_type=IpTraceEventType.REPLAY_TRIGGERED.value,
+                actor=actor,
+                layer=PipelineLayer.L2_REPLICA,
+                status=TimelineStatus.RETRIED,
+                summary_message=(
+                    f"Replayed L2 replica normalization for {self.stream}/{self.record_key} "
+                    f"from '{prior_trace_id}' (attempt #{next_replay_count})."
+                ),
+                replay_metadata=TraceReplayMetadata(
+                    parent_trace_id=prior_trace_id,
+                    original_trace_id=root_trace_id,
+                    replay_count=next_replay_count,
+                ),
+            )
+        )
+        self.add_domain_event(
+            ReplicaRecordChangedEvent(
+                record_id=self.id,
+                tenant_id=self.tenant_id,
+                connection_id=self.connection_id,
+                stream=self.stream,
+                record_key=self.record_key,
+                outcome=MergeOutcome.UPDATE.value,
+                version=self.version,
+                data_hash=self.data_hash,
+                trace_id=resolved_trace_id,
+                correlation_id=self.correlation_id,
+                parent_trace_id=prior_trace_id,
+                original_trace_id=root_trace_id,
+                replay_count=next_replay_count,
+            )
+        )
+        return resolved_trace_id
 
 
 @dataclass(frozen=True)

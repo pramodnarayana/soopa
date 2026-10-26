@@ -886,6 +886,11 @@ class GenericHttpConnector(BaseConnector):
         if operation == "UPDATE":
             method = "PUT"
             path = f"{fallback_prefix}/{encoded_record_id}"
+        elif operation == "UPSERT":
+            method = "PUT" if encoded_record_id else "POST"
+            path = (
+                f"{fallback_prefix}/{encoded_record_id}" if encoded_record_id else fallback_prefix
+            )
         elif operation == "DELETE":
             method = "DELETE"
             path = f"{fallback_prefix}/{encoded_record_id}"
@@ -901,21 +906,6 @@ class GenericHttpConnector(BaseConnector):
                 pass
         return method, path
 
-    @staticmethod
-    def _parse_write_response(resp: httpx.Response, default_id: str) -> tuple[str, str | None]:
-        result_record_id = default_id
-        destination_id: str | None = None
-        try:
-            body = resp.json()
-            if isinstance(body, dict):
-                if "id" in body:
-                    result_record_id = str(body["id"])
-                if "destination_id" in body:
-                    destination_id = str(body["destination_id"])
-        except (ValueError, TypeError):
-            pass
-        return result_record_id, destination_id
-
     async def write_record(
         self,
         stream_name: str,
@@ -927,9 +917,12 @@ class GenericHttpConnector(BaseConnector):
         target_record_id = command.record_id or ""
         spec_res = self._build_source_spec(public_config)
         if spec_res.is_err or spec_res.value is None:
-            assert spec_res.error is not None
-            self._last_error = spec_res.error
-            return WriteResultDTO.from_error(spec_res.error, record_id=target_record_id or "failed")
+            err = spec_res.error or InvalidConnectionConfigError(
+                field_name="public_config",
+                message="Invalid connection public configuration.",
+            )
+            self._last_error = err
+            return WriteResultDTO.from_error(err, record_id=target_record_id or "failed")
         spec = spec_res.value
 
         egress_res = self._egress_policy.validate_url(spec.base_url)
@@ -946,9 +939,12 @@ class GenericHttpConnector(BaseConnector):
         )
         url_res = self._build_safe_target_url(spec.base_url, path)
         if url_res.is_err or url_res.value is None:
-            assert url_res.error is not None
-            self._last_error = url_res.error
-            return WriteResultDTO.from_error(url_res.error, record_id=target_record_id or "failed")
+            url_err = url_res.error or EndpointSecurityViolationError(
+                endpoint=path,
+                message="Invalid target URL.",
+            )
+            self._last_error = url_err
+            return WriteResultDTO.from_error(url_err, record_id=target_record_id or "failed")
         target_url = url_res.value
 
         authenticator = AuthStrategyResolver.resolve(
@@ -957,31 +953,26 @@ class GenericHttpConnector(BaseConnector):
             allow_private_ips=self._allow_private_ips,
         )
 
+        merged_headers: dict[str, str] = {
+            **spec.default_headers,
+            **command.headers,
+        }
+        if command.idempotency_key:
+            merged_headers[command.idempotency_header_name] = command.idempotency_key
+
         req = httpx.Request(
             method=method,
             url=target_url,
-            headers=dict(spec.default_headers),
+            headers=merged_headers,
             json=command.payload if method != "DELETE" else None,
         )
         req = authenticator.authenticate_request(req)
 
-        try:
-            resp = await self._send_request(req)
-            if resp.status_code >= 400:
-                return WriteResultDTO(
-                    success=False,
-                    record_id=target_record_id,
-                    error_message=f"HTTP {resp.status_code}: {resp.text[:200]}",
-                )
-            result_record_id, destination_id = self._parse_write_response(resp, target_record_id)
-            return WriteResultDTO(
-                success=True,
-                record_id=result_record_id,
-                destination_id=destination_id,
-            )
-        except (httpx.HTTPError, HttpError, OSError, ValueError) as e:
-            return WriteResultDTO(
-                success=False,
-                record_id=target_record_id,
-                error_message=str(e),
-            )
+        return await self._execute_tracked_write_request(
+            send_fn=lambda: self._send_request(req),
+            target_url=target_url,
+            http_method=method,
+            request_headers=dict(req.headers),
+            default_record_id=target_record_id,
+            error_record_id=target_record_id,
+        )
