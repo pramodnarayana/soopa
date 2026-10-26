@@ -240,9 +240,12 @@ def test_declarative_connector_extract_nested_supports_negative_indices(
 def test_declarative_connector_basic_auth_header(sample_manifest: DeclarativeManifest) -> None:
     manifest = dataclasses.replace(sample_manifest, auth_type="BASIC")
     connector = DeclarativeHttpConnector(manifest=manifest)
-    headers = connector._build_auth_headers({"username": "user", "password": "secret_password"})
+    headers, sensitive_names = connector._build_auth_headers(
+        {"username": "user", "password": "secret_password"}
+    )
     assert "Authorization" in headers
     assert headers["Authorization"].startswith("Basic ")
+    assert "Authorization" in sensitive_names
 
 
 def test_declarative_connector_requires_https_and_rejects_restricted_hosts(

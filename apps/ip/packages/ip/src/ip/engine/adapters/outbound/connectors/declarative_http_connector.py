@@ -147,8 +147,8 @@ class DeclarativeHttpConnector(BaseConnector):
             return Result.fail(invalid_param_error)
         return self._validate_url(interpolated)
 
-    def _build_auth_headers(self, credentials: JsonDict) -> dict[str, str]:
-        """Injects authentication headers via unified AuthStrategyResolver."""
+    def _build_auth_headers(self, credentials: JsonDict) -> tuple[dict[str, str], list[str]]:
+        """Injects authentication headers via unified AuthStrategyResolver, returning headers and sensitive names."""
         authenticator = AuthStrategyResolver.resolve(
             self._manifest.auth_type,
             credentials,
@@ -160,11 +160,12 @@ class DeclarativeHttpConnector(BaseConnector):
             "authorization": "Authorization",
             "x-api-key": "X-API-Key",
         }
-        return {
+        headers = {
             canonical_names.get(k.lower(), k): v
             for k, v in authed_req.headers.items()
             if k.lower() not in ("host", "user-agent", "accept", "accept-encoding", "connection")
         }
+        return headers, list(authenticator.sensitive_header_names)
 
     @staticmethod
     def _extract_nested(data: object | None, path: str | None) -> object | None:
@@ -217,8 +218,9 @@ class DeclarativeHttpConnector(BaseConnector):
 
         base_url = interp_res.value
         url = f"{base_url.rstrip('/')}/{action.path.lstrip('/')}"
+        auth_headers, _ = self._build_auth_headers(credentials)
         headers = {
-            **self._build_auth_headers(credentials),
+            **auth_headers,
             **action.headers,
         }
 
@@ -403,8 +405,9 @@ class DeclarativeHttpConnector(BaseConnector):
         req_url: str,
         params: dict[str, str | int],
     ) -> Result[tuple[list[JsonDict], str | None, bool], IpError]:
+        auth_headers, _ = self._build_auth_headers(credentials)
         headers = {
-            **self._build_auth_headers(credentials),
+            **auth_headers,
             **action.headers,
         }
         try:
@@ -655,8 +658,9 @@ class DeclarativeHttpConnector(BaseConnector):
         encoded_record_id = quote(str(command.record_id or ""), safe="")
         action_path = action.path.replace("{record_id}", encoded_record_id)
         url = f"{base_url.rstrip('/')}/{action_path.lstrip('/')}"
+        auth_headers, sensitive_names = self._build_auth_headers(credentials)
         headers: dict[str, str] = {
-            **self._build_auth_headers(credentials),
+            **auth_headers,
             **action.headers,
             **command.headers,
             "Content-Type": "application/json",
@@ -677,4 +681,5 @@ class DeclarativeHttpConnector(BaseConnector):
             request_headers=headers,
             default_record_id=command.record_id or "written",
             error_record_id=command.record_id or "failed",
+            extra_sensitive_headers=sensitive_names,
         )

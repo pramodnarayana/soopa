@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from database.router import DatabaseRouterPort
 from dependency_injector import containers, providers
 from security.provider import SecurityProvider
 from storage.provider import StorageProvider
@@ -121,6 +122,7 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     # Repositories and Units of Work
     # -----------------------------------------------------------------------
+    db_router: providers.Dependency[DatabaseRouterPort] = providers.Dependency()
     tenant_resolver = providers.Dependency(instance_of=IpTenantResolver)
     cp_uow = providers.Factory(SqlAlchemyIpControlPlaneUnitOfWork)
     dp_uow = providers.Factory(
@@ -129,6 +131,8 @@ class Container(containers.DeclarativeContainer):
     )
     dp_uow_provider = providers.Factory(
         IpTenantUoWProvider,
+        resolver=tenant_resolver,
+        db_router=db_router,
         storage=tiered_storage,
     )
 
@@ -201,7 +205,7 @@ class Container(containers.DeclarativeContainer):
     fetch_record_use_case = providers.Factory(
         FetchRecordUseCase,
         control_plane_uow=cp_uow,
-        data_plane_uow=dp_uow,
+        data_plane_uow_provider=dp_uow_provider,
         tiered_storage=tiered_storage,
         cipher=cipher,
         connectors=catalog_registry,
@@ -210,7 +214,7 @@ class Container(containers.DeclarativeContainer):
     run_sync_use_case = providers.Factory(
         RunSyncUseCase,
         control_plane_uow=cp_uow,
-        data_plane_uow=dp_uow,
+        data_plane_uow_provider=dp_uow_provider,
         tiered_storage=tiered_storage,
         cipher=cipher,
         connectors=catalog_registry,

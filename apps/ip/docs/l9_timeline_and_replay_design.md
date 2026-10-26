@@ -14,28 +14,24 @@ A critical requirement of our monorepo (`AGENTS.md`) is **Strict Consistency Enf
 Our audit of the codebase confirms that distributed business tracing was **already upgraded in common platform code** (`commit a2c7fb120`) to support both **EDI** and **IP**:
 
 ### 1.1 What Already Exists in Common Platform & IP
-1. **`seedwork.models.TraceEvent` & `seedwork.models.TracedAggregateRoot`** (`core/platform/packages/seedwork/src/seedwork/models.py`):
+1. **`strace.domain.TraceEvent` & `strace.domain.TracedAggregateRoot`** (`core/platform/packages/strace/src/strace/domain/models.py`):
    - `TraceEvent`: Immutable audit event with `id`, `tenant_id`, `trace_id`, `event_type`, `actor`, `correlation_id`, `created_at`, and `metadata: JsonDict | None`.
    - `TracedAggregateRoot`: Base DDD aggregate root with `trace_id`, `tenant_id`, `correlation_id`, `parent_trace_id`, `original_trace_id`, `replay_count`, and `_trace_events: list[TraceEvent]`.
-2. **`database.models.common.TraceableMixin`** (`core/platform/packages/database/src/database/models/common.py`):
-   - Standardized SQLAlchemy mixin defining `trace_id`, `correlation_id`, `parent_trace_id`, and `original_trace_id`.
+2. **`strace.adapters.TenantTraceLineageOrmModel` & `strace.adapters.orm.TraceableMixin`** (`core/platform/packages/strace/src/strace/adapters/orm.py`):
+   - Standardized SQLAlchemy mixin and declarative base defining `trace_id`, `correlation_id`, `parent_trace_id`, and `original_trace_id`.
 3. **IP Domain Aggregates & Automatic Trace Draining (`apps/ip`)**:
    - `InboundRecord`, `NormalizedRecord`, `GlobalEntityMap`, and `OutboundRecord` already inherit from `TracedAggregateRoot`.
-   - `IpTraceEvent` (`ip/engine/domain/models/timeline_entry.py`) already inherits from `seedwork.models.TraceEvent`.
+   - `IpTraceEvent` (`ip/engine/domain/models/timeline_entry.py`) already inherits from `strace.domain.TraceEvent`.
    - `TenantSqlAlchemyRepository._drain_trace_events()` (`ip/engine/adapters/outbound/database/base_repository.py`) already drains `aggregate.trace_events` into `IpTraceEventModel` (`ip_trace_events`) atomically within the same SQLAlchemy transaction.
 
 ### 1.2 How EDI Uses the Platform Trace Architecture (`apps/edi`)
-In `apps/edi`, the trace, lineage, and replay layer follows a clean, battle-tested taxonomy:
-- **Outbound Port:** `edi/ports/outbound/trace_repository.py` (`TraceRepositoryPort`)
-- **Database Adapter:** `edi/adapters/outbound/database/trace_repository.py` (`SqlAlchemyTraceRepository`)
-  - Queries all stage tables (`EdiMessage`, `EdiJson`, `ApiGateway`, `TraceEvent`) for a `trace_id`.
-  - **Upstream Parent Hydration:** When viewing a child replay trace (`parent_trace_id` is set) that started at a later stage (e.g. delivery retry), walks `parent_trace_id` backward up to 10 hops to hydrate the upstream stage records so the UI always renders a complete end-to-end waterfall.
-  - **On-Demand S3 Payload Hydration:** Transparently downloads offloaded payloads via `StoragePort` (`hydrate_edi_data`, `hydrate_json_payload`) when `storage_uri` is present.
-  - **Lineage Resolution:** Queries all attempts sharing `original_trace_id == root_trace_id` ordered chronologically (`EdiTraceLineageItemDTO`).
-- **DTOs:** `edi/application/dtos/trace.py` (`EdiTraceDTO`) & `EdiTraceLineageItemDTO`
+In `apps/edi`, the trace, lineage, and replay layer leverages the centralized `strace` platform package:
+- **Centralized Platform Trace Repository:** `strace.adapters.SqlAlchemyTraceRepository` (implements `strace.ports.TraceRepositoryPort`).
+  - Queries all stage tables (`EdiMessage`, `EdiJson`, `ApiGateway`, `TraceEvent`) registered in `EDI_TRACE_STAGE_SPECS`.
+  - **Lineage Resolution:** Merges attempts sharing `original_trace_id == root_trace_id` ordered chronologically via `aggregate_trace_lineage_attempts()` (`TraceLineageItemDTO`).
 - **Use Cases (`edi/application/use_cases/transactions/`):**
-  - `get_edi_trace_use_case.py` (`GetEdiTraceUseCase`)
-  - `get_edi_trace_lineage_use_case.py` (`GetEdiTraceLineageUseCase`)
+  - `get_edi_trace_use_case.py` (`GetEdiTraceUseCase`): Assembles the composite waterfall from stage repositories and walks parent hops upstream when upstream stages were not duplicated on replay.
+  - `get_edi_trace_lineage_use_case.py` (`GetEdiTraceLineageUseCase`): Yields `TraceLineageItemDTO` sequences.
   - `replay_transaction_use_case.py` (`ReplayTransactionUseCase`)
   - `modify_and_replay_use_case.py` (`ModifyAndReplayTransactionUseCase`)
   - `bulk_replay_transactions_use_case.py` (`BulkReplayTransactionsUseCase`)
@@ -62,7 +58,7 @@ In `apps/edi`, the trace, lineage, and replay layer follows a clean, battle-test
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Record-Level Business Key Search (`correlation_id`)** | **None.** Tracks only batch `Job` and `Attempt` metrics (`recordsEmitted`, `bytesCommitted`). Cannot search for `meter_id=MTR-99`. | **Partial.** `ExecutionMetadataEntity` (`execution_metadata`), requires manual `n8n.setCustomData()` per workflow. | **None.** `FlowRunEntity` filters only by `flowId`, `status`, `created`, and array `tags`. | **Partial.** `v1_task_events_olap` stores `additional_metadata` JSONB on task runs. | **Native (`TraceableMixin`).** Composite B-Tree index `(tenant_id, correlation_id)` across `inbound_records`, `replica_records`, `normalized_records`, `outbound_records`, and `ip_trace_events`. |
 | **Cross-Stage Lineage Waterfall** | **None.** Source extraction, normalization, and destination write are opaque inside batch container logs. | **Single-Layer Only.** Tracks node execution within one workflow (`ExecutionDataEntity`), disconnected from canonical storage. | **Single-Layer Only.** Stores compressed step tree in a single blob (`logsFileId`). | **DAG Task Level Only.** Tracks `v1_dag_to_task` and `v1_task_events_olap`, unaware of L1/L2/L3/L5 data plane records. | **Full 5-Layer Data Plane + Parent Hydration.** `SqlAlchemyTraceRepository` stitches L1 (`InboundRecord`), L2 (`ReplicaRecord` + `ReplicaRejection`), L3 (`NormalizedRecord` + `NormalizationRejection` + `GlobalEntityMap`), L4 (`WorkflowRun`), L5 (`OutboundRecord`), and `IpTraceEvent`, automatically walking `parent_trace_id` upstream. |
-| **Tiered Payload Inspection & Secret Redaction** | **None.** Raw payloads are never stored for inspection unless debug logging is dumped. | **All-or-Nothing.** `execution_data.data` stores all node I/O in one row; S3 is only for binary attachments. | **Coarse Blob.** Whole run state is Zstd-compressed into S3/File (`logsFileId`). | **Dual-Write Cutover.** `v1_payload` offloads task inputs/outputs via `ExternalStore`. | **Per-Record Tiered Storage + Auto-Hydration.** Payloads $\le 256\text{ KB}$ inline JSONB; $> 256\text{ KB}$ offloaded to S3 (`request_s3_key` / `response_s3_key`) with SHA-256 checksums, hydrated on-demand via `StoragePort`, and redacted via `redact_sensitive_headers()`. |
+| **Tiered Payload Inspection & Secret Redaction** | **None.** Raw payloads are never stored for inspection unless debug logging is dumped. | **All-or-Nothing.** `execution_data.data` stores all node I/O in one row; S3 is only for binary attachments. | **Coarse Blob.** Whole run state is Zstd-compressed into S3/File (`logsFileId`). | **Dual-Write Cutover.** `v1_payload` offloads task inputs/outputs via `ExternalStore`. | **Per-Record Tiered Storage + Auto-Hydration.** Payloads $\le 64\text{ KB}$ inline JSONB; $> 64\text{ KB}$ offloaded to S3 (`request_s3_key` / `response_s3_key`) with SHA-256 checksums, hydrated on-demand via `StoragePort`, and redacted via `redact_sensitive_headers()`. |
 | **Deterministic Multi-Stage Replay & Lineage** | **Coarse Stream Reset.** Cannot replay one failed record; must re-run sync or reset entire stream cursor. | **Shallow Retry.** `retryOf` / `retrySuccessId` links only 1 hop (no `original_trace_id` root tree); cannot replay from L2/L3 canonical state. | **Destructive Overwrite.** `FlowRetryStrategy.FROM_FAILED_STEP` mutates the existing `FlowRun` row in place, destroying failed attempt history! | **In-Place DAG Reset.** `ReplayTasks` resets existing `v1_task` rows and increments `app_retry_count`. | **Non-Destructive Multi-Stage Lineage (`TracedAggregateRoot`).** Every replay mints a fresh `trace_id`, preserves `original_trace_id` and `parent_trace_id`, increments `replay_count`, and supports replay from L1 (`retry_ingest`), L2 (`retry_normalize`), L3 (`retry_stitch`), or L5 (`retry_deliver`), plus `ModifyAndReplay` and `BulkReplay`. |
 
 ---
@@ -71,9 +67,9 @@ In `apps/edi`, the trace, lineage, and replay layer follows a clean, battle-test
 
 ```mermaid
 flowchart TD
-    subgraph Platform["Shared Platform (seedwork + database)"]
-        TAR["TracedAggregateRoot & TraceEvent\n(seedwork.models)"]
-        TM["TraceableMixin\n(database.models.common)"]
+    subgraph Platform["Shared Platform (strace + database)"]
+        TAR["TracedAggregateRoot & TraceEvent\n(strace.domain)"]
+        TM["TenantTraceLineageOrmModel\n(strace.adapters)"]
     end
 
     subgraph DataPlane["IP Tenant Shard Data Plane (L1 - L5)"]
@@ -195,9 +191,9 @@ Matching `apps/edi/packages/edi/src/edi/application/use_cases/transactions/` 1-f
 
 ## 4. Adherence to the 8 Enterprise Architectural Principles
 
-1. **No Dual Architecture:** Reuses `seedwork.models.TracedAggregateRoot`, `seedwork.models.TraceEvent`, and `database.models.common.TraceableMixin`, and mirrors `apps/edi`'s exact file and class taxonomy (`trace_repository.py`, `get_ip_trace_use_case.py`, `get_ip_trace_lineage_use_case.py`, `replay_transaction_use_case.py`, `modify_and_replay_use_case.py`, `bulk_replay_transactions_use_case.py`).
-2. **No Duplicated Code:** Eliminates manual `trace_id`/`correlation_id`/`parent_trace_id`/`original_trace_id` column duplication in IP's `data_plane.py` by inheriting `TraceableMixin`. Reuses `redact_sensitive_headers()` and `TenantSqlAlchemyRepository._drain_trace_events()`.
-3. **Reuse Soopa Platform Code:** Uses `seedwork.models`, `database.models.common.TraceableMixin`, `storage.ports.outbound.StoragePort`, and `outbox`.
+1. **No Dual Architecture:** Reuses `strace.domain.TracedAggregateRoot`, `strace.domain.TraceEvent`, and `strace.adapters.TenantTraceLineageOrmModel`, and mirrors `apps/edi`'s exact use case taxonomy (`get_ip_trace_use_case.py`, `get_ip_trace_lineage_use_case.py`, `replay_transaction_use_case.py`, `modify_and_replay_use_case.py`, `bulk_replay_transactions_use_case.py`).
+2. **No Duplicated Code:** Eliminates manual `trace_id`/`correlation_id`/`parent_trace_id`/`original_trace_id` column duplication in IP's `data_plane.py` by inheriting `TenantTraceLineageOrmModel`. Reuses `redact_sensitive_headers()` and `TenantSqlAlchemyRepository._drain_trace_events()`.
+3. **Reuse Soopa Platform Code:** Uses `strace.domain`, `strace.adapters`, `storage.ports.outbound.StoragePort`, and `outbox`.
 4. **Zero IP Platform $\leftrightarrow$ Application Leakage:** All trace and replay components reside strictly in `ip.engine.*` and depend only on platform packages (`seedwork`, `database`, `storage`, `observability`).
 5. **First-Class Error Handling:** Every use case returns `Result[T, IpError]`. Missing traces, non-replayable stages, or invalid payload modifications return typed `Err(IpError)` without raising exceptions for known operational outcomes.
 6. **Zero `dict[str, Any]` / Proper DTOs:** All queries, commands, and trace responses are `@dataclass(frozen=True, kw_only=True)` using `JsonDict` / domain models.

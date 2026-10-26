@@ -30,6 +30,7 @@ from ip.engine.domain.exceptions import (
     ConnectorNotFoundError,
     IpError,
     Result,
+    TenantShardNotFoundError,
 )
 from ip.engine.domain.models.outbound_record import OutboundRecord
 from ip.engine.domain.services.outbound_error_classifier import classify_outbound_http_outcome
@@ -153,15 +154,21 @@ class DeliverOutboundRecordUseCase:
         self._data_plane_uow_provider = data_plane_uow_provider
 
     @contextlib.asynccontextmanager
-    async def _open_uow(self, tenant_id: str) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+    async def _open_uow(
+        self,
+        tenant_id: str,
+        shard_info: tuple[str, str] | None = None,
+    ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
         if self._data_plane_uow is not None:
             async with self._data_plane_uow as uow:
                 yield uow
         elif self._data_plane_uow_provider is not None:
-            shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
-            if shard_info_res.is_err:
-                raise RuntimeError(shard_info_res.unwrap_err().message)
-            shard_id, shard_dsn = shard_info_res.unwrap()
+            if shard_info is None:
+                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+                if shard_info_res.is_err:
+                    raise RuntimeError(shard_info_res.unwrap_err().message)
+                shard_info = shard_info_res.unwrap()
+            shard_id, shard_dsn = shard_info
             async with self._data_plane_uow_provider.get_data_plane_uow(
                 tenant_id, shard_id, shard_dsn
             ) as uow:
@@ -196,6 +203,22 @@ class DeliverOutboundRecordUseCase:
             return stored.raw_payload, None
         return None, stored.s3_key
 
+    async def _resolve_tenant_shard_info(
+        self, tenant_id: str
+    ) -> Result[tuple[str, str] | None, IpError]:
+        if self._data_plane_uow is not None or self._data_plane_uow_provider is None:
+            return Result.ok(None)
+        shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
+        if shard_info_res.is_err:
+            return Result.fail(
+                TenantShardNotFoundError(
+                    tenant_id=tenant_id,
+                    message=f"Tenant shard resolution failed for tenant {tenant_id}: {shard_info_res.unwrap_err().message}",
+                    details={"tenant_id": tenant_id},
+                )
+            )
+        return Result.ok(shard_info_res.unwrap())
+
     async def execute(
         self,
         command: DeliverOutboundRecordCommand,
@@ -203,8 +226,13 @@ class DeliverOutboundRecordUseCase:
         trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
         idempotency_key = compute_deterministic_idempotency_key(command)
 
+        shard_res = await self._resolve_tenant_shard_info(command.tenant_id)
+        if shard_res.is_err:
+            return Result.fail(shard_res.unwrap_err())
+        shard_info = shard_res.value
+
         # ── Phase 1A: Idempotency Short-Circuit Check ────────────────────────
-        async with self._open_uow(command.tenant_id) as uow:
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
             existing = await uow.outbound_records.get_by_idempotency_key(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
@@ -284,7 +312,7 @@ class DeliverOutboundRecordUseCase:
             command.idempotency_header_name: idempotency_key,
         }
 
-        async with self._open_uow(command.tenant_id) as uow:
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
             if existing is not None:
                 outbound_record = existing
                 outbound_record.mark_in_flight_attempt(attempt_number=command.attempt_number)
@@ -385,7 +413,7 @@ class DeliverOutboundRecordUseCase:
                 duration_ms=write_result.duration_ms,
                 external_record_id=external_id,
             )
-            async with self._open_uow(command.tenant_id) as uow:
+            async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
                 await uow.outbound_records.save(outbound_record)
                 await uow.commit()
 
@@ -434,7 +462,7 @@ class DeliverOutboundRecordUseCase:
                 failure_category=failure_cat.value,
                 retry_after_seconds=retry_after,
             )
-            async with self._open_uow(command.tenant_id) as uow:
+            async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
                 await uow.outbound_records.save(outbound_record)
                 await uow.commit()
 
@@ -479,7 +507,7 @@ class DeliverOutboundRecordUseCase:
             duration_ms=write_result.duration_ms,
             failure_category=failure_cat.value,
         )
-        async with self._open_uow(command.tenant_id) as uow:
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
             await uow.outbound_records.save(outbound_record)
             await uow.commit()
 
