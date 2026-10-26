@@ -153,22 +153,16 @@ class WorkflowDefinition:
 
         if self._has_cycle(in_degree, adjacency):
             return Result.err(
-                DagValidationError.with_reason(
-                    self.workflow_id, "Workflow graph contains a cycle."
-                )
+                DagValidationError.with_reason(self.workflow_id, "Workflow graph contains a cycle.")
             )
 
         return Result.ok(self)
 
     def _validate_header(self) -> DagValidationError | None:
         if not self.workflow_id.strip():
-            return DagValidationError.with_reason(
-                self.workflow_id, "workflow_id cannot be empty."
-            )
+            return DagValidationError.with_reason(self.workflow_id, "workflow_id cannot be empty.")
         if self.version < 1:
-            return DagValidationError.with_reason(
-                self.workflow_id, "version must be >= 1."
-            )
+            return DagValidationError.with_reason(self.workflow_id, "version must be >= 1.")
         if not self.nodes:
             return DagValidationError.with_reason(
                 self.workflow_id, "Workflow must contain at least one node."
@@ -182,9 +176,7 @@ class WorkflowDefinition:
         for node in self.nodes:
             if not node.node_key.strip():
                 return Result.err(
-                    DagValidationError.with_reason(
-                        self.workflow_id, "Node key cannot be empty."
-                    )
+                    DagValidationError.with_reason(self.workflow_id, "Node key cannot be empty.")
                 )
             if node.node_key in node_map:
                 return Result.err(
@@ -202,9 +194,7 @@ class WorkflowDefinition:
         adjacency: dict[str, list[str]] = {n.node_key: [] for n in self.nodes}
 
         for node in self.nodes:
-            edge_err = self._validate_node_parents(
-                node, node_map, in_degree, adjacency
-            )
+            edge_err = self._validate_node_parents(node, node_map, in_degree, adjacency)
             if edge_err is not None:
                 return Result.err(edge_err)
             node_err = self._validate_node_invariants(node)
@@ -242,9 +232,7 @@ class WorkflowDefinition:
             in_degree[node.node_key] += 1
         return None
 
-    def _has_cycle(
-        self, in_degree: dict[str, int], adjacency: dict[str, list[str]]
-    ) -> bool:
+    def _has_cycle(self, in_degree: dict[str, int], adjacency: dict[str, list[str]]) -> bool:
         queue: deque[str] = deque(k for k, deg in in_degree.items() if deg == 0)
         visited_count = 0
         while queue:
@@ -255,6 +243,36 @@ class WorkflowDefinition:
                 if in_degree[child] == 0:
                     queue.append(child)
         return visited_count != len(self.nodes)
+
+    def _validate_wait_for_event(self, node: NodeDefinition) -> DagValidationError | None:
+        if node.wait_event is None or not node.wait_event.event_key.strip():
+            return DagValidationError.with_reason(
+                self.workflow_id,
+                f"WAIT_FOR_EVENT node '{node.node_key}' must declare a valid WaitEventSpec.",
+            )
+        if node.wait_event.timeout is not None and node.wait_event.timeout.total_seconds() <= 0:
+            return DagValidationError.with_reason(
+                self.workflow_id,
+                f"WAIT_FOR_EVENT node '{node.node_key}' timeout must be positive.",
+            )
+        return None
+
+    def _validate_repeat_until(self, node: NodeDefinition) -> DagValidationError | None:
+        if not node.step_type.strip():
+            return DagValidationError.with_reason(
+                self.workflow_id,
+                f"REPEAT_UNTIL node '{node.node_key}' must declare a non-empty step_type.",
+            )
+        if (
+            node.repeat_until is None
+            or node.repeat_until.max_iterations < 1
+            or node.repeat_until.interval.total_seconds() <= 0
+        ):
+            return DagValidationError.with_reason(
+                self.workflow_id,
+                f"REPEAT_UNTIL node '{node.node_key}' must declare RepeatUntilSpec with max_iterations >= 1 and positive interval.",
+            )
+        return None
 
     def _validate_node_invariants(self, node: NodeDefinition) -> DagValidationError | None:
         if node.kind == NodeKind.TASK and not node.step_type.strip():
@@ -269,13 +287,8 @@ class WorkflowDefinition:
                 self.workflow_id,
                 f"SLEEP node '{node.node_key}' must declare a positive sleep_duration.",
             )
-        if node.kind == NodeKind.WAIT_FOR_EVENT and (
-            node.wait_event is None or not node.wait_event.event_key.strip()
-        ):
-            return DagValidationError.with_reason(
-                self.workflow_id,
-                f"WAIT_FOR_EVENT node '{node.node_key}' must declare a valid WaitEventSpec.",
-            )
+        if node.kind == NodeKind.WAIT_FOR_EVENT:
+            return self._validate_wait_for_event(node)
         if node.kind == NodeKind.BRANCH and (
             node.branch_predicate_id is None or not node.branch_predicate_id.strip()
         ):
@@ -290,13 +303,8 @@ class WorkflowDefinition:
                 self.workflow_id,
                 f"CHILD_WORKFLOW node '{node.node_key}' must declare a child_workflow_id.",
             )
-        if node.kind == NodeKind.REPEAT_UNTIL and (
-            node.repeat_until is None or node.repeat_until.max_iterations < 1
-        ):
-            return DagValidationError.with_reason(
-                self.workflow_id,
-                f"REPEAT_UNTIL node '{node.node_key}' must declare RepeatUntilSpec with max_iterations >= 1.",
-            )
+        if node.kind == NodeKind.REPEAT_UNTIL:
+            return self._validate_repeat_until(node)
         return None
 
 

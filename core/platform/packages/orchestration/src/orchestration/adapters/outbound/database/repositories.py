@@ -8,7 +8,8 @@ from datetime import datetime, timedelta
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository, HasDomainEvents
 from seedwork.domain.types import JsonDict
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestration.adapters.outbound.database.models import (
@@ -108,12 +109,14 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             self.drained_events.append(serialized)
         aggregate.clear_domain_events()
 
-    async def get_by_id(
-        self, tenant_id: str, run_id: str
-    ) -> Result[WorkflowRun, RunNotFoundError]:
-        run_stmt = select(WorkflowRunModel).where(
-            WorkflowRunModel.tenant_id == tenant_id,
-            WorkflowRunModel.id == run_id,
+    async def get_by_id(self, tenant_id: str, run_id: str) -> Result[WorkflowRun, RunNotFoundError]:
+        run_stmt = (
+            select(WorkflowRunModel)
+            .where(
+                WorkflowRunModel.tenant_id == tenant_id,
+                WorkflowRunModel.id == run_id,
+            )
+            .with_for_update()
         )
         run_record = (await self._session.execute(run_stmt)).scalar_one_or_none()
         if run_record is None:
@@ -142,8 +145,7 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             WorkflowStepRunModel.run_id == run.id,
         )
         existing_steps = {
-            rec.node_key: rec
-            for rec in (await self._session.execute(step_stmt)).scalars().all()
+            rec.node_key: rec for rec in (await self._session.execute(step_stmt)).scalars().all()
         }
         for node_key, step in run.steps.items():
             existing_step = existing_steps.get(node_key)
@@ -155,9 +157,7 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
         self._drain_events(run, default_tenant_id=run.tenant_id)
 
     async def save_attempt(self, attempt: StepAttempt) -> None:
-        stmt = select(WorkflowStepAttemptModel).where(
-            WorkflowStepAttemptModel.id == attempt.id
-        )
+        stmt = select(WorkflowStepAttemptModel).where(WorkflowStepAttemptModel.id == attempt.id)
         existing = (await self._session.execute(stmt)).scalar_one_or_none()
         if existing is None:
             self._session.add(self._attempt_to_orm_model(attempt))
@@ -252,9 +252,7 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
         )
 
     @staticmethod
-    def _update_record_from_domain(
-        record: WorkflowRunModel, run: WorkflowRun
-    ) -> None:
+    def _update_record_from_domain(record: WorkflowRunModel, run: WorkflowRun) -> None:
         record.status = run.status.value
         record.priority = int(run.priority)
         record.concurrency_key = run.concurrency_key
@@ -304,6 +302,7 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             retry_count=step.retry_count,
             app_retry_count=step.app_retry_count,
             internal_retry_count=step.internal_retry_count,
+            iteration_count=step.iteration_count,
             failure_code=step.failure_code,
             failure_detail=step.failure_detail,
             created_at=step.created_at,
@@ -311,13 +310,12 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
         )
 
     @staticmethod
-    def _update_step_record_from_domain(
-        record: WorkflowStepRunModel, step: StepRun
-    ) -> None:
+    def _update_step_record_from_domain(record: WorkflowStepRunModel, step: StepRun) -> None:
         record.status = step.status.value
         record.retry_count = step.retry_count
         record.app_retry_count = step.app_retry_count
         record.internal_retry_count = step.internal_retry_count
+        record.iteration_count = step.iteration_count
         record.failure_code = step.failure_code
         record.failure_detail = step.failure_detail
         record.finished_at = step.finished_at
@@ -334,6 +332,7 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
             retry_count=record.retry_count,
             app_retry_count=record.app_retry_count,
             internal_retry_count=record.internal_retry_count,
+            iteration_count=record.iteration_count,
             failure_code=record.failure_code,
             failure_detail=record.failure_detail,
             created_at=record.created_at,
@@ -427,9 +426,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
             await self.save_match(match)
 
     async def save_match(self, match: WorkflowMatch) -> None:
-        existing_stmt = select(WorkflowMatchModel).where(
-            WorkflowMatchModel.id == match.id
-        )
+        existing_stmt = select(WorkflowMatchModel).where(WorkflowMatchModel.id == match.id)
         existing_match = (await self._session.execute(existing_stmt)).scalar_one_or_none()
         if existing_match is None:
             self._session.add(self._to_orm_model(match))
@@ -439,9 +436,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
         cond_stmt = select(WorkflowMatchConditionModel).where(
             WorkflowMatchConditionModel.match_id == match.id
         )
-        existing_conds = {
-            c.id: c for c in (await self._session.execute(cond_stmt)).scalars().all()
-        }
+        existing_conds = {c.id: c for c in (await self._session.execute(cond_stmt)).scalars().all()}
         for cond in match.conditions:
             existing_cond = existing_conds.get(cond.id)
             if existing_cond is None:
@@ -449,9 +444,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
             else:
                 self._update_condition_record_from_domain(existing_cond, cond)
 
-    async def list_by_run(
-        self, tenant_id: str, run_id: str
-    ) -> Sequence[WorkflowMatch]:
+    async def list_by_run(self, tenant_id: str, run_id: str) -> Sequence[WorkflowMatch]:
         stmt = select(WorkflowMatchModel).where(
             WorkflowMatchModel.tenant_id == tenant_id,
             WorkflowMatchModel.run_id == run_id,
@@ -535,9 +528,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
         for c in all_conds:
             if c.match_id in conds_by_match:
                 conds_by_match[c.match_id].append(c)
-        return tuple(
-            self._to_domain_model(m, conds_by_match[m.id]) for m in match_records
-        )
+        return tuple(self._to_domain_model(m, conds_by_match[m.id]) for m in match_records)
 
     @staticmethod
     def _to_orm_model(match: WorkflowMatch) -> WorkflowMatchModel:
@@ -552,23 +543,17 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
             existing_data=dict(match.existing_data),
             is_satisfied=match.is_satisfied,
             resolved_action=(
-                match.resolved_action.value
-                if match.resolved_action is not None
-                else None
+                match.resolved_action.value if match.resolved_action is not None else None
             ),
             created_at=match.created_at,
         )
 
     @staticmethod
-    def _update_record_from_domain(
-        record: WorkflowMatchModel, match: WorkflowMatch
-    ) -> None:
+    def _update_record_from_domain(record: WorkflowMatchModel, match: WorkflowMatch) -> None:
         record.existing_data = dict(match.existing_data)
         record.is_satisfied = match.is_satisfied
         record.resolved_action = (
-            match.resolved_action.value
-            if match.resolved_action is not None
-            else None
+            match.resolved_action.value if match.resolved_action is not None else None
         )
 
     @staticmethod
@@ -577,8 +562,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
         cond_records: Sequence[WorkflowMatchConditionModel],
     ) -> WorkflowMatch:
         conditions = tuple(
-            SqlAlchemyWorkflowMatchRepository._condition_to_domain_model(c)
-            for c in cond_records
+            SqlAlchemyWorkflowMatchRepository._condition_to_domain_model(c) for c in cond_records
         )
         return WorkflowMatch(
             id=record.id,
@@ -592,9 +576,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
             existing_data=dict(record.existing_data),
             is_satisfied=record.is_satisfied,
             resolved_action=(
-                MatchAction(record.resolved_action)
-                if record.resolved_action is not None
-                else None
+                MatchAction(record.resolved_action) if record.resolved_action is not None else None
             ),
             created_at=record.created_at,
         )
@@ -615,9 +597,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
             readable_data_key=cond.readable_data_key,
             action=cond.action.value,
             is_satisfied=cond.is_satisfied,
-            matched_data=(
-                dict(cond.matched_data) if cond.matched_data is not None else None
-            ),
+            matched_data=(dict(cond.matched_data) if cond.matched_data is not None else None),
             timeout_at=cond.timeout_at,
             created_at=cond.created_at,
         )
@@ -627,9 +607,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
         record: WorkflowMatchConditionModel, cond: MatchCondition
     ) -> None:
         record.is_satisfied = cond.is_satisfied
-        record.matched_data = (
-            dict(cond.matched_data) if cond.matched_data is not None else None
-        )
+        record.matched_data = dict(cond.matched_data) if cond.matched_data is not None else None
 
     @staticmethod
     def _condition_to_domain_model(
@@ -647,11 +625,7 @@ class SqlAlchemyWorkflowMatchRepository(BaseSqlAlchemyRepository, WorkflowMatchR
             readable_data_key=record.readable_data_key,
             action=MatchAction(record.action),
             is_satisfied=record.is_satisfied,
-            matched_data=(
-                dict(record.matched_data)
-                if record.matched_data is not None
-                else None
-            ),
+            matched_data=(dict(record.matched_data) if record.matched_data is not None else None),
             timeout_at=record.timeout_at,
             created_at=record.created_at,
         )
@@ -714,6 +688,7 @@ class SqlAlchemyWorkflowQueueRepository(BaseSqlAlchemyRepository, WorkflowQueueP
         cursor_rec = (await self._session.execute(cursor_stmt)).scalar_one_or_none()
         last_tenant = cursor_rec.last_serviced_tenant_id if cursor_rec is not None else ""
 
+        candidate_limit = max(free_slots, max_active_tenants * per_tenant_cap)
         ready_stmt = (
             select(WorkflowQueueItemModel)
             .where(
@@ -721,6 +696,7 @@ class SqlAlchemyWorkflowQueueRepository(BaseSqlAlchemyRepository, WorkflowQueueP
                 WorkflowQueueItemModel.available_at <= now,
             )
             .order_by(WorkflowQueueItemModel.id.asc())
+            .limit(candidate_limit)
             .with_for_update(skip_locked=True)
         )
         records = (await self._session.execute(ready_stmt)).scalars().all()
@@ -736,23 +712,27 @@ class SqlAlchemyWorkflowQueueRepository(BaseSqlAlchemyRepository, WorkflowQueueP
         selected_ids = [item.id for item in res.selected_items]
         if selected_ids:
             await self._session.execute(
-                delete(WorkflowQueueItemModel).where(
-                    WorkflowQueueItemModel.id.in_(selected_ids)
-                )
+                delete(WorkflowQueueItemModel).where(WorkflowQueueItemModel.id.in_(selected_ids))
             )
-        if cursor_rec is None:
-            self._session.add(
-                WorkflowQueueCursorModel(
-                    queue_name=queue_name,
-                    last_serviced_tenant_id=res.next_cursor_tenant_id,
-                    min_unprocessed_id=res.min_unprocessed_id,
-                    updated_at=now,
-                )
+
+        cursor_upsert_stmt = (
+            pg_insert(WorkflowQueueCursorModel)
+            .values(
+                queue_name=queue_name,
+                last_serviced_tenant_id=res.next_cursor_tenant_id,
+                min_unprocessed_id=res.min_unprocessed_id,
+                updated_at=now,
             )
-        else:
-            cursor_rec.last_serviced_tenant_id = res.next_cursor_tenant_id
-            cursor_rec.min_unprocessed_id = res.min_unprocessed_id
-            cursor_rec.updated_at = now
+            .on_conflict_do_update(
+                index_elements=[WorkflowQueueCursorModel.queue_name],
+                set_={
+                    "last_serviced_tenant_id": res.next_cursor_tenant_id,
+                    "min_unprocessed_id": res.min_unprocessed_id,
+                    "updated_at": now,
+                },
+            )
+        )
+        await self._session.execute(cursor_upsert_stmt)
         return res
 
     async def park_rate_limited(
@@ -796,9 +776,7 @@ class SqlAlchemyWorkflowQueueRepository(BaseSqlAlchemyRepository, WorkflowQueueP
             return ()
         ids = [r.id for r in records]
         await self._session.execute(
-            delete(WorkflowPausedQueueItemModel).where(
-                WorkflowPausedQueueItemModel.id.in_(ids)
-            )
+            delete(WorkflowPausedQueueItemModel).where(WorkflowPausedQueueItemModel.id.in_(ids))
         )
         return tuple(self._paused_to_domain_model(r) for r in records)
 
@@ -880,14 +858,27 @@ class SqlAlchemyWorkflowConcurrencyRepository(BaseSqlAlchemyRepository, Workflow
         rate_limit_units: int = 1,
         now: datetime,
     ) -> ConcurrencySlot:
-        max_sort_stmt = select(
-            func.coalesce(func.max(WorkflowConcurrencySlotModel.sort_id), 0)
+        orm_slot = WorkflowConcurrencySlotModel(
+            tenant_id=tenant_id,
+            strategy_id=strategy_id,
+            concurrency_key=concurrency_key,
+            run_id=run_id,
+            step_run_id=step_run_id,
+            step_created_at=step_created_at,
+            retry_count=retry_count,
+            priority=int(priority),
+            is_filled=False,
+            next_strategy_ids=list(next_strategy_ids),
+            queue_name=queue_name,
+            rate_limit_key=rate_limit_key,
+            rate_limit_units=rate_limit_units,
+            created_at=now,
         )
-        current_max = int((await self._session.execute(max_sort_stmt)).scalar_one())
-        next_sort_id = current_max + 1
+        self._session.add(orm_slot)
+        await self._session.flush()
 
-        slot = ConcurrencySlot(
-            sort_id=next_sort_id,
+        return ConcurrencySlot(
+            sort_id=orm_slot.sort_id,
             tenant_id=tenant_id,
             strategy_id=strategy_id,
             concurrency_key=concurrency_key,
@@ -903,9 +894,6 @@ class SqlAlchemyWorkflowConcurrencyRepository(BaseSqlAlchemyRepository, Workflow
             rate_limit_units=rate_limit_units,
             created_at=now,
         )
-        self._session.add(self._to_orm_model(slot))
-        await self._session.flush()
-        return slot
 
     async def list_slots_for_key(
         self,
@@ -934,10 +922,7 @@ class SqlAlchemyWorkflowConcurrencyRepository(BaseSqlAlchemyRepository, Workflow
         concurrency_key: str,
         result: ConcurrencyEvaluationResult,
     ) -> None:
-        evict_ids = [
-            s.sort_id
-            for s in (*result.cancelled_slots, *result.promoted_to_next_strategy)
-        ]
+        evict_ids = [s.sort_id for s in result.cancelled_slots]
         if evict_ids:
             await self._session.execute(
                 delete(WorkflowConcurrencySlotModel).where(
@@ -947,10 +932,7 @@ class SqlAlchemyWorkflowConcurrencyRepository(BaseSqlAlchemyRepository, Workflow
                     WorkflowConcurrencySlotModel.sort_id.in_(evict_ids),
                 )
             )
-        promoted_set = {s.sort_id for s in result.promoted_to_next_strategy}
         for filled in result.newly_filled_slots:
-            if filled.sort_id in promoted_set:
-                continue
             stmt = select(WorkflowConcurrencySlotModel).where(
                 WorkflowConcurrencySlotModel.sort_id == filled.sort_id,
                 WorkflowConcurrencySlotModel.tenant_id == tenant_id,
@@ -1192,10 +1174,7 @@ class SqlAlchemyWorkflowPayloadStoreRepository(BaseSqlAlchemyRepository, Workflo
             return {}
         if rec.location == PayloadLocation.INLINE and rec.inline_content is not None:
             return dict(rec.inline_content)
-        if (
-            rec.location == PayloadLocation.REFERENCE
-            and rec.payload_reference_id is not None
-        ):
+        if rec.location == PayloadLocation.REFERENCE and rec.payload_reference_id is not None:
             ref_rec = await self.get_payload(
                 tenant_id=tenant_id,
                 owner_id=rec.payload_reference_id,
@@ -1214,9 +1193,7 @@ class SqlAlchemyWorkflowPayloadStoreRepository(BaseSqlAlchemyRepository, Workflo
             payload_type=record.payload_type.value,
             location=record.location.value,
             inline_content=(
-                dict(record.inline_content)
-                if record.inline_content is not None
-                else None
+                dict(record.inline_content) if record.inline_content is not None else None
             ),
             external_ref=record.external_ref,
             payload_reference_id=record.payload_reference_id,
@@ -1226,14 +1203,10 @@ class SqlAlchemyWorkflowPayloadStoreRepository(BaseSqlAlchemyRepository, Workflo
         )
 
     @staticmethod
-    def _update_record_from_domain(
-        orm_record: WorkflowPayloadModel, record: PayloadRecord
-    ) -> None:
+    def _update_record_from_domain(orm_record: WorkflowPayloadModel, record: PayloadRecord) -> None:
         orm_record.location = record.location.value
         orm_record.inline_content = (
-            dict(record.inline_content)
-            if record.inline_content is not None
-            else None
+            dict(record.inline_content) if record.inline_content is not None else None
         )
         orm_record.external_ref = record.external_ref
         orm_record.payload_reference_id = record.payload_reference_id
@@ -1250,9 +1223,7 @@ class SqlAlchemyWorkflowPayloadStoreRepository(BaseSqlAlchemyRepository, Workflo
             payload_type=PayloadType(record.payload_type),
             location=PayloadLocation(record.location),
             inline_content=(
-                dict(record.inline_content)
-                if record.inline_content is not None
-                else None
+                dict(record.inline_content) if record.inline_content is not None else None
             ),
             external_ref=record.external_ref,
             payload_reference_id=record.payload_reference_id,
@@ -1280,35 +1251,61 @@ class SqlAlchemyWorkflowIdempotencyRepository(BaseSqlAlchemyRepository, Workflow
         ttl: timedelta,
         now: datetime,
     ) -> Result[IdempotencyKeyRecord, DuplicateIdempotencyKeyError]:
+        expires_at = now + ttl
+        insert_stmt = (
+            pg_insert(WorkflowIdempotencyKeyModel)
+            .values(
+                tenant_id=tenant_id,
+                workflow_id=workflow_id,
+                key=key,
+                claimed_by_run_id=run_id,
+                eviction_policy=eviction_policy.value,
+                expires_at=expires_at,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=[
+                    WorkflowIdempotencyKeyModel.tenant_id,
+                    WorkflowIdempotencyKeyModel.workflow_id,
+                    WorkflowIdempotencyKeyModel.key,
+                ],
+                set_={
+                    "claimed_by_run_id": run_id,
+                    "eviction_policy": eviction_policy.value,
+                    "expires_at": expires_at,
+                    "updated_at": now,
+                },
+                where=WorkflowIdempotencyKeyModel.expires_at <= now,
+            )
+            .returning(WorkflowIdempotencyKeyModel.claimed_by_run_id)
+        )
+        res = (await self._session.execute(insert_stmt)).scalar_one_or_none()
+        if res == run_id:
+            domain_rec = IdempotencyKeyRecord(
+                tenant_id=tenant_id,
+                workflow_id=workflow_id,
+                key=key,
+                claimed_by_run_id=run_id,
+                eviction_policy=eviction_policy,
+                expires_at=expires_at,
+                updated_at=now,
+            )
+            return Result.ok(domain_rec)
+
         stmt = select(WorkflowIdempotencyKeyModel).where(
             WorkflowIdempotencyKeyModel.tenant_id == tenant_id,
             WorkflowIdempotencyKeyModel.workflow_id == workflow_id,
             WorkflowIdempotencyKeyModel.key == key,
         )
         existing = (await self._session.execute(stmt)).scalar_one_or_none()
-        if existing is not None and existing.expires_at > now:
-            return Result.err(
-                DuplicateIdempotencyKeyError.for_key(
-                    workflow_id=workflow_id,
-                    idempotency_key=key,
-                    existing_run_id=existing.claimed_by_run_id,
-                )
+        existing_run_id = existing.claimed_by_run_id if existing is not None else "unknown"
+        return Result.err(
+            DuplicateIdempotencyKeyError.for_key(
+                workflow_id=workflow_id,
+                idempotency_key=key,
+                existing_run_id=existing_run_id,
             )
-
-        domain_rec = IdempotencyKeyRecord(
-            tenant_id=tenant_id,
-            workflow_id=workflow_id,
-            key=key,
-            claimed_by_run_id=run_id,
-            eviction_policy=eviction_policy,
-            expires_at=now + ttl,
-            updated_at=now,
         )
-        if existing is None:
-            self._session.add(self._to_orm_model(domain_rec))
-        else:
-            self._update_record_from_domain(existing, domain_rec)
-        return Result.ok(domain_rec)
 
     async def release_on_terminal_status(
         self,

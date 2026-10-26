@@ -61,6 +61,7 @@ class IpTraceEvent(TraceEvent):
         status: TimelineStatus,
         summary_message: str,
         error_details: JsonDict | None = None,
+        extra_metadata: JsonDict | None = None,
     ) -> IpTraceEvent:
         meta: JsonDict = {
             "layer": layer.value,
@@ -69,6 +70,8 @@ class IpTraceEvent(TraceEvent):
         }
         if error_details is not None:
             meta["error_details"] = dict(error_details)
+        if extra_metadata is not None:
+            meta.update(extra_metadata)
 
         return cls(
             id=generate_id(cls.ID_PREFIX),

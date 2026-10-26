@@ -30,7 +30,12 @@ class IpTraceEventType(StrEnum):
     L2_REPLICA_TOMBSTONED = "L2_REPLICA_TOMBSTONED"
     L2_EXTRACTION_REJECTED = "L2_EXTRACTION_REJECTED"
     L3_NORMALIZED = "L3_NORMALIZED"
+    L3_REJECTED = "L3_REJECTED"
     L3_NORMALIZATION_FAILED = "L3_NORMALIZATION_FAILED"
+    L3_SKIPPED_STALE = "L3_SKIPPED_STALE"
+    L3_TOMBSTONED = "L3_TOMBSTONED"
+    L3_REFERENCE_PENDING = "L3_REFERENCE_PENDING"
+    L3_REFERENCE_RESOLVED = "L3_REFERENCE_RESOLVED"
     L4_DOMAIN_HYDRATED = "L4_DOMAIN_HYDRATED"
     L5_DISPATCH_PENDING = "L5_DISPATCH_PENDING"
     L5_DISPATCH_DELIVERED = "L5_DISPATCH_DELIVERED"
@@ -140,8 +145,61 @@ class IpEventType(StrEnum):
     FETCH_RECORD_REQUESTED = "ip.fetch_record.requested"
     REPLICA_RECORD_CHANGED = "ip.replica_record.changed"
     NORMALIZED_RECORD_CREATED = "ip.normalized_record.created"
+    CANONICAL_RECORD_CHANGED = "ip.canonical_record.changed"
+    MAPPING_BINDING_CHANGED = "ip.mapping_binding.changed"
+    MAPPING_VERSION_PROMOTED = "ip.mapping_version.promoted"
     OUTBOUND_RECORD_CREATED = "ip.outbound_record.created"
     STREAM_STATE_CHECKPOINTED = "ip.stream_state.checkpointed"
+
+
+class MappingMode(StrEnum):
+    """Execution mode of a stream mapping binding."""
+
+    ACTIVE = "ACTIVE"
+    SHADOW = "SHADOW"
+    DISABLED = "DISABLED"
+
+
+class NormalizationOutcome(StrEnum):
+    """Result of normalizing an L2 replica snapshot into canonical domain records."""
+
+    NORMALIZED = "NORMALIZED"
+    REJECTED = "REJECTED"
+    SKIPPED_STALE = "SKIPPED_STALE"
+    TOMBSTONED = "TOMBSTONED"
+    SKIPPED_NO_BINDING = "SKIPPED_NO_BINDING"
+
+
+class RuleSeverity(StrEnum):
+    """Action severity for a canonical entity quality validation rule."""
+
+    REJECT = "REJECT"
+    FLAG = "FLAG"
+
+
+class NormalizationRejectionReason(StrEnum):
+    """Typed failure code for a canonical mapping or validation rejection."""
+
+    MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
+    SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
+    QUALITY_RULE_REJECTED = "QUALITY_RULE_REJECTED"
+    MAPPER_ERROR = "MAPPER_ERROR"
+    UNRESOLVED_REFERENCE = "UNRESOLVED_REFERENCE"
+    MISSING_MAPPING_BINDING = "MISSING_MAPPING_BINDING"
+
+
+class PendingReferenceStatus(StrEnum):
+    """Resolution status of a late-arriving canonical source reference."""
+
+    PENDING = "PENDING"
+    RESOLVED = "RESOLVED"
+
+
+class CanonicalAction(StrEnum):
+    """Mutation action applied to a canonical domain record."""
+
+    UPSERT = "UPSERT"
+    TOMBSTONE = "TOMBSTONE"
 
 
 class IngestionMode(StrEnum):

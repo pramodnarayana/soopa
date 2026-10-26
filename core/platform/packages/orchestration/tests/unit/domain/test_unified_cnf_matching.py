@@ -106,8 +106,23 @@ def test_multi_parent_on_success_requires_all_parents_to_queue_or_any_parent_to_
     assert after_p1_fail.is_satisfied
     assert after_p1_fail.resolved_action == MatchAction.CANCEL
 
+    # 4. If p1 completes and p2 is skipped -> shared skip_group_id immediately resolves to SKIP!
+    after_p2_skipped = after_p1.apply_event(
+        MatchEvent(
+            tenant_id="ten_1",
+            condition_kind=ConditionKind.PARENT_OVERRIDE,
+            event_key=InternalStepEventKey.SKIPPED.value,
+            resource_hint="stp_p2",
+            occurred_at=now,
+        )
+    )
+    assert after_p2_skipped.is_satisfied
+    assert after_p2_skipped.resolved_action == MatchAction.SKIP
 
-def test_on_failure_compensation_node_queues_on_any_parent_failure_and_skips_when_all_succeed() -> None:
+
+def test_on_failure_compensation_node_queues_on_any_parent_failure_and_skips_when_all_succeed() -> (
+    None
+):
     now = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
     defn = WorkflowDefinition(
         workflow_id="comp_flow",
@@ -171,6 +186,18 @@ def test_on_failure_compensation_node_queues_on_any_parent_failure_and_skips_whe
     assert m_timeout.is_satisfied
     assert m_timeout.resolved_action == MatchAction.QUEUE
 
+    # When p2 is cancelled and p1 completed, compensate resolves to SKIP (all parents non-trigger)
+    m_cancelled = m1.apply_event(
+        MatchEvent(
+            tenant_id="ten_1",
+            condition_kind=ConditionKind.PARENT_OVERRIDE,
+            event_key=InternalStepEventKey.CANCELLED.value,
+            resource_hint="stp_p2",
+        )
+    )
+    assert m_cancelled.is_satisfied
+    assert m_cancelled.resolved_action == MatchAction.SKIP
+
 
 def test_two_stage_create_match_for_parent_dependent_wait_for_event_node() -> None:
     now = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
@@ -188,9 +215,7 @@ def test_two_stage_create_match_for_parent_dependent_wait_for_event_node() -> No
         workflow_id="two_stage_flow",
         version=1,
         nodes=(
-            NodeDefinition(
-                node_key="dispatch_cmd", kind=NodeKind.TASK, step_type="t.dispatch"
-            ),
+            NodeDefinition(node_key="dispatch_cmd", kind=NodeKind.TASK, step_type="t.dispatch"),
             wait_node,
         ),
     )

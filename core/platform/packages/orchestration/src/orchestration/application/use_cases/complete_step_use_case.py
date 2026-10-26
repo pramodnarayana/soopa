@@ -89,9 +89,7 @@ class CompleteStepUseCase:
                 return Result.err(run_res.unwrap_err())
             run = run_res.unwrap()
 
-            defn_res = self._definition_registry.get(
-                run.workflow_id, run.workflow_version
-            )
+            defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
             if defn_res.is_err:
                 return Result.err(defn_res.unwrap_err())
             definition = defn_res.unwrap()
@@ -183,11 +181,7 @@ class CompleteStepUseCase:
         node: NodeDefinition | None,
         command: CompleteStepCommand,
     ) -> Result[CompleteStepResultDTO, WorkflowError] | None:
-        if (
-            node is None
-            or node.kind != NodeKind.REPEAT_UNTIL
-            or node.repeat_until is None
-        ):
+        if node is None or node.kind != NodeKind.REPEAT_UNTIL or node.repeat_until is None:
             return None
 
         condition_met = (
@@ -200,7 +194,7 @@ class CompleteStepUseCase:
         if condition_met:
             return None
 
-        if step.retry_count + 1 < node.repeat_until.max_iterations:
+        if step.iteration_count + 1 < node.repeat_until.max_iterations:
             return await self._reschedule_repeat_until_iteration(
                 uow=uow,
                 run=run,
@@ -212,6 +206,7 @@ class CompleteStepUseCase:
         return await self._fail_exhausted_repeat_until(
             uow=uow,
             run=run,
+            definition=definition,
             node=node,
             command=command,
         )
@@ -226,18 +221,14 @@ class CompleteStepUseCase:
         command: CompleteStepCommand,
     ) -> Result[CompleteStepResultDTO, WorkflowError]:
         assert node.repeat_until is not None
-        retry_res = run.schedule_step_retry(
+        retry_res = run.reschedule_step_repeat_until(
             node_key=command.node_key,
             fencing_retry_count=command.fencing_retry_count,
-            failure_code=StepFailureCode.TIMEOUT,
-            failure_detail="REPEAT_UNTIL predicate not yet satisfied.",
             delay=node.repeat_until.interval,
-            is_app_error=False,
         )
         if retry_res.is_err:
             return Result.err(retry_res.unwrap_err())
         retried_step = retry_res.unwrap()
-        retried_step.status = StepStatus.READY
         await uow.runs.release_lease(retried_step.id)
         await self._release_and_advance_step_concurrency(
             uow=uow,
@@ -272,6 +263,7 @@ class CompleteStepUseCase:
         *,
         uow: WorkflowUnitOfWorkPort,
         run: WorkflowRun,
+        definition: WorkflowDefinition,
         node: NodeDefinition,
         command: CompleteStepCommand,
     ) -> Result[CompleteStepResultDTO, WorkflowError]:
@@ -289,6 +281,13 @@ class CompleteStepUseCase:
             return Result.err(fail_res.unwrap_err())
         failed_step = fail_res.unwrap()
         await uow.runs.release_lease(failed_step.id)
+        await self._release_and_advance_step_concurrency(
+            uow=uow,
+            tenant_id=run.tenant_id,
+            step_run_id=failed_step.id,
+            definition=definition,
+            now=command.now,
+        )
         await uow.runs.save(run)
         await self._match_resolver.resolve_in_uow(
             uow=uow,
@@ -304,6 +303,15 @@ class CompleteStepUseCase:
         )
         refreshed_res = await uow.runs.get_by_id(run.tenant_id, run.id)
         final_run = refreshed_res.unwrap() if refreshed_res.is_ok else run
+        final_run.finalize_after_match_propagation(now=command.now)
+        await uow.runs.save(final_run)
+
+        final_run = await self._finalize_run_resources(
+            uow=uow,
+            run=final_run,
+            definition=definition,
+            now=command.now,
+        )
         await uow.commit()
         return Result.ok(
             CompleteStepResultDTO(

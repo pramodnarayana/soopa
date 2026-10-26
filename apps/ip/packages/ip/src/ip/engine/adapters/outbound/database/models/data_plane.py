@@ -259,6 +259,107 @@ class IpTraceEventModel(IpTenantBase):
 TimelineEntryModel = IpTraceEventModel
 
 
+class NormalizationLedgerModel(IpTenantBase):
+    """Database record representation of the normalization_ledger table on tenant shards."""
+
+    __tablename__ = "normalization_ledger"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "replica_record_id",
+            "mapping_id",
+            "mapping_version",
+            name="uq_ip_norm_ledger_replica_mapping",
+        ),
+        Index("idx_norm_ledger_replica", "tenant_id", "replica_record_id"),
+        Index("idx_norm_ledger_trace", "tenant_id", "trace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    replica_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    replica_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    mapping_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    produced_canonical_refs: Mapped[list[list[str]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NormalizationRejectionModel(IpTenantBase):
+    """Database record representation of the normalization_rejections table on tenant shards."""
+
+    __tablename__ = "normalization_rejections"
+    __table_args__ = (
+        Index("idx_norm_rej_tenant_replica", "tenant_id", "replica_record_id"),
+        Index("idx_norm_rej_trace", "tenant_id", "trace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    replica_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    stream: Mapped[str] = mapped_column(String(128), nullable=False)
+    mapping_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    field_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    detail: Mapped[str] = mapped_column(Text, nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NormalizationShadowDiffModel(IpTenantBase):
+    """Database record representation of candidate mapper differences in shadow mode."""
+
+    __tablename__ = "normalization_shadow_diffs"
+    __table_args__ = (
+        Index("idx_norm_diff_replica", "tenant_id", "replica_record_id"),
+        Index("idx_norm_diff_trace", "tenant_id", "trace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    replica_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    candidate_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    diff_data: Mapped[JsonDict] = mapped_column(JSONB, nullable=False, default=dict)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PendingReferenceModel(IpTenantBase):
+    """Database record representation of unresolved late-arriving references."""
+
+    __tablename__ = "pending_references"
+    __table_args__ = (
+        Index(
+            "idx_pending_ref_target",
+            "tenant_id",
+            "source_connection_id",
+            "target_canonical_type",
+            "target_source_id",
+        ),
+        Index("idx_pending_ref_status", "tenant_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_canonical_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    referencing_canonical_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    referencing_source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    referencing_field: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="PENDING")
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class IpDataPlaneOutboxRecord(IpTenantBase, OutboxMixin):
     """Data Plane transactional Outbox table in tenant shards (public.ip_outbox)."""
 
@@ -287,8 +388,12 @@ __all__ = [
     "InboundRecordModel",
     "IpDataPlaneOutboxRecord",
     "IpTraceEventModel",
+    "NormalizationLedgerModel",
+    "NormalizationRejectionModel",
+    "NormalizationShadowDiffModel",
     "NormalizedRecordModel",
     "OutboundRecordModel",
+    "PendingReferenceModel",
     "ReplicaRecordModel",
     "ReplicaRejectionModel",
     "TimelineEntryModel",

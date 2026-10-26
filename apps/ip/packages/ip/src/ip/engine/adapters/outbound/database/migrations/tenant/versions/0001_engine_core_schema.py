@@ -26,6 +26,10 @@ _ENGINE_TABLES: tuple[str, ...] = (
     "replica_rejections",
     "normalized_records",
     "global_entity_map",
+    "normalization_ledger",
+    "normalization_rejections",
+    "normalization_shadow_diffs",
+    "pending_references",
     "ip_trace_events",
     "ip_outbox",
 )
@@ -257,6 +261,109 @@ def upgrade() -> None:
         "global_entity_map",
         ["tenant_id", "trace_id"],
     )
+
+    # 4. Layer 3: normalization_ledger
+    op.create_table(
+        "normalization_ledger",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("replica_record_id", sa.String(length=64), nullable=False),
+        sa.Column("replica_version", sa.BigInteger(), nullable=False),
+        sa.Column("mapping_id", sa.String(length=128), nullable=False),
+        sa.Column("mapping_version", sa.Integer(), nullable=False),
+        sa.Column(
+            "produced_canonical_refs",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("outcome", sa.String(length=32), nullable=False),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "replica_record_id",
+            "mapping_id",
+            "mapping_version",
+            name="uq_ip_norm_ledger_replica_mapping",
+        ),
+    )
+    op.create_index(
+        "idx_norm_ledger_replica", "normalization_ledger", ["tenant_id", "replica_record_id"]
+    )
+    op.create_index("idx_norm_ledger_trace", "normalization_ledger", ["tenant_id", "trace_id"])
+
+    # Layer 3: normalization_rejections
+    op.create_table(
+        "normalization_rejections",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("replica_record_id", sa.String(length=64), nullable=False),
+        sa.Column("stream", sa.String(length=128), nullable=False),
+        sa.Column("mapping_id", sa.String(length=128), nullable=False),
+        sa.Column("mapping_version", sa.Integer(), nullable=False),
+        sa.Column("reason_code", sa.String(length=64), nullable=False),
+        sa.Column("field_path", sa.String(length=255), nullable=True),
+        sa.Column("detail", sa.Text(), nullable=False),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "idx_norm_rej_tenant_replica",
+        "normalization_rejections",
+        ["tenant_id", "replica_record_id"],
+    )
+    op.create_index("idx_norm_rej_trace", "normalization_rejections", ["tenant_id", "trace_id"])
+
+    # Layer 3: normalization_shadow_diffs
+    op.create_table(
+        "normalization_shadow_diffs",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("replica_record_id", sa.String(length=64), nullable=False),
+        sa.Column("candidate_version", sa.Integer(), nullable=False),
+        sa.Column(
+            "diff_data",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "idx_norm_diff_replica", "normalization_shadow_diffs", ["tenant_id", "replica_record_id"]
+    )
+    op.create_index("idx_norm_diff_trace", "normalization_shadow_diffs", ["tenant_id", "trace_id"])
+
+    # Layer 3: pending_references
+    op.create_table(
+        "pending_references",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("source_connection_id", sa.String(length=64), nullable=False),
+        sa.Column("target_canonical_type", sa.String(length=64), nullable=False),
+        sa.Column("target_source_id", sa.String(length=255), nullable=False),
+        sa.Column("referencing_canonical_type", sa.String(length=64), nullable=False),
+        sa.Column("referencing_source_id", sa.String(length=255), nullable=False),
+        sa.Column("referencing_field", sa.String(length=128), nullable=False),
+        sa.Column("status", sa.String(length=32), server_default="PENDING", nullable=False),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "idx_pending_ref_target",
+        "pending_references",
+        ["tenant_id", "source_connection_id", "target_canonical_type", "target_source_id"],
+    )
+    op.create_index("idx_pending_ref_status", "pending_references", ["tenant_id", "status"])
 
     op.create_table(
         "ip_trace_events",

@@ -188,7 +188,9 @@ class GenericHttpConnector(BaseConnector):
             auth_type=AuthType.BEARER_TOKEN.value,
         )
 
-    def _build_source_spec(self, public_config: JsonDict) -> HttpSourceSpec:
+    def _build_source_spec(
+        self, public_config: JsonDict
+    ) -> Result[HttpSourceSpec, InvalidConnectionConfigError]:
         """Constructs an immutable HttpSourceSpec from per-connection public config."""
         base_url_raw = (
             public_config.get("base_url")
@@ -196,7 +198,12 @@ class GenericHttpConnector(BaseConnector):
             or public_config.get("host")
         )
         if not base_url_raw or not str(base_url_raw).strip():
-            raise ValueError("Public config must contain 'base_url' or 'endpoint_url'.")
+            return Result.fail(
+                InvalidConnectionConfigError(
+                    field_name="public_config",
+                    message="Public config must contain 'base_url' or 'endpoint_url'.",
+                )
+            )
         base_url = str(base_url_raw).strip()
 
         raw_auth = str(public_config.get("auth_type") or "NO_AUTH")
@@ -222,12 +229,14 @@ class GenericHttpConnector(BaseConnector):
             if isinstance(s, dict)
         ]
 
-        return HttpSourceSpec(
-            base_url=base_url,
-            auth_type=auth_type,
-            default_headers=default_headers,
-            check_request=check_request,
-            streams=tuple(streams_list),
+        return Result.ok(
+            HttpSourceSpec(
+                base_url=base_url,
+                auth_type=auth_type,
+                default_headers=default_headers,
+                check_request=check_request,
+                streams=tuple(streams_list),
+            )
         )
 
     @staticmethod
@@ -336,15 +345,16 @@ class GenericHttpConnector(BaseConnector):
         credentials: JsonDict,
     ) -> ConnectionCheckResultDTO:
         """Validates connection health and authentication with the external system."""
-        try:
-            spec = self._build_source_spec(public_config)
-        except ValueError as exc:
+        spec_res = self._build_source_spec(public_config)
+        if spec_res.is_err or spec_res.value is None:
+            assert spec_res.error is not None
             return ConnectionCheckResultDTO(
                 success=False,
                 status="FAILED",
                 error_code="INVALID_CONFIG",
-                message=str(exc),
+                message=spec_res.error.message,
             )
+        spec = spec_res.value
 
         # 1. Egress validation
         egress_res = self._egress_policy.validate_url(spec.base_url)
@@ -574,11 +584,13 @@ class GenericHttpConnector(BaseConnector):
         credentials: JsonDict,
     ) -> DiscoveredCatalogDTO:
         """Introspects configured streams and samples data to infer schemas."""
-        try:
-            spec = self._build_source_spec(public_config)
-        except ValueError as e:
-            err = InvalidConnectionConfigError(field_name="public_config", message=str(e))
-            return DiscoveredCatalogDTO.from_error(connection_id=connection_id, error=err)
+        spec_res = self._build_source_spec(public_config)
+        if spec_res.is_err or spec_res.value is None:
+            assert spec_res.error is not None
+            return DiscoveredCatalogDTO.from_error(
+                connection_id=connection_id, error=spec_res.error
+            )
+        spec = spec_res.value
 
         egress_res = self._egress_policy.validate_url(spec.base_url)
         if egress_res.is_err and egress_res.error:
@@ -741,13 +753,11 @@ class GenericHttpConnector(BaseConnector):
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         """Streams records asynchronously from the target HTTP stream."""
         self._last_error = None
-        try:
-            spec = self._build_source_spec(public_config)
-        except ValueError as e:
-            self._last_error = InvalidConnectionConfigError(
-                field_name="public_config", message=str(e)
-            )
+        spec_res = self._build_source_spec(public_config)
+        if spec_res.is_err or spec_res.value is None:
+            self._last_error = spec_res.error
             return
+        spec = spec_res.value
 
         stream_def = self._resolve_read_stream_def(spec, stream_name)
 
@@ -812,13 +822,11 @@ class GenericHttpConnector(BaseConnector):
     ) -> RecordEnvelopeDTO | None:
         """Fetches a single record by primary key via fetch_one specification."""
         self._last_error = None
-        try:
-            spec = self._build_source_spec(public_config)
-        except ValueError as e:
-            self._last_error = InvalidConnectionConfigError(
-                field_name="public_config", message=str(e)
-            )
+        spec_res = self._build_source_spec(public_config)
+        if spec_res.is_err or spec_res.value is None:
+            self._last_error = spec_res.error
             return None
+        spec = spec_res.value
 
         stream_def = self._resolve_read_stream_def(spec, stream_name)
         if stream_def.fetch_one is None:
@@ -917,12 +925,12 @@ class GenericHttpConnector(BaseConnector):
     ) -> WriteResultDTO:
         """Writes/mutates an individual record in the destination HTTP system."""
         target_record_id = command.record_id or ""
-        try:
-            spec = self._build_source_spec(public_config)
-        except ValueError as e:
-            err = InvalidConnectionConfigError(field_name="public_config", message=str(e))
-            self._last_error = err
-            return WriteResultDTO.from_error(err, record_id=target_record_id or "failed")
+        spec_res = self._build_source_spec(public_config)
+        if spec_res.is_err or spec_res.value is None:
+            assert spec_res.error is not None
+            self._last_error = spec_res.error
+            return WriteResultDTO.from_error(spec_res.error, record_id=target_record_id or "failed")
+        spec = spec_res.value
 
         egress_res = self._egress_policy.validate_url(spec.base_url)
         if egress_res.is_err and egress_res.error:

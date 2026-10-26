@@ -6,7 +6,9 @@ from dependency_injector import containers, providers
 from security.provider import SecurityProvider
 from storage.provider import StorageProvider
 
-from ip.application.connectors.registry_loader import create_default_catalog_registry
+from ip.engine.adapters.outbound.connectors.catalog_registry import (
+    ConnectorCatalogRegistry,
+)
 from ip.engine.adapters.outbound.database.control_plane.uow import (
     SqlAlchemyIpControlPlaneUnitOfWork,
 )
@@ -19,12 +21,33 @@ from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     DEFAULT_IP_PAYLOAD_BUCKET,
     TieredStorageAdapter,
 )
+from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
+    BackfillStreamNormalizationUseCase,
+)
+from ip.engine.application.use_cases.normalization.bind_stream_mapping_use_case import (
+    BindStreamMappingUseCase,
+)
+from ip.engine.application.use_cases.normalization.normalize_replica_record_use_case import (
+    NormalizeReplicaRecordUseCase,
+)
+from ip.engine.application.use_cases.normalization.promote_mapping_version_use_case import (
+    PromoteMappingVersionUseCase,
+)
 from ip.engine.application.use_cases.replication.replicate_records_use_case import (
     ReplicateRecordsUseCase,
 )
 from ip.engine.application.use_cases.replication.sweep_stale_replicas_use_case import (
     SweepStaleReplicasUseCase,
 )
+from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
+from ip.engine.domain.services.canonical_writer_registry import (
+    InMemoryCanonicalWriterRegistry,
+)
+from ip.engine.domain.services.default_normalization_error_policy import (
+    DefaultNormalizationErrorPolicy,
+)
+from ip.engine.domain.services.mapper_registry import InMemoryMapperRegistry
+from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
 
 
@@ -39,7 +62,7 @@ class Container(containers.DeclarativeContainer):
     cipher = providers.Singleton(SecurityProvider.get_cipher)
 
     catalog_registry = providers.Factory(
-        create_default_catalog_registry,
+        ConnectorCatalogRegistry,
         allow_private_ips=config.allow_private_ips.as_(bool),
     )
 
@@ -72,6 +95,40 @@ class Container(containers.DeclarativeContainer):
         tiered_storage=tiered_storage,
     )
     sweep_stale_replicas_use_case = providers.Factory(SweepStaleReplicasUseCase)
+
+    # -----------------------------------------------------------------------
+    # Normalization Registries & Use Cases (Layer 3)
+    # -----------------------------------------------------------------------
+    mapper_registry = providers.Singleton(InMemoryMapperRegistry)
+    writer_registry: providers.Singleton[InMemoryCanonicalWriterRegistry[CanonicalWriterPort]] = (
+        providers.Singleton(InMemoryCanonicalWriterRegistry)
+    )
+    entity_registry = providers.Singleton(CanonicalEntityRegistry)
+    normalization_error_policy = providers.Singleton(DefaultNormalizationErrorPolicy)
+
+    bind_stream_mapping_use_case = providers.Factory(
+        BindStreamMappingUseCase,
+        control_plane_uow=cp_uow,
+        mapper_registry=mapper_registry,
+    )
+    promote_mapping_version_use_case = providers.Factory(
+        PromoteMappingVersionUseCase,
+        control_plane_uow=cp_uow,
+    )
+    normalize_replica_record_use_case = providers.Factory(
+        NormalizeReplicaRecordUseCase,
+        control_plane_uow=cp_uow,
+        data_plane_uow_provider=dp_uow_provider,
+        mapper_registry=mapper_registry,
+        writer_registry=writer_registry,
+        entity_registry=entity_registry,
+        error_policy=normalization_error_policy,
+    )
+    backfill_stream_normalization_use_case = providers.Factory(
+        BackfillStreamNormalizationUseCase,
+        data_plane_uow_provider=dp_uow_provider,
+        normalize_use_case=normalize_replica_record_use_case,
+    )
 
 
 __all__ = ["Container"]

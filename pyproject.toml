@@ -332,7 +332,7 @@ extraPaths = [
     "core/platform/packages/sftp/src",
     "apps/ip/packages/ip/src",
     "core/platform/packages/shttp/src",
-    "core/platform/packages/workflow/src",
+    "core/platform/packages/orchestration/src",
     "core/platform/packages/seedwork/src",
 ]
 

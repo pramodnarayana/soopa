@@ -159,6 +159,30 @@ class SyncRunRecord(IpGlobalBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class MappingBindingRecord(IpGlobalBase):
+    """Database record representation of the ip.mapping_bindings table."""
+
+    __tablename__ = "mapping_bindings"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "connection_id", "stream", name="uq_ip_mapping_binding_stream"
+        ),
+        Index("ix_ip_mapping_bindings_conn", "connection_id"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    stream: Mapped[str] = mapped_column(String(128), nullable=False)
+    mapping_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    shadow_mapping_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mode: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class IpOutboxRecord(IpGlobalBase, OutboxMixin):
     """Control Plane transactional Outbox table in global_db (ip.outbox)."""
 
@@ -189,5 +213,6 @@ __all__ = [
     "ConnectionRecord",
     "ConnectionStreamStateRecord",
     "IpOutboxRecord",
+    "MappingBindingRecord",
     "SyncRunRecord",
 ]

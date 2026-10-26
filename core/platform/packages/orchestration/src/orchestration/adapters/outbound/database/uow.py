@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from database.uow import BaseSqlAlchemyUnitOfWork
+from seedwork.domain.types import JsonDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from orchestration.adapters.outbound.database.repositories import (
@@ -26,9 +29,7 @@ from orchestration.ports.outbound.repository_ports import (
 )
 
 
-class SqlAlchemyWorkflowUnitOfWork(
-    BaseSqlAlchemyUnitOfWork, WorkflowUnitOfWorkPort
-):
+class SqlAlchemyWorkflowUnitOfWork(BaseSqlAlchemyUnitOfWork, WorkflowUnitOfWorkPort):
     """Concrete SQLAlchemy Unit of Work assembling all 7 Workflow Engine repositories."""
 
     runs: WorkflowRunRepositoryPort
@@ -39,9 +40,13 @@ class SqlAlchemyWorkflowUnitOfWork(
     payloads: WorkflowPayloadStorePort
     idempotency: WorkflowIdempotencyPort
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        outbox_sink: Callable[[str, str, str | None, JsonDict], None] | None = None,
+    ) -> None:
         super().__init__(session)
-        self.runs = SqlAlchemyWorkflowRunRepository(session)
+        self.runs = SqlAlchemyWorkflowRunRepository(session, outbox_sink=outbox_sink)
         self.matches = SqlAlchemyWorkflowMatchRepository(session)
         self.queue = SqlAlchemyWorkflowQueueRepository(session)
         self.concurrency = SqlAlchemyWorkflowConcurrencyRepository(session)

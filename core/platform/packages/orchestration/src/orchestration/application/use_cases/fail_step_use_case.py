@@ -24,7 +24,12 @@ from orchestration.domain.constants import (
     StepStatus,
 )
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
-from orchestration.domain.exceptions import Result, WorkflowError
+from orchestration.domain.exceptions import (
+    FencingTokenMismatchError,
+    InvalidTransitionError,
+    Result,
+    WorkflowError,
+)
 from orchestration.domain.failures import ErrorPolicyDecision, RetryableFailure, StepFailure
 from orchestration.domain.matching import MatchEvent
 from orchestration.domain.run import StepAttempt, StepRun, WorkflowRun
@@ -88,18 +93,14 @@ class FailStepUseCase:
         self._step_scheduler = step_scheduler
         self._match_resolver = match_resolver
 
-    async def execute(
-        self, command: FailStepCommand
-    ) -> Result[FailStepResultDTO, WorkflowError]:
+    async def execute(self, command: FailStepCommand) -> Result[FailStepResultDTO, WorkflowError]:
         async with self._uow_factory() as uow:
             run_res = await uow.runs.get_by_id(command.tenant_id, command.run_id)
             if run_res.is_err:
                 return Result.err(run_res.unwrap_err())
             run = run_res.unwrap()
 
-            defn_res = self._definition_registry.get(
-                run.workflow_id, run.workflow_version
-            )
+            defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
             if defn_res.is_err:
                 return Result.err(defn_res.unwrap_err())
             definition = defn_res.unwrap()
@@ -108,6 +109,25 @@ class FailStepUseCase:
             if step_res.is_err:
                 return Result.err(step_res.unwrap_err())
             step = step_res.unwrap()
+
+            if step.retry_count != command.fencing_retry_count:
+                return Result.err(
+                    FencingTokenMismatchError.for_step(
+                        step_run_id=step.id,
+                        expected_retry_count=step.retry_count,
+                        actual_retry_count=command.fencing_retry_count,
+                    )
+                )
+
+            if step.status != StepStatus.RUNNING:
+                return Result.err(
+                    InvalidTransitionError.for_entity(
+                        entity_type="StepRun",
+                        entity_id=step.id,
+                        current_status=step.status.value,
+                        attempted_action="fail_step",
+                    )
+                )
 
             node = definition.get_node(command.node_key)
             if node is None:
@@ -219,15 +239,9 @@ class FailStepUseCase:
             if node.rate_limit_policy is not None
             else f"{run.workflow_id}:{node.node_key}"
         )
-        capacity = (
-            node.rate_limit_policy.capacity
-            if node.rate_limit_policy is not None
-            else 60
-        )
+        capacity = node.rate_limit_policy.capacity if node.rate_limit_policy is not None else 60
         refill_rate = (
-            node.rate_limit_policy.refill_per_second
-            if node.rate_limit_policy is not None
-            else 1.0
+            node.rate_limit_policy.refill_per_second if node.rate_limit_policy is not None else 1.0
         )
         bucket = await uow.rate_limits.get_or_create_bucket(
             tenant_id=run.tenant_id,
@@ -270,9 +284,7 @@ class FailStepUseCase:
             concurrency_key=run.concurrency_key,
             rate_limit_key=rl_key,
             rate_limit_units=(
-                node.rate_limit_policy.units
-                if node.rate_limit_policy is not None
-                else 1
+                node.rate_limit_policy.units if node.rate_limit_policy is not None else 1
             ),
         )
         await uow.queue.park_rate_limited(

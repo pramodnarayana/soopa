@@ -162,6 +162,75 @@ class NormalizedRecordCreatedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class CanonicalRecordChangedEvent(DomainEvent):
+    """Domain event emitted when a canonical domain record is upserted or tombstoned."""
+
+    tenant_id: str
+    connection_id: str
+    canonical_type: str
+    source_id: str
+    action: str  # UPSERT, TOMBSTONE
+    trace_id: str
+    mapping_id: str
+    mapping_version: int
+    replica_id: str
+    replica_version: int
+    correlation_id: str | None = None
+    changed_fields: tuple[str, ...] = ()
+    parent_trace_id: str | None = None
+    original_trace_id: str | None = None
+    replay_count: int = 0
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CANONICAL_RECORD_CHANGED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class MappingBindingChangedEvent(DomainEvent):
+    """Domain event emitted when a stream mapping binding is created or updated."""
+
+    binding_id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    mapping_id: str
+    mapping_version: int
+    mode: str
+    shadow_mapping_version: int | None = None
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.MAPPING_BINDING_CHANGED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class MappingVersionPromotedEvent(DomainEvent):
+    """Domain event emitted when a candidate shadow mapping version is promoted to active."""
+
+    binding_id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    mapping_id: str
+    promoted_version: int
+    previous_version: int
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.MAPPING_VERSION_PROMOTED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
 class OutboundRecordCreatedEvent(DomainEvent):
     """Domain event emitted when an external outbound dispatch is executed."""
 

@@ -229,9 +229,57 @@ def upgrade() -> None:
         schema="ip",
     )
 
+    op.create_table(
+        "mapping_bindings",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=64), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("stream", sa.String(length=128), nullable=False),
+        sa.Column("mapping_id", sa.String(length=128), nullable=False),
+        sa.Column(
+            "mapping_version",
+            sa.Integer(),
+            server_default=sa.text("1"),
+            nullable=False,
+        ),
+        sa.Column("shadow_mapping_version", sa.Integer(), nullable=True),
+        sa.Column(
+            "mode",
+            sa.String(length=32),
+            server_default="ACTIVE",
+            nullable=False,
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["connection_id"],
+            ["ip.connections.id"],
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "tenant_id", "connection_id", "stream", name="uq_ip_mapping_binding_stream"
+        ),
+        schema="ip",
+    )
+    op.create_index(
+        "ix_ip_mapping_bindings_conn",
+        "mapping_bindings",
+        ["connection_id"],
+        unique=False,
+        schema="ip",
+    )
+
 
 def downgrade() -> None:
     """Downgrade Control Plane schema."""
+    op.drop_index(
+        "ix_ip_mapping_bindings_conn",
+        table_name="mapping_bindings",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("mapping_bindings", schema="ip", if_exists=True)
     op.drop_index(
         "idx_ip_sync_runs_status",
         table_name="sync_runs",

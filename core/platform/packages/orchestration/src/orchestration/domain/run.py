@@ -175,6 +175,7 @@ class StepRun:
     retry_count: int = 0
     app_retry_count: int = 0
     internal_retry_count: int = 0
+    iteration_count: int = 0
     failure_code: str | None = None
     failure_detail: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -903,8 +904,46 @@ class WorkflowRun(AggregateRoot):
         """Re-evaluate overall WorkflowRun status after DAG match propagation settles."""
         self._recompute_run_status(now=now)
 
+    def reschedule_step_repeat_until(
+        self,
+        *,
+        node_key: str,
+        fencing_retry_count: int,
+        delay: timedelta,
+    ) -> Result[StepRun, WorkflowError]:
+        """Advances iteration counter and fencing token for REPEAT_UNTIL polling without consuming retry budget."""
+        step = self.steps.get(node_key)
+        if step is None:
+            return Result.err(StepNotFoundError.for_node(self.id, node_key))
+
+        if step.retry_count != fencing_retry_count:
+            return Result.err(
+                FencingTokenMismatchError.for_step(
+                    step_run_id=step.id,
+                    expected_retry_count=step.retry_count,
+                    actual_retry_count=fencing_retry_count,
+                )
+            )
+
+        if step.status != StepStatus.RUNNING:
+            return Result.err(
+                InvalidTransitionError.for_entity(
+                    entity_type="StepRun",
+                    entity_id=step.id,
+                    current_status=step.status.value,
+                    attempted_action="reschedule_step_repeat_until",
+                )
+            )
+
+        step.retry_count += 1
+        step.iteration_count += 1
+        step.status = StepStatus.READY
+        return Result.ok(step)
+
     def _recompute_run_status(self, now: datetime | None = None) -> None:
         if self.status in (
+            RunStatus.SUCCEEDED,
+            RunStatus.FAILED,
             RunStatus.CANCELLED,
             RunStatus.BLOCKED_VERSION_UNAVAILABLE,
         ):
@@ -915,9 +954,7 @@ class WorkflowRun(AggregateRoot):
 
         if all(s.is_terminal for s in all_steps):
             failed_steps = [
-                s
-                for s in all_steps
-                if s.status in (StepStatus.FAILED, StepStatus.TIMED_OUT)
+                s for s in all_steps if s.status in (StepStatus.FAILED, StepStatus.TIMED_OUT)
             ]
             if not failed_steps:
                 self.status = RunStatus.SUCCEEDED
@@ -935,7 +972,9 @@ class WorkflowRun(AggregateRoot):
             else:
                 primary_fail = failed_steps[0]
                 self.status = RunStatus.FAILED
-                self.failure_code = primary_fail.failure_code or StepFailureCode.UNHANDLED_EXCEPTION.value
+                self.failure_code = (
+                    primary_fail.failure_code or StepFailureCode.UNHANDLED_EXCEPTION.value
+                )
                 self.failure_detail = primary_fail.failure_detail or "Workflow step failed."
                 self.finished_at = timestamp
                 self.add_domain_event(
@@ -953,13 +992,9 @@ class WorkflowRun(AggregateRoot):
             return
 
         active_non_pending = [
-            s
-            for s in all_steps
-            if not s.is_terminal and s.status != StepStatus.PENDING
+            s for s in all_steps if not s.is_terminal and s.status != StepStatus.PENDING
         ]
-        if active_non_pending and all(
-            s.status == StepStatus.WAITING for s in active_non_pending
-        ):
+        if active_non_pending and all(s.status == StepStatus.WAITING for s in active_non_pending):
             self.status = RunStatus.WAITING
         elif self.status == RunStatus.WAITING and any(
             s.status in (StepStatus.RUNNING, StepStatus.READY, StepStatus.RETRY_SCHEDULED)

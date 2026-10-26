@@ -79,10 +79,7 @@ class MatchCondition:
             return False
         if self.event_key != event.event_key:
             return False
-        if (
-            self.event_resource_hint is not None
-            and self.event_resource_hint != event.resource_hint
-        ):
+        if self.event_resource_hint is not None and self.event_resource_hint != event.resource_hint:
             return False
         if self.predicate_id is not None:
             if predicate_evaluator is None:
@@ -114,15 +111,11 @@ class WorkflowMatch:
         in strict Hatchet precedence order: SKIP > CANCEL > CREATE > QUEUE > CREATE_MATCH.
         """
         for candidate_action in MATCH_ACTION_PRECEDENCE:
-            action_conditions = [
-                c for c in self.conditions if c.action == candidate_action
-            ]
+            action_conditions = [c for c in self.conditions if c.action == candidate_action]
             if not action_conditions:
                 continue
             total_groups = {c.or_group_id for c in action_conditions}
-            satisfied_groups = {
-                c.or_group_id for c in action_conditions if c.is_satisfied
-            }
+            satisfied_groups = {c.or_group_id for c in action_conditions if c.is_satisfied}
             if total_groups and total_groups == satisfied_groups:
                 return candidate_action
         return None
@@ -181,22 +174,15 @@ class WorkflowMatch:
             merged["parents"] = parents_dict
         return merged
 
-    def reset_for_replayed_parents(
-        self, replayed_step_ids: set[str]
-    ) -> WorkflowMatch:
+    def reset_for_replayed_parents(self, replayed_step_ids: set[str]) -> WorkflowMatch:
         """Reset a CANCEL-resolved or parent-referencing match when an upstream step is replayed or operator-skipped."""
-        has_reference = any(
-            c.event_resource_hint in replayed_step_ids for c in self.conditions
-        )
+        has_reference = any(c.event_resource_hint in replayed_step_ids for c in self.conditions)
         if not has_reference and self.resolved_action != MatchAction.CANCEL:
             return self
 
         reset_conditions = tuple(
             replace(c, is_satisfied=False, matched_data=None)
-            if (
-                c.event_resource_hint in replayed_step_ids
-                or c.action == MatchAction.CANCEL
-            )
+            if (c.event_resource_hint in replayed_step_ids or c.action == MatchAction.CANCEL)
             else c
             for c in self.conditions
         )
@@ -251,9 +237,7 @@ class DagMatchCompiler:
             # Node has parents: create stage-1 DAG_DEPENDENCY match.
             # If the node ALSO has a SLEEP or WAIT_FOR_EVENT, parent satisfaction triggers CREATE_MATCH
             # (two-stage activation) so the sleep/wait timer only starts after parents complete!
-            positive_action = (
-                MatchAction.CREATE_MATCH if needs_signal_stage else MatchAction.QUEUE
-            )
+            positive_action = MatchAction.CREATE_MATCH if needs_signal_stage else MatchAction.QUEUE
             matches.append(
                 DagMatchCompiler._build_parent_dependency_match(
                     tenant_id=tenant_id,
@@ -288,12 +272,12 @@ class DagMatchCompiler:
             # Standard DAG child (Hatchet getParentInDAGGroupMatch):
             # - Distinct or_group_id per parent for QUEUE/CREATE_MATCH on COMPLETED (AND across all parents)
             # - Shared cancel_group_id across all parents for CANCEL on FAILED/TIMED_OUT/CANCELLED (OR across parents)
-            # - Distinct skip_group_id per parent for SKIP on SKIPPED (skips if ALL parents skipped)
+            # - Shared skip_group_id across all parents for SKIP on SKIPPED (skips if ANY parent skipped)
             shared_cancel_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
+            shared_skip_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
             for parent_key in node.parents:
                 parent_step_id, _ = step_ids_by_node_key[parent_key]
                 queue_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
-                skip_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
 
                 conditions.append(
                     MatchCondition(
@@ -315,7 +299,7 @@ class DagMatchCompiler:
                         id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
                         match_id=match_id,
                         tenant_id=tenant_id,
-                        or_group_id=skip_group,
+                        or_group_id=shared_skip_group,
                         condition_kind=ConditionKind.PARENT_OVERRIDE,
                         event_key=InternalStepEventKey.SKIPPED.value,
                         event_resource_hint=parent_step_id,
@@ -375,6 +359,9 @@ class DagMatchCompiler:
                 for non_trig_evt in (
                     InternalStepEventKey.COMPLETED,
                     InternalStepEventKey.SKIPPED,
+                    InternalStepEventKey.FAILED,
+                    InternalStepEventKey.TIMED_OUT,
+                    InternalStepEventKey.CANCELLED,
                 ):
                     if non_trig_evt not in trigger_events:
                         conditions.append(

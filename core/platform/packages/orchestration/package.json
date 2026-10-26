@@ -1,5 +1,5 @@
 {
-  "name": "@soopa/workflow",
+  "name": "@soopa/orchestration",
   "private": true,
   "scripts": {
     "lint": "uv run ruff check .",

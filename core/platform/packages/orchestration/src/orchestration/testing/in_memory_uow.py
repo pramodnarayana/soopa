@@ -66,9 +66,7 @@ class InMemoryWorkflowRunRepository(WorkflowRunRepositoryPort):
         self.leases: dict[str, ActiveLease] = {}
         self.drained_events: list[JsonDict] = []
 
-    async def get_by_id(
-        self, tenant_id: str, run_id: str
-    ) -> Result[WorkflowRun, RunNotFoundError]:
+    async def get_by_id(self, tenant_id: str, run_id: str) -> Result[WorkflowRun, RunNotFoundError]:
         run = self.runs.get((tenant_id, run_id))
         if run is None:
             return Result.err(RunNotFoundError.for_id(run_id))
@@ -123,17 +121,13 @@ class InMemoryWorkflowRunRepository(WorkflowRunRepositoryPort):
     async def list_expired_leases(
         self, *, now: datetime, limit: int = 100
     ) -> Sequence[ActiveLease]:
-        expired = [
-            lease for lease in self.leases.values() if lease.is_lease_expired(now)
-        ]
+        expired = [lease for lease in self.leases.values() if lease.is_lease_expired(now)]
         return tuple(expired[:limit])
 
     async def list_timed_out_leases(
         self, *, now: datetime, limit: int = 100
     ) -> Sequence[ActiveLease]:
-        timed_out = [
-            lease for lease in self.leases.values() if lease.is_timed_out(now)
-        ]
+        timed_out = [lease for lease in self.leases.values() if lease.is_timed_out(now)]
         return tuple(timed_out[:limit])
 
 
@@ -150,13 +144,9 @@ class InMemoryWorkflowMatchRepository(WorkflowMatchRepositoryPort):
     async def save_match(self, match: WorkflowMatch) -> None:
         self.matches[match.id] = match
 
-    async def list_by_run(
-        self, tenant_id: str, run_id: str
-    ) -> Sequence[WorkflowMatch]:
+    async def list_by_run(self, tenant_id: str, run_id: str) -> Sequence[WorkflowMatch]:
         return tuple(
-            m
-            for m in self.matches.values()
-            if m.tenant_id == tenant_id and m.run_id == run_id
+            m for m in self.matches.values() if m.tenant_id == tenant_id and m.run_id == run_id
         )
 
     async def find_unsatisfied_for_event(
@@ -192,10 +182,7 @@ class InMemoryWorkflowMatchRepository(WorkflowMatchRepositoryPort):
         for match in self.matches.values():
             if match.is_satisfied or match.kind != MatchKind.SIGNAL_WAIT:
                 continue
-            if any(
-                c.timeout_at is not None and now >= c.timeout_at
-                for c in match.conditions
-            ):
+            if any(c.timeout_at is not None and now >= c.timeout_at for c in match.conditions):
                 expired.append(match)
         return tuple(expired[:limit])
 
@@ -310,14 +297,10 @@ class InMemoryWorkflowQueue(WorkflowQueuePort):
 
     async def remove_for_run(self, tenant_id: str, run_id: str) -> None:
         self.items = [
-            i
-            for i in self.items
-            if not (i.tenant_id == tenant_id and i.run_id == run_id)
+            i for i in self.items if not (i.tenant_id == tenant_id and i.run_id == run_id)
         ]
         self.paused_items = [
-            p
-            for p in self.paused_items
-            if not (p.tenant_id == tenant_id and p.run_id == run_id)
+            p for p in self.paused_items if not (p.tenant_id == tenant_id and p.run_id == run_id)
         ]
 
 
@@ -390,12 +373,7 @@ class InMemoryWorkflowConcurrency(WorkflowConcurrencyPort):
         result: ConcurrencyEvaluationResult,
     ) -> None:
         cancelled_ids = {s.sort_id for s in result.cancelled_slots}
-        promoted_ids = {s.sort_id for s in result.promoted_to_next_strategy}
-        newly_filled_map = {
-            s.sort_id: s
-            for s in result.newly_filled_slots
-            if s.sort_id not in promoted_ids
-        }
+        newly_filled_map = {s.sort_id: s for s in result.newly_filled_slots}
 
         updated: list[ConcurrencySlot] = []
         for s in self.slots:
@@ -404,7 +382,7 @@ class InMemoryWorkflowConcurrency(WorkflowConcurrencyPort):
                 and s.strategy_id == strategy_id
                 and s.concurrency_key == concurrency_key
             ):
-                if s.sort_id in cancelled_ids or s.sort_id in promoted_ids:
+                if s.sort_id in cancelled_ids:
                     continue
                 if s.sort_id in newly_filled_map:
                     updated.append(newly_filled_map[s.sort_id])
@@ -513,13 +491,8 @@ class InMemoryWorkflowPayloadStore(WorkflowPayloadStorePort):
             return {}
         if rec.location == PayloadLocation.INLINE and rec.inline_content is not None:
             return dict(rec.inline_content)
-        if (
-            rec.location == PayloadLocation.REFERENCE
-            and rec.payload_reference_id is not None
-        ):
-            ref_rec = self.records.get(
-                (tenant_id, rec.payload_reference_id, PayloadType.RUN_INPUT)
-            )
+        if rec.location == PayloadLocation.REFERENCE and rec.payload_reference_id is not None:
+            ref_rec = self.records.get((tenant_id, rec.payload_reference_id, PayloadType.RUN_INPUT))
             if ref_rec is not None and ref_rec.inline_content is not None:
                 return dict(ref_rec.inline_content)
         return {}

@@ -23,6 +23,8 @@ dependencies = [
     "pubsub",
     "shttp",
     "sftp",
+    "notification",
+    "orchestration",
     "pyyaml>=6.0.2",
     "aioboto3>=13.1.0",
     "botocore",
@@ -40,6 +42,8 @@ outbox = { workspace = true }
 pubsub = { workspace = true }
 shttp = { workspace = true }
 sftp = { workspace = true }
+notification = { workspace = true }
+orchestration = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
@@ -56,7 +60,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "../../../../core/platform/packages/orchestration/src"]
 addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",

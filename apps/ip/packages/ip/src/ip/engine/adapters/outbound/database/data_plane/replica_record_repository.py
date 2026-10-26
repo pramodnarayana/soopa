@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import TypedDict
 
 import structlog
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
@@ -15,6 +16,7 @@ from ip.engine.ports.outbound.replica_record_repository_port import (
     ReplicaMergeCandidate,
     ReplicaRecordRepositoryPort,
 )
+from seedwork.domain.types import JsonDict
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import select
@@ -22,6 +24,31 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
+
+
+class ReplicaRecordRowDict(TypedDict):
+    """Strongly-typed row dictionary for PostgreSQL bulk upsert."""
+
+    id: str
+    tenant_id: str
+    connection_id: str
+    stream: str
+    record_key: str
+    primary_key_values: list[str | int | float | bool | None]
+    cursor_value: str | None
+    cursor_kind: str | None
+    data: JsonDict
+    data_hash: str
+    version: int
+    generation_id: int
+    last_seen_generation: int
+    first_seen_at: datetime
+    extracted_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+    source_inbound_record_id: str | None
+    trace_id: str
+    correlation_id: str | None
 
 
 class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecordRepositoryPort):
@@ -75,7 +102,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         orm.source_inbound_record_id = domain.source_inbound_record_id
 
     @staticmethod
-    def _domain_to_row_dict(domain: ReplicaRecord) -> dict[str, object]:
+    def _domain_to_row_dict(domain: ReplicaRecord) -> ReplicaRecordRowDict:
         return {
             "id": domain.id,
             "tenant_id": domain.tenant_id,
@@ -98,6 +125,21 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             "trace_id": domain.trace_id,
             "correlation_id": domain.correlation_id,
         }
+
+    async def get_by_id(
+        self,
+        tenant_id: str,
+        record_id: str,
+    ) -> ReplicaRecord | None:
+        stmt = select(ReplicaRecordModel).where(
+            ReplicaRecordModel.tenant_id == tenant_id,
+            ReplicaRecordModel.id == record_id,
+        )
+        result = await self._session.execute(stmt)
+        orm = result.scalar_one_or_none()
+        if orm is None:
+            return None
+        return self._to_domain_model(orm)
 
     async def get_by_key(
         self,
@@ -190,7 +232,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         self,
         c: ReplicaMergeCandidate,
         existing_map: dict[tuple[str, str], ReplicaRecord],
-        upsert_rows: dict[tuple[str, str], dict[str, object]],
+        upsert_rows: dict[tuple[str, str], ReplicaRecordRowDict],
         changed_aggregates: dict[tuple[str, str], ReplicaRecord],
         now: datetime,
     ) -> MergeResult:
@@ -345,7 +387,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
 
         now = datetime.now(UTC)
         existing_map = await self._fetch_existing_domain_map(candidates)
-        upsert_rows: dict[tuple[str, str], dict[str, object]] = {}
+        upsert_rows: dict[tuple[str, str], ReplicaRecordRowDict] = {}
         changed_aggregates: dict[tuple[str, str], ReplicaRecord] = {}
 
         results: list[MergeResult] = []
@@ -428,3 +470,24 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
 
         await self._session.flush()
         return len(rows)
+
+    async def list_by_stream_chunk(
+        self,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        after_id: str | None = None,
+        limit: int = 100,
+    ) -> list[ReplicaRecord]:
+        """Retrieves a deterministic keyset-paginated chunk of replica records for a stream."""
+        stmt = select(ReplicaRecordModel).where(
+            ReplicaRecordModel.tenant_id == tenant_id,
+            ReplicaRecordModel.connection_id == connection_id,
+            ReplicaRecordModel.stream == stream,
+        )
+        if after_id is not None:
+            stmt = stmt.where(ReplicaRecordModel.id > after_id)
+        stmt = stmt.order_by(ReplicaRecordModel.id.asc()).limit(limit)
+        res = await self._session.execute(stmt)
+        return [self._to_domain_model(orm) for orm in res.scalars().all()]

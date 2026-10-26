@@ -32,17 +32,13 @@ class WorkflowStepSchedulerService:
         """Enqueue a READY step, evaluating workflow-level and step-level concurrency strategies if configured."""
         policies = self._collect_policies(definition, node)
         rate_limit_key = (
-            node.rate_limit_policy.rate_limit_key
-            if node.rate_limit_policy is not None
-            else None
+            node.rate_limit_policy.rate_limit_key if node.rate_limit_policy is not None else None
         )
-        rate_limit_units = (
-            node.rate_limit_policy.units
-            if node.rate_limit_policy is not None
-            else 1
-        )
+        rate_limit_units = node.rate_limit_policy.units if node.rate_limit_policy is not None else 1
         item_kind = self._resolve_queue_item_kind(node.kind)
-        concurrency_key = run.concurrency_key or policies[0].key_template if policies else run.concurrency_key
+        concurrency_key = (
+            run.concurrency_key or policies[0].key_template if policies else run.concurrency_key
+        )
 
         if not policies:
             await uow.queue.enqueue(
@@ -88,6 +84,7 @@ class WorkflowStepSchedulerService:
             concurrency_key=resolved_key,
             available_at=available_at,
             now=now,
+            current_run=run,
         )
 
     async def evaluate_and_advance_concurrency_key(
@@ -100,6 +97,7 @@ class WorkflowStepSchedulerService:
         concurrency_key: str,
         available_at: datetime | None = None,
         now: datetime,
+        current_run: WorkflowRun | None = None,
     ) -> None:
         """Run Hatchet's window-function concurrency evaluator for `(tenant_id, strategy_id, concurrency_key)`,
         promoting multi-strategy slots, enqueueing winning slots, and cancelling evicted slots/runs.
@@ -154,6 +152,7 @@ class WorkflowStepSchedulerService:
                 concurrency_key=promoted.concurrency_key,
                 available_at=available_at,
                 now=now,
+                current_run=current_run,
             )
 
         # Enqueue slots that have satisfied all concurrency strategies
@@ -181,6 +180,7 @@ class WorkflowStepSchedulerService:
                 slot=cancelled_slot,
                 strategy_name=policy.strategy.value,
                 now=now,
+                current_run=current_run,
             )
 
     async def _cancel_evicted_slot(
@@ -190,17 +190,28 @@ class WorkflowStepSchedulerService:
         slot: ConcurrencySlot,
         strategy_name: str,
         now: datetime,
+        current_run: WorkflowRun | None = None,
     ) -> None:
-        run_res = await uow.runs.get_by_id(slot.tenant_id, slot.run_id)
-        if run_res.is_err:
-            return
-        evicted_run = run_res.unwrap()
+        if current_run is not None and current_run.id == slot.run_id:
+            evicted_run = current_run
+        else:
+            run_res = await uow.runs.get_by_id(slot.tenant_id, slot.run_id)
+            if run_res.is_err:
+                return
+            evicted_run = run_res.unwrap()
+
         evicted_run.cancel_run(
             reason=f"Evicted by concurrency strategy {strategy_name} on key '{slot.concurrency_key}'.",
             now=now,
         )
         await uow.runs.release_lease(slot.step_run_id)
         await uow.queue.remove_for_run(slot.tenant_id, slot.run_id)
+        await uow.concurrency.release_slots_for_run(tenant_id=slot.tenant_id, run_id=slot.run_id)
+        await uow.idempotency.release_on_terminal_status(
+            tenant_id=slot.tenant_id,
+            workflow_id=evicted_run.workflow_id,
+            run_id=slot.run_id,
+        )
         await uow.runs.save(evicted_run)
 
     @staticmethod

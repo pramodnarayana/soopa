@@ -152,9 +152,7 @@ class ClaimStepsUseCase:
             if run_res.is_err:
                 continue
             run = run_res.unwrap()
-            defn_res = self._definition_registry.get(
-                run.workflow_id, run.workflow_version
-            )
+            defn_res = self._definition_registry.get(run.workflow_id, run.workflow_version)
             if defn_res.is_err:
                 continue
             defn = defn_res.unwrap()
@@ -198,6 +196,20 @@ class ClaimStepsUseCase:
         if defn_res.is_err:
             run.status = RunStatus.BLOCKED_VERSION_UNAVAILABLE
             await uow.runs.save(run)
+            await uow.queue.enqueue(
+                tenant_id=item.tenant_id,
+                run_id=item.run_id,
+                step_run_id=item.step_run_id,
+                step_created_at=item.step_created_at,
+                retry_count=item.retry_count,
+                item_kind=item.item_kind,
+                queue_name=item.queue_name,
+                priority=item.priority,
+                available_at=command.now + timedelta(minutes=5),
+                concurrency_key=item.concurrency_key,
+                rate_limit_key=item.rate_limit_key,
+                rate_limit_units=item.rate_limit_units,
+            )
             return
         definition = defn_res.unwrap()
 
@@ -278,9 +290,7 @@ class ClaimStepsUseCase:
             refill_per_second=rl_policy.refill_per_second,
             now=now,
         )
-        updated_bucket, consumed_ok, requeue_after = bucket.try_consume(
-            rl_policy.units, now
-        )
+        updated_bucket, consumed_ok, requeue_after = bucket.try_consume(rl_policy.units, now)
         await uow.rate_limits.save_bucket(updated_bucket)
         if consumed_ok or requeue_after is None:
             return False
