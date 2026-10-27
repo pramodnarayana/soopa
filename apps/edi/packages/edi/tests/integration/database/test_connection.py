@@ -51,7 +51,7 @@ async def test_tenant_session_rls_enforcement(router: DatabaseRouter) -> None:
     """
     tenant_id = "999"
 
-    shards = await router.get_all_shards()
+    shards = await router.get_all_shards(app_slug="edi")
     assert shards, "No shards found in global database!"
     shard_id, shard_url = shards[0]
 
