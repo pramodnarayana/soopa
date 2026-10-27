@@ -1,4 +1,10 @@
+from collections.abc import AsyncGenerator
+from typing import Any, cast
+
+import pytest
+
 from database.router import DatabaseRouter
+from database.types import GlobalSession
 
 
 def test_resolve_dsn_applies_overrides() -> None:
@@ -51,3 +57,68 @@ def test_resolve_dsn_applies_overrides() -> None:
 
     # 2.6 Missing key completely returns the default DSN
     assert router._resolve_dsn("default_dsn", "MISSING_SHARD") == "default_dsn"
+
+
+class _DummyShardRow:
+    def __init__(self, id: str, name: str, dsn: str) -> None:
+        self.id = id
+        self.name = name
+        self.dsn = dsn
+
+
+class _FakeSession:
+    def __init__(self, rows: list[_DummyShardRow]) -> None:
+        self.rows = rows
+        self.executed_stmts: list[object] = []
+
+    async def execute(self, stmt: object) -> list[_DummyShardRow]:
+        self.executed_stmts.append(stmt)
+        return self.rows
+
+
+class _TestDatabaseRouter(DatabaseRouter):
+    def __init__(self, fake_session: _FakeSession, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self._fake_session = fake_session
+
+    async def get_global_session(self) -> AsyncGenerator[GlobalSession, None]:
+        yield cast(GlobalSession, self._fake_session)
+
+
+@pytest.mark.asyncio
+async def test_get_all_shards_with_app_slug() -> None:
+    fake_session = _FakeSession(
+        [_DummyShardRow("edi_shard_1", "EDI Shard", "postgresql+asyncpg://orig/dsn")]
+    )
+    router = _TestDatabaseRouter(
+        fake_session=fake_session,
+        global_db_url="postgresql+asyncpg://global@localhost/global",
+        shard_overrides={"edi_shard_1": "postgresql+asyncpg://override/dsn"},
+    )
+
+    shards = await router.get_all_shards(app_slug="edi")
+    assert len(shards) == 1
+    assert shards[0] == ("edi_shard_1", "postgresql+asyncpg://override/dsn")
+    stmt_str = str(fake_session.executed_stmts[0])
+    assert "apps.slug = :slug_1" in stmt_str
+    assert "database_shards.id = ucp.shard_registry.shard_id" in stmt_str
+    assert "database_shards.id) LIKE" in stmt_str
+
+
+@pytest.mark.asyncio
+async def test_get_all_shards_without_app_slug() -> None:
+    fake_session = _FakeSession(
+        [
+            _DummyShardRow("edi_shard_1", "EDI Shard", "postgresql+asyncpg://orig/dsn1"),
+            _DummyShardRow("ip_shard_1", "IP Shard", "postgresql+asyncpg://orig/dsn2"),
+        ]
+    )
+    router = _TestDatabaseRouter(
+        fake_session=fake_session,
+        global_db_url="postgresql+asyncpg://global@localhost/global",
+    )
+
+    shards = await router.get_all_shards()
+    assert len(shards) == 2
+    assert shards[0] == ("edi_shard_1", "postgresql+asyncpg://orig/dsn1")
+    assert shards[1] == ("ip_shard_1", "postgresql+asyncpg://orig/dsn2")

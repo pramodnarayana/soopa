@@ -5,10 +5,11 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import JsonValue
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from strace.domain import TraceEventType
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
-from edi.domain.enums import EdiDirection, TraceEventType
+from edi.domain.enums import EdiDirection
 from edi.domain.events import TransformRequestedEvent
 from edi.domain.exceptions import IdempotencyConflictError
 from edi.domain.models.base import Direction, RecordStatus

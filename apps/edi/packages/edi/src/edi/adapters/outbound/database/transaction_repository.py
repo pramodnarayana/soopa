@@ -5,8 +5,8 @@ from typing import Any, Protocol, cast
 
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
-from seedwork.models import TracedAggregateRoot
 from seedwork.utils import generate_id
+from strace.domain import TracedAggregateRoot
 
 
 class RouteModelProtocol(Protocol):
@@ -51,7 +51,6 @@ from edi.domain.models.base import Direction, RecordStatus
 from edi.domain.models.transactions import (
     EdiJsonDomainModel,
     EdiMessageDomainModel,
-    TraceEventDomainModel,
 )
 from edi.ports.outbound.storage_port import StoragePort
 from edi.ports.outbound.transaction_repository import (
@@ -512,35 +511,6 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         return envelopes
 
-    async def save_trace_event(self, event: TraceEventDomainModel) -> None:
-
-        record = TraceEvent(
-            id=event.id,
-            tenant_id=event.tenant_id,
-            trace_id=event.trace_id,
-            event_type=event.event_type,
-            actor=event.actor,
-            metadata_=event.metadata,
-        )
-        self.session.add(record)
-        await self.flush()
-
-    async def save_all_trace_events(self, events: Sequence[TraceEventDomainModel]) -> None:
-
-        records = [
-            TraceEvent(
-                id=event.id,
-                tenant_id=event.tenant_id,
-                trace_id=event.trace_id,
-                event_type=event.event_type,
-                actor=event.actor,
-                metadata_=event.metadata,
-            )
-            for event in events
-        ]
-        self.session.add_all(records)
-        await self.flush()
-
     async def get_edi_message(
         self, trace_id: str, tenant_id: str | None = None
     ) -> EdiMessageDomainModel | None:
@@ -559,6 +529,58 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
 
         hydrated_payload = await hydrate_edi_data(self.storage, record.storage_uri, record.edi_data)
         return _map_edi_message_to_domain(record, hydrated_payload)
+
+    async def get_edi_message_dto(self, tenant_id: str, trace_id: str) -> EdiMessageDTO | None:
+        tid_str = tenant_id if tenant_id is not None else None
+        stmt = (
+            select(EdiMessage)
+            .where(EdiMessage.tenant_id == tid_str, EdiMessage.trace_id == str(trace_id))
+            .order_by(EdiMessage.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        edi_msg = result.scalars().first()
+        if not edi_msg:
+            return None
+
+        return EdiMessageDTO(
+            id=str(edi_msg.id),
+            trace_id=str(edi_msg.trace_id),
+            direction=edi_msg.direction,
+            connection_type=edi_msg.connection_type,
+            sender_id=edi_msg.sender_id,
+            receiver_id=edi_msg.receiver_id,
+            as2_sender_id=edi_msg.as2_sender_id,
+            as2_receiver_id=edi_msg.as2_receiver_id,
+            gs_sender_id=edi_msg.gs_sender_id,
+            gs_receiver_id=edi_msg.gs_receiver_id,
+            message_id=edi_msg.message_id,
+            mdn_id=edi_msg.mdn_id,
+            mdn_mode=edi_msg.mdn_mode,
+            mdn_response=edi_msg.mdn_response,
+            file_name=edi_msg.file_name,
+            content_type=edi_msg.content_type,
+            signature_algorithm=edi_msg.signature_algorithm,
+            encryption_algorithm=edi_msg.encryption_algorithm,
+            trading_partner_id=edi_msg.trading_partner_id,
+            status=edi_msg.status,
+            edi_data=await hydrate_edi_data(self.storage, edi_msg.storage_uri, edi_msg.edi_data),
+            interchange_control_no=edi_msg.interchange_control_no,
+            transaction_type=edi_msg.transaction_type,
+            format_standard=edi_msg.format_standard,
+            storage_uri=edi_msg.storage_uri,
+            file_size_bytes=edi_msg.file_size_bytes,
+            msg_headers=json.loads(edi_msg.msg_headers) if edi_msg.msg_headers else None,
+            state=edi_msg.state,
+            status_message=edi_msg.status_message,
+            error_code=edi_msg.error_code,
+            error_details=edi_msg.error_details,
+            created_at=edi_msg.created_at,
+            updated_at=edi_msg.updated_at,
+            replay_count=edi_msg.replay_count,
+            original_trace_id=edi_msg.original_trace_id,
+            parent_trace_id=edi_msg.parent_trace_id,
+        )
 
     async def get_edi_messages_by_traces(
         self, tenant_id: str, trace_ids: Sequence[str]
@@ -698,6 +720,46 @@ class SqlAlchemyTransactionRepository(TransactionRepositoryPort, TenantSqlAlchem
                 )
             )
         return domain_models
+
+    async def get_edi_json_dtos_by_trace_id(
+        self, tenant_id: str, trace_id: str
+    ) -> list[EdiJsonDTO]:
+        tid_str = tenant_id if tenant_id is not None else None
+        stmt = (
+            select(EdiJson)
+            .where(EdiJson.tenant_id == tid_str, EdiJson.trace_id == str(trace_id))
+            .order_by(EdiJson.created_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        json_records = result.scalars().all()
+        if not json_records:
+            return []
+
+        hydrated_json_payloads = await asyncio.gather(
+            *(hydrate_json_payload(self.storage, j.storage_uri, j.payload) for j in json_records)
+        )
+        return [
+            EdiJsonDTO(
+                id=str(j.id),
+                trace_id=str(j.trace_id),
+                tenant_id=j.tenant_id,
+                direction=j.direction,
+                status=j.status,
+                status_message=j.status_message,
+                error_code=j.error_code,
+                error_details=j.error_details,
+                trading_partner_id=j.trading_partner_id,
+                business_metadata=j.business_metadata,
+                transaction_type=j.transaction_type,
+                payload=payload,
+                created_at=j.created_at,
+                updated_at=j.updated_at,
+                replay_count=j.replay_count,
+                original_trace_id=j.original_trace_id,
+                parent_trace_id=j.parent_trace_id,
+            )
+            for j, payload in zip(json_records, hydrated_json_payloads, strict=True)
+        ]
 
     async def create_edi_json(self, command: CreateEdiJsonCommand) -> str:
         # Idempotency: if a record already exists for this trace_id + direction + transaction_type

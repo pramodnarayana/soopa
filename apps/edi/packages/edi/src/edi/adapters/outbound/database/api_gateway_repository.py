@@ -5,6 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.data_plane import ApiGateway
+from edi.application.dtos.transactions import ApiGatewayDTO
 from edi.ports.outbound.api_gateway_repository import (
     ApiGatewayPayloadDTO,
     ApiGatewayRepositoryPort,
@@ -56,6 +57,37 @@ class SqlAlchemyApiGatewayRepository(ApiGatewayRepositoryPort):
             error_code=record.error_code,
             error_details=record.error_details,
         )
+
+    async def get_api_gateways_by_trace_id(
+        self, tenant_id: str, trace_id: str
+    ) -> list[ApiGatewayDTO]:
+        tid_str = tenant_id if tenant_id is not None else None
+        stmt = (
+            select(ApiGateway)
+            .where(ApiGateway.tenant_id == tid_str, ApiGateway.trace_id == str(trace_id))
+            .order_by(ApiGateway.created_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        gw_records = result.scalars().all()
+        return [
+            ApiGatewayDTO(
+                id=str(g.id),
+                trace_id=str(g.trace_id),
+                status=g.status,
+                webhook_url=g.webhook_url,
+                http_status_code=g.http_status_code,
+                payload=g.payload,
+                response=g.response,
+                error_code=g.error_code,
+                error_details=g.error_details,
+                created_at=g.created_at,
+                updated_at=g.updated_at,
+                replay_count=g.replay_count,
+                original_trace_id=g.original_trace_id,
+                parent_trace_id=g.parent_trace_id,
+            )
+            for g in gw_records
+        ]
 
     async def update_api_payload_status(
         self,

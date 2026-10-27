@@ -533,7 +533,7 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("trace_id", sa.String(length=128), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
-        sa.Column("actor", sa.String(length=128), nullable=False),
+        sa.Column("actor", sa.String(length=255), nullable=False),
         sa.Column("metadata_", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "tenant_id",

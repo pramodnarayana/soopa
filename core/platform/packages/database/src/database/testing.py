@@ -89,14 +89,16 @@ class TransactionalTestRouter(DatabaseRouterPort):
                 session.info["session_type"] = "tenant"
                 yield cast(TenantSession, session)
 
-    async def get_all_shards(self) -> list[tuple[str, str]]:
+    async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
+        if app_slug == "edi" or "5433" in self.shard_url:
+            return [("edi_shard_1", self.shard_url)]
         return [("ucp_shard_1", self.shard_url)]
 
     async def close_all(self) -> None:
         pass
 
 
-async def get_test_shard_url_async(global_db_url: str) -> str:
+async def get_test_shard_url_async(global_db_url: str, app_slug: str | None = None) -> str:
     """
     Dynamically fetches the first active testing shard URL using the production DatabaseRouter.
 
@@ -110,16 +112,19 @@ async def get_test_shard_url_async(global_db_url: str) -> str:
         global_db_url=global_db_url,
         shard_overrides=db_settings.shard_overrides,
     )
-    shards = await router.get_all_shards()
+    shards = await router.get_all_shards(app_slug=app_slug)
     await router.close_all()
     if not shards:
         raise ValueError("No test shards found in the Control Plane.")
+    for shard_key, shard_url in shards:
+        if shard_key.lower() in db_settings.shard_overrides:
+            return shard_url
     return shards[0][1]
 
 
-def get_test_shard_url_sync(global_db_url: str) -> str:
+def get_test_shard_url_sync(global_db_url: str, app_slug: str | None = None) -> str:
     """
     Synchronous wrapper for get_test_shard_url_async.
     Use this in module-level declarations and non-async test scripts.
     """
-    return asyncio.run(get_test_shard_url_async(global_db_url))
+    return asyncio.run(get_test_shard_url_async(global_db_url, app_slug=app_slug))

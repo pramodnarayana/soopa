@@ -25,7 +25,7 @@ async def reprocess_stranded_messages() -> None:
 
     total_reprocessed = 0
     try:
-        shards = await db_router.get_all_shards()
+        shards = await db_router.get_all_shards(app_slug="edi")
 
         for shard_key, shard_url in shards:
             engine = await db_router.get_engine(shard_key, shard_url)

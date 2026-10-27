@@ -111,7 +111,7 @@ async def main(i_am_sure: bool) -> None:
         )
 
     router = DatabaseRouter(global_db_url=global_url)
-    shards = await router.get_all_shards()
+    shards = await router.get_all_shards(app_slug="edi")
     await router.close_all()
 
     db_urls = [shard[1].replace("@edi_postgres_shard:5432", "@localhost:5433") for shard in shards]

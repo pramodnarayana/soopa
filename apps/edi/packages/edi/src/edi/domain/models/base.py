@@ -5,10 +5,10 @@ from uuid import UUID
 
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import DomainIdPrefix
-from seedwork.models import TracedAggregateRoot, TraceEvent
 from seedwork.utils import generate_id
+from strace.domain import TracedAggregateRoot, TraceEvent, TraceEventType
 
-from edi.domain.enums import EdiDirection, MessageStatus, TraceEventType
+from edi.domain.enums import EdiDirection, MessageStatus
 
 # Re-export canonical enums so existing callers of `from edi.domain.models.base import ...`
 # keep working without changes during the transition.
@@ -37,15 +37,10 @@ class ProcessingMode(StrEnum):
 @dataclass(kw_only=True)
 class EdiRecordBase(TracedAggregateRoot):
     id: str
-    tenant_id: str
-    trace_id: str
     direction: EdiDirection
     status: MessageStatus
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    replay_count: int = 0
-    parent_trace_id: str | None = None
-    original_trace_id: str | None = None
     status_message: str | None = None
     error_code: str | None = None
     error_details: JsonDict | None = None

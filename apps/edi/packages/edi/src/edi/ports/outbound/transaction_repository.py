@@ -21,7 +21,6 @@ from edi.domain.enums import (
 from edi.domain.models.transactions import (
     EdiJsonDomainModel,
     EdiMessageDomainModel,
-    TraceEventDomainModel,
 )
 
 # ---------------------------------------------------------------------------
@@ -111,6 +110,12 @@ class TransactionRepositoryPort(Protocol):
         """
         ...
 
+    async def get_edi_message_dto(self, tenant_id: str, trace_id: str) -> EdiMessageDTO | None:
+        """
+        Fetches an EDI Message DTO (with hydrated S3 payload) for a tenant and trace_id.
+        """
+        ...
+
     async def get_edi_json(
         self, trace_id: str, tenant_id: str | None = None
     ) -> EdiJsonDomainModel | None:
@@ -124,6 +129,14 @@ class TransactionRepositoryPort(Protocol):
     ) -> list[EdiJsonDomainModel]:
         """
         Fetches all EDI JSON records by trace_id and maps them to domain models.
+        """
+        ...
+
+    async def get_edi_json_dtos_by_trace_id(
+        self, tenant_id: str, trace_id: str
+    ) -> list[EdiJsonDTO]:
+        """
+        Fetches all EDI JSON DTOs (with hydrated S3 payloads) for a tenant and trace_id.
         """
         ...
 
@@ -173,18 +186,6 @@ class TransactionRepositoryPort(Protocol):
         """
         Persists the EdiJson aggregate state and drains any domain events into the outbox
         within the same transaction.
-        """
-        ...
-
-    async def save_trace_event(self, event: TraceEventDomainModel) -> None:
-        """
-        Persists a TraceEvent to the Event Ledger for auditing and timeline history.
-        """
-        ...
-
-    async def save_all_trace_events(self, events: Sequence[TraceEventDomainModel]) -> None:
-        """
-        Persists multiple TraceEvents to the Event Ledger for auditing and timeline history.
         """
         ...
 
