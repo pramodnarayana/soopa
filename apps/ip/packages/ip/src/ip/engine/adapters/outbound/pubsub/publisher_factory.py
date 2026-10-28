@@ -23,24 +23,30 @@ class _UnconfiguredOutboxPublisher(OutboxPublisherPort):
         self._target_name = target_name
 
     async def publish(self, event: EventEnvelope) -> None:
-        logger.info(
-            "ip_outbox_unconfigured_publisher_event_skipped",
+        logger.error(
+            "ip_outbox_unconfigured_publisher_event_failed",
             target=self._target_name,
             event_id=event.id,
             event_type=event.event_type,
             lane=event.lane,
             tenant_id=event.tenant_id,
         )
+        raise RuntimeError(
+            f"Cannot publish event {event.id} ({event.event_type}): publisher target {self._target_name!r} is unconfigured."
+        )
 
     async def publish_batch(self, events: list[EventEnvelope]) -> list[str]:
-        if events:
-            logger.info(
-                "ip_outbox_unconfigured_publisher_batch_skipped",
-                target=self._target_name,
-                batch_size=len(events),
-                event_types=sorted({e.event_type for e in events}),
-            )
-        return [e.id for e in events]
+        if not events:
+            return []
+        logger.error(
+            "ip_outbox_unconfigured_publisher_batch_failed",
+            target=self._target_name,
+            batch_size=len(events),
+            event_types=sorted({e.event_type for e in events}),
+        )
+        raise RuntimeError(
+            f"Cannot publish batch of {len(events)} events: publisher target {self._target_name!r} is unconfigured."
+        )
 
 
 def _queue_or_noop(

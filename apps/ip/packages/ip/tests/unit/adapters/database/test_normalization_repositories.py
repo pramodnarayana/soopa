@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ip.engine.adapters.outbound.database.control_plane.mapping_binding_repository import (
-    SqlAlchemyMappingBindingRepository,
+from ip.engine.adapters.outbound.database.control_plane.transformation_repository import (
+    SqlAlchemyTransformationRepository,
 )
 from ip.engine.adapters.outbound.database.data_plane.normalization_ledger_repository import (
     SqlAlchemyNormalizationLedgerRepository,
@@ -17,63 +17,63 @@ from ip.engine.adapters.outbound.database.data_plane.pending_reference_repositor
     SqlAlchemyPendingReferenceRepository,
 )
 from ip.engine.domain.enums import (
-    MappingMode,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
+    TransformationMode,
 )
 from ip.engine.domain.normalization import (
-    MappingBinding,
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
+    Transformation,
 )
 
 
-def test_mapping_binding_data_mappers_roundtrip_and_update() -> None:
-    binding = MappingBinding.create(
+def test_transformation_data_mappers_roundtrip_and_update() -> None:
+    transformation = Transformation.create(
         tenant_id="ten_01",
         connection_id="conn_01",
         stream="orders",
-        mapping_id="commerce.order_mapper",
-        mapping_version=1,
-        mode=MappingMode.ACTIVE,
-        shadow_mapping_version=2,
+        transformation_id="commerce.order_transformer",
+        transformation_version=1,
+        mode=TransformationMode.ACTIVE,
+        shadow_transformation_version=2,
     )
 
-    orm = SqlAlchemyMappingBindingRepository._to_orm_model(binding)
-    assert orm.id == binding.id
+    orm = SqlAlchemyTransformationRepository._to_orm_model(transformation)
+    assert orm.id == transformation.id
     assert orm.tenant_id == "ten_01"
     assert orm.connection_id == "conn_01"
     assert orm.stream == "orders"
-    assert orm.mapping_id == "commerce.order_mapper"
-    assert orm.mapping_version == 1
-    assert orm.mode == MappingMode.ACTIVE.value
-    assert orm.shadow_mapping_version == 2
+    assert orm.transformation_id == "commerce.order_transformer"
+    assert orm.transformation_version == 1
+    assert orm.mode == TransformationMode.ACTIVE.value
+    assert orm.shadow_transformation_version == 2
 
-    domain = SqlAlchemyMappingBindingRepository._to_domain_model(orm)
-    assert domain.id == binding.id
-    assert domain.mapping_version == 1
-    assert domain.mode == MappingMode.ACTIVE
-    assert domain.shadow_mapping_version == 2
+    domain = SqlAlchemyTransformationRepository._to_domain_model(orm)
+    assert domain.id == transformation.id
+    assert domain.transformation_version == 1
+    assert domain.mode == TransformationMode.ACTIVE
+    assert domain.shadow_transformation_version == 2
 
-    updated = MappingBinding(
-        id=binding.id,
-        tenant_id=binding.tenant_id,
-        connection_id=binding.connection_id,
-        stream=binding.stream,
-        mapping_id=binding.mapping_id,
-        mapping_version=2,
-        mode=MappingMode.SHADOW,
-        shadow_mapping_version=None,
-        created_at=binding.created_at,
+    updated = Transformation(
+        id=transformation.id,
+        tenant_id=transformation.tenant_id,
+        connection_id=transformation.connection_id,
+        stream=transformation.stream,
+        transformation_id=transformation.transformation_id,
+        transformation_version=2,
+        mode=TransformationMode.SHADOW,
+        shadow_transformation_version=None,
+        created_at=transformation.created_at,
         updated_at=datetime.now(UTC),
     )
-    SqlAlchemyMappingBindingRepository._update_record_from_domain(orm, updated)
-    assert orm.mapping_version == 2
-    assert orm.mode == MappingMode.SHADOW.value
-    assert orm.shadow_mapping_version is None
+    SqlAlchemyTransformationRepository._update_record_from_domain(orm, updated)
+    assert orm.transformation_version == 2
+    assert orm.mode == TransformationMode.SHADOW.value
+    assert orm.shadow_transformation_version is None
 
 
 def test_normalization_ledger_data_mappers_roundtrip_and_update() -> None:
@@ -81,8 +81,8 @@ def test_normalization_ledger_data_mappers_roundtrip_and_update() -> None:
         tenant_id="ten_01",
         replica_record_id="rep_01",
         replica_version=1,
-        mapping_id="commerce.order_mapper",
-        mapping_version=1,
+        transformation_id="commerce.order_transformer",
+        transformation_version=1,
         produced_canonical_refs=(("commerce.order", "ord_01"), ("commerce.line", "ln_01")),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_01",
@@ -111,8 +111,8 @@ def test_normalization_ledger_data_mappers_roundtrip_and_update() -> None:
         tenant_id="ten_01",
         replica_record_id="rep_01",
         replica_version=2,
-        mapping_id="commerce.order_mapper",
-        mapping_version=1,
+        transformation_id="commerce.order_transformer",
+        transformation_version=1,
         produced_canonical_refs=(("commerce.order", "ord_01"),),
         outcome=NormalizationOutcome.TOMBSTONED,
         trace_id="trc_02",
@@ -130,8 +130,8 @@ def test_normalization_rejection_and_shadow_diff_data_mappers_roundtrip() -> Non
         tenant_id="ten_01",
         replica_record_id="rep_01",
         stream="orders",
-        mapping_id="commerce.order_mapper",
-        mapping_version=1,
+        transformation_id="commerce.order_transformer",
+        transformation_version=1,
         reason_code=NormalizationRejectionReason.SCHEMA_VALIDATION_FAILED.value,
         field_path="amount",
         detail="Amount must be numeric",

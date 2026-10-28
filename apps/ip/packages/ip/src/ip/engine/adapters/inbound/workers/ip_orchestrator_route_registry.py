@@ -174,7 +174,24 @@ class IpOrchestratorRouteRegistry:
                     return ConsumerAction.ACK
                 await idem_uow.commit()
 
-        action = await self._invoke_chunk_fn(fn, shard_id, shard_dsn)
+        try:
+            action = await self._invoke_chunk_fn(fn, shard_id, shard_dsn)
+        except Exception:
+            if envelope.idempotency_key:
+                async with self._dp_uow_provider.get_data_plane_uow(
+                    tenant_id, shard_id, shard_dsn
+                ) as release_uow:
+                    await release_uow.release_idempotency(tenant_id, envelope.idempotency_key)
+                    await release_uow.commit()
+                logger.info(
+                    "ip_orchestrator_idempotency_released_on_exception",
+                    event_id=envelope.id,
+                    event_type=envelope.event_type,
+                    idempotency_key=envelope.idempotency_key,
+                    tenant_id=tenant_id,
+                )
+            raise
+
         if action is ConsumerAction.NACK and envelope.idempotency_key:
             async with self._dp_uow_provider.get_data_plane_uow(
                 tenant_id, shard_id, shard_dsn

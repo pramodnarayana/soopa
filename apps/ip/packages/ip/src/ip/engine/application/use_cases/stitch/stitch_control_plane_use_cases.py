@@ -20,6 +20,7 @@ from ip.engine.domain.enums import IpIdPrefix
 from ip.engine.domain.exceptions import (
     InvalidConnectionConfigError,
     IpError,
+    IpErrorCode,
     Result,
     StitchDefinitionNotFoundError,
 )
@@ -366,11 +367,48 @@ class RegisterStitchUseCase:
                 )
             )
 
-        stitch_id = (
-            command.stitch_id.strip()
-            if command.stitch_id and command.stitch_id.strip()
-            else generate_id(IpIdPrefix.STITCH.value)
-        )
+        if command.stitch_id and command.stitch_id.strip():
+            stitch_id = command.stitch_id.strip()
+            if self._uow is not None:
+                async with self._uow:
+                    existing = await self._uow.stitches.get_by_id_global(stitch_id=stitch_id)
+                    if existing is not None and existing.tenant_id != command.tenant_id:
+                        bound.error(
+                            "register_stitch.cross_tenant_collision",
+                            existing_tenant_id=existing.tenant_id,
+                        )
+                        return Result.err(
+                            IpError(
+                                code=IpErrorCode.VALIDATION_FAILED,
+                                message=f"Stitch '{stitch_id}' already exists and belongs to another tenant.",
+                                http_status=409,
+                                details={"stitch_id": stitch_id, "tenant_id": command.tenant_id},
+                            )
+                        )
+            else:
+                existing_in_mem = self._stitch_catalog.get_stitch(
+                    tenant_id="*",
+                    stitch_id=stitch_id,
+                )
+                if (
+                    existing_in_mem is not None
+                    and existing_in_mem.tenant_id != "*"
+                    and existing_in_mem.tenant_id != command.tenant_id
+                ):
+                    bound.error(
+                        "register_stitch.cross_tenant_collision",
+                        existing_tenant_id=existing_in_mem.tenant_id,
+                    )
+                    return Result.err(
+                        IpError(
+                            code=IpErrorCode.VALIDATION_FAILED,
+                            message=f"Stitch '{stitch_id}' already exists and belongs to another tenant.",
+                            http_status=409,
+                            details={"stitch_id": stitch_id, "tenant_id": command.tenant_id},
+                        )
+                    )
+        else:
+            stitch_id = generate_id(IpIdPrefix.STITCH.value)
         stitch = Stitch(
             id=stitch_id,
             tenant_id=command.tenant_id,

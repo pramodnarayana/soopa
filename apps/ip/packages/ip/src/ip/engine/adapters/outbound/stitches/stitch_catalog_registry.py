@@ -17,7 +17,10 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         self._stitches: list[Stitch] = []
 
     def register_stitch(self, stitch: Stitch) -> None:
-        self._stitches = [s for s in self._stitches if s.id != stitch.id]
+        self._stitches = [
+            s for s in self._stitches
+            if not (s.id == stitch.id and s.tenant_id == stitch.tenant_id)
+        ]
         self._stitches.append(stitch)
 
     def list_stitches_for_event(
@@ -47,8 +50,12 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         tenant_id: str,
         stitch_id: str,
     ) -> Stitch | None:
+        # Prioritize exact tenant match before wildcard fallback
         for stitch in self._stitches:
-            if stitch.id == stitch_id and stitch.tenant_id in (tenant_id, "*"):
+            if stitch.id == stitch_id and stitch.tenant_id == tenant_id:
+                return stitch
+        for stitch in self._stitches:
+            if stitch.id == stitch_id and stitch.tenant_id == "*":
                 return stitch
         return None
 

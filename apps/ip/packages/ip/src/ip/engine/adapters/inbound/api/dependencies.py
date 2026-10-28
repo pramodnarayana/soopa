@@ -32,8 +32,8 @@ from ip.engine.adapters.outbound.database.tenant_uow_provider import IpTenantUoW
 from ip.engine.adapters.outbound.inbound.ack import StandardInboundAck
 from ip.engine.adapters.outbound.inbound.decoders import StandardInboundPayloadDecoder
 from ip.engine.adapters.outbound.inbound.verifiers import NoOpVerifier
-from ip.engine.adapters.outbound.stitches.sharded_stitch_adapters import (
-    IpShardedStitchCanonicalDispatcherAdapter,
+from ip.engine.adapters.outbound.stitches.stitch_adapters import (
+    IpStitchCanonicalDispatcherAdapter,
 )
 from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
     InMemoryStitchCatalogRegistry,
@@ -323,7 +323,7 @@ def get_stitch_shard_gateway(
 ) -> StitchShardGatewayPort:
     """Provides a shard-aware gateway for dispatching canonical events and querying Stitch runs."""
     db_router: DatabaseRouterPort = request.app.state.db_router
-    return IpShardedStitchCanonicalDispatcherAdapter(
+    return IpStitchCanonicalDispatcherAdapter(
         db_router=db_router,
         dp_uow_provider=dp_uow_provider,
         stitch_catalog=stitch_catalog,

@@ -424,7 +424,7 @@ class DeclarativeHttpConnector(BaseConnector):
                 url_params = dict(parse_qsl(parsed_req.query, keep_blank_values=True))
                 req_url = urlunparse(parsed_req._replace(query=""))
 
-        merged_page_params = {**url_params, **params, **auth.params}
+        merged_page_params = {**params, **url_params, **auth.params}
         try:
             resp = await self._http_client.request(
                 method=action.method,

@@ -43,8 +43,8 @@ async def test_normalization_ledger_repository_operations(
     v0 = await repo.get_latest_version(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
     assert v0 is None
 
@@ -53,8 +53,8 @@ async def test_normalization_ledger_repository_operations(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
         replica_version=1,
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         produced_canonical_refs=(
             ("energy.meter_reading", "mr_1"),
             ("energy.meter_reading", "mr_2"),
@@ -69,8 +69,8 @@ async def test_normalization_ledger_repository_operations(
     v1 = await repo.get_latest_version(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
     assert v1 == 1
 
@@ -78,8 +78,8 @@ async def test_normalization_ledger_repository_operations(
     refs = await repo.get_produced_refs(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
     assert len(refs) == 2
     assert ("energy.meter_reading", "mr_1") in refs
@@ -90,8 +90,8 @@ async def test_normalization_ledger_repository_operations(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
         replica_version=2,
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         produced_canonical_refs=(("energy.meter_reading", "mr_1"),),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_ledg_2",
@@ -101,27 +101,27 @@ async def test_normalization_ledger_repository_operations(
     v2 = await repo.get_latest_version(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
     assert v2 == 2
 
     refs_v2 = await repo.get_produced_refs(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
     assert len(refs_v2) == 1
     assert refs_v2[0] == ("energy.meter_reading", "mr_1")
 
-    # 6. Query latest produced refs across mapping versions
+    # 6. Query latest produced refs across transformation versions
     entry_m2 = NormalizationLedgerEntry.create(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
         replica_version=3,
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=2,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=2,
         produced_canonical_refs=(("energy.meter_reading", "mr_cross_version"),),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_ledg_3",
@@ -131,7 +131,7 @@ async def test_normalization_ledger_repository_operations(
     latest_refs = await repo.get_latest_produced_refs(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_test_1",
-        mapping_id="energy.ami_meter_reading",
+        transformation_id="energy.ami_meter_reading",
     )
     assert len(latest_refs) == 1
     assert latest_refs[0] == ("energy.meter_reading", "mr_cross_version")
@@ -149,8 +149,8 @@ async def test_normalization_rejection_and_shadow_diff_repository(
         tenant_id=seeded_ip_tenant,
         replica_record_id="rep_rej_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         reason_code=NormalizationRejectionReason.SCHEMA_VALIDATION_FAILED.value,
         field_path="kwh",
         detail="Value cannot be negative",

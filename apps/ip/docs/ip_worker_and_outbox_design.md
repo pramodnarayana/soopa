@@ -12,7 +12,7 @@
 - `apps/ip/packages/ip/src/ip/application/`
 - `core/platform/apps/unified-worker/src/unified_worker/registry.py`
 
-**Competitive Benchmark:** Shopify (Pod-Sharded Outbox & Single-Image Multi-Role Topology), Hatchet v1 (`FOR UPDATE SKIP LOCKED` DAG Scheduler), CloudEvents 1.0 Specification, Airbyte OSS, n8n, Activepieces, and [`apps/ip/docs/platform_vs_application_architecture_plan.md`](file:///Users/apple/soopa_mono/apps/ip/docs/platform_vs_application_architecture_plan.md).
+**Competitive Benchmark:** Shopify (Pod-Sharded Outbox & Single-Image Multi-Role Topology), Hatchet v1 (`FOR UPDATE SKIP LOCKED` DAG Scheduler), CloudEvents 1.0 Specification, Airbyte OSS, n8n, Activepieces, and [`platform_vs_application_architecture_plan.md`](./platform_vs_application_architecture_plan.md).
 
 ---
 
@@ -47,7 +47,7 @@ While `LISTEN/NOTIFY` is suitable for the low-volume **Control Plane** (`ip.outb
 
 ## 2. Global `EventEnvelope` & `OutboxMixin` Refactoring (CloudEvents 1.0 Gold Standard)
 
-To enforce **Zero Dual Architecture**, we eliminate all bounded-context envelope wrapper classes (no `IpEventEnvelopeMessage`, no `EdiDataPlaneEventMessage`, no `IdentityEventMessage`) and upgrade the global [`seedwork.events.EventEnvelope`](file:///Users/apple/soopa_mono/core/platform/packages/seedwork/src/seedwork/events.py#L9-L22), [`seedwork.events.DomainEvent`](file:///Users/apple/soopa_mono/core/platform/packages/seedwork/src/seedwork/events.py#L24-L49), and [`database.models.common.OutboxMixin`](file:///Users/apple/soopa_mono/core/platform/packages/database/src/database/models/common.py#L15-L72) with first-class routing and tracing headers.
+To enforce **Zero Dual Architecture**, we eliminate all bounded-context envelope wrapper classes (no `IpEventEnvelopeMessage`, no `EdiDataPlaneEventMessage`, no `IdentityEventMessage`) and upgrade the global [`seedwork.events.EventEnvelope`](../../../core/platform/packages/seedwork/src/seedwork/events.py), [`seedwork.events.DomainEvent`](../../../core/platform/packages/seedwork/src/seedwork/events.py), and [`database.models.common.OutboxMixin`](../../../core/platform/packages/database/src/database/models/common.py) with first-class routing and tracing headers.
 
 ### 2.1 Why First-Class Envelope & Outbox Columns Are Mandatory (Envelope vs. Payload Separation)
 1. **Priority Draining *Inside* the Outbox Table (Zero DB Head-of-Line Blocking):**
@@ -152,7 +152,7 @@ class OutboxMixin:
     # ... existing status, attempts, published_at, error_reason, created_at, updated_at, owner_token, lease_expires_at
 ```
 
-And on [`IpDataPlaneOutboxRecord`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/adapters/outbound/database/models/data_plane.py#L344-L364) (`public.ip_outbox`), the partial index is upgraded to:
+And on [`IpDataPlaneOutboxRecord`](../packages/ip/src/ip/engine/adapters/outbound/database/models/data_plane.py) (`public.ip_outbox`), the partial index is upgraded to:
 ```sql
 CREATE INDEX ix_ip_dp_outbox_pending
 ON public.ip_outbox (status, lane, created_at)
@@ -241,7 +241,7 @@ To eliminate this amplification **without** introducing dual codepaths ("single 
 
 ### Pillar 3: High-Speed "Drain-Until-Empty" Outbox Engine (`FOR UPDATE SKIP LOCKED` + Parallel SQS + Bulk SQL Update)
 
-Our audit of [`core/platform/packages/outbox`](file:///Users/apple/soopa_mono/core/platform/packages/outbox/src/outbox/application/outbox_processor_use_case.py#L68-L84) and [`core/platform/packages/pubsub`](file:///Users/apple/soopa_mono/core/platform/packages/pubsub/src/pubsub/aws/aws_batch_publisher_base.py#L116-L130) uncovered two major throughput bottlenecks that we fix directly in the shared platform packages:
+Our audit of [`core/platform/packages/outbox`](../../../core/platform/packages/outbox/src/outbox/application/outbox_processor_use_case.py) and [`core/platform/packages/pubsub`](../../../core/platform/packages/pubsub/src/pubsub/aws/aws_batch_publisher_base.py) uncovered two major throughput bottlenecks that we fix directly in the shared platform packages:
 
 #### Mechanic A: "Drain-Until-Empty" Loop (`MultiShardOutboxDrainRelay`)
 - Replaces `LISTEN/NOTIFY` on the Data Plane shards.
@@ -252,11 +252,11 @@ Our audit of [`core/platform/packages/outbox`](file:///Users/apple/soopa_mono/co
   - **When `len(events) == 0`:** Sleeps briefly (`poll_interval_seconds = 0.2`) before the next check.
   - **Horizontal Scaling:** Because of `FOR UPDATE SKIP LOCKED`, spinning up 10 `ip-dp-jobs-worker` containers automatically partitions batches across all 10 workers with zero lock contention and zero duplicate claims.
 
-#### Mechanic B: Concurrent SQS 10-Message Batch Dispatch (Upgrading [`AwsBatchPublisherBase`](file:///Users/apple/soopa_mono/core/platform/packages/pubsub/src/pubsub/aws/aws_batch_publisher_base.py#L112-L150))
-- Currently, [`AwsBatchPublisherBase._publish_batch_internal()`](file:///Users/apple/soopa_mono/core/platform/packages/pubsub/src/pubsub/aws/aws_batch_publisher_base.py#L116-L130) sends 10-message chunks **sequentially** in a `for` loop (`50` sequential HTTP round-trips for 500 events $\approx 1,000\text{ ms}$).
+#### Mechanic B: Concurrent SQS 10-Message Batch Dispatch (Upgrading [`AwsBatchPublisherBase`](../../../core/platform/packages/pubsub/src/pubsub/aws/aws_batch_publisher_base.py))
+- Currently, [`AwsBatchPublisherBase._publish_batch_internal()`](../../../core/platform/packages/pubsub/src/pubsub/aws/aws_batch_publisher_base.py) sends 10-message chunks **sequentially** in a `for` loop (`50` sequential HTTP round-trips for 500 events $\approx 1,000\text{ ms}$).
 - **Upgrade:** For standard (non-FIFO) queues, partition `events` into 10-message chunks and dispatch them **concurrently** bounded by `asyncio.Semaphore(max_concurrent_batches=10)` over a persistent `aioboto3` client, cutting 500-event publish time from `~1,000 ms` to **`~80 ms`**. Also promote `event_type`, `lane`, and `trace_id` to SQS/SNS `MessageAttributes`.
 
-#### Mechanic C: Single-Query Bulk Completion (Upgrading [`OutboxRepositoryPort`](file:///Users/apple/soopa_mono/core/platform/packages/outbox/src/outbox/ports/outbox_repository_port.py), [`OutboxProcessorUseCase`](file:///Users/apple/soopa_mono/core/platform/packages/outbox/src/outbox/application/outbox_processor_use_case.py), and [`OutboxSweeperUseCase`](file:///Users/apple/soopa_mono/core/platform/packages/outbox/src/outbox/application/outbox_sweeper_use_case.py))
+#### Mechanic C: Single-Query Bulk Completion (Upgrading [`OutboxRepositoryPort`](../../../core/platform/packages/outbox/src/outbox/ports/outbox_repository_port.py), [`OutboxProcessorUseCase`](../../../core/platform/packages/outbox/src/outbox/application/outbox_processor_use_case.py), and [`OutboxSweeperUseCase`](../../../core/platform/packages/outbox/src/outbox/application/outbox_sweeper_use_case.py))
 - Currently, `OutboxProcessorUseCase` and `OutboxSweeperUseCase` loop over `events` and call `repository.mark_completed(event.id, worker_id)` **500 separate times** (500 DB sessions and 500 commits!).
 - **Upgrade:** Add `mark_completed_batch(event_ids: Sequence[str], worker_id: str) -> None` and `mark_failed_batch(event_ids: Sequence[str], worker_id: str, error_message: str) -> None` to `OutboxRepositoryPort`:
   ```python
@@ -296,20 +296,20 @@ To maximize throughput while protecting PostgreSQL connection pools and external
      - When $N=K$ (Bulk Chunk of 250 items): Executes items across a bounded `asyncio.Semaphore(intra_chunk_concurrency)` (e.g., `25` for internal L3 normalization; `10` for external L5 delivery), ensuring predictable latency and bounded DB session usage.
 
 #### 4.2 Physical Compute vs. External I/O Worker Bulkheads (`unified-worker`)
-Following our **Shopify-Style Single-Image, Multiple-Containers** paradigm, we physically isolate fast internal compute from slow external network I/O across four worker entrypoints in [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](file:///Users/apple/soopa_mono/core/platform/apps/unified-worker/src/unified_worker/registry.py):
+Following our **Shopify-Style Single-Image, Multiple-Containers** paradigm, we physically isolate fast internal compute from slow external network I/O across four worker entrypoints in [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](../../../core/platform/apps/unified-worker/src/unified_worker/registry.py):
 
 1. **`ip-orchestrator-worker` (`ip.engine.adapters.inbound.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule`) — *Fast Internal Compute & DB Bulkhead*:**
    - Consumes `ip-orchestrator-realtime-queue` and `ip-orchestrator-bulk-queue` via `EventEnvelopeDispatcher`.
    - Executes **only** in-cluster CPU and shard-DB stages (`5–15ms` per record, **zero** external internet calls):
-     - **L2 Replication:** [`ReplicateRecordsUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/replication/replicate_records_use_case.py) & [`SweepStaleReplicasUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/replication/sweep_stale_replicas_use_case.py)
-     - **L3 Normalization & GEM:** [`NormalizeReplicaRecordUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/normalization/normalize_replica_record_use_case.py) & [`BackfillStreamNormalizationUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/normalization/backfill_stream_normalization_use_case.py)
-     - **L4 Durable Stitch Orchestration:** [`DispatchCanonicalEventToStitchesUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/stitch/dispatch_canonical_event_to_stitches_use_case.py) + immediate inline [`ExecuteStitchWorkerTickUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/stitch/execute_stitch_worker_tick_use_case.py), plus a background `IpMultiShardStitchTickLoop` for waking expired `SLEEP` timers.
+     - **L2 Replication:** [`ReplicateRecordsUseCase`](../packages/ip/src/ip/engine/application/use_cases/replication/replicate_records_use_case.py) & [`SweepStaleReplicasUseCase`](../packages/ip/src/ip/engine/application/use_cases/replication/sweep_stale_replicas_use_case.py)
+     - **L3 Normalization & GEM:** [`NormalizeReplicaRecordUseCase`](../packages/ip/src/ip/engine/application/use_cases/normalization/normalize_replica_record_use_case.py) & [`BackfillStreamNormalizationUseCase`](../packages/ip/src/ip/engine/application/use_cases/normalization/backfill_stream_normalization_use_case.py)
+     - **L4 Durable Stitch Orchestration:** [`DispatchCanonicalEventToStitchesUseCase`](../packages/ip/src/ip/engine/application/use_cases/stitch/dispatch_canonical_event_to_stitches_use_case.py) + immediate inline [`ExecuteStitchWorkerTickUseCase`](../packages/ip/src/ip/engine/application/use_cases/stitch/execute_stitch_worker_tick_use_case.py), plus a background `IpMultiShardStitchTickLoop` for waking expired `SLEEP` timers.
 2. **`ip-delivery-worker` (`ip.engine.adapters.inbound.workers.ip_delivery_worker.IpDeliveryWorkerModule`) — *External Network I/O Bulkhead*:**
    - Consumes `ip-delivery-realtime-queue` and `ip-delivery-bulk-queue` via `EventEnvelopeDispatcher`.
    - Physically isolates slow, rate-limited, or flaky third-party ERP/CRM/MDM/AMI network calls (`500ms–30s`):
-     - **L5 Outbound Delivery:** [`DeliverOutboundRecordUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/delivery/deliver_outbound_record_use_case.py) (with `TokenManagerService` distributed OAuth2 refresh lock, crash reconciliation via `reconcile_in_flight()`, `429 Retry-After` extraction, and S3 wire-payload offload).
-     - **L1 Thin-Webhook Fetch:** [`FetchRecordUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/ingestion/fetch_record_use_case.py)
-     - **L1 Pull Sync Execution:** [`RunSyncUseCase`](file:///Users/apple/soopa_mono/apps/ip/packages/ip/src/ip/engine/application/use_cases/ingestion/run_sync_use_case.py)
+     - **L5 Outbound Delivery:** [`DeliverOutboundRecordUseCase`](../packages/ip/src/ip/engine/application/use_cases/delivery/deliver_outbound_record_use_case.py) (with `TokenManagerService` distributed OAuth2 refresh lock, crash reconciliation via `reconcile_in_flight()`, `429 Retry-After` extraction, and S3 wire-payload offload).
+     - **L1 Thin-Webhook Fetch:** [`FetchRecordUseCase`](../packages/ip/src/ip/engine/application/use_cases/ingestion/fetch_record_use_case.py)
+     - **L1 Pull Sync Execution:** [`RunSyncUseCase`](../packages/ip/src/ip/engine/application/use_cases/ingestion/run_sync_use_case.py)
 3. **`ip-dp-jobs-worker` (`ip.engine.adapters.inbound.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule`) — *Data Plane High-Speed Outbox Drain & Retention Worker*:**
    - Runs **`MultiShardOutboxDrainRelay`** (Pillar 3 Drain-Until-Empty loop across all IP tenant shards, `batch_size=500`, `0ms` active sleep / `200ms` idle sleep, concurrent SQS batching, bulk `ANY(:ids)` completion).
    - Consumes `ip-dp-jobs-queue` for scheduled maintenance jobs (`ip.data_plane.outbox_sweeper`, `ip.data_plane.outbox_cleanup`, `ip.data_plane.data_retention_cleanup`).
@@ -320,7 +320,7 @@ Following our **Shopify-Style Single-Image, Multiple-Containers** paradigm, we p
 
 ## 4. Pure 2-Plane Taxonomy Inside `apps/ip/packages/ip/src/ip/` (Zero `apps/ip/apps/` & Zero `ip/bootstrap/`)
 
-Per [`apps/ip/docs/platform_vs_application_architecture_plan.md`](file:///Users/apple/soopa_mono/apps/ip/docs/platform_vs_application_architecture_plan.md#L58-L172), `apps/ip/packages/ip/src/ip/` contains **only two top-level directories**: **`ip/engine/`** and **`ip/application/`**.
+Per [`platform_vs_application_architecture_plan.md`](./platform_vs_application_architecture_plan.md), `apps/ip/packages/ip/src/ip/` contains **only two top-level directories**: **`ip/engine/`** and **`ip/application/`**.
 - We **eliminate `ip/bootstrap/`**: `container.py`, `settings.py`, and `lifespan.py` are pure Engine components and live directly inside `ip/engine/`.
 - We **never create `apps/ip/apps/*`**: In Hexagonal Architecture, background workers are **Inbound Driving Adapters** of the Engine and live directly inside `ip/engine/adapters/inbound/workers/`.
 - **How `ip.engine` Discovers `ip.application` Plugins With Zero Coupling:**
@@ -332,7 +332,7 @@ Per [`apps/ip/docs/platform_vs_application_architecture_plan.md`](file:///Users/
 | **1. IP Platform Kernel (`ip.engine`)** | `ip/engine/{domain,ports,application,adapters,container.py,settings.py,lifespan.py}` | All 5-layer SEDA pipeline logic, repositories, outbox, DI container, lifespan, and all 4 `LaunchableWorker` inbound adapters (`ip/engine/adapters/inbound/workers/`). | **Zero imports from `ip.application.*`.** Operates purely on `ip.engine` ports, use cases, and shared platform packages. |
 | **2. IP Application Layer (`ip.application`)** | `ip/application/{domains,connectors,transformers,stitches}/` | Industry verticals (`energy`, `tms`), partner connectors (`itron`, `salesforce`, `sftp_csv`), pure L3 mappers, and L4 stitch templates. | Depends strictly inward on `ip.engine.domain` and `ip.engine.ports` (plus `ip.engine.adapters` for ORM base/connectors). |
 
-And [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](file:///Users/apple/soopa_mono/core/platform/apps/unified-worker/src/unified_worker/registry.py) registers the four workers directly from `ip.engine.adapters.inbound.workers`:
+And [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](../../../core/platform/apps/unified-worker/src/unified_worker/registry.py) registers the four workers directly from `ip.engine.adapters.inbound.workers`:
 ```python
     "ip-orchestrator-worker": "ip.engine.adapters.inbound.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule",
     "ip-delivery-worker": "ip.engine.adapters.inbound.workers.ip_delivery_worker.IpDeliveryWorkerModule",

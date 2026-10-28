@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Mapping
 
 from database.router import DatabaseRouterPort
@@ -160,21 +161,22 @@ class SessionScopedOutboundDeliveryExecutor(OutboundDeliveryExecutorPort):
         self,
         command: DeliverOutboundRecordCommand,
     ) -> Result[DeliverOutboundRecordResponse, IpError]:
-        async for global_session in self._db_router.get_global_session():
-            cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-            token_mgr = TokenManagerService(
-                control_plane_uow=cp_uow,
-                cipher=self._cipher,
-                token_refresher=self._token_refresher,
-                lock_port=self._lock_port,
-            )
-            use_case = DeliverOutboundRecordUseCase(
-                data_plane_uow_provider=self._dp_uow_provider,
-                connectors=self._connectors,
-                tiered_storage=self._tiered_storage,
-                token_manager=token_mgr,
-            )
-            return await use_case.execute(command)
+        async with contextlib.aclosing(self._db_router.get_global_session()) as session_gen:
+            async for global_session in session_gen:
+                cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+                token_mgr = TokenManagerService(
+                    control_plane_uow=cp_uow,
+                    cipher=self._cipher,
+                    token_refresher=self._token_refresher,
+                    lock_port=self._lock_port,
+                )
+                use_case = DeliverOutboundRecordUseCase(
+                    data_plane_uow_provider=self._dp_uow_provider,
+                    connectors=self._connectors,
+                    tiered_storage=self._tiered_storage,
+                    token_manager=token_mgr,
+                )
+                return await use_case.execute(command)
         raise RuntimeError("DatabaseRouter did not yield a GlobalSession.")
 
 

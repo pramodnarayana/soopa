@@ -412,6 +412,9 @@ importers:
       '@soopa/database':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/database
+      '@soopa/identity':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/identity
       '@soopa/notification':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/notification
@@ -674,6 +677,9 @@ importers:
       '@soopa/identity-worker':
         specifier: workspace:*
         version: link:../identity-worker
+      '@soopa/ip':
+        specifier: workspace:*
+        version: link:../../../../apps/ip/packages/ip
       '@soopa/notification-channel-worker':
         specifier: workspace:*
         version: link:../notification-channel-worker

@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from platform_migrator.runners.platform_runner import run_platform_domain_migrations
 from platform_migrator.runners.seed_runner import run_domain_seeds
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = structlog.get_logger(__name__)
 
@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--domain",
         type=str,
         default="platform",
-        choices=["platform", "ucp", "identity", "notification", "edi", "all"],
+        choices=["platform", "ucp", "identity", "notification", "edi", "ip", "all"],
         help="Domain scope to seed",
     )
     return parser

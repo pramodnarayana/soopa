@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Annotated
 
 import structlog
@@ -213,6 +214,26 @@ async def ingest_record(
             ack=ack,
         )
         result = await use_case.execute(cmd)
+
+    if result.status_code >= 400:
+        log.error(
+            "ip_ingest_record.rejected",
+            status_code=result.status_code,
+            trace_id=result.trace_id,
+            record_id=result.record_id,
+        )
+        content_body: str | bytes
+        if isinstance(result.body, (str, bytes)):
+            content_body = result.body
+        else:
+            content_body = json.dumps(result.body)
+        media_type = "application/json" if isinstance(result.body, (dict, list)) else "text/plain"
+        return Response(
+            content=content_body,
+            status_code=result.status_code,
+            headers=dict(result.headers),
+            media_type=media_type,
+        )
 
     log.info(
         "ip_ingest_record.completed",

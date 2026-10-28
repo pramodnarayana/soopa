@@ -24,6 +24,7 @@ from database.testing import TransactionalTestRouter
 from database.types import GlobalSession, TenantSession
 from dotenv import load_dotenv
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
+from orchestration.adapters.outbound.database.models import WorkflowBase
 from seedwork import generate_id
 from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
@@ -81,6 +82,7 @@ async def tenant_db_engine() -> AsyncGenerator[AsyncEngine, None]:
     engine = get_async_engine(_get_shard_db_url())
     async with engine.begin() as conn:
         await conn.run_sync(IpTenantBase.metadata.create_all)
+        await conn.run_sync(WorkflowBase.metadata.create_all)
     yield engine
     await engine.dispose()
 

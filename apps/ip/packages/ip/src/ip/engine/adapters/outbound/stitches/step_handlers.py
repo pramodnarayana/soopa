@@ -123,7 +123,9 @@ class TenantAwareReplicaLookupAdapter(ReplicaLookupPort):
     ) -> ReplicaRecord | None:
         shard_info_res = await self._provider.resolve_shard_info(tenant_id)
         if shard_info_res.is_err:
-            return None
+            raise RuntimeError(
+                f"Cannot resolve physical shard for tenant '{tenant_id}': {shard_info_res.unwrap_err().message}"
+            )
         shard_id, shard_dsn = shard_info_res.unwrap()
         async with self._provider.get_data_plane_uow(tenant_id, shard_id, shard_dsn) as uow:
             return await uow.replica_records.get_by_key(
@@ -143,10 +145,12 @@ class TenantAwareNotificationOutboxAdapter(NotificationOutboxPort):
     async def publish_envelope(self, envelope: EventEnvelope) -> None:
         tenant_id = envelope.tenant_id
         if not tenant_id:
-            return
+            raise ValueError("Cannot stage notification envelope without tenant_id.")
         shard_info_res = await self._provider.resolve_shard_info(tenant_id)
         if shard_info_res.is_err:
-            return
+            raise RuntimeError(
+                f"Cannot resolve physical shard for tenant '{tenant_id}': {shard_info_res.unwrap_err().message}"
+            )
         shard_id, shard_dsn = shard_info_res.unwrap()
         async with self._provider.get_data_plane_uow(tenant_id, shard_id, shard_dsn) as uow:
             await uow.stage_outbox_envelope(envelope)

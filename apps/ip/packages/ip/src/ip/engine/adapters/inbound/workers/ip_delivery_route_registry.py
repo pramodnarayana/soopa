@@ -132,20 +132,37 @@ class IpDeliveryRouteRegistry:
                     return ConsumerAction.ACK
                 await idem_uow.commit()
 
-        sem = asyncio.Semaphore(self._max_chunk_concurrency)
-        outcomes = await asyncio.gather(
-            *(
-                self._deliver_single_record(
-                    sem=sem,
-                    tenant_id=dto.tenant_id,
-                    shard_id=shard_id,
-                    shard_dsn=shard_dsn,
-                    outbound_record_id=rec_id,
+        try:
+            sem = asyncio.Semaphore(self._max_chunk_concurrency)
+            outcomes = await asyncio.gather(
+                *(
+                    self._deliver_single_record(
+                        sem=sem,
+                        tenant_id=dto.tenant_id,
+                        shard_id=shard_id,
+                        shard_dsn=shard_dsn,
+                        outbound_record_id=rec_id,
+                    )
+                    for rec_id in dto.record_ids
                 )
-                for rec_id in dto.record_ids
             )
-        )
-        action = IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
+            action = IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
+        except Exception:
+            if envelope.idempotency_key:
+                async with self._dp_uow_provider.get_data_plane_uow(
+                    dto.tenant_id, shard_id, shard_dsn
+                ) as release_uow:
+                    await release_uow.release_idempotency(dto.tenant_id, envelope.idempotency_key)
+                    await release_uow.commit()
+                logger.info(
+                    "ip_delivery_idempotency_released_on_exception",
+                    event_id=envelope.id,
+                    event_type=envelope.event_type,
+                    idempotency_key=envelope.idempotency_key,
+                    tenant_id=dto.tenant_id,
+                )
+            raise
+
         if action is ConsumerAction.NACK and envelope.idempotency_key:
             async with self._dp_uow_provider.get_data_plane_uow(
                 dto.tenant_id, shard_id, shard_dsn

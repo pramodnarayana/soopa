@@ -1,9 +1,10 @@
-"""Shard-aware Layer-4 Stitch adapters for IP Data Plane shards."""
+"""Layer-4 Stitch adapters for IP Data Plane."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
+import structlog
 from database.router import DatabaseRouterPort
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
@@ -52,11 +53,13 @@ from orchestration.ports.outbound import WorkflowUnitOfWorkPort
 from seedwork.domain.types import JsonDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
+logger = structlog.get_logger(__name__)
 
-class IpShardedStitchCanonicalDispatcherAdapter(
+
+class IpStitchCanonicalDispatcherAdapter(
     IpStitchCanonicalDispatcherPort, StitchShardGatewayPort
 ):
-    """Routes `DispatchCanonicalEventToStitchesCommand` and run queries to the tenant's physical IP shard."""
+    """Routes `DispatchCanonicalEventToStitchesCommand` and run queries to the tenant's IP data plane."""
 
     def __init__(
         self,
@@ -199,7 +202,7 @@ class IpShardedStitchCanonicalDispatcherAdapter(
         )
 
 
-class IpShardedStitchWorkerTickAdapter(IpStitchWorkerTickExecutorPort):
+class IpStitchWorkerTickAdapter(IpStitchWorkerTickExecutorPort):
     """Executes `ExecuteStitchWorkerTickUseCase` across all active IP tenant shards."""
 
     def __init__(
@@ -229,49 +232,64 @@ class IpShardedStitchWorkerTickAdapter(IpStitchWorkerTickExecutorPort):
         woken: list[str] = []
 
         for shard_name, shard_dsn in shards:
-            async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
+            try:
+                async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
 
-                def _uow_factory(s: AsyncSession = session) -> WorkflowUnitOfWorkPort:
-                    return self._workflow_uow_factory(s)
+                    def _uow_factory(s: AsyncSession = session) -> WorkflowUnitOfWorkPort:
+                        return self._workflow_uow_factory(s)
 
-                match_resolver = ResolveMatchConditionsUseCase(
-                    uow_factory=_uow_factory,
-                    definition_registry=self._definition_registry,
-                    step_scheduler=self._scheduler,
+                    match_resolver = ResolveMatchConditionsUseCase(
+                        uow_factory=_uow_factory,
+                        definition_registry=self._definition_registry,
+                        step_scheduler=self._scheduler,
+                    )
+                    claim_steps = ClaimStepsUseCase(
+                        uow_factory=_uow_factory,
+                        definition_registry=self._definition_registry,
+                        step_scheduler=self._scheduler,
+                        match_resolver=match_resolver,
+                    )
+                    complete_step = CompleteStepUseCase(
+                        uow_factory=_uow_factory,
+                        definition_registry=self._definition_registry,
+                        step_scheduler=self._scheduler,
+                        match_resolver=match_resolver,
+                    )
+                    fail_step = FailStepUseCase(
+                        uow_factory=_uow_factory,
+                        definition_registry=self._definition_registry,
+                        error_policy=self._error_policy,
+                        step_scheduler=self._scheduler,
+                        match_resolver=match_resolver,
+                    )
+                    tick_uc = ExecuteStitchWorkerTickUseCase(
+                        claim_steps_use_case=claim_steps,
+                        complete_step_use_case=complete_step,
+                        fail_step_use_case=fail_step,
+                        handler_registry=self._handler_registry,
+                    )
+                    res = await tick_uc.execute(command)
+                    if res.is_err:
+                        err = res.unwrap_err()
+                        logger.error(
+                            "ip_stitch_tick_shard_failed",
+                            shard_name=shard_name,
+                            error_code=err.code.value,
+                            message=err.message,
+                        )
+                        continue
+                    dto = res.unwrap()
+                    completed.extend(dto.completed_step_ids)
+                    failed.extend(dto.failed_or_retried_step_ids)
+                    parked.extend(dto.parked_step_ids)
+                    woken.extend(dto.woken_timer_step_ids)
+            except Exception as exc:  # noqa: BLE001 - Shard boundary isolation: unhandled error on one shard must not starve ticks on remaining healthy shards
+                logger.error(
+                    "ip_stitch_tick_shard_exception",
+                    shard_name=shard_name,
+                    error=str(exc),
                 )
-                claim_steps = ClaimStepsUseCase(
-                    uow_factory=_uow_factory,
-                    definition_registry=self._definition_registry,
-                    step_scheduler=self._scheduler,
-                    match_resolver=match_resolver,
-                )
-                complete_step = CompleteStepUseCase(
-                    uow_factory=_uow_factory,
-                    definition_registry=self._definition_registry,
-                    step_scheduler=self._scheduler,
-                    match_resolver=match_resolver,
-                )
-                fail_step = FailStepUseCase(
-                    uow_factory=_uow_factory,
-                    definition_registry=self._definition_registry,
-                    error_policy=self._error_policy,
-                    step_scheduler=self._scheduler,
-                    match_resolver=match_resolver,
-                )
-                tick_uc = ExecuteStitchWorkerTickUseCase(
-                    claim_steps_use_case=claim_steps,
-                    complete_step_use_case=complete_step,
-                    fail_step_use_case=fail_step,
-                    handler_registry=self._handler_registry,
-                )
-                res = await tick_uc.execute(command)
-                if res.is_err:
-                    return res
-                dto = res.unwrap()
-                completed.extend(dto.completed_step_ids)
-                failed.extend(dto.failed_or_retried_step_ids)
-                parked.extend(dto.parked_step_ids)
-                woken.extend(dto.woken_timer_step_ids)
+                continue
 
         return Result.ok(
             StitchWorkerTickResultDTO(
@@ -284,6 +302,6 @@ class IpShardedStitchWorkerTickAdapter(IpStitchWorkerTickExecutorPort):
 
 
 __all__ = [
-    "IpShardedStitchCanonicalDispatcherAdapter",
-    "IpShardedStitchWorkerTickAdapter",
+    "IpStitchCanonicalDispatcherAdapter",
+    "IpStitchWorkerTickAdapter",
 ]

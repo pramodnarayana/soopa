@@ -15,10 +15,10 @@ class NormalizationLedgerRepositoryPort(Protocol):
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
     ) -> int | None:
-        """Retrieve the highest processed replica version for this replica and mapper version."""
+        """Retrieve the highest processed replica version for this replica and transformer version."""
         ...
 
     async def get_produced_refs(
@@ -26,8 +26,8 @@ class NormalizationLedgerRepositoryPort(Protocol):
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
     ) -> tuple[tuple[str, str], ...]:
         """Retrieve the canonical references produced by the most recent normalization run."""
         ...
@@ -37,9 +37,9 @@ class NormalizationLedgerRepositoryPort(Protocol):
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
+        transformation_id: str,
     ) -> tuple[tuple[str, str], ...]:
-        """Retrieve canonical references produced by the most recent normalization run across all mapping versions."""
+        """Retrieve canonical references produced by the most recent normalization run across all transformation versions."""
         ...
 
     async def record_entry(self, entry: NormalizationLedgerEntry) -> None:

@@ -80,6 +80,11 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         if record is None:
             self.session.add(self._to_orm_model(stitch, now))
         else:
+            if record.tenant_id != stitch.tenant_id:
+                raise ValueError(
+                    f"Cross-tenant violation: Stitch '{stitch.id}' belongs to tenant '{record.tenant_id}', "
+                    f"cannot be modified by tenant '{stitch.tenant_id}'."
+                )
             self._update_record_from_domain(record, stitch, now)
 
         self._drain_events(stitch, default_tenant_id=stitch.tenant_id)
@@ -97,6 +102,23 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
                 StitchRecord.id == stitch_id,
                 StitchRecord.tenant_id.in_((tenant_id, "*")),
             )
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        record = result.scalars().first()
+        if record is None:
+            return None
+        return self._to_domain_model(record)
+
+    async def get_by_id_global(
+        self,
+        *,
+        stitch_id: str,
+    ) -> Stitch | None:
+        """Retrieve a Stitch by ID across all tenants for cross-tenant collision detection."""
+        stmt = (
+            select(StitchRecord)
+            .where(StitchRecord.id == stitch_id)
             .limit(1)
         )
         result = await self.session.execute(stmt)

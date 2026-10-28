@@ -30,6 +30,17 @@ def _to_float(val: object, default: float = 0.0) -> float:
         return default
 
 
+def _to_optional_float(val: object) -> float | None:
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    try:
+        return float(str(val))
+    except (ValueError, TypeError):
+        return None
+
+
 def _to_int(val: object, default: int = 15) -> int:
     if val is None:
         return default
@@ -153,7 +164,7 @@ class AmiMeterReadingTransformerV2(TransformerPort):
 
         base_draft = v1_res.drafts[0]
         payload = replica.data
-        voltage_avg = _to_float(payload.get("voltage_avg"), 240.0)
+        voltage_avg = _to_optional_float(payload.get("voltage_avg"))
         kwh_delivered = _to_float(base_draft.fields.get("kwh_delivered"), 0.0)
         kwh_received = _to_float(base_draft.fields.get("kwh_received"), 0.0)
         net_kwh = round(kwh_delivered - kwh_received, 4)

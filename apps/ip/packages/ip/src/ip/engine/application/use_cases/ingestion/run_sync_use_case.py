@@ -241,6 +241,7 @@ class RunSyncUseCase:
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
+                for_update=True,
             )
             if active_run is not None:
                 if (

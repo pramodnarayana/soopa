@@ -98,6 +98,8 @@ pythonpath = [
     "core/platform/packages/strace/src",
     "core/platform/packages/notification/src",
     "apps/ip/packages/ip/src",
+    "apps/ip",
+    "infra/local/scripts",
 ]
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",

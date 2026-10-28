@@ -100,6 +100,7 @@ class SqlAlchemySyncRunRepository(GlobalSqlAlchemyRepository, SyncRunRepositoryP
         connection_id: str,
         stream: str,
         tenant_id: str | None = None,
+        for_update: bool = False,
     ) -> SyncRun | None:
         active_statuses = (SyncRunStatus.PENDING.value, SyncRunStatus.RUNNING.value)
         stmt = select(SyncRunRecord).where(
@@ -109,6 +110,8 @@ class SqlAlchemySyncRunRepository(GlobalSqlAlchemyRepository, SyncRunRepositoryP
         )
         if tenant_id is not None:
             stmt = stmt.where(SyncRunRecord.tenant_id == tenant_id)
+        if for_update:
+            stmt = stmt.with_for_update()
         stmt = stmt.limit(1)
         result = await self._session.execute(stmt)
         record = result.scalar_one_or_none()

@@ -424,8 +424,17 @@ class NormalizeReplicaRecordUseCase:
                 transformation.transformation_id, transformation.transformation_version
             )
             if baseline_transformer is not None:
-                baseline_result = baseline_transformer.transform(snapshot, context)
-                active_drafts = baseline_result.drafts
+                try:
+                    baseline_result = baseline_transformer.transform(snapshot, context)
+                    active_drafts = baseline_result.drafts
+                except Exception as exc:  # noqa: BLE001 - Shadow isolation boundary: failure in shadow baseline transform must not fail active normalization
+                    logger.error(
+                        "normalization_shadow_baseline_transform_failed",
+                        tenant_id=command.tenant_id,
+                        transformation_id=transformation.transformation_id,
+                        version=transformation.transformation_version,
+                        error=str(exc),
+                    )
 
         diff_data = self._compute_shadow_diff(
             active_drafts=active_drafts,

@@ -3,24 +3,24 @@
 from dataclasses import dataclass
 
 from ip.engine.domain.enums import (
-    MappingMode,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
     RuleSeverity,
+    TransformationMode,
 )
 from ip.engine.domain.normalization import (
     CanonicalDraft,
     CanonicalEntityDefinition,
-    MappingBinding,
-    MappingContext,
-    MappingResult,
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
     ReplicaSnapshot,
     SourceReference,
+    Transformation,
+    TransformationContext,
+    TransformationResult,
 )
 from seedwork.domain.types import JsonDict
 
@@ -66,14 +66,14 @@ def test_canonical_draft_creation() -> None:
     assert draft.extensions["raw_flag"] == "A"
 
 
-def test_mapping_result_empty_defaults() -> None:
-    res = MappingResult()
+def test_transformation_result_empty_defaults() -> None:
+    res = TransformationResult()
     assert res.drafts == ()
     assert res.rejections == ()
 
 
-def test_mapping_context_properties() -> None:
-    ctx = MappingContext(
+def test_transformation_context_properties() -> None:
+    ctx = TransformationContext(
         connection_id="conn_1",
         stream="meter_readings",
         tenant_id="tenant_a",
@@ -130,24 +130,24 @@ def test_quality_rule_evaluation() -> None:
     assert rule_reject.evaluate({"meter_id": "MTR-1"}) is None
 
 
-def test_mapping_binding_factory() -> None:
-    binding = MappingBinding.create(
+def test_transformation_factory() -> None:
+    transformation = Transformation.create(
         tenant_id="tenant_123",
         connection_id="conn_456",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
-        mode=MappingMode.ACTIVE,
-        shadow_mapping_version=2,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
+        mode=TransformationMode.ACTIVE,
+        shadow_transformation_version=2,
     )
-    assert binding.id.startswith("ip_bind_")
-    assert binding.tenant_id == "tenant_123"
-    assert binding.connection_id == "conn_456"
-    assert binding.stream == "readings"
-    assert binding.mapping_id == "energy.ami_meter_reading"
-    assert binding.mapping_version == 1
-    assert binding.mode == MappingMode.ACTIVE
-    assert binding.shadow_mapping_version == 2
+    assert transformation.id.startswith("ip_xfrm_")
+    assert transformation.tenant_id == "tenant_123"
+    assert transformation.connection_id == "conn_456"
+    assert transformation.stream == "readings"
+    assert transformation.transformation_id == "energy.ami_meter_reading"
+    assert transformation.transformation_version == 1
+    assert transformation.mode == TransformationMode.ACTIVE
+    assert transformation.shadow_transformation_version == 2
 
 
 def test_normalization_ledger_entry_factory() -> None:
@@ -155,8 +155,8 @@ def test_normalization_ledger_entry_factory() -> None:
         tenant_id="tenant_123",
         replica_record_id="rep_999",
         replica_version=2,
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         produced_canonical_refs=(("energy.meter_reading", "mr_1"),),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_abc",
@@ -175,8 +175,8 @@ def test_normalization_rejection_entry_factory() -> None:
         tenant_id="tenant_123",
         replica_record_id="rep_999",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         reason_code=NormalizationRejectionReason.MISSING_REQUIRED_FIELD.value,
         detail="Payload missing timestamp",
         trace_id="trc_abc",

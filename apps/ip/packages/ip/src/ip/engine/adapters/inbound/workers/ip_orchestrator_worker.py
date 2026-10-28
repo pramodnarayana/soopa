@@ -18,9 +18,9 @@ from ip.engine.adapters.outbound.database.control_plane.uow import (
     SqlAlchemyIpControlPlaneUnitOfWork,
 )
 from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
-from ip.engine.adapters.outbound.stitches.sharded_stitch_adapters import (
-    IpShardedStitchCanonicalDispatcherAdapter,
-    IpShardedStitchWorkerTickAdapter,
+from ip.engine.adapters.outbound.stitches.stitch_adapters import (
+    IpStitchCanonicalDispatcherAdapter,
+    IpStitchWorkerTickAdapter,
 )
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
@@ -140,7 +140,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         self.container = container
 
         dp_uow_provider = container.dp_uow_provider()
-        stitch_dispatcher = IpShardedStitchCanonicalDispatcherAdapter(
+        stitch_dispatcher = IpStitchCanonicalDispatcherAdapter(
             db_router=self.db_router,
             dp_uow_provider=dp_uow_provider,
             stitch_catalog=container.stitch_catalog(),
@@ -148,7 +148,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             workflow_uow_factory=create_ip_workflow_uow,
             control_plane_uow_factory=SqlAlchemyIpControlPlaneUnitOfWork,
         )
-        stitch_tick_adapter = IpShardedStitchWorkerTickAdapter(
+        stitch_tick_adapter = IpStitchWorkerTickAdapter(
             db_router=self.db_router,
             definition_registry=container.workflow_definition_registry(),
             handler_registry=container.step_handler_registry(),

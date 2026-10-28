@@ -252,8 +252,10 @@ async def test_l2_replica_merge_batch_all_outcomes_and_outbox_emission(
         .scalars()
         .all()
     )
-    # Only the 4 events from batch 1 (INSERT ord-1, INSERT ord-2, UPDATE ord-2, TOMBSTONE ord-del-unseen) should exist
-    assert len(outbox_b2) == 4
+    # Only the 1 coalesced bulk chunk-pointer event from batch 1 (containing ord-1, ord-2, ord-del-unseen) should exist
+    assert len(outbox_b2) == 1
+    assert outbox_b2[0].lane == "bulk"
+    assert len(outbox_b2[0].payload["record_ids"]) == 3
 
 
 @pytest.mark.asyncio

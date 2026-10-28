@@ -1,4 +1,5 @@
 import importlib
+from typing import cast
 
 from seedwork.infra.worker import LaunchableWorker
 
@@ -23,6 +24,10 @@ def get_worker_instance(worker_name: str) -> LaunchableWorker:
         "edi-config-sync-worker": "config_sync_worker.provision.main.EdiConfigSyncWorkerModule",
         "edi-cp-jobs-worker": "edi_cp_jobs_worker.main.EdiCpJobsWorkerModule",
         "edi-dp-jobs-worker": "edi_dp_jobs_worker.main.EdiDpJobsWorkerModule",
+        "ip-orchestrator-worker": "ip.engine.adapters.inbound.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule",
+        "ip-delivery-worker": "ip.engine.adapters.inbound.workers.ip_delivery_worker.IpDeliveryWorkerModule",
+        "ip-cp-jobs-worker": "ip.engine.adapters.inbound.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule",
+        "ip-dp-jobs-worker": "ip.engine.adapters.inbound.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule",
     }
 
     if worker_name not in registry:
@@ -37,4 +42,4 @@ def get_worker_instance(worker_name: str) -> LaunchableWorker:
         raise RuntimeError(f"Failed to load worker class {registry[worker_name]}: {e}") from e
 
     # We assume the module class has a zero-argument constructor that satisfies LaunchableWorker
-    return worker_class()
+    return cast(LaunchableWorker, worker_class())

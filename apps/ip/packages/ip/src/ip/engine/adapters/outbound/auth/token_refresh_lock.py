@@ -58,20 +58,21 @@ class SqlAlchemyTokenRefreshLockAdapter(TokenRefreshLockPort):
 
             lock_key = compute_token_refresh_advisory_key(connection_id)
             acquired = False
-            async for session in self._db_router.get_global_session():
-                await session.execute(
-                    text("SELECT pg_advisory_xact_lock(:lock_key)"),
-                    {"lock_key": lock_key},
-                )
-                acquired = True
-                try:
-                    yield
-                finally:
-                    await session.commit()
-                break
+            async with contextlib.aclosing(self._db_router.get_global_session()) as sessions:
+                async for session in sessions:
+                    await session.execute(
+                        text("SELECT pg_advisory_xact_lock(:lock_key)"),
+                        {"lock_key": lock_key},
+                    )
+                    acquired = True
+                    try:
+                        yield
+                    finally:
+                        await session.commit()
+                    break
 
             if not acquired:
-                yield
+                raise RuntimeError("DatabaseRouter did not yield a GlobalSession for advisory lock.")
 
 
 __all__ = [
