@@ -108,6 +108,51 @@ class TenantAwareOutboundRecordLookupAdapter(OutboundRecordLookupPort):
             )
 
 
+class TenantAwareReplicaLookupAdapter(ReplicaLookupPort):
+    """Adapter fulfilling ReplicaLookupPort by querying the tenant shard via IpDataPlaneUnitOfWorkProviderPort."""
+
+    def __init__(self, uow_provider: IpDataPlaneUnitOfWorkProviderPort) -> None:
+        self._provider = uow_provider
+
+    async def get_by_key(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        record_key: str,
+    ) -> ReplicaRecord | None:
+        shard_info_res = await self._provider.resolve_shard_info(tenant_id)
+        if shard_info_res.is_err:
+            return None
+        shard_id, shard_dsn = shard_info_res.unwrap()
+        async with self._provider.get_data_plane_uow(tenant_id, shard_id, shard_dsn) as uow:
+            return await uow.replica_records.get_by_key(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                stream=stream,
+                record_key=record_key,
+            )
+
+
+class TenantAwareNotificationOutboxAdapter(NotificationOutboxPort):
+    """Adapter fulfilling NotificationOutboxPort by staging Stage-1 notification envelopes to the tenant shard outbox."""
+
+    def __init__(self, uow_provider: IpDataPlaneUnitOfWorkProviderPort) -> None:
+        self._provider = uow_provider
+
+    async def publish_envelope(self, envelope: EventEnvelope) -> None:
+        tenant_id = envelope.tenant_id
+        if not tenant_id:
+            return
+        shard_info_res = await self._provider.resolve_shard_info(tenant_id)
+        if shard_info_res.is_err:
+            return
+        shard_id, shard_dsn = shard_info_res.unwrap()
+        async with self._provider.get_data_plane_uow(tenant_id, shard_id, shard_dsn) as uow:
+            await uow.stage_outbox_envelope(envelope)
+            await uow.commit()
+
+
 class QueryReplicaStepHandler(StepHandlerPort[JsonDict, JsonDict]):
     """Queries an L2 ReplicaRecord inside a Stitch workflow step (`EffectPolicy.PURE`)."""
 
@@ -390,4 +435,7 @@ __all__ = [
     "OutboundRecordLookupPort",
     "QueryReplicaStepHandler",
     "ReplicaLookupPort",
+    "TenantAwareNotificationOutboxAdapter",
+    "TenantAwareOutboundRecordLookupAdapter",
+    "TenantAwareReplicaLookupAdapter",
 ]

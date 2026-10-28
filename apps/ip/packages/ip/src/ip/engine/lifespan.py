@@ -1,4 +1,4 @@
-"""Integration Platform (IP) Domain Startup and Shutdown Hooks.
+"""Integration Platform (IP) Engine Startup and Shutdown Hooks.
 
 These hooks initialize and tear down IP infrastructure resources and IoC container state.
 They are called by the Shell's lifespan (`unified_api/bootstrap/lifespan.py`).
@@ -15,15 +15,13 @@ from database.router import DatabaseRouterPort
 from dependency_injector import providers
 from fastapi import FastAPI
 
-from ip.bootstrap.container import Container
 from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     DEFAULT_IP_PAYLOAD_BUCKET,
 )
+from ip.engine.container import Container
 
 logger = structlog.get_logger(__name__)
-
-_ip_container: Container | None = None
 
 
 async def _ensure_payload_bucket(bucket_name: str = DEFAULT_IP_PAYLOAD_BUCKET) -> None:
@@ -56,8 +54,6 @@ async def startup(
     allow_private_ips: bool = False,
 ) -> None:
     """Initializes the IP IoC Container and IpTenantResolver and attaches them to `app.state`."""
-    global _ip_container
-
     logger.info("ip_startup_initializing")
     await _ensure_payload_bucket(DEFAULT_IP_PAYLOAD_BUCKET)
 
@@ -69,17 +65,25 @@ async def startup(
     container.tenant_resolver.override(providers.Object(resolver))
     container.db_router.override(providers.Object(db_router))
     app.state.ip_container = container
-    _ip_container = container
+    app.state.ip_tiered_storage = container.tiered_storage()
+    app.state.ip_transformer_registry = container.transformer_registry()
+    app.state.ip_stitch_catalog = container.stitch_catalog()
+    app.state.ip_workflow_definitions = container.workflow_definition_registry()
+    app.state.ip_token_refresh_lock = container.token_refresh_lock()
+    app.state.ip_token_refresher = container.oauth2_token_refresher()
     logger.info("ip_startup_completed")
 
 
 async def shutdown(app: FastAPI | None = None) -> None:
     """Gracefully cleans up IP container and resolver state on application shutdown."""
-    global _ip_container
-
     logger.info("ip_shutdown_started")
-    if app is not None and hasattr(app, "state"):
+    if app is not None:
         app.state.ip_container = None
         app.state.ip_tenant_resolver = None
-    _ip_container = None
+        app.state.ip_tiered_storage = None
+        app.state.ip_transformer_registry = None
+        app.state.ip_stitch_catalog = None
+        app.state.ip_workflow_definitions = None
+        app.state.ip_token_refresh_lock = None
+        app.state.ip_token_refresher = None
     logger.info("ip_shutdown_completed")

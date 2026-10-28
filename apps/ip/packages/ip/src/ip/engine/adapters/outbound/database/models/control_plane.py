@@ -159,15 +159,15 @@ class SyncRunRecord(IpGlobalBase):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
-class MappingBindingRecord(IpGlobalBase):
-    """Database record representation of the ip.mapping_bindings table."""
+class TransformationRecord(IpGlobalBase):
+    """Database record representation of the ip.transformations table."""
 
-    __tablename__ = "mapping_bindings"
+    __tablename__ = "transformations"
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "connection_id", "stream", name="uq_ip_mapping_binding_stream"
+            "tenant_id", "connection_id", "stream", name="uq_ip_transformation_stream"
         ),
-        Index("ix_ip_mapping_bindings_conn", "connection_id"),
+        Index("ix_ip_transformations_conn", "connection_id"),
         {"schema": "ip"},
     )
 
@@ -175,10 +175,39 @@ class MappingBindingRecord(IpGlobalBase):
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
     stream: Mapped[str] = mapped_column(String(128), nullable=False)
-    mapping_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    shadow_mapping_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    transformation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    transformation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    shadow_transformation_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mode: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class StitchRecord(IpGlobalBase):
+    """Database record representation of the ip.stitches table."""
+
+    __tablename__ = "stitches"
+    __table_args__ = (
+        Index(
+            "ix_ip_stitches_tenant_event",
+            "tenant_id",
+            "canonical_event_type",
+        ),
+        Index("ix_ip_stitches_workflow", "workflow_id", "workflow_version"),
+        {"schema": "ip"},
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    workflow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    canonical_event_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    is_trigger: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    condition_event_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    idempotency_key_field: Mapped[str] = mapped_column(String(128), nullable=False, default="id")
+    concurrency_key_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    resource_hint_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -201,6 +230,7 @@ class IpOutboxRecord(IpGlobalBase, OutboxMixin):
         Index(
             "ix_ip_outbox_pending",
             "status",
+            "lane",
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
@@ -213,6 +243,7 @@ __all__ = [
     "ConnectionRecord",
     "ConnectionStreamStateRecord",
     "IpOutboxRecord",
-    "MappingBindingRecord",
+    "StitchRecord",
     "SyncRunRecord",
+    "TransformationRecord",
 ]

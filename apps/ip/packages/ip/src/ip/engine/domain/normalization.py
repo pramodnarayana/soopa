@@ -12,11 +12,12 @@ from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 
 from ip.engine.domain.enums import (
-    MappingMode,
+    IpIdPrefix,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
     RuleSeverity,
+    TransformationMode,
 )
 
 
@@ -31,7 +32,7 @@ class SourceReference:
 
 @dataclass(frozen=True)
 class CanonicalDraft:
-    """Draft canonical record produced by a pure MapperPort implementation."""
+    """Draft canonical record produced by a pure TransformerPort implementation."""
 
     canonical_type: str
     source_id: str
@@ -41,8 +42,8 @@ class CanonicalDraft:
 
 
 @dataclass(frozen=True)
-class MappingRejection:
-    """Typed rejection produced by a mapper when a record violates business expectations."""
+class TransformationRejection:
+    """Typed rejection produced by a transformer when a record violates business expectations."""
 
     reason: NormalizationRejectionReason | str
     field_path: str | None
@@ -50,16 +51,16 @@ class MappingRejection:
 
 
 @dataclass(frozen=True)
-class MappingResult:
-    """Deterministic output of a mapper execution."""
+class TransformationResult:
+    """Deterministic output of a transformer execution."""
 
     drafts: tuple[CanonicalDraft, ...] = ()
-    rejections: tuple[MappingRejection, ...] = ()
+    rejections: tuple[TransformationRejection, ...] = ()
 
 
 @dataclass(frozen=True)
-class MappingContext:
-    """Pure contextual metadata passed into MapperPort.map()."""
+class TransformationContext:
+    """Pure contextual metadata passed into TransformerPort.transform()."""
 
     connection_id: str
     stream: str
@@ -70,7 +71,7 @@ class MappingContext:
 
 @dataclass(frozen=True)
 class ReplicaSnapshot:
-    """Immutable view of an L2 replica snapshot provided as input to mappers."""
+    """Immutable view of an L2 replica snapshot provided as input to transformers."""
 
     id: str
     connection_id: str
@@ -109,19 +110,19 @@ class CanonicalEntityDefinition:
 
 
 @dataclass(kw_only=True)
-class MappingBinding(AggregateRoot):
-    """Control plane configuration binding a connection stream to an active mapper version."""
+class Transformation(AggregateRoot):
+    """Control plane configuration binding a connection stream to an active transformer version."""
 
-    ID_PREFIX: ClassVar[str] = DomainIdPrefix.IP_MAPPING_BINDING.value
+    ID_PREFIX: ClassVar[str] = IpIdPrefix.TRANSFORMATION.value
 
     id: str
     tenant_id: str
     connection_id: str
     stream: str
-    mapping_id: str
-    mapping_version: int
-    mode: MappingMode = MappingMode.ACTIVE
-    shadow_mapping_version: int | None = None
+    transformation_id: str
+    transformation_version: int
+    mode: TransformationMode = TransformationMode.ACTIVE
+    shadow_transformation_version: int | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -132,21 +133,21 @@ class MappingBinding(AggregateRoot):
         tenant_id: str,
         connection_id: str,
         stream: str,
-        mapping_id: str,
-        mapping_version: int,
-        mode: MappingMode = MappingMode.ACTIVE,
-        shadow_mapping_version: int | None = None,
-    ) -> MappingBinding:
+        transformation_id: str,
+        transformation_version: int,
+        mode: TransformationMode = TransformationMode.ACTIVE,
+        shadow_transformation_version: int | None = None,
+    ) -> Transformation:
         now = datetime.now(UTC)
         return cls(
             id=generate_id(cls.ID_PREFIX),
             tenant_id=tenant_id,
             connection_id=connection_id,
             stream=stream,
-            mapping_id=mapping_id,
-            mapping_version=mapping_version,
+            transformation_id=transformation_id,
+            transformation_version=transformation_version,
             mode=mode,
-            shadow_mapping_version=shadow_mapping_version,
+            shadow_transformation_version=shadow_transformation_version,
             created_at=now,
             updated_at=now,
         )
@@ -162,8 +163,8 @@ class NormalizationLedgerEntry:
     tenant_id: str
     replica_record_id: str
     replica_version: int
-    mapping_id: str
-    mapping_version: int
+    transformation_id: str
+    transformation_version: int
     produced_canonical_refs: tuple[tuple[str, str], ...]
     outcome: NormalizationOutcome
     trace_id: str
@@ -177,8 +178,8 @@ class NormalizationLedgerEntry:
         tenant_id: str,
         replica_record_id: str,
         replica_version: int,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
         produced_canonical_refs: tuple[tuple[str, str], ...],
         outcome: NormalizationOutcome,
         trace_id: str,
@@ -189,8 +190,8 @@ class NormalizationLedgerEntry:
             tenant_id=tenant_id,
             replica_record_id=replica_record_id,
             replica_version=replica_version,
-            mapping_id=mapping_id,
-            mapping_version=mapping_version,
+            transformation_id=transformation_id,
+            transformation_version=transformation_version,
             produced_canonical_refs=produced_canonical_refs,
             outcome=outcome,
             trace_id=trace_id,
@@ -209,8 +210,8 @@ class NormalizationRejectionEntry:
     tenant_id: str
     replica_record_id: str
     stream: str
-    mapping_id: str
-    mapping_version: int
+    transformation_id: str
+    transformation_version: int
     reason_code: str
     field_path: str | None
     detail: str
@@ -225,8 +226,8 @@ class NormalizationRejectionEntry:
         tenant_id: str,
         replica_record_id: str,
         stream: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
         reason_code: str,
         detail: str,
         trace_id: str,
@@ -238,8 +239,8 @@ class NormalizationRejectionEntry:
             tenant_id=tenant_id,
             replica_record_id=replica_record_id,
             stream=stream,
-            mapping_id=mapping_id,
-            mapping_version=mapping_version,
+            transformation_id=transformation_id,
+            transformation_version=transformation_version,
             reason_code=reason_code,
             field_path=field_path,
             detail=detail,
@@ -366,24 +367,26 @@ class PendingReferenceEntry:
         )
 
 
-class DomainMapperProtocol(Protocol):
-    """Pure domain protocol for deterministic Layer 3 normalization mappers."""
+class DomainTransformerProtocol(Protocol):
+    """Pure domain protocol for deterministic Layer 3 normalization transformers."""
 
     @property
-    def mapping_id(self) -> str:
-        """Stable identifier for this mapper (e.g. 'domain.stream_mapper')."""
+    def transformation_id(self) -> str:
+        """Stable identifier for this transformer (e.g. 'energy.ami_meter_reading')."""
         ...
 
     @property
-    def mapping_version(self) -> int:
-        """Monotonic schema/logic version of this mapper."""
+    def transformation_version(self) -> int:
+        """Monotonic schema/logic version of this transformer."""
         ...
 
     @property
     def target_types(self) -> tuple[str, ...]:
-        """Canonical entity types this mapper can produce."""
+        """Canonical entity types this transformer can produce."""
         ...
 
-    def map(self, replica: ReplicaSnapshot, context: MappingContext) -> MappingResult:
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
         """Transform a replica snapshot into canonical drafts and/or rejections."""
         ...

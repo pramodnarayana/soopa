@@ -11,6 +11,7 @@ from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchem
 from ip.engine.adapters.outbound.database.data_plane.mappers import replica_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRecordModel
 from ip.engine.domain.enums import CursorKind, MergeOutcome
+from ip.engine.domain.events import ReplicaRecordChangedEvent
 from ip.engine.domain.models.replica_record import ReplicaMergePolicy, ReplicaRecord
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
@@ -18,6 +19,7 @@ from ip.engine.ports.outbound.replica_record_repository_port import (
     ReplicaRecordRepositoryPort,
 )
 from seedwork.domain.types import JsonDict
+from seedwork.events import EventProcessingLane
 from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import select
@@ -403,9 +405,36 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             )
             await self._session.execute(upsert_stmt)
 
-        for agg in changed_aggregates.values():
+        changed_list = list(changed_aggregates.values())
+        for agg in changed_list:
             self._drain_trace_events(agg)
-            self._drain_events(agg, default_tenant_id=agg.tenant_id)
+
+        if len(changed_list) == 1:
+            self._drain_events(changed_list[0], default_tenant_id=changed_list[0].tenant_id)
+        elif len(changed_list) > 1:
+            for agg in changed_list:
+                agg.clear_domain_events()
+            chunk_size = 250
+            for idx in range(0, len(changed_list), chunk_size):
+                chunk_aggs = changed_list[idx : idx + chunk_size]
+                first = chunk_aggs[0]
+                first.add_domain_event(
+                    ReplicaRecordChangedEvent(
+                        record_id=first.id,
+                        record_ids=tuple(a.id for a in chunk_aggs),
+                        tenant_id=first.tenant_id,
+                        connection_id=first.connection_id,
+                        stream=first.stream,
+                        record_key=first.record_key,
+                        outcome="BATCH_UPSERT",
+                        version=first.version,
+                        data_hash=first.data_hash,
+                        trace_id=first.trace_id,
+                        correlation_id=first.correlation_id,
+                        lane=EventProcessingLane.BULK,
+                    )
+                )
+                self._drain_events(first, default_tenant_id=first.tenant_id)
 
         await self._session.flush()
         return results

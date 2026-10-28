@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
-from urllib.parse import quote, urlparse
+from urllib.parse import parse_qsl, quote, urlparse, urlunparse
 
 import httpx
 import structlog
@@ -229,7 +229,7 @@ class DeclarativeHttpConnector(BaseConnector):
             **auth.headers,
             **action.headers,
         }
-        merged_check_params = {**auth.params, **(action.query_params or {})}
+        merged_check_params = {**(action.query_params or {}), **auth.params}
 
         try:
             resp = await self._http_client.request(
@@ -417,7 +417,14 @@ class DeclarativeHttpConnector(BaseConnector):
             **auth.headers,
             **action.headers,
         }
-        merged_page_params = {**auth.params, **params}
+        url_params: dict[str, str | int] = {}
+        if "?" in req_url:
+            parsed_req = urlparse(req_url)
+            if parsed_req.query:
+                url_params = dict(parse_qsl(parsed_req.query, keep_blank_values=True))
+                req_url = urlunparse(parsed_req._replace(query=""))
+
+        merged_page_params = {**url_params, **params, **auth.params}
         try:
             resp = await self._http_client.request(
                 method=action.method,

@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from seedwork.events import DomainEvent
+from seedwork.events import DomainEvent, EventProcessingLane
 
 from ip.engine.domain.enums import IpEventType
 
@@ -83,18 +83,18 @@ class ConnectionErrorRecordedEvent(DomainEvent):
 
 @dataclass(frozen=True)
 class InboundRecordCreatedEvent(DomainEvent):
-    """Domain event emitted when an external inbound record is durably stored in L1."""
+    """Domain event emitted when one or more external inbound records are durably stored in L1."""
 
-    record_id: str
-    tenant_id: str
-    connection_id: str
-    trace_id: str
-    correlation_id: str | None
-    stream_name: str
-    payload_size_bytes: int
-    payload_sha256: str
-    is_inlined: bool
-    s3_key: str | None
+    record_id: str = ""
+    tenant_id: str = ""
+    connection_id: str = ""
+    trace_id: str = ""
+    correlation_id: str | None = None
+    stream_name: str = ""
+    payload_size_bytes: int = 0
+    payload_sha256: str = ""
+    is_inlined: bool = True
+    s3_key: str | None = None
     app_id: str = ""
     ingestion_mode: str = "PUSH_FULL"
     sync_run_id: str | None = None
@@ -103,6 +103,21 @@ class InboundRecordCreatedEvent(DomainEvent):
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    record_ids: tuple[str, ...] = ()
+    lane: EventProcessingLane | None = None
+
+    def __post_init__(self) -> None:
+        if not self.record_ids and self.record_id:
+            object.__setattr__(self, "record_ids", (self.record_id,))
+        elif self.record_ids and not self.record_id:
+            object.__setattr__(self, "record_id", self.record_ids[0])
+        if self.lane is None:
+            resolved_lane = (
+                EventProcessingLane.BULK
+                if (len(self.record_ids) > 1 or self.ingestion_mode.startswith("PULL_"))
+                else EventProcessingLane.REALTIME
+            )
+            object.__setattr__(self, "lane", resolved_lane)
 
     @property
     def event_name(self) -> str:
@@ -111,24 +126,48 @@ class InboundRecordCreatedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return self.lane or EventProcessingLane.REALTIME
+
 
 @dataclass(frozen=True)
 class ReplicaRecordChangedEvent(DomainEvent):
-    """Domain event emitted when an L2 universal replica changes (INSERT, UPDATE, TOMBSTONE)."""
+    """Domain event emitted when one or more L2 universal replicas change (INSERT, UPDATE, TOMBSTONE)."""
 
-    record_id: str
-    tenant_id: str
-    connection_id: str
-    stream: str
-    record_key: str
-    outcome: str
-    version: int
-    data_hash: str
-    trace_id: str
+    record_id: str = ""
+    tenant_id: str = ""
+    connection_id: str = ""
+    stream: str = ""
+    record_key: str = ""
+    outcome: str = ""
+    version: int = 1
+    data_hash: str = ""
+    trace_id: str = ""
     correlation_id: str | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    record_ids: tuple[str, ...] = ()
+    lane: EventProcessingLane | None = None
+
+    def __post_init__(self) -> None:
+        if not self.record_ids and self.record_id:
+            object.__setattr__(self, "record_ids", (self.record_id,))
+        elif self.record_ids and not self.record_id:
+            object.__setattr__(self, "record_id", self.record_ids[0])
+        if self.lane is None:
+            resolved_lane = (
+                EventProcessingLane.BULK
+                if len(self.record_ids) > 1
+                else EventProcessingLane.REALTIME
+            )
+            object.__setattr__(self, "lane", resolved_lane)
 
     @property
     def event_name(self) -> str:
@@ -137,21 +176,45 @@ class ReplicaRecordChangedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return self.lane or EventProcessingLane.REALTIME
+
 
 @dataclass(frozen=True)
 class NormalizedRecordCreatedEvent(DomainEvent):
     """Domain event emitted when an L3 canonical normalization completes."""
 
-    record_id: str
-    tenant_id: str
-    connection_id: str
-    canonical_type: str
-    source_id: str
-    trace_id: str
+    record_id: str = ""
+    tenant_id: str = ""
+    connection_id: str = ""
+    canonical_type: str = ""
+    source_id: str = ""
+    trace_id: str = ""
     correlation_id: str | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    record_ids: tuple[str, ...] = ()
+    lane: EventProcessingLane | None = None
+
+    def __post_init__(self) -> None:
+        if not self.record_ids and self.record_id:
+            object.__setattr__(self, "record_ids", (self.record_id,))
+        elif self.record_ids and not self.record_id:
+            object.__setattr__(self, "record_id", self.record_ids[0])
+        if self.lane is None:
+            resolved_lane = (
+                EventProcessingLane.BULK
+                if len(self.record_ids) > 1
+                else EventProcessingLane.REALTIME
+            )
+            object.__setattr__(self, "lane", resolved_lane)
 
     @property
     def event_name(self) -> str:
@@ -160,26 +223,50 @@ class NormalizedRecordCreatedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return self.lane or EventProcessingLane.REALTIME
+
 
 @dataclass(frozen=True)
 class CanonicalRecordChangedEvent(DomainEvent):
-    """Domain event emitted when a canonical domain record is upserted or tombstoned."""
+    """Domain event emitted when one or more canonical domain records are upserted or tombstoned."""
 
-    tenant_id: str
-    connection_id: str
-    canonical_type: str
-    source_id: str
-    action: str  # UPSERT, TOMBSTONE
-    trace_id: str
-    mapping_id: str
-    mapping_version: int
-    replica_id: str
-    replica_version: int
+    tenant_id: str = ""
+    connection_id: str = ""
+    canonical_type: str = ""
+    source_id: str = ""
+    action: str = "UPSERT"
+    trace_id: str = ""
+    transformation_id: str = ""
+    transformation_version: int = 1
+    replica_id: str = ""
+    replica_version: int = 1
     correlation_id: str | None = None
     changed_fields: tuple[str, ...] = ()
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    record_ids: tuple[str, ...] = ()
+    lane: EventProcessingLane | None = None
+
+    def __post_init__(self) -> None:
+        if not self.record_ids and self.source_id:
+            object.__setattr__(self, "record_ids", (self.source_id,))
+        elif self.record_ids and not self.source_id:
+            object.__setattr__(self, "source_id", self.record_ids[0])
+        if self.lane is None:
+            resolved_lane = (
+                EventProcessingLane.BULK
+                if len(self.record_ids) > 1
+                else EventProcessingLane.REALTIME
+            )
+            object.__setattr__(self, "lane", resolved_lane)
 
     @property
     def event_name(self) -> str:
@@ -188,64 +275,117 @@ class CanonicalRecordChangedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return self.lane or EventProcessingLane.REALTIME
+
 
 @dataclass(frozen=True)
-class MappingBindingChangedEvent(DomainEvent):
-    """Domain event emitted when a stream mapping binding is created or updated."""
+class TransformationChangedEvent(DomainEvent):
+    """Domain event emitted when a stream transformation is created or updated."""
 
-    binding_id: str
+    id: str
     tenant_id: str
     connection_id: str
     stream: str
-    mapping_id: str
-    mapping_version: int
+    transformation_id: str
+    transformation_version: int
     mode: str
-    shadow_mapping_version: int | None = None
+    shadow_transformation_version: int | None = None
 
     @property
     def event_name(self) -> str:
-        return IpEventType.MAPPING_BINDING_CHANGED
+        return IpEventType.TRANSFORMATION_CHANGED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_processing_lane(self) -> EventProcessingLane:
+        return EventProcessingLane.BULK
+
 
 @dataclass(frozen=True)
-class MappingVersionPromotedEvent(DomainEvent):
-    """Domain event emitted when a candidate shadow mapping version is promoted to active."""
+class TransformationVersionPromotedEvent(DomainEvent):
+    """Domain event emitted when a candidate shadow transformation version is promoted to active."""
 
-    binding_id: str
+    id: str
     tenant_id: str
     connection_id: str
     stream: str
-    mapping_id: str
+    transformation_id: str
     promoted_version: int
     previous_version: int
 
     @property
     def event_name(self) -> str:
-        return IpEventType.MAPPING_VERSION_PROMOTED
+        return IpEventType.TRANSFORMATION_VERSION_PROMOTED
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_processing_lane(self) -> EventProcessingLane:
+        return EventProcessingLane.BULK
+
+
+@dataclass(frozen=True)
+class StitchRegisteredEvent(DomainEvent):
+    """Domain event emitted when a Stitch is registered or updated in the Control Plane."""
+
+    stitch_id: str
+    tenant_id: str
+    workflow_id: str
+    workflow_version: int
+    canonical_event_type: str
+    is_trigger: bool
+    is_active: bool
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.STITCH_REGISTERED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return EventProcessingLane.BULK
+
 
 @dataclass(frozen=True)
 class OutboundRecordCreatedEvent(DomainEvent):
-    """Domain event emitted when an external outbound dispatch is executed."""
+    """Domain event emitted when one or more external outbound dispatches are staged or executed."""
 
-    record_id: str
-    tenant_id: str
-    connection_id: str
-    app_id: str
-    trace_id: str
-    correlation_id: str | None
-    stream_name: str
-    status: str
+    record_id: str = ""
+    tenant_id: str = ""
+    connection_id: str = ""
+    app_id: str = ""
+    trace_id: str = ""
+    correlation_id: str | None = None
+    stream_name: str = ""
+    status: str = ""
     response_status_code: int | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    record_ids: tuple[str, ...] = ()
+    lane: EventProcessingLane | None = None
+
+    def __post_init__(self) -> None:
+        if not self.record_ids and self.record_id:
+            object.__setattr__(self, "record_ids", (self.record_id,))
+        elif self.record_ids and not self.record_id:
+            object.__setattr__(self, "record_id", self.record_ids[0])
+        if self.lane is None:
+            resolved_lane = (
+                EventProcessingLane.BULK
+                if len(self.record_ids) > 1
+                else EventProcessingLane.REALTIME
+            )
+            object.__setattr__(self, "lane", resolved_lane)
 
     @property
     def event_name(self) -> str:
@@ -253,6 +393,15 @@ class OutboundRecordCreatedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
+
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return self.lane or EventProcessingLane.REALTIME
 
 
 @dataclass(frozen=True)
@@ -275,6 +424,34 @@ class StreamStateCheckpointedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class SyncRunRequestedEvent(DomainEvent):
+    """Domain event emitted when a pull sync run is requested via API or cron scheduler."""
+
+    tenant_id: str
+    connection_id: str
+    stream: str
+    kind: str
+    trace_id: str
+    correlation_id: str | None = None
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.SYNC_RUN_REQUESTED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return EventProcessingLane.BULK
+
+
+@dataclass(frozen=True)
 class SyncRunStartedEvent(DomainEvent):
     """Domain event emitted when a pull sync run begins execution."""
 
@@ -293,6 +470,9 @@ class SyncRunStartedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
+
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
 
 
 @dataclass(frozen=True)
@@ -318,6 +498,9 @@ class SyncRunCompletedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
 
 @dataclass(frozen=True)
 class SyncRunFailedEvent(DomainEvent):
@@ -340,6 +523,9 @@ class SyncRunFailedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
 
 @dataclass(frozen=True)
 class GenerationCompletedEvent(DomainEvent):
@@ -358,17 +544,39 @@ class GenerationCompletedEvent(DomainEvent):
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
 
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return EventProcessingLane.BULK
+
 
 @dataclass(frozen=True)
 class FetchRecordRequestedEvent(DomainEvent):
-    """Domain event emitted when a PUSH_THIN notice requests an async fetch."""
+    """Domain event emitted when one or more PUSH_THIN notices request an async fetch."""
 
-    tenant_id: str
-    connection_id: str
-    stream: str
-    record_id: str
-    notice_inbound_record_id: str
-    trace_id: str
+    tenant_id: str = ""
+    connection_id: str = ""
+    stream: str = ""
+    record_id: str = ""
+    notice_inbound_record_id: str = ""
+    trace_id: str = ""
+    correlation_id: str | None = None
+    record_ids: tuple[str, ...] = ()
+    lane: EventProcessingLane | None = None
+
+    def __post_init__(self) -> None:
+        if not self.record_ids and self.record_id:
+            object.__setattr__(self, "record_ids", (self.record_id,))
+        elif self.record_ids and not self.record_id:
+            object.__setattr__(self, "record_id", self.record_ids[0])
+        if self.lane is None:
+            resolved_lane = (
+                EventProcessingLane.BULK
+                if len(self.record_ids) > 1
+                else EventProcessingLane.REALTIME
+            )
+            object.__setattr__(self, "lane", resolved_lane)
 
     @property
     def event_name(self) -> str:
@@ -376,3 +584,12 @@ class FetchRecordRequestedEvent(DomainEvent):
 
     def get_routing_tenant_id(self) -> str | None:
         return self.tenant_id
+
+    def get_trace_id(self) -> str | None:
+        return self.trace_id or None
+
+    def get_correlation_id(self) -> str | None:
+        return self.correlation_id
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        return self.lane or EventProcessingLane.REALTIME

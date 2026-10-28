@@ -15,6 +15,7 @@ from ip.engine.domain.events import (
     GenerationCompletedEvent,
     SyncRunCompletedEvent,
     SyncRunFailedEvent,
+    SyncRunRequestedEvent,
     SyncRunStartedEvent,
 )
 
@@ -71,6 +72,41 @@ class SyncRun(AggregateRoot):
             end_checkpoint=start_checkpoint,
             trace_id=resolved_trace_id,
         )
+
+    @classmethod
+    def request(
+        cls,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        stream: str,
+        kind: SyncRunKind,
+        generation_id: int = 1,
+        start_checkpoint: str | None = None,
+        trace_id: str | None = None,
+        correlation_id: str | None = None,
+    ) -> SyncRun:
+        """Creates a PENDING SyncRun and records its SyncRunRequestedEvent for the outbox."""
+        run = cls.create(
+            tenant_id=tenant_id,
+            connection_id=connection_id,
+            stream=stream,
+            kind=kind,
+            generation_id=generation_id,
+            start_checkpoint=start_checkpoint,
+            trace_id=trace_id,
+        )
+        run.add_domain_event(
+            SyncRunRequestedEvent(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                stream=stream,
+                kind=kind.value,
+                trace_id=run.trace_id,
+                correlation_id=correlation_id,
+            )
+        )
+        return run
 
     def start(self) -> None:
         """Transitions from PENDING to RUNNING, emitting SyncRunStartedEvent."""

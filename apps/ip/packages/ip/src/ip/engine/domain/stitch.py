@@ -1,15 +1,22 @@
-"""Domain models, subscriptions, and step DTOs for the IP Layer-4 Stitch Engine."""
+"""Domain models and step DTOs for the IP Layer-4 Stitch Engine."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import ClassVar
 
 from orchestration.domain.constants import WorkflowErrorCode
 from orchestration.domain.exceptions import Result, WorkflowError
 from seedwork.domain.types import JsonDict
+from seedwork.models import AggregateRoot
 
-from ip.engine.domain.enums import HttpWriteOperation, OutboundConflictStrategy
+from ip.engine.domain.enums import (
+    HttpWriteOperation,
+    IpIdPrefix,
+    OutboundConflictStrategy,
+)
+from ip.engine.domain.events import StitchRegisteredEvent
 
 
 class StitchStepType(StrEnum):
@@ -20,11 +27,13 @@ class StitchStepType(StrEnum):
     EMIT_NOTIFICATION = "ip.stitch.emit_notification"
 
 
-@dataclass(frozen=True, kw_only=True)
-class StitchSubscription:
-    """Binds an L3 Canonical Event either to trigger a new Stitch WorkflowRun (`is_trigger=True`)
-    or to signal an active `WAIT_FOR_EVENT` condition (`is_trigger=False`).
+@dataclass(kw_only=True)
+class Stitch(AggregateRoot):
+    """Connects an L3 Canonical Event to a Stitch Workflow (`is_trigger=True`)
+    or signals an active `WAIT_FOR_EVENT` condition (`is_trigger=False`).
     """
+
+    ID_PREFIX: ClassVar[str] = IpIdPrefix.STITCH.value
 
     id: str
     tenant_id: str
@@ -37,6 +46,20 @@ class StitchSubscription:
     concurrency_key_field: str | None = None
     resource_hint_field: str | None = None
     is_active: bool = True
+
+    def record_registered(self) -> None:
+        """Records a StitchRegisteredEvent domain event on this aggregate."""
+        self.add_domain_event(
+            StitchRegisteredEvent(
+                stitch_id=self.id,
+                tenant_id=self.tenant_id,
+                workflow_id=self.workflow_id,
+                workflow_version=self.workflow_version,
+                canonical_event_type=self.canonical_event_type,
+                is_trigger=self.is_trigger,
+                is_active=self.is_active,
+            )
+        )
 
     def extract_idempotency_key(self, payload: JsonDict, fallback_event_id: str) -> str:
         raw_val = payload.get(self.idempotency_key_field)
@@ -281,6 +304,6 @@ __all__ = [
     "ExecuteHttpActionStepOutput",
     "QueryReplicaStepInput",
     "QueryReplicaStepOutput",
+    "Stitch",
     "StitchStepType",
-    "StitchSubscription",
 ]

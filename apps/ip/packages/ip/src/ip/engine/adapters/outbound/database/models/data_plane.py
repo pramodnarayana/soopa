@@ -22,7 +22,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from strace.adapters import TenantTraceableOrmModel, TraceEventMixin
 
-from database.models.common import OutboxMixin
+from database.models.common import OutboxMixin, ProcessedEventMixin
 
 
 class InboundRecordModel(IpTenantBase, TenantTraceableOrmModel):
@@ -248,9 +248,9 @@ class NormalizationLedgerModel(IpTenantBase):
         UniqueConstraint(
             "tenant_id",
             "replica_record_id",
-            "mapping_id",
-            "mapping_version",
-            name="uq_ip_norm_ledger_replica_mapping",
+            "transformation_id",
+            "transformation_version",
+            name="uq_ip_norm_ledger_replica_transformation",
         ),
         Index("idx_norm_ledger_replica", "tenant_id", "replica_record_id"),
         Index("idx_norm_ledger_trace", "tenant_id", "trace_id"),
@@ -260,8 +260,8 @@ class NormalizationLedgerModel(IpTenantBase):
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
     replica_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
     replica_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    mapping_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    transformation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    transformation_version: Mapped[int] = mapped_column(Integer, nullable=False)
     produced_canonical_refs: Mapped[list[list[str]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
@@ -284,8 +284,8 @@ class NormalizationRejectionModel(IpTenantBase):
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
     replica_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
     stream: Mapped[str] = mapped_column(String(128), nullable=False)
-    mapping_id: Mapped[str] = mapped_column(String(128), nullable=False)
-    mapping_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    transformation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    transformation_version: Mapped[int] = mapped_column(Integer, nullable=False)
     reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
     field_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     detail: Mapped[str] = mapped_column(Text, nullable=False)
@@ -358,16 +358,25 @@ class IpDataPlaneOutboxRecord(IpTenantBase, OutboxMixin):
         Index(
             "ix_ip_dp_outbox_pending",
             "status",
+            "lane",
             "created_at",
             postgresql_where=text("status = 'PENDING'"),
         ),
     )
 
 
+class IpProcessedEventModel(IpTenantBase, ProcessedEventMixin):
+    """Consumer idempotency ledger in tenant shards (public.ip_processed_events)."""
+
+    __tablename__ = "ip_processed_events"
+    __table_args__ = (Index("idx_ip_processed_events_tenant", "tenant_id", "processed_at"),)
+
+
 __all__ = [
     "GlobalEntityMapModel",
     "InboundRecordModel",
     "IpDataPlaneOutboxRecord",
+    "IpProcessedEventModel",
     "IpTraceEventModel",
     "NormalizationLedgerModel",
     "NormalizationRejectionModel",

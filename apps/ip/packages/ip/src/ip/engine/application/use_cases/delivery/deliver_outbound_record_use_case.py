@@ -33,7 +33,10 @@ from ip.engine.domain.exceptions import (
     TenantShardNotFoundError,
 )
 from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.services.outbound_error_classifier import classify_outbound_http_outcome
+from ip.engine.domain.services.outbound_error_classifier import (
+    classify_outbound_http_outcome,
+    redact_sensitive_headers,
+)
 from ip.engine.ports.outbound.connector_port import DestinationConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
@@ -307,10 +310,16 @@ class DeliverOutboundRecordUseCase:
             or f"https://{resolved_creds.app_id}.local"
         ).rstrip("/")
         initial_target_url = f"{base_url}/{command.stream_name.lstrip('/')}"
-        initial_headers: JsonDict = {
-            **command.headers,
-            command.idempotency_header_name: idempotency_key,
-        }
+        extra_sensitive = [
+            k for k in command.headers if k.lower() != command.idempotency_header_name.lower()
+        ]
+        initial_headers: JsonDict = redact_sensitive_headers(
+            {
+                **command.headers,
+                command.idempotency_header_name: idempotency_key,
+            },
+            extra_sensitive_names=extra_sensitive,
+        )
 
         async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
             if existing is not None:

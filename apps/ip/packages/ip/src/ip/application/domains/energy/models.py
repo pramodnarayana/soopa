@@ -15,6 +15,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
+from ip.application.domains.energy.canonical import (
+    MeterReadingQualityFlag,
+    ServicePointStatus,
+)
 from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 
 
@@ -43,6 +47,10 @@ class MdmMeterReadingRecord(IpTenantBase):
     replay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
     source_replica_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    transformation_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="energy.ami_meter_reading"
+    )
+    transformation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     meter_serial_number: Mapped[str] = mapped_column(String(128), nullable=False)
     service_point_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     reading_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -50,7 +58,11 @@ class MdmMeterReadingRecord(IpTenantBase):
     kwh_delivered: Mapped[float] = mapped_column(Float, nullable=False)
     kwh_received: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     voltage_avg: Mapped[float | None] = mapped_column(Float, nullable=True)
-    quality_flag: Mapped[str] = mapped_column(String(32), nullable=False, default="VALIDATED")
+    quality_flag: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=MeterReadingQualityFlag.VALIDATED.value,
+    )
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -77,10 +89,18 @@ class MdmServicePointRecord(IpTenantBase):
     replay_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     source_connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
     source_replica_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    transformation_id: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="energy.ami_service_point"
+    )
+    transformation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     service_point_external_id: Mapped[str] = mapped_column(String(128), nullable=False)
     meter_serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
     customer_external_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     service_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
     grid_region: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status: Mapped[str] = mapped_column(String(32), nullable=False, default="ACTIVE")
+    status: Mapped[str] = mapped_column(
+        String(32),
+        nullable=False,
+        default=ServicePointStatus.ACTIVE.value,
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

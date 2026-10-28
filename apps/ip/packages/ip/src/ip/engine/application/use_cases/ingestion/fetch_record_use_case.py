@@ -67,6 +67,8 @@ class FetchRecordUseCase:
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
         token_manager: TokenManagerService | None = None,
     ) -> None:
+        if data_plane_uow is None and data_plane_uow_provider is None:
+            raise ValueError("Either data_plane_uow or data_plane_uow_provider must be provided.")
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow = data_plane_uow
         self._data_plane_uow_provider = data_plane_uow_provider

@@ -44,16 +44,23 @@ class IpErrorCode(StrEnum):
     PAYLOAD_NOT_FOUND = "PAYLOAD_NOT_FOUND"
     TENANT_SHARD_NOT_FOUND = "TENANT_SHARD_NOT_FOUND"
     ACTIVE_SYNC_RUN_EXISTS = "ACTIVE_SYNC_RUN_EXISTS"
+    SYNC_RUN_NOT_FOUND = "SYNC_RUN_NOT_FOUND"
     INBOUND_VERIFICATION_FAILED = "INBOUND_VERIFICATION_FAILED"
     INBOUND_PAYLOAD_DECODE_FAILED = "INBOUND_PAYLOAD_DECODE_FAILED"
     DUPLICATE_EXTERNAL_EVENT = "DUPLICATE_EXTERNAL_EVENT"
     RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
-    MAPPING_BINDING_NOT_FOUND = "MAPPING_BINDING_NOT_FOUND"
+    TRANSFORMER_NOT_FOUND = "TRANSFORMER_NOT_FOUND"
+    TRANSFORMATION_NOT_FOUND = "TRANSFORMATION_NOT_FOUND"
     REPLICA_RECORD_NOT_FOUND = "REPLICA_RECORD_NOT_FOUND"
     NORMALIZATION_FAILED = "NORMALIZATION_FAILED"
+    STITCH_DEFINITION_NOT_FOUND = "STITCH_DEFINITION_NOT_FOUND"
+    STITCH_RUN_NOT_FOUND = "STITCH_RUN_NOT_FOUND"
     TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
     REPLAY_STAGE_NOT_AVAILABLE = "REPLAY_STAGE_NOT_AVAILABLE"
     INVALID_REPLAY_PAYLOAD = "INVALID_REPLAY_PAYLOAD"
+    VALIDATION_FAILED = "VALIDATION_FAILED"
+    EXTERNAL_API_ERROR = "EXTERNAL_API_ERROR"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -454,22 +461,22 @@ class RateLimitExceededError(IpError):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MappingBindingNotFoundError(IpError):
-    """Returned when a stream mapping binding configuration does not exist."""
+class TransformationNotFoundError(IpError):
+    """Returned when a stream transformation configuration does not exist."""
 
     connection_id: str = ""
     stream: str = ""
-    code: IpErrorCode = IpErrorCode.MAPPING_BINDING_NOT_FOUND
+    code: IpErrorCode = IpErrorCode.TRANSFORMATION_NOT_FOUND
     disposition: FailureDisposition = FailureDisposition.FAIL
     http_status: int = 404
-    remediation: str | None = "Configure a mapping binding for this stream before normalizing."
+    remediation: str | None = "Configure a transformation for this stream before normalizing."
 
     @classmethod
-    def for_stream(cls, connection_id: str, stream: str) -> MappingBindingNotFoundError:
+    def for_stream(cls, connection_id: str, stream: str) -> TransformationNotFoundError:
         return cls(
             connection_id=connection_id,
             stream=stream,
-            message=f"No mapping binding configured for connection '{connection_id}', stream '{stream}'.",
+            message=f"No transformation configured for connection '{connection_id}', stream '{stream}'.",
             details={"connection_id": connection_id, "stream": stream},
         )
 
@@ -555,6 +562,100 @@ class ReplayStageNotAvailableError(IpError):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SyncRunNotFoundError(IpError):
+    """Returned when a requested sync run ID cannot be found for the connection and tenant."""
+
+    run_id: str = ""
+    code: IpErrorCode = IpErrorCode.SYNC_RUN_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify the run_id exists and belongs to the active connection."
+
+    @classmethod
+    def for_id(cls, run_id: str) -> SyncRunNotFoundError:
+        return cls(
+            run_id=run_id,
+            message=f"Sync run '{run_id}' was not found.",
+            details={"run_id": run_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class TransformerNotFoundError(IpError):
+    """Returned when a requested transformer_id and version is not registered in TransformerRegistryPort."""
+
+    transformation_id: str = ""
+    transformation_version: int = 1
+    code: IpErrorCode = IpErrorCode.TRANSFORMER_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = (
+        "Verify the transformation_id and transformation_version against /api/v1/tenants/{tenant_id}/ip/transformations/transformers."
+    )
+
+    @classmethod
+    def for_version(
+        cls, transformation_id: str, transformation_version: int
+    ) -> TransformerNotFoundError:
+        return cls(
+            transformation_id=transformation_id,
+            transformation_version=transformation_version,
+            message=f"Transformer '{transformation_id}' version {transformation_version} is not registered.",
+            details={
+                "transformation_id": transformation_id,
+                "transformation_version": transformation_version,
+            },
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class StitchDefinitionNotFoundError(IpError):
+    """Returned when a requested stitch WorkflowDefinition cannot be found."""
+
+    workflow_id: str = ""
+    version: int | None = None
+    code: IpErrorCode = IpErrorCode.STITCH_DEFINITION_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = (
+        "Verify the workflow_id against /api/v1/tenants/{tenant_id}/ip/stitches/definitions."
+    )
+
+    @classmethod
+    def for_workflow(
+        cls, workflow_id: str, version: int | None = None
+    ) -> StitchDefinitionNotFoundError:
+        suffix = f" version {version}" if version is not None else ""
+        return cls(
+            workflow_id=workflow_id,
+            version=version,
+            message=f"Stitch workflow definition '{workflow_id}'{suffix} was not found.",
+            details={"workflow_id": workflow_id, "version": version},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class StitchRunNotFoundError(IpError):
+    """Returned when a requested stitch WorkflowRun cannot be found on the tenant shard."""
+
+    run_id: str = ""
+    code: IpErrorCode = IpErrorCode.STITCH_RUN_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = (
+        "Verify the stitch workflow run_id exists and belongs to the active tenant."
+    )
+
+    @classmethod
+    def for_id(cls, run_id: str) -> StitchRunNotFoundError:
+        return cls(
+            run_id=run_id,
+            message=f"Stitch workflow run '{run_id}' was not found.",
+            details={"run_id": run_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
 class InvalidReplayPayloadError(IpError):
     """Returned when a modified payload supplied to ModifyAndReplay is structurally invalid."""
 
@@ -595,7 +696,6 @@ __all__ = [
     "IpError",
     "IpErrorCode",
     "ManifestParseFailureError",
-    "MappingBindingNotFoundError",
     "NormalizationFailedError",
     "PayloadNotFoundError",
     "RateLimitExceededError",
@@ -603,9 +703,14 @@ __all__ = [
     "ReplicaRecordNotFoundError",
     "Result",
     "SftpConnectionError",
+    "StitchDefinitionNotFoundError",
+    "StitchRunNotFoundError",
     "StreamNotFoundError",
+    "SyncRunNotFoundError",
     "TenantShardNotFoundError",
     "TraceNotFoundError",
+    "TransformationNotFoundError",
+    "TransformerNotFoundError",
     "UnsupportedWriteOperationError",
     "UpstreamHttpError",
     "UpstreamNetworkError",

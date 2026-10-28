@@ -14,6 +14,22 @@ class EnergyEntityType(StrEnum):
     MDM_SERVICE_POINT = "MDM_SERVICE_POINT"
 
 
+class MeterReadingQualityFlag(StrEnum):
+    """Canonical quality flags for AMI Smart Grid interval meter readings."""
+
+    VALIDATED = "VALIDATED"
+    ESTIMATED = "ESTIMATED"
+    TOMBSTONED = "TOMBSTONED"
+
+
+class ServicePointStatus(StrEnum):
+    """Canonical lifecycle statuses for Energy utility service points."""
+
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    DELETED = "DELETED"
+
+
 @dataclass(frozen=True)
 class CanonicalMeterReadingDTO:
     """Canonical representation of an AMI Smart Grid interval meter reading."""
@@ -32,6 +48,8 @@ class CanonicalMeterReadingDTO:
     voltage_avg: float | None
     quality_flag: str
     recorded_at: datetime
+    transformation_id: str = "energy.ami_meter_reading"
+    transformation_version: int = 1
     correlation_id: str | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
@@ -54,6 +72,8 @@ class CanonicalServicePointDTO:
     grid_region: str | None
     status: str
     updated_at: datetime
+    transformation_id: str = "energy.ami_service_point"
+    transformation_version: int = 1
     correlation_id: str | None = None
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
