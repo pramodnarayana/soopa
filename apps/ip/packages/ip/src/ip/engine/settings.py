@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -34,7 +34,7 @@ class IpEngineSettings(BaseSettings):
     aws_region: str = Field(default="us-east-1", validation_alias="AWS_DEFAULT_REGION")
     aws_endpoint_url: str | None = Field(default=None, validation_alias="AWS_ENDPOINT_URL")
     aws_access_key_id: str | None = Field(default=None, validation_alias="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: str | None = Field(
+    aws_secret_access_key: SecretStr | None = Field(
         default=None, validation_alias="AWS_SECRET_ACCESS_KEY"
     )
 

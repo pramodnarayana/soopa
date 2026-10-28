@@ -386,13 +386,11 @@ class RegisterStitchUseCase:
                             )
                         )
             else:
-                existing_in_mem = self._stitch_catalog.get_stitch(
-                    tenant_id="*",
+                existing_in_mem = self._stitch_catalog.find_any_stitch_by_id(
                     stitch_id=stitch_id,
                 )
                 if (
                     existing_in_mem is not None
-                    and existing_in_mem.tenant_id != "*"
                     and existing_in_mem.tenant_id != command.tenant_id
                 ):
                     bound.error(

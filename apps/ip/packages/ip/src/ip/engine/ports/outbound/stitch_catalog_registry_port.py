@@ -37,6 +37,12 @@ class StitchCatalogRegistryPort(Protocol):
         stitch_id: str,
     ) -> Stitch | None: ...
 
+    def find_any_stitch_by_id(
+        self,
+        *,
+        stitch_id: str,
+    ) -> Stitch | None: ...
+
 
 class StitchShardGatewayPort(Protocol):
     """Outbound port for dispatching canonical events and querying WorkflowRuns on a tenant's Data Plane shard."""

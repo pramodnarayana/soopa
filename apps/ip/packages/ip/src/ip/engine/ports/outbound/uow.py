@@ -77,15 +77,15 @@ class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
 
         Returns True if this is the first time the key is processed, or False if already processed.
         """
-        return True
+        raise NotImplementedError
 
     async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
         """Releases a previously claimed idempotency key when a chunk fails transiently (NACK)."""
-        return None
+        raise NotImplementedError
 
     async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
         """Stages an EventEnvelope into the tenant shard transactional outbox (`public.ip_outbox`)."""
-        return None
+        raise NotImplementedError
 
 
 class IpTenantResolverPort(Protocol):

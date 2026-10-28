@@ -147,7 +147,7 @@ class IpDeliveryRouteRegistry:
                 )
             )
             action = IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             if envelope.idempotency_key:
                 async with self._dp_uow_provider.get_data_plane_uow(
                     dto.tenant_id, shard_id, shard_dsn

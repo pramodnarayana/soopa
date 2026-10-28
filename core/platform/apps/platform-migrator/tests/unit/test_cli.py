@@ -4,6 +4,7 @@ Unit Tests for Platform Migrator CLI (Pure DI, Zero Monkeypatching)
 
 import pytest
 from platform_migrator.cli import handle_migrate, handle_seed, main
+from platform_migrator.runners.seed_runner import run_domain_seeds
 
 
 def test_handle_migrate_platform() -> None:
@@ -67,3 +68,27 @@ def test_main_runner_exception_returns_exit_code_one() -> None:
         migration_runner=failing_runner,
     )
     assert exit_code == 1
+
+
+def test_main_seed_ip_domain_and_isolated_seed_runner() -> None:
+    calls: list[str] = []
+    exit_code = main(
+        args=["seed", "--domain", "ip"],
+        seed_runner=lambda domain: calls.append(domain),
+    )
+    assert exit_code == 0
+    assert calls == ["ip"]
+
+    ip_scripts: list[str] = []
+    run_domain_seeds("ip", script_executor=ip_scripts.append)
+    assert ip_scripts == [
+        "apps/ip/scripts/seed.py",
+        "apps/ip/scripts/seed_jobs.py",
+    ]
+
+    edi_scripts: list[str] = []
+    run_domain_seeds("edi", script_executor=edi_scripts.append)
+    assert edi_scripts == [
+        "apps/edi/scripts/seed_jobs.py",
+        "apps/edi/apps/edi-as2-server/scripts/seed.py",
+    ]

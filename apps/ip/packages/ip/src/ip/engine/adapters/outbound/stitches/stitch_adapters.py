@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 
 import structlog
@@ -91,13 +92,16 @@ class IpStitchCanonicalDispatcherAdapter(
             return Result.err(shard_res.unwrap_err())
         shard_id, shard_dsn = shard_res.unwrap()
 
-        async for session in self._db_router.get_tenant_session(tenant_id, shard_id, shard_dsn):
-            uow = self._workflow_uow_factory(session)
-            async with uow:
-                run_res = await uow.runs.get_by_id(tenant_id, run_id)
-                if run_res.is_err:
-                    return Result.err(StitchRunNotFoundError.for_id(run_id))
-                return Result.ok(run_res.unwrap())
+        async with contextlib.aclosing(
+            self._db_router.get_tenant_session(tenant_id, shard_id, shard_dsn)
+        ) as session_gen:
+            async for session in session_gen:
+                uow = self._workflow_uow_factory(session)
+                async with uow:
+                    run_res = await uow.runs.get_by_id(tenant_id, run_id)
+                    if run_res.is_err:
+                        return Result.err(StitchRunNotFoundError.for_id(run_id))
+                    return Result.ok(run_res.unwrap())
 
         return Result.err(StitchRunNotFoundError.for_id(run_id))
 
@@ -158,40 +162,46 @@ class IpStitchCanonicalDispatcherAdapter(
             )
         shard_id, shard_dsn = shard_res.unwrap()
 
-        async for session in self._db_router.get_tenant_session(
-            command.tenant_id, shard_id, shard_dsn
-        ):
-
-            def _uow_factory(s: AsyncSession = session) -> WorkflowUnitOfWorkPort:
-                return self._workflow_uow_factory(s)
-
-            match_resolver = ResolveMatchConditionsUseCase(
-                uow_factory=_uow_factory,
-                definition_registry=self._definition_registry,
-                step_scheduler=self._scheduler,
+        async with contextlib.aclosing(
+            self._db_router.get_tenant_session(
+                command.tenant_id, shard_id, shard_dsn
             )
-            start_run = StartRunUseCase(
-                uow_factory=_uow_factory,
-                definition_registry=self._definition_registry,
-                step_scheduler=self._scheduler,
-            )
-            if self._control_plane_uow_factory is not None:
-                async for global_session in self._db_router.get_global_session():
-                    cp_uow = self._control_plane_uow_factory(global_session)
-                    use_case = DispatchCanonicalEventToStitchesUseCase(
-                        stitch_catalog=self._stitch_catalog,
-                        start_run_use_case=start_run,
-                        resolve_matches_use_case=match_resolver,
-                        control_plane_uow=cp_uow,
-                    )
-                    return await use_case.execute(command)
+        ) as tenant_gen:
+            async for session in tenant_gen:
 
-            use_case = DispatchCanonicalEventToStitchesUseCase(
-                stitch_catalog=self._stitch_catalog,
-                start_run_use_case=start_run,
-                resolve_matches_use_case=match_resolver,
-            )
-            return await use_case.execute(command)
+                def _uow_factory(s: AsyncSession = session) -> WorkflowUnitOfWorkPort:
+                    return self._workflow_uow_factory(s)
+
+                match_resolver = ResolveMatchConditionsUseCase(
+                    uow_factory=_uow_factory,
+                    definition_registry=self._definition_registry,
+                    step_scheduler=self._scheduler,
+                )
+                start_run = StartRunUseCase(
+                    uow_factory=_uow_factory,
+                    definition_registry=self._definition_registry,
+                    step_scheduler=self._scheduler,
+                )
+                if self._control_plane_uow_factory is not None:
+                    async with contextlib.aclosing(
+                        self._db_router.get_global_session()
+                    ) as global_gen:
+                        async for global_session in global_gen:
+                            cp_uow = self._control_plane_uow_factory(global_session)
+                            use_case = DispatchCanonicalEventToStitchesUseCase(
+                                stitch_catalog=self._stitch_catalog,
+                                start_run_use_case=start_run,
+                                resolve_matches_use_case=match_resolver,
+                                control_plane_uow=cp_uow,
+                            )
+                            return await use_case.execute(command)
+
+                use_case = DispatchCanonicalEventToStitchesUseCase(
+                    stitch_catalog=self._stitch_catalog,
+                    start_run_use_case=start_run,
+                    resolve_matches_use_case=match_resolver,
+                )
+                return await use_case.execute(command)
 
         return Result.ok(
             DispatchCanonicalEventResultDTO(
@@ -233,10 +243,13 @@ class IpStitchWorkerTickAdapter(IpStitchWorkerTickExecutorPort):
 
         for shard_name, shard_dsn in shards:
             try:
-                async for session in self._db_router.get_shard_session(shard_name, shard_dsn):
+                async with contextlib.aclosing(
+                    self._db_router.get_shard_session(shard_name, shard_dsn)
+                ) as shard_gen:
+                    async for session in shard_gen:
 
-                    def _uow_factory(s: AsyncSession = session) -> WorkflowUnitOfWorkPort:
-                        return self._workflow_uow_factory(s)
+                        def _uow_factory(s: AsyncSession = session) -> WorkflowUnitOfWorkPort:
+                            return self._workflow_uow_factory(s)
 
                     match_resolver = ResolveMatchConditionsUseCase(
                         uow_factory=_uow_factory,

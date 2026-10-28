@@ -59,5 +59,15 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
                 return stitch
         return None
 
+    def find_any_stitch_by_id(
+        self,
+        *,
+        stitch_id: str,
+    ) -> Stitch | None:
+        for stitch in self._stitches:
+            if stitch.id == stitch_id:
+                return stitch
+        return None
+
 
 __all__ = ["InMemoryStitchCatalogRegistry"]

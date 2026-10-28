@@ -324,12 +324,12 @@ Per [`platform_vs_application_architecture_plan.md`](./platform_vs_application_a
 - We **eliminate `ip/bootstrap/`**: `container.py`, `settings.py`, and `lifespan.py` are pure Engine components and live directly inside `ip/engine/`.
 - We **never create `apps/ip/apps/*`**: In Hexagonal Architecture, background workers are **Inbound Driving Adapters** of the Engine and live directly inside `ip/engine/adapters/inbound/workers/`.
 - **How `ip.engine` Discovers `ip.application` Plugins With Zero Coupling:**
-  - `ip.engine` **never** imports `ip.application` (strictly enforced by `tach.toml`).
-  - `ip.application` exposes a clean plugin registrar (`ip.application.register_plugins(container)`) discovered via standard Python entry points (`importlib.metadata.entry_points(group="ip.plugins")`) or invoked by the host shell, keeping dependency direction 100% unidirectional (`ip.application -> ip.engine`).
+  - `ip.engine` core modules (`domain`, `ports`, `application`, `adapters`) **never** import `ip.application` (strictly enforced by `tach.toml`).
+  - `ip.engine.container` serves as the explicit Composition Root permitted by `tach.toml` to wire application plugins and default registries (`ip.application.domains`, `ip.application.stitches`, `ip.application.transformers`) into the engine.
 
 | Plane | Directory (`apps/ip/packages/ip/src/ip/...`) | What Belongs Here | `tach.toml` Dependency Rule |
 | :--- | :--- | :--- | :--- |
-| **1. IP Platform Kernel (`ip.engine`)** | `ip/engine/{domain,ports,application,adapters,container.py,settings.py,lifespan.py}` | All 5-layer SEDA pipeline logic, repositories, outbox, DI container, lifespan, and all 4 `LaunchableWorker` inbound adapters (`ip/engine/adapters/inbound/workers/`). | **Zero imports from `ip.application.*`.** Operates purely on `ip.engine` ports, use cases, and shared platform packages. |
+| **1. IP Platform Kernel (`ip.engine`)** | `ip/engine/{domain,ports,application,adapters,container.py,settings.py,lifespan.py}` | All 5-layer SEDA pipeline logic, repositories, outbox, DI container, lifespan, and all 4 `LaunchableWorker` inbound adapters (`ip/engine/adapters/inbound/workers/`). | **Core modules have zero imports from `ip.application.*`.** Only `ip.engine.container` (as Composition Root) is allowed to wire `ip.application` registries. |
 | **2. IP Application Layer (`ip.application`)** | `ip/application/{domains,connectors,transformers,stitches}/` | Industry verticals (`energy`, `tms`), partner connectors (`itron`, `salesforce`, `sftp_csv`), pure L3 mappers, and L4 stitch templates. | Depends strictly inward on `ip.engine.domain` and `ip.engine.ports` (plus `ip.engine.adapters` for ORM base/connectors). |
 
 And [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](../../../core/platform/apps/unified-worker/src/unified_worker/registry.py) registers the four workers directly from `ip.engine.adapters.inbound.workers`:

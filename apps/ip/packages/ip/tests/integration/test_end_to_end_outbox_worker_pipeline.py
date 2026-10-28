@@ -602,9 +602,11 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
     assert isinstance(raw_bulk_ids, list) and len(raw_bulk_ids) == 4
 
     # Verify trace events and consumer idempotency rows were persisted in the tenant shard
+    session_yielded = False
     async for verify_session in transactional_router.get_tenant_session(
         seeded_ip_tenant, shard_id, shard_dsn
     ):
+        session_yielded = True
         trace_rows = (
             (
                 await verify_session.execute(
@@ -635,3 +637,5 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
             .all()
         )
         assert len(processed_rows) >= 4
+
+    assert session_yielded, "Expected get_tenant_session to yield a session for verification"

@@ -176,7 +176,7 @@ class IpOrchestratorRouteRegistry:
 
         try:
             action = await self._invoke_chunk_fn(fn, shard_id, shard_dsn)
-        except Exception:
+        except (Exception, asyncio.CancelledError):
             if envelope.idempotency_key:
                 async with self._dp_uow_provider.get_data_plane_uow(
                     tenant_id, shard_id, shard_dsn

@@ -323,16 +323,17 @@ async def test_postgres_stitch_repository_and_advisory_lock(
     assert any(r.payload.get("stitch_id") == "stitch_energy_custom_pg_01" for r in cp_outbox_rows)
 
     # Verify SqlAlchemyTokenRefreshLockAdapter with PostgreSQL pg_advisory_xact_lock
-    lock_adapter = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)
+    lock_adapter_1 = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)
+    lock_adapter_2 = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)
     order: list[str] = []
 
-    async def _worker(label: str) -> None:
-        async with lock_adapter.acquire("conn_energy_oauth_01"):
+    async def _worker(adapter: SqlAlchemyTokenRefreshLockAdapter, label: str) -> None:
+        async with adapter.acquire("conn_energy_oauth_01"):
             order.append(f"{label}_enter")
             await asyncio.sleep(0.01)
             order.append(f"{label}_exit")
 
-    await asyncio.gather(_worker("w1"), _worker("w2"))
+    await asyncio.gather(_worker(lock_adapter_1, "w1"), _worker(lock_adapter_2, "w2"))
     assert order in (
         ["w1_enter", "w1_exit", "w2_enter", "w2_exit"],
         ["w2_enter", "w2_exit", "w1_enter", "w1_exit"],
