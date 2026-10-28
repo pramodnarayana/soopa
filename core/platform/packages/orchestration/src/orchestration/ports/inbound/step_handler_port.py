@@ -94,6 +94,12 @@ class WorkflowDefinitionRegistryPort(Protocol):
         self, workflow_id: str, version: int
     ) -> Result[WorkflowDefinition, VersionUnavailableError]: ...
 
+    def get_latest(
+        self, workflow_id: str
+    ) -> Result[WorkflowDefinition, VersionUnavailableError]: ...
+
+    def list_definitions(self) -> tuple[WorkflowDefinition, ...]: ...
+
 
 class StepErrorPolicyPort(Protocol):
     """Strategy port deciding how the Workflow Engine handles a StepFailure."""

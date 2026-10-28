@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Protocol
 
 from seedwork.events import EventEnvelope
@@ -13,3 +14,9 @@ class OutboxRepositoryPort(Protocol):
     async def mark_completed(self, event_id: str, worker_id: str) -> None: ...
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None: ...
+
+    async def mark_completed_batch(self, event_ids: Sequence[str], worker_id: str) -> None: ...
+
+    async def mark_failed_batch(
+        self, event_ids: Sequence[str], worker_id: str, error_message: str
+    ) -> None: ...

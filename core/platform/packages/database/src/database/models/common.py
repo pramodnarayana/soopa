@@ -1,7 +1,8 @@
 from datetime import UTC, datetime
-from typing import Any
 
 from outbox.domain.constants import OutboxStatus
+from seedwork.domain.types import JsonDict
+from seedwork.events import EventProcessingLane
 from sqlalchemy import (
     DateTime,
     Integer,
@@ -24,7 +25,24 @@ class OutboxMixin:
         return mapped_column(String(100), nullable=False)
 
     @declared_attr
-    def payload(cls) -> Mapped[dict[str, Any]]:
+    def trace_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(64), nullable=True, index=True)
+
+    @declared_attr
+    def correlation_id(cls) -> Mapped[str | None]:
+        return mapped_column(String(255), nullable=True)
+
+    @declared_attr
+    def lane(cls) -> Mapped[str]:
+        return mapped_column(
+            String(32),
+            nullable=False,
+            default=EventProcessingLane.REALTIME.value,
+            server_default=text("'realtime'"),
+        )
+
+    @declared_attr
+    def payload(cls) -> Mapped[JsonDict]:
         return mapped_column(JSONB, nullable=False)
 
     @declared_attr
@@ -102,3 +120,24 @@ class SoftDeleteMixin:
     @declared_attr
     def deleted_by(cls) -> Mapped[str | None]:
         return mapped_column(String, nullable=True)
+
+
+class ProcessedEventMixin:
+    """Shared columns for tenant-scoped idempotency ledger tables (processed_events)."""
+
+    @declared_attr
+    def tenant_id(cls) -> Mapped[str]:
+        return mapped_column(String(128), nullable=False)
+
+    @declared_attr
+    def idempotency_key(cls) -> Mapped[str]:
+        return mapped_column(String(255), primary_key=True, nullable=False)
+
+    @declared_attr
+    def processed_at(cls) -> Mapped[datetime]:
+        return mapped_column(
+            DateTime(timezone=True),
+            nullable=False,
+            server_default=text("now()"),
+            default=lambda: datetime.now(UTC),
+        )

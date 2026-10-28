@@ -19,6 +19,7 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 
 import fastapi
+from database.router import DatabaseRouterPort
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
@@ -48,6 +49,34 @@ from edi.domain.exceptions import OrchestrationError, VaultError
 logger = structlog.get_logger(__name__)
 
 
+def _register_edi_domain_exception_handlers(app: FastAPI) -> None:
+    @app.exception_handler(OrchestrationError)
+    async def orchestration_exception_handler(
+        request: Request, exc: OrchestrationError
+    ) -> JSONResponse:
+        logger.error(
+            "orchestration_error",
+            request_url_path=request.url.path,
+            exc=str(exc),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc)},
+        )
+
+    @app.exception_handler(VaultError)
+    async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
+        logger.error(
+            "vault_error",
+            request_url_path=request.url.path,
+            exc=str(exc),
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc)},
+        )
+
+
 def _setup_edi_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
@@ -75,31 +104,7 @@ def _setup_edi_exception_handlers(app: FastAPI) -> None:
             content={"detail": sanitized_errors},
         )
 
-    @app.exception_handler(OrchestrationError)
-    async def orchestration_exception_handler(
-        request: Request, exc: OrchestrationError
-    ) -> JSONResponse:
-        logger.error(
-            "orchestration_error",
-            request_url_path=request.url.path,
-            exc=str(exc),
-        )
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(exc)},
-        )
-
-    @app.exception_handler(VaultError)
-    async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
-        logger.error(
-            "vault_error",
-            request_url_path=request.url.path,
-            exc=str(exc),
-        )
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(exc)},
-        )
+    _register_edi_domain_exception_handlers(app)
 
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -118,7 +123,7 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
         raise ValueError("Settings must be injected into create_edi_app")
 
     @fastapi.concurrency.asynccontextmanager
-    async def app_lifespan(app: FastAPI):
+    async def app_lifespan(app: FastAPI) -> typing.AsyncGenerator[None, None]:
         await startup(
             app,
             global_db_url=str(settings.database.global_url),
@@ -204,3 +209,38 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
     object.__setattr__(app, "container", container)
 
     return app
+
+
+class EdiApiModule:
+    """Self-contained API module for the EDI bounded context."""
+
+    def __init__(self) -> None:
+        self._edi_app: FastAPI | None = None
+
+    @property
+    def name(self) -> str:
+        return "edi"
+
+    def register_routes(self, app: FastAPI) -> None:
+        """Creates and mounts the EDI sub-application onto the host FastAPI shell."""
+        if "settings" not in app.state._state or app.state.settings is None:
+            raise ValueError("Host FastAPI shell must attach settings to app.state.settings")
+        _register_edi_domain_exception_handlers(app)
+        edi_app = create_edi_app(settings=app.state.settings)
+        self._edi_app = edi_app
+        app.state.edi_app = edi_app
+        app.mount("/", edi_app)
+        logger.info("edi_api_module_routes_registered")
+
+    async def startup(self, app: FastAPI, db_router: DatabaseRouterPort) -> None:
+        """Initializes the EDI sub-application using the host shell's shared DatabaseRouter."""
+        edi_app = self._edi_app
+        if edi_app is None:
+            return
+        if "db_provider" in app.state._state:
+            edi_app.state.db_provider = app.state.db_provider
+        await startup(edi_app, db_router=db_router)
+
+    async def shutdown(self, app: FastAPI) -> None:
+        """Gracefully shuts down EDI sub-application resources."""
+        await shutdown(self._edi_app)

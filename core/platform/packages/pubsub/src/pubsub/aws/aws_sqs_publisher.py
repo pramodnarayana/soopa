@@ -19,6 +19,12 @@ class AwsSqsPublisher(AwsBatchPublisherBase):
         queue_url: str,
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
+        max_concurrent_batches: int = 10,
     ) -> None:
-        super().__init__(queue_url, region_name, endpoint_url)
+        super().__init__(
+            queue_url,
+            region_name,
+            endpoint_url,
+            max_concurrent_batches=max_concurrent_batches,
+        )
         self.queue_url = queue_url

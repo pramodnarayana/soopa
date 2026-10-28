@@ -81,6 +81,8 @@ async def require_tenant_member(
         identity.capabilities.clear()
         identity.capabilities.update(identity.permissions)
         identity.capabilities.update(tenant_caps)
+        if session.in_transaction():
+            await session.commit()
 
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
@@ -98,6 +100,8 @@ async def require_tenant_member(
         identity.capabilities.clear()
         identity.capabilities.update(identity.permissions)
         identity.capabilities.update(tenant_caps)
+        if session.in_transaction():
+            await session.commit()
 
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id

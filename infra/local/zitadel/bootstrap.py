@@ -55,13 +55,44 @@ def wait_for_zitadel_ready(
     raise TimeoutError("Timeout waiting for Zitadel server to be ready")
 
 
+DYNAMIC_IDENTITY_KEYS: tuple[str, ...] = (
+    "IDENTITY_PLATFORM_ORG_ID",
+    "IDENTITY_UCP_PROJECT_ID",
+    "VITE_IDENTITY_UCP_PROJECT_ID",
+    "IDENTITY_EDI_PROJECT_ID",
+    "IDENTITY_IDP_PROJECT_ID",
+    "IDENTITY_UCP_WEB_CLIENT_ID",
+    "VITE_IDENTITY_UCP_WEB_CLIENT_ID",
+    "IDENTITY_UCP_API_CLIENT_ID",
+    "IDENTITY_EDI_API_CLIENT_ID",
+    "IDENTITY_MACHINE_KEY",
+    "IDENTITY_PLATFORM_ADMIN_ID",
+)
+
+
+def _clear_dynamic_identity_outputs(env_path: Path) -> None:
+    """Purge all dynamic Zitadel runtime outputs from .env and process memory to prevent zombie credentials."""
+    logger.info("Purging dynamic Zitadel output variables from .env and memory...")
+    for key in DYNAMIC_IDENTITY_KEYS:
+        os.environ.pop(key, None)
+
+    if env_path.exists():
+        blank_updates = {key: "" for key in DYNAMIC_IDENTITY_KEYS}
+        _update_env_file(env_path, blank_updates)
+        logger.info("Cleared dynamic Zitadel output variables from .env")
+
+
 def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
     """
     Reset Zitadel to a completely clean state:
-      1. Delete any leftover pat.json from the bind-mount directory.
-      2. Stop containers and delete volumes — destroys the Postgres database.
+      1. Purge all dynamic Zitadel output variables from .env and memory.
+      2. Delete any leftover pat.json from the bind-mount directory.
+      3. Stop containers and delete volumes — destroys the Postgres database.
     """
-    logger.info("🔥 Resetting existing Zitadel state...")
+    logger.info("Resetting existing Zitadel state...")
+
+    env_path = root_dir / ".env"
+    _clear_dynamic_identity_outputs(env_path)
 
     pat_key_path = script_dir.parent.parent / "cloud" / "zitadel" / "machinekey" / "pat.json"
     if pat_key_path.exists():
@@ -92,7 +123,7 @@ def _destroy_existing(script_dir: Path, root_dir: Path) -> None:
         check=True,
     )
 
-    logger.info("✅ Full infrastructure state cleared. Ready for fresh bootstrap.")
+    logger.info("Full infrastructure state cleared. Ready for fresh bootstrap.")
 
 
 def _sanitize_env_value(value: str) -> str:
@@ -431,7 +462,10 @@ def _run_full_bootstrap(script_dir: Path, root_dir: Path, pat_key_path: Path) ->
         logger.info("✅ Zitadel bootstrap completed successfully!")
 
         subprocess.run(  # noqa: S603 - sys.executable is a trusted path
-            [sys.executable, str(root_dir / "infra" / "scripts" / "print_credentials.py")],
+            [
+                sys.executable,
+                str(root_dir / "infra" / "local" / "scripts" / "print_credentials.py"),
+            ],
             cwd=root_dir,
             check=False,
         )

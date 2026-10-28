@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from platform_migrator.runners.platform_runner import run_platform_domain_migrations
 from platform_migrator.runners.seed_runner import run_domain_seeds
 
-load_dotenv(override=True)
+load_dotenv()
 
 logger = structlog.get_logger(__name__)
 

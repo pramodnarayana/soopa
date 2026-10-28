@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any, ClassVar, Self
 
@@ -26,10 +27,14 @@ class AwsBatchPublisherBase(OutboxPublisherPort):
         destination: str,
         region_name: str = "us-east-1",
         endpoint_url: str | None = None,
+        max_concurrent_batches: int = 10,
     ) -> None:
+        if max_concurrent_batches <= 0:
+            raise ValueError("max_concurrent_batches must be strictly positive")
         self.destination = destination
         self.region_name = region_name
         self.endpoint_url = endpoint_url
+        self.max_concurrent_batches = max_concurrent_batches
         self.session = aioboto3.Session()
         self._client: Any = None
         self._client_context: Any = None
@@ -59,14 +64,25 @@ class AwsBatchPublisherBase(OutboxPublisherPort):
             raise ValueError(self.destination_error)
 
     def _build_entry(self, event: EventEnvelope, entry_id: str, *, batch: bool) -> dict[str, Any]:
+        attributes: dict[str, dict[str, str]] = {
+            "event_type": {
+                "DataType": "String",
+                "StringValue": event.event_type,
+            },
+            "lane": {
+                "DataType": "String",
+                "StringValue": str(event.lane),
+            },
+        }
+        if event.trace_id:
+            attributes["trace_id"] = {
+                "DataType": "String",
+                "StringValue": event.trace_id,
+            }
+
         entry: dict[str, Any] = {
             self.message_parameter: json.dumps(serialize_domain_event(event)),
-            "MessageAttributes": {
-                "event_type": {
-                    "DataType": "String",
-                    "StringValue": event.event_type,
-                }
-            },
+            "MessageAttributes": attributes,
         }
         if batch:
             entry["Id"] = entry_id
@@ -109,58 +125,82 @@ class AwsBatchPublisherBase(OutboxPublisherPort):
             )
             raise
 
+    async def _publish_chunk(
+        self, client: Any, chunk: list[EventEnvelope]
+    ) -> tuple[list[str], bool, Exception | None]:
+        """Publishes a single <=10 message chunk and returns (successful_ids, had_failed_entries, transport_error)."""
+        entry_id_to_event_id = {str(index): event.id for index, event in enumerate(chunk)}
+        entries = [
+            self._build_entry(event, str(index), batch=True) for index, event in enumerate(chunk)
+        ]
+        params = {
+            self.destination_parameter: self.destination,
+            self.batch_entries_parameter: entries,
+        }
+
+        try:
+            response = await getattr(client, self.batch_method)(**params)
+        except Exception as exc:
+            logger.exception(
+                "aws_batch_publish_chunk_failed",
+                service=self.service_name,
+                destination=self.destination,
+            )
+            return [], True, exc
+
+        chunk_successful = [
+            entry_id_to_event_id[success["Id"]] for success in response.get("Successful", [])
+        ]
+        if chunk_successful:
+            logger.info(
+                "aws_batch_chunk_published",
+                service=self.service_name,
+                destination=self.destination,
+                count=len(chunk_successful),
+            )
+
+        failed_entries = response.get("Failed", [])
+        for failed in failed_entries:
+            logger.error(
+                "aws_batch_publish_entry_failed",
+                service=self.service_name,
+                destination=self.destination,
+                event_id=entry_id_to_event_id[failed["Id"]],
+                code=failed.get("Code"),
+                message=failed.get("Message"),
+            )
+        return chunk_successful, bool(failed_entries), None
+
     async def _publish_batch_internal(self, client: Any, events: list[EventEnvelope]) -> list[str]:
+        chunks = [events[offset : offset + 10] for offset in range(0, len(events), 10)]
         successful_ids: list[str] = []
         first_transport_error: Exception | None = None
 
-        for offset in range(0, len(events), 10):
-            chunk = events[offset : offset + 10]
-            entry_id_to_event_id = {str(index): event.id for index, event in enumerate(chunk)}
-            entries = [
-                self._build_entry(event, str(index), batch=True)
-                for index, event in enumerate(chunk)
-            ]
-            params = {
-                self.destination_parameter: self.destination,
-                self.batch_entries_parameter: entries,
-            }
-
-            try:
-                response = await getattr(client, self.batch_method)(**params)
-            except Exception as exc:
-                logger.exception(
-                    "aws_batch_publish_chunk_failed",
-                    service=self.service_name,
-                    destination=self.destination,
-                )
-                first_transport_error = first_transport_error or exc
-                if self.is_fifo:
+        if self.is_fifo or len(chunks) <= 1:
+            for chunk in chunks:
+                chunk_success, had_failed, transport_err = await self._publish_chunk(client, chunk)
+                successful_ids.extend(chunk_success)
+                if transport_err is not None:
+                    first_transport_error = first_transport_error or transport_err
+                    if self.is_fifo:
+                        break
+                    continue
+                if had_failed and self.is_fifo:
                     break
-                continue
+        else:
+            semaphore = asyncio.Semaphore(self.max_concurrent_batches)
 
-            for success in response.get("Successful", []):
-                successful_ids.append(entry_id_to_event_id[success["Id"]])
+            async def _bounded_publish(
+                chunk: list[EventEnvelope],
+            ) -> tuple[list[str], bool, Exception | None]:
+                async with semaphore:
+                    return await self._publish_chunk(client, chunk)
 
-            if response.get("Successful"):
-                logger.info(
-                    "aws_batch_chunk_published",
-                    service=self.service_name,
-                    destination=self.destination,
-                    count=len(response.get("Successful", [])),
-                )
-
-            failed_entries = response.get("Failed", [])
-            for failed in failed_entries:
-                logger.error(
-                    "aws_batch_publish_entry_failed",
-                    service=self.service_name,
-                    destination=self.destination,
-                    event_id=entry_id_to_event_id[failed["Id"]],
-                    code=failed.get("Code"),
-                    message=failed.get("Message"),
-                )
-            if failed_entries and self.is_fifo:
-                break
+            results = await asyncio.gather(*[_bounded_publish(c) for c in chunks])
+            for chunk_success, _had_failed, transport_err in results:
+                successful_ids.extend(chunk_success)
+                if transport_err is not None and first_transport_error is None:
+                    first_transport_error = transport_err
 
         if not successful_ids and first_transport_error is not None:
             raise first_transport_error

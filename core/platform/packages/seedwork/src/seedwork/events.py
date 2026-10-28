@@ -1,16 +1,25 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from enum import StrEnum
 
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 
+class EventProcessingLane(StrEnum):
+    """Standard enterprise event processing lane separating realtime interactive vs bulk workloads."""
+
+    REALTIME = "realtime"
+    BULK = "bulk"
+
+
 @dataclass(frozen=True)
 class EventEnvelope:
     """
-    Standard Enterprise Event Envelope (CloudEvents compliant).
-    Must be used by all Bounded Contexts when publishing events via the Outbox.
+    Standard Enterprise Event Envelope (CloudEvents 1.0 compliant).
+    Must be used by all Bounded Contexts when publishing events via the Outbox
+    and when consuming events via EventEnvelopeDispatcher.
     """
 
     id: str
@@ -19,6 +28,9 @@ class EventEnvelope:
     tenant_id: str | None
     idempotency_key: str | None
     payload: JsonDict
+    trace_id: str | None = None
+    correlation_id: str | None = None
+    lane: EventProcessingLane = EventProcessingLane.REALTIME
 
 
 @dataclass(frozen=True)
@@ -47,3 +59,15 @@ class DomainEvent(ABC):
         If the event is platform-wide and has no tenant context, return None.
         """
         raise NotImplementedError
+
+    def get_trace_id(self) -> str | None:
+        """Returns the distributed trace_id associated with this event, if any."""
+        return None
+
+    def get_correlation_id(self) -> str | None:
+        """Returns the business correlation_id associated with this event, if any."""
+        return None
+
+    def get_processing_lane(self) -> EventProcessingLane:
+        """Returns the event processing lane (REALTIME or BULK) for this event."""
+        return EventProcessingLane.REALTIME

@@ -267,7 +267,7 @@ async def create_as2_partner(
     url = str(request.url) if request.url else None
     if request.is_local and not url:
         settings = get_settings()
-        url = f"{settings.public.base_url}/api/v1/as2/receive"
+        url = settings.as2_receive_url or "/api/v1/as2/receive"
 
     cmd = CreateAS2TradingPartnerCmd(
         name=request.name if request.name is not None else UNSET,

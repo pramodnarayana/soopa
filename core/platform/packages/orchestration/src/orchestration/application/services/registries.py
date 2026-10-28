@@ -47,6 +47,16 @@ class InMemoryWorkflowDefinitionRegistry(WorkflowDefinitionRegistryPort):
             return Result.err(VersionUnavailableError.for_version(workflow_id, version))
         return Result.ok(defn)
 
+    def get_latest(self, workflow_id: str) -> Result[WorkflowDefinition, VersionUnavailableError]:
+        matching = [d for (wid, _), d in self._definitions.items() if wid == workflow_id]
+        if not matching:
+            return Result.err(VersionUnavailableError.for_version(workflow_id, 1))
+        latest = max(matching, key=lambda d: d.version)
+        return Result.ok(latest)
+
+    def list_definitions(self) -> tuple[WorkflowDefinition, ...]:
+        return tuple(self._definitions.values())
+
 
 class InMemoryStepHandlerRegistry(StepHandlerRegistryPort):
     """In-memory registry mapping `step_type` to `StepHandlerPort` adapters."""

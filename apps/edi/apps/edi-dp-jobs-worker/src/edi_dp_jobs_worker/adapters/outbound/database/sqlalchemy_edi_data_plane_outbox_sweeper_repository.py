@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Sequence
 from typing import Any, cast
 
 import structlog
@@ -115,54 +116,64 @@ class SqlAlchemyEdiDataPlaneOutboxSweeperRepository(OutboxRepositoryPort):
         return events
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
-        try:
-            shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
-            for shard_name, shard_dsn in shards:
-                async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
-                    query = text("""
-                        UPDATE outbox
-                        SET status = :status_processed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
-                        WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
-                    """)
-                    res = await session.execute(
-                        query,
-                        {
-                            "event_id": event_id,
-                            "status_processing": OutboxStatus.PROCESSING.value,
-                            "status_processed": OutboxStatus.PROCESSED.value,
-                            "worker_id": worker_id,
-                        },
-                    )
-                    await session.commit()
-                    if getattr(res, "rowcount", 0) > 0:
-                        return
-        except Exception:
-            logger.exception("failed_to_mark_completed_data_plane_outbox")
-            raise
+        await self.mark_completed_batch([event_id], worker_id)
+
+    async def mark_completed_batch(self, event_ids: Sequence[str], worker_id: str) -> None:
+        for event_id in event_ids:
+            try:
+                shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
+                for shard_name, shard_dsn in shards:
+                    async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
+                        query = text("""
+                            UPDATE outbox
+                            SET status = :status_processed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
+                            WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
+                        """)
+                        res = await session.execute(
+                            query,
+                            {
+                                "event_id": event_id,
+                                "status_processing": OutboxStatus.PROCESSING.value,
+                                "status_processed": OutboxStatus.PROCESSED.value,
+                                "worker_id": worker_id,
+                            },
+                        )
+                        await session.commit()
+                        if getattr(res, "rowcount", 0) > 0:
+                            break
+            except Exception:
+                logger.exception("failed_to_mark_completed_data_plane_outbox")
+                raise
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
-        try:
-            shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
-            for shard_name, shard_dsn in shards:
-                async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
-                    query = text("""
-                        UPDATE outbox
-                        SET status = :status_failed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
-                        WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
-                    """)
-                    res = await session.execute(
-                        query,
-                        {
-                            "event_id": event_id,
-                            "error_message": error_message,
-                            "status_processing": OutboxStatus.PROCESSING.value,
-                            "status_failed": OutboxStatus.FAILED.value,
-                            "worker_id": worker_id,
-                        },
-                    )
-                    await session.commit()
-                    if getattr(res, "rowcount", 0) > 0:
-                        return
-        except Exception:
-            logger.exception("failed_to_mark_failed_data_plane_outbox")
-            raise
+        await self.mark_failed_batch([event_id], worker_id, error_message)
+
+    async def mark_failed_batch(
+        self, event_ids: Sequence[str], worker_id: str, error_message: str
+    ) -> None:
+        for event_id in event_ids:
+            try:
+                shards = await self.db_router.get_all_shards(app_slug=self.app_slug)
+                for shard_name, shard_dsn in shards:
+                    async for session in self.db_router.get_shard_session(shard_name, shard_dsn):
+                        query = text("""
+                            UPDATE outbox
+                            SET status = :status_failed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW(), error_reason = :error_message
+                            WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
+                        """)
+                        res = await session.execute(
+                            query,
+                            {
+                                "event_id": event_id,
+                                "error_message": error_message,
+                                "status_processing": OutboxStatus.PROCESSING.value,
+                                "status_failed": OutboxStatus.FAILED.value,
+                                "worker_id": worker_id,
+                            },
+                        )
+                        await session.commit()
+                        if getattr(res, "rowcount", 0) > 0:
+                            break
+            except Exception:
+                logger.exception("failed_to_mark_failed_data_plane_outbox")
+                raise
