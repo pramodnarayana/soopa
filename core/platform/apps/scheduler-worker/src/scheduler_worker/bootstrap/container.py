@@ -26,15 +26,7 @@ class Container(containers.DeclarativeContainer):
 
     job_dispatcher = providers.Factory(
         SQSJobDispatcher,
-        queue_url_map=providers.Dict(
-            {
-                "edi-data-plane-jobs.fifo": config.sqs_data_plane_jobs_queue_url,
-                "edi-control-plane-jobs.fifo": config.sqs_control_plane_jobs_queue_url,
-                "notification-jobs.fifo": config.sqs_notification_jobs_queue_url,
-                "identity-jobs.fifo": config.sqs_identity_jobs_queue_url,
-                "ucp-jobs.fifo": config.sqs_ucp_jobs_queue_url,
-            }
-        ),
+        queue_url_map=config.sqs_queue_url_map,
         endpoint_url=config.aws_endpoint_url,
         region=config.aws_region,
     )
