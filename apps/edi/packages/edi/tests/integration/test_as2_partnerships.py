@@ -15,6 +15,7 @@ from unified_api.adapters.inbound.http.dependencies.edi.services import (
     get_as2_tester,
     get_secret_store,
 )
+from unified_api.settings import get_settings
 
 """
 Tests for the AS2 Partnership connection test endpoint.
@@ -263,8 +264,6 @@ def test_test_as2_partnership_not_found(client_factory):
 
 def test_create_as2_local_partner_rejects_empty_receive_url(client_factory, monkeypatch):
     """Local AS2 partner creation fails with HTTP 400 when no URL is provided and AS2_RECEIVE_URL is empty."""
-    from unified_api.settings import get_settings
-
     monkeypatch.setenv("AS2_RECEIVE_URL", "")
     get_settings.cache_clear()
 
@@ -286,8 +285,6 @@ def test_create_as2_local_partner_rejects_empty_receive_url(client_factory, monk
 
 def test_create_as2_local_partner_with_explicit_url(client_factory, fake_uow, monkeypatch):
     """Local AS2 partner creation succeeds when an explicit absolute URL is supplied."""
-    from unified_api.settings import get_settings
-
     monkeypatch.setenv("AS2_RECEIVE_URL", "")
     get_settings.cache_clear()
 
