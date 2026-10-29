@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -115,15 +116,20 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     )
 
     # 1. Start run with idempotency key and zero-copy root payload reference
+    tenant_id = f"ten_{os.urandom(12).hex()}"
+    first_trace_id = f"trc_{os.urandom(12).hex()}"
+    first_idem_key = f"idem_{os.urandom(12).hex()}"
+    worker_id = f"wrk_{os.urandom(12).hex()}"
+
     started = (
         await start_run.execute(
             StartRunCommand(
-                tenant_id="ten_pg_01",
+                tenant_id=tenant_id,
                 workflow_id="energy.pg_integration_stitch",
                 workflow_version=1,
                 input_payload={"meter_id": "mtr_pg_100", "kwh": 99.5},
-                trace_id="trc_pg_01",
-                idempotency_key="idem_pg_100",
+                trace_id=first_trace_id,
+                idempotency_key=first_idem_key,
                 idempotency_eviction_policy=IdempotencyEvictionPolicy.ON_TERMINAL_STATUS,
                 concurrency_key="mtr_pg_100",
                 now=now,
@@ -132,10 +138,10 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     ).unwrap()
     assert not started.was_deduplicated
 
-    persisted_run = (await uow.runs.get_by_id("ten_pg_01", started.run_id)).unwrap()
+    persisted_run = (await uow.runs.get_by_id(tenant_id, started.run_id)).unwrap()
     root_step = persisted_run.get_step("ingest_ami").unwrap()
     step_in_rec = await uow.payloads.get_payload(
-        tenant_id="ten_pg_01",
+        tenant_id=tenant_id,
         owner_id=root_step.id,
         payload_type=PayloadType.STEP_INPUT,
     )
@@ -143,9 +149,7 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     assert step_in_rec.location == PayloadLocation.REFERENCE
 
     # 2. Claim root step, then report 429 rate-limit failure -> parks in paused queue without burning app_retry_count
-    claimed1 = (
-        await claim_steps.execute(ClaimStepsCommand(worker_id="wrk_pg_1", now=now))
-    ).unwrap()
+    claimed1 = (await claim_steps.execute(ClaimStepsCommand(worker_id=worker_id, now=now))).unwrap()
     assert len(claimed1.claimed_steps) == 1
     assert claimed1.claimed_steps[0].input_payload == {
         "meter_id": "mtr_pg_100",
@@ -155,11 +159,11 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     fail_429 = (
         await fail_step.execute(
             FailStepCommand(
-                tenant_id="ten_pg_01",
+                tenant_id=tenant_id,
                 run_id=started.run_id,
                 node_key="ingest_ami",
                 fencing_retry_count=0,
-                worker_id="wrk_pg_1",
+                worker_id=worker_id,
                 attempt_id=claimed1.claimed_steps[0].attempt_id,
                 failure=RetryableFailure(
                     code=StepFailureCode.RATE_LIMITED,
@@ -177,18 +181,18 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     # 3. Advance clock past 30s -> unpauses and claims root step, then completes
     t_unpause = now + timedelta(seconds=35)
     claimed2 = (
-        await claim_steps.execute(ClaimStepsCommand(worker_id="wrk_pg_1", now=t_unpause))
+        await claim_steps.execute(ClaimStepsCommand(worker_id=worker_id, now=t_unpause))
     ).unwrap()
     assert len(claimed2.claimed_steps) == 1
     assert claimed2.claimed_steps[0].context.retry_count == 0
 
     await complete_step.execute(
         CompleteStepCommand(
-            tenant_id="ten_pg_01",
+            tenant_id=tenant_id,
             run_id=started.run_id,
             node_key="ingest_ami",
             fencing_retry_count=0,
-            worker_id="wrk_pg_1",
+            worker_id=worker_id,
             attempt_id=claimed2.claimed_steps[0].attempt_id,
             output_payload={"normalized": True},
             now=t_unpause + timedelta(seconds=1),
@@ -198,7 +202,7 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     # 4. Claim and complete child step `emit_alert` -> run reaches SUCCEEDED
     t_child = t_unpause + timedelta(seconds=2)
     claimed3 = (
-        await claim_steps.execute(ClaimStepsCommand(worker_id="wrk_pg_1", now=t_child))
+        await claim_steps.execute(ClaimStepsCommand(worker_id=worker_id, now=t_child))
     ).unwrap()
     assert len(claimed3.claimed_steps) == 1
     assert claimed3.claimed_steps[0].context.node_key == "emit_alert"
@@ -206,11 +210,11 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     done_res = (
         await complete_step.execute(
             CompleteStepCommand(
-                tenant_id="ten_pg_01",
+                tenant_id=tenant_id,
                 run_id=started.run_id,
                 node_key="emit_alert",
                 fencing_retry_count=0,
-                worker_id="wrk_pg_1",
+                worker_id=worker_id,
                 attempt_id=claimed3.claimed_steps[0].attempt_id,
                 output_payload={"notified": True},
                 now=t_child + timedelta(seconds=1),
@@ -219,3 +223,45 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     ).unwrap()
     assert done_res.run_status == RunStatus.SUCCEEDED
     assert done_res.step_status == StepStatus.SUCCEEDED
+
+    # 5. Start a second run + another tenant's run and verify list_recent batch step hydration & filters
+    second_trace_id = f"trc_{os.urandom(12).hex()}"
+    started_second = (
+        await start_run.execute(
+            StartRunCommand(
+                tenant_id=tenant_id,
+                workflow_id="energy.pg_integration_stitch",
+                workflow_version=1,
+                input_payload={"meter_id": "mtr_pg_101", "kwh": 54.2},
+                trace_id=second_trace_id,
+                idempotency_key=f"idem_{os.urandom(12).hex()}",
+                concurrency_key="mtr_pg_101",
+                now=now + timedelta(minutes=2),
+            )
+        )
+    ).unwrap()
+    await start_run.execute(
+        StartRunCommand(
+            tenant_id=f"ten_{os.urandom(12).hex()}",
+            workflow_id="energy.pg_integration_stitch",
+            workflow_version=1,
+            input_payload={"meter_id": "mtr_other", "kwh": 10.0},
+            trace_id=f"trc_{os.urandom(12).hex()}",
+            idempotency_key=f"idem_{os.urandom(12).hex()}",
+            now=now + timedelta(minutes=3),
+        )
+    )
+
+    recent_runs = await uow.runs.list_recent(tenant_id, limit=10)
+    assert [r.id for r in recent_runs] == [started_second.run_id, started.run_id]
+    assert set(recent_runs[0].steps.keys()) == {"ingest_ami", "emit_alert"}
+    assert set(recent_runs[1].steps.keys()) == {"ingest_ami", "emit_alert"}
+
+    succeeded_only = await uow.runs.list_recent(
+        tenant_id,
+        workflow_id="energy.pg_integration_stitch",
+        status=RunStatus.SUCCEEDED,
+        limit=10,
+    )
+    assert [r.id for r in succeeded_only] == [started.run_id]
+    assert await uow.runs.list_recent(tenant_id, workflow_id="nonexistent.workflow") == ()

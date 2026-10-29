@@ -15,6 +15,7 @@ from orchestration.domain.constants import (
     PayloadType,
     Priority,
     QueueItemKind,
+    RunStatus,
 )
 from orchestration.domain.exceptions import (
     DuplicateIdempotencyKeyError,
@@ -46,6 +47,15 @@ class WorkflowRunRepositoryPort(Protocol):
     async def get_by_id(
         self, tenant_id: str, run_id: str
     ) -> Result[WorkflowRun, RunNotFoundError]: ...
+
+    async def list_recent(
+        self,
+        tenant_id: str,
+        *,
+        workflow_id: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+    ) -> Sequence[WorkflowRun]: ...
 
     async def save(self, run: WorkflowRun) -> None: ...
 

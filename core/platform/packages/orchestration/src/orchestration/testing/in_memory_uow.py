@@ -19,6 +19,7 @@ from orchestration.domain.constants import (
     PayloadType,
     Priority,
     QueueItemKind,
+    RunStatus,
     WorkflowErrorCode,
 )
 from orchestration.domain.exceptions import (
@@ -71,6 +72,24 @@ class InMemoryWorkflowRunRepository(WorkflowRunRepositoryPort):
         if run is None:
             return Result.err(RunNotFoundError.for_id(run_id))
         return Result.ok(deepcopy(run))
+
+    async def list_recent(
+        self,
+        tenant_id: str,
+        *,
+        workflow_id: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+    ) -> Sequence[WorkflowRun]:
+        matching = [
+            deepcopy(run)
+            for (tid, _rid), run in self.runs.items()
+            if tid == tenant_id
+            and (workflow_id is None or run.workflow_id == workflow_id)
+            and (status is None or run.status == status)
+        ]
+        matching.sort(key=lambda r: r.created_at, reverse=True)
+        return tuple(matching[:limit])
 
     async def save(self, run: WorkflowRun) -> None:
         for event in run.domain_events:

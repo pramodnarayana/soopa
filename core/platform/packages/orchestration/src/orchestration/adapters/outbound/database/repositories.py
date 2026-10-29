@@ -129,6 +129,39 @@ class SqlAlchemyWorkflowRunRepository(BaseSqlAlchemyRepository, WorkflowRunRepos
         step_records = (await self._session.execute(step_stmt)).scalars().all()
         return Result.ok(self._to_domain_model(run_record, step_records))
 
+    async def list_recent(
+        self,
+        tenant_id: str,
+        *,
+        workflow_id: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+    ) -> Sequence[WorkflowRun]:
+        run_stmt = select(WorkflowRunModel).where(WorkflowRunModel.tenant_id == tenant_id)
+        if workflow_id is not None:
+            run_stmt = run_stmt.where(WorkflowRunModel.workflow_id == workflow_id)
+        if status is not None:
+            run_stmt = run_stmt.where(WorkflowRunModel.status == status.value)
+        run_stmt = run_stmt.order_by(WorkflowRunModel.created_at.desc()).limit(limit)
+
+        run_records = (await self._session.execute(run_stmt)).scalars().all()
+        if not run_records:
+            return ()
+
+        run_ids = [rec.id for rec in run_records]
+        step_stmt = select(WorkflowStepRunModel).where(
+            WorkflowStepRunModel.tenant_id == tenant_id,
+            WorkflowStepRunModel.run_id.in_(run_ids),
+        )
+        all_step_records = (await self._session.execute(step_stmt)).scalars().all()
+        steps_by_run: dict[str, list[WorkflowStepRunModel]] = {}
+        for step_rec in all_step_records:
+            steps_by_run.setdefault(step_rec.run_id, []).append(step_rec)
+
+        return tuple(
+            self._to_domain_model(rec, steps_by_run.get(rec.id, [])) for rec in run_records
+        )
+
     async def save(self, run: WorkflowRun) -> None:
         existing_stmt = select(WorkflowRunModel).where(
             WorkflowRunModel.tenant_id == run.tenant_id,

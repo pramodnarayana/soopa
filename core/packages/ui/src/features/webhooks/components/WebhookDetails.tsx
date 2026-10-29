@@ -7,63 +7,78 @@ import type { WebhookHookConfig } from '../api/webhookHooks';
 import { useUpdateWebhookMutation } from '../api/webhookHooks';
 import type { Webhook } from '../types';
 
+interface WebhookFieldErrors {
+  name?: string;
+  url?: string;
+}
+
+function validateWebhookInput(name: string, url: string): WebhookFieldErrors {
+  const errors: WebhookFieldErrors = {};
+  if (!name.trim()) {
+    errors.name = 'Name is required';
+  }
+  if (!url.trim()) {
+    errors.url = 'URL is required';
+  } else if (!/^https?:\/\/.+/.test(url)) {
+    errors.url = 'Must be a valid HTTP/HTTPS URL';
+  }
+  return errors;
+}
+
 export function WebhookDetails({
   config,
   webhook,
   onCancel,
 }: {
-  config: WebhookHookConfig;
-  webhook: Webhook;
-  onCancel?: () => void;
+  readonly config: WebhookHookConfig;
+  readonly webhook: Webhook;
+  readonly onCancel?: () => void;
 }) {
   const updateMutation = useUpdateWebhookMutation(config);
 
   const [name, setName] = useState(webhook.name);
   const [url, setUrl] = useState(webhook.url);
-  const [errors, setErrors] = useState<{ name?: string; url?: string }>({});
+  const [errors, setErrors] = useState<WebhookFieldErrors>({});
+  const [problemMessage, setProblemMessage] = useState<string | null>(null);
 
   const isDirty = name !== webhook.name || url !== webhook.url;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent): void => {
     e.preventDefault();
-
-    // Simple validation
-    const newErrors: { name?: string; url?: string } = {};
-    if (!name.trim()) newErrors.name = 'Name is required';
-    if (!url.trim()) {
-      newErrors.url = 'URL is required';
-    } else if (!/^https?:\/\/.+/.test(url)) {
-      newErrors.url = 'Must be a valid HTTP/HTTPS URL';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    const nextErrors = validateWebhookInput(name, url);
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
     setErrors({});
+    setProblemMessage(null);
 
     updateMutation.mutate(
       { id: webhook.id, payload: { name, url } },
       {
-        onSuccess: () => {
-          if (onCancel) onCancel();
+        onSuccess: (result) => {
+          if (!result.ok) {
+            setProblemMessage(result.error.message);
+            return;
+          }
+          onCancel?.();
         },
       },
     );
   };
 
   return (
-    <div className="p-6 bg-slate-50/50 rounded-lg border border-slate-200">
+    <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-6">
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="flex justify-between items-center mb-6">
-          <h4 className="text-sm font-semibold text-slate-900 uppercase tracking-wider">
+        <div className="mb-6 flex items-center justify-between">
+          <h4 className="text-sm font-semibold tracking-wider text-slate-900 uppercase">
             Webhook Details
           </h4>
           <div className="flex justify-end gap-2">
             <Button
               type="button"
               variant="outline"
-              className="rounded-xl h-10 px-5 text-[14px] font-semibold"
+              className="h-10 rounded-xl px-5 text-sm font-semibold"
               onClick={onCancel}
             >
               Cancel
@@ -71,15 +86,15 @@ export function WebhookDetails({
             <Button
               type="submit"
               disabled={!isDirty || updateMutation.isPending}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl h-10 px-5 text-[14px] font-semibold min-w-[80px]"
+              className="h-10 min-w-20 rounded-xl bg-indigo-600 px-5 text-sm font-semibold text-white hover:bg-indigo-700"
             >
-              {updateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+              {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_2.5fr] gap-6 max-w-4xl">
-          <div className="space-y-2">
+        <div className="grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="space-y-2 md:col-span-1">
             <Label htmlFor={`name-${webhook.id}`}>Webhook Name</Label>
             <Input
               id={`name-${webhook.id}`}
@@ -91,7 +106,7 @@ export function WebhookDetails({
             {errors.name && <p className="text-sm text-red-500">{errors.name}</p>}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-2">
             <Label htmlFor={`url-${webhook.id}`}>Endpoint URL</Label>
             <Input
               id={`url-${webhook.id}`}
@@ -105,9 +120,9 @@ export function WebhookDetails({
           </div>
         </div>
 
-        {updateMutation.error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2 mt-4">
-            {updateMutation.error.message}
+        {problemMessage && (
+          <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+            {problemMessage}
           </div>
         )}
       </form>

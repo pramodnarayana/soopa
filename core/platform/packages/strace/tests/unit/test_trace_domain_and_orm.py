@@ -384,3 +384,9 @@ async def test_in_memory_trace_repository_satisfies_trace_repository_port() -> N
     corr = await repo.find_traces_by_correlation_id("ten_1", "PO-100", limit=1)
     assert len(corr) == 1
     assert corr[0].trace_id == "trc_child"
+
+    failed_recent = await repo.list_recent_traces("ten_1", status=TraceStatus.FAILED, limit=10)
+    assert [item.trace_id for item in failed_recent] == ["trc_root"]
+
+    replayed_recent = await repo.list_recent_traces("ten_1", min_replay_count=1, limit=10)
+    assert [item.trace_id for item in replayed_recent] == ["trc_child"]
