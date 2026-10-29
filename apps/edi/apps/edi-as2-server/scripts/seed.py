@@ -10,7 +10,7 @@ from sqlalchemy.future import select
 
 from as2_server.settings import get_settings as get_worker_settings
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = structlog.get_logger(__name__)
 

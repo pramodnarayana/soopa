@@ -26,7 +26,7 @@ class DomainIdPrefix(StrEnum):
     # Identity
     TENANT = "iam_ten"
     USER = "iam_usr"
-    TOKEN = "iam_tok"  # noqa: S105
+    TOKEN = "iam_tok"  # noqa: S105 - Entity ID prefix for IAM API tokens, not a secret credential
     KEY = "iam_key"
     ROLE = "iam_rol"
     USER_ROLE = "iam_usr_rol"

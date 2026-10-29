@@ -42,7 +42,7 @@ class BaseSqlAlchemyUnitOfWork:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        if exc_type is not None and self._owns_transaction:
+        if self._owns_transaction and self.session.in_transaction():
             await self.rollback()
 
     async def commit(self) -> None:

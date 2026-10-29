@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
@@ -53,3 +55,13 @@ class FakeOutboxRepository(OutboxRepositoryPort):
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
         self.failed_events.append((event_id, worker_id, error_message))
         self.events = [e for e in self.events if e.id != event_id]
+
+    async def mark_completed_batch(self, event_ids: Sequence[str], worker_id: str) -> None:
+        for event_id in event_ids:
+            await self.mark_completed(event_id, worker_id)
+
+    async def mark_failed_batch(
+        self, event_ids: Sequence[str], worker_id: str, error_message: str
+    ) -> None:
+        for event_id in event_ids:
+            await self.mark_failed(event_id, worker_id, error_message)

@@ -12,7 +12,7 @@ from edi.domain.enums import EdiJobName
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
 
-load_dotenv()
+load_dotenv(override=True)
 logger = structlog.get_logger(__name__)
 
 

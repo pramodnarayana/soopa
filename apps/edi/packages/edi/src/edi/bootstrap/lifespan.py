@@ -16,7 +16,7 @@ Architecture note:
 """
 
 import structlog
-from database.router import DatabaseRouter
+from database.router import DatabaseRouter, DatabaseRouterPort
 from dependency_injector import providers
 from fastapi import FastAPI
 
@@ -26,36 +26,40 @@ from edi.bootstrap.container import Container
 
 logger = structlog.get_logger(__name__)
 
-_db_router: DatabaseRouter | None = None
+_db_router: DatabaseRouterPort | None = None
 _edi_container: Container | None = None
 
 
 async def startup(
     app: FastAPI,
     *,
-    global_db_url: str,
+    global_db_url: str = "",
     pool_size: int = 10,
     max_overflow: int = 20,
     shard_overrides: dict[str, str] | None = None,
+    db_router: DatabaseRouterPort | None = None,
 ) -> None:
     """
     Initializes the EDI DatabaseRouter and attaches it to the EDI sub-app's state.
 
     ``app`` MUST be the EDI sub-app instance (not the Shell), because
     ``request.app`` inside EDI route handlers resolves to the sub-app.
-    The Shell calls this with the ``edi_app`` object it created, passing
-    all database configuration as explicit keyword arguments (Dependency Inversion).
-    The Shell is the sole composition root responsible for reading configuration.
+    When called via ``EdiApiModule.startup(app, db_router)``, reuses the Shell's
+    shared ``db_router`` directly.
     """
     global _db_router, _edi_container
 
-    logger.info("EDI: Initializing DatabaseRouter.")
-    _db_router = DatabaseRouter(
-        global_db_url=global_db_url,
-        pool_size=pool_size,
-        max_overflow=max_overflow,
-        shard_overrides=shard_overrides or {},
-    )
+    if db_router is not None:
+        logger.info("EDI: Attaching shared DatabaseRouter from Host Shell.")
+        _db_router = db_router
+    else:
+        logger.info("EDI: Initializing DatabaseRouter.")
+        _db_router = DatabaseRouter(
+            global_db_url=global_db_url,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            shard_overrides=shard_overrides or {},
+        )
     app.state.db_router = _db_router
 
     resolver = TenantResolver(_db_router)
@@ -75,9 +79,11 @@ async def shutdown(app: FastAPI | None = None) -> None:
     """
     global _db_router, _edi_container
 
-    container = getattr(app, "container", None) if app is not None else None
-    if container is None:
-        container = _edi_container
+    container: Container | None = _edi_container
+    if container is None and app is not None:
+        candidate = app.__dict__.get("container")
+        if isinstance(candidate, Container):
+            container = candidate
 
     if container:
         logger.info("EDI: Shutting down as2_tester adapter.")
@@ -89,11 +95,9 @@ async def shutdown(app: FastAPI | None = None) -> None:
             logger.exception("edi_as2_tester_close_failed")
         _edi_container = None
 
-    db_router = (
-        getattr(app.state, "db_router", None) if app is not None and hasattr(app, "state") else None
-    )
-    if db_router is None:
-        db_router = _db_router
+    db_router: DatabaseRouterPort | None = _db_router
+    if db_router is None and app is not None and "db_router" in app.state._state:
+        db_router = app.state.db_router
 
     if db_router:
         logger.info("EDI: Shutting down DatabaseRouter.")

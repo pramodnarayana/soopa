@@ -1,11 +1,12 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import structlog
 from database.models.notifications import NotificationOutbox
 from outbox.domain.constants import OutboxStatus
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from seedwork.events import EventEnvelope
 from seedwork.utils import generate_id
 from sqlalchemy import case, select, update
@@ -17,7 +18,9 @@ from ....ports.outbound.notification_outbox_repository_port import NotificationO
 logger = structlog.get_logger(__name__)
 
 
-class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
+class SqlAlchemyNotificationOutboxRepository(
+    NotificationOutboxRepositoryPort, OutboxRepositoryPort
+):
     def __init__(self, session_factory: Callable[[], AsyncSession]):
         self.session_factory = session_factory
 
@@ -115,11 +118,16 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
             ]
 
     async def mark_completed(self, message_id: str, worker_id: str) -> None:
+        await self.mark_completed_batch([message_id], worker_id)
+
+    async def mark_completed_batch(self, event_ids: Sequence[str], worker_id: str) -> None:
+        if not event_ids:
+            return
         async with self.session_factory() as session, session.begin():
             stmt = (
                 update(NotificationOutbox)
                 .where(
-                    NotificationOutbox.id == message_id,
+                    NotificationOutbox.id.in_(list(event_ids)),
                     NotificationOutbox.owner_token == worker_id,
                 )
                 .values(status=OutboxStatus.PROCESSED.value, updated_at=datetime.now(UTC))
@@ -127,17 +135,24 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
             result = await session.execute(stmt)
             if cast(CursorResult[tuple[()]], result).rowcount == 0:
                 logger.warning(
-                    "Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_completed",
-                    message_id=message_id,
+                    "Lost lease on messages (worker {worker_id}) - no rows updated in mark_completed_batch",
+                    event_ids=list(event_ids),
                     worker_id=worker_id,
                 )
 
     async def mark_failed(self, message_id: str, worker_id: str, error_reason: str) -> None:
+        await self.mark_failed_batch([message_id], worker_id, error_reason)
+
+    async def mark_failed_batch(
+        self, event_ids: Sequence[str], worker_id: str, error_message: str
+    ) -> None:
+        if not event_ids:
+            return
         async with self.session_factory() as session, session.begin():
             stmt = (
                 update(NotificationOutbox)
                 .where(
-                    NotificationOutbox.id == message_id,
+                    NotificationOutbox.id.in_(list(event_ids)),
                     NotificationOutbox.owner_token == worker_id,
                 )
                 .values(
@@ -148,15 +163,15 @@ class SqlAlchemyNotificationOutboxRepository(NotificationOutboxRepositoryPort):
                     attempts=NotificationOutbox.attempts + 1,
                     owner_token=None,
                     lease_expires_at=None,
-                    error_reason=error_reason[:1000],
+                    error_reason=error_message[:1000],
                     updated_at=datetime.now(UTC),
                 )
             )
             result = await session.execute(stmt)
             if cast(CursorResult[tuple[()]], result).rowcount == 0:
                 logger.warning(
-                    "Lost lease on message {message_id} (worker {worker_id}) - no rows updated in mark_failed",
-                    message_id=message_id,
+                    "Lost lease on messages (worker {worker_id}) - no rows updated in mark_failed_batch",
+                    event_ids=list(event_ids),
                     worker_id=worker_id,
                 )
 

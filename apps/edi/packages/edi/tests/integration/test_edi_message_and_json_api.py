@@ -129,7 +129,7 @@ async def test_edi_message_explorer_and_detail(
         # flush() makes data visible to the same DB connection without a physical commit.
         # The outer transaction.rollback() in the db_connection fixture ensures nothing
         # is persisted to the database after the test.
-        await uow.session.flush()
+        await uow.commit()
 
     # 2. List transactions via GET /api/v1/transactions/messages
     res_list = await client.get("/api/v1/tenants/1/edi/transactions/messages")

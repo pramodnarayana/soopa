@@ -23,11 +23,13 @@ class OutboxSweeperUseCase:
         publisher: OutboxPublisherPort,
         max_concurrent_events: int = 50,
         lock_lease_ms: int = 30000,
+        batch_pause_seconds: float = 0.1,
     ):
         self.repository = repository
         self.publisher = publisher
         self.max_concurrent_events = max_concurrent_events
         self.lock_lease_ms = lock_lease_ms
+        self.batch_pause_seconds = batch_pause_seconds
         self.worker_id = generate_id(SystemIdPrefix.GENERIC)
 
     async def execute(self) -> None:
@@ -59,15 +61,18 @@ class OutboxSweeperUseCase:
                 logger.exception("outbox_event_batch_publish_failed_by_sweeper")
                 successful_ids = []
 
-            tasks = []
+            completed_ids: list[str] = []
+            failed_ids: list[str] = []
+            successful_set = set(successful_ids)
+
             for event in events:
-                if event.id in successful_ids:
+                if event.id in successful_set:
                     logger.debug(
                         "outbox_event_processed_by_sweeper",
                         event_id=event.id,
                         event_type=event.event_type,
                     )
-                    tasks.append(self._safe_mark_completed(event.id))
+                    completed_ids.append(event.id)
                     total_processed += 1
                 else:
                     logger.error(
@@ -75,23 +80,30 @@ class OutboxSweeperUseCase:
                         event_id=event.id,
                         event_type=event.event_type,
                     )
-                    tasks.append(self._safe_mark_failed(event.id, "Failed to publish in batch"))
+                    failed_ids.append(event.id)
 
-            await asyncio.gather(*tasks, return_exceptions=True)
+            tasks = []
+            if completed_ids:
+                tasks.append(self._safe_mark_completed_batch(completed_ids))
+            if failed_ids:
+                tasks.append(self._safe_mark_failed_batch(failed_ids, "Failed to publish in batch"))
+
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
             # 4. Yield execution to allow DB and Event Loop to breathe
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(self.batch_pause_seconds)
 
         logger.info("sweep_outbox_completed", events_processed=total_processed)
 
-    async def _safe_mark_completed(self, event_id: str) -> None:
+    async def _safe_mark_completed_batch(self, event_ids: list[str]) -> None:
         try:
-            await self.repository.mark_completed(event_id, self.worker_id)
+            await self.repository.mark_completed_batch(event_ids, self.worker_id)
         except Exception:
-            logger.exception("outbox_event_mark_completed_error", event_id=event_id)
+            logger.exception("outbox_event_mark_completed_error", count=len(event_ids))
 
-    async def _safe_mark_failed(self, event_id: str, error_msg: str) -> None:
+    async def _safe_mark_failed_batch(self, event_ids: list[str], error_msg: str) -> None:
         try:
-            await self.repository.mark_failed(event_id, self.worker_id, error_msg)
+            await self.repository.mark_failed_batch(event_ids, self.worker_id, error_msg)
         except Exception:
-            logger.exception("outbox_event_mark_failed_error", event_id=event_id)
+            logger.exception("outbox_event_mark_failed_error", count=len(event_ids))

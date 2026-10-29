@@ -1,14 +1,16 @@
 import asyncio
+from collections.abc import Sequence
 from typing import cast
 
 from outbox.domain.constants import OutboxStatus
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from seedwork.events import EventEnvelope
 from sqlalchemy import text
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
-class PostgresOutboxRepository:
+class PostgresOutboxRepository(OutboxRepositoryPort):
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
         self.session_factory = session_factory
 
@@ -92,16 +94,21 @@ class PostgresOutboxRepository:
             return events
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
+        await self.mark_completed_batch([event_id], worker_id)
+
+    async def mark_completed_batch(self, event_ids: Sequence[str], worker_id: str) -> None:
+        if not event_ids:
+            return
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
                 SET status = :status_processed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
-                WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
+                WHERE id = ANY(:event_ids) AND status = :status_processing AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
                 {
-                    "event_id": event_id,
+                    "event_ids": list(event_ids),
                     "worker_id": worker_id,
                     "status_processed": OutboxStatus.PROCESSED.value,
                     "status_processing": OutboxStatus.PROCESSING.value,
@@ -110,18 +117,25 @@ class PostgresOutboxRepository:
             await session.commit()
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
+        await self.mark_failed_batch([event_id], worker_id, error_message)
+
+    async def mark_failed_batch(
+        self, event_ids: Sequence[str], worker_id: str, error_message: str
+    ) -> None:
+        if not event_ids:
+            return
         async with self.session_factory() as session:
             query = text("""
                 UPDATE ucp.outbox
                 SET status = CASE WHEN attempts + 1 >= :max_attempts THEN :status_failed ELSE :status_pending END,
                     attempts = attempts + 1, lease_expires_at = NULL, owner_token = NULL,
                     updated_at = NOW(), error_reason = :error_message
-                WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
+                WHERE id = ANY(:event_ids) AND status = :status_processing AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
                 {
-                    "event_id": event_id,
+                    "event_ids": list(event_ids),
                     "worker_id": worker_id,
                     "error_message": error_message,
                     "max_attempts": 3,
