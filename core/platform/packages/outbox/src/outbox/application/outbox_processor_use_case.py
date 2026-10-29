@@ -78,6 +78,16 @@ class OutboxProcessorUseCase:
                 logger.error("outbox_event_processing_failed", event_id=event.id)
                 failed_ids.append(event.id)
 
+        await self._update_batch_statuses(completed_ids, failed_ids, batch_failure_reason)
+
+        return len(events) >= self.max_concurrent_events
+
+    async def _update_batch_statuses(
+        self,
+        completed_ids: list[str],
+        failed_ids: list[str],
+        batch_failure_reason: str | None,
+    ) -> None:
         tasks = []
         if completed_ids:
             tasks.append(self.repository.mark_completed_batch(completed_ids, self.worker_id))
@@ -91,6 +101,7 @@ class OutboxProcessorUseCase:
             )
 
         if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-        return len(events) >= self.max_concurrent_events
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for res in results:
+                if isinstance(res, BaseException):
+                    logger.error("outbox_status_update_task_failed", error=str(res))

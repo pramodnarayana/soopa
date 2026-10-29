@@ -19,7 +19,7 @@ from database.models.identity import Tenant, User, UserRole
 from database.utils import normalize_to_asyncpg
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import func, update
+from sqlalchemy import func, or_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import create_async_engine
 from ucp_models.sharding import DatabaseShard
@@ -109,7 +109,7 @@ async def main() -> None:
                 update(User)
                 .where(
                     func.lower(User.email).in_(["admin@flowwolf.io", "admin@soopa.ai"]),
-                    User.idp_user_id != platform_admin_id,
+                    or_(User.idp_user_id != platform_admin_id, User.idp_user_id.is_(None)),
                 )
                 .values(idp_user_id=platform_admin_id)
             )

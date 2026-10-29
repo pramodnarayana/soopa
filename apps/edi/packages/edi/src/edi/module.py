@@ -4,6 +4,7 @@ import typing
 import structlog
 from dotenv import load_dotenv
 from seedwork.domain.types import JsonValue
+from seedwork.infra.config import load_settings_safely
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -44,6 +45,7 @@ from unified_api.adapters.inbound.http.edi.routers.tenant import dashboard
 
 from edi.bootstrap.container import Container
 from edi.bootstrap.lifespan import shutdown, startup
+from edi.config.models import EdiAwsSettings, EdiDataPlaneSqsSettings, S3Settings
 from edi.domain.exceptions import OrchestrationError, VaultError
 
 logger = structlog.get_logger(__name__)
@@ -201,9 +203,14 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
 
     container = Container()
     container.config.from_pydantic(settings)
+    if not hasattr(settings, "s3"):
+        container.config.s3.from_pydantic(load_settings_safely(S3Settings))
+    if not hasattr(settings, "sqs"):
+        container.config.sqs.from_pydantic(load_settings_safely(EdiDataPlaneSqsSettings))
+    if not hasattr(settings, "aws"):
+        container.config.aws.from_pydantic(load_settings_safely(EdiAwsSettings))
 
     # Expose the resolved AWS endpoint url to the DI container for localstack support
-
     container.config.aws.endpoint_url.from_value(os.getenv("AWS_ENDPOINT_URL"))
 
     object.__setattr__(app, "container", container)
