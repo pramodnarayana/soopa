@@ -6,6 +6,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormModal,
   SearchableSelect,
 } from '@soopa/ui';
 import { Input } from '@soopa/ui/components/ui/input';
@@ -18,7 +19,6 @@ import {
 } from '@soopa/ui/components/ui/select';
 import { useState } from 'react';
 import type { ControllerRenderProps } from 'react-hook-form';
-import { FormModal } from '../../../components/ui/form-modal';
 import {
   type AS2PartnershipFormValues,
   useCreateAS2PartnershipForm,

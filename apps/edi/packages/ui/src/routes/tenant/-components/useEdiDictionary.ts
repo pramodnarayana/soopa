@@ -1,3 +1,4 @@
+import { ApiErrorCode, FetchHttpClientAdapter, StructuredJsonLoggerAdapter } from '@soopa/ui';
 import { useEffect, useMemo, useState } from 'react';
 
 export interface EdiDictionary {
@@ -11,110 +12,109 @@ export interface EdiDocument {
   [key: string]: unknown;
 }
 
+function resolvePrimaryDocument(data: EdiDocument | EdiDocument[]): EdiDocument | undefined {
+  return Array.isArray(data) ? data[0] : data;
+}
+
+function extractX12Version(isaWrapper: NonNullable<EdiDocument['interchange_ISA']>): string {
+  const isa = Array.isArray(isaWrapper) ? isaWrapper[0] : isaWrapper;
+  const rawVersion = isa?.ISA?.ISA12?.trim() ?? '';
+  return rawVersion.length === 5 ? `${rawVersion.substring(2)}0` : '5011';
+}
+
+function deriveStandardAndVersion(data: EdiDocument | EdiDocument[]): {
+  readonly standard: string;
+  readonly version: string;
+} {
+  const doc = resolvePrimaryDocument(data);
+  if (doc?.interchange_ISA) {
+    return { standard: 'x12', version: extractX12Version(doc.interchange_ISA) };
+  }
+  if (doc?.interchange_UNB) {
+    return { standard: 'edifact', version: 'd96a' };
+  }
+  return { standard: 'x12', version: '5011' };
+}
+
+function mergeDictionaryOverride(
+  base: EdiDictionary,
+  override: Partial<EdiDictionary>,
+): EdiDictionary {
+  return {
+    segments: { ...base.segments, ...(override.segments ?? {}) },
+    elements: { ...base.elements, ...(override.elements ?? {}) },
+  };
+}
+
 export function useEdiDictionary(data: EdiDocument | EdiDocument[]) {
   const [dictionary, setDictionary] = useState<EdiDictionary | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Determine standard and version
-  const { standard, version } = useMemo(() => {
-    let standard = 'x12';
-    let version = '5011';
-
-    if (!Array.isArray(data) && data?.interchange_ISA) {
-      standard = 'x12';
-      const isaWrapper = data.interchange_ISA;
-      const isa = Array.isArray(isaWrapper) ? isaWrapper[0] : isaWrapper;
-      if (isa?.ISA?.ISA12) {
-        const v = isa.ISA.ISA12.trim();
-        if (v.length === 5) {
-          version = v.substring(2) + '0'; // e.g. 00401 -> 4010
-        }
-      }
-    } else if (Array.isArray(data) && data[0]?.interchange_ISA) {
-      standard = 'x12';
-      const isaWrapper = data[0].interchange_ISA;
-      const isa = Array.isArray(isaWrapper) ? isaWrapper[0] : isaWrapper;
-      if (isa?.ISA?.ISA12) {
-        const v = isa.ISA.ISA12.trim();
-        if (v.length === 5) {
-          version = v.substring(2) + '0'; // e.g. 00401 -> 4010
-        }
-      }
-    } else if (!Array.isArray(data) && data?.interchange_UNB) {
-      standard = 'edifact';
-      version = 'd96a'; // default edifact version
-    } else if (Array.isArray(data) && data[0]?.interchange_UNB) {
-      standard = 'edifact';
-      version = 'd96a'; // default edifact version
-    }
-
-    return { standard, version };
-  }, [data]);
+  const { standard, version } = useMemo(() => deriveStandardAndVersion(data), [data]);
 
   useEffect(() => {
-    let isCancelled = false;
+    const abortController = new AbortController();
+    const logger = new StructuredJsonLoggerAdapter({
+      bindings: { product: 'edi', component: 'useEdiDictionary', standard, version },
+    });
+    const client = new FetchHttpClientAdapter({
+      baseUrl: '/edidescription',
+      logger,
+    });
 
-    const fetchDictionary = async () => {
+    const loadDictionary = async (): Promise<void> => {
       setLoading(true);
+      const baseRes = await client.get<EdiDictionary>(`/${standard}.json`, {
+        signal: abortController.signal,
+      });
 
-      try {
-        // 2. Fetch base dictionary
-        const baseRes = await fetch(`/edidescription/${standard}.json`);
-        if (!baseRes.ok) throw new Error('Base dictionary fetch failed');
-        if (isCancelled) return;
-
-        let finalDict = (await baseRes.json()) as EdiDictionary;
-
-        // 3. Try fetching version-specific override
-        // Update: use the existing x12.json by key unless distinct X12 5011 release data is available
-        if (standard === 'x12' && version === '5011') {
-          if (!isCancelled) {
-            setDictionary(finalDict);
-            setLoading(false);
-          }
-          return;
-        }
-
-        try {
-          const overrideRes = await fetch(`/edidescription/${standard}_${version}.json`);
-          if (overrideRes.status === 404) {
-            console.log(
-              `No version override found for ${standard}_${version}.json, using base dictionary.`,
-            );
-          } else if (overrideRes.ok) {
-            const overrideData = (await overrideRes.json()) as Partial<EdiDictionary>;
-            if (isCancelled) return;
-            // Deep merge the overrides
-            finalDict = {
-              segments: { ...finalDict.segments, ...(overrideData.segments || {}) },
-              elements: { ...finalDict.elements, ...(overrideData.elements || {}) },
-            };
-          } else {
-            console.warn(
-              `Failed to fetch version override for ${standard}_${version}.json, status: ${overrideRes.status}`,
-            );
-          }
-        } catch (err: unknown) {
-          console.warn(`Failed to fetch version override for ${standard}_${version}.json:`, err);
-        }
-
-        if (!isCancelled) {
-          setDictionary(finalDict);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error(`Failed to load base dictionary for ${standard}`, err);
-        if (!isCancelled) {
-          setDictionary(null);
-          setLoading(false);
-        }
+      if (abortController.signal.aborted) {
+        return;
       }
+
+      if (!baseRes.ok) {
+        logger.error('edi_dictionary.base_load_failed', {
+          error_code: baseRes.error.code,
+          status: baseRes.error.status,
+        });
+        setDictionary(null);
+        setLoading(false);
+        return;
+      }
+
+      if (standard === 'x12' && version === '5011') {
+        setDictionary(baseRes.value);
+        setLoading(false);
+        return;
+      }
+
+      const overrideRes = await client.get<Partial<EdiDictionary>>(`/${standard}_${version}.json`, {
+        signal: abortController.signal,
+      });
+
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      if (overrideRes.ok) {
+        setDictionary(mergeDictionaryOverride(baseRes.value, overrideRes.value));
+      } else {
+        if (overrideRes.error.code === ApiErrorCode.NOT_FOUND) {
+          logger.info('edi_dictionary.override_missing_fallback_to_base');
+        } else {
+          logger.error('edi_dictionary.override_load_failed', {
+            error_code: overrideRes.error.code,
+            status: overrideRes.error.status,
+          });
+        }
+        setDictionary(baseRes.value);
+      }
+      setLoading(false);
     };
 
-    void fetchDictionary();
-
+    void loadDictionary();
     return () => {
-      isCancelled = true;
+      abortController.abort();
     };
   }, [standard, version]);
 

@@ -6,6 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
+from strace.domain.enums import TraceStatus
 from strace.domain.models import TraceEvent, TraceLineageItemDTO
 
 
@@ -64,6 +65,18 @@ class TraceRepositoryPort(Protocol):
         limit: int = 50,
     ) -> list[TraceLineageItemDTO]:
         """Finds trace summaries matching a business correlation key (e.g. meter_id, order_id, control_no)."""
+        ...
+
+    @abstractmethod
+    async def list_recent_traces(
+        self,
+        tenant_id: str,
+        *,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        limit: int = 50,
+    ) -> list[TraceLineageItemDTO]:
+        """Returns the most recent trace summaries for a tenant ordered newest-first."""
         ...
 
 

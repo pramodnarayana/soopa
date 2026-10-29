@@ -1,5 +1,5 @@
 import { Network } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -15,35 +15,42 @@ import type { WebhookHookConfig } from '../api/webhookHooks';
 import { useCreateWebhookMutation } from '../api/webhookHooks';
 
 interface CreateWebhookDialogProps {
-  config: WebhookHookConfig;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  readonly config: WebhookHookConfig;
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhookDialogProps) {
   const [name, setName] = useState('');
   const [url, setUrl] = useState('');
+  const [problemMessage, setProblemMessage] = useState<string | null>(null);
   const createMutation = useCreateWebhookMutation(config);
 
-  const reset = () => {
+  const reset = (): void => {
     setName('');
     setUrl('');
+    setProblemMessage(null);
   };
 
-  const handleOpenChange = (next: boolean) => {
+  const handleOpenChange = (next: boolean): void => {
     onOpenChange(next);
-    if (!next) reset();
+    if (!next) {
+      reset();
+    }
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    if (!url) return;
-    try {
-      await createMutation.mutateAsync({ name, url });
-      handleOpenChange(false);
-    } catch {
-      // error surfaced by react-query onError
+    if (!url) {
+      return;
     }
+    setProblemMessage(null);
+    const result = await createMutation.mutateAsync({ name, url });
+    if (!result.ok) {
+      setProblemMessage(result.error.message);
+      return;
+    }
+    handleOpenChange(false);
   };
 
   return (
@@ -51,7 +58,7 @@ export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhoo
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Network className="w-5 h-5 text-indigo-600" />
+            <Network className="h-5 w-5 text-indigo-600" />
             Add Webhook
           </DialogTitle>
           <DialogDescription>
@@ -59,7 +66,7 @@ export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhoo
           </DialogDescription>
         </DialogHeader>
 
-        <form id="create-webhook-form" onSubmit={handleSubmit} className="grid gap-4 mt-2">
+        <form id="create-webhook-form" onSubmit={handleSubmit} className="mt-2 grid gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="webhook-name">Name</Label>
             <Input
@@ -81,15 +88,15 @@ export function CreateWebhookDialog({ config, open, onOpenChange }: CreateWebhoo
               required
             />
           </div>
-          {createMutation.error && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">
-              {createMutation.error.message}
+          {problemMessage && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+              {problemMessage}
             </div>
           )}
         </form>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => handleOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
             Cancel
           </Button>
           <Button

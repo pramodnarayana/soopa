@@ -1,4 +1,4 @@
-import { type FieldDef, type FilterRule, QueryBuilder } from '@soopa/ui';
+import { type FieldDef, type FilterRule, QueryBuilder, ReplayBadge } from '@soopa/ui';
 import { Button, buttonVariants } from '@soopa/ui/components/ui/button';
 import { createRoute, Link, Outlet, useRouterState } from '@tanstack/react-router';
 import { ArrowRight, Database, FileJson, RefreshCcw } from 'lucide-react';
@@ -13,7 +13,6 @@ import {
   useBulkReplayTransactions,
   useReplayTransaction,
 } from '../../../features/transactions/api/transactionsApi';
-import { ReplayBadge } from '../../../features/transactions/components/ReplayBadge';
 import { TransactionsTable } from '../../../features/transactions/components/TransactionsTable';
 import { TRANSACTION_STATUS_GROUPS } from '../../../features/transactions/constants';
 import { Route as appRoute } from '../../tenant';

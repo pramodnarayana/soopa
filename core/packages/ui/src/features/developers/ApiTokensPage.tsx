@@ -1,25 +1,16 @@
 import {
   createColumnHelper,
-  flexRender,
   getCoreRowModel,
   getExpandedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
 import { formatDistanceToNow, parseISO } from 'date-fns';
-import {
-  AlertTriangle,
-  Check,
-  Copy,
-  Key,
-  Loader2,
-  Pencil,
-  Plus,
-  Power,
-  Trash2,
-} from 'lucide-react';
+import { AlertTriangle, Check, Copy, Key, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useClipboardCopy } from '../../components/observability/use-clipboard-copy';
 import { Button } from '../../components/ui/button';
+import { DataTable } from '../../components/ui/data-table';
 import {
   Dialog,
   DialogClose,
@@ -31,6 +22,7 @@ import {
 } from '../../components/ui/dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
+import { Switch } from '../../components/ui/switch';
 import type { ApiTokenHookConfig } from './api/apiTokenHooks';
 import {
   useApiTokensQuery,
@@ -40,35 +32,39 @@ import {
 } from './api/apiTokenHooks';
 import type { ApiToken, ApiTokenCreated } from './types';
 
+function CopyFieldRow({ label, value }: { readonly label: string; readonly value: string }) {
+  const { copied, copyText } = useClipboardCopy(2_000);
+
+  return (
+    <div className="grid gap-1.5">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <div className="flex gap-2">
+        <Input value={value} readOnly type="text" variant="code" />
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            void copyText(value);
+          }}
+          aria-label={`Copy ${label}`}
+        >
+          {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Token Credentials Modal ────────────────────────────────────────────────
 function TokenCredentialsModal({
   token,
   onClose,
 }: {
-  token: ApiTokenCreated;
-  onClose: () => void;
+  readonly token: ApiTokenCreated;
+  readonly onClose: () => void;
 }) {
-  const [copiedId, setCopiedId] = useState(false);
-  const [copiedSecret, setCopiedSecret] = useState(false);
-  const [copiedCombined, setCopiedCombined] = useState(false);
-
-  const copyToClipboard = async (text: string, type: 'id' | 'secret' | 'combined') => {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (type === 'secret') {
-        setCopiedSecret(true);
-        setTimeout(() => setCopiedSecret(false), 2000);
-      } else if (type === 'id') {
-        setCopiedId(true);
-        setTimeout(() => setCopiedId(false), 2000);
-      } else {
-        setCopiedCombined(true);
-        setTimeout(() => setCopiedCombined(false), 2000);
-      }
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-    }
-  };
+  const secretSegment = token.token.split('.')[1] ?? '';
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
@@ -80,8 +76,8 @@ function TokenCredentialsModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-900 text-sm">
-          <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
           <div>
             <p className="font-semibold text-amber-800">Store this secret securely</p>
             <p className="text-amber-700">
@@ -91,79 +87,31 @@ function TokenCredentialsModal({
         </div>
 
         <div className="grid gap-4 py-2">
-          <div className="grid gap-1.5">
-            <span className="text-sm font-medium text-slate-700">Client ID</span>
-            <div className="flex gap-2">
-              <Input value={token.client_id} readOnly variant="code" />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => copyToClipboard(token.client_id, 'id')}
-              >
-                {copiedId ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <span className="text-sm font-medium text-slate-700">Client Secret</span>
-            <div className="flex gap-2">
-              <Input value={token.token.split('.')[1] || ''} readOnly type="text" variant="code" />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => copyToClipboard(token.token.split('.')[1] || '', 'secret')}
-              >
-                {copiedSecret ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-          <div className="grid gap-1.5">
-            <span className="text-sm font-medium text-slate-700">
-              Combined Token (Bearer Token)
-            </span>
-            <div className="flex gap-2">
-              <Input value={token.token} readOnly type="text" variant="code" />
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => copyToClipboard(token.token, 'combined')}
-              >
-                {copiedCombined ? (
-                  <Check className="h-4 w-4 text-green-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-          </div>
+          <CopyFieldRow label="Client ID" value={token.client_id} />
+          <CopyFieldRow label="Client Secret" value={secretSegment} />
+          <CopyFieldRow label="Combined Token (Bearer Token)" value={token.token} />
         </div>
 
-        <div className="p-4 mt-2 rounded-lg bg-indigo-50 border border-indigo-100 text-sm text-indigo-900">
-          <p className="font-semibold text-indigo-950 mb-1">Developer Note: How to authenticate</p>
+        <div className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-900">
+          <p className="mb-1 font-semibold text-indigo-950">Developer Note: How to authenticate</p>
           <p className="text-indigo-800">
             Include the Combined Token in your HTTP requests using the standard Authorization
             header. If using Postman, select <strong>"Bearer Token"</strong> and paste the Combined
             Token exactly as is.
           </p>
-          <code className="block mt-2 p-2.5 bg-white rounded border border-indigo-100 font-mono text-xs text-indigo-950">
+          <code className="mt-2 block rounded border border-indigo-100 bg-white p-2.5 font-mono text-xs text-indigo-950">
             Authorization: Bearer {'<COMBINED_TOKEN>'}
           </code>
-          <p className="text-xs text-indigo-700 mt-2 font-medium">
+          <p className="mt-2 text-xs font-medium text-indigo-700">
             Note: Do not manually type the word "Bearer" when using Postman's Auth tab, as Postman
             adds it automatically.
           </p>
         </div>
 
         <DialogFooter>
-          <Button onClick={onClose}>I've saved the credentials</Button>
+          <Button type="button" onClick={onClose}>
+            I've saved the credentials
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -175,36 +123,38 @@ function CreateApiTokenDialog({
   config,
   onCreated,
 }: {
-  config: ApiTokenHookConfig;
-  onCreated: (token: ApiTokenCreated) => void;
+  readonly config: ApiTokenHookConfig;
+  readonly onCreated: (token: ApiTokenCreated) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const createMutation = useCreateApiTokenMutation(config);
 
-  const handleCreate = async () => {
-    if (!name.trim()) return;
-    try {
-      const data = await createMutation.mutateAsync({ name: name.trim() });
-      setOpen(false);
-      setName('');
-      onCreated(data);
-    } catch (error) {
-      console.error('Failed to generate API token:', error);
-      toast.error('Failed to generate API token. Please try again.');
+  const handleCreate = async (): Promise<void> => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
     }
+    const result = await createMutation.mutateAsync({ name: trimmed });
+    if (!result.ok) {
+      toast.error(result.error.message || 'Failed to generate API token. Please try again.');
+      return;
+    }
+    setOpen(false);
+    setName('');
+    onCreated(result.value);
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <Button id="generate-api-token-btn" size="cta" onClick={() => setOpen(true)}>
-        <Plus className="w-4 h-4 mr-1" />
+      <Button id="generate-api-token-btn" type="button" size="cta" onClick={() => setOpen(true)}>
+        <Plus className="mr-1 h-4 w-4" />
         Generate Token
       </Button>
       <DialogContent>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Key className="w-5 h-5 text-indigo-600" />
+            <Key className="h-5 w-5 text-indigo-600" />
             Generate New API Token
           </DialogTitle>
           <DialogDescription>
@@ -217,9 +167,12 @@ function CreateApiTokenDialog({
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
           </DialogClose>
           <Button
+            type="button"
             size="sm"
             onClick={handleCreate}
             disabled={!name.trim() || createMutation.isPending}
@@ -239,23 +192,22 @@ function DeleteTokenDialog({
   open,
   onOpenChange,
 }: {
-  config: ApiTokenHookConfig;
-  token: ApiToken;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+  readonly config: ApiTokenHookConfig;
+  readonly token: ApiToken;
+  readonly open: boolean;
+  readonly onOpenChange: (v: boolean) => void;
 }) {
   const [confirmText, setConfirmText] = useState('');
   const deleteMutation = useDeleteApiTokenMutation(config);
 
-  const handleDelete = async () => {
-    try {
-      await deleteMutation.mutateAsync(token.id);
-      setConfirmText('');
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Failed to delete API token:', error);
-      toast.error('Failed to delete API token. Please try again.');
+  const handleDelete = async (): Promise<void> => {
+    const result = await deleteMutation.mutateAsync(token.id);
+    if (!result.ok) {
+      toast.error(result.error.message || 'Failed to delete API token. Please try again.');
+      return;
     }
+    setConfirmText('');
+    onOpenChange(false);
   };
 
   return (
@@ -276,7 +228,7 @@ function DeleteTokenDialog({
         </DialogHeader>
         <div className="space-y-3 text-sm text-slate-600">
           <p>To confirm, type the token name:</p>
-          <code className="block bg-slate-100 rounded-lg px-3 py-2 text-xs font-mono break-all text-slate-700">
+          <code className="block rounded-lg bg-slate-100 px-3 py-2 font-mono text-xs break-all text-slate-700">
             {token.name}
           </code>
           <Label htmlFor={`delete-token-confirm-${token.id}`}>Confirmation</Label>
@@ -295,10 +247,13 @@ function DeleteTokenDialog({
         </div>
         <DialogFooter>
           <DialogClose asChild>
-            <Button variant="outline">Cancel</Button>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
           </DialogClose>
           <Button
             id={`delete-token-confirm-btn-${token.id}`}
+            type="button"
             variant="destructive"
             disabled={confirmText !== token.name || deleteMutation.isPending}
             onClick={handleDelete}
@@ -318,32 +273,33 @@ function RenameTokenDialog({
   open,
   onOpenChange,
 }: {
-  config: ApiTokenHookConfig;
-  token: ApiToken;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
+  readonly config: ApiTokenHookConfig;
+  readonly token: ApiToken;
+  readonly open: boolean;
+  readonly onOpenChange: (v: boolean) => void;
 }) {
   const [name, setName] = useState(token.name);
   const updateMutation = useUpdateApiTokenMutation(config);
 
   useEffect(() => {
-    if (open) setName(token.name);
+    if (open) {
+      setName(token.name);
+    }
   }, [open, token.name]);
 
-  const handleRename = async (e: React.FormEvent) => {
+  const handleRename = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || trimmed === token.name) {
       onOpenChange(false);
       return;
     }
-    try {
-      await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
-      onOpenChange(false);
-    } catch (error) {
-      console.error('Failed to rename API token:', error);
-      toast.error('Failed to rename API token. Please try again.');
+    const result = await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
+    if (!result.ok) {
+      toast.error(result.error.message || 'Failed to rename API token. Please try again.');
+      return;
     }
+    onOpenChange(false);
   };
 
   return (
@@ -378,20 +334,26 @@ function RenameTokenDialog({
 }
 
 // ─── Token Row Actions ───────────────────────────────────────────────────────
-function TokenRowActions({ config, token }: { config: ApiTokenHookConfig; token: ApiToken }) {
+function TokenRowActions({
+  config,
+  token,
+}: {
+  readonly config: ApiTokenHookConfig;
+  readonly token: ApiToken;
+}) {
   const [showDelete, setShowDelete] = useState(false);
   const [showRename, setShowRename] = useState(false);
   const updateMutation = useUpdateApiTokenMutation(config);
   const isActive = token.active;
 
-  const handleToggleActive = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleToggleActive = (nextChecked: boolean): void => {
     updateMutation.mutate(
-      { id: token.id, data: { active: !isActive } },
+      { id: token.id, data: { active: nextChecked } },
       {
-        onError: (error) => {
-          console.error('Failed to toggle token status:', error);
-          toast.error('Failed to toggle token status. Please try again.');
+        onSuccess: (result) => {
+          if (!result.ok) {
+            toast.error(result.error.message || 'Failed to toggle token status. Please try again.');
+          }
         },
       },
     );
@@ -404,62 +366,47 @@ function TokenRowActions({ config, token }: { config: ApiTokenHookConfig; token:
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isActive}
-          onClick={handleToggleActive}
-          disabled={updateMutation.isPending}
-          className={`relative inline-flex h-7 w-[90px] shrink-0 cursor-pointer items-center rounded-full border transition-colors ${
-            isActive ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-300'
-          } ${updateMutation.isPending ? 'opacity-50 cursor-wait' : ''}`}
-        >
-          <span
-            className={`absolute left-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity ${isActive ? 'opacity-100 text-emerald-700' : 'opacity-0'}`}
-          >
-            Active
+        <div className="flex items-center gap-2">
+          <Switch
+            checked={isActive}
+            onCheckedChange={handleToggleActive}
+            disabled={updateMutation.isPending}
+            aria-label={isActive ? 'Deactivate token' : 'Activate token'}
+          />
+          <span className="w-14 text-xs font-medium text-slate-600">
+            {isActive ? 'Active' : 'Inactive'}
           </span>
-          <span
-            className={`absolute right-2.5 text-[10px] font-bold uppercase tracking-wider transition-opacity ${isActive ? 'opacity-0' : 'opacity-100 text-slate-500'}`}
-          >
-            Inactive
-          </span>
-          <span
-            className={`pointer-events-none absolute left-1 flex h-5 w-5 transform items-center justify-center rounded-full shadow transition-transform ${isActive ? 'translate-x-[62px] bg-emerald-600 text-white' : 'translate-x-0 bg-white text-slate-400'}`}
-          >
-            {updateMutation.isPending ? (
-              <Loader2 className="w-3 h-3 animate-spin" />
-            ) : (
-              <Power className="w-3 h-3" />
-            )}
-          </span>
-        </button>
+        </div>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={(e) => {
             e.stopPropagation();
             setShowRename(true);
           }}
-          className="p-2 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+          className="text-slate-500 hover:bg-indigo-50 hover:text-indigo-600"
           title="Rename token"
           aria-label="Rename token"
         >
-          <Pencil className="w-4 h-4" />
-        </button>
+          <Pencil className="h-4 w-4" />
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           onClick={(e) => {
             e.stopPropagation();
             setShowDelete(true);
           }}
-          className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+          className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700"
           title="Delete token"
           aria-label="Delete token"
         >
-          <Trash2 className="w-4 h-4" />
-        </button>
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
 
       <DeleteTokenDialog
@@ -479,55 +426,61 @@ function TokenRowActions({ config, token }: { config: ApiTokenHookConfig; token:
 }
 
 // ─── Token Details ────────────────────────────────────────────────────────────
-function TokenDetails({ token, config }: { token: ApiToken; config: ApiTokenHookConfig }) {
+function TokenDetails({
+  token,
+  config,
+}: {
+  readonly token: ApiToken;
+  readonly config: ApiTokenHookConfig;
+}) {
   const [name, setName] = useState(token.name);
   const updateMutation = useUpdateApiTokenMutation(config);
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<void> => {
     const trimmed = name.trim();
-    if (trimmed && trimmed !== token.name) {
-      try {
-        await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
-      } catch (error) {
-        console.error('Failed to update API token:', error);
-        toast.error('Failed to update API token. Please try again.');
-      }
+    if (!trimmed || trimmed === token.name) {
+      return;
+    }
+    const result = await updateMutation.mutateAsync({ id: token.id, data: { name: trimmed } });
+    if (!result.ok) {
+      toast.error(result.error.message || 'Failed to update API token. Please try again.');
     }
   };
 
   return (
-    <div className="p-4 bg-slate-50/50 border-b border-slate-100 text-sm text-slate-600 grid gap-8 md:grid-cols-2">
+    <div className="grid gap-8 border-b border-slate-100 bg-slate-50/50 p-4 text-sm text-slate-600 md:grid-cols-2">
       <div className="grid gap-3">
         <div className="space-y-1">
           <Label htmlFor={`token-name-${token.id}`}>Token Name</Label>
-          <div className="flex gap-2 max-w-sm">
+          <div className="flex max-w-sm gap-2">
             <Input
               id={`token-name-${token.id}`}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
             <Button
+              type="button"
               size="sm"
               onClick={handleSave}
               disabled={updateMutation.isPending || name.trim() === token.name || !name.trim()}
             >
               {updateMutation.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
               ) : (
-                <Check className="w-3 h-3 mr-1" />
+                <Check className="mr-1 h-3 w-3" />
               )}
               Save
             </Button>
           </div>
         </div>
       </div>
-      <div className="grid gap-4 grid-cols-2 content-start pt-1">
+      <div className="grid grid-cols-2 content-start gap-4 pt-1">
         <div>
-          <div className="font-semibold text-slate-900 mb-1">Client ID</div>
-          <div className="font-mono text-xs text-slate-500 break-all">{token.client_id}</div>
+          <div className="mb-1 font-semibold text-slate-900">Client ID</div>
+          <div className="font-mono text-xs break-all text-slate-500">{token.client_id}</div>
         </div>
         <div>
-          <div className="font-semibold text-slate-900 mb-1">Status</div>
+          <div className="mb-1 font-semibold text-slate-900">Status</div>
           <div>{token.active ? 'Active' : 'Inactive'}</div>
         </div>
       </div>
@@ -544,8 +497,8 @@ const columns = [
     header: 'Name',
     cell: (info) => (
       <div className="flex items-center gap-2 font-semibold text-slate-900">
-        <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 border border-indigo-100 shrink-0">
-          <Key className="w-4 h-4" />
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-indigo-100 bg-indigo-50 text-indigo-600">
+          <Key className="h-4 w-4" />
         </div>
         {info.getValue()}
       </div>
@@ -560,7 +513,7 @@ const columns = [
     id: 'createdAt',
     header: 'Created',
     cell: (info) => (
-      <span className="text-slate-500 text-xs">
+      <span className="text-xs text-slate-500">
         {formatDistanceToNow(parseISO(info.getValue()), { addSuffix: true })}
       </span>
     ),
@@ -568,13 +521,14 @@ const columns = [
   columnHelper.accessor((row) => row.token.last_used_at, {
     id: 'lastUsedAt',
     header: 'Last Used',
-    cell: (info) => (
-      <span className="text-slate-500 text-xs">
-        {info.getValue()
-          ? formatDistanceToNow(parseISO(info.getValue() as string), { addSuffix: true })
-          : '—'}
-      </span>
-    ),
+    cell: (info) => {
+      const value = info.getValue();
+      return (
+        <span className="text-xs text-slate-500">
+          {value ? formatDistanceToNow(parseISO(value), { addSuffix: true }) : '—'}
+        </span>
+      );
+    },
   }),
   columnHelper.display({
     id: 'actions',
@@ -596,10 +550,16 @@ export type ApiTokensPageProps = ApiTokenHookConfig;
  * Accepts explicit (baseUrl, tenantId, token) as props — usable by any app
  * in the monorepo (UCP Dashboard, IDP, IP, etc.) without needing an EDI provider.
  */
-export function ApiTokensPage({ baseUrl, tenantId, token }: ApiTokensPageProps) {
+export function ApiTokensPage({
+  baseUrl,
+  tenantId,
+  token,
+  httpClient,
+  logger,
+}: ApiTokensPageProps) {
   const config = React.useMemo<ApiTokenHookConfig>(
-    () => ({ baseUrl, tenantId, token }),
-    [baseUrl, tenantId, token],
+    () => ({ baseUrl, tenantId, token, httpClient, logger }),
+    [baseUrl, httpClient, logger, tenantId, token],
   );
   const { data: tokens = [], isLoading } = useApiTokensQuery(config);
   const [createdToken, setCreatedToken] = useState<ApiTokenCreated | null>(null);
@@ -619,86 +579,31 @@ export function ApiTokensPage({ baseUrl, tenantId, token }: ApiTokensPageProps) 
   });
 
   return (
-    <div className="flex flex-col gap-10 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700 ease-out">
-      {/* Page Header */}
-      <section className="flex flex-col gap-2 pb-6 border-b border-slate-200/60">
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-900 flex items-center gap-3">
-            <Key className="w-8 h-8 text-indigo-600" />
+    <div className="animate-in fade-in slide-in-from-bottom-4 flex flex-col gap-10 pb-12 duration-700 ease-out">
+      <section className="flex flex-col gap-2 border-b border-slate-200/60 pb-6">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-3 text-3xl font-bold tracking-tight text-slate-900">
+            <Key className="h-8 w-8 text-indigo-600" />
             API Tokens
           </h2>
           <CreateApiTokenDialog config={config} onCreated={setCreatedToken} />
         </div>
-        <p className="text-slate-500 text-sm mt-1">
+        <p className="mt-1 text-sm text-slate-500">
           Generate and manage machine-to-machine API tokens for programmatic access.
         </p>
       </section>
 
-      {/* Token Table */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400">
-          <Loader2 className="w-6 h-6 animate-spin mr-2" />
-          Loading tokens…
-        </div>
-      ) : tokens.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
-          <Key className="w-10 h-10" />
-          <p className="text-sm font-medium">No API tokens yet</p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr
-                  key={headerGroup.id}
-                  className="border-b border-slate-100 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider"
-                >
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
-                      className={`pb-3 ${header.index === 0 ? 'pl-4' : ''}`}
-                      style={{ width: header.getSize() !== 150 ? header.getSize() : undefined }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {table.getRowModel().rows.map((row) => (
-                <React.Fragment key={row.id}>
-                  <tr
-                    className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
-                    onClick={row.getToggleExpandedHandler()}
-                  >
-                    {row.getVisibleCells().map((cell, index) => (
-                      <td key={cell.id} className={`py-3 ${index === 0 ? 'pl-4' : ''}`}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
-                  </tr>
-                  {row.getIsExpanded() && (
-                    <tr>
-                      <td
-                        colSpan={row.getVisibleCells().length}
-                        className="p-0 border-b border-slate-100"
-                      >
-                        <TokenDetails token={row.original.token} config={config} />
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        table={table}
+        columnsLength={columns.length}
+        dataLength={tableData.length}
+        isLoading={isLoading}
+        ariaLabel="API tokens"
+        emptyIcon={<Key className="h-10 w-10" />}
+        emptyTitle="No API tokens yet"
+        renderExpandedRow={(row) => <TokenDetails token={row.original.token} config={config} />}
+      />
 
-      {/* Show credentials modal after creation */}
       {createdToken && (
         <TokenCredentialsModal token={createdToken} onClose={() => setCreatedToken(null)} />
       )}

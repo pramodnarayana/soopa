@@ -1,80 +1,47 @@
+import type { ApiProblem, HttpClientPort, Result } from '../../../network';
 import type { ApiToken, ApiTokenCreated, CreateApiTokenPayload } from '../types';
+
+export interface ApiTokenRepositoryPort {
+  getAll(signal?: AbortSignal): Promise<Result<ApiToken[], ApiProblem>>;
+  create(payload: CreateApiTokenPayload): Promise<Result<ApiTokenCreated, ApiProblem>>;
+  update(
+    id: string,
+    data: { readonly name?: string; readonly active?: boolean },
+  ): Promise<Result<void, ApiProblem>>;
+  delete(id: string): Promise<Result<void, ApiProblem>>;
+}
 
 /**
  * Platform-level HTTP repository for API Token CRUD operations.
- * Communicates with UCP API: /api/v1/tenants/:tenantId/tokens
- *
- * Decoupled from EDI domain — usable by any app in the monorepo.
+ * Depends strictly on the abstract HttpClientPort (zero adapter-to-adapter coupling)
+ * and returns structured Result<T, ApiProblem> values without throwing exceptions.
  */
-export class HttpApiTokenRepository {
-  private readonly baseUrl: string;
-  private readonly tenantId: string;
-  private readonly token: string;
+export class HttpApiTokenRepository implements ApiTokenRepositoryPort {
+  public constructor(
+    private readonly httpClient: HttpClientPort,
+    private readonly tenantId: string,
+  ) {}
 
-  constructor(baseUrl: string, tenantId: string, token: string) {
-    this.baseUrl = baseUrl;
-    this.tenantId = tenantId;
-    this.token = token;
+  private get basePath(): string {
+    return `/tenants/${encodeURIComponent(this.tenantId)}/tokens`;
   }
 
-  private get apiRoot(): string {
-    return `${this.baseUrl}/tenants/${this.tenantId}/tokens`;
+  public getAll(signal?: AbortSignal): Promise<Result<ApiToken[], ApiProblem>> {
+    return this.httpClient.get<ApiToken[]>(this.basePath, { signal });
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000);
-
-    try {
-      const res = await fetch(`${this.apiRoot}${path}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-          ...init?.headers,
-        },
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        let message = res.statusText;
-        try {
-          const err = (await res.json()) as { message?: string | string[]; detail?: string };
-          message = Array.isArray(err.message)
-            ? err.message[0]
-            : (err.message ?? err.detail ?? message);
-        } catch {
-          // ignore parse errors
-        }
-        throw new Error(message);
-      }
-
-      if (res.status === 204) return undefined as unknown as T;
-      return (await res.json()) as T;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  public create(payload: CreateApiTokenPayload): Promise<Result<ApiTokenCreated, ApiProblem>> {
+    return this.httpClient.post<ApiTokenCreated>(this.basePath, payload);
   }
 
-  getAll(): Promise<ApiToken[]> {
-    return this.request<ApiToken[]>('');
+  public update(
+    id: string,
+    data: { readonly name?: string; readonly active?: boolean },
+  ): Promise<Result<void, ApiProblem>> {
+    return this.httpClient.patch<void>(`${this.basePath}/${encodeURIComponent(id)}`, data);
   }
 
-  create(payload: CreateApiTokenPayload): Promise<ApiTokenCreated> {
-    return this.request<ApiTokenCreated>('', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  update(id: string, data: { name?: string; active?: boolean }): Promise<void> {
-    return this.request<void>(`/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
-  }
-
-  delete(id: string): Promise<void> {
-    return this.request<void>(`/${id}`, { method: 'DELETE' });
+  public delete(id: string): Promise<Result<void, ApiProblem>> {
+    return this.httpClient.delete<void>(`${this.basePath}/${encodeURIComponent(id)}`);
   }
 }
