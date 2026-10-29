@@ -18,6 +18,7 @@ source_roots = [
     "core/platform/packages/strace/src"
 ]
 
+
 [[modules]]
 path = "strace.domain"
 depends_on = []

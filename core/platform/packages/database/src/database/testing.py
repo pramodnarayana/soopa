@@ -90,6 +90,8 @@ class TransactionalTestRouter(DatabaseRouterPort):
                 yield cast(TenantSession, session)
 
     async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
+        if app_slug == "edi" or "5433" in self.shard_url:
+            return [("edi_shard_1", self.shard_url)]
         return [("ucp_shard_1", self.shard_url)]
 
     async def close_all(self) -> None:
@@ -114,6 +116,9 @@ async def get_test_shard_url_async(global_db_url: str, app_slug: str | None = No
     await router.close_all()
     if not shards:
         raise ValueError("No test shards found in the Control Plane.")
+    for shard_key, shard_url in shards:
+        if shard_key.lower() in db_settings.shard_overrides:
+            return shard_url
     return shards[0][1]
 
 
