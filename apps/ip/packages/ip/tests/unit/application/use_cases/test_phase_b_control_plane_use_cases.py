@@ -891,6 +891,56 @@ async def test_stitch_control_plane_use_cases() -> None:
     assert reg_res.is_ok
     assert reg_res.unwrap().id == "stitch_custom_01"
 
+    # Wildcard override and cross-tenant collision tests
+    reg_wildcard = await reg_stitch_uc.execute(
+        RegisterStitchCommand(
+            tenant_id="*",
+            stitch_id="stitch_shared_01",
+            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.custom_meter_reading.normalized",
+            is_trigger=True,
+        )
+    )
+    assert reg_wildcard.is_ok
+
+    # Concrete tenant overrides wildcard stitch with same ID without 409
+    reg_override = await reg_stitch_uc.execute(
+        RegisterStitchCommand(
+            tenant_id="ten_01",
+            stitch_id="stitch_shared_01",
+            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.custom_meter_reading.normalized",
+            is_trigger=True,
+        )
+    )
+    assert reg_override.is_ok
+
+    # Different concrete tenant attempting same stitch ID triggers 409 collision
+    reg_conflict = await reg_stitch_uc.execute(
+        RegisterStitchCommand(
+            tenant_id="ten_02",
+            stitch_id="stitch_shared_01",
+            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.custom_meter_reading.normalized",
+            is_trigger=True,
+        )
+    )
+    assert reg_conflict.is_err
+    assert reg_conflict.unwrap_err().http_status == 409
+
+    # In-memory stitch catalog list_stitches_for_event prioritizes tenant stitch
+    matching_stitches = stitch_cat.list_stitches_for_event(
+        tenant_id="ten_01",
+        canonical_event_type="canonical.custom_meter_reading.normalized",
+    )
+    matching_ids = [s.id for s in matching_stitches]
+    assert matching_ids.count("stitch_shared_01") == 1
+    overridden = next(s for s in matching_stitches if s.id == "stitch_shared_01")
+    assert overridden.tenant_id == "ten_01"
+
     bad_reg_res = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id="ten_01",

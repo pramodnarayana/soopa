@@ -372,7 +372,11 @@ class RegisterStitchUseCase:
             if self._uow is not None:
                 async with self._uow:
                     existing = await self._uow.stitches.get_by_id_global(stitch_id=stitch_id)
-                    if existing is not None and existing.tenant_id != command.tenant_id:
+                    if (
+                        existing is not None
+                        and existing.tenant_id != command.tenant_id
+                        and existing.tenant_id != "*"
+                    ):
                         bound.error(
                             "register_stitch.cross_tenant_collision",
                             existing_tenant_id=existing.tenant_id,
@@ -392,6 +396,7 @@ class RegisterStitchUseCase:
                 if (
                     existing_in_mem is not None
                     and existing_in_mem.tenant_id != command.tenant_id
+                    and existing_in_mem.tenant_id != "*"
                 ):
                     bound.error(
                         "register_stitch.cross_tenant_collision",

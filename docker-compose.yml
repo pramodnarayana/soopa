@@ -138,6 +138,7 @@ services:
   # -------------------------------------------------------------------------
   cp-workers:
     <<: *modular-monolith-base
+    profiles: ["full"]
     command: [ "python", "-m", "unified_worker.main" ]
     environment:
       <<: *base-env
@@ -145,6 +146,7 @@ services:
 
   dp-workers:
     <<: *modular-monolith-base
+    profiles: ["full"]
     depends_on:
       postgres_global:
         condition: service_healthy
