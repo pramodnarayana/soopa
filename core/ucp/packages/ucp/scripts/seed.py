@@ -19,13 +19,13 @@ from database.models.identity import Tenant, User, UserRole
 from database.utils import normalize_to_asyncpg
 from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import func, update
+from sqlalchemy import func, or_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from ucp_models.sharding import DatabaseShard
 from ucp_models.subscriptions import App
 
-load_dotenv(override=True)
+load_dotenv()
 
 logger = structlog.get_logger(__name__)
 
@@ -73,7 +73,7 @@ async def _seed_platform_admin(conn: AsyncConnection, platform_admin_id: str) ->
         update(User)
         .where(
             func.lower(User.email).in_(["admin@flowwolf.io", "admin@soopa.ai"]),
-            User.idp_user_id != platform_admin_id,
+            or_(User.idp_user_id != platform_admin_id, User.idp_user_id.is_(None)),
         )
         .values(idp_user_id=platform_admin_id)
     )

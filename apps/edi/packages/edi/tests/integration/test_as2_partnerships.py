@@ -259,3 +259,53 @@ def test_test_as2_partnership_not_found(client_factory):
     response = client.post(f"/api/v1/as2/partnerships/{uuid.uuid4()!s}/test")
 
     assert response.status_code == 404
+
+
+def test_create_as2_local_partner_rejects_empty_receive_url(client_factory, monkeypatch):
+    """Local AS2 partner creation fails with HTTP 400 when no URL is provided and AS2_RECEIVE_URL is empty."""
+    from unified_api.settings import get_settings
+
+    monkeypatch.setenv("AS2_RECEIVE_URL", "")
+    get_settings.cache_clear()
+
+    try:
+        client = client_factory()
+        response = client.post(
+            "/api/v1/as2/trading-partners",
+            json={
+                "name": "Local Station Test",
+                "as2_id": "LOCAL_TEST",
+                "is_local": True,
+            },
+        )
+        assert response.status_code == 400
+        assert "AS2 receive URL must be configured" in response.json()["detail"]
+    finally:
+        get_settings.cache_clear()
+
+
+def test_create_as2_local_partner_with_explicit_url(client_factory, fake_uow, monkeypatch):
+    """Local AS2 partner creation succeeds when an explicit absolute URL is supplied."""
+    from unified_api.settings import get_settings
+
+    monkeypatch.setenv("AS2_RECEIVE_URL", "")
+    get_settings.cache_clear()
+
+    try:
+        client = client_factory()
+        response = client.post(
+            "/api/v1/as2/trading-partners",
+            json={
+                "name": "Local Station With URL",
+                "as2_id": "LOCAL_WITH_URL",
+                "is_local": True,
+                "url": "http://localhost:8001/as2/receive",
+                "private_key_pem": "FAKE_PRIVATE_KEY",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["url"] == "http://localhost:8001/as2/receive"
+        assert data["is_local"] is True
+    finally:
+        get_settings.cache_clear()
