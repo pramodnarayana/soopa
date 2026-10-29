@@ -20,6 +20,7 @@ class SyncRunRepositoryPort(Protocol):
         connection_id: str,
         stream: str,
         tenant_id: str | None = None,
+        for_update: bool = False,
     ) -> SyncRun | None:
         """Retrieves the active (PENDING or RUNNING) sync run for a stream, if one exists."""
         ...

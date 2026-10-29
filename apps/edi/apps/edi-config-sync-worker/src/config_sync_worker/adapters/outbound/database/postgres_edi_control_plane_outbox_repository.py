@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from typing import Any, cast
 
@@ -96,16 +97,21 @@ class PostgresEdiControlPlaneOutboxRepository(OutboxRepositoryPort):
         return total_swept
 
     async def mark_completed(self, event_id: str, worker_id: str) -> None:
+        await self.mark_completed_batch([event_id], worker_id)
+
+    async def mark_completed_batch(self, event_ids: Sequence[str], worker_id: str) -> None:
+        if not event_ids:
+            return
         async with asynccontextmanager(self.db_router.get_global_session)() as session:
             query = text("""
                 UPDATE edi.outbox
                 SET status = :status_processed, lease_expires_at = NULL, owner_token = NULL, updated_at = NOW()
-                WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
+                WHERE id = ANY(:event_ids) AND status = :status_processing AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
                 {
-                    "event_id": event_id,
+                    "event_ids": list(event_ids),
                     "worker_id": worker_id,
                     "status_processed": OutboxStatus.PROCESSED.value,
                     "status_processing": OutboxStatus.PROCESSING.value,
@@ -114,6 +120,13 @@ class PostgresEdiControlPlaneOutboxRepository(OutboxRepositoryPort):
             await session.commit()
 
     async def mark_failed(self, event_id: str, worker_id: str, error_message: str) -> None:
+        await self.mark_failed_batch([event_id], worker_id, error_message)
+
+    async def mark_failed_batch(
+        self, event_ids: Sequence[str], worker_id: str, error_message: str
+    ) -> None:
+        if not event_ids:
+            return
         async with asynccontextmanager(self.db_router.get_global_session)() as session:
             query = text("""
                 UPDATE edi.outbox
@@ -123,12 +136,12 @@ class PostgresEdiControlPlaneOutboxRepository(OutboxRepositoryPort):
                     owner_token = NULL,
                     updated_at = NOW(),
                     error_reason = :error_message
-                WHERE id = :event_id AND status = :status_processing AND owner_token = :worker_id
+                WHERE id = ANY(:event_ids) AND status = :status_processing AND owner_token = :worker_id
             """)
             await session.execute(
                 query,
                 {
-                    "event_id": event_id,
+                    "event_ids": list(event_ids),
                     "worker_id": worker_id,
                     "error_message": error_message,
                     "max_attempts": 3,

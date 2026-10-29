@@ -23,31 +23,31 @@ from ip.engine.application.use_cases.normalization.backfill_stream_normalization
     BackfillStreamNormalizationCommand,
     BackfillStreamNormalizationUseCase,
 )
-from ip.engine.application.use_cases.normalization.bind_stream_mapping_use_case import (
-    BindStreamMappingCommand,
-    BindStreamMappingUseCase,
+from ip.engine.application.use_cases.normalization.bind_stream_transformation_use_case import (
+    BindStreamTransformationCommand,
+    BindStreamTransformationUseCase,
 )
 from ip.engine.application.use_cases.normalization.normalize_replica_record_use_case import (
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordUseCase,
 )
-from ip.engine.application.use_cases.normalization.promote_mapping_version_use_case import (
-    PromoteMappingVersionCommand,
-    PromoteMappingVersionUseCase,
+from ip.engine.application.use_cases.normalization.promote_transformation_version_use_case import (
+    PromoteTransformationVersionCommand,
+    PromoteTransformationVersionUseCase,
 )
 from ip.engine.domain.enums import (
     AuthType,
-    MappingMode,
     NormalizationOutcome,
+    TransformationMode,
 )
 from ip.engine.domain.models.connection import Connection
 from ip.engine.domain.models.replica_record import ReplicaRecord
 from ip.engine.domain.normalization import (
     CanonicalDraft,
     CanonicalEntityDefinition,
-    MappingContext,
-    MappingResult,
     ReplicaSnapshot,
+    TransformationContext,
+    TransformationResult,
 )
 from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
 from ip.engine.domain.services.canonical_writer_registry import (
@@ -56,9 +56,9 @@ from ip.engine.domain.services.canonical_writer_registry import (
 from ip.engine.domain.services.default_normalization_error_policy import (
     DefaultNormalizationErrorPolicy,
 )
-from ip.engine.domain.services.mapper_registry import InMemoryMapperRegistry
+from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
-from ip.engine.ports.outbound.mapper_port import MapperPort
+from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from seedwork.domain.types import JsonDict
 
@@ -87,8 +87,8 @@ class _RecordingCanonicalWriter(CanonicalWriterPort):
         fields: JsonDict,
         extensions: JsonDict,
         trace_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
@@ -135,29 +135,31 @@ class _RecordingCanonicalWriter(CanonicalWriterPort):
             self.rows_by_source_id[source_id][field_name] = target_id
 
 
-class _SampleOrderMapper(MapperPort):
-    """Pure mapper transforming replica snapshots into canonical drafts."""
+class _SampleOrderTransformer(TransformerPort):
+    """Pure transformer transforming replica snapshots into canonical drafts."""
 
     def __init__(self, version: int = 1, multiplier: float = 1.0) -> None:
         self._version = version
         self._multiplier = multiplier
 
     @property
-    def mapping_id(self) -> str:
+    def transformation_id(self) -> str:
         return "commerce.order_mapper"
 
     @property
-    def mapping_version(self) -> int:
+    def transformation_version(self) -> int:
         return self._version
 
     @property
     def target_types(self) -> tuple[str, ...]:
         return ("commerce.order",)
 
-    def map(self, replica: ReplicaSnapshot, context: MappingContext) -> MappingResult:
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
         raw_amount = replica.data.get("amount", 0.0)
         amount = float(raw_amount) if isinstance(raw_amount, (int, float)) else 0.0
-        return MappingResult(
+        return TransformationResult(
             drafts=(
                 CanonicalDraft(
                     canonical_type="commerce.order",
@@ -210,9 +212,9 @@ async def test_normalization_use_cases_end_to_end_with_postgres(
     resolver = IpTenantResolver(db_router=transactional_router)
     dp_uow_provider = IpTenantUoWProvider(resolver=resolver, db_router=transactional_router)
 
-    mapper_registry = InMemoryMapperRegistry()
-    mapper_registry.register(_SampleOrderMapper(version=1, multiplier=1.0))
-    mapper_registry.register(_SampleOrderMapper(version=2, multiplier=2.0))
+    transformer_registry = InMemoryTransformerRegistry()
+    transformer_registry.register(_SampleOrderTransformer(version=1, multiplier=1.0))
+    transformer_registry.register(_SampleOrderTransformer(version=2, multiplier=2.0))
 
     writer = _RecordingCanonicalWriter("commerce.order")
     writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort] = (
@@ -228,15 +230,15 @@ async def test_normalization_use_cases_end_to_end_with_postgres(
         )
     )
 
-    bind_uc = BindStreamMappingUseCase(
+    bind_uc = BindStreamTransformationUseCase(
         control_plane_uow=cp_uow,
-        mapper_registry=mapper_registry,
+        transformer_registry=transformer_registry,
     )
-    promote_uc = PromoteMappingVersionUseCase(control_plane_uow=cp_uow)
+    promote_uc = PromoteTransformationVersionUseCase(control_plane_uow=cp_uow)
     normalize_uc = NormalizeReplicaRecordUseCase(
         control_plane_uow=cp_uow,
         data_plane_uow_provider=dp_uow_provider,
-        mapper_registry=mapper_registry,
+        transformer_registry=transformer_registry,
         writer_registry=writer_registry,
         entity_registry=entity_registry,
         error_policy=DefaultNormalizationErrorPolicy(),
@@ -246,22 +248,22 @@ async def test_normalization_use_cases_end_to_end_with_postgres(
         normalize_use_case=normalize_uc,
     )
 
-    # 4. Bind stream mapping (v1 active, v2 shadow)
+    # 4. Bind stream transformation (v1 active, v2 shadow)
     bind_res = await bind_uc.execute(
-        BindStreamMappingCommand(
+        BindStreamTransformationCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
             stream="orders",
-            mapping_id="commerce.order_mapper",
-            mapping_version=1,
-            mode=MappingMode.ACTIVE,
-            shadow_mapping_version=2,
+            transformation_id="commerce.order_mapper",
+            transformation_version=1,
+            mode=TransformationMode.ACTIVE,
+            shadow_transformation_version=2,
         )
     )
     assert bind_res.is_ok
     binding_dto = bind_res.unwrap()
-    assert binding_dto.mapping_version == 1
-    assert binding_dto.shadow_mapping_version == 2
+    assert binding_dto.transformation_version == 1
+    assert binding_dto.shadow_transformation_version == 2
 
     # 5. Normalize first replica record (verifies active write + shadow diff + ledger persistence)
     norm_res = await normalize_uc.execute(
@@ -282,14 +284,14 @@ async def test_normalization_use_cases_end_to_end_with_postgres(
     v_recorded = await ledger_repo.get_latest_version(
         tenant_id=seeded_ip_tenant,
         replica_record_id=replicas[0].id,
-        mapping_id="commerce.order_mapper",
-        mapping_version=1,
+        transformation_id="commerce.order_mapper",
+        transformation_version=1,
     )
     assert v_recorded == 1
 
     # 6. Promote shadow version 2 to active
     promote_res = await promote_uc.execute(
-        PromoteMappingVersionCommand(
+        PromoteTransformationVersionCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
             stream="orders",

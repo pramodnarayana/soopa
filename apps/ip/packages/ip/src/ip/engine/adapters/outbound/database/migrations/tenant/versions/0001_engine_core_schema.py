@@ -32,6 +32,7 @@ _ENGINE_TABLES: tuple[str, ...] = (
     "pending_references",
     "ip_trace_events",
     "ip_outbox",
+    "ip_processed_events",
 )
 
 
@@ -279,8 +280,8 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("replica_record_id", sa.String(length=64), nullable=False),
         sa.Column("replica_version", sa.BigInteger(), nullable=False),
-        sa.Column("mapping_id", sa.String(length=128), nullable=False),
-        sa.Column("mapping_version", sa.Integer(), nullable=False),
+        sa.Column("transformation_id", sa.String(length=128), nullable=False),
+        sa.Column("transformation_version", sa.Integer(), nullable=False),
         sa.Column(
             "produced_canonical_refs",
             postgresql.JSONB(astext_type=sa.Text()),
@@ -295,9 +296,9 @@ def upgrade() -> None:
         sa.UniqueConstraint(
             "tenant_id",
             "replica_record_id",
-            "mapping_id",
-            "mapping_version",
-            name="uq_ip_norm_ledger_replica_mapping",
+            "transformation_id",
+            "transformation_version",
+            name="uq_ip_norm_ledger_replica_transformation",
         ),
     )
     op.create_index(
@@ -312,8 +313,8 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("replica_record_id", sa.String(length=64), nullable=False),
         sa.Column("stream", sa.String(length=128), nullable=False),
-        sa.Column("mapping_id", sa.String(length=128), nullable=False),
-        sa.Column("mapping_version", sa.Integer(), nullable=False),
+        sa.Column("transformation_id", sa.String(length=128), nullable=False),
+        sa.Column("transformation_version", sa.Integer(), nullable=False),
         sa.Column("reason_code", sa.String(length=64), nullable=False),
         sa.Column("field_path", sa.String(length=255), nullable=True),
         sa.Column("detail", sa.Text(), nullable=False),
@@ -403,13 +404,16 @@ def upgrade() -> None:
         ["tenant_id", "event_type", "created_at"],
     )
 
-    # 5. Data Plane Outbox: ip_outbox
+    # 5. Data Plane Outbox: ip_outbox & ip_processed_events
     op.create_table(
         "ip_outbox",
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
+        sa.Column("trace_id", sa.String(length=128), nullable=True),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("lane", sa.String(length=32), server_default="realtime", nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("status", sa.String(length=50), server_default="PENDING", nullable=False),
         sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
@@ -436,8 +440,26 @@ def upgrade() -> None:
     op.create_index(
         "ix_ip_dp_outbox_pending",
         "ip_outbox",
-        ["status", "created_at"],
+        ["status", "lane", "created_at"],
         postgresql_where=sa.text("status = 'PENDING'"),
+    )
+
+    op.create_table(
+        "ip_processed_events",
+        sa.Column("idempotency_key", sa.String(length=255), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column(
+            "processed_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("idempotency_key"),
+    )
+    op.create_index(
+        "idx_ip_processed_events_tenant",
+        "ip_processed_events",
+        ["tenant_id", "processed_at"],
     )
 
     # Enable Row-Level Security (RLS) across all tenant-scoped Engine Data Plane tables

@@ -19,11 +19,11 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
 from ip.engine.domain.enums import (
     CanonicalAction,
     IpTraceEventType,
-    MappingMode,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
     RuleSeverity,
+    TransformationMode,
 )
 from ip.engine.domain.events import CanonicalRecordChangedEvent
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
@@ -31,16 +31,16 @@ from ip.engine.domain.models.replica_record import ReplicaRecord
 from ip.engine.domain.normalization import (
     CanonicalDraft,
     CanonicalEntityDefinition,
-    MappingBinding,
-    MappingContext,
-    MappingRejection,
-    MappingResult,
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
     ReplicaSnapshot,
     SourceReference,
+    Transformation,
+    TransformationContext,
+    TransformationRejection,
+    TransformationResult,
 )
 from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
 from ip.engine.domain.services.canonical_writer_registry import (
@@ -49,7 +49,7 @@ from ip.engine.domain.services.canonical_writer_registry import (
 from ip.engine.domain.services.default_normalization_error_policy import (
     DefaultNormalizationErrorPolicy,
 )
-from ip.engine.domain.services.mapper_registry import InMemoryMapperRegistry
+from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
@@ -58,10 +58,6 @@ from ip.engine.ports.outbound.entity_map_repository_port import (
 )
 from ip.engine.ports.outbound.inbound_record_repository_port import (
     InboundRecordRepositoryPort,
-)
-from ip.engine.ports.outbound.mapper_port import MapperPort
-from ip.engine.ports.outbound.mapping_binding_repository_port import (
-    MappingBindingRepositoryPort,
 )
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
     NormalizationLedgerRepositoryPort,
@@ -83,10 +79,15 @@ from ip.engine.ports.outbound.replica_record_repository_port import (
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
+from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
 from ip.engine.ports.outbound.stream_state_repository_port import (
     StreamStateRepositoryPort,
 )
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
+from ip.engine.ports.outbound.transformation_repository_port import (
+    TransformationRepositoryPort,
+)
+from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
@@ -101,24 +102,26 @@ from strace.domain import TraceEvent
 # ---------------------------------------------------------------------------
 
 
-class FakeMappingBindingRepository(MappingBindingRepositoryPort):
+class FakeTransformationRepository(TransformationRepositoryPort):
     def __init__(self) -> None:
-        self.bindings: dict[tuple[str, str, str], MappingBinding] = {}
+        self.transformations: dict[tuple[str, str, str], Transformation] = {}
 
     async def get_by_stream(
         self, *, tenant_id: str, connection_id: str, stream: str
-    ) -> MappingBinding | None:
-        return self.bindings.get((tenant_id, connection_id, stream))
+    ) -> Transformation | None:
+        return self.transformations.get((tenant_id, connection_id, stream))
 
-    async def save(self, binding: MappingBinding) -> None:
-        self.bindings[(binding.tenant_id, binding.connection_id, binding.stream)] = binding
+    async def save(self, transformation: Transformation) -> None:
+        self.transformations[
+            (transformation.tenant_id, transformation.connection_id, transformation.stream)
+        ] = transformation
 
     async def list_by_connection(
         self, *, tenant_id: str, connection_id: str
-    ) -> list[MappingBinding]:
+    ) -> list[Transformation]:
         return [
             b
-            for b in self.bindings.values()
+            for b in self.transformations.values()
             if b.tenant_id == tenant_id and b.connection_id == connection_id
         ]
 
@@ -197,28 +200,38 @@ class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
         self.entries: dict[tuple[str, str, str, int], NormalizationLedgerEntry] = {}
 
     async def get_latest_version(
-        self, *, tenant_id: str, replica_record_id: str, mapping_id: str, mapping_version: int
+        self,
+        *,
+        tenant_id: str,
+        replica_record_id: str,
+        transformation_id: str,
+        transformation_version: int,
     ) -> int | None:
-        key = (tenant_id, replica_record_id, mapping_id, mapping_version)
+        key = (tenant_id, replica_record_id, transformation_id, transformation_version)
         entry = self.entries.get(key)
         return entry.replica_version if entry else None
 
     async def get_produced_refs(
-        self, *, tenant_id: str, replica_record_id: str, mapping_id: str, mapping_version: int
+        self,
+        *,
+        tenant_id: str,
+        replica_record_id: str,
+        transformation_id: str,
+        transformation_version: int,
     ) -> tuple[tuple[str, str], ...]:
-        key = (tenant_id, replica_record_id, mapping_id, mapping_version)
+        key = (tenant_id, replica_record_id, transformation_id, transformation_version)
         entry = self.entries.get(key)
         return entry.produced_canonical_refs if entry else ()
 
     async def get_latest_produced_refs(
-        self, *, tenant_id: str, replica_record_id: str, mapping_id: str
+        self, *, tenant_id: str, replica_record_id: str, transformation_id: str
     ) -> tuple[tuple[str, str], ...]:
         matching = [
             e
             for e in self.entries.values()
             if e.tenant_id == tenant_id
             and e.replica_record_id == replica_record_id
-            and e.mapping_id == mapping_id
+            and e.transformation_id == transformation_id
             and e.outcome in (NormalizationOutcome.NORMALIZED, NormalizationOutcome.TOMBSTONED)
         ]
         if not matching:
@@ -227,7 +240,12 @@ class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
         return matching[0].produced_canonical_refs
 
     async def record_entry(self, entry: NormalizationLedgerEntry) -> None:
-        key = (entry.tenant_id, entry.replica_record_id, entry.mapping_id, entry.mapping_version)
+        key = (
+            entry.tenant_id,
+            entry.replica_record_id,
+            entry.transformation_id,
+            entry.transformation_version,
+        )
         self.entries[key] = entry
 
 
@@ -341,10 +359,11 @@ class FakeControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
     catalogs: CatalogRepositoryPort
     stream_states: StreamStateRepositoryPort
     sync_runs: SyncRunRepositoryPort
-    mapping_bindings: FakeMappingBindingRepository
+    transformations: FakeTransformationRepository
+    stitches: StitchRepositoryPort
 
     def __init__(self) -> None:
-        self.mapping_bindings = FakeMappingBindingRepository()
+        self.transformations = FakeTransformationRepository()
 
     async def commit(self) -> None:
         pass
@@ -381,8 +400,8 @@ class RecordingCanonicalWriter(CanonicalWriterPort):
         fields: JsonDict,
         extensions: JsonDict,
         trace_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
         replica_id: str,
         replica_version: int,
         correlation_id: str | None = None,
@@ -452,32 +471,34 @@ class MockQualityRule:
         return None
 
 
-class SimpleMapper(MapperPort):
+class SimpleTransformer(TransformerPort):
     def __init__(self, m_id: str, m_ver: int, multiplier: float = 1.0) -> None:
         self._id = m_id
         self._ver = m_ver
         self._multiplier = multiplier
 
     @property
-    def mapping_id(self) -> str:
+    def transformation_id(self) -> str:
         return self._id
 
     @property
-    def mapping_version(self) -> int:
+    def transformation_version(self) -> int:
         return self._ver
 
     @property
     def target_types(self) -> tuple[str, ...]:
         return ("energy.meter_reading",)
 
-    def map(self, replica: ReplicaSnapshot, context: MappingContext) -> MappingResult:
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
         if replica.data.get("trigger_error"):
             raise ValueError("Invalid field format in payload")
 
         if replica.data.get("reject_flag"):
-            return MappingResult(
+            return TransformationResult(
                 rejections=(
-                    MappingRejection(
+                    TransformationRejection(
                         reason=NormalizationRejectionReason.SCHEMA_VALIDATION_FAILED,
                         field_path="serial",
                         detail="Serial is blacklisted",
@@ -503,29 +524,31 @@ class SimpleMapper(MapperPort):
                 ),
             ),
         )
-        return MappingResult(drafts=(draft,))
+        return TransformationResult(drafts=(draft,))
 
 
-class ServicePointMapper(MapperPort):
+class ServicePointTransformer(TransformerPort):
     @property
-    def mapping_id(self) -> str:
+    def transformation_id(self) -> str:
         return "energy.ami_service_point"
 
     @property
-    def mapping_version(self) -> int:
+    def transformation_version(self) -> int:
         return 1
 
     @property
     def target_types(self) -> tuple[str, ...]:
         return ("energy.service_point",)
 
-    def map(self, replica: ReplicaSnapshot, context: MappingContext) -> MappingResult:
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
         draft = CanonicalDraft(
             canonical_type="energy.service_point",
             source_id=replica.record_key,
             fields={"utility_code": replica.data.get("utility_code", "ERCOT")},
         )
-        return MappingResult(drafts=(draft,))
+        return TransformationResult(drafts=(draft,))
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +564,7 @@ class NormalizationTestEnv:
     dp_provider: FakeDataPlaneUoWProvider
     writer: RecordingCanonicalWriter
     sp_writer: RecordingCanonicalWriter
-    mapper_registry: InMemoryMapperRegistry
+    transformer_registry: InMemoryTransformerRegistry
     writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort]
     entity_registry: CanonicalEntityRegistry
 
@@ -551,16 +574,16 @@ def setup_env() -> NormalizationTestEnv:
     cp_uow = FakeControlPlaneUoW()
     dp_uow = FakeDataPlaneUoW()
     dp_provider = FakeDataPlaneUoWProvider(dp_uow)
-    mapper_registry = InMemoryMapperRegistry()
+    transformer_registry = InMemoryTransformerRegistry()
     writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort] = (
         InMemoryCanonicalWriterRegistry()
     )
     entity_registry = CanonicalEntityRegistry()
     error_policy = DefaultNormalizationErrorPolicy()
 
-    mapper = SimpleMapper("energy.ami_meter_reading", 1)
-    mapper_registry.register(mapper)
-    mapper_registry.register(ServicePointMapper())
+    transformer = SimpleTransformer("energy.ami_meter_reading", 1)
+    transformer_registry.register(transformer)
+    transformer_registry.register(ServicePointTransformer())
 
     writer = RecordingCanonicalWriter("energy.meter_reading")
     sp_writer = RecordingCanonicalWriter("energy.service_point")
@@ -570,7 +593,7 @@ def setup_env() -> NormalizationTestEnv:
     use_case = NormalizeReplicaRecordUseCase(
         control_plane_uow=cp_uow,
         data_plane_uow_provider=dp_provider,
-        mapper_registry=mapper_registry,
+        transformer_registry=transformer_registry,
         writer_registry=writer_registry,
         entity_registry=entity_registry,
         error_policy=error_policy,
@@ -583,14 +606,14 @@ def setup_env() -> NormalizationTestEnv:
         dp_provider=dp_provider,
         writer=writer,
         sp_writer=sp_writer,
-        mapper_registry=mapper_registry,
+        transformer_registry=transformer_registry,
         writer_registry=writer_registry,
         entity_registry=entity_registry,
     )
 
 
 @pytest.mark.asyncio
-async def test_normalize_skipped_no_binding(setup_env: NormalizationTestEnv) -> None:
+async def test_normalize_skipped_no_transformation(setup_env: NormalizationTestEnv) -> None:
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -601,21 +624,21 @@ async def test_normalize_skipped_no_binding(setup_env: NormalizationTestEnv) -> 
     )
     result = await setup_env.use_case.execute(command)
     assert result.is_ok
-    assert result.unwrap().outcome == NormalizationOutcome.SKIPPED_NO_BINDING
+    assert result.unwrap().outcome == NormalizationOutcome.SKIPPED_NO_TRANSFORMATION
 
 
 @pytest.mark.asyncio
 async def test_normalize_version_guard_skips_stale_and_emits_trace(
     setup_env: NormalizationTestEnv,
 ) -> None:
-    binding = MappingBinding.create(
+    transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
-    await setup_env.cp_uow.mapping_bindings.save(binding)
+    await setup_env.cp_uow.transformations.save(transformation)
 
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
@@ -632,8 +655,8 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
         tenant_id="tenant_1",
         replica_record_id=replica.id,
         replica_version=3,
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         produced_canonical_refs=(),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_old",
@@ -660,14 +683,14 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
 async def test_normalize_success_upserts_and_emits_event_and_trace(
     setup_env: NormalizationTestEnv,
 ) -> None:
-    binding = MappingBinding.create(
+    transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
-    await setup_env.cp_uow.mapping_bindings.save(binding)
+    await setup_env.cp_uow.transformations.save(transformation)
 
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
@@ -723,8 +746,8 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
         t for t in trace_events if t.event_type == IpTraceEventType.L3_NORMALIZED.value
     )
     assert normalized_trace.metadata is not None
-    assert normalized_trace.metadata["mapping_id"] == "energy.ami_meter_reading"
-    assert normalized_trace.metadata["mapping_version"] == 1
+    assert normalized_trace.metadata["transformation_id"] == "energy.ami_meter_reading"
+    assert normalized_trace.metadata["transformation_version"] == 1
 
 
 @pytest.mark.asyncio
@@ -732,22 +755,22 @@ async def test_normalize_reference_resolution_and_late_arrival_backpatching(
     setup_env: NormalizationTestEnv,
 ) -> None:
     """Verifies Step 5 immediate reference resolution and Step 13 late-arriving back-patching."""
-    await setup_env.cp_uow.mapping_bindings.save(
-        MappingBinding.create(
+    await setup_env.cp_uow.transformations.save(
+        Transformation.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
             stream="readings",
-            mapping_id="energy.ami_meter_reading",
-            mapping_version=1,
+            transformation_id="energy.ami_meter_reading",
+            transformation_version=1,
         )
     )
-    await setup_env.cp_uow.mapping_bindings.save(
-        MappingBinding.create(
+    await setup_env.cp_uow.transformations.save(
+        Transformation.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
             stream="service_points",
-            mapping_id="energy.ami_service_point",
-            mapping_version=1,
+            transformation_id="energy.ami_service_point",
+            transformation_version=1,
         )
     )
 
@@ -842,20 +865,22 @@ async def test_normalize_reference_resolution_and_late_arrival_backpatching(
 async def test_normalize_shadow_mode_does_not_mutate_canonical_or_outbox(
     setup_env: NormalizationTestEnv,
 ) -> None:
-    """Verifies MappingMode.SHADOW writes only shadow diffs and never mutates canonical tables or outbox."""
-    # Register v2 mapper with 2.0 multiplier
-    setup_env.mapper_registry.register(SimpleMapper("energy.ami_meter_reading", 2, multiplier=2.0))
+    """Verifies TransformationMode.SHADOW writes only shadow diffs and never mutates canonical tables or outbox."""
+    # Register v2 transformer with 2.0 multiplier
+    setup_env.transformer_registry.register(
+        SimpleTransformer("energy.ami_meter_reading", 2, multiplier=2.0)
+    )
 
-    binding = MappingBinding.create(
+    transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
-        mode=MappingMode.SHADOW,
-        shadow_mapping_version=2,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
+        mode=TransformationMode.SHADOW,
+        shadow_transformation_version=2,
     )
-    await setup_env.cp_uow.mapping_bindings.save(binding)
+    await setup_env.cp_uow.transformations.save(transformation)
 
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
@@ -914,14 +939,14 @@ async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv)
         )
     )
 
-    binding = MappingBinding.create(
+    transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
-    await setup_env.cp_uow.mapping_bindings.save(binding)
+    await setup_env.cp_uow.transformations.save(transformation)
 
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
@@ -961,21 +986,21 @@ async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv)
 
 @pytest.mark.asyncio
 async def test_normalize_tombstone_cascades_soft_delete(setup_env: NormalizationTestEnv) -> None:
-    binding = MappingBinding.create(
+    transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
-    await setup_env.cp_uow.mapping_bindings.save(binding)
+    await setup_env.cp_uow.transformations.save(transformation)
 
     prev_ledger = NormalizationLedgerEntry.create(
         tenant_id="tenant_1",
         replica_record_id="rep_tomb",
         replica_version=1,
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
         produced_canonical_refs=(("energy.meter_reading", "mtr_tomb"),),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_prev",
@@ -1037,15 +1062,17 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
 
 
 @pytest.mark.asyncio
-async def test_normalize_terminal_mapper_error_handling(setup_env: NormalizationTestEnv) -> None:
-    binding = MappingBinding.create(
+async def test_normalize_terminal_transformer_error_handling(
+    setup_env: NormalizationTestEnv,
+) -> None:
+    transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        mapping_id="energy.ami_meter_reading",
-        mapping_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
     )
-    await setup_env.cp_uow.mapping_bindings.save(binding)
+    await setup_env.cp_uow.transformations.save(transformation)
 
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
@@ -1084,13 +1111,13 @@ async def test_backfill_stream_normalization_chunks_records(
     setup_env: NormalizationTestEnv,
 ) -> None:
     """Verifies BackfillStreamNormalizationUseCase processes stream replicas in bounded chunks."""
-    await setup_env.cp_uow.mapping_bindings.save(
-        MappingBinding.create(
+    await setup_env.cp_uow.transformations.save(
+        Transformation.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
             stream="readings",
-            mapping_id="energy.ami_meter_reading",
-            mapping_version=1,
+            transformation_id="energy.ami_meter_reading",
+            transformation_version=1,
         )
     )
 

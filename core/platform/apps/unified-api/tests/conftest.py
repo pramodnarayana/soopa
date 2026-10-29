@@ -23,6 +23,7 @@ from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import PostgresUserRepository
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
+from orchestration.adapters.outbound.database.models import WorkflowBase
 from secret_store import AwsSecretsManagerAdapter
 
 _IP_MODEL_MODULES = (
@@ -88,17 +89,25 @@ def event_loop():
     loop.close()
 
 
+_IP_TENANT_TABLES_SYNCED = False
+
+
 @pytest_asyncio.fixture(scope="function")
 async def db_engine():
+    global _IP_TENANT_TABLES_SYNCED
     db_url = os.environ["DATABASE_URL"]
     engine = get_async_engine(db_url)
 
     # In integration tests, ensure schemas and tables exist on the test database
     async with engine.begin() as conn:
         await conn.execute(text("CREATE SCHEMA IF NOT EXISTS ip;"))
+        if not _IP_TENANT_TABLES_SYNCED:
+            await conn.run_sync(IpTenantBase.metadata.drop_all)
+            _IP_TENANT_TABLES_SYNCED = True
         await conn.run_sync(TenantBase.metadata.create_all)
         await conn.run_sync(IpGlobalBase.metadata.create_all)
         await conn.run_sync(IpTenantBase.metadata.create_all)
+        await conn.run_sync(WorkflowBase.metadata.create_all)
 
     yield engine
     await engine.dispose()
@@ -160,6 +169,9 @@ async def db_session_factory(db_engine, monkeypatch):
     monkeypatch.setattr(
         edi.bootstrap.lifespan, "DatabaseRouter", lambda *args, **kwargs: fake_router
     )
+    monkeypatch.setattr(
+        "unified_api.bootstrap.lifespan.DatabaseRouter", lambda *args, **kwargs: fake_router
+    )
 
     yield SessionLocal
 
@@ -179,7 +191,8 @@ async def app(db_session_factory):
         return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
 
     _app.dependency_overrides[get_secret_store] = override_get_secret_store
-    edi_app.dependency_overrides[get_secret_store] = override_get_secret_store
+    if edi_app is not None:
+        edi_app.dependency_overrides[get_secret_store] = override_get_secret_store
 
     async with shell_lifespan(_app):
         yield _app

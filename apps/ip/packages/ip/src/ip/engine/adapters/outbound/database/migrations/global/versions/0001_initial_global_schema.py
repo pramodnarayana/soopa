@@ -101,6 +101,9 @@ def upgrade() -> None:
         sa.Column("tenant_id", sa.String(length=64), nullable=False),
         sa.Column("idempotency_key", sa.String(length=255), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
+        sa.Column("trace_id", sa.String(length=128), nullable=True),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("lane", sa.String(length=32), server_default="realtime", nullable=False),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("status", sa.String(length=50), server_default="PENDING", nullable=False),
         sa.Column("attempts", sa.Integer(), server_default=sa.text("0"), nullable=False),
@@ -134,7 +137,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_ip_outbox_pending",
         "outbox",
-        ["status", "created_at"],
+        ["status", "lane", "created_at"],
         unique=False,
         postgresql_where=sa.text("status = 'PENDING'"),
         schema="ip",
@@ -230,19 +233,19 @@ def upgrade() -> None:
     )
 
     op.create_table(
-        "mapping_bindings",
+        "transformations",
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("tenant_id", sa.String(length=64), nullable=False),
         sa.Column("connection_id", sa.String(length=64), nullable=False),
         sa.Column("stream", sa.String(length=128), nullable=False),
-        sa.Column("mapping_id", sa.String(length=128), nullable=False),
+        sa.Column("transformation_id", sa.String(length=128), nullable=False),
         sa.Column(
-            "mapping_version",
+            "transformation_version",
             sa.Integer(),
             server_default=sa.text("1"),
             nullable=False,
         ),
-        sa.Column("shadow_mapping_version", sa.Integer(), nullable=True),
+        sa.Column("shadow_transformation_version", sa.Integer(), nullable=True),
         sa.Column(
             "mode",
             sa.String(length=32),
@@ -258,14 +261,67 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "tenant_id", "connection_id", "stream", name="uq_ip_mapping_binding_stream"
+            "tenant_id", "connection_id", "stream", name="uq_ip_transformation_stream"
         ),
         schema="ip",
     )
     op.create_index(
-        "ix_ip_mapping_bindings_conn",
-        "mapping_bindings",
+        "ix_ip_transformations_conn",
+        "transformations",
         ["connection_id"],
+        unique=False,
+        schema="ip",
+    )
+
+    op.create_table(
+        "stitches",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=64), nullable=False),
+        sa.Column("workflow_id", sa.String(length=128), nullable=False),
+        sa.Column(
+            "workflow_version",
+            sa.Integer(),
+            server_default=sa.text("1"),
+            nullable=False,
+        ),
+        sa.Column("canonical_event_type", sa.String(length=128), nullable=False),
+        sa.Column(
+            "is_trigger",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column("condition_event_key", sa.String(length=128), nullable=True),
+        sa.Column(
+            "idempotency_key_field",
+            sa.String(length=128),
+            server_default="id",
+            nullable=False,
+        ),
+        sa.Column("concurrency_key_field", sa.String(length=128), nullable=True),
+        sa.Column("resource_hint_field", sa.String(length=128), nullable=True),
+        sa.Column(
+            "is_active",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+        schema="ip",
+    )
+    op.create_index(
+        "ix_ip_stitches_tenant_event",
+        "stitches",
+        ["tenant_id", "canonical_event_type"],
+        unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "ix_ip_stitches_workflow",
+        "stitches",
+        ["workflow_id", "workflow_version"],
         unique=False,
         schema="ip",
     )
@@ -274,12 +330,25 @@ def upgrade() -> None:
 def downgrade() -> None:
     """Downgrade Control Plane schema."""
     op.drop_index(
-        "ix_ip_mapping_bindings_conn",
-        table_name="mapping_bindings",
+        "ix_ip_stitches_workflow",
+        table_name="stitches",
         schema="ip",
         if_exists=True,
     )
-    op.drop_table("mapping_bindings", schema="ip", if_exists=True)
+    op.drop_index(
+        "ix_ip_stitches_tenant_event",
+        table_name="stitches",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("stitches", schema="ip", if_exists=True)
+    op.drop_index(
+        "ix_ip_transformations_conn",
+        table_name="transformations",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("transformations", schema="ip", if_exists=True)
     op.drop_index(
         "idx_ip_sync_runs_status",
         table_name="sync_runs",

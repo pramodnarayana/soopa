@@ -20,6 +20,7 @@
     "@soopa/security": "workspace:*",
     "@soopa/pubsub": "workspace:*",
     "@soopa/notification": "workspace:*",
-    "@soopa/orchestration": "workspace:*"
+    "@soopa/orchestration": "workspace:*",
+    "@soopa/identity": "workspace:*"
   }
 }

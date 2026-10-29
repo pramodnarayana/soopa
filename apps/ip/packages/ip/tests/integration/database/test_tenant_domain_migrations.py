@@ -22,7 +22,7 @@ pytestmark = pytest.mark.integration
 def test_domain_migration_modules_ownership_and_invariants() -> None:
     """Verifies that every table in IpTenantBase.metadata is owned by exactly one domain branch."""
     all_metadata_tables = set(IpTenantBase.registry.metadata.tables.keys())
-    assert len(all_metadata_tables) == 16
+    assert len(all_metadata_tables) == 17
 
     branch_labels: set[str] = set()
     claimed_tables: set[str] = set()

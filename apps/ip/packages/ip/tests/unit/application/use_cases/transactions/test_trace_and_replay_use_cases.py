@@ -287,8 +287,8 @@ class DummyLedgerRepo(NormalizationLedgerRepositoryPort):
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
     ) -> int | None:
         return None
 
@@ -297,8 +297,8 @@ class DummyLedgerRepo(NormalizationLedgerRepositoryPort):
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
     ) -> tuple[tuple[str, str], ...]:
         return ()
 
@@ -307,7 +307,7 @@ class DummyLedgerRepo(NormalizationLedgerRepositoryPort):
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
+        transformation_id: str,
     ) -> tuple[tuple[str, str], ...]:
         return ()
 

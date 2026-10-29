@@ -121,6 +121,7 @@ class FakeSyncRunRepository(SyncRunRepositoryPort):
         connection_id: str,
         stream: str,
         tenant_id: str | None = None,
+        for_update: bool = False,
     ) -> SyncRun | None:
         for r in self.runs.values():
             if (
@@ -634,3 +635,20 @@ async def test_run_sync_full_refresh_succeeds_when_stream_ends_exactly_at_page_c
     assert res.status == SyncRunStatus.SUCCEEDED.value
     assert res.pages_synced == 1
     assert res.records_synced == 10
+
+
+def test_run_sync_use_case_requires_data_plane_dependency() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    storage = FakeTieredStorageAdapter()
+    cipher = FakeCipher()
+    connector = FakePagingConnector([])
+
+    with pytest.raises(
+        ValueError, match=r"Either data_plane_uow or data_plane_uow_provider must be provided\."
+    ):
+        RunSyncUseCase(
+            control_plane_uow=cp_uow,
+            tiered_storage=storage,
+            cipher=cipher,
+            connectors={"itron_mdm": connector},
+        )

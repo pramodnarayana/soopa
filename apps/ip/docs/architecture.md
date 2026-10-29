@@ -264,7 +264,7 @@ The execution engine follows the **Staged Event-Driven Architecture (SEDA)**. Ev
 │                         ▼                                                              │
 │   ┌───────────────────────────────────────────┐                                        │
 │   │ Stage 3: Canonical Normalizer Engine (L3) │                                        │
-│   │   • Pure application-code MapperPort      │                                        │
+│   │   • Pure application-code TransformerPort │                                        │
 │   │   • Versioned replay from L2 & shadow diff│                                        │
 │   │   • Upsert into domain-owned typed tables │                                        │
 │   │     (mdm_meter_readings, tms_loads, ...)  │                                        │

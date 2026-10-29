@@ -121,6 +121,8 @@ depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
     "ip.engine.application",
+    "ip.engine.container",
+    "ip.engine.settings",
     "security",
     "database.models",
     "shttp",
@@ -133,6 +135,28 @@ depends_on = [
     "strace.ports",
     "strace.application",
     "strace.adapters"
+]
+
+[[modules]]
+path = "ip.engine.adapters.inbound.api"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.adapters",
+    "ip.engine.lifespan",
+    "ip.engine.settings",
+    "ip.application.connectors",
+    "ip.application.stitches",
+    "ip.application.transformers",
+    "identity",
+    "security",
+    "database.models",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "orchestration.adapters",
+    "strace.domain"
 ]
 
 [[modules]]
@@ -175,16 +199,22 @@ path = "ip.application.stitches"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
-    "ip.application.domains"
+    "ip.application.domains",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application"
 ]
 
 [[modules]]
-path = "ip.bootstrap"
+path = "ip.engine.container"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
     "ip.engine.application",
     "ip.engine.adapters",
+    "ip.application.domains",
+    "ip.application.stitches",
+    "ip.application.transformers",
     "security",
     "storage",
     "orchestration.domain",
@@ -192,6 +222,17 @@ depends_on = [
     "orchestration.application",
     "orchestration.adapters"
 ]
+
+[[modules]]
+path = "ip.engine.lifespan"
+depends_on = [
+    "ip.engine.container",
+    "ip.engine.adapters"
+]
+
+[[modules]]
+path = "ip.engine.settings"
+depends_on = []
 
 [[modules]]
 path = "security"

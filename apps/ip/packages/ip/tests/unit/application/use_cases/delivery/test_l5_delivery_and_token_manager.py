@@ -51,7 +51,6 @@ from ip.engine.ports.outbound.connection_repository_port import ConnectionReposi
 from ip.engine.ports.outbound.connector_port import ConnectorPort
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
-from ip.engine.ports.outbound.mapping_binding_repository_port import MappingBindingRepositoryPort
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
     NormalizationLedgerRepositoryPort,
 )
@@ -66,6 +65,7 @@ from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecor
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
+from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import (
@@ -75,6 +75,9 @@ from ip.engine.ports.outbound.tiered_storage_port import (
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
     RefreshedOAuth2TokensDTO,
+)
+from ip.engine.ports.outbound.transformation_repository_port import (
+    TransformationRepositoryPort,
 )
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
@@ -206,7 +209,8 @@ class FakeControlPlaneUnitOfWork(IpControlPlaneUnitOfWorkPort):
     catalogs: CatalogRepositoryPort
     stream_states: StreamStateRepositoryPort
     sync_runs: SyncRunRepositoryPort
-    mapping_bindings: MappingBindingRepositoryPort
+    transformations: TransformationRepositoryPort
+    stitches: StitchRepositoryPort
 
     def __init__(self) -> None:
         self.connections = FakeConnectionRepository()
@@ -927,3 +931,64 @@ async def test_l4_to_l5_execute_http_action_step_handler_and_crash_reconciliatio
     assert reconcile_outcome.adopted_output is not None
     assert reconcile_outcome.adopted_output["destination_id"] == "SAP-777"
     assert reconcile_outcome.adopted_output["was_deduplicated"] is True
+
+
+@pytest.mark.asyncio
+async def test_deliver_outbound_record_redacts_caller_supplied_headers_in_ledger() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    dp_uow = FakeDataPlaneUnitOfWork()
+    cipher = FakeCipher()
+    conn = _seed_oauth2_connection(cp_uow, cipher, expires_offset_seconds=3600.0)
+    token_manager = TokenManagerService(
+        control_plane_uow=cp_uow,
+        cipher=cipher,
+        lock_port=InMemoryTokenRefreshLockAdapter(),
+        token_refresher=FakeOAuth2TokenRefresher(),
+    )
+    connector = FakeDestinationAndSourceConnector(app_id="sap_isu")
+    use_case = DeliverOutboundRecordUseCase(
+        data_plane_uow=dp_uow,
+        tiered_storage=FakeTieredStorage(),
+        token_manager=token_manager,
+        connectors={"sap_isu": connector},
+    )
+
+    cmd = DeliverOutboundRecordCommand(
+        tenant_id="ten_energy_1",
+        connection_id=conn.id,
+        stream_name="meter_readings",
+        operation="CREATE",
+        payload={"reading": 450},
+        record_id="REC-999",
+        idempotency_key="idem-secret-headers-1",
+        headers={
+            "X-Client-Secret": "super_secret_caller_value",
+            "Authorization": "Bearer caller_raw_token",
+            "X-Trace-Tag": "visible_tag",
+        },
+    )
+
+    connector.queued_write_results = [
+        WriteResultDTO(
+            success=True,
+            record_id="REC-999",
+            destination_id="EXT-999",
+            response_status_code=200,
+        )
+    ]
+
+    res = await use_case.execute(cmd)
+    assert res.is_ok
+
+    # The connector received the raw headers
+    assert len(connector.write_calls) == 1
+    write_cmd, _ = connector.write_calls[0]
+    assert write_cmd.headers["X-Client-Secret"] == "super_secret_caller_value"
+    assert write_cmd.headers["Authorization"] == "Bearer caller_raw_token"
+
+    # But the persisted OutboundRecord has caller-supplied headers redacted
+    assert res.value is not None
+    saved = dp_uow.outbound_records.records[res.value.outbound_record_id]
+    assert saved.request_headers["X-Client-Secret"] == "***REDACTED***"
+    assert saved.request_headers["Authorization"] == "***REDACTED***"
+    assert saved.request_headers["Idempotency-Key"] == "idem-secret-headers-1"

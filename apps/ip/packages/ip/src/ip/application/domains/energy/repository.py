@@ -3,21 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ip.application.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
+    MeterReadingQualityFlag,
+    ServicePointStatus,
 )
 from ip.application.domains.energy.models import (
     MdmMeterReadingRecord,
     MdmServicePointRecord,
 )
+from ip.application.domains.energy.ports import EnergyDomainRepositoryPort
 
 
-class SqlAlchemyEnergyDomainRepository:
+class SqlAlchemyEnergyDomainRepository(EnergyDomainRepositoryPort):
     """Repository persisting and querying dedicated Energy MDM canonical tables."""
 
     def __init__(self, session: AsyncSession) -> None:
@@ -35,6 +39,8 @@ class SqlAlchemyEnergyDomainRepository:
             replay_count=orm.replay_count,
             source_connection_id=orm.source_connection_id,
             source_replica_id=orm.source_replica_id,
+            transformation_id=orm.transformation_id,
+            transformation_version=orm.transformation_version,
             meter_serial_number=orm.meter_serial_number,
             service_point_id=orm.service_point_id,
             reading_timestamp=orm.reading_timestamp,
@@ -58,6 +64,8 @@ class SqlAlchemyEnergyDomainRepository:
             replay_count=orm.replay_count,
             source_connection_id=orm.source_connection_id,
             source_replica_id=orm.source_replica_id,
+            transformation_id=orm.transformation_id,
+            transformation_version=orm.transformation_version,
             service_point_external_id=orm.service_point_external_id,
             meter_serial_number=orm.meter_serial_number,
             customer_external_id=orm.customer_external_id,
@@ -78,6 +86,8 @@ class SqlAlchemyEnergyDomainRepository:
             replay_count=dto.replay_count,
             source_connection_id=dto.source_connection_id,
             source_replica_id=dto.source_replica_id,
+            transformation_id=dto.transformation_id,
+            transformation_version=dto.transformation_version,
             meter_serial_number=dto.meter_serial_number,
             service_point_id=dto.service_point_id,
             reading_timestamp=dto.reading_timestamp,
@@ -133,6 +143,8 @@ class SqlAlchemyEnergyDomainRepository:
             replay_count=dto.replay_count,
             source_connection_id=dto.source_connection_id,
             source_replica_id=dto.source_replica_id,
+            transformation_id=dto.transformation_id,
+            transformation_version=dto.transformation_version,
             service_point_external_id=dto.service_point_external_id,
             meter_serial_number=dto.meter_serial_number,
             customer_external_id=dto.customer_external_id,
@@ -142,4 +154,87 @@ class SqlAlchemyEnergyDomainRepository:
             updated_at=dto.updated_at,
         )
         await self._session.merge(orm)
+        await self._session.flush()
+
+    async def get_service_point_by_external_id(
+        self,
+        tenant_id: str,
+        service_point_external_id: str,
+    ) -> CanonicalServicePointDTO | None:
+        stmt = select(MdmServicePointRecord).where(
+            MdmServicePointRecord.tenant_id == tenant_id,
+            MdmServicePointRecord.service_point_external_id == service_point_external_id,
+        )
+        result = await self._session.execute(stmt)
+        orm = result.scalar_one_or_none()
+        if orm is None:
+            return None
+        return self._to_service_point_dto(orm)
+
+    async def soft_delete_service_point(
+        self,
+        tenant_id: str,
+        service_point_external_id: str,
+        trace_id: str,
+        correlation_id: str | None = None,
+    ) -> None:
+        stmt = (
+            update(MdmServicePointRecord)
+            .where(
+                MdmServicePointRecord.tenant_id == tenant_id,
+                MdmServicePointRecord.service_point_external_id == service_point_external_id,
+            )
+            .values(
+                status=ServicePointStatus.DELETED.value,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                updated_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def soft_delete_meter_reading_by_id(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        trace_id: str,
+        correlation_id: str | None = None,
+    ) -> None:
+        stmt = (
+            update(MdmMeterReadingRecord)
+            .where(
+                MdmMeterReadingRecord.tenant_id == tenant_id,
+                MdmMeterReadingRecord.id == reading_id,
+            )
+            .values(
+                quality_flag=MeterReadingQualityFlag.TOMBSTONED.value,
+                trace_id=trace_id,
+                correlation_id=correlation_id,
+                recorded_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def update_meter_reading_service_point(
+        self,
+        tenant_id: str,
+        reading_id: str,
+        service_point_id: str,
+        trace_id: str,
+    ) -> None:
+        stmt = (
+            update(MdmMeterReadingRecord)
+            .where(
+                MdmMeterReadingRecord.tenant_id == tenant_id,
+                MdmMeterReadingRecord.id == reading_id,
+            )
+            .values(
+                service_point_id=service_point_id,
+                trace_id=trace_id,
+                recorded_at=datetime.now(UTC),
+            )
+        )
+        await self._session.execute(stmt)
         await self._session.flush()

@@ -2,25 +2,13 @@
 Shell-level Exception Handlers.
 
 These are the cross-cutting exception handlers for the Unified API Shell.
-They aggregate exception types from all domains into a single, consistent
-error response contract for every client of the public API.
-
-Architecture note:
-  - This module is part of the Shell (Host) — the ONLY component that is
-    allowed to import from both UCP and EDI simultaneously.
-  - Domain-specific exception handlers registered inside sub-apps (e.g.
-    edi_app's own OrchestrationError handler) take precedence for requests
-    that Starlette dispatches to the EDI sub-app, because inner-scope handlers
-    are invoked first. These Shell-level handlers act as a backstop for
-    exceptions that propagate out of any mounted sub-app.
-  - UCP exceptions (e.g. IdentityProviderPortError) are only registered here since
-    UCP routers are inlined on the Shell, not a sub-app.
-  - IP follows strict First-Class Error Handling (`IpError` value objects and `Result[T, E]`),
-    handling all known domain and operational errors explicitly at the router boundary without raising exceptions.
+They register framework validation/unhandled exception handlers and Core Platform (UCP)
+domain exception handlers without coupling the Shell to any business bounded context.
 """
 
+from __future__ import annotations
+
 import structlog
-from edi.domain.exceptions import OrchestrationError, VaultError
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -78,7 +66,7 @@ def _register_ucp_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: ResourceNotFoundError
     ) -> JSONResponse:
         sanitized_path = _sanitize_path(request)
-        logger.warning("resource_not_found", path=sanitized_path, error=str(exc))
+        logger.error("resource_not_found", path=sanitized_path, error=str(exc))
         return JSONResponse(
             status_code=404,
             content={"detail": str(exc)},
@@ -100,41 +88,13 @@ def _register_ucp_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: StateConflictError
     ) -> JSONResponse:
         sanitized_path = _sanitize_path(request)
-        logger.warning("state_conflict", path=sanitized_path, error=str(exc))
+        logger.error("state_conflict", path=sanitized_path, error=str(exc))
         return JSONResponse(status_code=409, content={"detail": str(exc)})
-
-
-def _register_edi_exception_handlers(app: FastAPI) -> None:
-    @app.exception_handler(OrchestrationError)
-    async def orchestration_exception_handler(
-        request: Request, exc: OrchestrationError
-    ) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.error("orchestration_error", path=sanitized_path, error=str(exc))
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(exc)},
-        )
-
-    @app.exception_handler(VaultError)
-    async def vault_exception_handler(request: Request, exc: VaultError) -> JSONResponse:
-        sanitized_path = _sanitize_path(request)
-        logger.error("vault_error", path=sanitized_path, error=str(exc))
-        return JSONResponse(
-            status_code=500,
-            content={"detail": str(exc)},
-        )
 
 
 def setup_shell_exception_handlers(app: FastAPI) -> None:
     """
-    Registers all exception handlers on the Shell (Host) application.
-
-    Covers:
-      - Framework validation & unhandled exceptions
-      - UCP domain exceptions
-      - EDI domain exceptions (backstop only)
+    Registers framework and Core Platform (UCP) exception handlers on the Shell (Host) application.
     """
     _register_framework_exception_handlers(app)
     _register_ucp_exception_handlers(app)
-    _register_edi_exception_handlers(app)

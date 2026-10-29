@@ -25,8 +25,8 @@ from ip.engine.domain.stitch import (
     ExecuteHttpActionStepInput,
     ExecuteHttpActionStepOutput,
     QueryReplicaStepInput,
+    Stitch,
     StitchStepType,
-    StitchSubscription,
 )
 from notification.domain.constants import NotificationEventType
 from orchestration.application.default_error_policy import DefaultStepErrorPolicy
@@ -263,9 +263,9 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     )
     assert definitions.register(defn).is_ok
 
-    # Register trigger subscription on `canonical.outage_event.normalized`
-    stitch_catalog.register_subscription(
-        StitchSubscription(
+    # Register trigger stitch on `canonical.outage_event.normalized`
+    stitch_catalog.register_stitch(
+        Stitch(
             id="sub_trigger_outage",
             tenant_id="ten_energy",
             workflow_id="energy.outage_restoration_stitch",
@@ -276,9 +276,9 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
             concurrency_key_field="meter_id",
         )
     )
-    # Register signal subscription on `canonical.meter_restored.normalized`
-    stitch_catalog.register_subscription(
-        StitchSubscription(
+    # Register signal stitch on `canonical.meter_restored.normalized`
+    stitch_catalog.register_stitch(
+        Stitch(
             id="sub_signal_restored",
             tenant_id="ten_energy",
             workflow_id="energy.outage_restoration_stitch",
@@ -519,7 +519,7 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     )
     definitions.register(defn)
     stitch_catalog = InMemoryStitchCatalogRegistry()
-    sub = StitchSubscription(
+    sub = Stitch(
         id="sub_unreg",
         tenant_id="ten_energy",
         workflow_id="energy.unregistered_step_stitch",
@@ -527,10 +527,10 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
         canonical_event_type="canonical.test.event",
         is_trigger=True,
     )
-    stitch_catalog.register_subscription(sub)
+    stitch_catalog.register_stitch(sub)
     assert (
         len(
-            stitch_catalog.list_subscriptions_for_event(
+            stitch_catalog.list_stitches_for_event(
                 tenant_id="ten_energy",
                 canonical_event_type="canonical.test.event",
             )
@@ -636,7 +636,7 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
     )
     definitions.register(defn)
     stitch_catalog = InMemoryStitchCatalogRegistry()
-    sub = StitchSubscription(
+    sub = Stitch(
         id="sub_crash",
         tenant_id="ten_energy",
         workflow_id="energy.crash_stitch",
@@ -644,7 +644,7 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
         canonical_event_type="canonical.test.event",
         is_trigger=True,
     )
-    stitch_catalog.register_subscription(sub)
+    stitch_catalog.register_stitch(sub)
 
     dispatcher = DispatchCanonicalEventToStitchesUseCase(
         stitch_catalog=stitch_catalog,

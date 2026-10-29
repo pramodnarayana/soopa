@@ -267,7 +267,13 @@ async def create_as2_partner(
     url = str(request.url) if request.url else None
     if request.is_local and not url:
         settings = get_settings()
-        url = f"{settings.public.base_url}/api/v1/as2/receive"
+        configured_url = settings.as2_receive_url.strip() if settings.as2_receive_url else ""
+        if not configured_url:
+            raise HTTPException(
+                status_code=400,
+                detail="AS2 receive URL must be configured (AS2_RECEIVE_URL) or explicitly provided for local stations.",
+            )
+        url = configured_url
 
     cmd = CreateAS2TradingPartnerCmd(
         name=request.name if request.name is not None else UNSET,

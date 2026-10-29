@@ -636,28 +636,28 @@ A Stitch fixes the **shape** of a flow. Business **logic** lives in pure mappers
 
 ### 8.9 Mapping evolution: code first, UI-managed mappings later
 
-**Strategy:** Stitch structure stays in code permanently. **Field mappings** start in code and later gain a UI-managed, declarative form for repetitive, tenant-specific variations. Both forms run behind the same `MapperPort`, so this is one architecture, not two.
+**Strategy:** Stitch structure stays in code permanently. **Field mappings** (inside Stitches) start in code and later gain a UI-managed, declarative form for repetitive, tenant-specific variations.
 
 #### 8.9.1 Why code first
-- We do not yet know which mappings repeat across Energy tenants. Code reveals the real patterns before we freeze a declarative model.
-- Code mappers get `mypy`, code review, golden fixtures and versioning for free.
+- We do not yet know which Stitch mappings repeat across Energy tenants. Code reveals the real patterns before we freeze a declarative model.
+- Code mappings get `mypy`, code review, golden fixtures and versioning for free.
 - Building a mapping language before the patterns are known is the most common way iPaaS products end up with weak, leaky mapping DSLs.
 
 #### 8.9.2 Phases
 | Phase | Who edits mappings | Form | Gate |
 |---|---|---|---|
-| **M1: Code (now)** | Soopa engineers | Pure Python mappers (`MapperPort`), versioned, golden fixtures | PR review plus CI |
+| **M1: Code (now)** | Soopa engineers | Pure Python Stitch mappings, versioned, golden fixtures | PR review plus CI |
 | **M2: Internal mapping UI** | Soopa implementation team | Declarative mapping sets: a Soopa **base mapping** plus **tenant overlays** | Validation, dry-run with diffs, approval |
 | **M3: Customer self-service (subset)** | Tenant admins | Overlays on fields marked `customer_editable` by the base mapping | Validation, dry-run with diffs, tenant approver plus optional Soopa approval |
 
-Entry criterion for M2: at least three tenants share a Stitch where most mapper changes are field-level variations (renames, lookups, defaults, unit conversions), not logic.
+Entry criterion for M2: at least three tenants share a Stitch where most mapping changes are field-level variations (renames, lookups, defaults, unit conversions), not logic.
 
 #### 8.9.3 Rules that keep UI mappings compatible with durable execution
 | # | Rule | Why it matters for durability |
 |---|---|---|
 | 1 | **Published mapping sets are immutable.** Each publish creates `mapping_set_id@version`; nothing is edited in place. | A retry or resume must produce the same payload as the first attempt. |
-| 2 | **Runs pin mapping versions at start.** The run input records `(mapping_set_id, version)` for every mapper node, alongside `workflow_version`. | Editing a mapping while thousands of runs wait does not change their behavior. In-flight runs finish on their pinned version; new runs use the new one (same semantics as code versions, §7.8). |
-| 3 | **One port.** `DeclarativeMapper` interprets a mapping set and implements `MapperPort`, exactly like code mappers. | The engine, step types and checkpoints are unaware of the mapper's origin. No dual architecture. |
+| 2 | **Runs pin mapping versions at start.** The run input records `(mapping_set_id, version)` for every mapping node, alongside `workflow_version`. | Editing a mapping while thousands of runs wait does not change their behavior. In-flight runs finish on their pinned version; new runs use the new one (same semantics as code versions, §7.8). |
+| 3 | **One port.** Declarative Stitch mappings interpret a mapping set behind the same Stitch mapping interface as code mappings. | The engine, step types and checkpoints are unaware of the mapping's origin. No dual architecture. |
 | 4 | **Closed set of typed transforms.** Only copy, lookup table, concat, format, date/time conversion, unit conversion, default, conditional constant, and calls to registered pure code functions. No free-form scripts or expressions. | Mappings stay deterministic, safe, statically validated and replayable. This is the explicit rejection of n8n-style runtime JavaScript. |
 | 5 | **Validate, dry-run, promote.** At publish: type-check against the canonical source schema and the target payload schema. Then run in `SHADOW` against recent real records and show field-level diffs. Then promote (audited). | A bad mapping never reaches production unseen. Reuses the L3 shadow-diff mechanism. |
 | 6 | **Re-run static loop and field-authority analysis on every publish.** | A mapping change can alter which fields a Stitch writes back, which could create a write-back cycle (§8.4). |
@@ -1083,6 +1083,6 @@ Each action is a use case with RBAC. Runbooks cover: target outage, credential e
 | 8 | Async replies path | **Through L1 → L3**, matched by the Trigger Router. No side door. |
 | 9 | Global entity map | **Evolve to `entity_links`** (N external IDs per canonical entity) |
 | 10 | In-memory slot scheduler | **Defer.** Only if Phase C load tests require it. |
-| 11 | Flow structure and mappings: code vs. UI | **Code first for both.** Stitch structure stays in code permanently. Field mappings gain a UI-managed declarative form later (§8.9), behind the same `MapperPort`. |
+| 11 | Flow structure and mappings: code vs. UI | **Code first for both.** Stitch structure stays in code permanently. Field mappings gain a UI-managed declarative form later (§8.9). |
 | 12 | Mapping versions in durable runs | **Immutable, versioned mapping sets pinned per run** (same semantics as workflow versions) |
 | 13 | Flows that exceed the DAG model | **Decompose first, then add declarative node kinds (`REPEAT_UNTIL`), and a durable code step only as a reviewed last resort** (§8.8) |

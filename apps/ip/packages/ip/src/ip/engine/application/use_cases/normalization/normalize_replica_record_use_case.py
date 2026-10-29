@@ -18,12 +18,12 @@ from ip.engine.domain.enums import (
     CanonicalAction,
     FailureDisposition,
     IpTraceEventType,
-    MappingMode,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PipelineLayer,
     RuleSeverity,
     TimelineStatus,
+    TransformationMode,
 )
 from ip.engine.domain.events import CanonicalRecordChangedEvent
 from ip.engine.domain.exceptions import (
@@ -38,22 +38,25 @@ from ip.engine.domain.normalization import (
     CanonicalDraft,
     EntityShadowDiff,
     FieldShadowDiff,
-    MappingBinding,
-    MappingContext,
-    MappingResult,
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
     ReplicaSnapshot,
+    Transformation,
+    TransformationContext,
+    TransformationResult,
 )
 from ip.engine.ports.outbound.canonical_writer_port import (
     CanonicalEntityRegistryPort,
     CanonicalWriterRegistryPort,
 )
-from ip.engine.ports.outbound.mapper_port import MapperPort, MapperRegistryPort
 from ip.engine.ports.outbound.normalization_error_policy_port import (
     NormalizationErrorPolicyPort,
+)
+from ip.engine.ports.outbound.transformer_port import (
+    TransformerPort,
+    TransformerRegistryPort,
 )
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
@@ -99,14 +102,14 @@ class NormalizeReplicaRecordUseCase:
         self,
         control_plane_uow: IpControlPlaneUnitOfWorkPort,
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
-        mapper_registry: MapperRegistryPort,
+        transformer_registry: TransformerRegistryPort,
         writer_registry: CanonicalWriterRegistryPort,
         entity_registry: CanonicalEntityRegistryPort,
         error_policy: NormalizationErrorPolicyPort,
     ) -> None:
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow_provider = data_plane_uow_provider
-        self._mapper_registry = mapper_registry
+        self._transformer_registry = transformer_registry
         self._writer_registry = writer_registry
         self._entity_registry = entity_registry
         self._error_policy = error_policy
@@ -139,19 +142,21 @@ class NormalizeReplicaRecordUseCase:
 
         shard_id, shard_dsn = shard_info_result.unwrap()
 
-        # 2. Look up stream mapping binding in Control Plane
-        binding = await self._control_plane_uow.mapping_bindings.get_by_stream(
+        # 2. Look up stream transformation in Control Plane
+        transformation = await self._control_plane_uow.transformations.get_by_stream(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
             stream=command.stream,
         )
-        if binding is None or binding.mode == MappingMode.DISABLED:
+        if transformation is None or transformation.mode == TransformationMode.DISABLED:
             bound_logger.info(
-                "l3_normalization_skipped_no_binding",
-                mode=binding.mode.value if binding else "NONE",
+                "l3_normalization_skipped_no_transformation",
+                mode=transformation.mode.value if transformation else "NONE",
             )
             return Result.ok(
-                NormalizeReplicaRecordResultDTO(outcome=NormalizationOutcome.SKIPPED_NO_BINDING)
+                NormalizeReplicaRecordResultDTO(
+                    outcome=NormalizationOutcome.SKIPPED_NO_TRANSFORMATION
+                )
             )
 
         # 3. Open Data Plane Unit of Work
@@ -159,8 +164,8 @@ class NormalizeReplicaRecordUseCase:
             command.tenant_id, shard_id, shard_dsn
         ) as uow:
             # 4. Version Guard check: Idempotency & out-of-order protection
-            if binding.mode == MappingMode.ACTIVE and await self._is_version_stale(
-                uow, command, binding
+            if transformation.mode == TransformationMode.ACTIVE and await self._is_version_stale(
+                uow, command, transformation
             ):
                 stale_replica = await uow.replica_records.get_by_id(
                     tenant_id=command.tenant_id,
@@ -170,12 +175,12 @@ class NormalizeReplicaRecordUseCase:
                     self._append_trace_event(
                         replica=stale_replica,
                         command=command,
-                        binding=binding,
+                        transformation=transformation,
                         event_type=IpTraceEventType.L3_SKIPPED_STALE,
                         status=TimelineStatus.SUCCESS,
                         summary_message=(
                             f"Skipped stale replica version {command.replica_version} "
-                            f"for mapper '{binding.mapping_id}' v{binding.mapping_version}."
+                            f"for transformer '{transformation.transformation_id}' v{transformation.transformation_version}."
                         ),
                     )
                     await uow.replica_records.save(stale_replica)
@@ -194,7 +199,7 @@ class NormalizeReplicaRecordUseCase:
                 bound_logger.error("replica_record_not_found")
                 return Result.err(ReplicaRecordNotFoundError.for_id(command.replica_record_id))
 
-            # 6. Construct ReplicaSnapshot & MappingContext
+            # 6. Construct ReplicaSnapshot & TransformationContext
             snapshot = ReplicaSnapshot(
                 id=replica.id,
                 connection_id=replica.connection_id,
@@ -204,7 +209,7 @@ class NormalizeReplicaRecordUseCase:
                 data=replica.data,
                 is_deleted=(replica.deleted_at is not None),
             )
-            context = MappingContext(
+            context = TransformationContext(
                 connection_id=command.connection_id,
                 stream=command.stream,
                 tenant_id=command.tenant_id,
@@ -213,52 +218,56 @@ class NormalizeReplicaRecordUseCase:
             )
 
             # 7. Shadow-Only Mode: Never mutate canonical tables or emit CanonicalRecordChangedEvent
-            if binding.mode == MappingMode.SHADOW:
+            if transformation.mode == TransformationMode.SHADOW:
                 return await self._execute_shadow_only_mode(
                     uow=uow,
                     replica=replica,
                     snapshot=snapshot,
                     context=context,
                     command=command,
-                    binding=binding,
+                    transformation=transformation,
                     bound_logger=bound_logger,
                 )
 
-            # 8. Resolve active mapper
-            mapper = self._mapper_registry.get(binding.mapping_id, binding.mapping_version)
-            if mapper is None:
-                return await self._handle_unregistered_mapper(
+            # 8. Resolve active transformer
+            transformer = self._transformer_registry.get(
+                transformation.transformation_id, transformation.transformation_version
+            )
+            if transformer is None:
+                return await self._handle_unregistered_transformer(
                     uow=uow,
                     replica=replica,
                     command=command,
-                    binding=binding,
-                    target_version=binding.mapping_version,
+                    transformation=transformation,
+                    target_version=transformation.transformation_version,
                     bound_logger=bound_logger,
                 )
 
             # 9. Handle Tombstone: Cascade soft-delete to canonical domain entities
             if snapshot.is_deleted:
-                return await self._handle_tombstone(uow, replica, command, binding, bound_logger)
+                return await self._handle_tombstone(
+                    uow, replica, command, transformation, bound_logger
+                )
 
-            # 10. Execute Mapper with strategy error handling
-            mapping_result, early_result = await self._execute_mapper(
-                mapper=mapper,
+            # 10. Execute Transformer with strategy error handling
+            transformation_result, early_result = await self._execute_transformer(
+                transformer=transformer,
                 replica=replica,
                 snapshot=snapshot,
                 context=context,
                 command=command,
-                binding=binding,
+                transformation=transformation,
                 uow=uow,
                 bound_logger=bound_logger,
                 record_ledger=True,
             )
-            if early_result is not None or mapping_result is None:
+            if early_result is not None or transformation_result is None:
                 assert early_result is not None
                 return early_result
 
-            # 11. Record explicit mapper rejections
-            rejections_count = await self._record_mapper_rejections(
-                uow, command, binding, mapping_result
+            # 11. Record explicit transformer rejections
+            rejections_count = await self._record_transformer_rejections(
+                uow, command, transformation, transformation_result
             )
 
             # 12. Evaluate Quality Rules, Resolve References & Upsert Canonical Drafts
@@ -266,29 +275,29 @@ class NormalizeReplicaRecordUseCase:
                 uow=uow,
                 replica=replica,
                 command=command,
-                binding=binding,
-                drafts=mapping_result.drafts,
+                transformation=transformation,
+                drafts=transformation_result.drafts,
             )
             rejections_count += qr_rej_count
 
             # 13. Tombstone Unseen Previous Drafts (Diffing)
             await self._tombstone_unseen_drafts(
-                uow, replica, command, binding, current_produced_refs
+                uow, replica, command, transformation, current_produced_refs
             )
 
             # 14. Late-Arriving Reference Resolution & Back-Patching
             resolved_count = await self._resolve_late_arriving_references(
-                uow, replica, command, binding, current_produced_refs
+                uow, replica, command, transformation, current_produced_refs
             )
 
             # 15. Active + Shadow Candidate Diff Calculation
             shadow_diff_count = await self._compute_and_record_shadow_diff(
                 uow=uow,
                 command=command,
-                binding=binding,
+                transformation=transformation,
                 snapshot=snapshot,
                 context=context,
-                active_drafts=mapping_result.drafts,
+                active_drafts=transformation_result.drafts,
             )
 
             # 16. Record Normalization Ledger Entry, Trace Event, Save Replica Events & Commit
@@ -304,7 +313,7 @@ class NormalizeReplicaRecordUseCase:
             self._append_trace_event(
                 replica=replica,
                 command=command,
-                binding=binding,
+                transformation=transformation,
                 event_type=(
                     IpTraceEventType.L3_NORMALIZED
                     if outcome == NormalizationOutcome.NORMALIZED
@@ -317,14 +326,14 @@ class NormalizeReplicaRecordUseCase:
                 ),
                 summary_message=(
                     f"Normalized replica '{replica.id}' v{command.replica_version} via "
-                    f"'{binding.mapping_id}' v{binding.mapping_version}: "
+                    f"'{transformation.transformation_id}' v{transformation.transformation_version}: "
                     f"{len(current_produced_refs)} canonical record(s), {rejections_count} rejection(s)."
                 ),
             )
             await self._record_ledger_entry(
                 uow,
                 command,
-                binding,
+                transformation,
                 tuple(current_produced_refs),
                 outcome,
             )
@@ -355,12 +364,12 @@ class NormalizeReplicaRecordUseCase:
         uow: IpDataPlaneUnitOfWorkPort,
         replica: ReplicaRecord,
         snapshot: ReplicaSnapshot,
-        context: MappingContext,
+        context: TransformationContext,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         bound_logger: FilteringBoundLogger,
     ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
-        """Execute mapper in SHADOW mode without mutating canonical tables or outbox."""
+        """Execute transformer in SHADOW mode without mutating canonical tables or outbox."""
         if snapshot.is_deleted:
             bound_logger.info("l3_shadow_normalization_tombstone_noop")
             return Result.ok(
@@ -368,29 +377,31 @@ class NormalizeReplicaRecordUseCase:
             )
 
         candidate_version = (
-            binding.shadow_mapping_version
-            if binding.shadow_mapping_version is not None
-            else binding.mapping_version
+            transformation.shadow_transformation_version
+            if transformation.shadow_transformation_version is not None
+            else transformation.transformation_version
         )
-        candidate_mapper = self._mapper_registry.get(binding.mapping_id, candidate_version)
-        if candidate_mapper is None:
-            return await self._handle_unregistered_mapper(
+        candidate_transformer = self._transformer_registry.get(
+            transformation.transformation_id, candidate_version
+        )
+        if candidate_transformer is None:
+            return await self._handle_unregistered_transformer(
                 uow=uow,
                 replica=replica,
                 command=command,
-                binding=binding,
+                transformation=transformation,
                 target_version=candidate_version,
                 bound_logger=bound_logger,
                 record_ledger=False,
             )
 
-        candidate_result, early_result = await self._execute_mapper(
-            mapper=candidate_mapper,
+        candidate_result, early_result = await self._execute_transformer(
+            transformer=candidate_transformer,
             replica=replica,
             snapshot=snapshot,
             context=context,
             command=command,
-            binding=binding,
+            transformation=transformation,
             uow=uow,
             bound_logger=bound_logger,
             record_ledger=False,
@@ -399,20 +410,31 @@ class NormalizeReplicaRecordUseCase:
             assert early_result is not None
             return early_result
 
-        rejections_count = await self._record_mapper_rejections(
-            uow, command, binding, candidate_result
+        rejections_count = await self._record_transformer_rejections(
+            uow, command, transformation, candidate_result
         )
 
-        # If shadow_mapping_version differs from mapping_version and an active baseline mapper is registered, compare against it; otherwise compare against empty baseline ()
         active_drafts: tuple[CanonicalDraft, ...] = ()
         if (
-            binding.shadow_mapping_version is not None
-            and binding.shadow_mapping_version != binding.mapping_version
+            transformation.shadow_transformation_version is not None
+            and transformation.shadow_transformation_version
+            != transformation.transformation_version
         ):
-            baseline_mapper = self._mapper_registry.get(binding.mapping_id, binding.mapping_version)
-            if baseline_mapper is not None:
-                baseline_result = baseline_mapper.map(snapshot, context)
-                active_drafts = baseline_result.drafts
+            baseline_transformer = self._transformer_registry.get(
+                transformation.transformation_id, transformation.transformation_version
+            )
+            if baseline_transformer is not None:
+                try:
+                    baseline_result = baseline_transformer.transform(snapshot, context)
+                    active_drafts = baseline_result.drafts
+                except Exception as exc:  # noqa: BLE001 - Shadow isolation boundary: failure in shadow baseline transform must not fail active normalization
+                    logger.error(
+                        "normalization_shadow_baseline_transform_failed",
+                        tenant_id=command.tenant_id,
+                        transformation_id=transformation.transformation_id,
+                        version=transformation.transformation_version,
+                        error=str(exc),
+                    )
 
         diff_data = self._compute_shadow_diff(
             active_drafts=active_drafts,
@@ -438,7 +460,7 @@ class NormalizeReplicaRecordUseCase:
         self._append_trace_event(
             replica=replica,
             command=command,
-            binding=binding,
+            transformation=transformation,
             event_type=(
                 IpTraceEventType.L3_NORMALIZED
                 if outcome == NormalizationOutcome.NORMALIZED
@@ -451,7 +473,7 @@ class NormalizeReplicaRecordUseCase:
             ),
             summary_message=(
                 f"Shadow-evaluated replica '{replica.id}' via "
-                f"'{binding.mapping_id}' v{candidate_version}: "
+                f"'{transformation.transformation_id}' v{candidate_version}: "
                 f"{len(candidate_result.drafts)} draft(s), {shadow_diff_count} diff(s)."
             ),
         )
@@ -478,40 +500,40 @@ class NormalizeReplicaRecordUseCase:
         self,
         uow: IpDataPlaneUnitOfWorkPort,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
     ) -> bool:
         latest_version = await uow.normalization_ledger.get_latest_version(
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
-            mapping_id=binding.mapping_id,
-            mapping_version=binding.mapping_version,
+            transformation_id=transformation.transformation_id,
+            transformation_version=transformation.transformation_version,
         )
         return latest_version is not None and latest_version >= command.replica_version
 
-    async def _handle_unregistered_mapper(
+    async def _handle_unregistered_transformer(
         self,
         *,
         uow: IpDataPlaneUnitOfWorkPort,
         replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         target_version: int,
         bound_logger: FilteringBoundLogger,
         record_ledger: bool = True,
     ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
         bound_logger.error(
-            "mapper_version_not_registered",
-            mapping_id=binding.mapping_id,
-            mapping_version=target_version,
+            "transformer_version_not_registered",
+            transformation_id=transformation.transformation_id,
+            transformation_version=target_version,
         )
-        detail = f"Mapper '{binding.mapping_id}' version {target_version} not found in registry."
+        detail = f"Transformer '{transformation.transformation_id}' version {target_version} not found in registry."
         rejection = NormalizationRejectionEntry.create(
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
             stream=command.stream,
-            mapping_id=binding.mapping_id,
-            mapping_version=target_version,
-            reason_code=NormalizationRejectionReason.MAPPER_ERROR.value,
+            transformation_id=transformation.transformation_id,
+            transformation_version=target_version,
+            reason_code=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
             detail=detail,
             trace_id=command.trace_id,
             correlation_id=command.correlation_id,
@@ -519,17 +541,17 @@ class NormalizeReplicaRecordUseCase:
         await uow.normalization_rejections.record_rejection(rejection)
         if record_ledger:
             await self._record_ledger_entry(
-                uow, command, binding, (), NormalizationOutcome.REJECTED
+                uow, command, transformation, (), NormalizationOutcome.REJECTED
             )
         self._append_trace_event(
             replica=replica,
             command=command,
-            binding=binding,
+            transformation=transformation,
             event_type=IpTraceEventType.L3_REJECTED,
             status=TimelineStatus.FAILED,
             summary_message=detail,
             error_details=TraceErrorDetails(
-                reason=NormalizationRejectionReason.MAPPER_ERROR.value,
+                reason=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
                 detail=detail,
             ),
         )
@@ -539,7 +561,7 @@ class NormalizeReplicaRecordUseCase:
             NormalizeReplicaRecordResultDTO(
                 outcome=NormalizationOutcome.REJECTED,
                 rejections_count=1,
-                error_detail="Mapper not found in registry",
+                error_detail="Transformer not found in registry",
             )
         )
 
@@ -548,13 +570,13 @@ class NormalizeReplicaRecordUseCase:
         uow: IpDataPlaneUnitOfWorkPort,
         replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         bound_logger: FilteringBoundLogger,
     ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
         previous_refs = await uow.normalization_ledger.get_latest_produced_refs(
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
-            mapping_id=binding.mapping_id,
+            transformation_id=transformation.transformation_id,
         )
         for canonical_type, source_id in previous_refs:
             writer = self._writer_registry.get(canonical_type)
@@ -576,8 +598,8 @@ class NormalizeReplicaRecordUseCase:
                     action=CanonicalAction.TOMBSTONE.value,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
-                    mapping_id=binding.mapping_id,
-                    mapping_version=binding.mapping_version,
+                    transformation_id=transformation.transformation_id,
+                    transformation_version=transformation.transformation_version,
                     replica_id=command.replica_record_id,
                     replica_version=command.replica_version,
                     parent_trace_id=command.parent_trace_id,
@@ -589,14 +611,16 @@ class NormalizeReplicaRecordUseCase:
         self._append_trace_event(
             replica=replica,
             command=command,
-            binding=binding,
+            transformation=transformation,
             event_type=IpTraceEventType.L3_TOMBSTONED,
             status=TimelineStatus.SUCCESS,
             summary_message=(
                 f"Tombstoned {len(previous_refs)} canonical record(s) from replica '{replica.id}'."
             ),
         )
-        await self._record_ledger_entry(uow, command, binding, (), NormalizationOutcome.TOMBSTONED)
+        await self._record_ledger_entry(
+            uow, command, transformation, (), NormalizationOutcome.TOMBSTONED
+        )
         await uow.replica_records.save(replica)
         await uow.commit()
         bound_logger.info(
@@ -605,31 +629,33 @@ class NormalizeReplicaRecordUseCase:
         )
         return Result.ok(NormalizeReplicaRecordResultDTO(outcome=NormalizationOutcome.TOMBSTONED))
 
-    async def _execute_mapper(
+    async def _execute_transformer(
         self,
         *,
-        mapper: MapperPort,
+        transformer: TransformerPort,
         replica: ReplicaRecord,
         snapshot: ReplicaSnapshot,
-        context: MappingContext,
+        context: TransformationContext,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         uow: IpDataPlaneUnitOfWorkPort,
         bound_logger: FilteringBoundLogger,
         record_ledger: bool,
-    ) -> tuple[MappingResult | None, Result[NormalizeReplicaRecordResultDTO, IpError] | None]:
+    ) -> tuple[
+        TransformationResult | None, Result[NormalizeReplicaRecordResultDTO, IpError] | None
+    ]:
         try:
-            return mapper.map(snapshot, context), None
+            return transformer.transform(snapshot, context), None
         except Exception as exc:
             if self._error_policy.is_terminal_failure(exc):
-                bound_logger.error("mapper_execution_terminal_failure", exc_info=exc)
+                bound_logger.error("transformer_execution_terminal_failure", exc_info=exc)
                 rejection = NormalizationRejectionEntry.create(
                     tenant_id=command.tenant_id,
                     replica_record_id=command.replica_record_id,
                     stream=command.stream,
-                    mapping_id=mapper.mapping_id,
-                    mapping_version=mapper.mapping_version,
-                    reason_code=NormalizationRejectionReason.MAPPER_ERROR.value,
+                    transformation_id=transformer.transformation_id,
+                    transformation_version=transformer.transformation_version,
+                    reason_code=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
                     detail=str(exc),
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
@@ -637,17 +663,17 @@ class NormalizeReplicaRecordUseCase:
                 await uow.normalization_rejections.record_rejection(rejection)
                 if record_ledger:
                     await self._record_ledger_entry(
-                        uow, command, binding, (), NormalizationOutcome.REJECTED
+                        uow, command, transformation, (), NormalizationOutcome.REJECTED
                     )
                 self._append_trace_event(
                     replica=replica,
                     command=command,
-                    binding=binding,
+                    transformation=transformation,
                     event_type=IpTraceEventType.L3_REJECTED,
                     status=TimelineStatus.FAILED,
-                    summary_message=f"Mapper execution failed: {exc}",
+                    summary_message=f"Transformer execution failed: {exc}",
                     error_details=TraceErrorDetails(
-                        reason=NormalizationRejectionReason.MAPPER_ERROR.value,
+                        reason=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
                         detail=str(exc),
                     ),
                 )
@@ -660,32 +686,32 @@ class NormalizeReplicaRecordUseCase:
                         error_detail=str(exc),
                     )
                 )
-            bound_logger.error("mapper_execution_transient_failure", exc_info=exc)
+            bound_logger.error("transformer_execution_transient_failure", exc_info=exc)
             return None, Result.err(
                 NormalizationFailedError(
                     message=str(exc),
                     disposition=FailureDisposition.RETRY,
                     details={
-                        "mapping_id": mapper.mapping_id,
-                        "mapping_version": mapper.mapping_version,
+                        "transformation_id": transformer.transformation_id,
+                        "transformation_version": transformer.transformation_version,
                     },
                 )
             )
 
-    async def _record_mapper_rejections(
+    async def _record_transformer_rejections(
         self,
         uow: IpDataPlaneUnitOfWorkPort,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
-        mapping_result: MappingResult,
+        transformation: Transformation,
+        transformation_result: TransformationResult,
     ) -> int:
-        for rej in mapping_result.rejections:
+        for rej in transformation_result.rejections:
             rejection_entry = NormalizationRejectionEntry.create(
                 tenant_id=command.tenant_id,
                 replica_record_id=command.replica_record_id,
                 stream=command.stream,
-                mapping_id=binding.mapping_id,
-                mapping_version=binding.mapping_version,
+                transformation_id=transformation.transformation_id,
+                transformation_version=transformation.transformation_version,
                 reason_code=str(rej.reason),
                 field_path=rej.field_path,
                 detail=rej.detail,
@@ -693,14 +719,14 @@ class NormalizeReplicaRecordUseCase:
                 correlation_id=command.correlation_id,
             )
             await uow.normalization_rejections.record_rejection(rejection_entry)
-        return len(mapping_result.rejections)
+        return len(transformation_result.rejections)
 
     async def _apply_drafts_and_references(
         self,
         uow: IpDataPlaneUnitOfWorkPort,
         replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         drafts: tuple[CanonicalDraft, ...],
     ) -> tuple[list[tuple[str, str]], int]:
         produced_refs: list[tuple[str, str]] = []
@@ -708,7 +734,7 @@ class NormalizeReplicaRecordUseCase:
 
         for draft in drafts:
             draft_rejected, fields_dict, rej_entry = self._evaluate_draft_quality_rules(
-                command, binding, draft
+                command, transformation, draft
             )
             if draft_rejected:
                 if rej_entry is not None:
@@ -744,7 +770,7 @@ class NormalizeReplicaRecordUseCase:
                     self._append_trace_event(
                         replica=replica,
                         command=command,
-                        binding=binding,
+                        transformation=transformation,
                         event_type=IpTraceEventType.L3_REFERENCE_PENDING,
                         status=TimelineStatus.SUCCESS,
                         summary_message=(
@@ -764,8 +790,8 @@ class NormalizeReplicaRecordUseCase:
                     extensions=draft.extensions,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
-                    mapping_id=binding.mapping_id,
-                    mapping_version=binding.mapping_version,
+                    transformation_id=transformation.transformation_id,
+                    transformation_version=transformation.transformation_version,
                     replica_id=command.replica_record_id,
                     replica_version=command.replica_version,
                 )
@@ -780,8 +806,8 @@ class NormalizeReplicaRecordUseCase:
                     action=CanonicalAction.UPSERT.value,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
-                    mapping_id=binding.mapping_id,
-                    mapping_version=binding.mapping_version,
+                    transformation_id=transformation.transformation_id,
+                    transformation_version=transformation.transformation_version,
                     replica_id=command.replica_record_id,
                     replica_version=command.replica_version,
                     changed_fields=tuple(fields_dict.keys()),
@@ -796,7 +822,7 @@ class NormalizeReplicaRecordUseCase:
     def _evaluate_draft_quality_rules(
         self,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         draft: CanonicalDraft,
     ) -> tuple[bool, JsonDict, NormalizationRejectionEntry | None]:
         entity_def = self._entity_registry.get(draft.canonical_type)
@@ -812,8 +838,8 @@ class NormalizeReplicaRecordUseCase:
                         tenant_id=command.tenant_id,
                         replica_record_id=command.replica_record_id,
                         stream=command.stream,
-                        mapping_id=binding.mapping_id,
-                        mapping_version=binding.mapping_version,
+                        transformation_id=transformation.transformation_id,
+                        transformation_version=transformation.transformation_version,
                         reason_code=NormalizationRejectionReason.QUALITY_RULE_REJECTED.value,
                         field_path=rule.code,
                         detail=failure_msg,
@@ -831,13 +857,13 @@ class NormalizeReplicaRecordUseCase:
         uow: IpDataPlaneUnitOfWorkPort,
         replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         current_produced_refs: list[tuple[str, str]],
     ) -> None:
         previous_refs = await uow.normalization_ledger.get_latest_produced_refs(
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
-            mapping_id=binding.mapping_id,
+            transformation_id=transformation.transformation_id,
         )
         unseen_refs = set(previous_refs) - set(current_produced_refs)
         for canonical_type, source_id in unseen_refs:
@@ -860,8 +886,8 @@ class NormalizeReplicaRecordUseCase:
                     action=CanonicalAction.TOMBSTONE.value,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
-                    mapping_id=binding.mapping_id,
-                    mapping_version=binding.mapping_version,
+                    transformation_id=transformation.transformation_id,
+                    transformation_version=transformation.transformation_version,
                     replica_id=command.replica_record_id,
                     replica_version=command.replica_version,
                     parent_trace_id=command.parent_trace_id,
@@ -872,7 +898,7 @@ class NormalizeReplicaRecordUseCase:
             self._append_trace_event(
                 replica=replica,
                 command=command,
-                binding=binding,
+                transformation=transformation,
                 event_type=IpTraceEventType.L3_TOMBSTONED,
                 status=TimelineStatus.SUCCESS,
                 summary_message=(
@@ -885,7 +911,7 @@ class NormalizeReplicaRecordUseCase:
         uow: IpDataPlaneUnitOfWorkPort,
         replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         current_produced_refs: list[tuple[str, str]],
     ) -> int:
         resolved_count = 0
@@ -927,7 +953,7 @@ class NormalizeReplicaRecordUseCase:
                 self._append_trace_event(
                     replica=replica,
                     command=command,
-                    binding=binding,
+                    transformation=transformation,
                     event_type=IpTraceEventType.L3_REFERENCE_RESOLVED,
                     status=TimelineStatus.SUCCESS,
                     summary_message=(
@@ -943,23 +969,25 @@ class NormalizeReplicaRecordUseCase:
         self,
         uow: IpDataPlaneUnitOfWorkPort,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         snapshot: ReplicaSnapshot,
-        context: MappingContext,
+        context: TransformationContext,
         active_drafts: tuple[CanonicalDraft, ...],
     ) -> int:
-        if binding.shadow_mapping_version is None:
+        if transformation.shadow_transformation_version is None:
             return 0
 
-        candidate_version = binding.shadow_mapping_version
-        if candidate_version == binding.mapping_version:
+        candidate_version = transformation.shadow_transformation_version
+        if candidate_version == transformation.transformation_version:
             return 0
 
-        shadow_mapper = self._mapper_registry.get(binding.mapping_id, candidate_version)
-        if shadow_mapper is None:
+        shadow_transformer = self._transformer_registry.get(
+            transformation.transformation_id, candidate_version
+        )
+        if shadow_transformer is None:
             return 0
 
-        shadow_result = shadow_mapper.map(snapshot, context)
+        shadow_result = shadow_transformer.transform(snapshot, context)
         diff_data = self._compute_shadow_diff(
             active_drafts=active_drafts, shadow_drafts=shadow_result.drafts
         )
@@ -979,7 +1007,7 @@ class NormalizeReplicaRecordUseCase:
         self,
         uow: IpDataPlaneUnitOfWorkPort,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         produced_refs: tuple[tuple[str, str], ...],
         outcome: NormalizationOutcome,
     ) -> None:
@@ -987,8 +1015,8 @@ class NormalizeReplicaRecordUseCase:
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
             replica_version=command.replica_version,
-            mapping_id=binding.mapping_id,
-            mapping_version=binding.mapping_version,
+            transformation_id=transformation.transformation_id,
+            transformation_version=transformation.transformation_version,
             produced_canonical_refs=produced_refs,
             outcome=outcome,
             trace_id=command.trace_id,
@@ -1001,7 +1029,7 @@ class NormalizeReplicaRecordUseCase:
         *,
         replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
-        binding: MappingBinding,
+        transformation: Transformation,
         event_type: IpTraceEventType,
         status: TimelineStatus,
         summary_message: str,
@@ -1018,8 +1046,8 @@ class NormalizeReplicaRecordUseCase:
                 summary_message=summary_message,
                 error_details=error_details,
                 extra_metadata={
-                    "mapping_id": binding.mapping_id,
-                    "mapping_version": binding.mapping_version,
+                    "transformation_id": transformation.transformation_id,
+                    "transformation_version": transformation.transformation_version,
                 },
             )
         )

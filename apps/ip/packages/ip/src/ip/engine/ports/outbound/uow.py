@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 from typing import Protocol
 
+from seedwork.events import EventEnvelope
 from seedwork.uow import UnitOfWorkPort
 from strace.ports import TraceRepositoryPort
 
@@ -13,9 +14,6 @@ from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPo
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
-from ip.engine.ports.outbound.mapping_binding_repository_port import (
-    MappingBindingRepositoryPort,
-)
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
     NormalizationLedgerRepositoryPort,
 )
@@ -33,8 +31,14 @@ from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecor
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
+from ip.engine.ports.outbound.stitch_repository_port import (
+    StitchRepositoryPort,
+)
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
+from ip.engine.ports.outbound.transformation_repository_port import (
+    TransformationRepositoryPort,
+)
 
 
 class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
@@ -47,7 +51,8 @@ class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     catalogs: CatalogRepositoryPort
     stream_states: StreamStateRepositoryPort
     sync_runs: SyncRunRepositoryPort
-    mapping_bindings: MappingBindingRepositoryPort
+    transformations: TransformationRepositoryPort
+    stitches: StitchRepositoryPort
 
 
 class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
@@ -66,6 +71,21 @@ class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     normalization_rejections: NormalizationRejectionRepositoryPort
     pending_references: PendingReferenceRepositoryPort
     traces: TraceRepositoryPort
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        """Atomically claims an inbound event idempotency key inside the current transaction.
+
+        Returns True if this is the first time the key is processed, or False if already processed.
+        """
+        raise NotImplementedError
+
+    async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
+        """Releases a previously claimed idempotency key when a chunk fails transiently (NACK)."""
+        raise NotImplementedError
+
+    async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
+        """Stages an EventEnvelope into the tenant shard transactional outbox (`public.ip_outbox`)."""
+        raise NotImplementedError
 
 
 class IpTenantResolverPort(Protocol):

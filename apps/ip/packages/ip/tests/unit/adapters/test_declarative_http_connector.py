@@ -384,3 +384,65 @@ async def test_declarative_connector_write_record_injects_idempotency_key_and_ex
     assert result.retry_after_seconds == 30.0
     assert result.request_headers is not None
     assert result.request_headers.get("Idempotency-Key") == "idem-decl-429"
+
+
+@pytest.mark.asyncio
+async def test_declarative_connector_auth_params_remain_authoritative_on_conflict(
+    httpserver: HTTPServer,
+) -> None:
+    httpserver.expect_request(
+        "/tenants/acme/api/v1/ping",
+        method="GET",
+        query_string="apiKey=auth_authoritative_key",
+    ).respond_with_json({"status": "ok"}, status=200)
+
+    base_manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
+    manifest = dataclasses.replace(
+        base_manifest,
+        auth_type="API_KEY",
+        check_action=HttpActionSpec(
+            path="/ping",
+            method="GET",
+            query_params={"apiKey": "conflicting_action_key"},
+        ),
+    )
+    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    result = await connector.check(
+        public_config={"tenant_slug": "acme"},
+        credentials={
+            "api_key": "auth_authoritative_key",
+            "param_name": "apiKey",
+            "placement": "query",
+        },
+    )
+    assert result.success is True
+    assert result.status == "SUCCEEDED"
+
+
+@pytest.mark.asyncio
+async def test_declarative_connector_fetch_page_auth_params_override_cursor_query(
+    httpserver: HTTPServer,
+) -> None:
+    httpserver.expect_request(
+        "/tenants/acme/api/v1/contacts",
+        method="GET",
+        query_string="cursor=abc&apiKey=auth_authoritative_key",
+    ).respond_with_json({"items": [{"id": "1"}], "next_cursor": None}, status=200)
+
+    base_manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
+    manifest = dataclasses.replace(base_manifest, auth_type="API_KEY")
+    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    action = manifest.streams["contacts"]
+    res = await connector._fetch_records_page(
+        action=action,
+        credentials={
+            "api_key": "auth_authoritative_key",
+            "param_name": "apiKey",
+            "placement": "query",
+        },
+        req_url=f"{httpserver.url_for('')}/tenants/acme/api/v1/contacts?cursor=abc&apiKey=stale_cursor_key",
+        params={},
+    )
+    assert res.is_ok is True
+    records, _next_cur, _has_more = res.unwrap()
+    assert len(records) == 1

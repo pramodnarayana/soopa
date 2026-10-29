@@ -30,18 +30,11 @@ x-modular-monolith-base: &modular-monolith-base
       condition: service_healthy
     localstack:
       condition: service_healthy
-    edi_postgres_shard:
-      condition: service_healthy
-    ip_postgres_shard:
-      condition: service_healthy
 
 services:
 
   # -------------------------------------------------------------------------
   # 0. One-Shot Seed Runner (invoked via: docker compose run --rm db-seed)
-  # Runs inside the Docker network so edi_postgres_shard resolves correctly.
-  # env_file provides all Zitadel/identity vars. environment overrides only
-  # the two URLs that differ from pnpm dev values in .env.
   # -------------------------------------------------------------------------
   db-seed:
     <<: *modular-monolith-base
@@ -61,29 +54,109 @@ services:
   # -------------------------------------------------------------------------
   unified-api:
     <<: *modular-monolith-base
+    profiles: ["platform", "ip", "edi"]
+    environment:
+      <<: *base-env
+      ENABLED_APPS: ${ENABLED_APPS:-edi,ip}
     command: [ "uvicorn", "unified_api.main:app", "--host", "0.0.0.0", "--port", "8000" ]
     ports:
       - "127.0.0.1:3000:8000"
 
   edi-as2-server:
     <<: *modular-monolith-base
+    profiles: ["edi"]
+    depends_on:
+      postgres_global:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      edi_postgres_shard:
+        condition: service_healthy
     command: [ "uvicorn", "as2_server.main:app", "--host", "0.0.0.0", "--port", "8001" ]
     ports:
       - "8001:8001"
 
   # -------------------------------------------------------------------------
-  # 2. Worker Tier (Asynchronous Event Processing & Daemons)
+  # 2. Decoupled Per-Domain Worker Tier (Profile-Scoped)
   # -------------------------------------------------------------------------
-  cp-workers:
+  platform-workers:
     <<: *modular-monolith-base
+    profiles: ["platform", "ip", "edi"]
     command: [ "python", "-m", "unified_worker.main" ]
     environment:
       <<: *base-env
-      WORKER_MODULES: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker"
+      WORKER_MODULES: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker"
 
-  dp-workers:
+  ip-cp-workers:
     <<: *modular-monolith-base
+    profiles: ["ip"]
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "ip-cp-jobs-worker"
+
+  ip-dp-workers:
+    <<: *modular-monolith-base
+    profiles: ["ip"]
+    depends_on:
+      postgres_global:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      ip_postgres_shard:
+        condition: service_healthy
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "ip-orchestrator-worker,ip-delivery-worker,ip-dp-jobs-worker"
+
+  edi-cp-workers:
+    <<: *modular-monolith-base
+    profiles: ["edi"]
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "edi-cp-jobs-worker,edi-config-sync-worker"
+
+  edi-dp-workers:
+    <<: *modular-monolith-base
+    profiles: ["edi"]
+    depends_on:
+      postgres_global:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      edi_postgres_shard:
+        condition: service_healthy
     command: [ "python", "-m", "unified_worker.main" ]
     environment:
       <<: *base-env
       WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-delivery-dlq-worker,edi-dp-jobs-worker"
+
+  # -------------------------------------------------------------------------
+  # 3. Consolidated Worker Containers (Full Multi-App Mode)
+  # -------------------------------------------------------------------------
+  cp-workers:
+    <<: *modular-monolith-base
+    profiles: ["full"]
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "identity-worker,identity-jobs-worker,notification-worker,notification-jobs-worker,notification-channel-worker,ucp-worker,ucp-jobs-worker,scheduler-worker,edi-cp-jobs-worker,edi-config-sync-worker,ip-cp-jobs-worker"
+
+  dp-workers:
+    <<: *modular-monolith-base
+    profiles: ["full"]
+    depends_on:
+      postgres_global:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      edi_postgres_shard:
+        condition: service_healthy
+      ip_postgres_shard:
+        condition: service_healthy
+    command: [ "python", "-m", "unified_worker.main" ]
+    environment:
+      <<: *base-env
+      WORKER_MODULES: "edi-orchestrator-worker,edi-compute-worker,edi-delivery-worker,edi-delivery-dlq-worker,edi-dp-jobs-worker,ip-orchestrator-worker,ip-delivery-worker,ip-dp-jobs-worker"

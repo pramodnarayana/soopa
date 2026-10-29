@@ -104,6 +104,8 @@ class RunSyncUseCase:
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
         token_manager: TokenManagerService | None = None,
     ) -> None:
+        if data_plane_uow is None and data_plane_uow_provider is None:
+            raise ValueError("Either data_plane_uow or data_plane_uow_provider must be provided.")
         self._control_plane_uow = control_plane_uow
         self._data_plane_uow = data_plane_uow
         self._data_plane_uow_provider = data_plane_uow_provider
@@ -239,8 +241,23 @@ class RunSyncUseCase:
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
+                for_update=True,
             )
             if active_run is not None:
+                if (
+                    active_run.status == SyncRunStatus.PENDING
+                    and command.trace_id is not None
+                    and active_run.trace_id == command.trace_id
+                ):
+                    active_run.start()
+                    await self._control_plane_uow.sync_runs.save(active_run)
+                    await self._control_plane_uow.commit()
+                    return (
+                        active_run,
+                        active_run.start_checkpoint,
+                        active_run.kind,
+                        active_run.generation_id,
+                    )
                 logger.error(
                     "active_sync_run_already_exists",
                     existing_run_id=active_run.id,

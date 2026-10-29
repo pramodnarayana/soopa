@@ -64,23 +64,44 @@ class OutboxProcessorUseCase:
         if not successful_ids and batch_failure_reason is None:
             batch_failure_reason = "Batch publisher returned no successful event IDs"
 
-        tasks = []
+        completed_ids: list[str] = []
+        failed_ids: list[str] = []
+        successful_set = set(successful_ids)
+
         for event in events:
-            if event.id in successful_ids:
+            if event.id in successful_set:
                 logger.info(
                     "outbox_event_published", event_id=event.id, event_type=event.event_type
                 )
-                tasks.append(self.repository.mark_completed(event.id, self.worker_id))
+                completed_ids.append(event.id)
             else:
                 logger.error("outbox_event_processing_failed", event_id=event.id)
-                tasks.append(
-                    self.repository.mark_failed(
-                        event.id,
-                        self.worker_id,
-                        batch_failure_reason or "Event was not acknowledged by batch publisher",
-                    )
-                )
+                failed_ids.append(event.id)
 
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await self._update_batch_statuses(completed_ids, failed_ids, batch_failure_reason)
 
         return len(events) >= self.max_concurrent_events
+
+    async def _update_batch_statuses(
+        self,
+        completed_ids: list[str],
+        failed_ids: list[str],
+        batch_failure_reason: str | None,
+    ) -> None:
+        tasks = []
+        if completed_ids:
+            tasks.append(self.repository.mark_completed_batch(completed_ids, self.worker_id))
+        if failed_ids:
+            tasks.append(
+                self.repository.mark_failed_batch(
+                    failed_ids,
+                    self.worker_id,
+                    batch_failure_reason or "Event was not acknowledged by batch publisher",
+                )
+            )
+
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for res in results:
+                if isinstance(res, BaseException):
+                    logger.error("outbox_status_update_task_failed", error=str(res))

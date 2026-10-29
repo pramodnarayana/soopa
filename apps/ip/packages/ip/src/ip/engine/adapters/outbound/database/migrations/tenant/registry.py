@@ -26,6 +26,7 @@ ENGINE_CORE = DomainMigrationModule(
         "outbound_records",
         "ip_trace_events",
         "ip_outbox",
+        "ip_processed_events",
     ),
 )
 

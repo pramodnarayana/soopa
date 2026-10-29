@@ -45,7 +45,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--domain",
         type=str,
         default="platform",
-        choices=["platform", "ucp", "identity", "notification", "edi", "all"],
+        choices=["platform", "ucp", "identity", "notification", "edi", "ip", "all"],
         help="Domain scope to seed",
     )
     return parser

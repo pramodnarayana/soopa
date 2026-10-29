@@ -33,8 +33,8 @@ class SqlAlchemyNormalizationLedgerRepository(
             tenant_id=record.tenant_id,
             replica_record_id=record.replica_record_id,
             replica_version=record.replica_version,
-            mapping_id=record.mapping_id,
-            mapping_version=record.mapping_version,
+            transformation_id=record.transformation_id,
+            transformation_version=record.transformation_version,
             produced_canonical_refs=tuple(refs),
             outcome=NormalizationOutcome(record.outcome),
             trace_id=record.trace_id,
@@ -50,8 +50,8 @@ class SqlAlchemyNormalizationLedgerRepository(
             tenant_id=entry.tenant_id,
             replica_record_id=entry.replica_record_id,
             replica_version=entry.replica_version,
-            mapping_id=entry.mapping_id,
-            mapping_version=entry.mapping_version,
+            transformation_id=entry.transformation_id,
+            transformation_version=entry.transformation_version,
             produced_canonical_refs=raw_refs,
             outcome=entry.outcome.value,
             trace_id=entry.trace_id,
@@ -75,17 +75,17 @@ class SqlAlchemyNormalizationLedgerRepository(
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
     ) -> int | None:
-        """Retrieve highest processed replica version for this replica and mapper version."""
+        """Retrieve highest processed replica version for this replica and transformer version."""
         stmt = (
             select(NormalizationLedgerModel.replica_version)
             .where(
                 NormalizationLedgerModel.tenant_id == tenant_id,
                 NormalizationLedgerModel.replica_record_id == replica_record_id,
-                NormalizationLedgerModel.mapping_id == mapping_id,
-                NormalizationLedgerModel.mapping_version == mapping_version,
+                NormalizationLedgerModel.transformation_id == transformation_id,
+                NormalizationLedgerModel.transformation_version == transformation_version,
             )
             .order_by(NormalizationLedgerModel.replica_version.desc())
             .limit(1)
@@ -98,8 +98,8 @@ class SqlAlchemyNormalizationLedgerRepository(
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
-        mapping_version: int,
+        transformation_id: str,
+        transformation_version: int,
     ) -> tuple[tuple[str, str], ...]:
         """Retrieve canonical references produced by the most recent normalization run."""
         stmt = (
@@ -107,8 +107,8 @@ class SqlAlchemyNormalizationLedgerRepository(
             .where(
                 NormalizationLedgerModel.tenant_id == tenant_id,
                 NormalizationLedgerModel.replica_record_id == replica_record_id,
-                NormalizationLedgerModel.mapping_id == mapping_id,
-                NormalizationLedgerModel.mapping_version == mapping_version,
+                NormalizationLedgerModel.transformation_id == transformation_id,
+                NormalizationLedgerModel.transformation_version == transformation_version,
             )
             .order_by(NormalizationLedgerModel.replica_version.desc())
             .limit(1)
@@ -125,15 +125,15 @@ class SqlAlchemyNormalizationLedgerRepository(
         *,
         tenant_id: str,
         replica_record_id: str,
-        mapping_id: str,
+        transformation_id: str,
     ) -> tuple[tuple[str, str], ...]:
-        """Retrieve canonical references produced by the most recent normalization run across all mapping versions."""
+        """Retrieve canonical references produced by the most recent normalization run across all transformation versions."""
         stmt = (
             select(NormalizationLedgerModel)
             .where(
                 NormalizationLedgerModel.tenant_id == tenant_id,
                 NormalizationLedgerModel.replica_record_id == replica_record_id,
-                NormalizationLedgerModel.mapping_id == mapping_id,
+                NormalizationLedgerModel.transformation_id == transformation_id,
                 NormalizationLedgerModel.outcome.in_(
                     [NormalizationOutcome.NORMALIZED.value, NormalizationOutcome.TOMBSTONED.value]
                 ),
@@ -156,8 +156,8 @@ class SqlAlchemyNormalizationLedgerRepository(
         stmt = select(NormalizationLedgerModel).where(
             NormalizationLedgerModel.tenant_id == entry.tenant_id,
             NormalizationLedgerModel.replica_record_id == entry.replica_record_id,
-            NormalizationLedgerModel.mapping_id == entry.mapping_id,
-            NormalizationLedgerModel.mapping_version == entry.mapping_version,
+            NormalizationLedgerModel.transformation_id == entry.transformation_id,
+            NormalizationLedgerModel.transformation_version == entry.transformation_version,
         )
         result = await self.session.execute(stmt)
         record = result.scalars().first()

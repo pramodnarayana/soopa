@@ -54,6 +54,9 @@ class GlobalSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
                 idempotency_key=event.idempotency_key,
                 tenant_id=tenant_id,
                 event_type=event.event_name,
+                trace_id=event.get_trace_id(),
+                correlation_id=event.get_correlation_id(),
+                lane=event.get_processing_lane().value,
                 payload=serialize_domain_event(event),
                 status=OutboxStatus.PENDING,
             )
@@ -103,6 +106,9 @@ class TenantSqlAlchemyRepository(PlatformBaseSqlAlchemyRepository):
                 idempotency_key=event.idempotency_key,
                 tenant_id=tenant_id,
                 event_type=event.event_name,
+                trace_id=event.get_trace_id(),
+                correlation_id=event.get_correlation_id(),
+                lane=event.get_processing_lane().value,
                 payload=serialize_domain_event(event),
                 status=OutboxStatus.PENDING,
             )

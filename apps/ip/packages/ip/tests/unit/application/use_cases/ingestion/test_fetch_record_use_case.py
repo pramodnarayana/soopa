@@ -368,3 +368,20 @@ async def test_fetch_record_not_found() -> None:
     result = await use_case.execute(cmd)
     assert result.status == "NOT_FOUND"
     assert len(dp_uow.inbound_records.records) == 0
+
+
+def test_fetch_record_use_case_requires_data_plane_dependency() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    storage = FakeTieredStorageAdapter()
+    cipher = FakeCipher()
+    connectors: dict[str, SourceConnectorPort] = {}
+
+    with pytest.raises(
+        ValueError, match=r"Either data_plane_uow or data_plane_uow_provider must be provided\."
+    ):
+        FetchRecordUseCase(
+            control_plane_uow=cp_uow,
+            tiered_storage=storage,
+            cipher=cipher,
+            connectors=connectors,
+        )

@@ -139,6 +139,7 @@ class IpEventType(StrEnum):
     CONNECTION_RELINKED = "ip.connection.relinked"
     CONNECTION_ERROR_RECORDED = "ip.connection.error_recorded"
     INBOUND_RECORD_CREATED = "ip.inbound_record.created"
+    SYNC_RUN_REQUESTED = "ip.sync_run.requested"
     SYNC_RUN_STARTED = "ip.sync_run.started"
     SYNC_RUN_COMPLETED = "ip.sync_run.completed"
     SYNC_RUN_FAILED = "ip.sync_run.failed"
@@ -147,14 +148,46 @@ class IpEventType(StrEnum):
     REPLICA_RECORD_CHANGED = "ip.replica_record.changed"
     NORMALIZED_RECORD_CREATED = "ip.normalized_record.created"
     CANONICAL_RECORD_CHANGED = "ip.canonical_record.changed"
-    MAPPING_BINDING_CHANGED = "ip.mapping_binding.changed"
-    MAPPING_VERSION_PROMOTED = "ip.mapping_version.promoted"
+    TRANSFORMATION_CHANGED = "ip.transformation.changed"
+    TRANSFORMATION_VERSION_PROMOTED = "ip.transformation_version.promoted"
+    STITCH_REGISTERED = "ip.stitch.registered"
     OUTBOUND_RECORD_CREATED = "ip.outbound_record.created"
     STREAM_STATE_CHECKPOINTED = "ip.stream_state.checkpointed"
 
 
-class MappingMode(StrEnum):
-    """Execution mode of a stream mapping binding."""
+class IpIdPrefix(StrEnum):
+    """Domain-specific entity ID prefixes for the Integration Platform (IP) bounded context."""
+
+    TRACE = "ip_trc"
+    TRACE_EVENT = "ip_trace_evt"
+    INBOUND_RECORD = "ip_inb"
+    CONNECTION = "ip_conn"
+    CATALOG = "ip_cat"
+    STREAM = "ip_strm"
+    REPLICA = "ip_rep"
+    REPLICA_REJECTION = "ip_rej"
+    NORMALIZED = "ip_nrm"
+    CANONICAL = "ip_canon"
+    OUTBOUND_RECORD = "ip_out"
+    OUTBOUND_DISPATCH = "ip_disp"
+    OUTBOX = "ip_obx"
+    GEM = "ip_gem"
+    STREAM_STATE = "ip_cst"
+    MDM_READING = "ip_mdmr"
+    MDM_SERVICE_POINT = "ip_mdms"
+    TMS_LOAD = "ip_tmsl"
+    TMS_CARRIER = "ip_tmsc"
+    SYNC_RUN = "ip_sync"
+    TRANSFORMATION = "ip_xfrm"
+    STITCH = "ip_stch"
+    NORMALIZATION_LEDGER = "ip_nlg"
+    NORMALIZATION_REJECTION = "ip_nrj"
+    SHADOW_DIFF = "ip_sdiff"
+    PENDING_REFERENCE = "ip_pref"
+
+
+class TransformationMode(StrEnum):
+    """Execution mode of a stream transformation."""
 
     ACTIVE = "ACTIVE"
     SHADOW = "SHADOW"
@@ -168,7 +201,7 @@ class NormalizationOutcome(StrEnum):
     REJECTED = "REJECTED"
     SKIPPED_STALE = "SKIPPED_STALE"
     TOMBSTONED = "TOMBSTONED"
-    SKIPPED_NO_BINDING = "SKIPPED_NO_BINDING"
+    SKIPPED_NO_TRANSFORMATION = "SKIPPED_NO_TRANSFORMATION"
 
 
 class RuleSeverity(StrEnum):
@@ -179,14 +212,14 @@ class RuleSeverity(StrEnum):
 
 
 class NormalizationRejectionReason(StrEnum):
-    """Typed failure code for a canonical mapping or validation rejection."""
+    """Typed failure code for a canonical transformation or validation rejection."""
 
     MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
     SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
     QUALITY_RULE_REJECTED = "QUALITY_RULE_REJECTED"
-    MAPPER_ERROR = "MAPPER_ERROR"
+    TRANSFORMER_ERROR = "TRANSFORMER_ERROR"
     UNRESOLVED_REFERENCE = "UNRESOLVED_REFERENCE"
-    MISSING_MAPPING_BINDING = "MISSING_MAPPING_BINDING"
+    MISSING_TRANSFORMATION = "MISSING_TRANSFORMATION"
 
 
 class PendingReferenceStatus(StrEnum):
@@ -233,6 +266,29 @@ class SyncRunStatus(StrEnum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+    SKIPPED_ALREADY_ACTIVE = "SKIPPED_ALREADY_ACTIVE"
+
+
+class FetchRecordStatus(StrEnum):
+    """Execution status of a Layer-1 Fetch-on-Notify single-record pull."""
+
+    FETCHED = "FETCHED"
+    DEDUPLICATED = "DEDUPLICATED"
+    NOT_FOUND = "NOT_FOUND"
+    RATE_LIMITED = "RATE_LIMITED"
+    TRANSIENT_ERROR = "TRANSIENT_ERROR"
+    FETCH_FAILED = "FETCH_FAILED"
+    TERMINAL_ERROR = "TERMINAL_ERROR"
+
+
+class SyncErrorCode(StrEnum):
+    """Error classification code emitted by Layer-1 Pull Sync runs."""
+
+    RATE_LIMITED = "RATE_LIMITED"
+    TRANSIENT_ERROR = "TRANSIENT_ERROR"
+    UPSTREAM_5XX = "UPSTREAM_5XX"
+    AUTH_EXPIRED = "AUTH_EXPIRED"
+    TERMINAL_ERROR = "TERMINAL_ERROR"
 
 
 class CursorKind(StrEnum):
@@ -339,3 +395,27 @@ class ReplayStage(StrEnum):
     RETRY_NORMALIZE = "RETRY_NORMALIZE"
     RETRY_STITCH = "RETRY_STITCH"
     RETRY_DELIVER = "RETRY_DELIVER"
+
+
+class IpOutboxSource(StrEnum):
+    """Canonical CloudEvents source identifiers for IP outbox streams."""
+
+    CONTROL_PLANE = "soopa.ip.control_plane"
+    DATA_PLANE = "soopa.ip.data_plane"
+
+
+class IpOutboxChannel(StrEnum):
+    """PostgreSQL LISTEN/NOTIFY channel names for IP outbox wakeup."""
+
+    CONTROL_PLANE = "ip_cp_outbox_channel"
+    DATA_PLANE = "ip_dp_outbox_channel"
+
+
+class IpJobName(StrEnum):
+    """Scheduled background job identifiers for IP Control Plane and Data Plane."""
+
+    IP_CONTROL_PLANE_OUTBOX_SWEEPER = "IP_CONTROL_PLANE_OUTBOX_SWEEPER"
+    IP_CONTROL_PLANE_OUTBOX_CLEANUP = "IP_CONTROL_PLANE_OUTBOX_CLEANUP"
+    IP_DATA_PLANE_OUTBOX_SWEEPER = "IP_DATA_PLANE_OUTBOX_SWEEPER"
+    IP_DATA_PLANE_OUTBOX_CLEANUP = "IP_DATA_PLANE_OUTBOX_CLEANUP"
+    IP_DATA_RETENTION_CLEANUP = "IP_DATA_RETENTION_CLEANUP"

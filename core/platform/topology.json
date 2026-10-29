@@ -1,0 +1,56 @@
+{
+  "topics": [
+    { "name": "platform-events-topic", "fifo": true, "env_var": "SNS_PLATFORM_EVENTS_TOPIC_ARN" }
+  ],
+  "queues": [
+    { "name": "ucp-jobs", "fifo": true, "dlq": true, "env_var": "SQS_UCP_JOBS_QUEUE_URL" },
+    {
+      "name": "notification-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_NOTIFICATION_JOBS_QUEUE_URL"
+    },
+    {
+      "name": "identity-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_IDENTITY_JOBS_QUEUE_URL"
+    },
+    {
+      "name": "ucp-events",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_UCP_IDENTITY_SYNC_QUEUE_URL"
+    },
+    {
+      "name": "identity-events",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_IDENTITY_SYNC_QUEUE_URL"
+    },
+    {
+      "name": "email-channel",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_EMAIL_CHANNEL_QUEUE_URL"
+    }
+  ],
+  "subscriptions": [
+    {
+      "topic": "platform-events-topic",
+      "queue": "ucp-events",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "app." }, { "prefix": "tenant." }]
+      }
+    },
+    {
+      "topic": "platform-events-topic",
+      "queue": "identity-events",
+      "filterPolicy": {
+        "event_type": [{ "prefix": "tenant." }, { "prefix": "app." }, { "prefix": "user." }]
+      }
+    }
+  ],
+  "buckets": [{ "name": "observability-data" }],
+  "secrets": []
+}
