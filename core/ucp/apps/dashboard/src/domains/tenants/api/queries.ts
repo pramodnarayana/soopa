@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 
 export interface Tenant {
   id: string;
@@ -9,7 +9,7 @@ export interface Tenant {
   createdAt: string;
   updatedAt: string;
   zitadelOrgId: string;
-  subscriptions: any[];
+  subscriptions: string[];
 }
 
 export interface PaginatedTenants {
@@ -20,6 +20,8 @@ export interface PaginatedTenants {
 }
 
 export const useGetTenants = () => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
@@ -30,6 +32,8 @@ export const useGetTenants = () => {
 };
 
 export const useGetTenant = (tenantId?: string) => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['tenant', tenantId],
     queryFn: () => apiClient.get<Tenant>(`/tenants/${tenantId}`),

@@ -25,6 +25,7 @@ from ip.engine.domain.exceptions import (
     IpError,
     IpErrorCode,
     StitchRunNotFoundError,
+    TenantShardNotFoundError,
 )
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
@@ -43,7 +44,7 @@ from orchestration.application.use_cases import (
     ResolveMatchConditionsUseCase,
     StartRunUseCase,
 )
-from orchestration.domain.constants import WorkflowErrorCode
+from orchestration.domain.constants import RunStatus, WorkflowErrorCode
 from orchestration.domain.exceptions import Result, WorkflowError
 from orchestration.domain.run import WorkflowRun
 from orchestration.ports.inbound.step_handler_port import (
@@ -104,6 +105,54 @@ class IpStitchCanonicalDispatcherAdapter(
                     return Result.ok(run_res.unwrap())
 
         return Result.err(StitchRunNotFoundError.for_id(run_id))
+
+    async def list_runs(
+        self,
+        *,
+        tenant_id: str,
+        workflow_id: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+    ) -> Result[tuple[WorkflowRun, ...], IpError]:
+        bound = logger.bind(
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            status=status.value if status is not None else None,
+            limit=limit,
+        )
+        bound.info("ip_stitch_adapter.list_runs_started")
+        shard_res = await self._dp_uow_provider.resolve_shard_info(tenant_id)
+        if shard_res.is_err:
+            err = shard_res.unwrap_err()
+            bound.error(
+                "ip_stitch_adapter.shard_resolution_failed",
+                error_code=err.code.value,
+                message=err.message,
+            )
+            return Result.err(err)
+        shard_id, shard_dsn = shard_res.unwrap()
+
+        async with contextlib.aclosing(
+            self._db_router.get_tenant_session(tenant_id, shard_id, shard_dsn)
+        ) as session_gen:
+            async for session in session_gen:
+                uow = self._workflow_uow_factory(session)
+                async with uow:
+                    runs = await uow.runs.list_recent(
+                        tenant_id,
+                        workflow_id=workflow_id,
+                        status=status,
+                        limit=limit,
+                    )
+                    bound.info(
+                        "ip_stitch_adapter.list_runs_completed",
+                        shard_id=shard_id,
+                        count=len(runs),
+                    )
+                    return Result.ok(tuple(runs))
+
+        bound.error("ip_stitch_adapter.session_unavailable", shard_id=shard_id)
+        return Result.err(TenantShardNotFoundError.for_tenant(tenant_id))
 
     async def dispatch_event(
         self,

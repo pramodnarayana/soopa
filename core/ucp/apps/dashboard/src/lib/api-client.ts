@@ -1,123 +1,132 @@
+import {
+  FetchHttpClientAdapter,
+  type HttpClientPort,
+  HttpMethod,
+  type HttpMethodValue,
+  type HttpRequestOptions,
+  type QueryParamsRecord,
+  StructuredJsonLoggerAdapter,
+  unwrapOrThrow,
+} from '@soopa/ui';
 import { getApiUrl } from './config';
 
-const UCP_API_URL = getApiUrl('/api/v1');
+export interface DashboardFetchOptions {
+  readonly method?: string;
+  readonly params?: QueryParamsRecord;
+  readonly headers?: HeadersInit;
+  readonly signal?: AbortSignal;
+  readonly body?: unknown;
+}
 
-let globalToken: string | null = null;
+export type DashboardRequestConfig = Omit<DashboardFetchOptions, 'method' | 'body'>;
 
-class ApiError extends Error {
-  public statusCode: number;
-  public details?: unknown;
+export interface UcpApiClientPort {
+  readonly httpClient: HttpClientPort;
+  request<T>(endpoint: string, options?: DashboardFetchOptions): Promise<T>;
+  get<T>(endpoint: string, options?: DashboardRequestConfig): Promise<T>;
+  post<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
+  put<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
+  patch<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
+  delete<T>(endpoint: string, options?: DashboardRequestConfig): Promise<T>;
+}
 
-  constructor(message: string, statusCode: number, details?: unknown) {
-    super(message);
-    this.name = 'ApiError';
-    this.statusCode = statusCode;
-    this.details = details;
+const VALID_HTTP_METHODS: ReadonlySet<string> = new Set(Object.values(HttpMethod));
+
+export function isHttpMethodValue(candidate: string): candidate is HttpMethodValue {
+  return VALID_HTTP_METHODS.has(candidate);
+}
+
+export function parseHttpMethod(raw?: string): HttpMethodValue {
+  const upper = raw?.toUpperCase();
+  if (upper && isHttpMethodValue(upper)) {
+    return upper;
+  }
+  return HttpMethod.GET;
+}
+
+function toHttpOptions(options?: DashboardRequestConfig): HttpRequestOptions | undefined {
+  if (!options) {
+    return undefined;
+  }
+  return {
+    params: options.params,
+    headers: options.headers,
+    signal: options.signal,
+  };
+}
+
+function normalizeRequestBody(rawBody: unknown): unknown {
+  if (typeof rawBody !== 'string') {
+    return rawBody;
+  }
+  try {
+    return JSON.parse(rawBody);
+  } catch {
+    return rawBody;
   }
 }
 
-interface FetchOptions extends RequestInit {
-  params?: Record<string, string>;
+export interface CreateScopedUcpApiClientOptions {
+  readonly getToken: () => string | null | undefined;
+  readonly baseUrl?: string;
+  readonly fetchImpl?: typeof fetch;
 }
 
-function getIdempotencyKey(): string {
-  return crypto.randomUUID();
+export function createScopedUcpApiClient(
+  options: CreateScopedUcpApiClientOptions,
+): UcpApiClientPort {
+  const logger = new StructuredJsonLoggerAdapter({
+    bindings: { product: 'ucp-dashboard' },
+  });
+
+  const adapter = new FetchHttpClientAdapter({
+    baseUrl: options.baseUrl ?? getApiUrl('/api/v1'),
+    getToken: options.getToken,
+    logger,
+    fetchImpl: options.fetchImpl,
+  });
+
+  return {
+    httpClient: adapter,
+
+    async request<T>(endpoint: string, reqOptions: DashboardFetchOptions = {}): Promise<T> {
+      const method = parseHttpMethod(reqOptions.method);
+      const parsedBody = normalizeRequestBody(reqOptions.body);
+      return unwrapOrThrow(
+        await adapter.request<T>(method, endpoint, parsedBody, toHttpOptions(reqOptions)),
+      );
+    },
+
+    async get<T>(endpoint: string, reqOptions?: DashboardRequestConfig): Promise<T> {
+      return unwrapOrThrow(await adapter.get<T>(endpoint, toHttpOptions(reqOptions)));
+    },
+
+    async post<T>(
+      endpoint: string,
+      body?: unknown,
+      reqOptions?: DashboardRequestConfig,
+    ): Promise<T> {
+      return unwrapOrThrow(await adapter.post<T>(endpoint, body, toHttpOptions(reqOptions)));
+    },
+
+    async put<T>(
+      endpoint: string,
+      body?: unknown,
+      reqOptions?: DashboardRequestConfig,
+    ): Promise<T> {
+      return unwrapOrThrow(await adapter.put<T>(endpoint, body, toHttpOptions(reqOptions)));
+    },
+
+    async patch<T>(
+      endpoint: string,
+      body?: unknown,
+      reqOptions?: DashboardRequestConfig,
+    ): Promise<T> {
+      return unwrapOrThrow(await adapter.patch<T>(endpoint, body, toHttpOptions(reqOptions)));
+    },
+
+    async delete<T>(endpoint: string, reqOptions?: DashboardRequestConfig): Promise<T> {
+      return unwrapOrThrow(await adapter.delete<T>(endpoint, toHttpOptions(reqOptions)));
+    },
+  };
 }
-
-export const apiClient = {
-  setToken(token: string | null) {
-    globalToken = token;
-  },
-
-  async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-    const { params, headers, ...customConfig } = options;
-
-    const url = new URL(`${UCP_API_URL}${endpoint}`, window.location.origin);
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
-      });
-    }
-
-    const normalizedHeaders = new Headers(headers);
-    if (!normalizedHeaders.has('Content-Type') && customConfig.body !== undefined) {
-      normalizedHeaders.set('Content-Type', 'application/json');
-    }
-    if (globalToken && !normalizedHeaders.has('Authorization')) {
-      normalizedHeaders.set('Authorization', `Bearer ${globalToken}`);
-    }
-
-    // Inject strict idempotency key for mutating requests
-    const method = customConfig.method?.toUpperCase() || 'GET';
-    if (
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
-      !normalizedHeaders.has('Idempotency-Key')
-    ) {
-      const idempotencyKey = getIdempotencyKey();
-      normalizedHeaders.set('Idempotency-Key', idempotencyKey);
-    }
-
-    const config: RequestInit = {
-      ...customConfig,
-      headers: normalizedHeaders,
-    };
-
-    const response = await fetch(url.toString(), config);
-
-    if (!response.ok) {
-      let errorMessage = 'An unexpected error occurred';
-      let errorDetails: unknown = null;
-
-      const textData = await response.text();
-
-      if (textData) {
-        try {
-          const errorData = JSON.parse(textData) as Record<string, unknown>;
-          if (typeof errorData.message === 'string') {
-            errorMessage = errorData.message;
-          }
-          errorDetails = errorData.details || errorData;
-        } catch {
-          // Fallback if response is not valid JSON
-          errorMessage = textData;
-        }
-      }
-
-      throw new ApiError(errorMessage, response.status, errorDetails);
-    }
-
-    if (response.status === 204 || response.headers.get('content-length') === '0') {
-      return {} as T;
-    }
-
-    try {
-      return (await response.json()) as T;
-    } catch {
-      return {} as T;
-    }
-  },
-
-  get<T>(endpoint: string, options?: Omit<FetchOptions, 'method'>) {
-    return this.request<T>(endpoint, { ...options, method: 'GET' });
-  },
-
-  post<T>(endpoint: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: 'POST',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  },
-
-  patch<T>(endpoint: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: 'PATCH',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  },
-
-  delete<T>(endpoint: string, options?: Omit<FetchOptions, 'method'>) {
-    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
-  },
-};

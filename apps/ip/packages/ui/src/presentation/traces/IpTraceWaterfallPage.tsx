@@ -21,17 +21,13 @@ import {
   useIpTraceQuery,
   useReplayTransactionMutation,
 } from '../../application/use-trace-queries';
-import {
-  isReplayStageValue,
-  PipelineLayer,
-  type PipelineLayerValue,
-  type ReplayStageValue,
-} from '../../domain/enums';
+import { PipelineLayer, type PipelineLayerValue, type ReplayStageValue } from '../../domain/enums';
 import {
   computePipelineWaterfallSummary,
   deriveEligibleReplayStages,
 } from '../../domain/replay/derive-replay-eligibility';
 import type { IpTrace, IpTraceLineageItem } from '../../domain/trace';
+import { isReplayStageValue } from '../../domain/type-guards';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { FiveLayerStageStrip } from '../shared/FiveLayerStagePill';

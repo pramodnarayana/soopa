@@ -33,8 +33,8 @@ export function splitSpecFormValues(
   const rawCredentials: Record<string, unknown> = {};
 
   for (const prop of properties) {
-    const rawVal = values[prop.name];
-    if (rawVal === undefined || rawVal === '') {
+    const rawVal = values[prop.name] !== undefined ? values[prop.name] : prop.defaultValue;
+    if (rawVal === undefined || rawVal === null || rawVal === '') {
       continue;
     }
     if (isSecretConnectorProperty(prop)) {

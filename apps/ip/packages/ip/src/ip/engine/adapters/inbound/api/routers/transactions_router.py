@@ -35,6 +35,7 @@ from ip.engine.application.use_cases.transactions.bulk_replay_transactions_use_c
 from ip.engine.application.use_cases.transactions.get_ip_trace_lineage_use_case import (
     GetIpTraceLineageQuery,
     GetIpTraceLineageUseCase,
+    ListRecentTracesQuery,
     SearchTracesByCorrelationQuery,
 )
 from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
@@ -50,6 +51,7 @@ from ip.engine.application.use_cases.transactions.replay_transaction_use_case im
     ReplayTransactionUseCase,
 )
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
+from strace.domain import TraceStatus
 
 logger = structlog.get_logger(__name__)
 
@@ -57,6 +59,60 @@ router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/transactions",
     tags=["Integration Platform - Transactions & Replay"],
 )
+
+
+@router.get(
+    "",
+    response_model=list[IpTraceLineageItemHttpResponse],
+    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
+    status_code=status.HTTP_200_OK,
+)
+async def list_recent_traces(
+    tenant_id: str,
+    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    uow_provider: Annotated[
+        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
+    ],
+    status_filter: Annotated[
+        TraceStatus | None,
+        Query(alias="status", description="Optional TraceStatus filter (e.g. FAILED, DELIVERED)"),
+    ] = None,
+    min_replay_count: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            description="Optional minimum replay_count filter (e.g. 1 for replayed traces)",
+        ),
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[IpTraceLineageItemHttpResponse] | Response:
+    """Lists recent transaction trace summaries for the tenant Support Timeline."""
+    _ = context
+    log = logger.bind(
+        tenant_id=tenant_id,
+        status_filter=status_filter.value if status_filter is not None else None,
+        min_replay_count=min_replay_count,
+        limit=limit,
+    )
+    log.info("ip_list_recent_traces.received")
+
+    use_case = GetIpTraceLineageUseCase(uow_provider=uow_provider)
+    result = await use_case.list_recent(
+        ListRecentTracesQuery(
+            tenant_id=tenant_id,
+            status=status_filter,
+            min_replay_count=min_replay_count,
+            limit=limit,
+        )
+    )
+    if result.is_err:
+        err = result.unwrap_err()
+        log.error("ip_list_recent_traces.failed", error_code=err.code.value)
+        return from_ip_error(err)
+
+    items = result.unwrap()
+    log.info("ip_list_recent_traces.completed", count=len(items))
+    return [map_lineage_item_to_http(item) for item in items]
 
 
 @router.get(

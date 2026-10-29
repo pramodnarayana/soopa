@@ -1,4 +1,8 @@
-import type { AuthTypeValue, ConnectorDirectionValue, ConnectorPropertyTypeValue } from './enums';
+import type {
+  AuthTypeValue,
+  ConnectorPropertyTypeValue,
+  ConnectorRuntimeArchitectureValue,
+} from './enums';
 
 export interface DropdownOption {
   readonly label: string;
@@ -29,7 +33,7 @@ export interface CatalogAppSummary {
   readonly category: string;
   readonly authType: AuthTypeValue | (string & {});
   readonly description: string | null;
-  readonly connectorType: ConnectorDirectionValue;
+  readonly runtimeArchitecture: ConnectorRuntimeArchitectureValue;
   readonly iconUrl: string | null;
 }
 

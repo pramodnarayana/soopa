@@ -30,13 +30,9 @@ import {
   useRecentTracesQuery,
   useSearchTracesByCorrelationQuery,
 } from '../../application/use-trace-queries';
-import {
-  isReplayStageValue,
-  ReplayStage,
-  type ReplayStageValue,
-  TraceStatus,
-} from '../../domain/enums';
+import { ReplayStage, type ReplayStageValue, TraceStatus } from '../../domain/enums';
 import type { IpTraceLineageItem } from '../../domain/trace';
+import { isReplayStageValue } from '../../domain/type-guards';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { LayerTagBadge } from '../shared/FiveLayerStagePill';
@@ -259,7 +255,7 @@ export function IpTracesTimelinePage({ initialCorrelationQuery = '' }: IpTracesT
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
+  const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.traceId);
 
   return (
     <div className="space-y-6">

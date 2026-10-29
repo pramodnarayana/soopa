@@ -1,5 +1,6 @@
 import { ApiErrorCode, FetchHttpClientAdapter } from '@soopa/ui';
 import { describe, expect, it } from 'vitest';
+import { normalizeConnectorPropertyType } from '../adapters/http/mappers/catalog.mapper';
 import { HttpConnectionRepository } from '../adapters/http/repositories/http-connection.repository';
 import { HttpStitchRepository } from '../adapters/http/repositories/http-stitch.repository';
 import { HttpTraceRepository } from '../adapters/http/repositories/http-trace.repository';
@@ -9,11 +10,11 @@ import { computeDagLayout } from '../domain/dag/compute-dag-layout';
 import {
   AuthType,
   ConnectionHandshakeStatus,
+  ConnectionStatus,
   ConnectorDirection,
+  ConnectorPropertyType,
+  ConnectorRuntimeArchitecture,
   IP_PRODUCT_THEME_TOKEN,
-  isAuthTypeValue,
-  isReplayStageValue,
-  isTransformationModeValue,
   PipelineLayer,
   ReplayDispatchStatus,
   ReplayStage,
@@ -28,6 +29,11 @@ import {
 import { isPlainJsonRecord, parseJsonObject } from '../domain/replay/parse-json-object';
 import { buildRegisterStitchInput } from '../domain/stitch-registration';
 import type { IpTrace } from '../domain/trace';
+import {
+  isAuthTypeValue,
+  isReplayStageValue,
+  isTransformationModeValue,
+} from '../domain/type-guards';
 
 describe('IP Domain: computeDagLayout', () => {
   it('assigns topological ranks and deterministic coordinates for multi-branch Stitch DAGs', () => {
@@ -621,10 +627,23 @@ describe('IP Domain: Enum Type Guards, JSON Object Parser, Auth Normalization & 
     expect(ReplayDispatchStatus.COMPLETED).toBe('COMPLETED');
     expect(ReplayDispatchStatus.PARTIAL).toBe('PARTIAL');
 
+    expect(ConnectionStatus.DEACTIVATED).toBe('DEACTIVATED');
+    expect(PipelineLayer.L5_DELIVER).toBe('L5_DELIVER');
+    expect(ConnectorRuntimeArchitecture.DECLARATIVE_HTTP).toBe('DECLARATIVE_HTTP');
+
+    expect(normalizeConnectorPropertyType('oauth2')).toBe(ConnectorPropertyType.OAUTH);
+    expect(normalizeConnectorPropertyType('OAUTH2')).toBe(ConnectorPropertyType.OAUTH);
+    expect(normalizeConnectorPropertyType('oauth')).toBe(ConnectorPropertyType.OAUTH);
+    expect(normalizeConnectorPropertyType('SECRET_TEXT')).toBe(ConnectorPropertyType.SECRET_TEXT);
+    expect(normalizeConnectorPropertyType('SHORT_TEXT')).toBe(ConnectorPropertyType.SHORT_TEXT);
+    expect(normalizeConnectorPropertyType('NUMBER')).toBe(ConnectorPropertyType.NUMBER);
+    expect(normalizeConnectorPropertyType('BOOLEAN')).toBe(ConnectorPropertyType.BOOLEAN);
+    expect(normalizeConnectorPropertyType('DROPDOWN')).toBe(ConnectorPropertyType.DROPDOWN);
+
     expect(isAuthTypeValue(AuthType.OAUTH2)).toBe(true);
     expect(isAuthTypeValue('CUSTOM_UNKNOWN')).toBe(false);
     expect(normalizeAuthType(AuthType.BEARER)).toBe(AuthType.BEARER);
-    expect(normalizeAuthType('UNRECOGNIZED')).toBe(AuthType.API_KEY);
+    expect(normalizeAuthType('UNRECOGNIZED')).toBe(null);
 
     expect(isReplayStageValue(ReplayStage.RETRY_DELIVER)).toBe(true);
     expect(isReplayStageValue('INVALID_STAGE')).toBe(false);

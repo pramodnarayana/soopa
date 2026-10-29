@@ -1,4 +1,5 @@
 import {
+  ApiErrorCode,
   type ApiProblem,
   Button,
   Dialog,
@@ -75,7 +76,7 @@ function MarketplaceStep({
                   <StatusBadge label={app.authType} tone={StatusTone.NEUTRAL} />
                 </div>
                 <span className="font-mono text-xs text-brand-ink">
-                  {app.category} · {app.connectorType}
+                  {app.category} · {app.runtimeArchitecture}
                 </span>
                 {app.description ? (
                   <p className="line-clamp-2 text-xs text-muted-foreground whitespace-normal">
@@ -122,10 +123,20 @@ function VerifiedSpecConfigurator({
 
   const handleRunPreflight = async (): Promise<void> => {
     setProblem(null);
+    const normalizedAuth = normalizeAuthType(spec.authType);
+    if (!normalizedAuth) {
+      setProblem({
+        code: ApiErrorCode.VALIDATION_ERROR,
+        status: 400,
+        serverCode: 'UNSUPPORTED_AUTH_TYPE',
+        message: `Connector auth type "${spec.authType}" is not recognized or supported.`,
+      });
+      return;
+    }
     const { publicConfig, rawCredentials } = splitSpecFormValues(spec.properties, formValues);
     const res = await checkMutation.mutateAsync({
       appId: spec.appId,
-      authType: normalizeAuthType(spec.authType),
+      authType: normalizedAuth,
       publicConfig,
       rawCredentials,
     });
@@ -143,11 +154,21 @@ function VerifiedSpecConfigurator({
 
   const handleSave = async (): Promise<void> => {
     setProblem(null);
+    const normalizedAuth = normalizeAuthType(spec.authType);
+    if (!normalizedAuth) {
+      setProblem({
+        code: ApiErrorCode.VALIDATION_ERROR,
+        status: 400,
+        serverCode: 'UNSUPPORTED_AUTH_TYPE',
+        message: `Connector auth type "${spec.authType}" is not recognized or supported.`,
+      });
+      return;
+    }
     const { publicConfig, rawCredentials } = splitSpecFormValues(spec.properties, formValues);
     const res = await createMutation.mutateAsync({
       appId: spec.appId,
       name: connectionName.trim(),
-      authType: normalizeAuthType(spec.authType),
+      authType: normalizedAuth,
       publicConfig,
       rawCredentials,
     });

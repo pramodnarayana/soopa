@@ -14,6 +14,7 @@
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/plus-jakarta-sans": "^5.3.0",
     "@soopa/edi-ui": "workspace:*",
+    "@soopa/ip-ui": "workspace:*",
     "@soopa/ui": "workspace:*",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-router": "^1.170.31",

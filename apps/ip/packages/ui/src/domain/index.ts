@@ -10,3 +10,4 @@ export * from './stitch-registration';
 export * from './sync-run';
 export * from './trace';
 export * from './transformation';
+export * from './type-guards';

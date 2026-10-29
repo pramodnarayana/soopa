@@ -34,16 +34,13 @@ import {
   usePromoteShadowTransformationMutation,
   useRegisteredTransformersQuery,
 } from '../../application/use-transformation-queries';
-import {
-  isTransformationModeValue,
-  TransformationMode,
-  type TransformationModeValue,
-} from '../../domain/enums';
+import { TransformationMode, type TransformationModeValue } from '../../domain/enums';
 import type {
   BindStreamTransformationInput,
   RegisteredTransformer,
   Transformation,
 } from '../../domain/transformation';
+import { isTransformationModeValue } from '../../domain/type-guards';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
 import { mapTransformationModeTone } from '../shared/status-mapping';

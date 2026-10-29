@@ -95,6 +95,21 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
 
     expect(split.publicConfig).toEqual({ base_url: 'https://mdm.itron.local' });
     expect(split.rawCredentials).toEqual({ api_secret: 'sec_live_99' });
+
+    const specWithDefaults: ConnectorPropertySpec[] = [
+      {
+        ...SPEC_URL,
+        defaultValue: 'https://default.example.com',
+      },
+      {
+        ...SPEC_SECRET,
+        defaultValue: 'default_secret_key',
+      },
+    ];
+
+    const splitDefaults = splitSpecFormValues(specWithDefaults, {});
+    expect(splitDefaults.publicConfig).toEqual({ base_url: 'https://default.example.com' });
+    expect(splitDefaults.rawCredentials).toEqual({ api_secret: 'default_secret_key' });
   });
 
   it('maps operational statuses to WCAG-compliant non-brand status tones and formats units', () => {

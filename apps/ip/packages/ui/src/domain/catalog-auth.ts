@@ -1,5 +1,6 @@
-import { AuthType, type AuthTypeValue, isAuthTypeValue } from './enums';
+import type { AuthTypeValue } from './enums';
+import { isAuthTypeValue } from './type-guards';
 
-export function normalizeAuthType(raw: string): AuthTypeValue {
-  return isAuthTypeValue(raw) ? raw : AuthType.API_KEY;
+export function normalizeAuthType(raw: string): AuthTypeValue | null {
+  return isAuthTypeValue(raw) ? raw : null;
 }

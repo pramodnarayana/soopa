@@ -17,10 +17,11 @@ import {
 } from '@soopa/ui';
 import React, { useEffect, useState } from 'react';
 import { useModifyAndReplayMutation } from '../../application/use-trace-queries';
-import { isReplayStageValue, ReplayStage, type ReplayStageValue } from '../../domain/enums';
+import { ReplayStage, type ReplayStageValue } from '../../domain/enums';
 import { extractModifiablePayloadSeed } from '../../domain/replay/derive-replay-eligibility';
 import { parseJsonObject } from '../../domain/replay/parse-json-object';
 import type { IpTrace } from '../../domain/trace';
+import { isReplayStageValue } from '../../domain/type-guards';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { formatReplayStageLabel, stringifyJsonPretty } from '../shared/status-mapping';
 

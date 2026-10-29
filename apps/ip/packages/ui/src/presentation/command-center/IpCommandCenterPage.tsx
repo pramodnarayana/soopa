@@ -450,7 +450,7 @@ export function IpCommandCenterPage() {
   const attentionConnections = computeAttentionConnections(connections);
 
   const handleCorrelationJump = (query: string): void => {
-    if (query.startsWith('ip_trc_')) {
+    if (query.startsWith('ip_trc_') || query.startsWith('trc_')) {
       navigation.toTraceDetail(query);
       return;
     }

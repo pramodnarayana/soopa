@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 
 export interface App {
   id: string;
@@ -9,6 +9,8 @@ export interface App {
 }
 
 export const useGetApps = () => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['apps'],
     queryFn: () => apiClient.get<App[]>('/apps'),
@@ -23,6 +25,8 @@ export interface Subscription {
 }
 
 export const useGetTenantSubscriptions = (tenantId: string) => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['tenants', tenantId, 'subscriptions'],
     queryFn: () => apiClient.get<Subscription[]>(`/tenants/${tenantId}/subscriptions`),

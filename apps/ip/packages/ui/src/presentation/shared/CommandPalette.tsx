@@ -84,9 +84,21 @@ function renderWorkspaceIcon(id: CommandPaletteWorkspaceIdValue): React.ReactNod
   }
 }
 
+function useDebounceValue<T>(value: T, delayMs = 250): T {
+  const [debounced, setDebounced] = useState<T>(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+
+  return debounced;
+}
+
 export function CommandPalette({ open, onOpenChange, navigation }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
-  const searchView = useSearchTracesByCorrelationQuery(query, 8);
+  const debouncedQuery = useDebounceValue(query, 250);
+  const searchView = useSearchTracesByCorrelationQuery(debouncedQuery, 8);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {

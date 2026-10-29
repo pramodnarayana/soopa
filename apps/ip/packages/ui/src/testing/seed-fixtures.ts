@@ -3,8 +3,8 @@ import type { Connection, DiscoveredCatalog } from '../domain/connection';
 import {
   AuthType,
   ConnectionStatus,
-  ConnectorDirection,
   ConnectorPropertyType,
+  ConnectorRuntimeArchitecture,
   PipelineLayer,
   StitchNodeKind,
   StitchRunStatus,
@@ -32,7 +32,7 @@ export const SEED_CATALOG_APPS: readonly CatalogAppSummary[] = [
     category: 'energy',
     authType: AuthType.OAUTH2,
     description: 'Smart meter interval reads and voltage events',
-    connectorType: ConnectorDirection.BIDIRECTIONAL,
+    runtimeArchitecture: ConnectorRuntimeArchitecture.DECLARATIVE_HTTP,
     iconUrl: null,
   },
   {
@@ -41,7 +41,7 @@ export const SEED_CATALOG_APPS: readonly CatalogAppSummary[] = [
     category: 'erp',
     authType: AuthType.API_KEY,
     description: 'Meter Data Management billing determinants destination',
-    connectorType: ConnectorDirection.DESTINATION,
+    runtimeArchitecture: ConnectorRuntimeArchitecture.DECLARATIVE_HTTP,
     iconUrl: null,
   },
 ];
@@ -92,6 +92,14 @@ export const SEED_CONNECTION: Connection = {
   createdAt: '2026-10-20T10:00:00Z',
   updatedAt: '2026-10-29T08:00:00Z',
   deactivatedAt: null,
+};
+
+export const SEED_DEACTIVATED_CONNECTION: Connection = {
+  ...SEED_CONNECTION,
+  id: 'conn_deactivated_01',
+  name: 'Legacy Salesforce Integration',
+  status: ConnectionStatus.DEACTIVATED,
+  deactivatedAt: '2026-10-25T14:30:00Z',
 };
 
 export const SEED_DISCOVERED_CATALOG: DiscoveredCatalog = {

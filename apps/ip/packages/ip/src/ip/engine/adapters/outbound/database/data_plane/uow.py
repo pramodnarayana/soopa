@@ -108,6 +108,7 @@ IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=InboundRecordModel,
         timestamp_col=InboundRecordModel.received_at,
+        static_status=TraceStatus.INGESTED,
         correlation_cols=(InboundRecordModel.correlation_id,),
         to_attempt_row=lambda inb: TraceStageAttemptRow(
             trace_id=inb.trace_id,
@@ -123,6 +124,7 @@ IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=NormalizedRecordModel,
         timestamp_col=NormalizedRecordModel.normalized_at,
+        static_status=TraceStatus.NORMALIZED,
         correlation_cols=(NormalizedRecordModel.correlation_id,),
         to_attempt_row=lambda nrm: TraceStageAttemptRow(
             trace_id=nrm.trace_id,
@@ -138,6 +140,7 @@ IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=OutboundRecordModel,
         timestamp_col=OutboundRecordModel.sent_at,
+        status_col=OutboundRecordModel.status,
         correlation_cols=(OutboundRecordModel.correlation_id,),
         to_attempt_row=lambda out: TraceStageAttemptRow(
             trace_id=out.trace_id,

@@ -16,11 +16,6 @@ export const AuthType = {
 } as const;
 export type AuthTypeValue = (typeof AuthType)[keyof typeof AuthType];
 
-const AUTH_TYPE_SET: ReadonlySet<string> = new Set(Object.values(AuthType));
-export function isAuthTypeValue(candidate: string): candidate is AuthTypeValue {
-  return AUTH_TYPE_SET.has(candidate);
-}
-
 export const ConnectorDirection = {
   SOURCE: 'SOURCE',
   DESTINATION: 'DESTINATION',
@@ -71,11 +66,6 @@ export const TransformationMode = {
 } as const;
 export type TransformationModeValue = (typeof TransformationMode)[keyof typeof TransformationMode];
 
-const TRANSFORMATION_MODE_SET: ReadonlySet<string> = new Set(Object.values(TransformationMode));
-export function isTransformationModeValue(candidate: string): candidate is TransformationModeValue {
-  return TRANSFORMATION_MODE_SET.has(candidate);
-}
-
 export const PipelineLayer = {
   L1_INGEST: 'L1_INGEST',
   L2_REPLICA: 'L2_REPLICA',
@@ -92,11 +82,6 @@ export const ReplayStage = {
   RETRY_DELIVER: 'RETRY_DELIVER',
 } as const;
 export type ReplayStageValue = (typeof ReplayStage)[keyof typeof ReplayStage];
-
-const REPLAY_STAGE_SET: ReadonlySet<string> = new Set(Object.values(ReplayStage));
-export function isReplayStageValue(candidate: string): candidate is ReplayStageValue {
-  return REPLAY_STAGE_SET.has(candidate);
-}
 
 export const ReplayDispatchStatus = {
   QUEUED: 'QUEUED',
@@ -147,6 +132,15 @@ export const StagePosture = {
   SKIPPED: 'SKIPPED',
 } as const;
 export type StagePostureValue = (typeof StagePosture)[keyof typeof StagePosture];
+
+export const ConnectorRuntimeArchitecture = {
+  DECLARATIVE_HTTP: 'DECLARATIVE_HTTP',
+  PYTHON_HOOK: 'PYTHON_HOOK',
+  WASM: 'WASM',
+} as const;
+export type ConnectorRuntimeArchitectureValue =
+  | (typeof ConnectorRuntimeArchitecture)[keyof typeof ConnectorRuntimeArchitecture]
+  | (string & {});
 
 export const ConnectorPropertyType = {
   SHORT_TEXT: 'shortText',

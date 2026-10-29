@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import contextlib
+import os
 from collections.abc import AsyncIterator, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from ip.engine.application.dtos.trace import IpTraceLineageItemDTO
@@ -15,6 +16,7 @@ from ip.engine.application.use_cases.transactions.bulk_replay_transactions_use_c
 from ip.engine.application.use_cases.transactions.get_ip_trace_lineage_use_case import (
     GetIpTraceLineageQuery,
     GetIpTraceLineageUseCase,
+    ListRecentTracesQuery,
     SearchTracesByCorrelationQuery,
 )
 from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
@@ -78,6 +80,7 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
 )
+from seedwork.events import EventEnvelope
 from strace.domain import TraceEvent, TraceStatus
 from strace.ports import TraceRepositoryPort
 
@@ -256,6 +259,28 @@ class InMemoryTraceRepo(TraceRepositoryPort):
             :limit
         ]
 
+    async def list_recent_traces(
+        self,
+        tenant_id: str,
+        *,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        limit: int = 50,
+    ) -> list[IpTraceLineageItemDTO]:
+        _ = tenant_id
+        matching = [
+            item
+            for item in self.lineage_items
+            if (status is None or str(item.status) == status.value)
+            and (min_replay_count is None or item.replay_count >= min_replay_count)
+        ]
+        ordered = sorted(
+            matching,
+            key=lambda item: str(item.created_at or ""),
+            reverse=True,
+        )
+        return ordered[:limit]
+
 
 class DummyReplicaRejectionRepo(ReplicaRejectionRepositoryPort):
     async def save_batch(self, rejections: Sequence[ReplicaRejection]) -> None:
@@ -363,6 +388,16 @@ class InMemoryDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
 
     async def rollback(self) -> None:
         pass
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        _ = (tenant_id, idempotency_key)
+        return True
+
+    async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
+        _ = (tenant_id, idempotency_key)
+
+    async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
+        _ = envelope
 
 
 class InMemoryDataPlaneUoWProvider(IpDataPlaneUnitOfWorkProviderPort):
@@ -648,3 +683,110 @@ async def test_modify_and_replay_and_bulk_replay_use_cases() -> None:
     assert len(bulk_dto.new_trace_ids) == 2
     assert len(bulk_dto.failed_items) == 1
     assert bulk_dto.failed_items[0].trace_id == "ip_trc_nonexistent"
+
+
+@pytest.mark.asyncio
+async def test_list_recent_traces_filters_and_orders_descending() -> None:
+    uow = InMemoryDataPlaneUoW()
+    tenant_id = f"ten_{os.urandom(12).hex()}"
+    missing_tenant_id = f"ten_{os.urandom(12).hex()}"
+    missing_trace_id = f"ip_trc_{os.urandom(12).hex()}"
+    root_trace_id = f"ip_trc_{os.urandom(12).hex()}"
+    failed_replay_trace_id = f"ip_trc_{os.urandom(12).hex()}"
+    base_time = datetime(2026, 10, 29, 8, 0, tzinfo=UTC)
+
+    newer_delivered = [
+        IpTraceLineageItemDTO(
+            trace_id=f"ip_trc_{os.urandom(12).hex()}",
+            correlation_id=f"MTR-{2000 + idx}",
+            status=TraceStatus.DELIVERED,
+            primary_layer=PipelineLayer.L5_DELIVER,
+            created_at=base_time + timedelta(minutes=idx + 10),
+            replay_count=0,
+            parent_trace_id=None,
+            original_trace_id=None,
+        )
+        for idx in range(320)
+    ]
+    uow.traces.lineage_items = [
+        IpTraceLineageItemDTO(
+            trace_id=failed_replay_trace_id,
+            correlation_id="MTR-102",
+            status=TraceStatus.FAILED,
+            primary_layer=PipelineLayer.L5_DELIVER,
+            created_at=base_time,
+            replay_count=2,
+            parent_trace_id=root_trace_id,
+            original_trace_id=root_trace_id,
+        ),
+        *newer_delivered,
+    ]
+
+    class _Provider(IpDataPlaneUnitOfWorkProviderPort):
+        async def resolve_shard_info(
+            self, tenant_id: str
+        ) -> Result[tuple[str, str], TenantShardNotFoundError]:
+            _ = tenant_id
+            return Result.ok(("shard-01", "postgresql+asyncpg://localhost/shard01"))
+
+        @contextlib.asynccontextmanager
+        async def get_data_plane_uow(
+            self,
+            tenant_id: str,
+            shard_id: str,
+            shard_dsn: str,
+        ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+            _ = (tenant_id, shard_id, shard_dsn)
+            yield uow
+
+    lineage_uc = GetIpTraceLineageUseCase(uow_provider=_Provider())
+    all_res = await lineage_uc.list_recent(ListRecentTracesQuery(tenant_id=tenant_id, limit=3))
+    assert all_res.is_ok
+    assert [item.trace_id for item in all_res.unwrap()] == [
+        newer_delivered[-1].trace_id,
+        newer_delivered[-2].trace_id,
+        newer_delivered[-3].trace_id,
+    ]
+
+    filtered_res = await lineage_uc.list_recent(
+        ListRecentTracesQuery(
+            tenant_id=tenant_id,
+            status=TraceStatus.FAILED,
+            min_replay_count=1,
+            limit=10,
+        )
+    )
+    assert filtered_res.is_ok
+    assert [item.trace_id for item in filtered_res.unwrap()] == [failed_replay_trace_id]
+
+    class _MissingShardProvider(IpDataPlaneUnitOfWorkProviderPort):
+        async def resolve_shard_info(
+            self, tenant_id: str
+        ) -> Result[tuple[str, str], TenantShardNotFoundError]:
+            return Result.err(TenantShardNotFoundError.for_tenant(tenant_id))
+
+        @contextlib.asynccontextmanager
+        async def get_data_plane_uow(
+            self,
+            tenant_id: str,
+            shard_id: str,
+            shard_dsn: str,
+        ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+            _ = (tenant_id, shard_id, shard_dsn)
+            yield uow
+
+    missing_uc = GetIpTraceLineageUseCase(uow_provider=_MissingShardProvider())
+    assert (
+        await missing_uc.execute(
+            GetIpTraceLineageQuery(tenant_id=missing_tenant_id, trace_id=missing_trace_id)
+        )
+    ).is_err
+    assert (
+        await missing_uc.search_by_correlation_id(
+            SearchTracesByCorrelationQuery(tenant_id=missing_tenant_id, correlation_id="MTR-1")
+        )
+    ).is_err
+    assert (
+        await missing_uc.list_recent(ListRecentTracesQuery(tenant_id=missing_tenant_id))
+    ).is_err
+

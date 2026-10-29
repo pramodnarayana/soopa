@@ -198,7 +198,7 @@ class StitchRecord(IpGlobalBase):
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
     workflow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     canonical_event_type: Mapped[str] = mapped_column(String(128), nullable=False)

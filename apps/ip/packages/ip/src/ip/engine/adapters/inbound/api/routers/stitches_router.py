@@ -34,6 +34,8 @@ from ip.engine.application.use_cases.stitch import (
     ListStitchDefinitionsUseCase,
     ListStitchesQuery,
     ListStitchesUseCase,
+    ListStitchRunsQuery,
+    ListStitchRunsUseCase,
     RegisterStitchCommand,
     RegisterStitchUseCase,
     StitchDefinitionSummaryDTO,
@@ -47,6 +49,7 @@ from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchShardGatewayPort,
 )
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
+from orchestration.domain.constants import RunStatus
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 
 logger = structlog.get_logger(__name__)
@@ -327,6 +330,49 @@ async def dispatch_stitch_event(
         deduplicated_run_ids=list(dto.deduplicated_run_ids),
         signalled_step_ids=list(dto.signalled_step_ids),
     )
+
+
+@router.get("/runs", response_model=list[StitchRunHttpResponse])
+async def list_stitch_runs(
+    tenant_id: str,
+    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
+    shard_gateway: Annotated[StitchShardGatewayPort, Depends(get_stitch_shard_gateway)],
+    workflow_id: Annotated[str | None, Query()] = None,
+    status_filter: Annotated[RunStatus | None, Query(alias="status")] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+) -> list[StitchRunHttpResponse] | JSONResponse:
+    """Lists recent durable Stitch WorkflowRuns on the tenant Data Plane shard."""
+    logger.info(
+        "http_list_stitch_runs.received",
+        tenant_id=tenant_id,
+        workflow_id=workflow_id,
+        status=status_filter.value if status_filter is not None else None,
+        limit=limit,
+    )
+    use_case = ListStitchRunsUseCase(shard_gateway=shard_gateway)
+    res = await use_case.execute(
+        ListStitchRunsQuery(
+            tenant_id=tenant_id,
+            workflow_id=workflow_id,
+            status=status_filter,
+            limit=limit,
+        )
+    )
+    if res.is_err:
+        err = res.unwrap_err()
+        logger.error(
+            "http_list_stitch_runs.failed",
+            tenant_id=tenant_id,
+            error_code=err.code.value,
+        )
+        return from_ip_error(err)
+    dtos = res.unwrap()
+    logger.info(
+        "http_list_stitch_runs.completed",
+        tenant_id=tenant_id,
+        count=len(dtos),
+    )
+    return [_to_run_response(d) for d in dtos]
 
 
 @router.get("/runs/{run_id}", response_model=StitchRunHttpResponse)

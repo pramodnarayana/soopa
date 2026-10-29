@@ -18,8 +18,7 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
 
     def register_stitch(self, stitch: Stitch) -> None:
         self._stitches = [
-            s for s in self._stitches
-            if not (s.id == stitch.id and s.tenant_id == stitch.tenant_id)
+            s for s in self._stitches if not (s.id == stitch.id and s.tenant_id == stitch.tenant_id)
         ]
         self._stitches.append(stitch)
 
@@ -75,7 +74,10 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         stitch_id: str,
     ) -> Stitch | None:
         for stitch in self._stitches:
-            if stitch.id == stitch_id:
+            if stitch.id == stitch_id and stitch.tenant_id != "*":
+                return stitch
+        for stitch in self._stitches:
+            if stitch.id == stitch_id and stitch.tenant_id == "*":
                 return stitch
         return None
 

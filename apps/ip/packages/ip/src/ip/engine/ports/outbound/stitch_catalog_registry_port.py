@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
+from orchestration.domain.constants import RunStatus
 from orchestration.domain.run import WorkflowRun
 from seedwork.domain.types import JsonDict
 
@@ -53,6 +54,15 @@ class StitchShardGatewayPort(Protocol):
         tenant_id: str,
         run_id: str,
     ) -> Result[WorkflowRun, IpError]: ...
+
+    async def list_runs(
+        self,
+        *,
+        tenant_id: str,
+        workflow_id: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+    ) -> Result[tuple[WorkflowRun, ...], IpError]: ...
 
     async def dispatch_event(
         self,
