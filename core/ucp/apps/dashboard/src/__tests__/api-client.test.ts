@@ -1,9 +1,13 @@
-import { HttpMethod } from '@soopa/ui';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { UcpApiClientProvider, useUcpApiClient } from '../contexts/UcpApiClientContext';
-import { createScopedUcpApiClient, isHttpMethodValue, parseHttpMethod } from '../lib/api-client';
+import {
+  createScopedUcpApiClient,
+  HttpMethod,
+  isHttpMethodValue,
+  parseHttpMethod,
+} from '../lib/api-client';
 
 describe('UCP Dashboard Scoped API Client & Context DI', () => {
   it('validates HTTP method strings via type guard without unsafe casts', () => {

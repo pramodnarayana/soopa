@@ -194,6 +194,12 @@ class StitchRecord(IpGlobalBase):
             "canonical_event_type",
         ),
         Index("ix_ip_stitches_workflow", "workflow_id", "workflow_version"),
+        Index(
+            "uq_ip_stitches_concrete_id",
+            "id",
+            unique=True,
+            postgresql_where=text("tenant_id != '*'"),
+        ),
         {"schema": "ip"},
     )
 

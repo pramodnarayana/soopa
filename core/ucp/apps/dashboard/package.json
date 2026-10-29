@@ -8,6 +8,7 @@
     "build": "tsr generate && tsc -b && vite build",
     "typecheck": "tsr generate && tsc --noEmit",
     "lint": "oxlint",
+    "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {

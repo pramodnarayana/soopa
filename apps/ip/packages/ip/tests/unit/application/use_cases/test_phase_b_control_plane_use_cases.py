@@ -1013,6 +1013,24 @@ async def test_stitch_control_plane_use_cases() -> None:
     overridden = next(s for s in matching_stitches if s.id == shared_stitch_id)
     assert overridden.tenant_id == tenant_id
 
+    # Inactive tenant override completely suppresses the wildcard stitch
+    stitch_cat.register_stitch(
+        Stitch(
+            id=shared_stitch_id,
+            tenant_id=tenant_id,
+            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.custom_meter_reading.normalized",
+            is_trigger=True,
+            is_active=False,
+        )
+    )
+    inactive_override_matches = stitch_cat.list_stitches_for_event(
+        tenant_id=tenant_id,
+        canonical_event_type="canonical.custom_meter_reading.normalized",
+    )
+    assert not any(s.id == shared_stitch_id for s in inactive_override_matches)
+
     bad_reg_res = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id=tenant_id,

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import React, { createContext, useContext, useLayoutEffect, useMemo, useRef } from 'react';
 import { createScopedUcpApiClient, type UcpApiClientPort } from '../lib/api-client';
 
 const UcpApiClientContext = createContext<UcpApiClientPort | null>(null);
@@ -15,7 +15,7 @@ export function UcpApiClientProvider({
   children,
 }: UcpApiClientProviderProps) {
   const tokenRef = useRef<string | null>(token);
-  useEffect(() => {
+  useLayoutEffect(() => {
     tokenRef.current = token;
   }, [token]);
 

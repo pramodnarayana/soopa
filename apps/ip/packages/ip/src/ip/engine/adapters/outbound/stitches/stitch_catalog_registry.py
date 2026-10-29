@@ -28,18 +28,15 @@ class InMemoryStitchCatalogRegistry(StitchCatalogRegistryPort):
         tenant_id: str,
         canonical_event_type: str,
     ) -> Sequence[Stitch]:
-        matching = [
-            s
-            for s in self._stitches
-            if s.tenant_id in (tenant_id, "*")
-            and s.canonical_event_type == canonical_event_type
-            and s.is_active
-        ]
         by_id: dict[str, Stitch] = {}
-        for s in matching:
-            if s.id not in by_id or s.tenant_id == tenant_id:
+        for s in self._stitches:
+            if s.tenant_id in (tenant_id, "*") and (s.id not in by_id or s.tenant_id == tenant_id):
                 by_id[s.id] = s
-        return tuple(by_id.values())
+        return tuple(
+            s
+            for s in by_id.values()
+            if s.canonical_event_type == canonical_event_type and s.is_active
+        )
 
     def list_stitches(
         self,

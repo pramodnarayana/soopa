@@ -14,7 +14,7 @@ export const Route = createFileRoute('/_authenticated/tenant/ip')({
 function IpLayout() {
   const { tenantId, token } = useTenantContext();
   const navigate = useNavigate();
-  const { data: tenant, isLoading } = useGetTenant(tenantId);
+  const { data: tenant, isLoading, isError, error, refetch } = useGetTenant(tenantId);
 
   const navigation = useMemo<IpNavigationPort>(
     () => ({
@@ -71,6 +71,24 @@ function IpLayout() {
     return (
       <div className="flex min-h-full flex-1 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center">
+        <p className="text-sm font-medium text-red-600">
+          Failed to load tenant subscription status:{' '}
+          {error instanceof Error ? error.message : 'Unknown error'}
+        </p>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+        >
+          Retry
+        </button>
       </div>
     );
   }

@@ -24,11 +24,14 @@ export interface Subscription {
   status: 'active' | 'inactive';
 }
 
+export const tenantSubscriptionsQueryKey = (tenantId: string) =>
+  ['tenants', tenantId, 'subscriptions'] as const;
+
 export const useGetTenantSubscriptions = (tenantId: string) => {
   const apiClient = useUcpApiClient();
 
   return useQuery({
-    queryKey: ['tenants', tenantId, 'subscriptions'],
+    queryKey: tenantSubscriptionsQueryKey(tenantId),
     queryFn: () => apiClient.get<Subscription[]>(`/tenants/${tenantId}/subscriptions`),
     enabled: !!tenantId,
   });

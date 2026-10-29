@@ -325,10 +325,24 @@ def upgrade() -> None:
         unique=False,
         schema="ip",
     )
+    op.create_index(
+        "uq_ip_stitches_concrete_id",
+        "stitches",
+        ["id"],
+        unique=True,
+        postgresql_where=sa.text("tenant_id != '*'"),
+        schema="ip",
+    )
 
 
 def downgrade() -> None:
     """Downgrade Control Plane schema."""
+    op.drop_index(
+        "uq_ip_stitches_concrete_id",
+        table_name="stitches",
+        schema="ip",
+        if_exists=True,
+    )
     op.drop_index(
         "ix_ip_stitches_workflow",
         table_name="stitches",

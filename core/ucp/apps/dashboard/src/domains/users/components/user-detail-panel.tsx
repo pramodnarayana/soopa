@@ -46,11 +46,10 @@ export function UserDetailPanel({
     editRole !== baseline.role;
 
   useEffect(() => {
-    const next = deriveUserFormValues(user);
-    setEditFirst(next.firstName);
-    setEditLast(next.lastName);
-    setEditRole(next.role);
-  }, [user]);
+    setEditFirst(baseline.firstName);
+    setEditLast(baseline.lastName);
+    setEditRole(baseline.role);
+  }, [baseline.firstName, baseline.lastName, baseline.role]);
 
   const updateMutationObj = useUpdateTenantUser();
 

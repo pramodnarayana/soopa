@@ -159,11 +159,7 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         """List all active Stitches matching a tenant (or '*') and canonical_event_type."""
         stmt = (
             select(StitchRecord)
-            .where(
-                StitchRecord.tenant_id.in_((tenant_id, "*")),
-                StitchRecord.canonical_event_type == canonical_event_type,
-                StitchRecord.is_active.is_(True),
-            )
+            .where(StitchRecord.tenant_id.in_((tenant_id, "*")))
             .order_by(StitchRecord.id.asc())
         )
         result = await self.session.execute(stmt)
@@ -172,7 +168,11 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         for r in records:
             if r.id not in by_id or r.tenant_id == tenant_id:
                 by_id[r.id] = self._to_domain_model(r)
-        return list(by_id.values())
+        return [
+            s
+            for s in by_id.values()
+            if s.canonical_event_type == canonical_event_type and s.is_active
+        ]
 
 
 __all__ = ["SqlAlchemyStitchRepository"]

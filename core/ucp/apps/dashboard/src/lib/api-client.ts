@@ -1,14 +1,17 @@
-import {
-  FetchHttpClientAdapter,
-  type HttpClientPort,
-  HttpMethod,
-  type HttpMethodValue,
-  type HttpRequestOptions,
-  type QueryParamsRecord,
-  StructuredJsonLoggerAdapter,
-  unwrapOrThrow,
-} from '@soopa/ui';
 import { getApiUrl } from './config';
+
+export const HttpMethod = {
+  GET: 'GET',
+  POST: 'POST',
+  PUT: 'PUT',
+  PATCH: 'PATCH',
+  DELETE: 'DELETE',
+} as const;
+export type HttpMethodValue = (typeof HttpMethod)[keyof typeof HttpMethod];
+
+export type QueryParamsRecord = Readonly<
+  Record<string, string | number | boolean | null | undefined>
+>;
 
 export interface DashboardFetchOptions {
   readonly method?: string;
@@ -21,7 +24,7 @@ export interface DashboardFetchOptions {
 export type DashboardRequestConfig = Omit<DashboardFetchOptions, 'method' | 'body'>;
 
 export interface UcpApiClientPort {
-  readonly httpClient: HttpClientPort;
+  readonly httpClient?: unknown;
   request<T>(endpoint: string, options?: DashboardFetchOptions): Promise<T>;
   get<T>(endpoint: string, options?: DashboardRequestConfig): Promise<T>;
   post<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
@@ -44,26 +47,33 @@ export function parseHttpMethod(raw?: string): HttpMethodValue {
   return HttpMethod.GET;
 }
 
-function toHttpOptions(options?: DashboardRequestConfig): HttpRequestOptions | undefined {
-  if (!options) {
-    return undefined;
-  }
-  return {
-    params: options.params,
-    headers: options.headers,
-    signal: options.signal,
-  };
-}
+function buildUrl(baseUrl: string, endpoint: string, params?: QueryParamsRecord): string {
+  const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
-function normalizeRequestBody(rawBody: unknown): unknown {
-  if (typeof rawBody !== 'string') {
-    return rawBody;
+  // If base is a fully qualified URL, parse with URL constructor; otherwise append relative path
+  if (cleanBase.startsWith('http://') || cleanBase.startsWith('https://')) {
+    const url = new URL(`${cleanBase}${cleanEndpoint}`);
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          url.searchParams.append(key, String(value));
+        }
+      }
+    }
+    return url.toString();
   }
-  try {
-    return JSON.parse(rawBody);
-  } catch {
-    return rawBody;
+
+  const queryParts: string[] = [];
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        queryParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+      }
+    }
   }
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  return `${cleanBase}${cleanEndpoint}${queryString}`;
 }
 
 export interface CreateScopedUcpApiClientOptions {
@@ -75,30 +85,76 @@ export interface CreateScopedUcpApiClientOptions {
 export function createScopedUcpApiClient(
   options: CreateScopedUcpApiClientOptions,
 ): UcpApiClientPort {
-  const logger = new StructuredJsonLoggerAdapter({
-    bindings: { product: 'ucp-dashboard' },
-  });
+  const fetchFn = options.fetchImpl ?? globalThis.fetch;
+  const baseUrl = options.baseUrl ?? getApiUrl('/api/v1');
 
-  const adapter = new FetchHttpClientAdapter({
-    baseUrl: options.baseUrl ?? getApiUrl('/api/v1'),
-    getToken: options.getToken,
-    logger,
-    fetchImpl: options.fetchImpl,
-  });
+  const execute = async <T>(
+    method: HttpMethodValue,
+    endpoint: string,
+    body?: unknown,
+    config?: DashboardRequestConfig,
+  ): Promise<T> => {
+    const token = options.getToken();
+    const headers = new Headers(config?.headers);
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    let payload: BodyInit | undefined;
+    if (body !== undefined && body !== null) {
+      if (typeof body === 'string') {
+        payload = body;
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+      } else if (
+        body instanceof FormData ||
+        body instanceof Blob ||
+        body instanceof URLSearchParams
+      ) {
+        payload = body;
+      } else {
+        payload = JSON.stringify(body);
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+      }
+    }
+
+    const url = buildUrl(baseUrl, endpoint, config?.params);
+    const response = await fetchFn(url, {
+      method,
+      headers,
+      signal: config?.signal,
+      body: method !== HttpMethod.GET ? payload : undefined,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return (await response.json()) as T;
+    }
+    return (await response.text()) as unknown as T;
+  };
 
   return {
-    httpClient: adapter,
+    httpClient: { execute },
 
     async request<T>(endpoint: string, reqOptions: DashboardFetchOptions = {}): Promise<T> {
       const method = parseHttpMethod(reqOptions.method);
-      const parsedBody = normalizeRequestBody(reqOptions.body);
-      return unwrapOrThrow(
-        await adapter.request<T>(method, endpoint, parsedBody, toHttpOptions(reqOptions)),
-      );
+      return execute<T>(method, endpoint, reqOptions.body, {
+        params: reqOptions.params,
+        headers: reqOptions.headers,
+        signal: reqOptions.signal,
+      });
     },
 
     async get<T>(endpoint: string, reqOptions?: DashboardRequestConfig): Promise<T> {
-      return unwrapOrThrow(await adapter.get<T>(endpoint, toHttpOptions(reqOptions)));
+      return execute<T>(HttpMethod.GET, endpoint, undefined, reqOptions);
     },
 
     async post<T>(
@@ -106,7 +162,7 @@ export function createScopedUcpApiClient(
       body?: unknown,
       reqOptions?: DashboardRequestConfig,
     ): Promise<T> {
-      return unwrapOrThrow(await adapter.post<T>(endpoint, body, toHttpOptions(reqOptions)));
+      return execute<T>(HttpMethod.POST, endpoint, body, reqOptions);
     },
 
     async put<T>(
@@ -114,7 +170,7 @@ export function createScopedUcpApiClient(
       body?: unknown,
       reqOptions?: DashboardRequestConfig,
     ): Promise<T> {
-      return unwrapOrThrow(await adapter.put<T>(endpoint, body, toHttpOptions(reqOptions)));
+      return execute<T>(HttpMethod.PUT, endpoint, body, reqOptions);
     },
 
     async patch<T>(
@@ -122,11 +178,11 @@ export function createScopedUcpApiClient(
       body?: unknown,
       reqOptions?: DashboardRequestConfig,
     ): Promise<T> {
-      return unwrapOrThrow(await adapter.patch<T>(endpoint, body, toHttpOptions(reqOptions)));
+      return execute<T>(HttpMethod.PATCH, endpoint, body, reqOptions);
     },
 
     async delete<T>(endpoint: string, reqOptions?: DashboardRequestConfig): Promise<T> {
-      return unwrapOrThrow(await adapter.delete<T>(endpoint, toHttpOptions(reqOptions)));
+      return execute<T>(HttpMethod.DELETE, endpoint, undefined, reqOptions);
     },
   };
 }
