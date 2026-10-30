@@ -1,5 +1,16 @@
 import { createFileRoute, Outlet } from '@tanstack/react-router';
-import { ArrowLeftRight, Bell, LayoutDashboard, Settings, Wrench } from 'lucide-react';
+import {
+  Activity,
+  ArrowLeftRight,
+  Bell,
+  Cable,
+  Compass,
+  GitMerge,
+  LayoutDashboard,
+  Settings,
+  Workflow,
+  Wrench,
+} from 'lucide-react';
 import { AppLayout } from '../../components/layout/AppLayout';
 import { NavItem } from '../../components/layout/NavItem';
 import { TenantProvider } from '../../components/layout/TenantProvider';
@@ -10,17 +21,18 @@ export const Route = createFileRoute('/_authenticated/tenant')({
 
 function TenantSidebar({ subscriptions }: { subscriptions: string[] }) {
   const isEdiSubscribed = subscriptions.includes('edi');
+  const isIpSubscribed = subscriptions.includes('ip');
 
   return (
     <>
-      <div className="text-[18px] font-bold text-muted-foreground uppercase tracking-widest mb-3 px-4 mt-2">
+      <div className="mb-3 mt-2 px-4 text-lg font-bold tracking-widest text-muted-foreground uppercase">
         Overview
       </div>
       <NavItem icon={LayoutDashboard} label="Dashboard" to="/tenant" exact />
       <NavItem icon={Bell} label="Notifications" to="/tenant/notifications" exact />
       {isEdiSubscribed && (
         <>
-          <div className="text-[18px] font-bold text-muted-foreground uppercase tracking-widest mb-3 px-4 mt-8">
+          <div className="mb-3 mt-8 px-4 text-lg font-bold tracking-widest text-muted-foreground uppercase">
             EDI
           </div>
           <NavItem icon={LayoutDashboard} label="EDI Dashboard" to="/tenant/edi" exact />
@@ -30,7 +42,20 @@ function TenantSidebar({ subscriptions }: { subscriptions: string[] }) {
         </>
       )}
 
-      <div className="text-[18px] font-bold text-muted-foreground uppercase tracking-widest mb-3 px-4 mt-8">
+      {isIpSubscribed && (
+        <>
+          <div className="mb-3 mt-8 px-4 text-lg font-bold tracking-widest text-muted-foreground uppercase">
+            Integration Platform
+          </div>
+          <NavItem icon={Compass} label="Command Center" to="/tenant/ip" exact />
+          <NavItem icon={Activity} label="Support Traces" to="/tenant/ip/traces" />
+          <NavItem icon={Cable} label="Connections" to="/tenant/ip/connections" />
+          <NavItem icon={GitMerge} label="Transformations" to="/tenant/ip/transformations" />
+          <NavItem icon={Workflow} label="Stitches" to="/tenant/ip/stitches" />
+        </>
+      )}
+
+      <div className="mb-3 mt-8 px-4 text-lg font-bold tracking-widest text-muted-foreground uppercase">
         Configuration
       </div>
       <NavItem icon={Settings} label="Settings" to="/tenant/settings" />

@@ -194,11 +194,17 @@ class StitchRecord(IpGlobalBase):
             "canonical_event_type",
         ),
         Index("ix_ip_stitches_workflow", "workflow_id", "workflow_version"),
+        Index(
+            "uq_ip_stitches_concrete_id",
+            "id",
+            unique=True,
+            postgresql_where=text("tenant_id != '*'"),
+        ),
         {"schema": "ip"},
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     workflow_id: Mapped[str] = mapped_column(String(128), nullable=False)
     workflow_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     canonical_event_type: Mapped[str] = mapped_column(String(128), nullable=False)

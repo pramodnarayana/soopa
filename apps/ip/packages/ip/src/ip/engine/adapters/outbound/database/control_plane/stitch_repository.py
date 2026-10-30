@@ -8,7 +8,7 @@ from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchem
 from ip.engine.adapters.outbound.database.models.control_plane import StitchRecord
 from ip.engine.domain.stitch import Stitch
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -73,18 +73,16 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
     async def save(self, stitch: Stitch) -> None:
         """Upsert a Stitch configuration in ip.stitches."""
         now = datetime.now(UTC)
-        stmt = select(StitchRecord).where(StitchRecord.id == stitch.id)
+        stmt = select(StitchRecord).where(
+            StitchRecord.id == stitch.id,
+            StitchRecord.tenant_id == stitch.tenant_id,
+        )
         result = await self.session.execute(stmt)
         record = result.scalars().first()
 
         if record is None:
             self.session.add(self._to_orm_model(stitch, now))
         else:
-            if record.tenant_id != stitch.tenant_id:
-                raise ValueError(
-                    f"Cross-tenant violation: Stitch '{stitch.id}' belongs to tenant '{record.tenant_id}', "
-                    f"cannot be modified by tenant '{stitch.tenant_id}'."
-                )
             self._update_record_from_domain(record, stitch, now)
 
         self._drain_events(stitch, default_tenant_id=stitch.tenant_id)
@@ -95,13 +93,14 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         tenant_id: str,
         stitch_id: str,
     ) -> Stitch | None:
-        """Retrieve a Stitch by ID for a tenant (or wildcard '*')."""
+        """Retrieve a Stitch by ID for a tenant (prioritizing tenant-specific before wildcard '*')."""
         stmt = (
             select(StitchRecord)
             .where(
                 StitchRecord.id == stitch_id,
                 StitchRecord.tenant_id.in_((tenant_id, "*")),
             )
+            .order_by(case((StitchRecord.tenant_id == tenant_id, 0), else_=1))
             .limit(1)
         )
         result = await self.session.execute(stmt)
@@ -115,10 +114,15 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         *,
         stitch_id: str,
     ) -> Stitch | None:
-        """Retrieve a Stitch by ID across all tenants for cross-tenant collision detection."""
+        """Retrieve a Stitch by ID across all tenants for cross-tenant collision detection.
+
+        Prioritizes concrete tenant records over wildcard '*' so collisions against
+        concrete tenants are always detected.
+        """
         stmt = (
             select(StitchRecord)
             .where(StitchRecord.id == stitch_id)
+            .order_by(case((StitchRecord.tenant_id != "*", 0), else_=1))
             .limit(1)
         )
         result = await self.session.execute(stmt)
@@ -139,7 +143,12 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             .order_by(StitchRecord.id.asc())
         )
         result = await self.session.execute(stmt)
-        return [self._to_domain_model(r) for r in result.scalars().all()]
+        records = result.scalars().all()
+        by_id: dict[str, Stitch] = {}
+        for r in records:
+            if r.id not in by_id or r.tenant_id == tenant_id:
+                by_id[r.id] = self._to_domain_model(r)
+        return list(by_id.values())
 
     async def list_for_event(
         self,
@@ -150,15 +159,20 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         """List all active Stitches matching a tenant (or '*') and canonical_event_type."""
         stmt = (
             select(StitchRecord)
-            .where(
-                StitchRecord.tenant_id.in_((tenant_id, "*")),
-                StitchRecord.canonical_event_type == canonical_event_type,
-                StitchRecord.is_active.is_(True),
-            )
+            .where(StitchRecord.tenant_id.in_((tenant_id, "*")))
             .order_by(StitchRecord.id.asc())
         )
         result = await self.session.execute(stmt)
-        return [self._to_domain_model(r) for r in result.scalars().all()]
+        records = result.scalars().all()
+        by_id: dict[str, Stitch] = {}
+        for r in records:
+            if r.id not in by_id or r.tenant_id == tenant_id:
+                by_id[r.id] = self._to_domain_model(r)
+        return [
+            s
+            for s in by_id.values()
+            if s.canonical_event_type == canonical_event_type and s.is_active
+        ]
 
 
 __all__ = ["SqlAlchemyStitchRepository"]

@@ -96,6 +96,7 @@ EDI_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=EdiMessage,
         timestamp_col=EdiMessage.created_at,
+        status_col=EdiMessage.status,
         correlation_cols=(EdiMessage.interchange_control_no, EdiMessage.message_id),
         to_attempt_row=lambda m: TraceStageAttemptRow(
             trace_id=m.trace_id,
@@ -111,6 +112,7 @@ EDI_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=EdiJson,
         timestamp_col=EdiJson.created_at,
+        status_col=EdiJson.status,
         to_attempt_row=lambda j: TraceStageAttemptRow(
             trace_id=j.trace_id,
             correlation_id=None,
@@ -125,6 +127,7 @@ EDI_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=ApiGateway,
         timestamp_col=ApiGateway.created_at,
+        status_col=ApiGateway.status,
         to_attempt_row=lambda g: TraceStageAttemptRow(
             trace_id=g.trace_id,
             correlation_id=None,

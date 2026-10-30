@@ -8,11 +8,12 @@ from datetime import datetime
 from typing import Protocol
 
 from database.repository import BaseSqlAlchemyRepository
-from sqlalchemy import ColumnElement, String, or_, select
+from sqlalchemy import ColumnElement, SQLColumnExpression, String, exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute, Mapped, declared_attr, mapped_column
 
 from strace.adapters.orm import TraceableMixin, TraceEventMixin, TraceLineageMixin
+from strace.domain.enums import TraceStatus
 from strace.domain.models import (
     TraceEvent,
     TraceLineageItemDTO,
@@ -100,6 +101,25 @@ class TraceStageSpecPort(Protocol):
         limit: int,
     ) -> list[TraceStageAttemptRow]: ...
 
+    async def fetch_attempts_for_trace_ids(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        trace_ids: Sequence[str],
+    ) -> list[TraceStageAttemptRow]: ...
+
+    async def list_recent_attempts(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        limit: int,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        downstream_models: Sequence[type[TenantTraceLineageOrmModel]] = (),
+    ) -> list[TraceStageAttemptRow]: ...
+
 
 @dataclass(frozen=True, kw_only=True)
 class TraceStageSpec[TOrm: TenantTraceLineageOrmModel](TraceStageSpecPort):
@@ -109,6 +129,8 @@ class TraceStageSpec[TOrm: TenantTraceLineageOrmModel](TraceStageSpecPort):
     timestamp_col: InstrumentedAttribute[datetime]
     to_attempt_row: Callable[[TOrm], TraceStageAttemptRow]
     correlation_cols: tuple[InstrumentedAttribute[str | None], ...] = ()
+    status_col: SQLColumnExpression[str] | None = None
+    static_status: TraceStatus | None = None
 
     def get_model_cls(self) -> type[TOrm]:
         return self.model_cls
@@ -128,6 +150,26 @@ class TraceStageSpec[TOrm: TenantTraceLineageOrmModel](TraceStageSpecPort):
                     self.model_cls.trace_id == root_trace_id,
                     self.model_cls.original_trace_id == root_trace_id,
                 ),
+            )
+            .order_by(self.timestamp_col.asc())
+        )
+        res = await session.execute(stmt)
+        return [self.to_attempt_row(row) for row in res.scalars().all()]
+
+    async def fetch_attempts_for_trace_ids(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        trace_ids: Sequence[str],
+    ) -> list[TraceStageAttemptRow]:
+        if not trace_ids:
+            return []
+        stmt = (
+            select(self.model_cls)
+            .where(
+                self.model_cls.tenant_id == tenant_id,
+                self.model_cls.trace_id.in_(trace_ids),
             )
             .order_by(self.timestamp_col.asc())
         )
@@ -154,6 +196,42 @@ class TraceStageSpec[TOrm: TenantTraceLineageOrmModel](TraceStageSpecPort):
             .order_by(self.timestamp_col.desc())
             .limit(limit)
         )
+        res = await session.execute(stmt)
+        return [self.to_attempt_row(row) for row in res.scalars().all()]
+
+    def _matches_static_status(self, status: TraceStatus) -> bool:
+        if self.status_col is not None:
+            return True
+        return self.static_status is not None and self.static_status == status
+
+    async def list_recent_attempts(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        limit: int,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        downstream_models: Sequence[type[TenantTraceLineageOrmModel]] = (),
+    ) -> list[TraceStageAttemptRow]:
+        if status is not None and not self._matches_static_status(status):
+            return []
+        stmt = select(self.model_cls).where(self.model_cls.tenant_id == tenant_id)
+        if min_replay_count is not None:
+            stmt = stmt.where(self.model_cls.replay_count >= min_replay_count)
+        if status is not None:
+            if self.status_col is not None:
+                stmt = stmt.where(self.status_col == status.value)
+            for downstream_cls in downstream_models:
+                stmt = stmt.where(
+                    ~exists(
+                        select(1).where(
+                            downstream_cls.tenant_id == self.model_cls.tenant_id,
+                            downstream_cls.trace_id == self.model_cls.trace_id,
+                        )
+                    )
+                )
+        stmt = stmt.order_by(self.timestamp_col.desc()).limit(limit)
         res = await session.execute(stmt)
         return [self.to_attempt_row(row) for row in res.scalars().all()]
 
@@ -308,6 +386,61 @@ class SqlAlchemyTraceRepository(
         )
         sorted_items = sorted(
             items,
+            key=lambda item: str(item.created_at or ""),
+            reverse=True,
+        )
+        return sorted_items[:limit]
+
+    async def list_recent_traces(
+        self,
+        tenant_id: str,
+        *,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        limit: int = 50,
+    ) -> list[TraceLineageItemDTO]:
+        if not self._stage_specs:
+            return []
+        candidate_trace_ids: list[str] = []
+        seen_trace_ids: set[str] = set()
+        for idx, spec in enumerate(self._stage_specs):
+            downstream_models = tuple(ds.get_model_cls() for ds in self._stage_specs[idx + 1 :])
+            attempts = await spec.list_recent_attempts(
+                self._session,
+                tenant_id=tenant_id,
+                limit=limit,
+                status=status,
+                min_replay_count=min_replay_count,
+                downstream_models=downstream_models,
+            )
+            for attempt in attempts:
+                if attempt.trace_id not in seen_trace_ids:
+                    seen_trace_ids.add(attempt.trace_id)
+                    candidate_trace_ids.append(attempt.trace_id)
+
+        if not candidate_trace_ids:
+            return []
+
+        stage_batches: list[Sequence[TraceStageAttemptRow]] = []
+        for spec in self._stage_specs:
+            hydrated = await spec.fetch_attempts_for_trace_ids(
+                self._session,
+                tenant_id=tenant_id,
+                trace_ids=candidate_trace_ids,
+            )
+            stage_batches.append(hydrated)
+
+        items = aggregate_trace_lineage_attempts(
+            stage_batches_in_pipeline_order=tuple(stage_batches),
+        )
+        filtered = [
+            item
+            for item in items
+            if (status is None or str(item.status) == status.value)
+            and (min_replay_count is None or item.replay_count >= min_replay_count)
+        ]
+        sorted_items = sorted(
+            filtered,
             key=lambda item: str(item.created_at or ""),
             reverse=True,
         )

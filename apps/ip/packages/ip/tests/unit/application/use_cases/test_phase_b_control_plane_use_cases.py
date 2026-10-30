@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
-from collections.abc import AsyncIterator, Sequence
+import os
+from collections.abc import AsyncGenerator, AsyncIterator, Sequence
 from types import TracebackType
 
 import pytest
+from database.router import DatabaseRouterPort
+from database.types import GlobalSession, TenantSession
 from ip.application.domains.energy.canonical import EnergyEntityType
 from ip.application.stitches.registry_loader import (
     create_default_workflow_definition_registry,
@@ -14,6 +18,9 @@ from ip.application.stitches.registry_loader import (
 )
 from ip.application.transformers.registry_loader import (
     create_default_transformer_registry,
+)
+from ip.engine.adapters.outbound.stitches.stitch_adapters import (
+    IpStitchCanonicalDispatcherAdapter,
 )
 from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
     InMemoryStitchCatalogRegistry,
@@ -57,6 +64,8 @@ from ip.engine.application.use_cases.stitch.stitch_control_plane_use_cases impor
     ListStitchDefinitionsUseCase,
     ListStitchesQuery,
     ListStitchesUseCase,
+    ListStitchRunsQuery,
+    ListStitchRunsUseCase,
     RegisterStitchCommand,
     RegisterStitchUseCase,
     TriggerStitchEventCommand,
@@ -76,6 +85,7 @@ from ip.engine.domain.exceptions import (
     PayloadNotFoundError,
     Result,
     StitchRunNotFoundError,
+    TenantShardNotFoundError,
 )
 from ip.engine.domain.models.connection import Connection
 from ip.engine.domain.models.inbound_record import InboundRecord
@@ -123,6 +133,7 @@ from ip.engine.ports.outbound.transformation_repository_port import (
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkProviderPort,
 )
 from ip.engine.ports.types import (
     AppSpecDTO,
@@ -135,10 +146,12 @@ from orchestration.application.use_cases import (
     ResolveMatchConditionsUseCase,
     StartRunUseCase,
 )
+from orchestration.domain.constants import RunStatus
 from orchestration.domain.run import WorkflowRun
 from orchestration.testing import InMemoryWorkflowUnitOfWork
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict, JsonValue
+from seedwork.events import EventEnvelope
 from strace.ports import TraceRepositoryPort
 
 
@@ -262,31 +275,47 @@ class _InMemoryTransformationRepo(TransformationRepositoryPort):
 
 class _InMemoryStitchRepo(StitchRepositoryPort):
     def __init__(self) -> None:
-        self.items: dict[str, Stitch] = {}
+        self.items: dict[tuple[str, str], Stitch] = {}
 
     async def save(self, stitch: Stitch) -> None:
-        self.items[stitch.id] = stitch
+        self.items[(stitch.id, stitch.tenant_id)] = stitch
 
     async def get_by_id(self, *, tenant_id: str, stitch_id: str) -> Stitch | None:
-        sub = self.items.get(stitch_id)
-        if sub is not None and sub.tenant_id in (tenant_id, "*"):
+        sub = self.items.get((stitch_id, tenant_id))
+        if sub is not None:
             return sub
-        return None
+        return self.items.get((stitch_id, "*"))
 
     async def get_by_id_global(self, *, stitch_id: str) -> Stitch | None:
-        return self.items.get(stitch_id)
+        for (sid, tid), stitch in self.items.items():
+            if sid == stitch_id and tid != "*":
+                return stitch
+        for (sid, tid), stitch in self.items.items():
+            if sid == stitch_id and tid == "*":
+                return stitch
+        return None
 
     async def list_by_tenant(self, *, tenant_id: str) -> list[Stitch]:
-        return [s for s in self.items.values() if s.tenant_id in (tenant_id, "*")]
+        matching = [s for s in self.items.values() if s.tenant_id in (tenant_id, "*")]
+        by_id: dict[str, Stitch] = {}
+        for s in matching:
+            if s.id not in by_id or s.tenant_id == tenant_id:
+                by_id[s.id] = s
+        return list(by_id.values())
 
     async def list_for_event(self, *, tenant_id: str, canonical_event_type: str) -> list[Stitch]:
-        return [
+        matching = [
             s
             for s in self.items.values()
             if s.tenant_id in (tenant_id, "*")
             and s.canonical_event_type == canonical_event_type
             and s.is_active
         ]
+        by_id: dict[str, Stitch] = {}
+        for s in matching:
+            if s.id not in by_id or s.tenant_id == tenant_id:
+                by_id[s.id] = s
+        return list(by_id.values())
 
 
 class _InMemoryControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
@@ -321,6 +350,16 @@ class _InMemoryControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
 
     async def rollback(self) -> None:
         pass
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        _ = (tenant_id, idempotency_key)
+        return True
+
+    async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
+        _ = (tenant_id, idempotency_key)
+
+    async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
+        _ = envelope
 
 
 class _InMemoryInboundRecordRepository(InboundRecordRepositoryPort):
@@ -383,6 +422,16 @@ class _InMemoryDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
 
     async def rollback(self) -> None:
         pass
+
+    async def record_idempotency(self, tenant_id: str, idempotency_key: str) -> bool:
+        _ = (tenant_id, idempotency_key)
+        return True
+
+    async def release_idempotency(self, tenant_id: str, idempotency_key: str) -> None:
+        _ = (tenant_id, idempotency_key)
+
+    async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
+        _ = envelope
 
 
 class _InMemoryCipher(CipherPort):
@@ -534,6 +583,22 @@ class _InMemoryStitchShardGateway(StitchShardGatewayPort):
         if run_res.is_err:
             return Result.err(StitchRunNotFoundError.for_id(run_id))
         return Result.ok(run_res.unwrap())
+
+    async def list_runs(
+        self,
+        *,
+        tenant_id: str,
+        workflow_id: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+    ) -> Result[tuple[WorkflowRun, ...], IpError]:
+        runs = await self._wf_uow.runs.list_recent(
+            tenant_id,
+            workflow_id=workflow_id,
+            status=status,
+            limit=limit,
+        )
+        return Result.ok(tuple(runs))
 
 
 @pytest.mark.asyncio
@@ -864,12 +929,19 @@ async def test_stitch_control_plane_use_cases() -> None:
     assert missing_def_res.unwrap_err().code == IpErrorCode.STITCH_DEFINITION_NOT_FOUND
 
     # 2. List and Register Stitches
+    tenant_id = f"ten_{os.urandom(12).hex()}"
+    other_tenant_id = f"ten_{os.urandom(12).hex()}"
+    custom_stitch_id = f"stitch_{os.urandom(12).hex()}"
+    shared_stitch_id = f"stitch_{os.urandom(12).hex()}"
+    bad_stitch_id = f"stitch_{os.urandom(12).hex()}"
+    missing_run_id = f"wfr_{os.urandom(12).hex()}"
+
     cp_uow = _InMemoryControlPlaneUoW()
     list_stitches_uc = ListStitchesUseCase(
         stitch_catalog=stitch_cat,
         uow=cp_uow,
     )
-    stitches = await list_stitches_uc.execute(ListStitchesQuery(tenant_id="ten_01"))
+    stitches = await list_stitches_uc.execute(ListStitchesQuery(tenant_id=tenant_id))
     assert len(stitches) >= 2
 
     reg_stitch_uc = RegisterStitchUseCase(
@@ -879,8 +951,8 @@ async def test_stitch_control_plane_use_cases() -> None:
     )
     reg_res = await reg_stitch_uc.execute(
         RegisterStitchCommand(
-            tenant_id="ten_01",
-            stitch_id="stitch_custom_01",
+            tenant_id=tenant_id,
+            stitch_id=custom_stitch_id,
             workflow_id="energy.meter_reading_erp_sync_stitch",
             workflow_version=1,
             canonical_event_type="canonical.custom_meter_reading.normalized",
@@ -889,13 +961,13 @@ async def test_stitch_control_plane_use_cases() -> None:
         )
     )
     assert reg_res.is_ok
-    assert reg_res.unwrap().id == "stitch_custom_01"
+    assert reg_res.unwrap().id == custom_stitch_id
 
     # Wildcard override and cross-tenant collision tests
     reg_wildcard = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id="*",
-            stitch_id="stitch_shared_01",
+            stitch_id=shared_stitch_id,
             workflow_id="energy.meter_reading_erp_sync_stitch",
             workflow_version=1,
             canonical_event_type="canonical.custom_meter_reading.normalized",
@@ -907,8 +979,8 @@ async def test_stitch_control_plane_use_cases() -> None:
     # Concrete tenant overrides wildcard stitch with same ID without 409
     reg_override = await reg_stitch_uc.execute(
         RegisterStitchCommand(
-            tenant_id="ten_01",
-            stitch_id="stitch_shared_01",
+            tenant_id=tenant_id,
+            stitch_id=shared_stitch_id,
             workflow_id="energy.meter_reading_erp_sync_stitch",
             workflow_version=1,
             canonical_event_type="canonical.custom_meter_reading.normalized",
@@ -920,8 +992,8 @@ async def test_stitch_control_plane_use_cases() -> None:
     # Different concrete tenant attempting same stitch ID triggers 409 collision
     reg_conflict = await reg_stitch_uc.execute(
         RegisterStitchCommand(
-            tenant_id="ten_02",
-            stitch_id="stitch_shared_01",
+            tenant_id=other_tenant_id,
+            stitch_id=shared_stitch_id,
             workflow_id="energy.meter_reading_erp_sync_stitch",
             workflow_version=1,
             canonical_event_type="canonical.custom_meter_reading.normalized",
@@ -933,18 +1005,36 @@ async def test_stitch_control_plane_use_cases() -> None:
 
     # In-memory stitch catalog list_stitches_for_event prioritizes tenant stitch
     matching_stitches = stitch_cat.list_stitches_for_event(
-        tenant_id="ten_01",
+        tenant_id=tenant_id,
         canonical_event_type="canonical.custom_meter_reading.normalized",
     )
     matching_ids = [s.id for s in matching_stitches]
-    assert matching_ids.count("stitch_shared_01") == 1
-    overridden = next(s for s in matching_stitches if s.id == "stitch_shared_01")
-    assert overridden.tenant_id == "ten_01"
+    assert matching_ids.count(shared_stitch_id) == 1
+    overridden = next(s for s in matching_stitches if s.id == shared_stitch_id)
+    assert overridden.tenant_id == tenant_id
+
+    # Inactive tenant override completely suppresses the wildcard stitch
+    stitch_cat.register_stitch(
+        Stitch(
+            id=shared_stitch_id,
+            tenant_id=tenant_id,
+            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.custom_meter_reading.normalized",
+            is_trigger=True,
+            is_active=False,
+        )
+    )
+    inactive_override_matches = stitch_cat.list_stitches_for_event(
+        tenant_id=tenant_id,
+        canonical_event_type="canonical.custom_meter_reading.normalized",
+    )
+    assert not any(s.id == shared_stitch_id for s in inactive_override_matches)
 
     bad_reg_res = await reg_stitch_uc.execute(
         RegisterStitchCommand(
-            tenant_id="ten_01",
-            stitch_id="stitch_bad",
+            tenant_id=tenant_id,
+            stitch_id=bad_stitch_id,
             workflow_id="nonexistent.workflow",
             workflow_version=1,
             canonical_event_type="canonical.event",
@@ -977,7 +1067,7 @@ async def test_stitch_control_plane_use_cases() -> None:
     trigger_stitch_uc = TriggerStitchEventUseCase(shard_gateway=shard_gw)
     disp_res = await trigger_stitch_uc.execute(
         TriggerStitchEventCommand(
-            tenant_id="ten_01",
+            tenant_id=tenant_id,
             canonical_event_type=EnergyEntityType.MDM_METER_READING.value,
             payload={
                 "source_id": "MTR-777",
@@ -993,7 +1083,7 @@ async def test_stitch_control_plane_use_cases() -> None:
     run_id = started_run_ids[0]
 
     get_stitch_run_uc = GetStitchRunUseCase(shard_gateway=shard_gw)
-    run_res = await get_stitch_run_uc.execute(GetStitchRunQuery(tenant_id="ten_01", run_id=run_id))
+    run_res = await get_stitch_run_uc.execute(GetStitchRunQuery(tenant_id=tenant_id, run_id=run_id))
     assert run_res.is_ok
     run_dto = run_res.unwrap()
     assert run_dto.run_id == run_id
@@ -1001,7 +1091,100 @@ async def test_stitch_control_plane_use_cases() -> None:
     assert len(run_dto.steps) == 2
 
     missing_stitch_run = await get_stitch_run_uc.execute(
-        GetStitchRunQuery(tenant_id="ten_01", run_id="wfr_missing")
+        GetStitchRunQuery(tenant_id=tenant_id, run_id=missing_run_id)
     )
     assert missing_stitch_run.is_err
     assert missing_stitch_run.unwrap_err().code == IpErrorCode.STITCH_RUN_NOT_FOUND
+
+    list_runs_uc = ListStitchRunsUseCase(shard_gateway=shard_gw)
+    listed_runs_res = await list_runs_uc.execute(
+        ListStitchRunsQuery(
+            tenant_id=tenant_id,
+            workflow_id="energy.meter_reading_erp_sync_stitch",
+            status=RunStatus(run_dto.status),
+            limit=20,
+        )
+    )
+    assert listed_runs_res.is_ok
+    listed_runs = listed_runs_res.unwrap()
+    assert len(listed_runs) == 1
+    assert listed_runs[0].run_id == run_id
+
+
+class _EmptySessionDbRouter(DatabaseRouterPort):
+    async def get_global_session(self) -> AsyncGenerator[GlobalSession, None]:
+        for _ in ():
+            yield _
+
+    async def get_tenant_session(
+        self, tenant_id: str, shard_key: str, shard_url: str
+    ) -> AsyncGenerator[TenantSession, None]:
+        _ = (tenant_id, shard_key, shard_url)
+        for _ in ():
+            yield _
+
+    async def get_shard_session(
+        self, shard_key: str, shard_url: str
+    ) -> AsyncGenerator[TenantSession, None]:
+        _ = (shard_key, shard_url)
+        for _ in ():
+            yield _
+
+    async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
+        _ = app_slug
+        return []
+
+    async def close_all(self) -> None:
+        return None
+
+
+class _StaticDpUowProvider(IpDataPlaneUnitOfWorkProviderPort):
+    def __init__(self, *, missing_tenant_id: str) -> None:
+        self._missing_tenant_id = missing_tenant_id
+
+    async def resolve_shard_info(
+        self, target_tenant_id: str
+    ) -> Result[tuple[str, str], TenantShardNotFoundError]:
+        if target_tenant_id == self._missing_tenant_id:
+            return Result.err(TenantShardNotFoundError.for_tenant(target_tenant_id))
+        return Result.ok(("shard-01", "postgresql+asyncpg://localhost/shard01"))
+
+    @contextlib.asynccontextmanager
+    async def get_data_plane_uow(
+        self,
+        target_tenant_id: str,
+        shard_id: str,
+        shard_dsn: str,
+    ) -> AsyncIterator[IpDataPlaneUnitOfWorkPort]:
+        _ = (target_tenant_id, shard_id, shard_dsn)
+        raise AssertionError("get_data_plane_uow should not be invoked by list_runs")
+        yield  # unreachable generator marker
+
+
+@pytest.mark.asyncio
+async def test_stitch_dispatcher_adapter_list_runs_handles_empty_session_and_shard_errors() -> None:
+    wf_reg = create_default_workflow_definition_registry()
+    stitch_cat = InMemoryStitchCatalogRegistry()
+    register_default_stitches(stitch_cat)
+    wf_uow = InMemoryWorkflowUnitOfWork()
+    tenant_id = f"ten_{os.urandom(12).hex()}"
+    missing_tenant_id = f"ten_{os.urandom(12).hex()}"
+
+    empty_session_adapter = IpStitchCanonicalDispatcherAdapter(
+        db_router=_EmptySessionDbRouter(),
+        dp_uow_provider=_StaticDpUowProvider(missing_tenant_id=missing_tenant_id),
+        stitch_catalog=stitch_cat,
+        definition_registry=wf_reg,
+        workflow_uow_factory=lambda _session: wf_uow,
+    )
+
+    missing_shard_res = await empty_session_adapter.list_runs(tenant_id=missing_tenant_id)
+    assert missing_shard_res.is_err
+    assert missing_shard_res.unwrap_err().code == IpErrorCode.TENANT_SHARD_NOT_FOUND
+
+    empty_session_res = await empty_session_adapter.list_runs(
+        tenant_id=tenant_id,
+        status=RunStatus.RUNNING,
+    )
+    assert empty_session_res.is_err
+    assert empty_session_res.unwrap_err().code == IpErrorCode.TENANT_SHARD_NOT_FOUND

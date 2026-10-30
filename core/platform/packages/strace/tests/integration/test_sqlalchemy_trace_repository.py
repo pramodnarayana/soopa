@@ -103,6 +103,7 @@ _STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=_Stage1Orm,
         timestamp_col=_Stage1Orm.created_at,
+        status_col=_Stage1Orm.status,
         correlation_cols=(_Stage1Orm.correlation_id,),
         to_attempt_row=lambda r: TraceStageAttemptRow(
             trace_id=r.trace_id,
@@ -118,6 +119,7 @@ _STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=_Stage2Orm,
         timestamp_col=_Stage2Orm.created_at,
+        status_col=_Stage2Orm.status,
         to_attempt_row=lambda r: TraceStageAttemptRow(
             trace_id=r.trace_id,
             correlation_id=None,
@@ -179,16 +181,24 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
         event_spec=_EVENT_SPEC,
         stage_specs=_STAGE_SPECS,
     )
-    tenant_id = "ten_trace_int_01"
-    root_trace_id = "trc_int_root_01"
-    child_trace_id = "trc_int_child_01"
+    tenant_id = f"ten_{os.urandom(12).hex()}"
+    other_tenant_id = f"ten_{os.urandom(12).hex()}"
+    root_trace_id = f"trc_{os.urandom(12).hex()}"
+    child_trace_id = f"trc_{os.urandom(12).hex()}"
+    nonexistent_trace_id = f"trc_{os.urandom(12).hex()}"
+    evt_1_id = f"evt_{os.urandom(12).hex()}"
+    evt_2_id = f"evt_{os.urandom(12).hex()}"
+    evt_other_id = f"evt_{os.urandom(12).hex()}"
+    s1_root_id = f"s1_{os.urandom(12).hex()}"
+    s2_root_id = f"s2_{os.urandom(12).hex()}"
+    s2_child_id = f"s2_{os.urandom(12).hex()}"
     t0 = datetime.now(UTC)
     t1 = t0 + timedelta(seconds=5)
     t2 = t0 + timedelta(seconds=10)
 
     # 1. Save single and batch trace events and verify chronological listing + tenant isolation
     evt_1 = TraceEvent(
-        id="evt_int_01",
+        id=evt_1_id,
         tenant_id=tenant_id,
         trace_id=root_trace_id,
         correlation_id="ORD-777",
@@ -198,7 +208,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
         created_at=t0,
     )
     evt_2 = TraceEvent(
-        id="evt_int_02",
+        id=evt_2_id,
         tenant_id=tenant_id,
         trace_id=root_trace_id,
         correlation_id="ORD-777",
@@ -208,8 +218,8 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
         created_at=t1,
     )
     evt_other_tenant = TraceEvent(
-        id="evt_int_03",
-        tenant_id="ten_other",
+        id=evt_other_id,
+        tenant_id=other_tenant_id,
         trace_id=root_trace_id,
         correlation_id="ORD-777",
         event_type=TraceEventType.RECEIVED,
@@ -221,7 +231,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     await repo.save_all_trace_events([])
 
     events = await repo.list_trace_events(tenant_id, root_trace_id)
-    assert [e.id for e in events] == ["evt_int_01", "evt_int_02"]
+    assert [e.id for e in events] == [evt_1_id, evt_2_id]
     assert events[0].correlation_id == "ORD-777"
     assert events[1].metadata == {"step": 2, "status_code": 502}
 
@@ -229,7 +239,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     pg_session.add_all(
         [
             _Stage1Orm(
-                id="s1_root",
+                id=s1_root_id,
                 tenant_id=tenant_id,
                 trace_id=root_trace_id,
                 correlation_id="ORD-777",
@@ -240,7 +250,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 created_at=t0,
             ),
             _Stage2Orm(
-                id="s2_root",
+                id=s2_root_id,
                 tenant_id=tenant_id,
                 trace_id=root_trace_id,
                 parent_trace_id=None,
@@ -250,7 +260,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 created_at=t1,
             ),
             _Stage2Orm(
-                id="s2_child",
+                id=s2_child_id,
                 tenant_id=tenant_id,
                 trace_id=child_trace_id,
                 parent_trace_id=root_trace_id,
@@ -266,7 +276,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     # 3. Verify root trace resolution from child_trace_id and unknown trace_id
     resolved_root = await repo.resolve_root_trace_id(tenant_id, child_trace_id)
     assert resolved_root == root_trace_id
-    assert await repo.resolve_root_trace_id(tenant_id, "trc_nonexistent") == "trc_nonexistent"
+    assert await repo.resolve_root_trace_id(tenant_id, nonexistent_trace_id) == nonexistent_trace_id
 
     # 4. Verify fetch_lineage_family_rows returns both root and child stage 2 rows
     family_rows = await repo.fetch_lineage_family_rows(
@@ -275,7 +285,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
         root_trace_id=root_trace_id,
         order_by_col=_Stage2Orm.created_at.asc(),
     )
-    assert [r.id for r in family_rows] == ["s2_root", "s2_child"]
+    assert [r.id for r in family_rows] == [s2_root_id, s2_child_id]
 
     # 5. Verify get_trace_lineage merges Stage 1 -> Stage 2 and sorts by (replay_count, created_at)
     lineage = await repo.get_trace_lineage(tenant_id, child_trace_id)
@@ -298,21 +308,129 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     assert corr_matches[0].trace_id == root_trace_id
     assert corr_matches[0].correlation_id == "ORD-777"
 
+    # 7. Verify list_recent_traces orders newest traces first, deduplicates stages, and isolates tenant
+    later_trace_id = f"trc_{os.urandom(12).hex()}"
+    t3 = t0 + timedelta(seconds=20)
+    pg_session.add_all(
+        [
+            _Stage1Orm(
+                id=f"s1_{os.urandom(12).hex()}",
+                tenant_id=tenant_id,
+                trace_id=later_trace_id,
+                correlation_id="ORD-888",
+                parent_trace_id=None,
+                original_trace_id=later_trace_id,
+                replay_count=0,
+                status=TraceStatus.INGESTED.value,
+                created_at=t3,
+            ),
+            _Stage1Orm(
+                id=f"s1_{os.urandom(12).hex()}",
+                tenant_id=other_tenant_id,
+                trace_id=f"trc_{os.urandom(12).hex()}",
+                correlation_id="ORD-999",
+                parent_trace_id=None,
+                original_trace_id=None,
+                replay_count=0,
+                status=TraceStatus.INGESTED.value,
+                created_at=t3 + timedelta(seconds=5),
+            ),
+        ]
+    )
+    await pg_session.flush()
+
+    recent_items = await repo.list_recent_traces(tenant_id, limit=10)
+    assert [item.trace_id for item in recent_items] == [
+        later_trace_id,
+        child_trace_id,
+        root_trace_id,
+    ]
+    assert recent_items[0].correlation_id == "ORD-888"
+    assert recent_items[0].primary_layer == "STAGE_1"
+    assert recent_items[1].primary_layer == "STAGE_2"
+    assert recent_items[1].replay_count == 1
+    assert recent_items[2].primary_layer == "STAGE_2"
+    assert recent_items[2].status == TraceStatus.FAILED.value
+
+    limited_items = await repo.list_recent_traces(tenant_id, limit=2)
+    assert [item.trace_id for item in limited_items] == [later_trace_id, child_trace_id]
+
+    # 8. Verify SQL pushdown for status & min_replay_count never starves older FAILED/INGESTED rows across >300 newer DELIVERED rows
+    bulk_rows: list[_Stage1Orm | _Stage2Orm] = []
+    for idx in range(320):
+        bulk_trc_id = f"trc_{os.urandom(12).hex()}"
+        bulk_ts = t3 + timedelta(minutes=idx + 1)
+        bulk_rows.append(
+            _Stage1Orm(
+                id=f"s1_{os.urandom(12).hex()}",
+                tenant_id=tenant_id,
+                trace_id=bulk_trc_id,
+                correlation_id=f"ORD-BULK-{idx}",
+                parent_trace_id=None,
+                original_trace_id=bulk_trc_id,
+                replay_count=0,
+                status=TraceStatus.INGESTED.value,
+                created_at=bulk_ts,
+            )
+        )
+        bulk_rows.append(
+            _Stage2Orm(
+                id=f"s2_{os.urandom(12).hex()}",
+                tenant_id=tenant_id,
+                trace_id=bulk_trc_id,
+                parent_trace_id=None,
+                original_trace_id=bulk_trc_id,
+                replay_count=0,
+                status=TraceStatus.DELIVERED.value,
+                created_at=bulk_ts + timedelta(seconds=1),
+            )
+        )
+    pg_session.add_all(bulk_rows)
+    await pg_session.flush()
+
+    failed_items = await repo.list_recent_traces(
+        tenant_id,
+        status=TraceStatus.FAILED,
+        limit=10,
+    )
+    assert [item.trace_id for item in failed_items] == [root_trace_id]
+    assert failed_items[0].correlation_id == "ORD-777"
+    assert failed_items[0].primary_layer == "STAGE_2"
+
+    ingested_only_items = await repo.list_recent_traces(
+        tenant_id,
+        status=TraceStatus.INGESTED,
+        limit=10,
+    )
+    assert [item.trace_id for item in ingested_only_items] == [later_trace_id]
+    assert ingested_only_items[0].primary_layer == "STAGE_1"
+
+    replayed_items = await repo.list_recent_traces(
+        tenant_id,
+        min_replay_count=1,
+        limit=10,
+    )
+    assert [item.trace_id for item in replayed_items] == [child_trace_id]
+    assert replayed_items[0].replay_count == 1
+
 
 @pytest.mark.asyncio
 async def test_sqlalchemy_trace_repository_without_specs_returns_empty_and_noops(
     pg_session: AsyncSession,
 ) -> None:
     empty_repo = SqlAlchemyTraceRepository(pg_session)
+    empty_tenant_id = f"ten_{os.urandom(12).hex()}"
+    empty_trace_id = f"trc_{os.urandom(12).hex()}"
     evt = TraceEvent(
-        id="evt_noop",
-        tenant_id="ten_1",
-        trace_id="trc_1",
+        id=f"evt_{os.urandom(12).hex()}",
+        tenant_id=empty_tenant_id,
+        trace_id=empty_trace_id,
         event_type=TraceEventType.RECEIVED,
         actor="SYSTEM",
     )
     await empty_repo.save_trace_event(evt)
     await empty_repo.save_all_trace_events([evt])
-    assert await empty_repo.list_trace_events("ten_1", "trc_1") == []
-    assert await empty_repo.get_trace_lineage("ten_1", "trc_1") == []
-    assert await empty_repo.find_traces_by_correlation_id("ten_1", "CORR-1") == []
+    assert await empty_repo.list_trace_events(empty_tenant_id, empty_trace_id) == []
+    assert await empty_repo.get_trace_lineage(empty_tenant_id, empty_trace_id) == []
+    assert await empty_repo.find_traces_by_correlation_id(empty_tenant_id, "CORR-1") == []
+    assert await empty_repo.list_recent_traces(empty_tenant_id, limit=10) == []

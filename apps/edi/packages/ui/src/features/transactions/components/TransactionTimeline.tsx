@@ -1,4 +1,4 @@
-import { Badge } from '@soopa/ui';
+import { Badge, ReplayBadge } from '@soopa/ui';
 import { Card, CardContent, CardHeader, CardTitle } from '@soopa/ui/components/ui/card';
 import { Link } from '@tanstack/react-router';
 import {
@@ -14,7 +14,6 @@ import { CodeViewer } from '../../../components/ui/code-viewer';
 import { useTransactionLineage } from '../api/transactionsApi';
 import { TRANSACTION_STATUS_GROUPS } from '../constants';
 import type { TransactionDetailResponse } from '../types';
-import { ReplayBadge } from './ReplayBadge';
 
 interface Props {
   transaction: TransactionDetailResponse;

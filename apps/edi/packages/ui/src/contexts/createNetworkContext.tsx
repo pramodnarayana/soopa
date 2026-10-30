@@ -1,20 +1,63 @@
+import {
+  FetchHttpClientAdapter,
+  type HttpRequestOptions,
+  type QueryParamsRecord,
+  StructuredJsonLoggerAdapter,
+  unwrapOrThrow,
+} from '@soopa/ui';
 import React, { createContext, useContext, useMemo } from 'react';
 
-type CustomRequestInit = RequestInit & { params?: Record<string, any> };
-type FetchFunction = (url: string, init?: CustomRequestInit) => Promise<Response>;
+export interface EdiNetworkRequestConfig {
+  readonly params?: QueryParamsRecord;
+  readonly headers?: HeadersInit;
+  readonly signal?: AbortSignal;
+  readonly timeoutMs?: number;
+}
 
-export function createNetworkContext(hookName: string) {
-  interface NetworkContextType {
-    api: {
-      get: <T = any>(url: string, config?: CustomRequestInit) => Promise<{ data: T }>;
-      post: <T = any>(url: string, data?: any, config?: CustomRequestInit) => Promise<{ data: T }>;
-      put: <T = any>(url: string, data?: any, config?: CustomRequestInit) => Promise<{ data: T }>;
-      patch: <T = any>(url: string, data?: any, config?: CustomRequestInit) => Promise<{ data: T }>;
-      delete: <T = any>(url: string, config?: CustomRequestInit) => Promise<{ data: T }>;
-    };
+export interface EdiNetworkApi {
+  readonly get: <T = unknown>(
+    url: string,
+    config?: EdiNetworkRequestConfig,
+  ) => Promise<{ data: T }>;
+  readonly post: <T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: EdiNetworkRequestConfig,
+  ) => Promise<{ data: T }>;
+  readonly put: <T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: EdiNetworkRequestConfig,
+  ) => Promise<{ data: T }>;
+  readonly patch: <T = unknown>(
+    url: string,
+    data?: unknown,
+    config?: EdiNetworkRequestConfig,
+  ) => Promise<{ data: T }>;
+  readonly delete: <T = unknown>(
+    url: string,
+    config?: EdiNetworkRequestConfig,
+  ) => Promise<{ data: T }>;
+}
+
+function toHttpOptions(config?: EdiNetworkRequestConfig): HttpRequestOptions | undefined {
+  if (!config) {
+    return undefined;
   }
+  return {
+    params: config.params,
+    headers: config.headers,
+    signal: config.signal,
+    timeoutMs: config.timeoutMs,
+  };
+}
 
-  const NetworkContext = createContext<NetworkContextType | null>(null);
+/**
+ * EDI network context backed directly by the centralized @soopa/ui FetchHttpClientAdapter
+ * (eliminating duplicate fetch/AbortController plumbing while preserving EDI's { data: T } adapter shape).
+ */
+export function createNetworkContext(hookName: string) {
+  const NetworkContext = createContext<EdiNetworkApi | null>(null);
 
   function Provider({
     children,
@@ -25,121 +68,55 @@ export function createNetworkContext(hookName: string) {
     baseUrl: string;
     token?: string;
   }) {
-    const api = useMemo(() => {
-      const baseFetch: FetchFunction = async (url, init = {}) => {
-        const headers = new Headers(init.headers);
-        if (token && !headers.has('Authorization')) {
-          headers.set('Authorization', `Bearer ${token}`);
-        }
-        if (!headers.has('Content-Type') && init.method !== 'GET' && init.method !== 'HEAD') {
-          headers.set('Content-Type', 'application/json');
-        }
-
-        const normalizedBase = baseUrl.replace(/\/$/, '');
-        const normalizedPath = url.replace(/^\//, '');
-        let fullUrl = `${normalizedBase}/${normalizedPath}`;
-        if (init.params) {
-          const searchParams = new URLSearchParams();
-          for (const [key, value] of Object.entries(init.params)) {
-            if (value !== undefined && value !== null) {
-              searchParams.append(key, String(value));
-            }
-          }
-          const queryString = searchParams.toString();
-          if (queryString) {
-            fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
-          }
-        }
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
-        // Combine caller-provided signal with timeout signal
-        let combinedSignal = controller.signal;
-        if (init.signal) {
-          const callerSignal = init.signal;
-          // Browser-compatible signal combination: listen to both signals
-          const abortHandler = () => controller.abort();
-          callerSignal.addEventListener('abort', abortHandler, { once: true });
-          // Clean up listener if timeout fires first
-          controller.signal.addEventListener(
-            'abort',
-            () => {
-              callerSignal.removeEventListener('abort', abortHandler);
-            },
-            { once: true },
-          );
-        }
-
-        try {
-          const response = await fetch(fullUrl, { ...init, headers, signal: combinedSignal });
-
-          if (!response.ok) {
-            let message = response.statusText;
-            try {
-              const err = await response.json();
-              message = err.message || err.detail || message;
-            } catch {
-              // ignore
-            }
-            throw new Error(message);
-          }
-          return response;
-        } finally {
-          clearTimeout(timeoutId);
-        }
-      };
+    const api = useMemo<EdiNetworkApi>(() => {
+      const client = new FetchHttpClientAdapter({
+        baseUrl,
+        getToken: () => token,
+        logger: new StructuredJsonLoggerAdapter({
+          bindings: { product: 'edi', context: hookName },
+        }),
+      });
 
       return {
-        get: async <T = any>(url: string, config?: CustomRequestInit) => {
-          const res = await baseFetch(url, { ...config, method: 'GET' });
-          if (res.status === 204) return { data: undefined as unknown as T };
-          return { data: (await res.json()) as T };
-        },
-        post: async <T = any>(url: string, data?: any, config?: CustomRequestInit) => {
-          const res = await baseFetch(url, {
-            ...config,
-            method: 'POST',
-            body: data !== undefined ? JSON.stringify(data) : undefined,
-          });
-          if (res.status === 204) return { data: undefined as unknown as T };
-          return { data: (await res.json()) as T };
-        },
-        put: async <T = any>(url: string, data?: any, config?: CustomRequestInit) => {
-          const res = await baseFetch(url, {
-            ...config,
-            method: 'PUT',
-            body: data !== undefined ? JSON.stringify(data) : undefined,
-          });
-          if (res.status === 204) return { data: undefined as unknown as T };
-          return { data: (await res.json()) as T };
-        },
-        patch: async <T = any>(url: string, data?: any, config?: CustomRequestInit) => {
-          const res = await baseFetch(url, {
-            ...config,
-            method: 'PATCH',
-            body: data !== undefined ? JSON.stringify(data) : undefined,
-          });
-          if (res.status === 204) return { data: undefined as unknown as T };
-          return { data: (await res.json()) as T };
-        },
-        delete: async <T = any>(url: string, config?: CustomRequestInit) => {
-          const res = await baseFetch(url, { ...config, method: 'DELETE' });
-          if (res.status === 204) return { data: undefined as unknown as T };
-          return { data: (await res.json()) as T };
-        },
+        get: async <T = unknown>(url: string, config?: EdiNetworkRequestConfig) => ({
+          data: unwrapOrThrow(await client.get<T>(url, toHttpOptions(config))),
+        }),
+        post: async <T = unknown>(
+          url: string,
+          data?: unknown,
+          config?: EdiNetworkRequestConfig,
+        ) => ({
+          data: unwrapOrThrow(await client.post<T>(url, data, toHttpOptions(config))),
+        }),
+        put: async <T = unknown>(
+          url: string,
+          data?: unknown,
+          config?: EdiNetworkRequestConfig,
+        ) => ({
+          data: unwrapOrThrow(await client.put<T>(url, data, toHttpOptions(config))),
+        }),
+        patch: async <T = unknown>(
+          url: string,
+          data?: unknown,
+          config?: EdiNetworkRequestConfig,
+        ) => ({
+          data: unwrapOrThrow(await client.patch<T>(url, data, toHttpOptions(config))),
+        }),
+        delete: async <T = unknown>(url: string, config?: EdiNetworkRequestConfig) => ({
+          data: unwrapOrThrow(await client.delete<T>(url, toHttpOptions(config))),
+        }),
       };
     }, [baseUrl, token]);
 
-    return <NetworkContext.Provider value={{ api }}>{children}</NetworkContext.Provider>;
+    return <NetworkContext.Provider value={api}>{children}</NetworkContext.Provider>;
   }
 
-  function useNetwork() {
+  function useNetwork(): EdiNetworkApi {
     const context = useContext(NetworkContext);
     if (!context) {
       throw new Error(`${hookName} must be used within its Provider`);
     }
-    return context.api;
+    return context;
   }
 
   return { Provider, useNetwork };

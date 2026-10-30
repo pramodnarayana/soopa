@@ -21,12 +21,19 @@
       "types": "./dist/lib/*.d.ts",
       "import": "./dist/lib/*.js",
       "require": "./dist/lib/*.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.cjs"
     }
   },
   "scripts": {
     "dev": "tsup --watch",
     "build": "tsup",
-    "lint": "oxlint"
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

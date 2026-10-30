@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from strace.domain import TraceEvent, TraceLineageItemDTO
+from strace.domain import TraceEvent, TraceLineageItemDTO, TraceStatus
 from strace.ports import TraceRepositoryPort
 
 
@@ -79,6 +79,27 @@ class InMemoryTraceRepository(TraceRepositoryPort):
             item
             for item in self._lineage_by_tenant.get(tenant_id, [])
             if item.correlation_id == correlation_id
+        ]
+        sorted_items = sorted(
+            items,
+            key=lambda item: str(item.created_at or ""),
+            reverse=True,
+        )
+        return sorted_items[:limit]
+
+    async def list_recent_traces(
+        self,
+        tenant_id: str,
+        *,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        limit: int = 50,
+    ) -> list[TraceLineageItemDTO]:
+        items = [
+            item
+            for item in self._lineage_by_tenant.get(tenant_id, [])
+            if (status is None or str(item.status) == status.value)
+            and (min_replay_count is None or item.replay_count >= min_replay_count)
         ]
         sorted_items = sorted(
             items,

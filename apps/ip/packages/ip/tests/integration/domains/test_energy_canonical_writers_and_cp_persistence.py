@@ -322,6 +322,54 @@ async def test_postgres_stitch_repository_and_advisory_lock(
     cp_outbox_rows = (await global_session.execute(cp_outbox_stmt)).scalars().all()
     assert any(r.payload.get("stitch_id") == "stitch_energy_custom_pg_01" for r in cp_outbox_rows)
 
+    # Verify wildcard stitch override and concrete tenant priority in PostgreSQL
+    reg_wildcard_res = await reg_uc.execute(
+        RegisterStitchCommand(
+            tenant_id="*",
+            stitch_id="stitch_shared_override_test",
+            workflow_id="energy.outage_restoration_stitch",
+            workflow_version=1,
+            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
+            is_trigger=True,
+        )
+    )
+    assert reg_wildcard_res.is_ok
+
+    # Concrete tenant overrides wildcard stitch with same ID without 409 or persistence crash
+    reg_override_res = await reg_uc.execute(
+        RegisterStitchCommand(
+            tenant_id=seeded_ip_tenant,
+            stitch_id="stitch_shared_override_test",
+            workflow_id="energy.outage_restoration_stitch",
+            workflow_version=1,
+            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
+            is_trigger=True,
+        )
+    )
+    assert reg_override_res.is_ok
+
+    # Concrete tenant resolves its own stitch, not the wildcard
+    persisted_override = await cp_uow.stitches.get_by_id(
+        tenant_id=seeded_ip_tenant,
+        stitch_id="stitch_shared_override_test",
+    )
+    assert persisted_override is not None
+    assert persisted_override.tenant_id == seeded_ip_tenant
+
+    # Different concrete tenant attempting the same stitch_id triggers 409 collision
+    reg_conflict_res = await reg_uc.execute(
+        RegisterStitchCommand(
+            tenant_id="other_concrete_tenant_999",
+            stitch_id="stitch_shared_override_test",
+            workflow_id="energy.outage_restoration_stitch",
+            workflow_version=1,
+            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
+            is_trigger=True,
+        )
+    )
+    assert reg_conflict_res.is_err
+    assert reg_conflict_res.unwrap_err().http_status == 409
+
     # Verify SqlAlchemyTokenRefreshLockAdapter with PostgreSQL pg_advisory_xact_lock
     lock_adapter_1 = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)
     lock_adapter_2 = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)

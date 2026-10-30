@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTenantContext } from '@/contexts/TenantContext';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 import { useAuthUser } from '@/hooks/useAuthUser';
-import { apiClient } from '@/lib/api-client';
 
 export interface UserNotificationPreference {
   id: string;
@@ -15,6 +15,7 @@ export interface UserNotificationPreference {
 export const useUserPreferences = () => {
   const { tenantId } = useTenantContext();
   const { data: user } = useAuthUser();
+  const apiClient = useUcpApiClient();
 
   return useQuery({
     queryKey: ['user-notification-preferences', tenantId, user?.subject],
@@ -30,6 +31,7 @@ export const useUpdateUserPreference = () => {
   const { tenantId } = useTenantContext();
   const { data: user } = useAuthUser();
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
 
   return useMutation({
     mutationFn: async ({
@@ -48,7 +50,7 @@ export const useUpdateUserPreference = () => {
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ['user-notification-preferences', tenantId, user?.subject],
       });
     },
