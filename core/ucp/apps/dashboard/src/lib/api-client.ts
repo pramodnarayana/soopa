@@ -23,6 +23,20 @@ export interface DashboardFetchOptions {
 
 export type DashboardRequestConfig = Omit<DashboardFetchOptions, 'method' | 'body'>;
 
+export class ApiClientError extends Error {
+  public readonly status: number;
+  public readonly statusText: string;
+  public readonly rawBody: string;
+
+  constructor(status: number, statusText: string, message: string, rawBody: string) {
+    super(message);
+    this.name = 'ApiClientError';
+    this.status = status;
+    this.statusText = statusText;
+    this.rawBody = rawBody;
+  }
+}
+
 export interface UcpApiClientPort {
   readonly httpClient?: unknown;
   request<T>(endpoint: string, options?: DashboardFetchOptions): Promise<T>;
@@ -77,7 +91,7 @@ function buildUrl(baseUrl: string, endpoint: string, params?: QueryParamsRecord)
 }
 
 export interface CreateScopedUcpApiClientOptions {
-  readonly getToken: () => string | null | undefined;
+  readonly getToken?: () => string | null | undefined;
   readonly baseUrl?: string;
   readonly fetchImpl?: typeof fetch;
 }
@@ -94,7 +108,7 @@ export function createScopedUcpApiClient(
     body?: unknown,
     config?: DashboardRequestConfig,
   ): Promise<T> => {
-    const token = options.getToken();
+    const token = options.getToken?.();
     const headers = new Headers(config?.headers);
     if (token && !headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
@@ -130,8 +144,34 @@ export function createScopedUcpApiClient(
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || `HTTP ${response.status} ${response.statusText}`);
+      const rawText = await response.text();
+      let errorMessage = rawText || `HTTP ${response.status} ${response.statusText}`;
+      if (rawText) {
+        try {
+          const parsed = JSON.parse(rawText) as Record<string, unknown>;
+          if (parsed && typeof parsed === 'object') {
+            if (typeof parsed.detail === 'string' && parsed.detail) {
+              errorMessage = parsed.detail;
+            } else if (typeof parsed.message === 'string' && parsed.message) {
+              errorMessage = parsed.message;
+            } else if (Array.isArray(parsed.detail)) {
+              const messages = parsed.detail
+                .map((item) =>
+                  item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string'
+                    ? item.msg
+                    : null,
+                )
+                .filter((msg): msg is string => Boolean(msg));
+              if (messages.length > 0) {
+                errorMessage = messages.join('; ');
+              }
+            }
+          }
+        } catch {
+          // If body is not valid JSON, retain rawText fallback
+        }
+      }
+      throw new ApiClientError(response.status, response.statusText, errorMessage, rawText);
     }
 
     const contentType = response.headers.get('content-type');

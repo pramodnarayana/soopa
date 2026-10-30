@@ -58,6 +58,25 @@ function buildRequestUrl(baseUrl: string, path: string, params?: QueryParamsReco
   return `${fullPath}${separator}${queryString}`;
 }
 
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function buildRequestHeaders(
   method: HttpMethodValue,
   hasBody: boolean,
@@ -74,7 +93,7 @@ function buildRequestHeaders(
   if (options?.idempotencyKey) {
     headers.set('Idempotency-Key', options.idempotencyKey);
   } else if (MUTATING_METHODS.has(method) && !headers.has('Idempotency-Key')) {
-    headers.set('Idempotency-Key', crypto.randomUUID());
+    headers.set('Idempotency-Key', generateUUID());
   }
   return headers;
 }
@@ -328,12 +347,14 @@ export class FetchHttpClientAdapter implements HttpClientPort {
     options?: HttpRequestOptions,
   ): Promise<Result<T, ApiProblem>> {
     const startedAt = Date.now();
-    const url = buildRequestUrl(this.baseUrl, path, options?.params);
-    const headers = buildRequestHeaders(method, body !== undefined, this.getToken?.(), options);
-    const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
-    const abortContext = createAbortExecutionContext(options?.signal, timeoutMs);
+    let abortContext: { signal: AbortSignal; cleanup: () => void } | undefined;
 
     try {
+      const url = buildRequestUrl(this.baseUrl, path, options?.params);
+      const headers = buildRequestHeaders(method, body !== undefined, this.getToken?.(), options);
+      const timeoutMs = options?.timeoutMs ?? this.defaultTimeoutMs;
+      abortContext = createAbortExecutionContext(options?.signal, timeoutMs);
+
       return await this.executeAndClassify<T>(
         method,
         path,
@@ -348,7 +369,7 @@ export class FetchHttpClientAdapter implements HttpClientPort {
       emitProblemTelemetry(this.logger, method, path, problem, Date.now() - startedAt);
       return err(problem);
     } finally {
-      abortContext.cleanup();
+      abortContext?.cleanup();
     }
   }
 

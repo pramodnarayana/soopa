@@ -207,4 +207,55 @@ describe('FetchHttpClientAdapter', () => {
       }),
     ).toThrow(ApiProblemError);
   });
+
+  it('captures setup failure inside request() returning err(problem) without throwing', async () => {
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local/api/v1',
+      getToken: () => {
+        throw new Error('Keychain token read failure');
+      },
+    });
+
+    const result = await client.get('/protected-route');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.code).toBe(ApiErrorCode.NETWORK_FAILURE);
+      expect(result.error.message).toContain('Keychain token read failure');
+    }
+  });
+
+  it('generates valid Idempotency-Key via fallback when crypto.randomUUID is undefined', async () => {
+    const originalRandomUUID = crypto.randomUUID;
+    try {
+      // Temporarily remove randomUUID to test fallback
+      // @ts-expect-error test simulation of environments without randomUUID
+      crypto.randomUUID = undefined;
+
+      const transport = createQueuedFetch([
+        async () =>
+          new Response(JSON.stringify({ created: true }), {
+            status: 201,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ]);
+
+      const client = new FetchHttpClientAdapter({
+        baseUrl: 'https://api.soopa.local/api/v1',
+        fetchImpl: transport.fetchImpl,
+      });
+
+      const result = await client.post('/items', { name: 'fallback-test' });
+      expect(result.ok).toBe(true);
+
+      const capturedCall = transport.calls[0];
+      const headers = new Headers(capturedCall?.init?.headers);
+      const idempotencyKey = headers.get('Idempotency-Key');
+      expect(idempotencyKey).toBeTruthy();
+      expect(idempotencyKey).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+    } finally {
+      crypto.randomUUID = originalRandomUUID;
+    }
+  });
 });

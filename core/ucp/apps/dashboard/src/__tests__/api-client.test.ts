@@ -91,4 +91,53 @@ describe('UCP Dashboard Scoped API Client & Context DI', () => {
     expect(injected).toBe(true);
     expect(html).toContain('mounted');
   });
+
+  it('parses error response bodies extracting detail or message with fallbacks', async () => {
+    const detailClient = createScopedUcpApiClient({
+      baseUrl: 'https://ucp.soopa.local/api/v1',
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ detail: 'Tenant organization not found' }), {
+          status: 404,
+          statusText: 'Not Found',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    });
+    await expect(detailClient.get('/tenants/not-found')).rejects.toThrow(
+      'Tenant organization not found',
+    );
+
+    const messageClient = createScopedUcpApiClient({
+      baseUrl: 'https://ucp.soopa.local/api/v1',
+      fetchImpl: async () =>
+        new Response(JSON.stringify({ message: 'Token expired' }), {
+          status: 401,
+          statusText: 'Unauthorized',
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    });
+    await expect(messageClient.get('/auth/refresh')).rejects.toThrow('Token expired');
+
+    const rawTextClient = createScopedUcpApiClient({
+      baseUrl: 'https://ucp.soopa.local/api/v1',
+      fetchImpl: async () =>
+        new Response('Internal Gateway Proxy Timeout', {
+          status: 504,
+          statusText: 'Gateway Timeout',
+          headers: { 'Content-Type': 'text/plain' },
+        }),
+    });
+    await expect(rawTextClient.get('/proxy')).rejects.toThrow('Internal Gateway Proxy Timeout');
+
+    const emptyBodyClient = createScopedUcpApiClient({
+      baseUrl: 'https://ucp.soopa.local/api/v1',
+      fetchImpl: async () =>
+        new Response('', {
+          status: 500,
+          statusText: 'Internal Server Error',
+        }),
+    });
+    await expect(emptyBodyClient.get('/empty-error')).rejects.toThrow(
+      'HTTP 500 Internal Server Error',
+    );
+  });
 });
