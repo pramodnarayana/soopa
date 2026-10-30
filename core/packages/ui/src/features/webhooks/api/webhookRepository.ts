@@ -1,81 +1,41 @@
+import type { ApiProblem, HttpClientPort, Result } from '../../../network';
 import type { CreateWebhookPayload, UpdateWebhookPayload, Webhook } from '../types';
+
+export interface WebhookRepositoryPort {
+  getAll(signal?: AbortSignal): Promise<Result<Webhook[], ApiProblem>>;
+  create(payload: CreateWebhookPayload): Promise<Result<Webhook, ApiProblem>>;
+  update(id: string, payload: UpdateWebhookPayload): Promise<Result<Webhook, ApiProblem>>;
+  delete(id: string): Promise<Result<void, ApiProblem>>;
+}
 
 /**
  * Platform-level HTTP repository for Webhook CRUD operations.
- * Communicates with the UCP API: GET/POST/PATCH/DELETE /api/v1/tenants/:tenantId/webhooks
- *
- * This repository is intentionally decoupled from any EDI context or provider.
- * It can be used by any app in the monorepo (IDP, EDI, IP, etc.).
+ * Depends strictly on the abstract HttpClientPort (zero adapter-to-adapter coupling)
+ * and returns structured Result<T, ApiProblem> values without throwing exceptions.
  */
-export class HttpWebhookRepository {
-  private readonly baseUrl: string;
-  private readonly tenantId: string;
-  private readonly token: string;
+export class HttpWebhookRepository implements WebhookRepositoryPort {
+  public constructor(
+    private readonly httpClient: HttpClientPort,
+    private readonly tenantId: string,
+  ) {}
 
-  constructor(baseUrl: string, tenantId: string, token: string) {
-    this.baseUrl = baseUrl;
-    this.tenantId = tenantId;
-    this.token = token;
+  private get basePath(): string {
+    return `/tenants/${encodeURIComponent(this.tenantId)}/webhooks`;
   }
 
-  private get apiRoot(): string {
-    return `${this.baseUrl}/tenants/${this.tenantId}/webhooks`;
+  public getAll(signal?: AbortSignal): Promise<Result<Webhook[], ApiProblem>> {
+    return this.httpClient.get<Webhook[]>(this.basePath, { signal });
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15_000);
-
-    try {
-      const res = await fetch(`${this.apiRoot}${path}`, {
-        ...init,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${this.token}`,
-          ...init?.headers,
-        },
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        let message = res.statusText;
-        try {
-          const err = (await res.json()) as { message?: string | string[]; detail?: string };
-          message = Array.isArray(err.message)
-            ? err.message[0]
-            : (err.message ?? err.detail ?? message);
-        } catch {
-          // ignore parse errors, use statusText
-        }
-        throw new Error(message);
-      }
-
-      if (res.status === 204) return undefined as unknown as T;
-      return (await res.json()) as T;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  public create(payload: CreateWebhookPayload): Promise<Result<Webhook, ApiProblem>> {
+    return this.httpClient.post<Webhook>(this.basePath, payload);
   }
 
-  getAll(): Promise<Webhook[]> {
-    return this.request<Webhook[]>('');
+  public update(id: string, payload: UpdateWebhookPayload): Promise<Result<Webhook, ApiProblem>> {
+    return this.httpClient.patch<Webhook>(`${this.basePath}/${encodeURIComponent(id)}`, payload);
   }
 
-  create(payload: CreateWebhookPayload): Promise<Webhook> {
-    return this.request<Webhook>('', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  update(id: string, payload: UpdateWebhookPayload): Promise<Webhook> {
-    return this.request<Webhook>(`/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    });
-  }
-
-  delete(id: string): Promise<void> {
-    return this.request<void>(`/${id}`, { method: 'DELETE' });
+  public delete(id: string): Promise<Result<void, ApiProblem>> {
+    return this.httpClient.delete<void>(`${this.basePath}/${encodeURIComponent(id)}`);
   }
 }

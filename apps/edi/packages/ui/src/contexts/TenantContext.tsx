@@ -1,6 +1,5 @@
-import React, { createContext, useContext } from 'react';
-
-const TenantContext = createContext<string | undefined>(undefined);
+import { TenantSessionProvider, useOptionalTenantId } from '@soopa/ui';
+import React from 'react';
 
 export function TenantProvider({
   tenantId,
@@ -9,15 +8,9 @@ export function TenantProvider({
   tenantId?: string;
   children: React.ReactNode;
 }) {
-  return <TenantContext.Provider value={tenantId}>{children}</TenantContext.Provider>;
+  return <TenantSessionProvider tenantId={tenantId}>{children}</TenantSessionProvider>;
 }
 
-export function useTenantId() {
-  const tenantId = useContext(TenantContext);
-  if (!tenantId) {
-    console.warn(
-      'useTenantId: No tenant ID found in context. API calls requiring tenantId may fail.',
-    );
-  }
-  return tenantId || '';
+export function useTenantId(): string {
+  return useOptionalTenantId();
 }
