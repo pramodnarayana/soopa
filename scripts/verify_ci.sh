@@ -57,7 +57,7 @@ echo "🔄 Ensuring infrastructure is running (Non-Destructive)..."
 pnpm infra:up
 
 echo "✅ Running Architectural Semgrep Checks..."
-uv run --with semgrep semgrep --config=semgrep-architecture.yml --error apps core
+uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --error apps core
 
 
 echo "✅ Validating Python-to-Package Dependency Sync..."
