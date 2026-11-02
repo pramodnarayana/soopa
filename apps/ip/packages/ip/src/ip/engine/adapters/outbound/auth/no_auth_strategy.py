@@ -1,10 +1,10 @@
 from collections.abc import Sequence
 
 import httpx
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
+from shttp import HttpRequestAuthenticator
 
 
-class NoAuthStrategy(AuthenticatorPort):
+class NoAuthStrategy(HttpRequestAuthenticator):
     """Pass-through strategy that performs no modification on outgoing requests."""
 
     @property

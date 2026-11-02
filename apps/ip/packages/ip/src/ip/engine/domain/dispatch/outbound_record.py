@@ -11,11 +11,8 @@ from seedwork.domain.types import JsonDict
 from seedwork.utils import generate_id
 from strace.domain import TracedAggregateRoot, TraceReplayMetadata
 
-from ip.engine.domain.constants import (
-    REDACTED_SECRET_VALUE,
-    SENSITIVE_HTTP_HEADERS,
-    IpIdPrefix,
-)
+from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.dispatch.classifier import redact_sensitive_headers
 from ip.engine.domain.dispatch.enums import (
     HttpWriteOperation,
     OutboundDispatchStatus,
@@ -26,22 +23,6 @@ from ip.engine.domain.trace.trace_event import (
     IpTraceEvent,
     TraceErrorDetails,
 )
-
-
-def redact_sensitive_headers(
-    headers: JsonDict | None,
-) -> JsonDict:
-    """Case-insensitively masks sensitive authentication/cookie headers before audit persistence."""
-    if not headers:
-        return {}
-    redacted: JsonDict = {}
-    for key, value in headers.items():
-        key_lower = key.strip().lower()
-        if key_lower in SENSITIVE_HTTP_HEADERS:
-            redacted[key] = REDACTED_SECRET_VALUE
-        else:
-            redacted[key] = str(value) if not isinstance(value, (str, int, float, bool)) else value
-    return redacted
 
 
 def compute_request_sha256(payload_bytes: bytes) -> str:

@@ -3,19 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
 
-from ip.engine.domain.enums import TransformationMode
-from ip.engine.domain.events import TransformationVersionPromotedEvent
 from ip.engine.domain.exceptions import (
     IpError,
-    NormalizationFailedError,
     Result,
     TransformationNotFoundError,
 )
-from ip.engine.domain.normalization import Transformation
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -71,57 +66,28 @@ class PromoteTransformationVersionUseCase:
                 )
             )
 
-        if transformation.shadow_transformation_version is None:
-            return Result.err(
-                NormalizationFailedError.with_message(
-                    f"No candidate shadow_transformation_version configured on transformation '{transformation.id}' to promote."
-                )
-            )
+        promote_res = transformation.promote_shadow_version()
+        if promote_res.is_err:
+            return Result.err(promote_res.unwrap_err())
 
-        previous_version = transformation.transformation_version
-        promoted_version = transformation.shadow_transformation_version
+        previous_version, promoted_version = promote_res.unwrap()
 
-        updated_transformation = Transformation(
-            id=transformation.id,
-            tenant_id=transformation.tenant_id,
-            connection_id=transformation.connection_id,
-            stream=transformation.stream,
-            transformation_id=transformation.transformation_id,
-            transformation_version=promoted_version,
-            mode=TransformationMode.ACTIVE,
-            shadow_transformation_version=None,
-            created_at=transformation.created_at,
-            updated_at=datetime.now(UTC),
-        )
-
-        updated_transformation.add_domain_event(
-            TransformationVersionPromotedEvent(
-                id=updated_transformation.id,
-                tenant_id=updated_transformation.tenant_id,
-                connection_id=updated_transformation.connection_id,
-                stream=updated_transformation.stream,
-                transformation_id=updated_transformation.transformation_id,
-                promoted_version=promoted_version,
-                previous_version=previous_version,
-            )
-        )
-
-        await self._uow.transformations.save(updated_transformation)
+        await self._uow.transformations.save(transformation)
         await self._uow.commit()
 
         bound_logger.info(
             "transformation_version_promoted",
-            id=updated_transformation.id,
+            id=transformation.id,
             previous_version=previous_version,
             promoted_version=promoted_version,
         )
 
         return Result.ok(
             PromoteTransformationVersionResultDTO(
-                id=updated_transformation.id,
-                connection_id=updated_transformation.connection_id,
-                stream=updated_transformation.stream,
-                transformation_id=updated_transformation.transformation_id,
+                id=transformation.id,
+                connection_id=transformation.connection_id,
+                stream=transformation.stream,
+                transformation_id=transformation.transformation_id,
                 promoted_version=promoted_version,
                 previous_version=previous_version,
             )

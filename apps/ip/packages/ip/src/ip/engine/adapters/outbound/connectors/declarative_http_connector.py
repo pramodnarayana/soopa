@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import re
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import AsyncIterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from urllib.parse import parse_qsl, quote, urlparse, urlunparse
 
 import httpx
 import structlog
-from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
 from ip.engine.adapters.outbound.connectors.spec_mapper import schema_to_app_spec_dto
+from ip.engine.domain.connection.enums import PaginationType
+from ip.engine.domain.connection.http_spec import DeclarativeManifest, HttpActionSpec
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     FailureDisposition,
@@ -26,15 +28,10 @@ from ip.engine.domain.exceptions import (
     UpstreamNetworkError,
     WriteActionNotConfiguredError,
 )
-from ip.engine.domain.models.connector_spec import (
-    DeclarativeManifest,
-    HttpActionSpec,
-    PaginationType,
-)
-from ip.engine.ports.types import (
+from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
+from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
-    ConnectorAuthPayload,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
     StreamFieldDTO,
@@ -46,6 +43,7 @@ from seedwork.domain.types import JsonDict
 from shttp import (
     HttpClient,
     HttpError,
+    HttpRequestAuthenticator,
     PassThroughPolicy,
     create_http_client,
 )
@@ -54,12 +52,23 @@ from shttp.resilience import HttpBackoffHandler
 logger = structlog.get_logger(__name__)
 
 
+@dataclass(frozen=True)
+class ConnectorAuthPayload:
+    """Resolved authentication headers, query parameters, and sensitive metadata for wire requests."""
+
+    headers: Mapping[str, str] = field(default_factory=dict)
+    params: Mapping[str, str] = field(default_factory=dict)
+    sensitive_header_names: Sequence[str] = ()
+
+
 class DeclarativeHttpConnector(BaseConnector):
     """Data-driven HTTP connector executing REST actions defined by DeclarativeManifest."""
 
     def __init__(
         self,
         manifest: DeclarativeManifest,
+        *,
+        auth_resolver: AuthStrategyResolverPort[HttpRequestAuthenticator],
         client: httpx.AsyncClient | None = None,
         http_client: HttpClient | None = None,
         timeout_seconds: float = 10.0,
@@ -67,6 +76,7 @@ class DeclarativeHttpConnector(BaseConnector):
         allow_private_ips: bool = False,
     ) -> None:
         self._manifest = manifest
+        self._auth_resolver = auth_resolver
         self._timeout_seconds = timeout_seconds
         self._allow_private_ips = allow_private_ips or (client is not None)
 
@@ -149,8 +159,8 @@ class DeclarativeHttpConnector(BaseConnector):
         return self._validate_url(interpolated)
 
     def _build_auth_payload(self, credentials: JsonDict) -> ConnectorAuthPayload:
-        """Injects authentication headers and query parameters via unified AuthStrategyResolver."""
-        authenticator = AuthStrategyResolver.resolve(
+        """Injects authentication headers and query parameters via injected AuthStrategyResolverPort."""
+        authenticator = self._auth_resolver.resolve(
             self._manifest.auth_type,
             credentials,
             allow_private_ips=self._allow_private_ips,

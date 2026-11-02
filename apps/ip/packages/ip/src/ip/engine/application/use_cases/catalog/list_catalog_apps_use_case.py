@@ -5,14 +5,17 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
-from ip.engine.application.responses import CatalogAppSummaryDTO
-from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
+from ip.engine.ports.outbound.catalog_registry_port import (
+    CatalogAppSummaryDTO,
+    CatalogRegistryPort,
+)
 
 
 @dataclass(frozen=True)
 class ListCatalogAppsQuery:
-    """Query parameters to filter connector catalog applications."""
+    """Query parameters to filter connector catalog applications for a tenant."""
 
+    tenant_id: str
     category: str | None = None
     search: str | None = None
 

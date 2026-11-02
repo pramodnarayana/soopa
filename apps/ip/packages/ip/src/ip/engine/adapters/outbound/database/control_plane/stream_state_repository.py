@@ -8,7 +8,7 @@ from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchem
 from ip.engine.adapters.outbound.database.models.control_plane import (
     ConnectionStreamStateRecord,
 )
-from ip.engine.domain.models.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +32,19 @@ class SqlAlchemyStreamStateRepository(GlobalSqlAlchemyRepository, StreamStateRep
             cursor_value=record.cursor_value,
             records_synced_count=record.records_synced_count,
             last_synced_at=record.last_synced_at,
+        )
+
+    @staticmethod
+    def _to_orm_model(state: ConnectionStreamState) -> ConnectionStreamStateRecord:
+        return ConnectionStreamStateRecord(
+            id=state.id,
+            tenant_id=state.tenant_id,
+            connection_id=state.connection_id,
+            stream_name=state.stream_name,
+            cursor_field=state.cursor_field,
+            cursor_value=state.cursor_value,
+            records_synced_count=state.records_synced_count,
+            last_synced_at=state.last_synced_at,
         )
 
     @staticmethod
@@ -99,17 +112,7 @@ class SqlAlchemyStreamStateRepository(GlobalSqlAlchemyRepository, StreamStateRep
         if existing is not None:
             self._update_record_from_domain(existing, state)
         else:
-            new_record = ConnectionStreamStateRecord(
-                id=state.id,
-                tenant_id=state.tenant_id,
-                connection_id=state.connection_id,
-                stream_name=state.stream_name,
-                cursor_field=state.cursor_field,
-                cursor_value=state.cursor_value,
-                records_synced_count=state.records_synced_count,
-                last_synced_at=state.last_synced_at,
-            )
-            self._session.add(new_record)
+            self._session.add(self._to_orm_model(state))
 
         self._drain_events(state, default_tenant_id=state.tenant_id)
         await self._session.flush()

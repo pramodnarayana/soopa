@@ -8,26 +8,22 @@ from urllib.parse import quote, urljoin, urlsplit
 
 import httpx
 import structlog
-from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
 from ip.engine.adapters.outbound.connectors.egress_policy import PublicInternetEgressPolicy
 from ip.engine.adapters.outbound.connectors.pagination_strategies import PaginationStrategyResolver
-from ip.engine.application.responses import (
-    AppSpecDTO,
-    ConnectionCheckResultDTO,
-    ConnectorPropertyDTO,
-    DiscoveredCatalogDTO,
-    DropdownOptionDTO,
-    StreamFieldDTO,
-    StreamSchemaDTO,
-)
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.enums import (
+    ApiKeyPlacement,
     AuthType,
-    CursorKind,
-    HttpWriteOperation,
+    ConnectorPropertyKey,
     PaginationType,
-    SyncMode,
+    PropertyType,
 )
+from ip.engine.domain.connection.http_spec import (
+    HttpRequestSpec,
+    HttpSourceSpec,
+    HttpStreamDefinition,
+)
+from ip.engine.domain.dispatch.enums import HttpWriteOperation
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     InvalidConnectionConfigError,
@@ -36,21 +32,45 @@ from ip.engine.domain.exceptions import (
     UpstreamHttpError,
     UpstreamNetworkError,
 )
-from ip.engine.domain.models.http_source_spec import (
-    HttpRequestSpec,
-    HttpSourceSpec,
-    HttpStreamDefinition,
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    SyncMode,
 )
-from ip.engine.domain.models.stream_definition import DeletionMarker, StreamDefinition
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
+from ip.engine.domain.replication.stream_definition import DeletionMarker, StreamDefinition
+from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
+from ip.engine.ports.outbound.connector_port import (
+    AppSpecDTO,
+    ConnectionCheckResultDTO,
+    ConnectorPropertyDTO,
+    DiscoveredCatalogDTO,
+    DropdownOptionDTO,
+    RecordEnvelopeDTO,
+    StreamFieldDTO,
+    StreamSchemaDTO,
+    WriteRecordCommand,
+    WriteResultDTO,
+)
 from ip.engine.ports.outbound.egress_policy_port import EgressPolicyPort
-from ip.engine.ports.types import RecordEnvelopeDTO, WriteRecordCommand, WriteResultDTO
 from seedwork.domain.types import JsonDict, JsonValue
-from shttp import HttpClient, PassThroughPolicy, create_http_client
+from shttp import (
+    HttpClient,
+    HttpRequestAuthenticator,
+    PassThroughPolicy,
+    create_http_client,
+)
 from shttp.exceptions import HttpError
 from shttp.resilience import HttpBackoffHandler
 
 logger = structlog.get_logger(__name__)
+
+AUTH_CONFIG_CREDENTIAL_KEYS: tuple[ConnectorPropertyKey, ...] = (
+    ConnectorPropertyKey.PARAM_NAME,
+    ConnectorPropertyKey.PLACEMENT,
+    ConnectorPropertyKey.USERNAME,
+    ConnectorPropertyKey.TOKEN_URL,
+    ConnectorPropertyKey.CLIENT_ID,
+    ConnectorPropertyKey.SCOPES,
+)
 
 
 def _extract_nested(data: JsonValue, path: list[str] | tuple[str, ...]) -> JsonValue:
@@ -78,6 +98,7 @@ class GenericHttpConnector(BaseConnector):
     def __init__(
         self,
         *,
+        auth_resolver: AuthStrategyResolverPort[HttpRequestAuthenticator],
         app_id: str = "http",
         client: httpx.AsyncClient | None = None,
         http_client: HttpClient | None = None,
@@ -86,6 +107,7 @@ class GenericHttpConnector(BaseConnector):
         allow_private_ips: bool = False,
     ) -> None:
         self._app_id = app_id
+        self._auth_resolver = auth_resolver
         self._timeout_seconds = timeout_seconds
         self._allow_private_ips = allow_private_ips or (client is not None)
         self._egress_policy = egress_policy or PublicInternetEgressPolicy(
@@ -143,6 +165,25 @@ class GenericHttpConnector(BaseConnector):
             timeout=self._timeout_seconds,
         )
 
+    def _resolve_authenticator(
+        self,
+        auth_type: AuthType,
+        public_config: JsonDict,
+        credentials: JsonDict,
+    ) -> HttpRequestAuthenticator:
+        """Merges public auth properties into credentials before resolving authenticator."""
+        creds_merged = dict(credentials) if isinstance(credentials, dict) else {}
+        for key in AUTH_CONFIG_CREDENTIAL_KEYS:
+            prop_name = key.value
+            if prop_name in public_config and prop_name not in creds_merged:
+                creds_merged[prop_name] = public_config[prop_name]
+
+        return self._auth_resolver.resolve(
+            auth_type,
+            creds_merged,
+            allow_private_ips=self._allow_private_ips,
+        )
+
     def spec(self) -> AppSpecDTO:
         """Returns the dynamic property schema for configuring generic HTTP connections."""
         return AppSpecDTO(
@@ -152,37 +193,114 @@ class GenericHttpConnector(BaseConnector):
             description="Universal HTTP / REST API connector for SaaS and custom web endpoints.",
             properties=[
                 ConnectorPropertyDTO(
-                    name="base_url",
+                    name=ConnectorPropertyKey.BASE_URL.value,
                     label="Base URL",
-                    type="SHORT_TEXT",
+                    type=PropertyType.SHORT_TEXT.value,
                     required=True,
                     description="Base HTTPS URL for the target API.",
                     default="https://api.example.com",
                 ),
                 ConnectorPropertyDTO(
-                    name="auth_type",
+                    name=ConnectorPropertyKey.AUTH_TYPE.value,
                     label="Authentication Type",
-                    type="DROPDOWN",
+                    type=PropertyType.DROPDOWN.value,
                     required=True,
                     description="Authentication method required by the API.",
                     options=[
-                        DropdownOptionDTO(label="None", value="NO_AUTH"),
-                        DropdownOptionDTO(label="Bearer Token", value="BEARER_TOKEN"),
-                        DropdownOptionDTO(label="API Key", value="API_KEY"),
-                        DropdownOptionDTO(label="Basic Auth", value="BASIC_AUTH"),
+                        DropdownOptionDTO(label="None", value=AuthType.NO_AUTH.value),
+                        DropdownOptionDTO(label="Bearer Token", value=AuthType.BEARER_TOKEN.value),
+                        DropdownOptionDTO(label="API Key", value=AuthType.API_KEY.value),
+                        DropdownOptionDTO(label="Basic Auth", value=AuthType.BASIC_AUTH.value),
                         DropdownOptionDTO(
-                            label="OAuth2 Client Credentials", value="OAUTH2_CLIENT_CREDENTIALS"
+                            label="OAuth2 Client Credentials",
+                            value=AuthType.OAUTH2_CLIENT_CREDENTIALS.value,
                         ),
                     ],
-                    default="BEARER_TOKEN",
+                    default=AuthType.BEARER_TOKEN.value,
                 ),
                 ConnectorPropertyDTO(
-                    name="check_path",
-                    label="Health Check Path",
-                    type="SHORT_TEXT",
+                    name=ConnectorPropertyKey.CHECK_PATH.value,
+                    label="Test Connection Path",
+                    type=PropertyType.SHORT_TEXT.value,
                     required=False,
-                    description="Relative path used to verify connection status (e.g. /health).",
+                    description="Lightweight endpoint (e.g. /health, /v1/me, /status, or /) used to verify credentials and connectivity during pre-flight.",
                     default="/",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.TOKEN.value,
+                    label="Bearer Token / API Key",
+                    type=PropertyType.SECRET_TEXT.value,
+                    required=False,
+                    description="Secret token or API key for Bearer Token or API Key authentication.",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.PARAM_NAME.value,
+                    label="API Key Header / Query Name",
+                    type=PropertyType.SHORT_TEXT.value,
+                    required=False,
+                    description="Header or query parameter name for API Key auth (e.g. X-API-Key, Authorization). Default: X-API-Key.",
+                    default="X-API-Key",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.PLACEMENT.value,
+                    label="API Key Placement",
+                    type=PropertyType.DROPDOWN.value,
+                    required=False,
+                    description="Send the API Key in the HTTP request Header or Query Parameter.",
+                    options=[
+                        DropdownOptionDTO(
+                            label="Header (X-API-Key: ...)",
+                            value=ApiKeyPlacement.HEADER.value,
+                        ),
+                        DropdownOptionDTO(
+                            label="Query Parameter (?api_key=...)",
+                            value=ApiKeyPlacement.QUERY_PARAM.value,
+                        ),
+                    ],
+                    default=ApiKeyPlacement.HEADER.value,
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.USERNAME.value,
+                    label="Basic Auth Username",
+                    type=PropertyType.SHORT_TEXT.value,
+                    required=False,
+                    description="Username for Basic Authentication.",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.PASSWORD.value,
+                    label="Basic Auth Password",
+                    type=PropertyType.SECRET_TEXT.value,
+                    required=False,
+                    description="Password for Basic Authentication.",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.TOKEN_URL.value,
+                    label="OAuth2 Token URL",
+                    type=PropertyType.SHORT_TEXT.value,
+                    required=False,
+                    description="Endpoint to request access tokens using OAuth2 client credentials.",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.CLIENT_ID.value,
+                    label="OAuth2 Client ID",
+                    type=PropertyType.SHORT_TEXT.value,
+                    required=False,
+                    description="Client ID for OAuth2 token exchange.",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.CLIENT_SECRET.value,
+                    label="OAuth2 Client Secret",
+                    type=PropertyType.SECRET_TEXT.value,
+                    required=False,
+                    description="Client Secret for OAuth2 token exchange.",
+                ),
+                ConnectorPropertyDTO(
+                    name=ConnectorPropertyKey.TIMEOUT_SECONDS.value,
+                    label="Request Timeout (Seconds)",
+                    type=PropertyType.NUMBER.value,
+                    required=False,
+                    description="Timeout limit per request in seconds (default: 30).",
+                    default=30,
                 ),
             ],
             auth_type=AuthType.BEARER_TOKEN.value,
@@ -193,7 +311,7 @@ class GenericHttpConnector(BaseConnector):
     ) -> Result[HttpSourceSpec, InvalidConnectionConfigError]:
         """Constructs an immutable HttpSourceSpec from per-connection public config."""
         base_url_raw = (
-            public_config.get("base_url")
+            public_config.get(ConnectorPropertyKey.BASE_URL.value)
             or public_config.get("endpoint_url")
             or public_config.get("host")
         )
@@ -206,7 +324,9 @@ class GenericHttpConnector(BaseConnector):
             )
         base_url = str(base_url_raw).strip()
 
-        raw_auth = str(public_config.get("auth_type") or "NO_AUTH")
+        raw_auth = str(
+            public_config.get(ConnectorPropertyKey.AUTH_TYPE.value) or AuthType.NO_AUTH.value
+        )
         try:
             auth_type = AuthType(raw_auth)
         except ValueError:
@@ -219,7 +339,7 @@ class GenericHttpConnector(BaseConnector):
             else {}
         )
 
-        check_path = str(public_config.get("check_path") or "/")
+        check_path = str(public_config.get(ConnectorPropertyKey.CHECK_PATH.value) or "/")
         check_request = HttpRequestSpec(path=check_path, method="GET")
 
         raw_streams = public_config.get("streams")
@@ -364,10 +484,10 @@ class GenericHttpConnector(BaseConnector):
             )
 
         # 2. Build authenticator
-        authenticator = AuthStrategyResolver.resolve(
+        authenticator = self._resolve_authenticator(
             spec.auth_type,
+            public_config,
             credentials,
-            allow_private_ips=self._allow_private_ips,
         )
 
         # 3. Assemble target request
@@ -429,7 +549,7 @@ class GenericHttpConnector(BaseConnector):
         self,
         connection_id: str,
         spec: HttpSourceSpec,
-        authenticator: AuthenticatorPort,
+        authenticator: HttpRequestAuthenticator,
     ) -> tuple[list[StreamSchemaDTO], DiscoveredCatalogDTO | None]:
         url_res = self._build_safe_target_url(spec.base_url, "api/v1/schema/streams")
         if url_res.is_err or url_res.value is None:
@@ -495,7 +615,7 @@ class GenericHttpConnector(BaseConnector):
         self,
         stream_def: HttpStreamDefinition,
         spec: HttpSourceSpec,
-        authenticator: AuthenticatorPort,
+        authenticator: HttpRequestAuthenticator,
     ) -> StreamSchemaDTO:
         stream_name = stream_def.replication.stream
         req_spec = stream_def.request
@@ -598,10 +718,10 @@ class GenericHttpConnector(BaseConnector):
                 connection_id=connection_id, error=egress_res.error
             )
 
-        authenticator = AuthStrategyResolver.resolve(
+        authenticator = self._resolve_authenticator(
             spec.auth_type,
+            public_config,
             credentials,
-            allow_private_ips=self._allow_private_ips,
         )
 
         if not spec.streams:
@@ -766,10 +886,10 @@ class GenericHttpConnector(BaseConnector):
             self._last_error = egress_res.error
             return
 
-        authenticator = AuthStrategyResolver.resolve(
+        authenticator = self._resolve_authenticator(
             spec.auth_type,
+            public_config,
             credentials,
-            allow_private_ips=self._allow_private_ips,
         )
 
         pagination_strat = PaginationStrategyResolver.resolve(stream_def.request.pagination)
@@ -837,10 +957,10 @@ class GenericHttpConnector(BaseConnector):
             self._last_error = egress_res.error
             return None
 
-        authenticator = AuthStrategyResolver.resolve(
+        authenticator = self._resolve_authenticator(
             spec.auth_type,
+            public_config,
             credentials,
-            allow_private_ips=self._allow_private_ips,
         )
 
         encoded_record_id = quote(str(record_id), safe="")
@@ -947,10 +1067,10 @@ class GenericHttpConnector(BaseConnector):
             return WriteResultDTO.from_error(url_err, record_id=target_record_id or "failed")
         target_url = url_res.value
 
-        authenticator = AuthStrategyResolver.resolve(
+        authenticator = self._resolve_authenticator(
             spec.auth_type,
+            public_config,
             credentials,
-            allow_private_ips=self._allow_private_ips,
         )
 
         merged_headers: dict[str, str] = {

@@ -232,7 +232,11 @@ class SyncRun(AggregateRoot):
         self, error_code: str, error_message: str
     ) -> Result[SyncRun, InvalidSyncRunStateError]:
         """Marks run as FAILED with error context, emitting SyncRunFailedEvent."""
-        if self.status in (SyncRunStatus.SUCCEEDED, SyncRunStatus.CANCELLED):
+        if self.status in (
+            SyncRunStatus.SUCCEEDED,
+            SyncRunStatus.FAILED,
+            SyncRunStatus.CANCELLED,
+        ):
             return Result.fail(
                 InvalidSyncRunStateError(
                     run_id=self.id,

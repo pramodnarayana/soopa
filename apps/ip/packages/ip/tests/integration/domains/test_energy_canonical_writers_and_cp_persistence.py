@@ -9,22 +9,14 @@ import pytest
 from database.testing import TransactionalTestRouter
 from database.types import GlobalSession, TenantSession
 from dependency_injector import providers
-from ip.application.domains.energy.canonical import EnergyEntityType
-from ip.application.domains.energy.repository import SqlAlchemyEnergyDomainRepository
 from ip.engine.adapters.outbound.auth.token_refresh_lock import (
     SqlAlchemyTokenRefreshLockAdapter,
-)
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
-)
-from ip.engine.adapters.outbound.database.data_plane.uow import (
-    SqlAlchemyIpDataPlaneUnitOfWork,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
 from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
 )
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
+from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
 from ip.engine.application.use_cases.normalization.bind_stream_transformation_use_case import (
     BindStreamTransformationCommand,
 )
@@ -37,16 +29,22 @@ from ip.engine.application.use_cases.stitch.stitch_control_plane_use_cases impor
     RegisterStitchCommand,
     RegisterStitchUseCase,
 )
-from ip.engine.container import Container
-from ip.engine.domain.enums import (
-    AuthType,
-    IpEventType,
+from ip.engine.bootstrap.container import (
+    Container,
+    create_ip_control_plane_uow,
+    create_ip_data_plane_uow,
+)
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     TransformationMode,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.stitch import StitchStepType
+from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.domain.stitch.enums import StitchStepType
+from ip.solutions.domains.energy.canonical import EnergyEntityType
+from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
 from orchestration.ports.inbound.step_handler_port import StepContext
 from sqlalchemy import select
 
@@ -63,14 +61,14 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
     """Verifies Container wires Energy canonical writers (`mdm_meter_readings`, `mdm_service_points`)
     and all 3 Stitch step handlers against PostgreSQL, including out-of-order reference back-patching.
     """
-    resolver = IpTenantResolver(transactional_router)
+    resolver = SqlAlchemyIpTenantResolver(transactional_router)
     container = Container()
     container.config.allow_private_ips.from_value(True)
     container.db_router.override(providers.Object(transactional_router))
     container.tenant_resolver.override(providers.Object(resolver))
 
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    dp_uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    cp_uow = create_ip_control_plane_uow(global_session)
+    dp_uow = create_ip_data_plane_uow(tenant_session)
     now = datetime.now(UTC)
     conn_id = "ip_conn_itron_energy_01"
 
@@ -274,7 +272,7 @@ async def test_postgres_stitch_repository_and_advisory_lock(
     SqlAlchemyTokenRefreshLockAdapter acquires PostgreSQL `pg_advisory_xact_lock`.
     """
     container = Container()
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    cp_uow = create_ip_control_plane_uow(global_session)
     wf_reg = container.workflow_definition_registry()
     stitch_cat = container.stitch_catalog()
 
@@ -302,7 +300,7 @@ async def test_postgres_stitch_repository_and_advisory_lock(
     fresh_cat = container.stitch_catalog()
     list_uc = ListStitchesUseCase(
         stitch_catalog=fresh_cat,
-        uow=SqlAlchemyIpControlPlaneUnitOfWork(global_session),
+        uow=create_ip_control_plane_uow(global_session),
     )
     listed = await list_uc.execute(ListStitchesQuery(tenant_id=seeded_ip_tenant))
     assert any(s.id == "stitch_energy_custom_pg_01" for s in listed)

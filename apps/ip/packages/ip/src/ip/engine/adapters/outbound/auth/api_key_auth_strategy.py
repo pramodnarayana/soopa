@@ -1,12 +1,12 @@
 from collections.abc import Sequence
 
 import httpx
-from ip.engine.domain.enums import ApiKeyPlacement
+from ip.engine.domain.connection.enums import ApiKeyPlacement
 from ip.engine.domain.exceptions import InvalidCredentialsError
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
+from shttp import HttpRequestAuthenticator
 
 
-class ApiKeyAuthStrategy(AuthenticatorPort):
+class ApiKeyAuthStrategy(HttpRequestAuthenticator):
     """Injects an API key into an HTTP header or query parameter."""
 
     def __init__(

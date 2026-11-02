@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.models.connector_spec import (
+from ip.engine.domain.connection.catalog import (
     ConnectorProperty,
     ConnectorPropertySchema,
     DropdownOption,
     OAuthConfig,
 )
-from ip.engine.ports.types import (
+from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
     ConnectorPropertyDTO,
     DropdownOptionDTO,
@@ -41,7 +41,7 @@ def connector_property_to_dto(prop: ConnectorProperty) -> ConnectorPropertyDTO:
     return ConnectorPropertyDTO(
         name=prop.name,
         label=prop.label,
-        type=prop.type.value if hasattr(prop.type, "value") else str(prop.type),
+        type=prop.type.value,
         required=prop.required,
         default=prop.default,
         description=prop.description,

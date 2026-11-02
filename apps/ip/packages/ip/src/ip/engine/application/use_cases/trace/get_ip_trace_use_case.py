@@ -1,4 +1,4 @@
-"""Use case for fetching the end-to-end 5-layer waterfall snapshot of an IP transaction trace."""
+"""Use case for fetching the end-to-end 5-layer waterfall snapshot of an IP trace."""
 
 from __future__ import annotations
 
@@ -8,17 +8,17 @@ from dataclasses import dataclass
 from strace.domain import (
     TraceEvent,
     TraceLineageContext,
-    TraceStatus,
     extract_deepest_lineage_context,
 )
 
-from ip.engine.application.dtos.trace import IpTraceDTO
+from ip.engine.application.responses import IpTraceDTO
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import IpError, Result, TraceNotFoundError
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.normalization import NormalizationRejectionEntry
+from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.trace import IpTraceStatus
 from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
@@ -58,19 +58,19 @@ class GetIpTraceUseCase:
         replica_rejections: Sequence[ReplicaRejection],
         replica_records: Sequence[ReplicaRecord],
         inbound_record: InboundRecord | None,
-    ) -> TraceStatus:
+    ) -> IpTraceStatus:
         """Derives the overall trace lifecycle status from its 5-layer stage records."""
         if outbound_records:
-            return TraceStatus(outbound_records[-1].status.value)
+            return IpTraceStatus(outbound_records[-1].status.value)
         if normalization_rejections or replica_rejections:
-            return TraceStatus.REJECTED
+            return IpTraceStatus.REJECTED
         if normalized_records:
-            return TraceStatus.NORMALIZED
+            return IpTraceStatus.NORMALIZED
         if replica_records:
-            return TraceStatus.REPLICATED
+            return IpTraceStatus.REPLICATED
         if inbound_record is not None:
-            return TraceStatus.INGESTED
-        return TraceStatus.UNKNOWN
+            return IpTraceStatus.INGESTED
+        return IpTraceStatus.UNKNOWN
 
     @staticmethod
     def extract_lineage_context(

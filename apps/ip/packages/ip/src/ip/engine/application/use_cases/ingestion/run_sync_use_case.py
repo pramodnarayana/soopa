@@ -10,31 +10,32 @@ from datetime import UTC, datetime, timedelta
 
 import structlog
 from security.ports.cipher_port import CipherPort
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonDict, JsonValue
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ip.engine.application.use_cases.connections.token_manager_service import (
     GetValidCredentialsCommand,
     TokenManagerService,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.exceptions import InvalidSyncRunStateError
+from ip.engine.domain.replication.enums import (
     IngestionMode,
     SyncRunKind,
     SyncRunStatus,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.stream_state import ConnectionStreamState
-from ip.engine.domain.models.sync_run import SyncRun
-from ip.engine.ports.outbound.connector_port import SourceConnectorPort
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.sync_run import SyncRun
+from ip.engine.ports.outbound.connector_port import RecordEnvelopeDTO, SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
 )
-from ip.engine.ports.types import RecordEnvelopeDTO
 
 logger = structlog.get_logger(__name__)
 
@@ -126,22 +127,17 @@ class RunSyncUseCase:
         if self._data_plane_uow is not None:
             async with self._data_plane_uow as uow:
                 yield uow
-        elif self._data_plane_uow_provider is not None:
-            if shard_info is None:
-                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
-                if shard_info_res.is_err:
-                    raise RuntimeError(shard_info_res.unwrap_err().message)
-                shard_info = shard_info_res.unwrap()
-            shard_id, shard_dsn = shard_info
-            async with self._data_plane_uow_provider.get_data_plane_uow(
-                tenant_id, shard_id, shard_dsn
-            ) as uow:
-                yield uow
-        else:
-            raise RuntimeError("Neither data_plane_uow nor data_plane_uow_provider was configured.")
+            return
+        assert self._data_plane_uow_provider is not None
+        assert shard_info is not None
+        shard_id, shard_dsn = shard_info
+        async with self._data_plane_uow_provider.get_data_plane_uow(
+            tenant_id, shard_id, shard_dsn
+        ) as uow:
+            yield uow
 
     async def execute(self, command: RunSyncCommand) -> RunSyncResultDTO:
-        trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
         init_res = await self._init_sync_run(command, trace_id)
         if isinstance(init_res, RunSyncResultDTO):
             return init_res
@@ -184,7 +180,7 @@ class RunSyncUseCase:
             )
             ingestion_mode = self._resolve_ingestion_mode(kind)
 
-            capped = await self._execute_stream_pull(
+            pull_res = await self._execute_stream_pull(
                 command=command,
                 sync_run=sync_run,
                 connection=connection,
@@ -196,6 +192,24 @@ class RunSyncUseCase:
                 trace_id=trace_id,
                 shard_info=shard_info,
             )
+            if pull_res.is_err:
+                state_err = pull_res.unwrap_err()
+                return RunSyncResultDTO(
+                    run_id=sync_run.id,
+                    tenant_id=sync_run.tenant_id,
+                    connection_id=sync_run.connection_id,
+                    stream_name=sync_run.stream,
+                    kind=sync_run.kind.value,
+                    status=sync_run.status.value,
+                    pages_synced=sync_run.pages_synced,
+                    records_synced=sync_run.records_synced,
+                    bytes_synced=sync_run.bytes_synced,
+                    start_checkpoint=sync_run.start_checkpoint,
+                    end_checkpoint=sync_run.end_checkpoint,
+                    error_code=state_err.code.value,
+                    error_message=state_err.message,
+                )
+            capped = pull_res.unwrap()
         except Exception as exc:
             logger.exception(
                 "sync_run_execution_exception",
@@ -249,7 +263,24 @@ class RunSyncUseCase:
                     and command.trace_id is not None
                     and active_run.trace_id == command.trace_id
                 ):
-                    active_run.start()
+                    start_res = active_run.start()
+                    if start_res.is_err:
+                        err = start_res.unwrap_err()
+                        return RunSyncResultDTO(
+                            run_id=active_run.id,
+                            tenant_id=command.tenant_id,
+                            connection_id=command.connection_id,
+                            stream_name=command.stream_name,
+                            kind=active_run.kind.value,
+                            status="CONFLICT",
+                            pages_synced=0,
+                            records_synced=0,
+                            bytes_synced=0,
+                            start_checkpoint=active_run.start_checkpoint,
+                            end_checkpoint=active_run.end_checkpoint,
+                            error_code=err.code.value,
+                            error_message=err.message,
+                        )
                     await self._control_plane_uow.sync_runs.save(active_run)
                     await self._control_plane_uow.commit()
                     return (
@@ -318,7 +349,24 @@ class RunSyncUseCase:
                 start_checkpoint=start_cursor,
                 trace_id=trace_id,
             )
-            sync_run.start()
+            start_res = sync_run.start()
+            if start_res.is_err:
+                err = start_res.unwrap_err()
+                return RunSyncResultDTO(
+                    run_id=sync_run.id,
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    stream_name=command.stream_name,
+                    kind=sync_run.kind.value,
+                    status="CONFLICT",
+                    pages_synced=0,
+                    records_synced=0,
+                    bytes_synced=0,
+                    start_checkpoint=sync_run.start_checkpoint,
+                    end_checkpoint=sync_run.end_checkpoint,
+                    error_code=err.code.value,
+                    error_message=err.message,
+                )
             await self._control_plane_uow.sync_runs.save(sync_run)
             await self._control_plane_uow.commit()
 
@@ -354,7 +402,7 @@ class RunSyncUseCase:
         generation_id: int,
         trace_id: str,
         shard_info: tuple[str, str] | None = None,
-    ) -> bool:
+    ) -> Result[bool, InvalidSyncRunStateError]:
         current_page: list[RecordEnvelopeDTO] = []
         page_index = 0
         latest_page_cursor: str | None = None
@@ -383,7 +431,7 @@ class RunSyncUseCase:
 
             if len(current_page) >= command.page_batch_size:
                 page_index += 1
-                await self._persist_page(
+                persist_res = await self._persist_page(
                     page=current_page,
                     sync_run=sync_run,
                     tenant_id=command.tenant_id,
@@ -396,10 +444,12 @@ class RunSyncUseCase:
                     trace_id=trace_id,
                     shard_info=shard_info,
                 )
+                if persist_res.is_err:
+                    return Result.fail(persist_res.unwrap_err())
                 current_page = []
 
         if current_page:
-            await self._persist_page(
+            persist_res = await self._persist_page(
                 page=current_page,
                 sync_run=sync_run,
                 tenant_id=command.tenant_id,
@@ -412,14 +462,33 @@ class RunSyncUseCase:
                 trace_id=trace_id,
                 shard_info=shard_info,
             )
+            if persist_res.is_err:
+                return Result.fail(persist_res.unwrap_err())
 
-        return capped
+        return Result.ok(capped)
 
     async def _complete_run(
         self, sync_run: SyncRun, start_cursor: str | None, trace_id: str
     ) -> RunSyncResultDTO:
         end_checkpoint = sync_run.end_checkpoint or start_cursor
-        sync_run.succeed(end_checkpoint=end_checkpoint)
+        succeed_res = sync_run.succeed(end_checkpoint=end_checkpoint)
+        if succeed_res.is_err:
+            err = succeed_res.unwrap_err()
+            return RunSyncResultDTO(
+                run_id=sync_run.id,
+                tenant_id=sync_run.tenant_id,
+                connection_id=sync_run.connection_id,
+                stream_name=sync_run.stream,
+                kind=sync_run.kind.value,
+                status=sync_run.status.value,
+                pages_synced=sync_run.pages_synced,
+                records_synced=sync_run.records_synced,
+                bytes_synced=sync_run.bytes_synced,
+                start_checkpoint=sync_run.start_checkpoint,
+                end_checkpoint=sync_run.end_checkpoint,
+                error_code=err.code.value,
+                error_message=err.message,
+            )
         async with self._control_plane_uow:
             await self._control_plane_uow.sync_runs.save(sync_run)
             await self._control_plane_uow.commit()
@@ -463,10 +532,26 @@ class RunSyncUseCase:
         next_cursor: str | None,
         trace_id: str,
         shard_info: tuple[str, str] | None = None,
-    ) -> None:
+    ) -> Result[None, InvalidSyncRunStateError]:
         """Stores page in Data Plane and atomically updates checkpoint and sync run counters in Control Plane."""
         page_payload: list[JsonValue] = [envelope.data for envelope in page]
         page_bytes = json.dumps(page_payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+        page_res = sync_run.record_page(
+            records_in_page=len(page),
+            bytes_size=len(page_bytes),
+            next_checkpoint=next_cursor,
+        )
+        if page_res.is_err:
+            err = page_res.unwrap_err()
+            logger.error(
+                "sync_run_record_page_invalid_state",
+                run_id=sync_run.id,
+                status=sync_run.status.value,
+                reason=err.message,
+            )
+            return Result.fail(err)
+
         parsed_dict: JsonDict | None = {"records": page_payload}
 
         # 1. Store raw payload in Data Plane (Tiered Storage)
@@ -519,19 +604,38 @@ class RunSyncUseCase:
                     records_in_batch=len(page),
                 )
             await self._control_plane_uow.stream_states.save(state)
-
-            sync_run.record_page(
-                records_in_page=len(page),
-                bytes_size=len(page_bytes),
-                next_checkpoint=next_cursor,
-            )
             await self._control_plane_uow.sync_runs.save(sync_run)
             await self._control_plane_uow.commit()
+
+        return Result.ok(None)
 
     async def _fail_run(
         self, sync_run: SyncRun, error_code: str, error_message: str
     ) -> RunSyncResultDTO:
-        sync_run.fail(error_code=error_code, error_message=error_message)
+        fail_res = sync_run.fail(error_code=error_code, error_message=error_message)
+        if fail_res.is_err:
+            err = fail_res.unwrap_err()
+            logger.error(
+                "sync_run_fail_invalid_state",
+                run_id=sync_run.id,
+                status=sync_run.status.value,
+                reason=err.message,
+            )
+            return RunSyncResultDTO(
+                run_id=sync_run.id,
+                tenant_id=sync_run.tenant_id,
+                connection_id=sync_run.connection_id,
+                stream_name=sync_run.stream,
+                kind=sync_run.kind.value,
+                status=sync_run.status.value,
+                pages_synced=sync_run.pages_synced,
+                records_synced=sync_run.records_synced,
+                bytes_synced=sync_run.bytes_synced,
+                start_checkpoint=sync_run.start_checkpoint,
+                end_checkpoint=sync_run.end_checkpoint,
+                error_code=err.code.value,
+                error_message=err.message,
+            )
         async with self._control_plane_uow:
             await self._control_plane_uow.sync_runs.save(sync_run)
             await self._control_plane_uow.commit()

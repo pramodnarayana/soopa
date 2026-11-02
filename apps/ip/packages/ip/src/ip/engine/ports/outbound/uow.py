@@ -103,7 +103,7 @@ class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
         self, key: DomainRepositoryKey[TDomainRepo]
     ) -> TDomainRepo | None:
         """Resolves a registered vertical-domain repository bound to the current Data Plane UoW."""
-        return None
+        raise NotImplementedError
 
 
 class IpTenantResolverPort(Protocol):

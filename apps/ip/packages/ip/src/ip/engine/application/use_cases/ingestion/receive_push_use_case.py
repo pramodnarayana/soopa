@@ -7,12 +7,11 @@ from dataclasses import dataclass
 
 import structlog
 from seedwork.domain.types import JsonDict, JsonValue
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import IngestionMode
-from ip.engine.domain.events import FetchRecordRequestedEvent
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
@@ -82,7 +81,7 @@ class ReceivePushUseCase:
         self._ack = ack
 
     async def execute(self, command: ReceivePushCommand) -> ReceivePushResultDTO:
-        trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
         str_headers: dict[str, str] = {str(k): str(v) for k, v in command.headers.items()}
 
         # 1. Verify webhook authenticity (Strategy pattern via InboundVerifierPort)
@@ -199,16 +198,7 @@ class ReceivePushUseCase:
 
             # 6. For thin push, trigger async fetch
             if command.is_thin and command.thin_record_id:
-                record.add_domain_event(
-                    FetchRecordRequestedEvent(
-                        tenant_id=command.tenant_id,
-                        connection_id=command.connection_id,
-                        stream=command.stream_name,
-                        record_id=command.thin_record_id,
-                        notice_inbound_record_id=record.id,
-                        trace_id=trace_id,
-                    )
-                )
+                record.request_thin_record_fetch(record_id=command.thin_record_id)
 
             await self._uow.inbound_records.save(record)
             await self._uow.commit()

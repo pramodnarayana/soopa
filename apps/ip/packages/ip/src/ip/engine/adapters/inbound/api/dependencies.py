@@ -6,42 +6,16 @@ from collections.abc import AsyncGenerator, Iterator, Mapping
 from typing import Annotated
 
 import structlog
-from database.models.identity import Tenant as TenantORM
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
 from fastapi import Depends, HTTPException, Path, Request, status
 from identity.domain.identity_context import IdentityContext
-from ip.application.connectors.registry_loader import create_default_catalog_registry
-from ip.application.stitches.registry_loader import (
-    create_default_workflow_definition_registry,
-    register_default_stitches,
-)
-from ip.application.transformers.registry_loader import create_default_transformer_registry
-from ip.engine.adapters.outbound.auth.oauth2_strategy import OAuth2StrategyTokenRefresher
-from ip.engine.adapters.outbound.auth.token_refresh_lock import (
-    SqlAlchemyTokenRefreshLockAdapter,
-)
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
-)
-from ip.engine.adapters.outbound.database.data_plane.uow import (
-    stage_workflow_outbox_event,
-)
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
-from ip.engine.adapters.outbound.database.tenant_uow_provider import IpTenantUoWProvider
-from ip.engine.adapters.outbound.inbound.ack import StandardInboundAck
-from ip.engine.adapters.outbound.inbound.decoders import StandardInboundPayloadDecoder
-from ip.engine.adapters.outbound.inbound.verifiers import NoOpVerifier
-from ip.engine.adapters.outbound.stitches.stitch_adapters import (
-    IpStitchCanonicalDispatcherAdapter,
-)
-from ip.engine.adapters.outbound.stitches.stitch_catalog_registry import (
-    InMemoryStitchCatalogRegistry,
-)
-from ip.engine.adapters.outbound.storage.tiered_storage_adapter import TieredStorageAdapter
+from ip.engine.application.api_provider_port import IpApiProviderPort
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
+from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
+from ip.engine.domain.enums import PipelineStage
 from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
 from ip.engine.ports.outbound.connector_port import ConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
@@ -60,17 +34,26 @@ from ip.engine.ports.outbound.transformer_port import TransformerRegistryPort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
+    IpTenantResolverPort,
 )
-from ip.engine.settings import get_ip_engine_settings
-from orchestration.adapters.outbound.database.uow import SqlAlchemyWorkflowUnitOfWork
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
-from orchestration.ports.outbound import WorkflowUnitOfWorkPort
 from security.ports.cipher_port import CipherPort
-from security.provider import SecurityProvider
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
+
+
+def _get_api_provider(request: Request) -> IpApiProviderPort:
+    try:
+        provider: IpApiProviderPort | None = request.app.state.ip_api_provider
+    except AttributeError:
+        provider = None
+    if provider is None:
+        raise RuntimeError(
+            "IpApiProviderPort is not initialized on app.state.ip_api_provider. "
+            "Register routes via IpApiModule.register_routes(app) first."
+        )
+    return provider
 
 
 async def get_ip_global_session(
@@ -83,33 +66,35 @@ async def get_ip_global_session(
 
 
 def get_ip_control_plane_uow(
+    request: Request,
     global_session: Annotated[AsyncSession, Depends(get_ip_global_session)],
 ) -> IpControlPlaneUnitOfWorkPort:
     """Resolves an IpControlPlaneUnitOfWorkPort bound to the request Control Plane session."""
-    return SqlAlchemyIpControlPlaneUnitOfWork(global_session=global_session)
+    return _get_api_provider(request).create_control_plane_uow(global_session)
 
 
 def get_ip_data_plane_uow_provider(request: Request) -> IpDataPlaneUnitOfWorkProviderPort:
-    """Resolves the IpDataPlaneUnitOfWorkProviderPort bound to the centralized DatabaseRouter and IpTenantResolver."""
+    """Resolves the IpDataPlaneUnitOfWorkProviderPort bound to the centralized DatabaseRouter and IpTenantResolverPort."""
+    provider = _get_api_provider(request)
     state = request.app.state
     db_router: DatabaseRouterPort = state.db_router
     try:
-        resolver: IpTenantResolver | None = state.ip_tenant_resolver
+        resolver: IpTenantResolverPort | None = state.ip_tenant_resolver
     except AttributeError:
         resolver = None
-    if resolver is None:
-        resolver = IpTenantResolver(db_router)
-        state.ip_tenant_resolver = resolver
-
     try:
         storage: TieredStoragePort | None = state.ip_tiered_storage
     except AttributeError:
         storage = None
-    if storage is None:
-        storage = TieredStorageAdapter()
-        state.ip_tiered_storage = storage
 
-    return IpTenantUoWProvider(resolver=resolver, db_router=db_router, storage=storage)
+    uow_provider, resolved_resolver, resolved_storage = provider.resolve_data_plane_uow_provider(
+        db_router=db_router,
+        resolver=resolver,
+        storage=storage,
+    )
+    state.ip_tenant_resolver = resolved_resolver
+    state.ip_tiered_storage = resolved_storage
+    return uow_provider
 
 
 async def require_tenant_member(
@@ -131,11 +116,9 @@ async def require_tenant_member(
         )
 
     if identity.is_platform_admin:
-        result = await session.execute(
-            select(TenantORM.id).where(TenantORM.idp_tenant_id == tenant_id)
-        )
-        resolved_id = result.scalar_one_or_none()
-        canonical_tenant_id = str(resolved_id) if resolved_id is not None else tenant_id
+        provider = _get_api_provider(request)
+        resolved_id = await provider.resolve_canonical_tenant_id(session, tenant_id)
+        canonical_tenant_id = resolved_id if resolved_id is not None else tenant_id
         if session.in_transaction():
             await session.commit()
         request.state.identity = identity
@@ -179,10 +162,9 @@ class _ConnectorCatalogMapping(Mapping[str, ConnectorPort]):
         return (app.app_id for app in self._registry.list_apps())
 
 
-def get_catalog_registry() -> CatalogRegistryPort:
+def get_catalog_registry(request: Request) -> CatalogRegistryPort:
     """Resolves a CatalogRegistryPort configured according to IP engine settings."""
-    settings = get_ip_engine_settings()
-    return create_default_catalog_registry(allow_private_ips=settings.allow_private_ips)
+    return _get_api_provider(request).get_catalog_registry()
 
 
 def get_connectors(
@@ -192,29 +174,29 @@ def get_connectors(
     return _ConnectorCatalogMapping(registry)
 
 
-def get_cipher() -> CipherPort:
+def get_cipher(request: Request) -> CipherPort:
     """Resolves the platform CipherPort."""
-    return SecurityProvider.get_cipher()
+    return _get_api_provider(request).get_cipher()
 
 
-def get_tiered_storage() -> TieredStoragePort:
+def get_tiered_storage(request: Request) -> TieredStoragePort:
     """Resolves the TieredStoragePort backed by platform S3 PayloadStoragePort."""
-    return TieredStorageAdapter()
+    return _get_api_provider(request).get_tiered_storage()
 
 
-def get_inbound_verifier() -> InboundVerifierPort:
+def get_inbound_verifier(request: Request) -> InboundVerifierPort:
     """Resolves the InboundVerifierPort for L1 push webhook verification."""
-    return NoOpVerifier()
+    return _get_api_provider(request).get_inbound_verifier()
 
 
-def get_inbound_decoder() -> InboundPayloadDecoderPort:
+def get_inbound_decoder(request: Request) -> InboundPayloadDecoderPort:
     """Resolves the InboundPayloadDecoderPort for L1 push webhook payload decoding."""
-    return StandardInboundPayloadDecoder()
+    return _get_api_provider(request).get_inbound_decoder()
 
 
-def get_inbound_ack() -> InboundAckPort:
+def get_inbound_ack(request: Request) -> InboundAckPort:
     """Resolves the InboundAckPort for L1 push webhook acknowledgments."""
-    return StandardInboundAck()
+    return _get_api_provider(request).get_inbound_ack()
 
 
 def get_token_refresh_lock(request: Request) -> TokenRefreshLockPort:
@@ -229,7 +211,7 @@ def get_token_refresh_lock(request: Request) -> TokenRefreshLockPort:
             db_router: DatabaseRouterPort | None = state.db_router
         except AttributeError:
             db_router = None
-        lock = SqlAlchemyTokenRefreshLockAdapter(db_router=db_router)
+        lock = _get_api_provider(request).create_token_refresh_lock(db_router=db_router)
         state.ip_token_refresh_lock = lock
     return lock
 
@@ -242,8 +224,7 @@ def get_token_refresher(request: Request) -> OAuth2TokenRefresherPort:
     except AttributeError:
         refresher = None
     if refresher is None:
-        settings = get_ip_engine_settings()
-        refresher = OAuth2StrategyTokenRefresher(allow_private_ips=settings.allow_private_ips)
+        refresher = _get_api_provider(request).create_token_refresher()
         state.ip_token_refresher = refresher
     return refresher
 
@@ -271,7 +252,7 @@ def get_transformer_registry(request: Request) -> TransformerRegistryPort:
     except AttributeError:
         registry = None
     if registry is None:
-        registry = create_default_transformer_registry()
+        registry = _get_api_provider(request).create_transformer_registry()
         state.ip_transformer_registry = registry
     return registry
 
@@ -284,8 +265,7 @@ def get_stitch_catalog_registry(request: Request) -> StitchCatalogRegistryPort:
     except AttributeError:
         registry = None
     if registry is None:
-        catalog = InMemoryStitchCatalogRegistry()
-        register_default_stitches(catalog)
+        catalog = _get_api_provider(request).create_stitch_catalog_registry()
         state.ip_stitch_catalog = catalog
         return catalog
     return registry
@@ -299,16 +279,9 @@ def get_workflow_definition_registry(request: Request) -> WorkflowDefinitionRegi
     except AttributeError:
         registry = None
     if registry is None:
-        registry = create_default_workflow_definition_registry()
+        registry = _get_api_provider(request).create_workflow_definition_registry()
         state.ip_workflow_definitions = registry
     return registry
-
-
-def _build_workflow_uow(session: AsyncSession) -> WorkflowUnitOfWorkPort:
-    return SqlAlchemyWorkflowUnitOfWork(
-        session,
-        outbox_sink=lambda tid, et, ik, pl: stage_workflow_outbox_event(session, tid, et, ik, pl),
-    )
 
 
 def get_stitch_shard_gateway(
@@ -323,14 +296,19 @@ def get_stitch_shard_gateway(
 ) -> StitchShardGatewayPort:
     """Provides a shard-aware gateway for dispatching canonical events and querying Stitch runs."""
     db_router: DatabaseRouterPort = request.app.state.db_router
-    return IpStitchCanonicalDispatcherAdapter(
+    return _get_api_provider(request).create_stitch_shard_gateway(
         db_router=db_router,
         dp_uow_provider=dp_uow_provider,
         stitch_catalog=stitch_catalog,
         definition_registry=definition_registry,
-        workflow_uow_factory=_build_workflow_uow,
-        control_plane_uow_factory=SqlAlchemyIpControlPlaneUnitOfWork,
     )
+
+
+def get_ip_stage_replay_processors(
+    request: Request,
+) -> Mapping[PipelineStage, StageReplayProcessorPort]:
+    """Assembles the isolated StageReplayProcessorPort strategies for inbound replay endpoints."""
+    return _get_api_provider(request).get_stage_replay_processors()
 
 
 __all__ = [
@@ -343,6 +321,7 @@ __all__ = [
     "get_ip_control_plane_uow",
     "get_ip_data_plane_uow_provider",
     "get_ip_global_session",
+    "get_ip_stage_replay_processors",
     "get_stitch_catalog_registry",
     "get_stitch_shard_gateway",
     "get_tiered_storage",

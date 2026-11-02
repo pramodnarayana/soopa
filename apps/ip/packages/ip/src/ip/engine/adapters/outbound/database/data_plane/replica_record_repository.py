@@ -10,17 +10,18 @@ import structlog
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import replica_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRecordModel
-from ip.engine.domain.enums import CursorKind, MergeOutcome
-from ip.engine.domain.events import ReplicaRecordChangedEvent
-from ip.engine.domain.models.replica_record import ReplicaMergePolicy, ReplicaRecord
+from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    MergeOutcome,
+)
+from ip.engine.domain.replication.replica_record import ReplicaMergePolicy, ReplicaRecord
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
     ReplicaMergeCandidate,
     ReplicaRecordRepositoryPort,
 )
 from seedwork.domain.types import JsonDict
-from seedwork.events import EventProcessingLane
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -63,6 +64,31 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
     @staticmethod
     def _to_domain_model(orm: ReplicaRecordModel) -> ReplicaRecord:
         return replica_record_to_domain(orm)
+
+    @staticmethod
+    def _to_orm_model(record: ReplicaRecord) -> ReplicaRecordModel:
+        return ReplicaRecordModel(
+            id=record.id,
+            tenant_id=record.tenant_id,
+            trace_id=record.trace_id,
+            correlation_id=record.correlation_id,
+            connection_id=record.connection_id,
+            stream=record.stream,
+            record_key=record.record_key,
+            primary_key_values=list(record.primary_key_values),
+            cursor_value=record.cursor_value,
+            cursor_kind=record.cursor_kind,
+            data=dict(record.data),
+            data_hash=record.data_hash,
+            version=record.version,
+            generation_id=record.generation_id,
+            last_seen_generation=record.last_seen_generation,
+            first_seen_at=record.first_seen_at,
+            extracted_at=record.extracted_at,
+            updated_at=record.updated_at,
+            deleted_at=record.deleted_at,
+            source_inbound_record_id=record.source_inbound_record_id,
+        )
 
     @staticmethod
     def _update_record_from_domain(orm: ReplicaRecordModel, domain: ReplicaRecord) -> None:
@@ -148,29 +174,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         existing = result.scalar_one_or_none()
 
         if existing is None:
-            orm = ReplicaRecordModel(
-                id=record.id,
-                tenant_id=record.tenant_id,
-                trace_id=record.trace_id,
-                correlation_id=record.correlation_id,
-                connection_id=record.connection_id,
-                stream=record.stream,
-                record_key=record.record_key,
-                primary_key_values=list(record.primary_key_values),
-                cursor_value=record.cursor_value,
-                cursor_kind=record.cursor_kind,
-                data=dict(record.data),
-                data_hash=record.data_hash,
-                version=record.version,
-                generation_id=record.generation_id,
-                last_seen_generation=record.last_seen_generation,
-                first_seen_at=record.first_seen_at,
-                extracted_at=record.extracted_at,
-                updated_at=record.updated_at,
-                deleted_at=record.deleted_at,
-                source_inbound_record_id=record.source_inbound_record_id,
-            )
-            self._session.add(orm)
+            self._session.add(self._to_orm_model(record))
         else:
             self._update_record_from_domain(existing, record)
 
@@ -418,22 +422,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             for idx in range(0, len(changed_list), chunk_size):
                 chunk_aggs = changed_list[idx : idx + chunk_size]
                 first = chunk_aggs[0]
-                first.add_domain_event(
-                    ReplicaRecordChangedEvent(
-                        record_id=first.id,
-                        record_ids=tuple(a.id for a in chunk_aggs),
-                        tenant_id=first.tenant_id,
-                        connection_id=first.connection_id,
-                        stream=first.stream,
-                        record_key=first.record_key,
-                        outcome="BATCH_UPSERT",
-                        version=first.version,
-                        data_hash=first.data_hash,
-                        trace_id=first.trace_id,
-                        correlation_id=first.correlation_id,
-                        lane=EventProcessingLane.BULK,
-                    )
-                )
+                first.record_batch_upsert_chunk(chunk_record_ids=tuple(a.id for a in chunk_aggs))
                 self._drain_events(first, default_tenant_id=first.tenant_id)
 
         await self._session.flush()
@@ -466,7 +455,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         if not rows:
             return 0
 
-        actual_trace_id = trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        actual_trace_id = trace_id or generate_id(IpIdPrefix.TRACE.value)
         for orm in rows:
             domain_rec = self._to_domain_model(orm)
             domain_rec.tombstone(

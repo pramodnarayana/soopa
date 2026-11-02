@@ -30,7 +30,7 @@ from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/ip/catalog",
+    prefix="/api/v1/tenants/{tenant_id}/ip/catalog",
     tags=["Integration Platform - Catalog"],
 )
 
@@ -41,18 +41,21 @@ router = APIRouter(
     status_code=status.HTTP_200_OK,
 )
 async def list_catalog_apps(
+    tenant_id: str,
     category: str | None = Query(
         None, description="Filter by category (CRM, BILLING, STORAGE, ENERGY, ITSM)"
     ),
     search: str | None = Query(None, description="Search query by name or appId"),
     registry: CatalogRegistryPort = Depends(get_catalog_registry),
 ) -> list[CatalogAppSummaryHttpResponse]:
-    """Lists supported connector catalog applications with optional category and search filters."""
-    log = logger.bind(category=category, search=search)
+    """Lists supported connector catalog applications with optional category and search filters for the tenant."""
+    log = logger.bind(tenant_id=tenant_id, category=category, search=search)
     log.info("ip_list_catalog_apps.received")
 
     use_case = ListCatalogAppsUseCase(registry=registry)
-    apps = await use_case.execute(ListCatalogAppsQuery(category=category, search=search))
+    apps = await use_case.execute(
+        ListCatalogAppsQuery(tenant_id=tenant_id, category=category, search=search)
+    )
 
     log.info("ip_list_catalog_apps.completed", app_count=len(apps))
     return [
@@ -76,15 +79,16 @@ async def list_catalog_apps(
     status_code=status.HTTP_200_OK,
 )
 async def get_catalog_app_spec(
+    tenant_id: str,
     app_id: str,
     registry: CatalogRegistryPort = Depends(get_catalog_registry),
 ) -> AppSpecHttpResponse | Response:
-    """Retrieves dynamic property schema and UI specification for an application."""
-    log = logger.bind(app_id=app_id)
+    """Retrieves dynamic property schema and UI specification for an application within the tenant workspace."""
+    log = logger.bind(tenant_id=tenant_id, app_id=app_id)
     log.info("ip_get_catalog_app_spec.received")
 
     use_case = GetAppSpecUseCase(registry=registry)
-    result = await use_case.execute(GetAppSpecQuery(app_id=app_id))
+    result = await use_case.execute(GetAppSpecQuery(tenant_id=tenant_id, app_id=app_id))
     if not result.success or result.spec is None:
         err = result.error or ConnectorNotFoundError.for_app(app_id)
         log.error("ip_get_catalog_app_spec.not_found", error_code=err.code.value)

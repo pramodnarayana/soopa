@@ -4,12 +4,9 @@ from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import ConnectionCatalogRecord
-from ip.engine.domain.models.catalog import (
-    ConnectionCatalog,
-    StreamField,
-    StreamSchema,
-    SyncMode,
-)
+from ip.engine.domain.connection.catalog import ConnectionCatalog
+from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
+from ip.engine.domain.replication.enums import SyncMode
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
@@ -106,17 +103,21 @@ class SqlAlchemyCatalogRepository(GlobalSqlAlchemyRepository, CatalogRepositoryP
             ]
         }
 
-    async def save(self, catalog: ConnectionCatalog) -> None:
-        """Saves a new catalog version into the repository."""
-        record = ConnectionCatalogRecord(
+    @classmethod
+    def _to_orm_model(cls, catalog: ConnectionCatalog) -> ConnectionCatalogRecord:
+        return ConnectionCatalogRecord(
             id=catalog.id,
             connection_id=catalog.connection_id,
             catalog_version=catalog.catalog_version,
             catalog_hash=catalog.catalog_hash,
-            schema_definition=self._serialize_schema_definition(catalog),
+            schema_definition=cls._serialize_schema_definition(catalog),
             is_active=catalog.is_active,
-            discovered_at=self._parse_iso(catalog.discovered_at),
+            discovered_at=cls._parse_iso(catalog.discovered_at),
         )
+
+    async def save(self, catalog: ConnectionCatalog) -> None:
+        """Saves a new catalog version into the repository."""
+        record = self._to_orm_model(catalog)
         self._session.add(record)
         self._drain_events(catalog)
         await self._session.flush()

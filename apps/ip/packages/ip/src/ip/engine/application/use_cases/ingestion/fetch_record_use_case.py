@@ -9,15 +9,15 @@ from dataclasses import dataclass
 
 import structlog
 from security.ports.cipher_port import CipherPort
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ip.engine.application.use_cases.connections.token_manager_service import (
     GetValidCredentialsCommand,
     TokenManagerService,
 )
-from ip.engine.domain.enums import IngestionMode
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.connector_port import SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
@@ -89,22 +89,17 @@ class FetchRecordUseCase:
         if self._data_plane_uow is not None:
             async with self._data_plane_uow as uow:
                 yield uow
-        elif self._data_plane_uow_provider is not None:
-            if shard_info is None:
-                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
-                if shard_info_res.is_err:
-                    raise RuntimeError(shard_info_res.unwrap_err().message)
-                shard_info = shard_info_res.unwrap()
-            shard_id, shard_dsn = shard_info
-            async with self._data_plane_uow_provider.get_data_plane_uow(
-                tenant_id, shard_id, shard_dsn
-            ) as uow:
-                yield uow
-        else:
-            raise RuntimeError("Neither data_plane_uow nor data_plane_uow_provider was configured.")
+            return
+        assert self._data_plane_uow_provider is not None
+        assert shard_info is not None
+        shard_id, shard_dsn = shard_info
+        async with self._data_plane_uow_provider.get_data_plane_uow(
+            tenant_id, shard_id, shard_dsn
+        ) as uow:
+            yield uow
 
     async def execute(self, command: FetchRecordCommand) -> FetchRecordResultDTO:
-        trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
 
         # 0. Pre-resolve tenant shard before pulling remote record or offloading payload
         shard_info: tuple[str, str] | None = None

@@ -7,14 +7,13 @@ from dataclasses import dataclass, field
 
 import structlog
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import IpError, Result, TransformerNotFoundError
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.ledger import EntityShadowDiff, FieldShadowDiff
+from ip.engine.domain.normalization.transformation import (
     CanonicalDraft,
-    EntityShadowDiff,
-    FieldShadowDiff,
     ReplicaSnapshot,
     SourceReference,
     TransformationContext,
@@ -149,9 +148,9 @@ class PreviewStreamTransformationUseCase:
                     )
                 )
 
-        trace_id = generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = generate_id(IpIdPrefix.TRACE.value)
         snapshot = ReplicaSnapshot(
-            id=generate_id(DomainIdPrefix.IP_REPLICA.value),
+            id=generate_id(IpIdPrefix.REPLICA.value),
             connection_id=command.connection_id,
             stream=command.stream,
             record_key=command.record_key,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.data_plane import NormalizationLedgerModel
-from ip.engine.domain.enums import NormalizationOutcome
-from ip.engine.domain.normalization import NormalizationLedgerEntry
+from ip.engine.domain.normalization.enums import NormalizationOutcome
+from ip.engine.domain.normalization.ledger import NormalizationLedgerEntry
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
     NormalizationLedgerRepositoryPort,
 )
@@ -152,7 +152,7 @@ class SqlAlchemyNormalizationLedgerRepository(
         return domain.produced_canonical_refs
 
     async def record_entry(self, entry: NormalizationLedgerEntry) -> None:
-        """Insert or update a normalization ledger entry."""
+        """Insert or update a normalization ledger entry and drain its domain and trace events."""
         stmt = select(NormalizationLedgerModel).where(
             NormalizationLedgerModel.tenant_id == entry.tenant_id,
             NormalizationLedgerModel.replica_record_id == entry.replica_record_id,
@@ -166,3 +166,6 @@ class SqlAlchemyNormalizationLedgerRepository(
             self.session.add(self._to_orm_model(entry))
         else:
             self._update_record_from_domain(record, entry)
+
+        self._drain_events(entry, default_tenant_id=entry.tenant_id)
+        self._drain_trace_events(entry)

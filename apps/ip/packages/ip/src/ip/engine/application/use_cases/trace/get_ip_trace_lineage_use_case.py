@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import structlog
-from strace.domain import TraceStatus
 
-from ip.engine.application.dtos.trace import IpTraceLineageItemDTO
+from ip.engine.application.responses import IpTraceLineageItemDTO
 from ip.engine.domain.exceptions import IpError, Result
+from ip.engine.domain.trace import IpTraceStatus
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 
 logger = structlog.get_logger(__name__)
@@ -16,7 +16,7 @@ logger = structlog.get_logger(__name__)
 
 @dataclass(frozen=True, kw_only=True)
 class GetIpTraceLineageQuery:
-    """Query to fetch the ordered replay attempt history for a transaction trace."""
+    """Query to fetch the ordered replay attempt history for a trace."""
 
     tenant_id: str
     trace_id: str
@@ -36,7 +36,7 @@ class ListRecentTracesQuery:
     """Query to list recent trace lineage summaries for the Support Timeline feed."""
 
     tenant_id: str
-    status: TraceStatus | None = None
+    status: IpTraceStatus | None = None
     min_replay_count: int | None = None
     limit: int = 50
 

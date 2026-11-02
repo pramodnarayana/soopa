@@ -11,13 +11,13 @@ from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 from orchestration.domain.run import StepRun, WorkflowRun
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
 )
-from ip.engine.domain.enums import IpIdPrefix
+from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import (
     InvalidConnectionConfigError,
     IpError,
@@ -25,7 +25,7 @@ from ip.engine.domain.exceptions import (
     Result,
     StitchDefinitionNotFoundError,
 )
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
@@ -470,7 +470,7 @@ class TriggerStitchEventUseCase:
         trace_id = (
             command.trace_id.strip()
             if command.trace_id and command.trace_id.strip()
-            else generate_id(DomainIdPrefix.IP_TRACE.value)
+            else generate_id(IpIdPrefix.TRACE.value)
         )
         event_id = (
             command.event_id.strip()

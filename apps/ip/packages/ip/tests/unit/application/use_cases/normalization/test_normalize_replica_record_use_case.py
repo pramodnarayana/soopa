@@ -16,25 +16,33 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordUseCase,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
+from ip.engine.domain.normalization.enums import (
     CanonicalAction,
-    IpTraceEventType,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
     RuleSeverity,
     TransformationMode,
 )
-from ip.engine.domain.events import CanonicalRecordChangedEvent
-from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.normalization import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
+from ip.engine.domain.normalization.events import CanonicalRecordChangedEvent
+from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
+)
+from ip.engine.domain.normalization.policies import (
+    DefaultNormalizationErrorPolicy,
+)
+from ip.engine.domain.normalization.registries import (
+    CanonicalEntityRegistry,
+    CanonicalWriterRegistry,
+    TransformerRegistry,
+)
+from ip.engine.domain.normalization.transformation import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
     ReplicaSnapshot,
     SourceReference,
     Transformation,
@@ -42,14 +50,8 @@ from ip.engine.domain.normalization import (
     TransformationRejection,
     TransformationResult,
 )
-from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
-from ip.engine.domain.services.canonical_writer_registry import (
-    InMemoryCanonicalWriterRegistry,
-)
-from ip.engine.domain.services.default_normalization_error_policy import (
-    DefaultNormalizationErrorPolicy,
-)
-from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
+from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
@@ -89,13 +91,16 @@ from ip.engine.ports.outbound.transformation_repository_port import (
 )
 from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.engine.ports.outbound.uow import (
+    DomainRepositoryKey,
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
+    TDomainRepo,
 )
 from seedwork.domain.types import JsonDict
 from seedwork.events import DomainEvent
-from strace.domain import TraceEvent
+from strace.domain import TraceEvent, TraceLineageItemDTO, TraceStatus
+from strace.ports import TraceRepositoryPort
 
 # ---------------------------------------------------------------------------
 # In-Memory Test Fakes
@@ -195,9 +200,46 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
         return matching[:limit]
 
 
-class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
+class FakeTraceRepository(TraceRepositoryPort):
     def __init__(self) -> None:
+        self.events: list[TraceEvent] = []
+
+    async def list_trace_events(self, tenant_id: str, trace_id: str) -> list[TraceEvent]:
+        return [e for e in self.events if e.tenant_id == tenant_id and e.trace_id == trace_id]
+
+    async def save_trace_event(self, event: TraceEvent) -> None:
+        self.events.append(event)
+
+    async def save_all_trace_events(self, events: Sequence[TraceEvent]) -> None:
+        self.events.extend(events)
+
+    async def resolve_root_trace_id(self, tenant_id: str, trace_id: str) -> str:
+        return trace_id
+
+    async def get_trace_lineage(self, tenant_id: str, trace_id: str) -> list[TraceLineageItemDTO]:
+        return []
+
+    async def find_traces_by_correlation_id(
+        self, tenant_id: str, correlation_id: str, *, limit: int = 50
+    ) -> list[TraceLineageItemDTO]:
+        return []
+
+    async def list_recent_traces(
+        self,
+        tenant_id: str,
+        *,
+        status: TraceStatus | None = None,
+        min_replay_count: int | None = None,
+        limit: int = 50,
+    ) -> list[TraceLineageItemDTO]:
+        return []
+
+
+class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
+    def __init__(self, trace_repo: FakeTraceRepository) -> None:
+        self._trace_repo = trace_repo
         self.entries: dict[tuple[str, str, str, int], NormalizationLedgerEntry] = {}
+        self.events: list[DomainEvent] = []
 
     async def get_latest_version(
         self,
@@ -247,6 +289,10 @@ class FakeNormalizationLedgerRepository(NormalizationLedgerRepositoryPort):
             entry.transformation_version,
         )
         self.entries[key] = entry
+        self.events.extend(entry.domain_events)
+        entry.clear_domain_events()
+        self._trace_repo.events.extend(entry.trace_events)
+        entry.clear_trace_events()
 
 
 class FakeNormalizationRejectionRepository(NormalizationRejectionRepositoryPort):
@@ -317,10 +363,12 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     normalization_ledger: FakeNormalizationLedgerRepository
     normalization_rejections: FakeNormalizationRejectionRepository
     pending_references: FakePendingReferenceRepository
+    traces: FakeTraceRepository
 
     def __init__(self) -> None:
+        self.traces = FakeTraceRepository()
         self.replica_records = FakeReplicaRecordRepository()
-        self.normalization_ledger = FakeNormalizationLedgerRepository()
+        self.normalization_ledger = FakeNormalizationLedgerRepository(self.traces)
         self.normalization_rejections = FakeNormalizationRejectionRepository()
         self.pending_references = FakePendingReferenceRepository()
         self.committed = False
@@ -336,6 +384,12 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
 
     async def __aexit__(self, *args: object) -> None:
         pass
+
+    def resolve_domain_repository(
+        self, key: DomainRepositoryKey[TDomainRepo]
+    ) -> TDomainRepo | None:
+        del key
+        return None
 
 
 class FakeDataPlaneUoWProvider(IpDataPlaneUnitOfWorkProviderPort):
@@ -564,8 +618,8 @@ class NormalizationTestEnv:
     dp_provider: FakeDataPlaneUoWProvider
     writer: RecordingCanonicalWriter
     sp_writer: RecordingCanonicalWriter
-    transformer_registry: InMemoryTransformerRegistry
-    writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort]
+    transformer_registry: TransformerRegistry
+    writer_registry: CanonicalWriterRegistry[CanonicalWriterPort]
     entity_registry: CanonicalEntityRegistry
 
 
@@ -574,10 +628,8 @@ def setup_env() -> NormalizationTestEnv:
     cp_uow = FakeControlPlaneUoW()
     dp_uow = FakeDataPlaneUoW()
     dp_provider = FakeDataPlaneUoWProvider(dp_uow)
-    transformer_registry = InMemoryTransformerRegistry()
-    writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort] = (
-        InMemoryCanonicalWriterRegistry()
-    )
+    transformer_registry = TransformerRegistry()
+    writer_registry: CanonicalWriterRegistry[CanonicalWriterPort] = CanonicalWriterRegistry()
     entity_registry = CanonicalEntityRegistry()
     error_policy = DefaultNormalizationErrorPolicy()
 
@@ -675,8 +727,9 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
     assert result.is_ok
     assert result.unwrap().outcome == NormalizationOutcome.SKIPPED_STALE
 
-    trace_types = [t.event_type for t in setup_env.dp_uow.replica_records.trace_events]
-    assert IpTraceEventType.L3_SKIPPED_STALE.value in trace_types
+    trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
+    assert IpTraceEventType.SKIPPED_STALE.value in trace_types
+    assert len(setup_env.dp_uow.replica_records.trace_events) == 0
 
 
 @pytest.mark.asyncio
@@ -730,20 +783,21 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
 
     events = [
         e
-        for e in setup_env.dp_uow.replica_records.events
+        for e in setup_env.dp_uow.normalization_ledger.events
         if isinstance(e, CanonicalRecordChangedEvent)
     ]
     assert len(events) == 1
     assert events[0].action == CanonicalAction.UPSERT.value
     assert events[0].canonical_type == "energy.meter_reading"
     assert events[0].source_id == "mtr_100"
+    assert len(setup_env.dp_uow.replica_records.trace_events) == 0
 
-    trace_events = setup_env.dp_uow.replica_records.trace_events
+    trace_events = setup_env.dp_uow.traces.events
     trace_types = [t.event_type for t in trace_events]
-    assert IpTraceEventType.L3_REFERENCE_PENDING.value in trace_types
-    assert IpTraceEventType.L3_NORMALIZED.value in trace_types
+    assert IpTraceEventType.REFERENCE_PENDING.value in trace_types
+    assert IpTraceEventType.NORMALIZED.value in trace_types
     normalized_trace = next(
-        t for t in trace_events if t.event_type == IpTraceEventType.L3_NORMALIZED.value
+        t for t in trace_events if t.event_type == IpTraceEventType.NORMALIZED.value
     )
     assert normalized_trace.metadata is not None
     assert normalized_trace.metadata["transformation_id"] == "energy.ami_meter_reading"
@@ -808,7 +862,7 @@ async def test_normalize_reference_resolution_and_late_arrival_backpatching(
         trace_id="trc_sp",
     )
     await setup_env.dp_uow.replica_records.save(sp_rep)
-    setup_env.dp_uow.replica_records.trace_events.clear()
+    setup_env.dp_uow.traces.events.clear()
 
     res2 = await setup_env.use_case.execute(
         NormalizeReplicaRecordCommand(
@@ -829,8 +883,8 @@ async def test_normalize_reference_resolution_and_late_arrival_backpatching(
         setup_env.writer.rows_by_source_id["mtr_early"]["service_point_id"]
         == "canon_energy.service_point_sp_999"
     )
-    trace_types = [t.event_type for t in setup_env.dp_uow.replica_records.trace_events]
-    assert IpTraceEventType.L3_REFERENCE_RESOLVED.value in trace_types
+    trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
+    assert IpTraceEventType.REFERENCE_RESOLVED.value in trace_types
 
     # 3. Second reading referencing existing sp_999 resolves immediately without pending reference!
     reading_rep2 = ReplicaRecord.create(
@@ -916,7 +970,9 @@ async def test_normalize_shadow_mode_does_not_mutate_canonical_or_outbox(
     assert len(setup_env.dp_uow.normalization_ledger.entries) == 0
     assert len(setup_env.dp_uow.pending_references.pending) == 0
     # Outbox CanonicalRecordChangedEvent must NOT be emitted
+    assert len(setup_env.dp_uow.normalization_ledger.events) == 0
     assert len(setup_env.dp_uow.replica_records.events) == 0
+    assert len(setup_env.dp_uow.traces.events) == 1
     # Shadow diff MUST be recorded
     assert len(setup_env.dp_uow.normalization_rejections.shadow_diffs) == 1
     diff_entry = setup_env.dp_uow.normalization_rejections.shadow_diffs[0]
@@ -980,8 +1036,8 @@ async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv)
         setup_env.dp_uow.normalization_rejections.rejections[0].reason_code
         == NormalizationRejectionReason.QUALITY_RULE_REJECTED.value
     )
-    trace_types = [t.event_type for t in setup_env.dp_uow.replica_records.trace_events]
-    assert IpTraceEventType.L3_REJECTED.value in trace_types
+    trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
+    assert IpTraceEventType.NORMALIZATION_REJECTED.value in trace_types
 
 
 @pytest.mark.asyncio
@@ -1050,15 +1106,15 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
 
     tomb_events = [
         e
-        for e in setup_env.dp_uow.replica_records.events
+        for e in setup_env.dp_uow.normalization_ledger.events
         if isinstance(e, CanonicalRecordChangedEvent)
         and e.action == CanonicalAction.TOMBSTONE.value
     ]
     assert len(tomb_events) == 1
     assert tomb_events[0].source_id == "mtr_tomb"
 
-    trace_types = [t.event_type for t in setup_env.dp_uow.replica_records.trace_events]
-    assert IpTraceEventType.L3_TOMBSTONED.value in trace_types
+    trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
+    assert IpTraceEventType.TOMBSTONED.value in trace_types
 
 
 @pytest.mark.asyncio
@@ -1102,8 +1158,8 @@ async def test_normalize_terminal_transformer_error_handling(
     assert "Invalid field format" in str(dto.error_detail)
     assert setup_env.dp_uow.committed
 
-    trace_types = [t.event_type for t in setup_env.dp_uow.replica_records.trace_events]
-    assert IpTraceEventType.L3_REJECTED.value in trace_types
+    trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
+    assert IpTraceEventType.NORMALIZATION_REJECTED.value in trace_types
 
 
 @pytest.mark.asyncio

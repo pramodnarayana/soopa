@@ -1,4 +1,4 @@
-"""Inbound HTTP router for Integration Platform Transactions, Trace Waterfall, Lineage, and Replay."""
+"""Inbound HTTP router for Integration Platform Trace Waterfall and Lineage."""
 
 from __future__ import annotations
 
@@ -15,49 +15,30 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ApiErrorHttpResponse,
     from_ip_error,
 )
-from ip.engine.adapters.inbound.api.dtos.transaction_dtos import (
-    BulkReplayHttpRequest,
-    BulkReplayHttpResponse,
+from ip.engine.adapters.inbound.api.dtos.trace_dtos import (
     IpTraceHttpResponse,
     IpTraceLineageItemHttpResponse,
-    ModifyAndReplayHttpRequest,
-    ReplayTransactionHttpRequest,
-    ReplayTransactionHttpResponse,
-    map_bulk_replay_result_to_http,
     map_ip_trace_dto_to_http,
     map_lineage_item_to_http,
-    map_replay_result_to_http,
 )
-from ip.engine.application.use_cases.transactions.bulk_replay_transactions_use_case import (
-    BulkReplayCommand,
-    BulkReplayTransactionsUseCase,
-)
-from ip.engine.application.use_cases.transactions.get_ip_trace_lineage_use_case import (
+from ip.engine.application.use_cases.trace.get_ip_trace_lineage_use_case import (
     GetIpTraceLineageQuery,
     GetIpTraceLineageUseCase,
     ListRecentTracesQuery,
     SearchTracesByCorrelationQuery,
 )
-from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
+from ip.engine.application.use_cases.trace.get_ip_trace_use_case import (
     GetIpTraceQuery,
     GetIpTraceUseCase,
 )
-from ip.engine.application.use_cases.transactions.modify_and_replay_use_case import (
-    ModifyAndReplayCommand,
-    ModifyAndReplayTransactionUseCase,
-)
-from ip.engine.application.use_cases.transactions.replay_transaction_use_case import (
-    ReplayTransactionCommand,
-    ReplayTransactionUseCase,
-)
+from ip.engine.domain.trace import IpTraceStatus
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
-from strace.domain import TraceStatus
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(
-    prefix="/api/v1/tenants/{tenant_id}/ip/transactions",
-    tags=["Integration Platform - Transactions & Replay"],
+    prefix="/api/v1/tenants/{tenant_id}/ip/traces",
+    tags=["Integration Platform - Traces & Lineage"],
 )
 
 
@@ -74,7 +55,7 @@ async def list_recent_traces(
         IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
     ],
     status_filter: Annotated[
-        TraceStatus | None,
+        IpTraceStatus | None,
         Query(alias="status", description="Optional TraceStatus filter (e.g. FAILED, DELIVERED)"),
     ] = None,
     min_replay_count: Annotated[
@@ -86,7 +67,7 @@ async def list_recent_traces(
     ] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[IpTraceLineageItemHttpResponse] | Response:
-    """Lists recent transaction trace summaries for the tenant Support Timeline."""
+    """Lists recent trace summaries for the tenant Support Timeline."""
     _ = context
     log = logger.bind(
         tenant_id=tenant_id,
@@ -134,7 +115,7 @@ async def search_traces_by_correlation_id(
     ),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[IpTraceLineageItemHttpResponse] | Response:
-    """Searches transaction traces across L1, L2, L3, and L5 by business correlation ID."""
+    """Searches traces across Ingest, Replica, Normalize, and Deliver by business correlation ID."""
     log = logger.bind(tenant_id=tenant_id, correlation_id=correlation_id, limit=limit)
     log.info("ip_search_traces_by_correlation.received")
 
@@ -154,53 +135,6 @@ async def search_traces_by_correlation_id(
     items = result.unwrap()
     log.info("ip_search_traces_by_correlation.completed", match_count=len(items))
     return [map_lineage_item_to_http(item) for item in items]
-
-
-@router.post(
-    "/bulk-replay",
-    response_model=BulkReplayHttpResponse,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def bulk_replay_transactions(
-    tenant_id: str,
-    request: BulkReplayHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    uow_provider: Annotated[
-        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
-    ],
-) -> BulkReplayHttpResponse | Response:
-    """Bulk-replays up to 100 Integration Platform transactions from the requested stage."""
-    actor = context.subject or "USER"
-    log = logger.bind(
-        tenant_id=tenant_id,
-        stage=request.stage.value,
-        requested_count=len(request.trace_ids),
-        actor=actor,
-    )
-    log.info("ip_bulk_replay_transactions.received")
-
-    use_case = BulkReplayTransactionsUseCase(uow_provider=uow_provider)
-    result = await use_case.execute(
-        BulkReplayCommand(
-            tenant_id=tenant_id,
-            trace_ids=tuple(request.trace_ids),
-            stage=request.stage,
-            actor=actor,
-        )
-    )
-    if result.is_err:
-        err = result.unwrap_err()
-        log.error("ip_bulk_replay_transactions.failed", error_code=err.code.value)
-        return from_ip_error(err)
-
-    dto = result.unwrap()
-    log.info(
-        "ip_bulk_replay_transactions.accepted",
-        replayed_count=dto.replayed_count,
-        failed_count=len(dto.failed_items),
-    )
-    return map_bulk_replay_result_to_http(dto)
 
 
 @router.get(
@@ -283,111 +217,3 @@ async def get_ip_trace_lineage(
     items = result.unwrap()
     log.info("ip_get_trace_lineage.completed", attempt_count=len(items))
     return [map_lineage_item_to_http(item) for item in items]
-
-
-@router.post(
-    "/{trace_id}/replay",
-    response_model=ReplayTransactionHttpResponse,
-    responses={
-        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
-        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
-    },
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def replay_transaction(
-    tenant_id: str,
-    trace_id: str,
-    request: ReplayTransactionHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    uow_provider: Annotated[
-        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
-    ],
-) -> ReplayTransactionHttpResponse | Response:
-    """Deterministically replays an Integration Platform transaction from L1, L2, L3, or L5."""
-    actor = context.subject or "USER"
-    log = logger.bind(
-        tenant_id=tenant_id,
-        trace_id=trace_id,
-        stage=request.stage.value,
-        actor=actor,
-    )
-    log.info("ip_replay_transaction.received")
-
-    use_case = ReplayTransactionUseCase(uow_provider=uow_provider)
-    result = await use_case.execute(
-        ReplayTransactionCommand(
-            tenant_id=tenant_id,
-            trace_id=trace_id,
-            stage=request.stage,
-            actor=actor,
-        )
-    )
-    if result.is_err:
-        err = result.unwrap_err()
-        log.error("ip_replay_transaction.failed", error_code=err.code.value, reason=err.message)
-        return from_ip_error(err, trace_id=trace_id)
-
-    dto = result.unwrap()
-    log.info(
-        "ip_replay_transaction.accepted",
-        new_trace_id=dto.new_trace_id,
-        replay_count=dto.replay_count,
-    )
-    return map_replay_result_to_http(dto)
-
-
-@router.post(
-    "/{trace_id}/modify-and-replay",
-    response_model=ReplayTransactionHttpResponse,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
-        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
-        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
-    },
-    status_code=status.HTTP_202_ACCEPTED,
-)
-async def modify_and_replay_transaction(
-    tenant_id: str,
-    trace_id: str,
-    request: ModifyAndReplayHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    uow_provider: Annotated[
-        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
-    ],
-) -> ReplayTransactionHttpResponse | Response:
-    """Overrides an L1 or L3 payload and triggers a new immutable replay trace."""
-    actor = context.subject or "USER"
-    log = logger.bind(
-        tenant_id=tenant_id,
-        trace_id=trace_id,
-        stage=request.stage.value,
-        actor=actor,
-    )
-    log.info("ip_modify_and_replay_transaction.received")
-
-    use_case = ModifyAndReplayTransactionUseCase(uow_provider=uow_provider)
-    result = await use_case.execute(
-        ModifyAndReplayCommand(
-            tenant_id=tenant_id,
-            trace_id=trace_id,
-            stage=request.stage,
-            modified_payload=request.modified_payload,
-            actor=actor,
-        )
-    )
-    if result.is_err:
-        err = result.unwrap_err()
-        log.error(
-            "ip_modify_and_replay_transaction.failed",
-            error_code=err.code.value,
-            reason=err.message,
-        )
-        return from_ip_error(err, trace_id=trace_id)
-
-    dto = result.unwrap()
-    log.info(
-        "ip_modify_and_replay_transaction.accepted",
-        new_trace_id=dto.new_trace_id,
-        replay_count=dto.replay_count,
-    )
-    return map_replay_result_to_http(dto)

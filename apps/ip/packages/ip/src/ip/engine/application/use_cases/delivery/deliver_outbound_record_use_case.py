@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 
 import structlog
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ip.engine.application.use_cases.connections.token_manager_service import (
@@ -14,9 +13,13 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
     ResolvedConnectionCredentialsDTO,
     TokenManagerService,
 )
-from ip.engine.domain.constants import DEFAULT_IDEMPOTENCY_HEADER
-from ip.engine.domain.enums import (
-    AuthType,
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.constants import DEFAULT_IDEMPOTENCY_HEADER, IpIdPrefix
+from ip.engine.domain.dispatch.classifier import (
+    classify_outbound_http_outcome,
+    redact_sensitive_headers,
+)
+from ip.engine.domain.dispatch.enums import (
     BatchFailurePolicy,
     FailureDisposition,
     HttpWriteOperation,
@@ -25,6 +28,7 @@ from ip.engine.domain.enums import (
     OutboundFailureCategory,
     TokenRefreshPolicy,
 )
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
     ConnectorNotFoundError,
@@ -32,18 +36,16 @@ from ip.engine.domain.exceptions import (
     Result,
     TenantShardNotFoundError,
 )
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.services.outbound_error_classifier import (
-    classify_outbound_http_outcome,
-    redact_sensitive_headers,
+from ip.engine.ports.outbound.connector_port import (
+    DestinationConnectorPort,
+    WriteRecordCommand,
+    WriteResultDTO,
 )
-from ip.engine.ports.outbound.connector_port import DestinationConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
 )
-from ip.engine.ports.types import WriteRecordCommand, WriteResultDTO
 
 logger = structlog.get_logger(__name__)
 
@@ -150,6 +152,8 @@ class DeliverOutboundRecordUseCase:
         data_plane_uow: IpDataPlaneUnitOfWorkPort | None = None,
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
     ) -> None:
+        if data_plane_uow is None and data_plane_uow_provider is None:
+            raise ValueError("Either data_plane_uow or data_plane_uow_provider must be provided.")
         self._tiered_storage = tiered_storage
         self._token_manager = token_manager
         self._connectors = connectors
@@ -165,19 +169,14 @@ class DeliverOutboundRecordUseCase:
         if self._data_plane_uow is not None:
             async with self._data_plane_uow as uow:
                 yield uow
-        elif self._data_plane_uow_provider is not None:
-            if shard_info is None:
-                shard_info_res = await self._data_plane_uow_provider.resolve_shard_info(tenant_id)
-                if shard_info_res.is_err:
-                    raise RuntimeError(shard_info_res.unwrap_err().message)
-                shard_info = shard_info_res.unwrap()
-            shard_id, shard_dsn = shard_info
-            async with self._data_plane_uow_provider.get_data_plane_uow(
-                tenant_id, shard_id, shard_dsn
-            ) as uow:
-                yield uow
-        else:
-            raise RuntimeError("Neither data_plane_uow nor data_plane_uow_provider was configured.")
+            return
+        assert self._data_plane_uow_provider is not None
+        assert shard_info is not None
+        shard_id, shard_dsn = shard_info
+        async with self._data_plane_uow_provider.get_data_plane_uow(
+            tenant_id, shard_id, shard_dsn
+        ) as uow:
+            yield uow
 
     async def _store_response_tier(
         self,
@@ -226,7 +225,7 @@ class DeliverOutboundRecordUseCase:
         self,
         command: DeliverOutboundRecordCommand,
     ) -> Result[DeliverOutboundRecordResponse, IpError]:
-        trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
         idempotency_key = compute_deterministic_idempotency_key(command)
 
         shard_res = await self._resolve_tenant_shard_info(command.tenant_id)
@@ -407,7 +406,11 @@ class DeliverOutboundRecordUseCase:
         outbound_record.update_wire_target(
             target_url=write_result.target_url or initial_target_url,
             http_method=write_result.http_method or "POST",
-            request_headers=write_result.request_headers or initial_headers,
+            request_headers=(
+                dict(write_result.request_headers)
+                if write_result.request_headers
+                else initial_headers
+            ),
         )
 
         external_id = write_result.destination_id or write_result.record_id or command.record_id

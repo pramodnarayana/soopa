@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 
 import httpx
 import structlog
-from ip.engine.domain.enums import FailureDisposition
+from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     InvalidCredentialsError,
@@ -17,13 +17,18 @@ from ip.engine.domain.exceptions import (
     UpstreamHttpError,
     UpstreamNetworkError,
 )
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
     RefreshedOAuth2TokensDTO,
 )
 from seedwork.domain.types import JsonDict
-from shttp import HttpClient, HttpError, PassThroughPolicy, create_http_client
+from shttp import (
+    HttpClient,
+    HttpError,
+    HttpRequestAuthenticator,
+    PassThroughPolicy,
+    create_http_client,
+)
 from shttp.exceptions import SsrfSecurityError
 from shttp.resilience import HttpBackoffHandler
 
@@ -41,7 +46,7 @@ class OAuth2TokenResponseDTO:
     expires_at_epoch: float | None = None
 
 
-class OAuth2Strategy(AuthenticatorPort):
+class OAuth2Strategy(HttpRequestAuthenticator):
     """Handles OAuth 2.0 bearer authorization and token renewal via centralized shttp.HttpClient."""
 
     @property

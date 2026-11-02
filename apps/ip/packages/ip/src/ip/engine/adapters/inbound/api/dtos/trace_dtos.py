@@ -1,23 +1,20 @@
-"""HTTP Request and Response DTOs for the Integration Platform Transactions, Trace, and Replay API."""
+"""HTTP Request and Response DTOs for the Integration Platform Trace and Lineage API."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
 
-from ip.engine.application.dtos.trace import (
-    BulkReplayResultDTO,
+from ip.engine.application.responses import (
     IpTraceDTO,
     IpTraceLineageItemDTO,
-    ReplayTransactionResultDTO,
 )
-from ip.engine.domain.enums import ReplayStage
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import CanonicalDataDict, NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.normalization import NormalizationRejectionEntry
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.normalization.transformation import CanonicalDataDict
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
 from pydantic import BaseModel, Field
 from seedwork.domain.types import JsonDict, JsonPrimitive, JsonValue
 from strace.domain import TraceEvent
@@ -46,7 +43,7 @@ def _normalize_canonical_data(canonical_data: CanonicalDataDict) -> JsonDict:
 
 
 class InboundRecordHttpResponse(BaseModel):
-    """HTTP representation of an L1 InboundRecord stage snapshot."""
+    """HTTP representation of an InboundRecord stage snapshot."""
 
     id: str
     tenant_id: str
@@ -76,7 +73,7 @@ class InboundRecordHttpResponse(BaseModel):
 
 
 class ReplicaRecordHttpResponse(BaseModel):
-    """HTTP representation of an L2 ReplicaRecord stage snapshot."""
+    """HTTP representation of a ReplicaRecord stage snapshot."""
 
     id: str
     tenant_id: str
@@ -104,7 +101,7 @@ class ReplicaRecordHttpResponse(BaseModel):
 
 
 class ReplicaRejectionHttpResponse(BaseModel):
-    """HTTP representation of an L2 ReplicaRejection entry."""
+    """HTTP representation of a ReplicaRejection entry."""
 
     id: str
     tenant_id: str
@@ -119,7 +116,7 @@ class ReplicaRejectionHttpResponse(BaseModel):
 
 
 class NormalizedRecordHttpResponse(BaseModel):
-    """HTTP representation of an L3 NormalizedRecord stage snapshot."""
+    """HTTP representation of a NormalizedRecord stage snapshot."""
 
     id: str
     tenant_id: str
@@ -136,7 +133,7 @@ class NormalizedRecordHttpResponse(BaseModel):
 
 
 class NormalizationRejectionHttpResponse(BaseModel):
-    """HTTP representation of an L3 NormalizationRejectionEntry."""
+    """HTTP representation of a NormalizationRejectionEntry."""
 
     id: str
     tenant_id: str
@@ -153,7 +150,7 @@ class NormalizationRejectionHttpResponse(BaseModel):
 
 
 class GlobalEntityMapHttpResponse(BaseModel):
-    """HTTP representation of an L3 GlobalEntityMap cross-reference entry."""
+    """HTTP representation of a GlobalEntityMap cross-reference entry."""
 
     id: str
     tenant_id: str
@@ -172,7 +169,7 @@ class GlobalEntityMapHttpResponse(BaseModel):
 
 
 class OutboundRecordHttpResponse(BaseModel):
-    """HTTP representation of an L5 OutboundRecord wire audit entry."""
+    """HTTP representation of an OutboundRecord wire audit entry."""
 
     id: str
     tenant_id: str
@@ -221,7 +218,7 @@ class TraceEventHttpResponse(BaseModel):
 
 
 class IpTraceHttpResponse(BaseModel):
-    """Full 5-layer waterfall snapshot of an Integration Platform transaction trace."""
+    """Full 5-layer waterfall snapshot of an Integration Platform trace."""
 
     trace_id: str
     tenant_id: str
@@ -251,66 +248,6 @@ class IpTraceLineageItemHttpResponse(BaseModel):
     replay_count: int = 0
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
-
-
-class ReplayTransactionHttpRequest(BaseModel):
-    """Payload to replay an Integration Platform transaction from a specific stage."""
-
-    stage: ReplayStage = Field(
-        ...,
-        description="Target pipeline stage to replay from (RETRY_INGEST, RETRY_NORMALIZE, RETRY_STITCH, RETRY_DELIVER)",
-    )
-
-
-class ModifyAndReplayHttpRequest(BaseModel):
-    """Payload to override an L1 or L3 payload and trigger a new replay trace."""
-
-    stage: ReplayStage = Field(
-        ...,
-        description="Target stage for payload modification (RETRY_INGEST or RETRY_STITCH)",
-    )
-    modified_payload: JsonDict = Field(
-        ...,
-        description="Replacement JSON object for the L1 request body or L3 canonical data",
-    )
-
-
-class ReplayTransactionHttpResponse(BaseModel):
-    """Response returned when a single transaction replay or modify-and-replay is accepted."""
-
-    status: str = "ACCEPTED"
-    original_trace_id: str
-    parent_trace_id: str
-    new_trace_id: str
-    stage: str
-    replay_count: int
-    correlation_id: str | None = None
-
-
-class BulkReplayHttpRequest(BaseModel):
-    """Payload to bulk-replay up to 100 transaction traces from a target stage."""
-
-    trace_ids: list[str] = Field(..., min_length=1, max_length=100)
-    stage: ReplayStage
-
-
-class BulkReplayFailureItemHttpResponse(BaseModel):
-    """Per-trace error item for a trace that could not be replayed during a bulk replay."""
-
-    trace_id: str
-    error_code: str
-    message: str
-
-
-class BulkReplayHttpResponse(BaseModel):
-    """Response returned when a bulk transaction replay operation completes."""
-
-    status: str = "ACCEPTED"
-    stage: str
-    replayed_count: int
-    succeeded_trace_ids: list[str] = Field(default_factory=list)
-    new_trace_ids: list[str] = Field(default_factory=list)
-    failed_items: list[BulkReplayFailureItemHttpResponse] = Field(default_factory=list)
 
 
 def map_inbound_record_to_http(record: InboundRecord) -> InboundRecordHttpResponse:
@@ -502,7 +439,7 @@ def map_ip_trace_dto_to_http(dto: IpTraceDTO) -> IpTraceHttpResponse:
         original_trace_id=dto.original_trace_id,
         parent_trace_id=dto.parent_trace_id,
         replay_count=dto.replay_count,
-        status=dto.status.value if hasattr(dto.status, "value") else str(dto.status),
+        status=dto.status.value,
         inbound_record=(
             map_inbound_record_to_http(dto.inbound_record)
             if dto.inbound_record is not None
@@ -524,7 +461,7 @@ def map_lineage_item_to_http(item: IpTraceLineageItemDTO) -> IpTraceLineageItemH
     return IpTraceLineageItemHttpResponse(
         trace_id=item.trace_id,
         correlation_id=item.correlation_id,
-        status=item.status.value if hasattr(item.status, "value") else str(item.status),
+        status=str(item.status),
         primary_layer=item.primary_layer,
         created_at=_format_dt(item.created_at),
         replay_count=item.replay_count,
@@ -533,55 +470,18 @@ def map_lineage_item_to_http(item: IpTraceLineageItemDTO) -> IpTraceLineageItemH
     )
 
 
-def map_replay_result_to_http(dto: ReplayTransactionResultDTO) -> ReplayTransactionHttpResponse:
-    return ReplayTransactionHttpResponse(
-        status="ACCEPTED",
-        original_trace_id=dto.original_trace_id,
-        parent_trace_id=dto.parent_trace_id,
-        new_trace_id=dto.new_trace_id,
-        stage=dto.stage.value,
-        replay_count=dto.replay_count,
-        correlation_id=dto.correlation_id,
-    )
-
-
-def map_bulk_replay_result_to_http(dto: BulkReplayResultDTO) -> BulkReplayHttpResponse:
-    return BulkReplayHttpResponse(
-        status="ACCEPTED",
-        stage=dto.stage.value,
-        replayed_count=dto.replayed_count,
-        succeeded_trace_ids=list(dto.succeeded_trace_ids),
-        new_trace_ids=list(dto.new_trace_ids),
-        failed_items=[
-            BulkReplayFailureItemHttpResponse(
-                trace_id=item.trace_id,
-                error_code=item.error_code.value,
-                message=item.message,
-            )
-            for item in dto.failed_items
-        ],
-    )
-
-
 __all__ = [
-    "BulkReplayFailureItemHttpResponse",
-    "BulkReplayHttpRequest",
-    "BulkReplayHttpResponse",
     "GlobalEntityMapHttpResponse",
     "InboundRecordHttpResponse",
     "IpTraceHttpResponse",
     "IpTraceLineageItemHttpResponse",
-    "ModifyAndReplayHttpRequest",
     "NormalizationRejectionHttpResponse",
     "NormalizedRecordHttpResponse",
     "OutboundRecordHttpResponse",
-    "ReplayTransactionHttpRequest",
-    "ReplayTransactionHttpResponse",
     "ReplicaRecordHttpResponse",
     "ReplicaRejectionHttpResponse",
     "TraceEventHttpResponse",
-    "map_bulk_replay_result_to_http",
+    "map_inbound_record_to_http",
     "map_ip_trace_dto_to_http",
     "map_lineage_item_to_http",
-    "map_replay_result_to_http",
 ]
