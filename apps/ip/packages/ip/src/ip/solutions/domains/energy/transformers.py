@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import math
+from datetime import datetime
+
 from ip.engine.domain.normalization.enums import NormalizationRejectionReason
 from ip.engine.domain.normalization.transformation import (
     CanonicalDraft,
@@ -19,38 +22,53 @@ from ip.solutions.domains.energy.canonical import (
 )
 
 
-def _to_float(val: object, default: float = 0.0) -> float:
-    if val is None:
-        return default
+def _is_non_finite_number(val: object) -> bool:
+    if val is None or isinstance(val, bool):
+        return False
     if isinstance(val, (int, float)):
-        return float(val)
+        return not math.isfinite(float(val))
+    if isinstance(val, str) and val.strip():
+        try:
+            parsed = float(val.strip())
+        except ValueError:
+            return False
+        return not math.isfinite(parsed)
+    return False
+
+
+def _is_valid_iso_timestamp(val: str) -> bool:
     try:
-        return float(str(val))
-    except (ValueError, TypeError):
-        return default
+        datetime.fromisoformat(val.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
+def _to_float(val: object, default: float = 0.0) -> float:
+    parsed = _to_optional_float(val)
+    return default if parsed is None else parsed
 
 
 def _to_optional_float(val: object) -> float | None:
-    if val is None:
+    if val is None or isinstance(val, bool):
         return None
-    if isinstance(val, (int, float)):
-        return float(val)
     try:
-        return float(str(val))
+        parsed = float(val) if isinstance(val, (int, float)) else float(str(val))
     except (ValueError, TypeError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _to_int(val: object, default: int = 15) -> int:
-    if val is None:
+    if val is None or isinstance(val, bool):
         return default
     if isinstance(val, int):
         return val
     if isinstance(val, float):
-        return int(val)
+        return int(val) if math.isfinite(val) else default
     try:
         return int(str(val))
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
         return default
 
 
@@ -102,6 +120,29 @@ class AmiMeterReadingTransformerV1(TransformerPort):
                     ),
                 )
             )
+        normalized_ts = str(raw_ts).strip()
+        if not _is_valid_iso_timestamp(normalized_ts):
+            return TransformationResult(
+                rejections=(
+                    TransformationRejection(
+                        reason=NormalizationRejectionReason.SCHEMA_VALIDATION_FAILED,
+                        field_path="timestamp",
+                        detail="Invalid ISO-8601 reading timestamp.",
+                    ),
+                )
+            )
+
+        for metric_field in ("kwh_delivered", "kwh_received"):
+            if _is_non_finite_number(payload.get(metric_field)):
+                return TransformationResult(
+                    rejections=(
+                        TransformationRejection(
+                            reason=NormalizationRejectionReason.QUALITY_RULE_REJECTED,
+                            field_path=metric_field,
+                            detail=f"Non-finite measurement rejected for '{metric_field}'.",
+                        ),
+                    )
+                )
 
         kwh_delivered = _to_float(payload.get("kwh_delivered"), 0.0)
         kwh_received = _to_float(payload.get("kwh_received"), 0.0)
@@ -124,11 +165,11 @@ class AmiMeterReadingTransformerV1(TransformerPort):
             drafts=(
                 CanonicalDraft(
                     canonical_type=EnergyEntityType.MDM_METER_READING.value,
-                    source_id=replica.record_key or f"{meter_serial}:{raw_ts}",
+                    source_id=replica.record_key or f"{meter_serial}:{normalized_ts}",
                     fields={
                         "meter_serial_number": meter_serial,
                         "service_point_id": sp_id,
-                        "reading_timestamp": str(raw_ts),
+                        "reading_timestamp": normalized_ts,
                         "interval_minutes": interval_minutes,
                         "kwh_delivered": kwh_delivered,
                         "kwh_received": kwh_received,

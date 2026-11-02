@@ -27,6 +27,7 @@ import { TraceWaterfallStageContent } from '../presentation/traces/TraceWaterfal
 import { TransformationWorkbenchPanel } from '../presentation/transformations/TransformationWorkbenchPanel';
 import {
   createInMemoryIpWorkspaceSeed,
+  SEED_CATALOG_APPS,
   SEED_CONNECTION,
   SEED_CONNECTION_ID,
   SEED_DISCOVERED_CATALOG,
@@ -50,6 +51,7 @@ function createHydratedQueryClient(): QueryClient {
     defaultOptions: { queries: { retry: false } },
   });
 
+  qc.setQueryData(ipQueryKeys.catalog.apps(SEED_TENANT_ID, undefined), ok(SEED_CATALOG_APPS));
   qc.setQueryData(ipQueryKeys.connections.list(SEED_TENANT_ID, undefined), ok([SEED_CONNECTION]));
   qc.setQueryData(
     ipQueryKeys.connections.detail(SEED_TENANT_ID, SEED_CONNECTION_ID),

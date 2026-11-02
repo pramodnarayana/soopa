@@ -8,24 +8,26 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
+from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.declarative_http_connector import (
     DeclarativeHttpConnector,
+)
+from ip.engine.domain.connection.catalog import ConnectorProperty, ConnectorPropertySchema
+from ip.engine.domain.connection.enums import (
+    PaginationType,
+    PropertyType,
+)
+from ip.engine.domain.connection.http_spec import (
+    DeclarativeManifest,
+    HttpActionSpec,
+    PaginationConfig,
 )
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     FailureDisposition,
     UpstreamHttpError,
 )
-from ip.engine.domain.models.connector_spec import (
-    ConnectorProperty,
-    ConnectorPropertySchema,
-    DeclarativeManifest,
-    HttpActionSpec,
-    PaginationConfig,
-    PaginationType,
-    PropertyType,
-)
-from ip.engine.ports.types import WriteRecordCommand
+from ip.engine.ports.outbound.connector_port import WriteRecordCommand
 from pytest_httpserver import HTTPServer
 from shttp import HttpClient, PassThroughPolicy, create_http_client
 from shttp.resilience import HttpBackoffHandler
@@ -79,7 +81,9 @@ def sample_manifest() -> DeclarativeManifest:
 
 
 def test_declarative_connector_spec(sample_manifest: DeclarativeManifest) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     spec = connector.spec()
     assert spec.app_id == "hubspot_crm"
     assert spec.display_name == "HubSpot CRM"
@@ -97,7 +101,11 @@ async def test_declarative_connector_check_success(httpserver: HTTPServer) -> No
     ).respond_with_json({"status": "ok"}, status=200)
 
     manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
-    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     result = await connector.check(
         public_config={"tenant_slug": "acme"},
         credentials={"access_token": "secret-token"},
@@ -115,7 +123,11 @@ async def test_declarative_connector_check_failure(httpserver: HTTPServer) -> No
     ).respond_with_json({"error": "Unauthorized"}, status=401)
 
     manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
-    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     result = await connector.check(
         public_config={"tenant_slug": "acme"},
         credentials={"access_token": "bad-token"},
@@ -129,7 +141,9 @@ async def test_declarative_connector_check_failure(httpserver: HTTPServer) -> No
 async def test_declarative_connector_discover(
     sample_manifest: DeclarativeManifest,
 ) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     catalog = await connector.discover(
         connection_id="ip_conn_1",
         public_config={"tenant_slug": "acme"},
@@ -167,7 +181,11 @@ async def test_declarative_connector_read_stream_with_cursor_pagination(
     )
 
     manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
-    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     records = [
         r
         async for r in connector.read_stream(
@@ -192,7 +210,11 @@ async def test_declarative_connector_write_record(httpserver: HTTPServer) -> Non
     ).respond_with_json({"id": "new_c99", "status": "created"}, status=201)
 
     manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
-    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     result = await connector.write_record(
         stream_name="contacts",
         command=WriteRecordCommand(
@@ -211,7 +233,9 @@ async def test_declarative_connector_write_record(httpserver: HTTPServer) -> Non
 async def test_declarative_connector_write_record_rejects_unsupported_operation(
     sample_manifest: DeclarativeManifest,
 ) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     result = await connector.write_record(
         stream_name="contacts",
         command=WriteRecordCommand(
@@ -230,7 +254,9 @@ async def test_declarative_connector_write_record_rejects_unsupported_operation(
 def test_declarative_connector_extract_nested_supports_negative_indices(
     sample_manifest: DeclarativeManifest,
 ) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     data = {"data": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}
     assert connector._extract_nested(data, "data.-1.id") == "3"
     assert connector._extract_nested(data, "data.-2.id") == "2"
@@ -239,7 +265,7 @@ def test_declarative_connector_extract_nested_supports_negative_indices(
 
 def test_declarative_connector_basic_auth_header(sample_manifest: DeclarativeManifest) -> None:
     manifest = dataclasses.replace(sample_manifest, auth_type="BASIC")
-    connector = DeclarativeHttpConnector(manifest=manifest)
+    connector = DeclarativeHttpConnector(manifest=manifest, auth_resolver=AuthStrategyResolver())
     auth = connector._build_auth_payload({"username": "user", "password": "secret_password"})
     assert "Authorization" in auth.headers
     assert auth.headers["Authorization"].startswith("Basic ")
@@ -249,7 +275,7 @@ def test_declarative_connector_basic_auth_header(sample_manifest: DeclarativeMan
 
 def test_declarative_connector_query_param_auth(sample_manifest: DeclarativeManifest) -> None:
     manifest = dataclasses.replace(sample_manifest, auth_type="API_KEY")
-    connector = DeclarativeHttpConnector(manifest=manifest)
+    connector = DeclarativeHttpConnector(manifest=manifest, auth_resolver=AuthStrategyResolver())
     auth = connector._build_auth_payload(
         {"api_key": "secret_key_123", "param_name": "apiKey", "placement": "query"}
     )
@@ -262,7 +288,9 @@ def test_declarative_connector_query_param_auth(sample_manifest: DeclarativeMani
 def test_declarative_connector_requires_https_and_rejects_restricted_hosts(
     sample_manifest: DeclarativeManifest,
 ) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     http_res = connector._interpolate_string("http://insecure.com/api", {}, {})
     assert http_res.is_err is True
     assert isinstance(http_res.error, EndpointSecurityViolationError)
@@ -278,7 +306,9 @@ def test_declarative_connector_requires_https_and_rejects_restricted_hosts(
 async def test_declarative_connector_check_handles_invalid_configuration(
     sample_manifest: DeclarativeManifest,
 ) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     result = await connector.check(
         public_config={"tenant_slug": "invalid/subdomain;injection"},
         credentials={},
@@ -291,7 +321,9 @@ async def test_declarative_connector_check_handles_invalid_configuration(
 def test_declarative_connector_rejects_cursor_url_with_mismatched_origin(
     sample_manifest: DeclarativeManifest,
 ) -> None:
-    connector = DeclarativeHttpConnector(manifest=sample_manifest)
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     action = sample_manifest.streams["contacts"]
 
     res = connector._prepare_page_url_and_params(
@@ -325,7 +357,10 @@ async def test_declarative_connector_fetch_page_handles_http_error(
     )
     manifest = _build_manifest(httpserver.url_for(""))
     connector = DeclarativeHttpConnector(
-        manifest=manifest, http_client=http_client, allow_private_ips=True
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        http_client=http_client,
+        allow_private_ips=True,
     )
     action = manifest.streams["contacts"]
 
@@ -364,6 +399,7 @@ async def test_declarative_connector_write_record_injects_idempotency_key_and_ex
     manifest = _build_manifest(httpserver.url_for(""))
     connector = DeclarativeHttpConnector(
         manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
         http_client=http_client,
         allow_private_ips=True,
     )
@@ -406,7 +442,11 @@ async def test_declarative_connector_auth_params_remain_authoritative_on_conflic
             query_params={"apiKey": "conflicting_action_key"},
         ),
     )
-    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     result = await connector.check(
         public_config={"tenant_slug": "acme"},
         credentials={
@@ -431,7 +471,11 @@ async def test_declarative_connector_fetch_page_auth_params_override_cursor_quer
 
     base_manifest = _build_manifest(f"{httpserver.url_for('')}/tenants/{{tenant_slug}}/api/v1")
     manifest = dataclasses.replace(base_manifest, auth_type="API_KEY")
-    connector = DeclarativeHttpConnector(manifest=manifest, allow_private_ips=True)
+    connector = DeclarativeHttpConnector(
+        manifest=manifest,
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     action = manifest.streams["contacts"]
     res = await connector._fetch_records_page(
         action=action,

@@ -24,14 +24,14 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     ReplicaRecordModel,
     ReplicaRejectionModel,
 )
-from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
+from ip.engine.application.use_cases.trace.get_ip_trace_use_case import (
     GetIpTraceUseCase,
 )
 from ip.engine.domain.constants import REDACTED_SECRET_VALUE
-from ip.engine.domain.enums import PipelineLayer
+from ip.engine.domain.enums import PipelineStage
+from ip.engine.domain.trace import IpTraceStatus as TraceStatus
 from strace.domain import (
     TraceStageAttemptRow,
-    TraceStatus,
     aggregate_trace_lineage_attempts,
 )
 
@@ -241,7 +241,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
         trace_id="ip_trc_root",
         correlation_id="MTR-777",
         status=TraceStatus.INGESTED,
-        primary_layer=PipelineLayer.L1_INGEST,
+        primary_layer=PipelineStage.INGEST,
         created_at=t0,
         replay_count=0,
         parent_trace_id=None,
@@ -251,7 +251,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
         trace_id="ip_trc_root",
         correlation_id="MTR-777",
         status=TraceStatus.FAILED,
-        primary_layer=PipelineLayer.L5_DELIVER,
+        primary_layer=PipelineStage.DELIVER,
         created_at=t0,
         replay_count=0,
         parent_trace_id=None,
@@ -261,7 +261,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
         trace_id="ip_trc_child_1",
         correlation_id="MTR-777",
         status=TraceStatus.DELIVERED,
-        primary_layer=PipelineLayer.L5_DELIVER,
+        primary_layer=PipelineStage.DELIVER,
         created_at=t1,
         replay_count=1,
         parent_trace_id="ip_trc_root",
@@ -275,7 +275,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
     assert len(items) == 2
     assert items[0].trace_id == "ip_trc_root"
     assert items[0].status == TraceStatus.FAILED
-    assert items[0].primary_layer == PipelineLayer.L5_DELIVER.value
+    assert items[0].primary_layer == PipelineStage.DELIVER.value
     assert items[1].trace_id == "ip_trc_child_1"
     assert items[1].status == TraceStatus.DELIVERED
     assert items[1].replay_count == 1

@@ -1,4 +1,4 @@
-"""Application use-case unit tests for GetIpTrace, GetIpTraceLineage, ReplayTransaction, ModifyAndReplay, and BulkReplay."""
+"""Application use-case unit tests for GetIpTrace, GetIpTraceLineage, ReplayStage, ModifyAndReplay, and BulkReplay."""
 
 from __future__ import annotations
 
@@ -8,51 +8,50 @@ from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from ip.engine.application.dtos.trace import IpTraceLineageItemDTO
-from ip.engine.application.use_cases.transactions.bulk_replay_transactions_use_case import (
-    BulkReplayCommand,
-    BulkReplayTransactionsUseCase,
+from ip.engine.application.responses import IpTraceLineageItemDTO
+from ip.engine.application.use_cases.replay.bulk_replay_stage_use_case import (
+    BulkReplayStageCommand,
+    BulkReplayStageUseCase,
 )
-from ip.engine.application.use_cases.transactions.get_ip_trace_lineage_use_case import (
+from ip.engine.application.use_cases.replay.modify_and_replay_use_case import (
+    ModifyAndReplayCommand,
+    ModifyAndReplayUseCase,
+)
+from ip.engine.application.use_cases.replay.replay_stage_use_case import (
+    ReplayStage,
+    ReplayStageCommand,
+    ReplayStageUseCase,
+)
+from ip.engine.application.use_cases.trace.get_ip_trace_lineage_use_case import (
     GetIpTraceLineageQuery,
     GetIpTraceLineageUseCase,
     ListRecentTracesQuery,
     SearchTracesByCorrelationQuery,
 )
-from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
+from ip.engine.application.use_cases.trace.get_ip_trace_use_case import (
     GetIpTraceQuery,
     GetIpTraceUseCase,
 )
-from ip.engine.application.use_cases.transactions.modify_and_replay_use_case import (
-    ModifyAndReplayCommand,
-    ModifyAndReplayTransactionUseCase,
-)
-from ip.engine.application.use_cases.transactions.replay_transaction_use_case import (
-    ReplayTransactionCommand,
-    ReplayTransactionUseCase,
-)
-from ip.engine.domain.enums import (
-    HttpWriteOperation,
-    IngestionMode,
-    PipelineLayer,
-    ReplayStage,
-)
+from ip.engine.bootstrap.container import create_default_stage_replay_processors
+from ip.engine.domain.dispatch.enums import HttpWriteOperation, OutboundDispatchStatus
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.enums import PipelineStage
 from ip.engine.domain.exceptions import (
     IpErrorCode,
     Result,
     TenantShardNotFoundError,
 )
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
 )
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.trace import IpTraceStatus as TraceStatus
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
@@ -81,7 +80,7 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkProviderPort,
 )
 from seedwork.events import EventEnvelope
-from strace.domain import TraceEvent, TraceStatus
+from strace.domain import TraceEvent
 from strace.ports import TraceRepositoryPort
 
 
@@ -465,7 +464,7 @@ async def test_get_ip_trace_lineage_and_correlation_search() -> None:
             trace_id="ip_trc_root",
             correlation_id="MTR-100",
             status=TraceStatus.FAILED,
-            primary_layer=PipelineLayer.L5_DELIVER.value,
+            primary_layer=PipelineStage.DELIVER.value,
             created_at=now,
             replay_count=0,
             original_trace_id="ip_trc_root",
@@ -474,7 +473,7 @@ async def test_get_ip_trace_lineage_and_correlation_search() -> None:
             trace_id="ip_trc_replay_1",
             correlation_id="MTR-100",
             status=TraceStatus.DELIVERED,
-            primary_layer=PipelineLayer.L5_DELIVER.value,
+            primary_layer=PipelineStage.DELIVER.value,
             created_at=now,
             replay_count=1,
             parent_trace_id="ip_trc_root",
@@ -498,10 +497,13 @@ async def test_get_ip_trace_lineage_and_correlation_search() -> None:
 
 
 @pytest.mark.asyncio
-async def test_replay_transaction_use_case_across_all_stages_and_upstream_hydration() -> None:
+async def test_replay_stage_use_case_across_all_stages_and_upstream_hydration() -> None:
     uow = InMemoryDataPlaneUoW()
     provider = InMemoryDataPlaneUoWProvider(uow)
-    replay_uc = ReplayTransactionUseCase(uow_provider=provider)
+    replay_uc = ReplayStageUseCase(
+        uow_provider=provider,
+        stage_processors=create_default_stage_replay_processors(),
+    )
 
     inb = InboundRecord.create(
         tenant_id="ten_01",
@@ -553,9 +555,9 @@ async def test_replay_transaction_use_case_across_all_stages_and_upstream_hydrat
     await uow.normalized_records.save(nrm)
     await uow.outbound_records.save(out)
 
-    # 1. Replay L5 Delivery (RETRY_DELIVER)
+    # 1. Replay Delivery (RETRY_DELIVER)
     deliv_res = await replay_uc.execute(
-        ReplayTransactionCommand(
+        ReplayStageCommand(
             tenant_id="ten_01",
             trace_id="ip_trc_root",
             stage=ReplayStage.RETRY_DELIVER,
@@ -569,9 +571,9 @@ async def test_replay_transaction_use_case_across_all_stages_and_upstream_hydrat
     assert deliv_dto.replay_count == 1
     assert deliv_dto.stage == ReplayStage.RETRY_DELIVER
 
-    # 2. Replay L3 Stitch from the L5 replay child trace (walks parent_trace_id upstream to find NormalizedRecord!)
+    # 2. Replay Stitch from the Delivery replay child trace (walks parent_trace_id upstream to find NormalizedRecord!)
     stitch_res = await replay_uc.execute(
-        ReplayTransactionCommand(
+        ReplayStageCommand(
             tenant_id="ten_01",
             trace_id=deliv_dto.new_trace_id,
             stage=ReplayStage.RETRY_STITCH,
@@ -584,9 +586,9 @@ async def test_replay_transaction_use_case_across_all_stages_and_upstream_hydrat
     assert stitch_dto.parent_trace_id == deliv_dto.new_trace_id
     assert stitch_dto.replay_count == 2
 
-    # 3. Replay L1 Ingest
+    # 3. Replay Ingest
     ingest_res = await replay_uc.execute(
-        ReplayTransactionCommand(
+        ReplayStageCommand(
             tenant_id="ten_01",
             trace_id="ip_trc_root",
             stage=ReplayStage.RETRY_INGEST,
@@ -596,9 +598,9 @@ async def test_replay_transaction_use_case_across_all_stages_and_upstream_hydrat
     assert ingest_res.is_ok
     assert ingest_res.unwrap().stage == ReplayStage.RETRY_INGEST
 
-    # 4. Replay L2 Normalize
+    # 4. Replay Normalize
     norm_res = await replay_uc.execute(
-        ReplayTransactionCommand(
+        ReplayStageCommand(
             tenant_id="ten_01",
             trace_id="ip_trc_root",
             stage=ReplayStage.RETRY_NORMALIZE,
@@ -608,13 +610,38 @@ async def test_replay_transaction_use_case_across_all_stages_and_upstream_hydrat
     assert norm_res.is_ok
     assert norm_res.unwrap().stage == ReplayStage.RETRY_NORMALIZE
 
+    # 5. Replay via PipelineStage enum directly (PipelineStage.INGEST)
+    pipeline_stage_res = await replay_uc.execute(
+        ReplayStageCommand(
+            tenant_id="ten_01",
+            trace_id="ip_trc_root",
+            stage=PipelineStage.INGEST,
+            actor="ops@soopa.io",
+        )
+    )
+    assert pipeline_stage_res.is_ok
+    assert pipeline_stage_res.unwrap().stage == ReplayStage.RETRY_INGEST
+
+    # 6. Non-executable stage (PipelineStage.REPLICA) returns ReplayStageNotAvailableError
+    non_exec_res = await replay_uc.execute(
+        ReplayStageCommand(
+            tenant_id="ten_01",
+            trace_id="ip_trc_root",
+            stage=PipelineStage.REPLICA,
+            actor="ops@soopa.io",
+        )
+    )
+    assert non_exec_res.is_err
+    assert non_exec_res.unwrap_err().code == IpErrorCode.REPLAY_STAGE_NOT_AVAILABLE
+
 
 @pytest.mark.asyncio
 async def test_modify_and_replay_and_bulk_replay_use_cases() -> None:
     uow = InMemoryDataPlaneUoW()
     provider = InMemoryDataPlaneUoWProvider(uow)
-    modify_uc = ModifyAndReplayTransactionUseCase(uow_provider=provider)
-    bulk_uc = BulkReplayTransactionsUseCase(uow_provider=provider)
+    processors = create_default_stage_replay_processors()
+    modify_uc = ModifyAndReplayUseCase(uow_provider=provider, stage_processors=processors)
+    bulk_uc = BulkReplayStageUseCase(uow_provider=provider, stage_processors=processors)
 
     inb1 = InboundRecord.create(
         tenant_id="ten_01",
@@ -669,7 +696,7 @@ async def test_modify_and_replay_and_bulk_replay_use_cases() -> None:
     assert replayed_inb[0].request_body == {"meter_id": "MTR-101", "kwh": 99.9}
 
     bulk_res = await bulk_uc.execute(
-        BulkReplayCommand(
+        BulkReplayStageCommand(
             tenant_id="ten_01",
             trace_ids=("ip_trc_m1", "ip_trc_m1", "ip_trc_m2", "ip_trc_nonexistent"),
             stage=ReplayStage.RETRY_INGEST,
@@ -700,7 +727,7 @@ async def test_list_recent_traces_filters_and_orders_descending() -> None:
             trace_id=f"ip_trc_{os.urandom(12).hex()}",
             correlation_id=f"MTR-{2000 + idx}",
             status=TraceStatus.DELIVERED,
-            primary_layer=PipelineLayer.L5_DELIVER,
+            primary_layer=PipelineStage.DELIVER,
             created_at=base_time + timedelta(minutes=idx + 10),
             replay_count=0,
             parent_trace_id=None,
@@ -713,7 +740,7 @@ async def test_list_recent_traces_filters_and_orders_descending() -> None:
             trace_id=failed_replay_trace_id,
             correlation_id="MTR-102",
             status=TraceStatus.FAILED,
-            primary_layer=PipelineLayer.L5_DELIVER,
+            primary_layer=PipelineStage.DELIVER,
             created_at=base_time,
             replay_count=2,
             parent_trace_id=root_trace_id,
@@ -786,7 +813,31 @@ async def test_list_recent_traces_filters_and_orders_descending() -> None:
             SearchTracesByCorrelationQuery(tenant_id=missing_tenant_id, correlation_id="MTR-1")
         )
     ).is_err
-    assert (
-        await missing_uc.list_recent(ListRecentTracesQuery(tenant_id=missing_tenant_id))
-    ).is_err
+    assert (await missing_uc.list_recent(ListRecentTracesQuery(tenant_id=missing_tenant_id))).is_err
 
+
+def test_derive_overall_status_maps_in_flight_outbound_record_to_pending() -> None:
+    in_flight_record = OutboundRecord.create_pending(
+        tenant_id="ten_01",
+        trace_id="ip_trc_in_flight",
+        connection_id="ip_conn_01",
+        app_id="salesforce",
+        stream_name="accounts",
+        operation=HttpWriteOperation.UPSERT.value,
+        target_url="https://api.example.com/accounts",
+        http_method="POST",
+        payload_bytes=b'{"name":"Acme"}',
+        is_inlined=True,
+        request_headers={},
+        request_body={"name": "Acme"},
+        status=OutboundDispatchStatus.IN_FLIGHT,
+    )
+    status = GetIpTraceUseCase.derive_overall_status(
+        outbound_records=[in_flight_record],
+        normalization_rejections=[],
+        normalized_records=[],
+        replica_rejections=[],
+        replica_records=[],
+        inbound_record=None,
+    )
+    assert status == TraceStatus.PENDING

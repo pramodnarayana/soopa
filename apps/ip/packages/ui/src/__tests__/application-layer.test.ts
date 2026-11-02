@@ -58,10 +58,19 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
   it('constructs deterministic hierarchical query keys across all 6 IP bounded sub-resources', () => {
     expect(ipQueryKeys.all).toEqual(['ip']);
     expect(ipQueryKeys.tenant('ten_1')).toEqual(['ip', 'tenant', 'ten_1']);
-    expect(ipQueryKeys.catalog.all()).toEqual(['ip', 'catalog']);
-    expect(ipQueryKeys.catalog.spec('itron_ami')).toEqual(['ip', 'catalog', 'spec', 'itron_ami']);
-    expect(ipQueryKeys.catalog.apps({ category: 'energy' })).toEqual([
+    expect(ipQueryKeys.catalog.all('ten_1')).toEqual(['ip', 'tenant', 'ten_1', 'catalog']);
+    expect(ipQueryKeys.catalog.spec('ten_1', 'itron_ami')).toEqual([
       'ip',
+      'tenant',
+      'ten_1',
+      'catalog',
+      'spec',
+      'itron_ami',
+    ]);
+    expect(ipQueryKeys.catalog.apps('ten_1', { category: 'energy' })).toEqual([
+      'ip',
+      'tenant',
+      'ten_1',
       'catalog',
       'apps',
       'energy',
@@ -194,7 +203,9 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
   it('executes full Liskov-substitutable state transitions across all 6 InMemory repositories', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
 
-    const filteredApps = await harness.catalog.listApps({ search: 'oracle' });
+    const filteredApps = await harness.catalog.listApps(SEED_TENANT_ID, {
+      search: 'oracle',
+    });
     expect(filteredApps.ok && filteredApps.value).toHaveLength(1);
 
     const createdConn = await harness.connections.createConnection(SEED_TENANT_ID, {

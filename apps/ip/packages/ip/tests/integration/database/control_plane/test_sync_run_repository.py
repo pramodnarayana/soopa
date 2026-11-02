@@ -11,9 +11,14 @@ from ip.engine.adapters.outbound.database.control_plane.sync_run_repository impo
     SqlAlchemySyncRunRepository,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
-from ip.engine.domain.enums import AuthType, IpEventType, SyncRunKind, SyncRunStatus
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.sync_run import SyncRun
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.replication.enums import (
+    SyncRunKind,
+    SyncRunStatus,
+)
+from ip.engine.domain.replication.sync_run import SyncRun
 from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
@@ -54,7 +59,7 @@ async def test_sync_run_repository_lifecycle_and_outbox(
         generation_id=2,
         start_checkpoint=None,
     )
-    run.start()
+    assert run.start().is_ok
     await run_repo.save(run)
 
     # Active run lookup
@@ -68,12 +73,12 @@ async def test_sync_run_repository_lifecycle_and_outbox(
     assert active.status == SyncRunStatus.RUNNING
 
     # Record page and complete
-    active.record_page(
+    assert active.record_page(
         records_in_page=40,
         bytes_size=4096,
         next_checkpoint="2026-10-23T12:00:00Z",
-    )
-    active.succeed(end_checkpoint="2026-10-23T12:00:00Z")
+    ).is_ok
+    assert active.succeed(end_checkpoint="2026-10-23T12:00:00Z").is_ok
     await run_repo.save(active)
 
     # Active run should now be None

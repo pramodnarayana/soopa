@@ -4,30 +4,25 @@ from __future__ import annotations
 
 import pytest
 from database.types import TenantSession
-from ip.engine.adapters.outbound.database.data_plane.uow import (
-    SqlAlchemyIpDataPlaneUnitOfWork,
-)
-from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
+from ip.engine.application.use_cases.trace.get_ip_trace_use_case import (
     GetIpTraceUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_data_plane_uow
 from ip.engine.domain.constants import REDACTED_SECRET_VALUE
-from ip.engine.domain.enums import (
-    HttpWriteOperation,
-    IngestionMode,
-    PipelineLayer,
-)
+from ip.engine.domain.dispatch.enums import HttpWriteOperation
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.enums import PipelineStage
 from ip.engine.domain.exceptions import PayloadNotFoundError, Result
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.domain.trace.enums import IpTraceStatus
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
     TieredStorageResultDTO,
 )
 from seedwork.domain.types import JsonValue
-from strace.domain import TraceStatus
 
 pytestmark = pytest.mark.integration
 
@@ -65,7 +60,7 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
             "s3://ip-payloads/ten_dp_trace_01/inb_01.json": b'{"meter_id":"MTR-500","kwh":88.2}',
         }
     )
-    uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session, storage=storage)
+    uow = create_ip_data_plane_uow(tenant_session, storage=storage)
 
     # 1. Seed full 5-layer root trace (which fails at L5)
     inb = InboundRecord.create(
@@ -166,7 +161,7 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
     assert child_waterfall.parent_trace_id == root_trace_id
     assert child_waterfall.original_trace_id == root_trace_id
     assert child_waterfall.replay_count == 1
-    assert child_waterfall.status == TraceStatus.DELIVERED
+    assert child_waterfall.status == IpTraceStatus.DELIVERED
     assert child_waterfall.inbound_record is not None
     assert child_waterfall.inbound_record.id == inb.id
     assert child_waterfall.inbound_record.request_headers["Authorization"] == REDACTED_SECRET_VALUE
@@ -180,12 +175,12 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
     lineage = await uow.traces.get_trace_lineage(tenant_id, child_trace_id)
     assert len(lineage) == 2
     assert lineage[0].trace_id == root_trace_id
-    assert lineage[0].status == TraceStatus.FAILED
+    assert lineage[0].status == IpTraceStatus.FAILED
     assert lineage[0].replay_count == 0
     assert lineage[1].trace_id == child_trace_id
-    assert lineage[1].status == TraceStatus.DELIVERED
+    assert lineage[1].status == IpTraceStatus.DELIVERED
     assert lineage[1].replay_count == 1
-    assert lineage[1].primary_layer == PipelineLayer.L5_DELIVER.value
+    assert lineage[1].primary_layer == PipelineStage.DELIVER.value
 
     # 5. Verify uow.traces.find_traces_by_correlation_id
     corr_results = await uow.traces.find_traces_by_correlation_id(tenant_id, "MTR-500")

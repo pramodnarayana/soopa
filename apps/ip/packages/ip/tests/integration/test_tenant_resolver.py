@@ -9,11 +9,9 @@ from ip.engine.adapters.outbound.database.data_plane.uow import (
 )
 from ip.engine.adapters.outbound.database.tenant_resolver import (
     IP_APP_SLUG,
-    IpTenantResolver,
+    SqlAlchemyIpTenantResolver,
 )
-from ip.engine.adapters.outbound.database.tenant_uow_provider import (
-    IpTenantUoWProvider,
-)
+from ip.engine.bootstrap.container import create_ip_tenant_uow_provider
 from ip.engine.domain.exceptions import IpErrorCode, TenantShardNotFoundError
 from sqlalchemy import text
 
@@ -25,7 +23,7 @@ async def test_ip_tenant_resolver_resolves_shard_and_returns_result(
     transactional_router: TransactionalTestRouter,
     seeded_ip_tenant: str,
 ) -> None:
-    resolver = IpTenantResolver(db_router=transactional_router)
+    resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
     assert resolver.app_slug == IP_APP_SLUG == "ip"
 
     ok_res = await resolver.resolve_tenant_shard(seeded_ip_tenant)
@@ -47,8 +45,8 @@ async def test_ip_tenant_uow_provider_yields_scoped_tenant_uow(
     transactional_router: TransactionalTestRouter,
     seeded_ip_tenant: str,
 ) -> None:
-    resolver = IpTenantResolver(db_router=transactional_router)
-    provider = IpTenantUoWProvider(resolver=resolver, db_router=transactional_router)
+    resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
+    provider = create_ip_tenant_uow_provider(resolver=resolver, db_router=transactional_router)
 
     shard_res = await provider.resolve_shard_info(seeded_ip_tenant)
     assert shard_res.is_ok is True

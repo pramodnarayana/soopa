@@ -37,7 +37,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     signal?: AbortSignal,
   ): Promise<Result<readonly IpTraceLineageItem[], ApiProblem>> {
     const raw = await this.httpClient.get<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces`,
       {
         params: {
           status: filter?.status,
@@ -51,7 +51,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
       raw,
       IpTraceLineageListWireSchema,
       (items) => items.map(mapLineageItemFromWire),
-      'GET /ip/transactions',
+      'GET /ip/traces',
       this.logger,
     );
   }
@@ -63,7 +63,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     signal?: AbortSignal,
   ): Promise<Result<readonly IpTraceLineageItem[], ApiProblem>> {
     const raw = await this.httpClient.get<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions/search`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces/search`,
       {
         params: {
           correlation_id: correlationId,
@@ -76,7 +76,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
       raw,
       IpTraceLineageListWireSchema,
       (items) => items.map(mapLineageItemFromWire),
-      'GET /ip/transactions/search',
+      'GET /ip/traces/search',
       this.logger,
     );
   }
@@ -88,7 +88,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     signal?: AbortSignal,
   ): Promise<Result<IpTrace, ApiProblem>> {
     const raw = await this.httpClient.get<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions/${encodeURIComponent(traceId)}`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces/${encodeURIComponent(traceId)}`,
       {
         params: { hydrate_payloads: hydratePayloads },
         signal,
@@ -98,7 +98,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
       raw,
       IpTraceWireSchema,
       mapIpTraceFromWire,
-      `GET /ip/transactions/${traceId}`,
+      `GET /ip/traces/${traceId}`,
       this.logger,
     );
   }
@@ -109,14 +109,14 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     signal?: AbortSignal,
   ): Promise<Result<readonly IpTraceLineageItem[], ApiProblem>> {
     const raw = await this.httpClient.get<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions/${encodeURIComponent(traceId)}/lineage`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces/${encodeURIComponent(traceId)}/lineage`,
       { signal },
     );
     return parseAndMapResult(
       raw,
       IpTraceLineageListWireSchema,
       (items) => items.map(mapLineageItemFromWire),
-      `GET /ip/transactions/${traceId}/lineage`,
+      `GET /ip/traces/${traceId}/lineage`,
       this.logger,
     );
   }
@@ -127,14 +127,14 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     stage: ReplayStageValue,
   ): Promise<Result<ReplayTransactionResult, ApiProblem>> {
     const raw = await this.httpClient.post<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions/${encodeURIComponent(traceId)}/replay`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces/${encodeURIComponent(traceId)}/replay`,
       { stage },
     );
     return parseAndMapResult(
       raw,
       ReplayTransactionResultWireSchema,
       mapReplayResultFromWire,
-      `POST /ip/transactions/${traceId}/replay`,
+      `POST /ip/traces/${traceId}/replay`,
       this.logger,
     );
   }
@@ -146,7 +146,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     modifiedPayload: JsonRecord,
   ): Promise<Result<ReplayTransactionResult, ApiProblem>> {
     const raw = await this.httpClient.post<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions/${encodeURIComponent(traceId)}/modify-and-replay`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces/${encodeURIComponent(traceId)}/modify-and-replay`,
       {
         stage,
         modified_payload: modifiedPayload,
@@ -156,7 +156,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
       raw,
       ReplayTransactionResultWireSchema,
       mapReplayResultFromWire,
-      `POST /ip/transactions/${traceId}/modify-and-replay`,
+      `POST /ip/traces/${traceId}/modify-and-replay`,
       this.logger,
     );
   }
@@ -167,7 +167,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
     stage: ReplayStageValue,
   ): Promise<Result<BulkReplayResult, ApiProblem>> {
     const raw = await this.httpClient.post<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/transactions/bulk-replay`,
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/traces/bulk-replay`,
       {
         trace_ids: traceIds,
         stage,
@@ -177,7 +177,7 @@ export class HttpTraceRepository implements TraceRepositoryPort {
       raw,
       BulkReplayResultWireSchema,
       mapBulkReplayResultFromWire,
-      'POST /ip/transactions/bulk-replay',
+      'POST /ip/traces/bulk-replay',
       this.logger,
     );
   }

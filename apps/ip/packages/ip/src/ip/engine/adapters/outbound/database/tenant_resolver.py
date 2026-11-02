@@ -9,10 +9,10 @@ from database.tenant_shard_resolver import TenantNotFoundError, TenantShardResol
 
 IP_APP_SLUG = "ip"
 
-__all__ = ["IP_APP_SLUG", "IpTenantResolver", "TenantNotFoundError", "TenantResolver"]
+__all__ = ["IP_APP_SLUG", "SqlAlchemyIpTenantResolver", "TenantNotFoundError"]
 
 
-class IpTenantResolver(TenantShardResolver):
+class SqlAlchemyIpTenantResolver(TenantShardResolver):
     """IP-specific TenantShardResolver resolving dedicated Data Plane shards (app_slug='ip')."""
 
     def __init__(
@@ -38,6 +38,3 @@ class IpTenantResolver(TenantShardResolver):
             return Result.ok((shard_id, shard_dsn))
         except TenantNotFoundError:
             return Result.fail(TenantShardNotFoundError.for_tenant(tenant_id))
-
-
-TenantResolver = IpTenantResolver

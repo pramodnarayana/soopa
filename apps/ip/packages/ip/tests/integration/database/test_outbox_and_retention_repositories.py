@@ -11,21 +11,16 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from database.testing import TransactionalTestRouter
 from database.types import GlobalSession, TenantSession
-from ip.engine.adapters.inbound.workers import (
-    IpCpJobsWorkerModule,
-    IpDeliveryWorkerModule,
-    IpDpJobsWorkerModule,
-    IpOrchestratorWorkerModule,
+from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
+    stage_workflow_outbox_event,
 )
-from ip.engine.adapters.outbound.database.data_plane.uow import stage_workflow_outbox_event
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
 from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
     IpProcessedEventModel,
     IpTraceEventModel,
 )
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
-from ip.engine.adapters.outbound.database.tenant_uow_provider import IpTenantUoWProvider
+from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
 from ip.engine.adapters.outbound.stitches.stitch_adapters import (
     IpStitchCanonicalDispatcherAdapter,
     IpStitchWorkerTickAdapter,
@@ -39,12 +34,21 @@ from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches
 from ip.engine.application.use_cases.stitch.execute_stitch_worker_tick_use_case import (
     ExecuteStitchWorkerTickCommand,
 )
-from ip.engine.container import create_ip_workflow_uow
+from ip.engine.bootstrap.container import (
+    create_ip_tenant_uow_provider,
+    create_ip_workflow_uow,
+)
+from ip.engine.bootstrap.workers import (
+    IpCpJobsWorkerModule,
+    IpDeliveryWorkerModule,
+    IpDpJobsWorkerModule,
+    IpOrchestratorWorkerModule,
+)
 from ip.engine.domain.enums import (
     IpEventType,
     IpOutboxSource,
-    IpTraceEventType,
 )
+from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.settings import IpEngineSettings
 from orchestration.application.services.registries import (
     InMemoryStepHandlerRegistry,
@@ -140,7 +144,7 @@ async def test_global_outbox_repository_priority_lane_and_bulk_batch_updates(
     await global_session.flush()
 
     repo = SqlAlchemyGlobalOutboxRepository(
-        transactional_router,
+        session_factory=transactional_router.global_session_scope,
         model_cls=IpOutboxRecord,
         source=IpOutboxSource.CONTROL_PLANE.value,
     )
@@ -269,7 +273,7 @@ async def test_sharded_trace_retention_repository_prunes_expired_trace_and_proce
                 tenant_id=seeded_ip_tenant,
                 trace_id="tr_old",
                 correlation_id="corr_old",
-                event_type=IpTraceEventType.L1_INGEST_RECEIVED.value,
+                event_type=IpTraceEventType.INGEST_RECEIVED.value,
                 actor="SYSTEM",
                 metadata_={"summary": "Old trace event"},
                 created_at=expired_ts,
@@ -279,7 +283,7 @@ async def test_sharded_trace_retention_repository_prunes_expired_trace_and_proce
                 tenant_id=seeded_ip_tenant,
                 trace_id="tr_recent",
                 correlation_id="corr_recent",
-                event_type=IpTraceEventType.L1_INGEST_RECEIVED.value,
+                event_type=IpTraceEventType.INGEST_RECEIVED.value,
                 actor="SYSTEM",
                 metadata_={"summary": "Recent trace event"},
                 created_at=recent_ts,
@@ -382,7 +386,7 @@ async def test_global_outbox_repository_sweep_stuck_events_and_cleanup_processed
     await global_session.flush()
 
     repo = SqlAlchemyGlobalOutboxRepository(
-        transactional_router,
+        session_factory=transactional_router.global_session_scope,
         model_cls=IpOutboxRecord,
         source=IpOutboxSource.CONTROL_PLANE.value,
         max_attempts=3,
@@ -466,8 +470,8 @@ async def test_data_plane_uow_idempotency_claim_and_release_on_nack(
     transactional_router: TransactionalTestRouter,
 ) -> None:
     """Verify SqlAlchemyIpDataPlaneUnitOfWork claims idempotency keys and releases them on transient NACK."""
-    resolver = IpTenantResolver(db_router=transactional_router)
-    uow_provider = IpTenantUoWProvider(resolver=resolver, db_router=transactional_router)
+    resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
+    uow_provider = create_ip_tenant_uow_provider(resolver=resolver, db_router=transactional_router)
     shard_res = await uow_provider.resolve_shard_info(seeded_ip_tenant)
     shard_id, shard_dsn = shard_res.unwrap()
 
@@ -568,8 +572,10 @@ async def test_stitch_adapters_and_worker_modules_lifecycle(
     )
     await tenant_session.flush()
 
-    resolver = IpTenantResolver(db_router=transactional_router)
-    dp_uow_provider = IpTenantUoWProvider(resolver=resolver, db_router=transactional_router)
+    resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
+    dp_uow_provider = create_ip_tenant_uow_provider(
+        resolver=resolver, db_router=transactional_router
+    )
     stitch_catalog = InMemoryStitchCatalogRegistry()
     def_registry = InMemoryWorkflowDefinitionRegistry()
     handler_registry = InMemoryStepHandlerRegistry()

@@ -13,20 +13,19 @@ import aioboto3
 import pytest
 import pytest_asyncio
 from database.types import TenantSession
+from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.data_plane.inbound_record_repository import (
     SqlAlchemyInboundRecordRepository,
-)
-from ip.engine.adapters.outbound.database.data_plane.uow import (
-    SqlAlchemyIpDataPlaneUnitOfWork,
 )
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import TieredStorageAdapter
 from ip.engine.application.use_cases.ingress.ingest_record_use_case import (
     IngestRecordCommand,
     IngestRecordUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_data_plane_uow
+from ip.engine.domain.constants import IpIdPrefix
 from seedwork import generate_id
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import DomainIdPrefix
 from storage.adapters.s3_storage_adapter import Aioboto3PayloadStorage
 
 pytestmark = pytest.mark.integration
@@ -34,7 +33,7 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def s3_bucket() -> AsyncGenerator[str, None]:
-    bucket_name = f"ip-ingest-{generate_id(DomainIdPrefix.TENANT.value).replace('_', '-')}"
+    bucket_name = f"ip-ingest-{generate_id(IdentityIdPrefix.TENANT.value).replace('_', '-')}"
     endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
     session = aioboto3.Session()
     async with session.client(
@@ -55,12 +54,12 @@ async def s3_bucket() -> AsyncGenerator[str, None]:
 
 @pytest.mark.asyncio
 async def test_ingest_record_inline(tenant_session: TenantSession) -> None:
-    uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    uow = create_ip_data_plane_uow(tenant_session)
     repo = SqlAlchemyInboundRecordRepository(tenant_session)
     tiered_storage = TieredStorageAdapter(threshold_bytes=64 * 1024)
     use_case = IngestRecordUseCase(uow=uow, tiered_storage=tiered_storage)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
-    connection_id = generate_id(DomainIdPrefix.IP_CONNECTION.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    connection_id = generate_id(IpIdPrefix.CONNECTION.value)
 
     command = IngestRecordCommand(
         tenant_id=tenant_id,
@@ -102,12 +101,12 @@ async def test_ingest_record_s3_offload(
         access_key_id="test",
         secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
     )
-    uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    uow = create_ip_data_plane_uow(tenant_session)
     repo = SqlAlchemyInboundRecordRepository(tenant_session)
     tiered_storage = TieredStorageAdapter(storage_client=s3_storage, threshold_bytes=500)
     use_case = IngestRecordUseCase(uow=uow, tiered_storage=tiered_storage)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
-    connection_id = generate_id(DomainIdPrefix.IP_CONNECTION.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    connection_id = generate_id(IpIdPrefix.CONNECTION.value)
 
     large_dict: JsonDict = {"batch": [f"item_{i}" for i in range(200)]}
 

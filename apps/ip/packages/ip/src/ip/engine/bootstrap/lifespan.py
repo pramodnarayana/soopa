@@ -15,11 +15,11 @@ from database.router import DatabaseRouterPort
 from dependency_injector import providers
 from fastapi import FastAPI
 
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
+from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     DEFAULT_IP_PAYLOAD_BUCKET,
 )
-from ip.engine.container import Container
+from ip.engine.bootstrap.container import Container
 
 logger = structlog.get_logger(__name__)
 
@@ -53,11 +53,11 @@ async def startup(
     db_router: DatabaseRouterPort,
     allow_private_ips: bool = False,
 ) -> None:
-    """Initializes the IP IoC Container and IpTenantResolver and attaches them to `app.state`."""
+    """Initializes the IP IoC Container and SqlAlchemyIpTenantResolver and attaches them to `app.state`."""
     logger.info("ip_startup_initializing")
     await _ensure_payload_bucket(DEFAULT_IP_PAYLOAD_BUCKET)
 
-    resolver = IpTenantResolver(db_router)
+    resolver = SqlAlchemyIpTenantResolver(db_router)
     app.state.ip_tenant_resolver = resolver
 
     container = Container()

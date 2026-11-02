@@ -4,9 +4,7 @@ from __future__ import annotations
 
 import pytest
 from database.types import GlobalSession
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
-)
+from identity.domain.constants import IdentityIdPrefix
 from ip.engine.application.use_cases.connections.create_connection_use_case import (
     CreateConnectionCommand,
     CreateConnectionUseCase,
@@ -15,9 +13,9 @@ from ip.engine.application.use_cases.connections.list_connections_use_case impor
     ListConnectionsQuery,
     ListConnectionsUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_control_plane_uow
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -33,11 +31,11 @@ async def test_list_connections_use_case(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    uow = create_ip_control_plane_uow(global_session)
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     list_uc = ListConnectionsUseCase(uow=uow)
 
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     create_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,

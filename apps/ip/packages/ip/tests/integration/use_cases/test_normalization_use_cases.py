@@ -8,17 +8,13 @@ from database.types import GlobalSession, TenantSession
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
 )
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
-)
 from ip.engine.adapters.outbound.database.data_plane.normalization_ledger_repository import (
     SqlAlchemyNormalizationLedgerRepository,
 )
 from ip.engine.adapters.outbound.database.data_plane.replica_record_repository import (
     SqlAlchemyReplicaRecordRepository,
 )
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
-from ip.engine.adapters.outbound.database.tenant_uow_provider import IpTenantUoWProvider
+from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
     BackfillStreamNormalizationUseCase,
@@ -35,28 +31,32 @@ from ip.engine.application.use_cases.normalization.promote_transformation_versio
     PromoteTransformationVersionCommand,
     PromoteTransformationVersionUseCase,
 )
-from ip.engine.domain.enums import (
-    AuthType,
+from ip.engine.bootstrap.container import (
+    create_ip_control_plane_uow,
+    create_ip_tenant_uow_provider,
+)
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     TransformationMode,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.policies import (
+    DefaultNormalizationErrorPolicy,
+)
+from ip.engine.domain.normalization.registries import (
+    CanonicalEntityRegistry,
+    CanonicalWriterRegistry,
+    TransformerRegistry,
+)
+from ip.engine.domain.normalization.transformation import (
     CanonicalDraft,
     CanonicalEntityDefinition,
     ReplicaSnapshot,
     TransformationContext,
     TransformationResult,
 )
-from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
-from ip.engine.domain.services.canonical_writer_registry import (
-    InMemoryCanonicalWriterRegistry,
-)
-from ip.engine.domain.services.default_normalization_error_policy import (
-    DefaultNormalizationErrorPolicy,
-)
-from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
+from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
@@ -208,18 +208,18 @@ async def test_normalization_use_cases_end_to_end_with_postgres(
     await tenant_session.flush()
 
     # 3. Assemble registries & UoWs backed by SAVEPOINT sessions
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    resolver = IpTenantResolver(db_router=transactional_router)
-    dp_uow_provider = IpTenantUoWProvider(resolver=resolver, db_router=transactional_router)
+    cp_uow = create_ip_control_plane_uow(global_session)
+    resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
+    dp_uow_provider = create_ip_tenant_uow_provider(
+        resolver=resolver, db_router=transactional_router
+    )
 
-    transformer_registry = InMemoryTransformerRegistry()
+    transformer_registry = TransformerRegistry()
     transformer_registry.register(_SampleOrderTransformer(version=1, multiplier=1.0))
     transformer_registry.register(_SampleOrderTransformer(version=2, multiplier=2.0))
 
     writer = _RecordingCanonicalWriter("commerce.order")
-    writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort] = (
-        InMemoryCanonicalWriterRegistry()
-    )
+    writer_registry: CanonicalWriterRegistry[CanonicalWriterPort] = CanonicalWriterRegistry()
     writer_registry.register(writer)
 
     entity_registry = CanonicalEntityRegistry()

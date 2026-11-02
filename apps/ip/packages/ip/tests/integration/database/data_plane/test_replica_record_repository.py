@@ -15,17 +15,17 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     IpTraceEventModel,
     ReplicaRejectionModel,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.replication.enums import (
     CursorKind,
-    IpEventType,
-    IpTraceEventType,
     MergeOutcome,
 )
-from ip.engine.domain.models.replica_record import (
+from ip.engine.domain.replication.replica_record import (
     ReplicaRecord,
     ReplicaRejection,
     compute_data_hash,
 )
+from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.ports.outbound.replica_record_repository_port import (
     ReplicaMergeCandidate,
 )
@@ -347,7 +347,7 @@ async def test_l2_tombstone_unseen_generations_drains_trace_and_outbox(
         .all()
     )
     assert len(sweep_traces) == 2
-    assert all(t.event_type == IpTraceEventType.L2_REPLICA_TOMBSTONED.value for t in sweep_traces)
+    assert all(t.event_type == IpTraceEventType.REPLICA_TOMBSTONED.value for t in sweep_traces)
 
 
 @pytest.mark.asyncio

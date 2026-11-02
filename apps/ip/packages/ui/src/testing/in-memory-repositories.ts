@@ -89,6 +89,7 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
   }
 
   public async listApps(
+    _tenantId: string,
     filter?: CatalogAppsFilter,
   ): Promise<Result<readonly CatalogAppSummary[], ApiProblem>> {
     const searchLower = filter?.search?.toLowerCase();
@@ -103,7 +104,7 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
     return ok(filtered);
   }
 
-  public async getAppSpec(appId: string): Promise<Result<AppSpec, ApiProblem>> {
+  public async getAppSpec(_tenantId: string, appId: string): Promise<Result<AppSpec, ApiProblem>> {
     const spec = this.specs.get(appId);
     return spec ? ok(spec) : err(notFoundProblem(`AppSpec ${appId} not found`));
   }

@@ -31,7 +31,7 @@ import {
   useTriggerSyncRunMutation,
 } from '../../application/use-sync-run-queries';
 import type { Connection, DiscoveredCatalog, StreamSchema } from '../../domain/connection';
-import { SyncRunKind } from '../../domain/enums';
+import { ConnectorPropertyKey, SyncRunKind } from '../../domain/enums';
 import type { StreamState, SyncRun } from '../../domain/sync-run';
 import {
   formatBytesCompact,
@@ -68,7 +68,11 @@ export function ConnectionOverviewTab({
   const handleRelink = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault();
     onProblem(null);
-    const { rawCredentials } = splitSpecFormValues(secretProps, secretValues);
+    const { rawCredentials } = splitSpecFormValues(secretProps, {
+      ...connection.publicConfig,
+      ...secretValues,
+      [ConnectorPropertyKey.AUTH_TYPE]: connection.authType,
+    });
     const hasSecretPatch = Object.keys(rawCredentials).length > 0;
     const res = await relinkMutation.mutateAsync({
       newName: newName.trim() || connection.name,
@@ -142,7 +146,11 @@ export function ConnectionOverviewTab({
               {secretProps.length > 0 ? (
                 <SpecFormRenderer
                   properties={secretProps}
-                  values={secretValues}
+                  values={{
+                    ...connection.publicConfig,
+                    ...secretValues,
+                    [ConnectorPropertyKey.AUTH_TYPE]: connection.authType,
+                  }}
                   onChangeValue={(name, val) =>
                     setSecretValues((prev) => ({ ...prev, [name]: val }))
                   }

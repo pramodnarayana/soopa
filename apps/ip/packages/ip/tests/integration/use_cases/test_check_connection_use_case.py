@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
 from ip.engine.application.use_cases.connections.check_connection_use_case import (
     CheckConnectionCommand,
@@ -21,7 +22,10 @@ async def test_check_connection_use_case(httpserver: HTTPServer) -> None:
         headers={"X-API-Key": "valid_token"},
     ).respond_with_json({"status": "ok", "system": "Itron Head-End"})
 
-    connector = GenericHttpConnector(allow_private_ips=True)
+    connector = GenericHttpConnector(
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
     use_case = CheckConnectionUseCase(connectors={connector.app_id: connector})
 
     cmd = CheckConnectionCommand(

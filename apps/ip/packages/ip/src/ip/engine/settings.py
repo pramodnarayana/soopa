@@ -91,7 +91,7 @@ class IpEngineSettings(BaseSettings):
     notification_queue_url: str = Field(
         default="",
         validation_alias=AliasChoices(
-            "SQS_NOTIFICATION_JOBS_QUEUE_URL",
+            "SQS_NOTIFICATION_QUEUE_URL",
             "NOTIFICATION_QUEUE_URL",
         ),
     )

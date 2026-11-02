@@ -417,7 +417,7 @@ const FAKE_ROUTE_FIXTURES: ReadonlyArray<{
   readonly payload: unknown;
 }> = [
   {
-    matches: (url) => url.includes('/transactions/search'),
+    matches: (url) => url.includes('/traces/search'),
     payload: [
       {
         trace_id: 'ip_trc_700',

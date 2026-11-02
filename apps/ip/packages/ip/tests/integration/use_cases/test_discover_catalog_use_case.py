@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import pytest
 from database.types import GlobalSession
+from identity.domain.constants import IdentityIdPrefix
+from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.generic_http_connector import (
     GenericHttpConnector,
 )
 from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
     SqlAlchemyCatalogRepository,
-)
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
 )
 from ip.engine.application.use_cases.connections.create_connection_use_case import (
     CreateConnectionCommand,
@@ -20,10 +19,10 @@ from ip.engine.application.use_cases.connections.create_connection_use_case impo
 from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
     DiscoverCatalogUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_control_plane_uow
 from pytest_httpserver import HTTPServer
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -70,10 +69,14 @@ async def test_discover_catalog_use_case(
         status=200,
     )
 
-    connector = GenericHttpConnector(app_id="itron_mdm", allow_private_ips=True)
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    connector = GenericHttpConnector(
+        app_id="itron_mdm",
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
+    uow = create_ip_control_plane_uow(global_session)
     cat_repo = SqlAlchemyCatalogRepository(global_session)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     conn_res = await create_uc.execute(
@@ -138,10 +141,14 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
         status=200,
     )
 
-    connector = GenericHttpConnector(app_id="itron_mdm", allow_private_ips=True)
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    connector = GenericHttpConnector(
+        app_id="itron_mdm",
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
+    uow = create_ip_control_plane_uow(global_session)
     cat_repo = SqlAlchemyCatalogRepository(global_session)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     conn_res = await create_uc.execute(
@@ -182,7 +189,7 @@ async def test_discover_catalog_connection_not_found_returns_failure(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    uow = create_ip_control_plane_uow(global_session)
     discover_uc = DiscoverCatalogUseCase(
         uow=uow,
         cipher=cipher,
@@ -198,8 +205,8 @@ async def test_discover_catalog_connector_not_found_returns_failure(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    uow = create_ip_control_plane_uow(global_session)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
@@ -230,8 +237,8 @@ async def test_discover_catalog_deactivated_connection_returns_failure(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    uow = create_ip_control_plane_uow(global_session)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
@@ -269,8 +276,8 @@ async def test_discover_catalog_mismatched_tenant_id_returns_not_found(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    uow = create_ip_control_plane_uow(global_session)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
@@ -291,7 +298,7 @@ async def test_discover_catalog_mismatched_tenant_id_returns_not_found(
         cipher=cipher,
         connectors={},
     )
-    wrong_tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    wrong_tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     result = await discover_uc.execute(conn_res.connection.id, tenant_id=wrong_tenant_id)
     assert result.success is False
     assert result.error_code == "CONNECTION_NOT_FOUND"

@@ -159,7 +159,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
   it('maps HttpCatalogRepository (listApps, getAppSpec) and HttpConnectionRepository (all 7 methods)', async () => {
     const logger = new RecordingLoggerFake();
     const { fetchImpl, calls } = createRouteFetch({
-      'GET /api/v1/ip/catalog/apps': [
+      'GET /api/v1/tenants/ten_01/ip/catalog/apps': [
         {
           app_id: 'itron_ami',
           display_name: 'Itron AMI',
@@ -167,7 +167,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
           auth_type: 'OAUTH2',
         },
       ],
-      'GET /api/v1/ip/catalog/apps/itron_ami/spec': {
+      'GET /api/v1/tenants/ten_01/ip/catalog/apps/itron_ami/spec': {
         app_id: 'itron_ami',
         display_name: 'Itron AMI',
         auth_type: 'OAUTH2',
@@ -230,10 +230,12 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
     const catalogRepo = new HttpCatalogRepository(client, logger);
     const connRepo = new HttpConnectionRepository(client, logger);
 
-    const apps = expectOk(await catalogRepo.listApps({ category: 'energy', search: 'itron' }));
+    const apps = expectOk(
+      await catalogRepo.listApps('ten_01', { category: 'energy', search: 'itron' }),
+    );
     expect(apps[0]?.appId).toBe('itron_ami');
 
-    const spec = expectOk(await catalogRepo.getAppSpec('itron_ami'));
+    const spec = expectOk(await catalogRepo.getAppSpec('ten_01', 'itron_ami'));
     expect(spec.properties[0]?.oauthConfig?.scopes).toEqual(['ami:read']);
 
     const listed = expectOk(await connRepo.listConnections('ten_01', 'ACTIVE'));
@@ -460,9 +462,9 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       },
       'GET /api/v1/tenants/ten_01/ip/stitches/runs': [WIRE_STITCH_RUN],
       'GET /api/v1/tenants/ten_01/ip/stitches/runs/run_01': WIRE_STITCH_RUN,
-      'GET /api/v1/tenants/ten_01/ip/transactions': lineageWire,
-      'GET /api/v1/tenants/ten_01/ip/transactions/search': lineageWire,
-      'GET /api/v1/tenants/ten_01/ip/transactions/trc_01': {
+      'GET /api/v1/tenants/ten_01/ip/traces': lineageWire,
+      'GET /api/v1/tenants/ten_01/ip/traces/search': lineageWire,
+      'GET /api/v1/tenants/ten_01/ip/traces/trc_01': {
         trace_id: 'trc_01',
         tenant_id: 'ten_01',
         correlation_id: 'MTR-77410',
@@ -584,8 +586,8 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
           },
         ],
       },
-      'GET /api/v1/tenants/ten_01/ip/transactions/trc_01/lineage': lineageWire,
-      'GET /api/v1/tenants/ten_01/ip/transactions/trc_no_inb': {
+      'GET /api/v1/tenants/ten_01/ip/traces/trc_01/lineage': lineageWire,
+      'GET /api/v1/tenants/ten_01/ip/traces/trc_no_inb': {
         trace_id: 'trc_no_inb',
         tenant_id: 'ten_01',
         original_trace_id: 'trc_no_inb',
@@ -593,7 +595,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         status: 'INGESTED',
         inbound_record: null,
       },
-      'POST /api/v1/tenants/ten_01/ip/transactions/trc_01/replay': {
+      'POST /api/v1/tenants/ten_01/ip/traces/trc_01/replay': {
         status: 'QUEUED',
         original_trace_id: 'trc_01',
         parent_trace_id: 'trc_01',
@@ -602,7 +604,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         replay_count: 1,
         correlation_id: 'MTR-77410',
       },
-      'POST /api/v1/tenants/ten_01/ip/transactions/trc_01/modify-and-replay': {
+      'POST /api/v1/tenants/ten_01/ip/traces/trc_01/modify-and-replay': {
         status: 'QUEUED',
         original_trace_id: 'trc_01',
         parent_trace_id: 'trc_01',
@@ -611,7 +613,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         replay_count: 1,
         correlation_id: 'MTR-77410',
       },
-      'POST /api/v1/tenants/ten_01/ip/transactions/bulk-replay': {
+      'POST /api/v1/tenants/ten_01/ip/traces/bulk-replay': {
         status: 'PARTIAL',
         stage: 'RETRY_DELIVER',
         replayed_count: 1,
@@ -698,13 +700,13 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
   it('emits structured ERROR http_wire.schema_drift log when wire JSON violates Zod contract', async () => {
     const logger = new RecordingLoggerFake().bind({ product: 'ip', tenant_id: 'ten_01' });
     const { fetchImpl } = createRouteFetch({
-      'GET /api/v1/ip/catalog/apps': [{ unexpected_key: 123 }],
+      'GET /api/v1/tenants/ten_01/ip/catalog/apps': [{ unexpected_key: 123 }],
     });
 
     const client = new FetchHttpClientAdapter({ baseUrl: 'https://api.soopa.local', fetchImpl });
     const catalogRepo = new HttpCatalogRepository(client, logger);
 
-    const res = await catalogRepo.listApps();
+    const res = await catalogRepo.listApps('ten_01');
     expect(res.ok).toBe(false);
     if (!res.ok) {
       expect(res.error.code).toBe(ApiErrorCode.SCHEMA_DRIFT);
@@ -713,7 +715,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
     expect(logger.entries).toHaveLength(1);
     expect(logger.entries[0]?.level).toBe(LogLevel.ERROR);
     expect(logger.entries[0]?.event).toBe('http_wire.schema_drift');
-    expect(logger.entries[0]?.attributes.context).toBe('GET /api/v1/ip/catalog/apps');
+    expect(logger.entries[0]?.attributes.context).toBe('GET /api/v1/tenants/ten_01/ip/catalog/apps');
     expect(logger.entries[0]?.attributes.tenant_id).toBe('ten_01');
   });
 });

@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Annotated
+
 import structlog
 from fastapi import APIRouter, Depends, Query, Response, status
-from ip.engine.adapters.inbound.api.dependencies import get_catalog_registry
+from identity.domain.identity_context import IdentityContext
+from ip.engine.adapters.inbound.api.dependencies import (
+    get_catalog_registry,
+    require_tenant_member,
+)
 from ip.engine.adapters.inbound.api.dtos.catalog_dtos import (
     AppSpecHttpResponse,
     CatalogAppSummaryHttpResponse,
@@ -42,6 +48,7 @@ router = APIRouter(
 )
 async def list_catalog_apps(
     tenant_id: str,
+    _context: Annotated[IdentityContext, Depends(require_tenant_member)],
     category: str | None = Query(
         None, description="Filter by category (CRM, BILLING, STORAGE, ENERGY, ITSM)"
     ),
@@ -81,6 +88,7 @@ async def list_catalog_apps(
 async def get_catalog_app_spec(
     tenant_id: str,
     app_id: str,
+    _context: Annotated[IdentityContext, Depends(require_tenant_member)],
     registry: CatalogRegistryPort = Depends(get_catalog_registry),
 ) -> AppSpecHttpResponse | Response:
     """Retrieves dynamic property schema and UI specification for an application within the tenant workspace."""

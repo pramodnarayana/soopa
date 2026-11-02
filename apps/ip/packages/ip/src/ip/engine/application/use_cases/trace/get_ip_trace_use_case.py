@@ -12,6 +12,7 @@ from strace.domain import (
 )
 
 from ip.engine.application.responses import IpTraceDTO
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import IpError, Result, TraceNotFoundError
 from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
@@ -61,7 +62,10 @@ class GetIpTraceUseCase:
     ) -> IpTraceStatus:
         """Derives the overall trace lifecycle status from its 5-layer stage records."""
         if outbound_records:
-            return IpTraceStatus(outbound_records[-1].status.value)
+            latest_status = outbound_records[-1].status
+            if latest_status == OutboundDispatchStatus.IN_FLIGHT:
+                return IpTraceStatus.PENDING
+            return IpTraceStatus(latest_status.value)
         if normalization_rejections or replica_rejections:
             return IpTraceStatus.REJECTED
         if normalized_records:

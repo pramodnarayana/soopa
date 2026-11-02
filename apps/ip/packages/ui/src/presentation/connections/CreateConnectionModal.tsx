@@ -15,7 +15,7 @@ import {
   StatusTone,
 } from '@soopa/ui';
 import { CheckCircle2, PlugZap, ShieldCheck } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCatalogAppSpecQuery, useCatalogAppsQuery } from '../../application/use-catalog-queries';
 import {
@@ -25,6 +25,7 @@ import {
 import type { AppSpec, CatalogAppSummary } from '../../domain/catalog';
 import { normalizeAuthType } from '../../domain/catalog-auth';
 import type { ConnectionCheckResult } from '../../domain/connection';
+import { ConnectorPropertyKey } from '../../domain/enums';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { buildFailedCheckProblem, isConnectionSnapshotVerified } from './connection-preflight';
 import { SpecFormRenderer, splitSpecFormValues } from './SpecFormRenderer';
@@ -33,6 +34,7 @@ export interface CreateConnectionModalProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
   readonly onCreated: (connectionId: string) => void;
+  readonly initialApp?: CatalogAppSummary | null;
 }
 
 function MarketplaceStep({
@@ -121,15 +123,26 @@ function VerifiedSpecConfigurator({
   const isVerified = isConnectionSnapshotVerified(currentSnapshot, verifiedSnapshot, checkResult);
   const canSave = isVerified && connectionName.trim().length > 0 && !createMutation.isPending;
 
+  const resolveEffectiveAuthType = (): string => {
+    const defaultAuthFromProps = spec.properties.find(
+      (p) => p.name === ConnectorPropertyKey.AUTH_TYPE,
+    )?.defaultValue;
+    const raw =
+      (formValues[ConnectorPropertyKey.AUTH_TYPE] as string | undefined) ??
+      (typeof defaultAuthFromProps === 'string' ? defaultAuthFromProps : spec.authType);
+    return raw;
+  };
+
   const handleRunPreflight = async (): Promise<void> => {
     setProblem(null);
-    const normalizedAuth = normalizeAuthType(spec.authType);
+    const effectiveAuth = resolveEffectiveAuthType();
+    const normalizedAuth = normalizeAuthType(effectiveAuth);
     if (!normalizedAuth) {
       setProblem({
         code: ApiErrorCode.VALIDATION_ERROR,
         status: 400,
         serverCode: 'UNSUPPORTED_AUTH_TYPE',
-        message: `Connector auth type "${spec.authType}" is not recognized or supported.`,
+        message: `Connector auth type "${effectiveAuth}" is not recognized or supported.`,
       });
       return;
     }
@@ -154,13 +167,14 @@ function VerifiedSpecConfigurator({
 
   const handleSave = async (): Promise<void> => {
     setProblem(null);
-    const normalizedAuth = normalizeAuthType(spec.authType);
+    const effectiveAuth = resolveEffectiveAuthType();
+    const normalizedAuth = normalizeAuthType(effectiveAuth);
     if (!normalizedAuth) {
       setProblem({
         code: ApiErrorCode.VALIDATION_ERROR,
         status: 400,
         serverCode: 'UNSUPPORTED_AUTH_TYPE',
-        message: `Connector auth type "${spec.authType}" is not recognized or supported.`,
+        message: `Connector auth type "${effectiveAuth}" is not recognized or supported.`,
       });
       return;
     }
@@ -243,8 +257,16 @@ export function CreateConnectionModal({
   open,
   onOpenChange,
   onCreated,
+  initialApp,
 }: CreateConnectionModalProps) {
-  const [selectedApp, setSelectedApp] = useState<CatalogAppSummary | null>(null);
+  const [selectedApp, setSelectedApp] = useState<CatalogAppSummary | null>(initialApp ?? null);
+
+  useEffect(() => {
+    if (open) {
+      setSelectedApp(initialApp ?? null);
+    }
+  }, [open, initialApp]);
+
   const specView = useCatalogAppSpecQuery(selectedApp?.appId ?? null);
 
   return (
@@ -275,7 +297,13 @@ export function CreateConnectionModal({
             key={selectedApp.appId}
             spec={specView.data}
             defaultName={`${selectedApp.displayName} Primary`}
-            onBack={() => setSelectedApp(null)}
+            onBack={() => {
+              if (initialApp) {
+                onOpenChange(false);
+              } else {
+                setSelectedApp(null);
+              }
+            }}
             onCreated={(id) => {
               onOpenChange(false);
               onCreated(id);

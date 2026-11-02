@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -41,44 +42,42 @@ def _parse_iso_datetime(val: object) -> datetime:
         try:
             parsed = datetime.fromisoformat(normalized)
             return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
-        except ValueError:
-            pass
-    return datetime.now(UTC)
+        except ValueError as exc:
+            raise ValueError(f"Invalid ISO-8601 timestamp: {val!r}") from exc
+    raise ValueError(f"Invalid ISO-8601 timestamp: {val!r}")
 
 
 def _parse_float(val: object, default: float = 0.0) -> float:
-    if isinstance(val, (int, float)):
-        return float(val)
-    if isinstance(val, str):
-        try:
-            return float(val)
-        except ValueError:
-            return default
-    return default
+    parsed = _parse_optional_float(val)
+    return default if parsed is None else parsed
 
 
 def _parse_optional_float(val: object) -> float | None:
-    if val is None:
+    if val is None or isinstance(val, bool):
         return None
     if isinstance(val, (int, float)):
-        return float(val)
+        parsed = float(val)
+        return parsed if math.isfinite(parsed) else None
     if isinstance(val, str) and val.strip():
         try:
-            return float(val)
+            parsed = float(val)
         except ValueError:
             return None
+        return parsed if math.isfinite(parsed) else None
     return None
 
 
 def _parse_int(val: object, default: int = 15) -> int:
+    if isinstance(val, bool):
+        return default
     if isinstance(val, int):
         return val
     if isinstance(val, float):
-        return int(val)
+        return int(val) if math.isfinite(val) else default
     if isinstance(val, str):
         try:
             return int(val)
-        except ValueError:
+        except (ValueError, OverflowError):
             return default
     return default
 

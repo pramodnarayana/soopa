@@ -13,18 +13,18 @@ from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from database.provider import get_async_engine
+from database.provider import DatabaseProvider
 
 logger = structlog.get_logger(__name__)
 
 
 async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) -> list[str]:
     """Connect to the global DB and fetch all registered IP shard URLs."""
-    engine = get_async_engine(global_url)
+    provider = DatabaseProvider.from_url(global_url)
     shard_map: dict[str, str] = {}
     try:
-        async with engine.connect() as conn:
-            result = await conn.execute(text("SELECT id, dsn FROM ucp.database_shards"))
+        async with provider.session() as session:
+            result = await session.execute(text("SELECT id, dsn FROM ucp.database_shards"))
             for row in result.fetchall():
                 shard_id, dsn = row
                 if str(shard_id).lower().startswith("ip_"):
@@ -35,7 +35,7 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
             raise
         logger.warning("ucp_database_shards_unavailable_using_overrides", error=str(err))
     finally:
-        await engine.dispose()
+        await provider.close()
 
     if overrides:
         for shard_id, dsn in overrides.items():

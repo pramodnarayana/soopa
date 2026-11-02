@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 from ip.engine.adapters.outbound.connectors.sftp_connector import SftpConnector
+from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import SftpConnectionError
-from ip.engine.ports.types import WriteRecordCommand
+from ip.engine.ports.outbound.connector_port import WriteRecordCommand
 from seedwork import generate_id
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -42,7 +42,7 @@ async def test_sftp_connector_write_and_read_stream_against_local_sftp() -> None
     connector = SftpConnector(timeout_seconds=5.0, allow_local=True)
     public_config: JsonDict = {"host": "127.0.0.1", "port": 2222, "base_directory": "/upload"}
     credentials: JsonDict = {"username": "testuser", "password": "pass"}
-    filename = f"{generate_id(DomainIdPrefix.IP_INBOUND_RECORD.value)}.csv"
+    filename = f"{generate_id(IpIdPrefix.INBOUND_RECORD.value)}.csv"
 
     write_res = await connector.write_record(
         stream_name="files",

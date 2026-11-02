@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
 from urllib.parse import quote, urljoin, urlsplit
@@ -103,7 +104,7 @@ class GenericHttpConnector(BaseConnector):
         client: httpx.AsyncClient | None = None,
         http_client: HttpClient | None = None,
         egress_policy: EgressPolicyPort | None = None,
-        timeout_seconds: float = 10.0,
+        timeout_seconds: float = 30.0,
         allow_private_ips: bool = False,
     ) -> None:
         self._app_id = app_id
@@ -153,16 +154,24 @@ class GenericHttpConnector(BaseConnector):
             )
         return Result.ok(joined)
 
-    async def _send_request(self, req: httpx.Request) -> httpx.Response:
+    async def _send_request(
+        self,
+        req: httpx.Request,
+        *,
+        timeout_seconds: float | None = None,
+    ) -> httpx.Response:
         url_without_query = str(req.url).split("?")[0]
         params = dict(req.url.params) if req.url.params else None
+        effective_timeout = (
+            timeout_seconds if timeout_seconds is not None else self._timeout_seconds
+        )
         return await self._http_client.request(
             method=req.method,
             url=url_without_query,
             headers=dict(req.headers),
             params=params,
             content=req.content,
-            timeout=self._timeout_seconds,
+            timeout=effective_timeout,
         )
 
     def _resolve_authenticator(
@@ -306,6 +315,34 @@ class GenericHttpConnector(BaseConnector):
             auth_type=AuthType.BEARER_TOKEN.value,
         )
 
+    @staticmethod
+    def _parse_timeout_seconds(
+        raw_timeout: JsonValue,
+    ) -> Result[float | None, InvalidConnectionConfigError]:
+        """Validates optional per-connection request timeout in seconds."""
+        if raw_timeout is None or (isinstance(raw_timeout, str) and not raw_timeout.strip()):
+            return Result.ok(None)
+        if isinstance(raw_timeout, bool):
+            return Result.fail(
+                InvalidConnectionConfigError(
+                    field_name=ConnectorPropertyKey.TIMEOUT_SECONDS.value,
+                    message="Request timeout ('timeout_seconds') must be a positive finite number.",
+                )
+            )
+        if isinstance(raw_timeout, (int, float, str)):
+            try:
+                parsed = float(raw_timeout)
+            except ValueError:
+                parsed = float("nan")
+            if math.isfinite(parsed) and parsed > 0:
+                return Result.ok(parsed)
+        return Result.fail(
+            InvalidConnectionConfigError(
+                field_name=ConnectorPropertyKey.TIMEOUT_SECONDS.value,
+                message="Request timeout ('timeout_seconds') must be a positive finite number.",
+            )
+        )
+
     def _build_source_spec(
         self, public_config: JsonDict
     ) -> Result[HttpSourceSpec, InvalidConnectionConfigError]:
@@ -323,6 +360,13 @@ class GenericHttpConnector(BaseConnector):
                 )
             )
         base_url = str(base_url_raw).strip()
+
+        timeout_res = self._parse_timeout_seconds(
+            public_config.get(ConnectorPropertyKey.TIMEOUT_SECONDS.value)
+        )
+        if timeout_res.is_err:
+            assert timeout_res.error is not None
+            return Result.fail(timeout_res.error)
 
         raw_auth = str(
             public_config.get(ConnectorPropertyKey.AUTH_TYPE.value) or AuthType.NO_AUTH.value
@@ -356,6 +400,7 @@ class GenericHttpConnector(BaseConnector):
                 default_headers=default_headers,
                 check_request=check_request,
                 streams=tuple(streams_list),
+                timeout_seconds=timeout_res.value,
             )
         )
 
@@ -508,7 +553,7 @@ class GenericHttpConnector(BaseConnector):
         req = authenticator.authenticate_request(req)
 
         try:
-            resp = await self._send_request(req)
+            resp = await self._send_request(req, timeout_seconds=spec.timeout_seconds)
             if resp.status_code in (401, 403):
                 return ConnectionCheckResultDTO(
                     success=False,
@@ -565,7 +610,7 @@ class GenericHttpConnector(BaseConnector):
         )
         req = authenticator.authenticate_request(req)
         try:
-            resp = await self._send_request(req)
+            resp = await self._send_request(req, timeout_seconds=spec.timeout_seconds)
             if resp.status_code in (401, 403):
                 return [], DiscoveredCatalogDTO(
                     connection_id=connection_id,
@@ -653,7 +698,7 @@ class GenericHttpConnector(BaseConnector):
 
         fields: list[StreamFieldDTO] = []
         try:
-            resp = await self._send_request(req)
+            resp = await self._send_request(req, timeout_seconds=spec.timeout_seconds)
             if resp.status_code < 400:
                 payload = resp.json()
                 records = _extract_nested(payload, stream_def.replication.record_path)
@@ -844,9 +889,11 @@ class GenericHttpConnector(BaseConnector):
         req: httpx.Request,
         target_url: str,
         stream_name: str,
+        *,
+        timeout_seconds: float | None = None,
     ) -> httpx.Response | None:
         try:
-            resp = await self._send_request(req)
+            resp = await self._send_request(req, timeout_seconds=timeout_seconds)
         except (httpx.HTTPError, HttpError, OSError) as e:
             self._last_error = UpstreamNetworkError(
                 endpoint=target_url,
@@ -910,7 +957,12 @@ class GenericHttpConnector(BaseConnector):
             )
             req = authenticator.authenticate_request(req)
 
-            resp = await self._fetch_read_page(req, target_url, stream_name)
+            resp = await self._fetch_read_page(
+                req,
+                target_url,
+                stream_name,
+                timeout_seconds=spec.timeout_seconds,
+            )
             if resp is None:
                 return
 
@@ -979,7 +1031,12 @@ class GenericHttpConnector(BaseConnector):
         )
         req = authenticator.authenticate_request(req)
 
-        resp = await self._fetch_read_page(req, target_url, stream_name)
+        resp = await self._fetch_read_page(
+            req,
+            target_url,
+            stream_name,
+            timeout_seconds=spec.timeout_seconds,
+        )
         if resp is None:
             return None
 
@@ -1090,7 +1147,7 @@ class GenericHttpConnector(BaseConnector):
         custom_sensitive: list[str] = list(authenticator.sensitive_header_names)
 
         return await self._execute_tracked_write_request(
-            send_fn=lambda: self._send_request(req),
+            send_fn=lambda: self._send_request(req, timeout_seconds=spec.timeout_seconds),
             target_url=target_url,
             http_method=method,
             request_headers=dict(req.headers),

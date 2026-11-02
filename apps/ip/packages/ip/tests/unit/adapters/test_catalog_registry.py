@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import pytest
+from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
+from ip.engine.domain.connection.catalog import ConnectorPropertySchema
+from ip.engine.domain.connection.http_spec import DeclarativeManifest, HttpActionSpec
 from ip.engine.domain.exceptions import ConnectorNotFoundError
-from ip.engine.domain.models.connector_spec import (
-    ConnectorPropertySchema,
-    DeclarativeManifest,
-    HttpActionSpec,
-)
 
 
 @pytest.mark.asyncio
 async def test_generic_registry_registration_and_unregistration() -> None:
-    registry = ConnectorCatalogRegistry()
+    registry = ConnectorCatalogRegistry(auth_resolver=AuthStrategyResolver())
     assert len(registry.list_apps()) == 0
 
     schema = ConnectorPropertySchema(

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import structlog
-from ip.engine.domain.enums import IpEventType
-from ip.engine.settings import IpEngineSettings
 from outbox.adapters.outbound.event_type_router import EventTypeOutboxRouter, RouteKey
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from pubsub.provider import PubSubProvider
 from seedwork.events import EventEnvelope, EventProcessingLane
 
-from pubsub.provider import PubSubProvider
+from ip.engine.domain.enums import IpEventType
+from ip.engine.settings import IpEngineSettings
 
 logger = structlog.get_logger(__name__)
 

@@ -1,21 +1,13 @@
-"""Root test fixtures for Integration Platform (apps/ip/packages/ip/tests).
-
-Enforces transactional isolation via nested PostgreSQL SAVEPOINTs (`join_transaction_mode="create_savepoint"`).
-Every database-backed test runs inside an uncommitted outer transaction on `global_db` (localhost:5432)
-and `ip_shard` (localhost:5434) that rolls back completely upon completion, guaranteeing zero shared-state
-pollution across Control Plane (`IpGlobalBase`) and Data Plane (`IpTenantBase`).
-"""
-
 from __future__ import annotations
 
 import os
 from collections.abc import AsyncGenerator
 from typing import cast
 
-import ip.application.domains.energy.models as _ip_energy_models
-import ip.application.domains.tms.models as _ip_tms_models
 import ip.engine.adapters.outbound.database.models.control_plane as _ip_cp_models
 import ip.engine.adapters.outbound.database.models.data_plane as _ip_dp_models
+import ip.solutions.domains.energy.models as _ip_energy_models
+import ip.solutions.domains.tms.models as _ip_tms_models
 import pytest_asyncio
 from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant as TenantORM
@@ -23,10 +15,10 @@ from database.provider import get_async_engine
 from database.testing import TransactionalTestRouter
 from database.types import GlobalSession, TenantSession
 from dotenv import load_dotenv
+from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
 from orchestration.adapters.outbound.database.models import WorkflowBase
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
@@ -164,7 +156,7 @@ async def transactional_router(
 @pytest_asyncio.fixture(scope="function")
 async def seeded_ip_tenant(global_session: GlobalSession) -> str:
     """Self-contained fixture seeding an active Tenant, IP App, Subscription, and ShardRegistry inside the savepoint."""
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     tenant = TenantORM(
         id=tenant_id,
         name="IP Narrow Integration Tenant",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Literal
@@ -137,6 +138,7 @@ class HttpSourceSpec:
     default_headers: dict[str, str] = field(default_factory=dict)
     check_request: HttpRequestSpec | None = None
     streams: tuple[HttpStreamDefinition, ...] = field(default_factory=tuple)
+    timeout_seconds: float | None = None
 
     def __post_init__(self) -> None:
         clean_url = self.base_url.strip().lower()
@@ -147,6 +149,14 @@ class HttpSourceSpec:
         for header in self.default_headers:
             if header.lower() in BLOCKED_HEADERS:
                 raise ValueError(f"Header '{header}' is blocked from default_headers for security.")
+        if self.timeout_seconds is not None and (
+            isinstance(self.timeout_seconds, bool)
+            or not math.isfinite(self.timeout_seconds)
+            or self.timeout_seconds <= 0
+        ):
+            raise ValueError(
+                f"Invalid timeout_seconds: '{self.timeout_seconds}'. Must be a positive finite number."
+            )
 
     def get_stream(self, stream_name: str) -> HttpStreamDefinition | None:
         for stream in self.streams:
