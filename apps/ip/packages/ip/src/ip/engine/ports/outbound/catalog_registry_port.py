@@ -4,12 +4,25 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
+from ip.engine.domain.connection.http_spec import DeclarativeManifest
 from ip.engine.domain.exceptions import ConnectorNotFoundError, Result
-from ip.engine.domain.models.connector_spec import DeclarativeManifest
-from ip.engine.ports.outbound.connector_port import ConnectorPort
-from ip.engine.ports.types import AppSpecDTO, CatalogAppSummaryDTO
+from ip.engine.ports.outbound.connector_port import AppSpecDTO, ConnectorPort
+
+
+@dataclass(frozen=True)
+class CatalogAppSummaryDTO:
+    """Summary representation of a connector catalog application."""
+
+    app_id: str
+    display_name: str
+    category: str
+    auth_type: str
+    description: str | None = None
+    connector_type: str = "DECLARATIVE_HTTP"
+    icon_url: str | None = None
 
 
 class CatalogRegistryPort(Protocol):
@@ -47,3 +60,9 @@ class CatalogRegistryPort(Protocol):
     ) -> None:
         """Registers a native or custom Python connector into the live catalog."""
         ...
+
+
+__all__ = [
+    "CatalogAppSummaryDTO",
+    "CatalogRegistryPort",
+]

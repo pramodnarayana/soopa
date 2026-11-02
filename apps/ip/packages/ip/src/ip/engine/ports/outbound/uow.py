@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-from typing import Protocol
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Generic, Protocol, TypeVar
 
 from seedwork.events import EventEnvelope
 from seedwork.uow import UnitOfWorkPort
@@ -39,6 +41,16 @@ from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryP
 from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
 )
+
+TDomainRepo = TypeVar("TDomainRepo")
+
+
+@dataclass(frozen=True)
+class DomainRepositoryKey(Generic[TDomainRepo]):
+    """Type-safe lookup token for vertical-domain repositories registered on a Data Plane UoW."""
+
+    name: str
+    narrow: Callable[[object], TDomainRepo | None]
 
 
 class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
@@ -86,6 +98,12 @@ class IpDataPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
         """Stages an EventEnvelope into the tenant shard transactional outbox (`public.ip_outbox`)."""
         raise NotImplementedError
+
+    def resolve_domain_repository(
+        self, key: DomainRepositoryKey[TDomainRepo]
+    ) -> TDomainRepo | None:
+        """Resolves a registered vertical-domain repository bound to the current Data Plane UoW."""
+        return None
 
 
 class IpTenantResolverPort(Protocol):

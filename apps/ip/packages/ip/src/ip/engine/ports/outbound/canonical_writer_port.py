@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 from seedwork.domain.types import JsonDict
 
 if TYPE_CHECKING:
-    from ip.engine.domain.normalization import CanonicalEntityDefinition
+    from ip.engine.domain.normalization.transformation import CanonicalEntityDefinition
     from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 
 

@@ -3,10 +3,12 @@ IP Domain Constants
 ===================
 
 Non-enumeration constants, defaults, and sentinels for the Integration Platform bounded context.
-All StrEnum definitions live in ``ip.engine.domain.enums``.
+All StrEnum definitions live in their respective subdomain packages (e.g., ``ip.engine.domain.<subdomain>.enums``).
 """
 
 from typing import Final
+
+from ip.engine.domain.enums import IpIdPrefix
 
 __all__ = [
     "DEFAULT_IDEMPOTENCY_HEADER",
@@ -17,6 +19,7 @@ __all__ = [
     "RESERVED_RAW_BYTES_KEY",
     "SENSITIVE_HTTP_HEADERS",
     "WRAPPED_SCALAR_KEY",
+    "IpIdPrefix",
 ]
 
 # ── Storage & Payload Inlining Constants ─────────────────────────────────────
