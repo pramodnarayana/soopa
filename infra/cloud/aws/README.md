@@ -66,11 +66,18 @@ pulumi up -s <env> -C infra/cloud/zitadel
 
 ---
 
-## Phase 4: Database Migrations & Data Seeding
+## Phase 4: Messaging Topology, Database Migrations & Data Seeding
 
-Now that the core infrastructure and identity configurations are deployed, we must align the database schemas and insert the required system constants (Webhooks, Identity configs, Event Types) *before* deploying the Application code.
+Now that the core infrastructure and identity configurations are deployed, we converge bounded-context messaging/storage resources, align database schemas, and insert the required system constants (Webhooks, Identity configs, Event Types) *before* deploying the Application code.
 
 ```bash
+# 0. Converge Bounded-Context Messaging & Storage Stacks (Topology SSOT)
+pulumi up -s <env> -C infra/cloud/aws/apps/ucp/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/identity/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/notification/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/edi/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/edi/storage
+
 # From the bastion host, local machine (via VPN), or ECS run-task:
 
 # 1. Deploy the Database Migrator Task Templates (Platform & EDI)
@@ -133,19 +140,20 @@ pulumi import aws:cloudwatch/logGroup:LogGroup <env>-openas2-log-group /ecs/<env
 Deployments and infrastructure provisioning are orchestrated entirely via native GitHub Actions pipelines:
 
 1. **Cloud Infra Pipelines (`check-infra.yml`, `preview-infra.yml` & `provision-infra.yml`)**:
-   - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
+   - Manages all **stateful cloud infrastructure**: Foundation, Data, Platform, Bounded-Context Messaging & Storage (`ucp/messaging`, `identity/messaging`, `notification/messaging`, `edi/messaging`, `edi/storage`), OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
    - **Static Checks (`check-infra.yml`)**: Fast, unprivileged workflow (zero AWS credentials) running linters and pure unit tests without cloud mocks on any `infra/**` PR.
    - **Speculative Cloud Diff (`preview-infra.yml`)**: OIDC-authenticated workflow generating `pulumi preview` diffs against live AWS infrastructure stacks.
-   - **Cloud Infra Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding app ECS service stacks `api`, `ucp`, `edi`, and `migrator`, which roll out via App Service Rollout; `openas2`, `dashboard`, and `routing` still roll out through `provision-infra.yml`).
+   - **Cloud Infra Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for stateful platform, messaging, and storage paths (excluding stateless compute and migrator stacks, which roll out via App Service Rollout). Exposes an explicit `workflow_dispatch` `refresh` boolean input (`default: false`) for break-glass state reconciliation if manual cloud drift occurs.
 
 2. **App Continuous Delivery (`ci.yml`, `preview-app-iac.yml`, `cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
    - **App CI (`ci.yml`)**: Gated on linting, unit/integration testing, and Docker image build test for pure application services (zero infra mocks).
-   - **App IaC Preview (`preview-app-iac.yml`)**: Event-driven speculative diff workflow triggered when app infrastructure (`infra/cloud/aws/apps/**`) is modified, generating real Pulumi diffs against the staging cluster.
-   - **App Service Rollout (`deploy.yml`)**: Triggered post-CI via `cd-staging.yml` / `cd-prod.yml`.
+   - **App IaC Preview (`preview-app-iac.yml`)**: Event-driven speculative diff workflow triggered when stateless compute or migrator infrastructure (`infra/cloud/aws/apps/{api,ucp/workers,edi/migrator,edi/workers,edi/as2}/**`, `infra/cloud/aws/platform/migrator/**`, `infra/cloud/aws/packages/seedwork/**`) is modified, generating real Pulumi diffs against the staging cluster.
+   - **App Service Rollout (`deploy.yml`)**: Triggered post-CI via `cd-staging.yml` / `cd-prod.yml` (strictly stateless compute and schema migrations — never mutates stateful S3 buckets or SQS/SNS queues).
    - Builds and tags the single modular monolith container image (`sha-*`).
    - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_task`).
    - Executes rolling updates for API, UCP workers, EDI workers, and AS2 servers.
    - Builds and deploys frontend dashboard assets to S3/CloudFront (`deploy-dashboard.sh`).
+   - Exposes an explicit `workflow_dispatch` `refresh` boolean input (`default: false`) for break-glass state reconciliation.
 
 3. **Monorepo Governance (`.github/CODEOWNERS`)**:
    - Infrastructure paths (`infra/**`, `.github/**`) are strictly owned by `@soopa/platform-team`.

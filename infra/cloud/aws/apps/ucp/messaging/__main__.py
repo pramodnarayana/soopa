@@ -37,8 +37,9 @@ result = provision_from_topology(
 
 # ── Exports ───────────────────────────────────────────────────────────────────
 pulumi.export("queue_env_vars", result.queue_env_vars)
+pulumi.export("queue_arns", result.queue_arns)
 
-# Granular exports for stacks still using individual require_output() calls.
+# Granular exports retained for migrator compatibility.
 pulumi.export("ucp_events_topic_arn", platform_events_topic_arn)
 pulumi.export("ucp_jobs_queue_url", result.queues["ucp-jobs"].url)
 pulumi.export("ucp_jobs_queue_arn", result.queues["ucp-jobs"].arn)

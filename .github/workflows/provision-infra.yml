@@ -7,10 +7,15 @@ on:
       - development
       - main
     paths:
+      - 'infra/topology.json'
+      - 'core/platform/topology.json'
+      - 'apps/*/topology.json'
       - 'infra/cloud/aws/**'
       - '!infra/cloud/aws/apps/api/**'
-      - '!infra/cloud/aws/apps/ucp/**'
-      - '!infra/cloud/aws/apps/edi/**'
+      - '!infra/cloud/aws/apps/ucp/workers/**'
+      - '!infra/cloud/aws/apps/edi/migrator/**'
+      - '!infra/cloud/aws/apps/edi/workers/**'
+      - '!infra/cloud/aws/apps/edi/as2/**'
       - '!infra/cloud/aws/platform/migrator/**'
       - 'infra/cloud/zitadel/**'
       - 'versions.env'
@@ -28,6 +33,11 @@ on:
         options:
           - staging
           - production
+      refresh:
+        description: 'Break-glass only: run pulumi refresh before up to reconcile manual cloud drift'
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       target_env:
@@ -39,6 +49,11 @@ on:
         description: 'Specific commit SHA to checkout'
         required: false
         type: string
+      refresh:
+        description: 'Break-glass only: run pulumi refresh before up to reconcile manual cloud drift'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -61,6 +76,7 @@ jobs:
       TARGET_ENV: ${{ (inputs.environment == 'prod' || inputs.environment == 'production' || inputs.target_env == 'prod' || inputs.target_env == 'production') && 'production' || (inputs.environment == 'staging' || inputs.target_env == 'staging') && 'staging' || (github.event_name == 'push' && github.ref_name == 'main') && 'production' || 'staging' }}
       STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      REFRESH_STATE: ${{ (inputs.refresh == true || inputs.refresh == 'true') && 'true' || 'false' }}
 
     steps:
       - name: Checkout Code
@@ -91,59 +107,104 @@ jobs:
         with:
           stack-dir: infra/cloud/aws/foundation
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy Data (Aurora RDS & KMS)
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/data
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy Platform (ECS Cluster & ECR)
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/platform
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
-      # Step 2: Third-Party Images Sync (OpenObserve, Zitadel)
+      # Step 2: Bounded-Context Stateful Messaging & Storage Topology
+      - name: Deploy UCP Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/ucp/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
+
+      - name: Deploy Identity Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/identity/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
+
+      - name: Deploy Notification Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/notification/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
+
+      - name: Deploy EDI Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
+
+      - name: Deploy EDI Storage Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/storage
+          stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
+
+      # Step 3: Third-Party Images Sync (OpenObserve, Zitadel)
       - name: Sync Third-Party Container Images to ECR
         shell: bash
         run: |
           ./infra/cloud/aws/platform/sync-images.sh "${{ env.TARGET_ENV }}"
 
-      # Step 3: Platform Services & Identity
+      # Step 4: Platform Services & Identity
       - name: Deploy OpenObserve
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/openobserve
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy Zitadel Infra
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/zitadel
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy Zitadel Configuration
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/zitadel
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
-      # Step 4: Tools, Dashboard Infra & Global Routing
+      # Step 5: Tools, Dashboard Infra & Global Routing
       - name: Deploy OpenAS2 Partner Server
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/openas2
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy Dashboard Infra (S3 & CloudFront)
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/dashboard
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy Global Edge Routing
         uses: ./.github/actions/pulumi-stack-up
         with:
           stack-dir: infra/cloud/aws/apps/routing
           stack-name: ${{ env.TARGET_ENV }}
+          refresh: ${{ env.REFRESH_STATE }}

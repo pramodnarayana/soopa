@@ -44,13 +44,11 @@ result = provision_from_topology(
 )
 
 # ── Exports ───────────────────────────────────────────────────────────────────
-# Single structured map: { "SQS_ORCHESTRATOR_QUEUE_URL": "https://...", ... }
-# Compute stacks consume this wholesale — no per-queue re-mapping ever needed.
+# Structured SSOT exports: compute stacks consume queue_env_vars (for container
+# env injection) and queue_arns (for least-privilege SQS IAM permissions).
 pulumi.export("queue_env_vars", result.queue_env_vars)
+pulumi.export("queue_arns", result.queue_arns)
 
-# Granular exports retained for backward-compatibility with other stacks that
-# still use individual require_output() calls (e.g. ucp/workers). These will
-# be removed once all consumers migrate to queue_env_vars.
 for queue_name, queue in result.queues.items():
     pulumi.export(f"sqs_{queue_name.replace('-', '_')}_url", queue.url)
     pulumi.export(f"sqs_{queue_name.replace('-', '_')}_arn", queue.arn)

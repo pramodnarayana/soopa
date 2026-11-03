@@ -13,6 +13,11 @@ on:
         description: 'Specific commit SHA to deploy'
         required: false
         type: string
+      refresh:
+        description: 'Break-glass only: run pulumi refresh before up to reconcile manual cloud drift'
+        required: false
+        default: false
+        type: boolean
   workflow_dispatch:
     inputs:
       environment:
@@ -23,6 +28,11 @@ on:
         options:
           - staging
           - prod
+      refresh:
+        description: 'Break-glass only: run pulumi refresh before up to reconcile manual cloud drift'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -46,6 +56,7 @@ jobs:
       STATE_BUCKET: ${{ vars.PULUMI_STATE_BUCKET || 's3://iac-state-platform-634680389104' }}
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
       IMAGE_TAG: sha-${{ inputs.commit_sha || github.sha }}
+      REFRESH_STATE: ${{ (inputs.refresh == true || inputs.refresh == 'true') && 'true' || 'false' }}
 
 
     steps:
@@ -98,6 +109,7 @@ jobs:
           stack-dir: infra/cloud/aws/platform/migrator
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Execute Platform Database Migrations (global_db)
         shell: bash
@@ -121,6 +133,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/edi/migrator
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Execute EDI Shard Database Migrations (edi_shard)
         shell: bash
@@ -145,6 +158,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/api
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       # Step 3: Background Worker Containers (Unified Monolith Deployment)
       - name: Deploy UCP Workers Stack
@@ -153,6 +167,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/ucp/workers
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       - name: Deploy EDI Workers Stack
         uses: ./.github/actions/pulumi-stack-up
@@ -160,6 +175,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/edi/workers
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       # Step 4: EDI AS2 Partner Server
       - name: Deploy EDI AS2 Server Stack
@@ -168,6 +184,7 @@ jobs:
           stack-dir: infra/cloud/aws/apps/edi/as2
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
+          refresh: ${{ env.REFRESH_STATE }}
 
       # Step 5: Frontend Dashboard Assets (Vite Build & S3 Upload)
       - name: Build & Deploy Frontend Dashboard Assets

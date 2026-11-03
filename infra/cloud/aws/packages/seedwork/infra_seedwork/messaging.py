@@ -12,8 +12,10 @@ structured ``TopologyOutput.queue_env_vars`` from here.
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TypedDict
+from urllib.parse import urlparse
 
 import pulumi
 import pulumi_aws as aws
@@ -172,17 +174,21 @@ class TopologyOutput:
     """
     Structured result of provisioning queues/topics for a bounded context.
 
-    ``queue_env_vars`` is the only field compute stacks should consume.
-    It is a Pulumi Output resolving to ``{ "ENV_VAR_NAME": "https://sqs-url..." }``
-    for every queue/topic that declares an ``env_var`` in topology.json.
-
-    Compute stacks pass this into ``infra_seedwork.env.queue_env_vars_to_ecs_format``
-    inside an ``.apply()`` callback — zero manual per-queue mapping ever required.
+    ``queue_env_vars`` and ``queue_arns`` are the canonical SSOT exports that
+    compute stacks consume:
+    - ``queue_env_vars`` resolves to ``{ "ENV_VAR_NAME": "https://sqs-url..." }``
+      for zero-touch container environment variable injection.
+    - ``queue_arns`` resolves to a sorted list of SQS Queue ARNs (including
+      consumed DLQs) for zero-touch least-privilege IAM task role policies.
     """
 
     # Pulumi Output[dict[str, str]] — env_var → resolved URL/ARN.
     # Exported by messaging stacks, consumed by compute stacks.
     queue_env_vars: pulumi.Output[dict[str, str]]
+
+    # Pulumi Output[list[str]] — sorted list of provisioned SQS queue + consumed DLQ ARNs.
+    # Exported by messaging stacks, consumed via resolve_messaging_queue_arns().
+    queue_arns: pulumi.Output[list[str]]
 
     # Raw queue objects keyed by topology queue name, for stacks that need
     # to wire subscriptions or grant extra IAM permissions.
@@ -193,6 +199,117 @@ class TopologyOutput:
 
     # Raw topic objects keyed by topology topic name.
     topics: dict[str, aws.sns.Topic] = field(default_factory=dict)
+
+
+def _aws_partition_for_region(region: str) -> str:
+    """Resolve the IAM ARN partition for a given AWS region identifier."""
+    if region.startswith("us-gov-"):
+        return "aws-us-gov"
+    if region.startswith("cn-"):
+        return "aws-cn"
+    return "aws"
+
+
+def sqs_url_to_arn(queue_url: str) -> str:
+    """
+    Deterministically convert a canonical AWS SQS Queue URL into an IAM Queue ARN.
+
+    Accepts standard and FIFO AWS SQS URLs of the form:
+    ``https://sqs.<region>.amazonaws.com/<account_id>/<queue_name>``
+
+    Raises:
+        ValueError: If ``queue_url`` is not a valid AWS SQS queue URL.
+    """
+    if not queue_url:
+        raise ValueError(f"Invalid AWS SQS queue URL: {queue_url!r}")
+
+    parsed = urlparse(queue_url)
+    hostname = parsed.hostname or ""
+    host_parts = hostname.split(".")
+    if (
+        parsed.scheme not in ("https", "http")
+        or len(host_parts) < 4
+        or host_parts[0] != "sqs"
+        or "amazonaws" not in host_parts
+    ):
+        raise ValueError(f"Invalid AWS SQS queue URL: {queue_url!r}")
+
+    region = host_parts[1]
+    path_segments = [segment for segment in parsed.path.split("/") if segment]
+    if len(path_segments) != 2 or not region or not path_segments[0].isdigit():
+        raise ValueError(f"Invalid AWS SQS queue URL: {queue_url!r}")
+
+    account_id, queue_name = path_segments[0], path_segments[1]
+    partition = _aws_partition_for_region(region)
+    return f"arn:{partition}:sqs:{region}:{account_id}:{queue_name}"
+
+
+def sqs_arns_from_queue_env_vars(queue_env_vars: Mapping[str, object]) -> list[str]:
+    """
+    Derive sorted, deduplicated SQS Queue ARNs from a ``queue_env_vars`` export map.
+
+    Ignores SNS topic ARNs (``arn:*:sns:...``) that may share the ``queue_env_vars`` map.
+    """
+    arns: set[str] = set()
+    for raw_val in queue_env_vars.values():
+        if not isinstance(raw_val, str) or not raw_val:
+            continue
+        if raw_val.startswith("arn:"):
+            if ":sqs:" in raw_val:
+                arns.add(raw_val)
+            continue
+        arns.add(sqs_url_to_arn(raw_val))
+    return sorted(arns)
+
+
+def select_messaging_queue_arns(
+    exported_queue_arns: Sequence[object] | None,
+    exported_queue_env_vars: Mapping[str, object] | None,
+) -> list[str]:
+    """
+    Select canonical SQS Queue ARNs for a messaging stack reference.
+
+    Prefers the structured ``queue_arns`` export in steady state, and falls back
+    to deriving ARNs from ``queue_env_vars`` during speculative PR previews before
+    ``queue_arns`` has been rolled out to backend state.
+    """
+    if exported_queue_arns is not None:
+        return sorted({str(arn) for arn in exported_queue_arns if isinstance(arn, str) and arn})
+    if exported_queue_env_vars is not None:
+        return sqs_arns_from_queue_env_vars(exported_queue_env_vars)
+    return []
+
+
+def resolve_messaging_queue_arns(stack_ref: pulumi.StackReference) -> pulumi.Output[list[str]]:
+    """
+    Resolve SQS Queue ARNs from a bounded-context messaging ``StackReference``.
+
+    Safe for both steady-state deployments and speculative PR previews without
+    ever requiring per-queue ``require_output(...)`` coupling in compute stacks.
+    """
+
+    def _select(args: list[object]) -> list[str]:
+        raw_arns = (
+            args[0] if isinstance(args[0], Sequence) and not isinstance(args[0], str) else None
+        )
+        raw_env_vars = args[1] if isinstance(args[1], Mapping) else None
+        return select_messaging_queue_arns(raw_arns, raw_env_vars)
+
+    return pulumi.Output.all(
+        stack_ref.get_output("queue_arns"),
+        stack_ref.get_output("queue_env_vars"),
+    ).apply(_select)
+
+
+def merge_messaging_queue_arns(*stack_refs: pulumi.StackReference) -> pulumi.Output[list[str]]:
+    """Resolve and merge deduplicated SQS Queue ARNs across multiple messaging stacks."""
+    if not stack_refs:
+        return pulumi.Output.from_input([])
+
+    resolved_per_stack = [resolve_messaging_queue_arns(ref) for ref in stack_refs]
+    return pulumi.Output.all(*resolved_per_stack).apply(
+        lambda groups: sorted({arn for group in groups for arn in group})
+    )
 
 
 def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively requires high branching logic to support multiple topological permutations
@@ -374,6 +491,22 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
                 env_var_outputs[env_var] = pulumi.Output.from_input(external_topic_arns[name])
                 already_assigned[env_var] = name
 
+    # Collect every provisioned queue ARN + any consumed DLQ ARN (where dlq_env_var is set)
+    # for zero-touch least-privilege IAM task role permissions in compute stacks.
+    queue_arn_outputs: list[pulumi.Output[str]] = []
+    for queue_conf in topology.get("queues", []):
+        name = queue_conf["name"]
+        if name in queues:
+            queue_arn_outputs.append(queues[name].arn)
+            if queue_conf.get("dlq_env_var") and name in dlqs:
+                queue_arn_outputs.append(dlqs[name].arn)
+
+    resolved_queue_arns: pulumi.Output[list[str]] = (
+        pulumi.Output.all(*queue_arn_outputs).apply(lambda arns: sorted(set(arns)))
+        if queue_arn_outputs
+        else pulumi.Output.from_input([])
+    )
+
     # Resolve the dict of Outputs into a single Output[dict[str, str]].
     # pulumi.Output.all(**kwargs) resolves to dict[str, str] directly —
     # no .apply() passthrough needed.
@@ -381,4 +514,10 @@ def provision_from_topology(  # noqa: C901 - Infrastructure assembler natively r
         pulumi.Output.all(**env_var_outputs) if env_var_outputs else pulumi.Output.from_input({})
     )
 
-    return TopologyOutput(queue_env_vars=resolved, queues=queues, topics=topics, dlqs=dlqs)
+    return TopologyOutput(
+        queue_env_vars=resolved,
+        queue_arns=resolved_queue_arns,
+        queues=queues,
+        topics=topics,
+        dlqs=dlqs,
+    )

@@ -5,8 +5,10 @@ on:
     branches: [ "main", "development" ]
     paths:
       - 'infra/cloud/aws/apps/api/**'
-      - 'infra/cloud/aws/apps/ucp/**'
-      - 'infra/cloud/aws/apps/edi/**'
+      - 'infra/cloud/aws/apps/ucp/workers/**'
+      - 'infra/cloud/aws/apps/edi/migrator/**'
+      - 'infra/cloud/aws/apps/edi/workers/**'
+      - 'infra/cloud/aws/apps/edi/as2/**'
       - 'infra/cloud/aws/platform/migrator/**'
       - 'infra/cloud/aws/packages/seedwork/**'
       - '.github/actions/pulumi-setup/**'
