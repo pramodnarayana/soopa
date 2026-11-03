@@ -48,7 +48,7 @@ def test_sqlalchemy_job_repository_orm_to_domain_mapper() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sqlalchemy_job_repository_claims_null_next_run_at_jobs_first() -> None:
+async def test_sqlalchemy_job_repository_claims_due_dated_jobs_ahead_of_null_backlog() -> None:
     compiled_pg_sql = str(
         SqlAlchemyJobRepository._build_claimable_ids_subquery(limit=2).compile(
             dialect=postgresql.dialect()
@@ -57,7 +57,7 @@ async def test_sqlalchemy_job_repository_claims_null_next_run_at_jobs_first() ->
     assert "scheduling.scheduled_jobs.next_run_at IS NULL" in compiled_pg_sql
     assert "scheduling.scheduled_jobs.next_run_at <= now()" in compiled_pg_sql
     assert (
-        "ORDER BY scheduling.scheduled_jobs.next_run_at ASC NULLS FIRST, "
+        "ORDER BY scheduling.scheduled_jobs.next_run_at ASC NULLS LAST, "
         "scheduling.scheduled_jobs.id ASC"
     ) in compiled_pg_sql
 
@@ -162,7 +162,7 @@ async def test_sqlalchemy_job_repository_claims_null_next_run_at_jobs_first() ->
         first_batch = SqlAlchemyJobRepository._sort_claimed_jobs(
             [SqlAlchemyJobRepository._to_domain_model(record) for record in top_two_records]
         )
-        assert [job.id for job in first_batch] == ["sys_job_01_null_a", "sys_job_02_null_b"]
+        assert [job.id for job in first_batch] == ["sys_job_03_due", "sys_job_01_null_a"]
 
         all_claimable_records = (
             (
@@ -181,16 +181,16 @@ async def test_sqlalchemy_job_repository_claims_null_next_run_at_jobs_first() ->
             [SqlAlchemyJobRepository._to_domain_model(record) for record in all_claimable_records]
         )
         assert [job.id for job in full_batch] == [
+            "sys_job_03_due",
             "sys_job_01_null_a",
             "sys_job_02_null_b",
-            "sys_job_03_due",
         ]
 
     await provider.engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_fake_job_repository_orders_null_next_run_at_first_and_skips_future() -> None:
+async def test_fake_job_repository_orders_due_dated_ahead_of_null_and_skips_future() -> None:
     now = datetime.now(UTC)
     repo = FakeJobRepository()
     repo.jobs["sys_job_due"] = ScheduledJob(
@@ -205,9 +205,21 @@ async def test_fake_job_repository_orders_null_next_run_at_first_and_skips_futur
         max_retries=3,
         next_run_at=now - timedelta(seconds=5),
     )
-    repo.jobs["sys_job_null"] = ScheduledJob(
-        id="sys_job_null",
-        name="null_initial",
+    repo.jobs["sys_job_null_b"] = ScheduledJob(
+        id="sys_job_null_b",
+        name="null_initial_b",
+        target_queue="q1",
+        payload={},
+        status=JobStatus.PENDING,
+        cron_expression="*/5 * * * *",
+        interval_seconds=None,
+        retry_count=0,
+        max_retries=3,
+        next_run_at=None,
+    )
+    repo.jobs["sys_job_null_a"] = ScheduledJob(
+        id="sys_job_null_a",
+        name="null_initial_a",
         target_queue="q1",
         payload={},
         status=JobStatus.PENDING,
@@ -230,5 +242,5 @@ async def test_fake_job_repository_orders_null_next_run_at_first_and_skips_futur
         next_run_at=now + timedelta(minutes=10),
     )
 
-    claimed = await repo.claim_next_jobs(worker_id="w-1", limit=10, lock_lease_ms=5000)
-    assert [j.id for j in claimed] == ["sys_job_null", "sys_job_due"]
+    claimed = await repo.claim_next_jobs(worker_id="w-1", limit=2, lock_lease_ms=5000)
+    assert [j.id for j in claimed] == ["sys_job_due", "sys_job_null_a"]

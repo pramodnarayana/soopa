@@ -1,5 +1,5 @@
 import structlog
-from notification.adapters.outbound.channels import EmailChannelStrategy
+from notification.ports.outbound.notification_channel_strategy_port import DeliveryStrategyPort
 from seedwork.domain.types import JsonDict
 
 logger = structlog.get_logger(__name__)
@@ -8,7 +8,7 @@ logger = structlog.get_logger(__name__)
 class EmailChannelDispatcher:
     def __init__(
         self,
-        email_strategy: EmailChannelStrategy,
+        email_strategy: DeliveryStrategyPort,
     ) -> None:
         self.email_strategy = email_strategy
 

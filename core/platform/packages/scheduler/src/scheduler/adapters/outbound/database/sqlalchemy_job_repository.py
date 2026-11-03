@@ -8,7 +8,7 @@ from scheduler.domain.constants import JobStatus
 from scheduler.domain.scheduled_job import ScheduledJob
 from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 
-_MIN_UTC = datetime.min.replace(tzinfo=UTC)
+_MAX_UTC = datetime.max.replace(tzinfo=UTC)
 
 
 def _normalize_utc(value: datetime) -> datetime:
@@ -86,7 +86,7 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
                     OrmScheduledJob.next_run_at <= func.now(),
                 ),
             )
-            .order_by(OrmScheduledJob.next_run_at.asc().nulls_first(), OrmScheduledJob.id.asc())
+            .order_by(OrmScheduledJob.next_run_at.asc().nulls_last(), OrmScheduledJob.id.asc())
             .limit(limit)
             .with_for_update(skip_locked=True)
             .scalar_subquery()
@@ -97,8 +97,8 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
         return sorted(
             jobs,
             key=lambda job: (
-                job.next_run_at is not None,
-                _normalize_utc(job.next_run_at) if job.next_run_at is not None else _MIN_UTC,
+                job.next_run_at is None,
+                _normalize_utc(job.next_run_at) if job.next_run_at is not None else _MAX_UTC,
                 job.id,
             ),
         )

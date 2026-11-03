@@ -1,11 +1,13 @@
 from database.models.notifications import NotificationTemplate
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from seedwork import generate_random_hex
+from seedwork import generate_id
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from notification.domain.models import Channel, Template
+from notification.domain.constants import NotificationIdPrefix
+from notification.domain.enums import Channel
+from notification.domain.template import Template
 
 
 class SqlAlchemyTemplateRepository:
@@ -39,7 +41,7 @@ class SqlAlchemyTemplateRepository:
             result = await self.session.execute(stmt)
             row = result.scalars().first()
             if row:
-                return self._map_template(row)
+                return self._to_domain_model(row)
         return None
 
     # -----------------------------------------------------------------------
@@ -52,7 +54,7 @@ class SqlAlchemyTemplateRepository:
         )
         result = await self.session.execute(stmt)
         rows = result.scalars().all()
-        return [self._map_template(row) for row in rows]
+        return [self._to_domain_model(row) for row in rows]
 
     async def upsert_template(
         self,
@@ -64,32 +66,43 @@ class SqlAlchemyTemplateRepository:
         body_template: str,
         is_active: bool,
     ) -> Template:
+        candidate = Template(
+            id=generate_id(NotificationIdPrefix.NOTIFICATION_TEMPLATE.value),
+            tenant_id=tenant_id,
+            name=name,
+            event_type=event_type,
+            channel=Channel(channel),
+            subject=subject_template,
+            body_content=body_template,
+            is_active=is_active,
+        )
+        orm_record = self._to_orm_record(candidate)
         stmt = (
             insert(NotificationTemplate)
             .values(
-                id=f"{NotificationTemplate.ID_PREFIX}_{generate_random_hex(6)}",
-                tenant_id=tenant_id,
-                name=name,
-                event_type=event_type,
-                channel=channel,
-                subject_template=subject_template,
-                body_template=body_template,
-                is_active=is_active,
+                id=orm_record.id,
+                tenant_id=orm_record.tenant_id,
+                name=orm_record.name,
+                event_type=orm_record.event_type,
+                channel=orm_record.channel,
+                subject_template=orm_record.subject_template,
+                body_template=orm_record.body_template,
+                is_active=orm_record.is_active,
             )
             .on_conflict_do_update(
                 constraint="notification_template_idx",
                 set_={
-                    "name": name,
-                    "subject_template": subject_template,
-                    "body_template": body_template,
-                    "is_active": is_active,
+                    "name": orm_record.name,
+                    "subject_template": orm_record.subject_template,
+                    "body_template": orm_record.body_template,
+                    "is_active": orm_record.is_active,
                 },
             )
             .returning(NotificationTemplate)
         )
         result = await self.session.execute(stmt)
         row = result.scalars().one()
-        return self._map_template(row)
+        return self._to_domain_model(row)
 
     async def delete_template(self, tenant_id: str, template_id: str) -> bool:
         stmt = (
@@ -104,7 +117,7 @@ class SqlAlchemyTemplateRepository:
         return result.scalar_one_or_none() is not None
 
     @staticmethod
-    def _map_template(row: NotificationTemplate) -> Template:
+    def _to_domain_model(row: NotificationTemplate) -> Template:
         return Template(
             id=row.id,
             tenant_id=row.tenant_id,
@@ -115,3 +128,31 @@ class SqlAlchemyTemplateRepository:
             body_content=row.body_template,
             is_active=row.is_active,
         )
+
+    @staticmethod
+    def _to_orm_record(template: Template) -> NotificationTemplate:
+        record_id = (
+            template.id
+            if template.id
+            else generate_id(NotificationIdPrefix.NOTIFICATION_TEMPLATE.value)
+        )
+        return NotificationTemplate(
+            id=record_id,
+            tenant_id=template.tenant_id,
+            name=template.name,
+            event_type=template.event_type,
+            channel=template.channel.value,
+            subject_template=template.subject,
+            body_template=template.body_content,
+            is_active=template.is_active,
+        )
+
+    @staticmethod
+    def _update_record_from_domain(row: NotificationTemplate, template: Template) -> None:
+        row.tenant_id = template.tenant_id
+        row.name = template.name
+        row.event_type = template.event_type
+        row.channel = template.channel.value
+        row.subject_template = template.subject
+        row.body_template = template.body_content
+        row.is_active = template.is_active

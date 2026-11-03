@@ -5,7 +5,7 @@ from scheduler.domain.scheduled_job import ScheduledJob
 from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 from scheduler.ports.outbound.uow_port import SchedulerUnitOfWorkPort
 
-_MIN_UTC = datetime.min.replace(tzinfo=UTC)
+_MAX_UTC = datetime.max.replace(tzinfo=UTC)
 
 
 def _normalize_utc(value: datetime) -> datetime:
@@ -36,8 +36,8 @@ class FakeJobRepository(JobRepositoryPort):
                 and (job.next_run_at is None or _normalize_utc(job.next_run_at) <= now)
             ),
             key=lambda job: (
-                job.next_run_at is not None,
-                _normalize_utc(job.next_run_at) if job.next_run_at is not None else _MIN_UTC,
+                job.next_run_at is None,
+                _normalize_utc(job.next_run_at) if job.next_run_at is not None else _MAX_UTC,
                 job.id,
             ),
         )

@@ -64,3 +64,22 @@ async def test_create_api_token_empty_name_fails_without_commit(
     assert res.is_err
     assert res.unwrap_err().code == UcpErrorCode.VALIDATION_FAILED
     assert fake_uow.committed is False
+
+
+@pytest.mark.asyncio
+async def test_create_api_token_past_expires_at_fails_without_commit(
+    create_api_token_use_case: CreateApiTokenUseCase,
+    fake_uow: FakeUcpUnitOfWork,
+) -> None:
+    command = CreateApiTokenCommand(
+        name="Already Expired Key",
+        expires_at=datetime.now(UTC) - timedelta(minutes=5),
+    )
+
+    res = await create_api_token_use_case.execute(
+        tenant_id=generate_id(DomainIdPrefix.TENANT), command=command
+    )
+
+    assert res.is_err
+    assert res.unwrap_err().code == UcpErrorCode.VALIDATION_FAILED
+    assert fake_uow.committed is False

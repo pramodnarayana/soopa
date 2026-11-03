@@ -46,6 +46,7 @@ class ApiToken(AggregateRoot):
         secret_hash: str,
         expires_at: datetime | None = None,
         token_id: str | None = None,
+        now: datetime | None = None,
     ) -> Result[ApiToken, IdentityError]:
         cleaned_name = name.strip()
         if not cleaned_name:
@@ -55,7 +56,15 @@ class ApiToken(AggregateRoot):
                     message="API token name cannot be empty.",
                 )
             )
-        now = datetime.now(UTC)
+        effective_now = _normalize_utc(now) if now is not None else datetime.now(UTC)
+        if expires_at is not None and _normalize_utc(expires_at) <= effective_now:
+            return Result.fail(
+                IdentityError(
+                    code=IdentityErrorCode.INVALID_TOKEN_EXPIRATION,
+                    message="API token expiration timestamp must be in the future.",
+                    details={"expires_at": expires_at.isoformat()},
+                )
+            )
         return Result.ok(
             cls(
                 id=token_id or generate_id(cls.ID_PREFIX),
@@ -66,8 +75,8 @@ class ApiToken(AggregateRoot):
                 last_used_at=None,
                 expires_at=expires_at,
                 active=True,
-                created_at=now,
-                updated_at=now,
+                created_at=effective_now,
+                updated_at=effective_now,
             )
         )
 

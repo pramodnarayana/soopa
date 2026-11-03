@@ -127,6 +127,45 @@ def test_api_token_is_expired_handles_none_boundary_and_naive_timestamps() -> No
         client_id=_client_id(),
         secret_hash="hash_xyz",
         expires_at=(now + timedelta(minutes=5)).replace(tzinfo=None),
+        now=now,
     ).unwrap()
     assert naive_expiring.is_expired(at=now) is False
     assert naive_expiring.is_expired(at=now + timedelta(minutes=5)) is True
+
+
+def test_api_token_create_rejects_past_or_present_expires_at() -> None:
+    now = datetime.now(UTC)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+
+    past_res = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Past Token",
+        client_id=_client_id(),
+        secret_hash="hash_xyz",
+        expires_at=now - timedelta(seconds=1),
+        now=now,
+    )
+    assert past_res.is_err
+    assert past_res.unwrap_err().code == IdentityErrorCode.INVALID_TOKEN_EXPIRATION
+
+    exact_now_res = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Boundary Token",
+        client_id=_client_id(),
+        secret_hash="hash_xyz",
+        expires_at=now,
+        now=now,
+    )
+    assert exact_now_res.is_err
+    assert exact_now_res.unwrap_err().code == IdentityErrorCode.INVALID_TOKEN_EXPIRATION
+
+    naive_past_res = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Naive Past Token",
+        client_id=_client_id(),
+        secret_hash="hash_xyz",
+        expires_at=(now - timedelta(minutes=1)).replace(tzinfo=None),
+        now=now,
+    )
+    assert naive_past_res.is_err
+    assert naive_past_res.unwrap_err().code == IdentityErrorCode.INVALID_TOKEN_EXPIRATION

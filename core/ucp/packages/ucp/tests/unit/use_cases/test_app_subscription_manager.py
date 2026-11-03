@@ -1,12 +1,12 @@
 from contextlib import asynccontextmanager
 
 import pytest
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.app_subscription_manager import AppSubscriptionManager
+from ucp.domain.app import App
 from ucp.domain.constants import LifecycleStatus, UcpEventType
-from ucp.domain.models.app import App
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
@@ -68,3 +68,4 @@ async def test_handle_app_unsubscribed_success(provisioner, fake_uow):
     assert fake_uow.committed is True
 
     assert fake_uow.tenant_repo.subscriptions.get((tenant_id, app_id)) == LifecycleStatus.INACTIVE
+    assert fake_uow.tenant_repo.shard_statuses.get((tenant_id, app_id)) == LifecycleStatus.INACTIVE

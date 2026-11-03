@@ -1,6 +1,7 @@
 import structlog
 
-from ..domain.models import UserNotificationPreference
+from notification.domain.preference import UserNotificationPreference
+
 from ..ports.outbound.uow_port import NotificationUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

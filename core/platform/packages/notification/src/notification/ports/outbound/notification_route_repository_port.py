@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from notification.domain.models import Channel
+from notification.domain.enums import Channel
 
 
 class NotificationRouteRepositoryPort(Protocol):

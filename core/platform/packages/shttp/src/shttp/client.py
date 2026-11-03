@@ -7,6 +7,7 @@ from types import TracebackType
 
 import httpx
 
+from .auth import BearerTokenProvider
 from .policy import HttpResponsePolicy, PassThroughPolicy
 from .resilience import HttpBackoffHandler
 from .security import ssrf_safe_context
@@ -44,16 +45,45 @@ class HttpClient:
         backoff_handler: HttpBackoffHandler | None = None,
         allow_private_ips: bool = False,
         response_policy: HttpResponsePolicy | None = None,
+        *,
+        base_url: str | None = None,
+        token_provider: BearerTokenProvider | None = None,
+        default_headers: Mapping[str, str] | None = None,
     ) -> None:
-        if client is not None and getattr(client, "follow_redirects", False):
+        if client is not None and client.follow_redirects:
             raise ValueError(
                 "Injected httpx.AsyncClient must have follow_redirects=False to prevent SSRF bypass via redirects."
             )
+        if base_url is not None:
+            normalized_base = base_url.rstrip("/")
+            if not normalized_base.startswith(("http://", "https://")):
+                raise ValueError("HttpClient base_url must use HTTP or HTTPS scheme")
+            self._base_url: str | None = normalized_base
+        else:
+            self._base_url = None
         self._client = client or create_http_client()
         self._backoff_handler = backoff_handler or HttpBackoffHandler()
         self._allow_private_ips = allow_private_ips
         self._response_policy = response_policy or PassThroughPolicy()
         self._owns_client = client is None
+        self._token_provider = token_provider
+        self._default_headers: dict[str, str] = dict(default_headers) if default_headers else {}
+        self._auth_transport: HttpClient | None = (
+            HttpClient(
+                client=self._client,
+                backoff_handler=self._backoff_handler,
+                allow_private_ips=self._allow_private_ips,
+            )
+            if token_provider is not None
+            else None
+        )
+
+    def _resolve_url(self, url: str) -> str:
+        if url.startswith(("http://", "https://")):
+            return url
+        if self._base_url is not None:
+            return f"{self._base_url}/{url.lstrip('/')}" if url else self._base_url
+        return url
 
     @property
     def raw_client(self) -> httpx.AsyncClient:
@@ -117,23 +147,32 @@ class HttpClient:
         policy: HttpResponsePolicy | None = None,
     ) -> httpx.Response:
         """Executes an HTTP request wrapped in SSRF IP pinning, transient backoff retries, and response policy."""
+        resolved_url = self._resolve_url(url)
         check_private = self._allow_private_ips if allow_private_ips is None else allow_private_ips
         effective_policy = policy or self._response_policy
         effective_timeout = timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT
 
-        with ssrf_safe_context(url, allow_private_ips=check_private):
+        merged_headers: dict[str, str] = dict(self._default_headers)
+        if self._token_provider is not None and self._auth_transport is not None:
+            access_token = await self._token_provider.get_access_token(self._auth_transport)
+            merged_headers["Authorization"] = f"Bearer {access_token}"
+        if headers is not None:
+            merged_headers.update(headers)
+        effective_headers: Mapping[str, str] | None = merged_headers if merged_headers else None
+
+        with ssrf_safe_context(resolved_url, allow_private_ips=check_private):
             response = await self._backoff_handler.execute(
                 lambda: self._client.request(
                     method=method,
-                    url=url,
-                    headers=headers,
+                    url=resolved_url,
+                    headers=effective_headers,
                     params=params,
                     data=data,
                     content=content,
                     json=json,
                     timeout=effective_timeout,
                 ),
-                url=url,
+                url=resolved_url,
                 method=method,
             )
 

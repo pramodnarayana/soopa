@@ -1,13 +1,13 @@
 import asyncio
-import contextlib
 import inspect
 from collections.abc import Awaitable
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from observability import ObservabilityProvider
-from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from notification_jobs_worker.bootstrap.container import WorkerContainer as Container
 from notification_jobs_worker.config.settings import get_settings
@@ -15,13 +15,10 @@ from notification_jobs_worker.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 
 
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
-
-
 class NotificationJobsWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.container = Container()
-        self.outbox_listener: PostgresOutboxRelay | None = None
+        self.outbox_listener: NotifyOutboxRelay | None = None
         self.jobs_consumer: SqsConsumerManager | None = None
 
     async def start(self) -> None:
@@ -55,22 +52,26 @@ class NotificationJobsWorkerModule(LaunchableWorker):
         logger.info("notification_jobs_worker_consumer_started")
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
-        tasks: list[asyncio.Task[Any]] = []
-        if self.outbox_listener and hasattr(self.outbox_listener, "background_tasks"):
+        tasks: list[asyncio.Task[object]] = []
+        if self.outbox_listener is not None:
             tasks.extend(self.outbox_listener.background_tasks())
 
-        if self.jobs_consumer and hasattr(self.jobs_consumer, "background_tasks"):
+        if self.jobs_consumer is not None:
             tasks.extend(self.jobs_consumer.background_tasks())
         return tasks
 
     async def stop(self) -> None:
         logger.info("notification_jobs_worker_shutting_down")
         if self.jobs_consumer:
-            with contextlib.suppress(Exception):
+            try:
                 await self.jobs_consumer.stop()
+            except Exception:
+                logger.exception("notification_jobs_consumer_stop_failed")
         if self.outbox_listener:
-            with contextlib.suppress(Exception):
+            try:
                 await self.outbox_listener.stop()
+            except Exception:
+                logger.exception("notification_outbox_listener_stop_failed")
         await cast(Awaitable[None], self.container.shutdown_resources())
 
 

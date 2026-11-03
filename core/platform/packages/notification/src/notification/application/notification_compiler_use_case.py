@@ -5,7 +5,8 @@ import structlog
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.domain.types import JsonDict
 
-from ..domain.models import NotificationDispatch
+from notification.domain.dispatch import NotificationDispatch
+
 from ..ports.outbound.template_renderer_port import TemplateRendererPort
 from ..ports.outbound.uow_port import NotificationUnitOfWorkPort
 

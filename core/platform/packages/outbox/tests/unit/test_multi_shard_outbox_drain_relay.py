@@ -6,10 +6,8 @@ import asyncio
 from collections.abc import Sequence
 
 import pytest
-from outbox.adapters.inbound.multi_shard_outbox_drain_relay import (
-    MultiShardOutboxDrainRelay,
-    ShardOutboxDrainPort,
-)
+from outbox.adapters.inbound.multi_shard_outbox_drain_relay import MultiShardOutboxDrainRelay
+from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from outbox.testing.fakes import FakeOutboxPublisher
 from seedwork.events import EventEnvelope, EventProcessingLane
 

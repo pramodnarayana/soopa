@@ -1,46 +1,10 @@
 from dataclasses import dataclass
-from enum import StrEnum
 
+from seedwork.domain.aggregate import AggregateRoot
 from seedwork.domain.types import JsonDict
-from seedwork.models import AggregateRoot
 
+from notification.domain.enums import Channel
 from notification.domain.events import NotificationDispatchedEvent
-
-
-class Channel(StrEnum):
-    EMAIL = "EMAIL"
-    IN_APP = "IN_APP"
-    SLACK = "SLACK"
-
-
-@dataclass(frozen=True)
-class Template:
-    id: str
-    tenant_id: str
-    name: str
-    event_type: str
-    channel: Channel
-    subject: str | None
-    body_content: str
-    is_active: bool = True
-
-
-@dataclass(frozen=True)
-class NotificationPreference:
-    id: str
-    tenant_id: str
-    event_type: str
-    channels: tuple[Channel, ...]
-
-
-@dataclass(frozen=True)
-class UserNotificationPreference:
-    id: str
-    tenant_id: str
-    user_id: str
-    event_type: str
-    channel: Channel
-    is_enabled: bool
 
 
 @dataclass
@@ -85,3 +49,6 @@ class NotificationDispatch(AggregateRoot):
             )
         )
         return dispatch
+
+
+__all__ = ["NotificationDispatch"]

@@ -2,7 +2,7 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict
 
-from notification.domain.models import Channel
+from notification.domain.enums import Channel
 
 
 class ChannelDispatcherPort(Protocol):

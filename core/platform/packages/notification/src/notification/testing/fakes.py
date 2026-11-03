@@ -1,17 +1,16 @@
-import dataclasses
-from collections.abc import Mapping
-from typing import Any
+from dataclasses import replace
+from types import TracebackType
 
+from database.outbox_serializer import serialize_domain_event
+from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
-from notification.domain.models import (
-    Channel,
-    NotificationDispatch,
-    Template,
-    UserNotificationPreference,
-)
+from notification.domain.dispatch import NotificationDispatch
+from notification.domain.enums import Channel
+from notification.domain.preference import UserNotificationPreference
+from notification.domain.template import Template
 from notification.ports.outbound.notification_outbox_repository_port import (
     NotificationOutboxRepositoryPort,
 )
@@ -23,6 +22,7 @@ from notification.ports.outbound.notification_route_repository_port import (
 )
 from notification.ports.outbound.template_renderer_port import TemplateRendererPort
 from notification.ports.outbound.template_repository_port import TemplateRepositoryPort
+from notification.ports.outbound.uow_port import NotificationUnitOfWorkPort
 from notification.ports.outbound.user_notification_preference_repository_port import (
     UserNotificationPreferenceRepositoryPort,
 )
@@ -30,7 +30,7 @@ from notification.ports.outbound.user_notification_preference_repository_port im
 
 class FakeUserPrefRepo(UserNotificationPreferenceRepositoryPort):
     def __init__(self) -> None:
-        self.prefs: dict[Any, Any] = {}
+        self.prefs: dict[tuple[str, str, str, str], UserNotificationPreference] = {}
 
     async def get_preference(
         self, tenant_id: str, user_id: str, event_type: str, channel: str
@@ -51,16 +51,15 @@ class FakeUserPrefRepo(UserNotificationPreferenceRepositoryPort):
         )
         if key in self.prefs:
             existing = self.prefs[key]
-
             # Preserve existing ID by creating a new instance
-            preference = dataclasses.replace(preference, id=existing.id)
+            preference = replace(preference, id=existing.id)
 
         self.prefs[key] = preference
 
 
 class FakeTemplateRepo(TemplateRepositoryPort):
     def __init__(self) -> None:
-        self.templates: dict[Any, Any] = {}
+        self.templates: dict[tuple[str, str, Channel], Template] = {}
 
     async def get_template(
         self, tenant_id: str, event_type: str, channel: Channel
@@ -69,9 +68,9 @@ class FakeTemplateRepo(TemplateRepositoryPort):
 
 
 class FakeTemplateRenderer(TemplateRendererPort):
-    def render(self, template_str: str, context: Mapping[str, Any]) -> str:
+    def render(self, template_str: str, data: JsonDict) -> str:
         result = template_str
-        for k, v in context.items():
+        for k, v in data.items():
             result = result.replace(f"{{{{{k}}}}}", str(v))
         return result
 
@@ -81,8 +80,8 @@ class FakeOutboxRepo(NotificationOutboxRepositoryPort):
         self.events: list[EventEnvelope] = []
         self.stuck_swept = 0
         self.next_messages: list[EventEnvelope] = []
-        self.completed: list[Any] = []
-        self.failed: list[Any] = []
+        self.completed: list[tuple[str, str]] = []
+        self.failed: list[tuple[str, str, str]] = []
 
     async def save(self, event: EventEnvelope) -> None:
         self.events.append(event)
@@ -112,11 +111,10 @@ class FakeRouteRepo(NotificationRouteRepositoryPort):
 
 class FakeRecordRepo(NotificationRecordRepositoryPort):
     def __init__(self) -> None:
-        self.records: list[Any] = []
+        self.records: list[tuple[str, str, str | None, JsonDict]] = []
         self.dispatches: list[NotificationDispatch] = []
 
     async def save(self, dispatch: NotificationDispatch) -> None:
-
         self.dispatches.append(dispatch)
         if dispatch.channel == Channel.IN_APP:
             self.records.append(
@@ -124,23 +122,30 @@ class FakeRecordRepo(NotificationRecordRepositoryPort):
             )
 
 
-from notification.ports.outbound.uow_port import NotificationUnitOfWorkPort
-
-
 class FakeNotificationUow(NotificationUnitOfWorkPort):
     def __init__(
         self,
-        user_preference_repo: Any,
-        template_repo: Any,
-        record_repo: Any,
-        route_repo: Any,
-        outbox_repo: Any,
+        user_preference_repo: UserNotificationPreferenceRepositoryPort | None = None,
+        template_repo: TemplateRepositoryPort | None = None,
+        record_repo: NotificationRecordRepositoryPort | None = None,
+        route_repo: NotificationRouteRepositoryPort | None = None,
+        outbox_repo: NotificationOutboxRepositoryPort | None = None,
     ) -> None:
-        self.user_preference_repo = user_preference_repo
-        self.template_repo = template_repo
-        self.record_repo = record_repo
-        self.route_repo = route_repo
-        self.outbox_repo = outbox_repo
+        self.user_preference_repo: UserNotificationPreferenceRepositoryPort = (
+            user_preference_repo if user_preference_repo is not None else FakeUserPrefRepo()
+        )
+        self.template_repo: TemplateRepositoryPort = (
+            template_repo if template_repo is not None else FakeTemplateRepo()
+        )
+        self.record_repo: NotificationRecordRepositoryPort = (
+            record_repo if record_repo is not None else FakeRecordRepo()
+        )
+        self.route_repo: NotificationRouteRepositoryPort = (
+            route_repo if route_repo is not None else FakeRouteRepo()
+        )
+        self.outbox_repo: NotificationOutboxRepositoryPort = (
+            outbox_repo if outbox_repo is not None else FakeOutboxRepo()
+        )
         self.committed = False
         self.rolled_back = False
 
@@ -150,16 +155,16 @@ class FakeNotificationUow(NotificationUnitOfWorkPort):
     async def commit(self) -> None:
         await self._pre_commit()
         # Simulate Outbox event collection
-        if self.record_repo and hasattr(self.record_repo, "dispatches"):
+        if isinstance(self.record_repo, FakeRecordRepo):
             for dispatch in self.record_repo.dispatches:
                 for event in dispatch.domain_events:
                     outbox_event = EventEnvelope(
                         id=generate_id(SystemIdPrefix.GENERIC),
                         source="notification",
-                        tenant_id=event.tenant_id,
+                        tenant_id=event.get_routing_tenant_id() or dispatch.tenant_id,
                         event_type=event.event_name,
                         idempotency_key=event.idempotency_key,
-                        payload=dataclasses.asdict(event),
+                        payload=serialize_domain_event(event),
                     )
                     await self.outbox_repo.save(outbox_event)
                 dispatch.clear_domain_events()
@@ -171,5 +176,10 @@ class FakeNotificationUow(NotificationUnitOfWorkPort):
     async def __aenter__(self) -> "FakeNotificationUow":
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         pass

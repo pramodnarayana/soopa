@@ -92,7 +92,7 @@ class ExponentialBackoffStrategy:
         response: httpx.Response | None,
         exception: Exception | None,
     ) -> float | None:
-        base_delay = self._factor * (2**attempt)
+        base_delay: float = self._factor * float(2**attempt)
         jitter = random.uniform(0.0, base_delay * self._jitter_ratio)  # noqa: S311 - Jitter randomization for rate limiting, not cryptographic
         total_delay = base_delay + jitter
         return min(total_delay, self._max_delay)
