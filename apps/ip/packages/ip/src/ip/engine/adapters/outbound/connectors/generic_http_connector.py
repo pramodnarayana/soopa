@@ -20,6 +20,7 @@ from ip.engine.domain.connection.enums import (
     PropertyType,
 )
 from ip.engine.domain.connection.http_spec import (
+    MAX_HTTP_TIMEOUT_SECONDS,
     HttpRequestSpec,
     HttpSourceSpec,
     HttpStreamDefinition,
@@ -308,7 +309,10 @@ class GenericHttpConnector(BaseConnector):
                     label="Request Timeout (Seconds)",
                     type=PropertyType.NUMBER.value,
                     required=False,
-                    description="Timeout limit per request in seconds (default: 30).",
+                    description=(
+                        f"Timeout limit per request in seconds "
+                        f"(default: 30, max: {MAX_HTTP_TIMEOUT_SECONDS:g})."
+                    ),
                     default=30,
                 ),
             ],
@@ -320,26 +324,30 @@ class GenericHttpConnector(BaseConnector):
         raw_timeout: JsonValue,
     ) -> Result[float | None, InvalidConnectionConfigError]:
         """Validates optional per-connection request timeout in seconds."""
+        invalid_timeout_message = (
+            f"Request timeout ('timeout_seconds') must be a finite number "
+            f"greater than 0 and at most {MAX_HTTP_TIMEOUT_SECONDS:g} seconds."
+        )
         if raw_timeout is None or (isinstance(raw_timeout, str) and not raw_timeout.strip()):
             return Result.ok(None)
         if isinstance(raw_timeout, bool):
             return Result.fail(
                 InvalidConnectionConfigError(
                     field_name=ConnectorPropertyKey.TIMEOUT_SECONDS.value,
-                    message="Request timeout ('timeout_seconds') must be a positive finite number.",
+                    message=invalid_timeout_message,
                 )
             )
         if isinstance(raw_timeout, (int, float, str)):
             try:
                 parsed = float(raw_timeout)
-            except ValueError:
+            except (ValueError, OverflowError):
                 parsed = float("nan")
-            if math.isfinite(parsed) and parsed > 0:
+            if math.isfinite(parsed) and 0 < parsed <= MAX_HTTP_TIMEOUT_SECONDS:
                 return Result.ok(parsed)
         return Result.fail(
             InvalidConnectionConfigError(
                 field_name=ConnectorPropertyKey.TIMEOUT_SECONDS.value,
-                message="Request timeout ('timeout_seconds') must be a positive finite number.",
+                message=invalid_timeout_message,
             )
         )
 

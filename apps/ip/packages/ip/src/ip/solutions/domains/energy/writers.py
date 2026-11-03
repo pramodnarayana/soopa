@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -28,6 +27,15 @@ from ip.solutions.domains.energy.canonical import (
     ServicePointStatus,
 )
 from ip.solutions.domains.energy.ports import EnergyDomainRepositoryPort
+from ip.solutions.domains.numeric import (
+    to_finite_float as _parse_float,
+)
+from ip.solutions.domains.numeric import (
+    to_finite_int as _parse_int,
+)
+from ip.solutions.domains.numeric import (
+    to_optional_finite_float as _parse_optional_float,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -45,41 +53,6 @@ def _parse_iso_datetime(val: object) -> datetime:
         except ValueError as exc:
             raise ValueError(f"Invalid ISO-8601 timestamp: {val!r}") from exc
     raise ValueError(f"Invalid ISO-8601 timestamp: {val!r}")
-
-
-def _parse_float(val: object, default: float = 0.0) -> float:
-    parsed = _parse_optional_float(val)
-    return default if parsed is None else parsed
-
-
-def _parse_optional_float(val: object) -> float | None:
-    if val is None or isinstance(val, bool):
-        return None
-    if isinstance(val, (int, float)):
-        parsed = float(val)
-        return parsed if math.isfinite(parsed) else None
-    if isinstance(val, str) and val.strip():
-        try:
-            parsed = float(val)
-        except ValueError:
-            return None
-        return parsed if math.isfinite(parsed) else None
-    return None
-
-
-def _parse_int(val: object, default: int = 15) -> int:
-    if isinstance(val, bool):
-        return default
-    if isinstance(val, int):
-        return val
-    if isinstance(val, float):
-        return int(val) if math.isfinite(val) else default
-    if isinstance(val, str):
-        try:
-            return int(val)
-        except (ValueError, OverflowError):
-            return default
-    return default
 
 
 def _parse_optional_str(val: object) -> str | None:

@@ -20,7 +20,17 @@ from ip.solutions.domains.energy.transformers import (
     AmiMeterReadingTransformerV1,
     AmiMeterReadingTransformerV2,
 )
-from ip.solutions.domains.energy.writers import _parse_iso_datetime
+from ip.solutions.domains.energy.writers import (
+    _parse_float,
+    _parse_iso_datetime,
+    _parse_optional_float,
+)
+from ip.solutions.domains.numeric import (
+    is_non_finite_number,
+    to_finite_float,
+    to_finite_int,
+    to_optional_finite_float,
+)
 
 
 def test_canonical_energy_dtos_are_immutable() -> None:
@@ -145,8 +155,10 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
     for field_name, bad_val in (
         ("kwh_delivered", "nan"),
         ("kwh_delivered", float("inf")),
+        ("kwh_delivered", 10**400),
         ("kwh_received", "-inf"),
         ("kwh_received", float("nan")),
+        ("kwh_received", -(10**400)),
     ):
         non_finite_res = v2.transform(
             ReplicaSnapshot(
@@ -182,7 +194,7 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
                 "timestamp": "2026-10-29T00:15:00Z",
                 "kwh_delivered": 12.5,
                 "kwh_received": 2.5,
-                "voltage_avg": float("nan"),
+                "voltage_avg": 10**400,
                 "interval_minutes": float("inf"),
             },
         ),
@@ -193,3 +205,10 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
     assert draft_fields["voltage_avg"] is None
     assert draft_fields["interval_minutes"] == 15
     assert draft_fields["net_kwh"] == 10.0
+
+    assert is_non_finite_number(10**400) is True
+    assert to_optional_finite_float(10**400) is None
+    assert to_finite_float(10**400, 0.0) == 0.0
+    assert to_finite_int(float("nan"), 15) == 15
+    assert _parse_optional_float(10**400) is None
+    assert _parse_float(10**400, 0.0) == 0.0

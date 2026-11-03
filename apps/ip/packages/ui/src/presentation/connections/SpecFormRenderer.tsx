@@ -31,14 +31,8 @@ const AUTH_PROPERTY_VISIBILITY_RULE: Readonly<Record<string, ReadonlySet<string>
   [ConnectorPropertyKey.PLACEMENT]: new Set([AuthType.API_KEY]),
   [ConnectorPropertyKey.USERNAME]: new Set([AuthType.BASIC_AUTH]),
   [ConnectorPropertyKey.PASSWORD]: new Set([AuthType.BASIC_AUTH]),
-  [ConnectorPropertyKey.TOKEN_URL]: new Set([
-    AuthType.OAUTH2_CLIENT_CREDENTIALS,
-    AuthType.OAUTH2,
-  ]),
-  [ConnectorPropertyKey.CLIENT_ID]: new Set([
-    AuthType.OAUTH2_CLIENT_CREDENTIALS,
-    AuthType.OAUTH2,
-  ]),
+  [ConnectorPropertyKey.TOKEN_URL]: new Set([AuthType.OAUTH2_CLIENT_CREDENTIALS, AuthType.OAUTH2]),
+  [ConnectorPropertyKey.CLIENT_ID]: new Set([AuthType.OAUTH2_CLIENT_CREDENTIALS, AuthType.OAUTH2]),
   [ConnectorPropertyKey.CLIENT_SECRET]: new Set([
     AuthType.OAUTH2_CLIENT_CREDENTIALS,
     AuthType.OAUTH2,

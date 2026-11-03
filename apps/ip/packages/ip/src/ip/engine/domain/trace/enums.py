@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.enums import PipelineStage
 
 
@@ -71,9 +72,20 @@ class IpTraceEventType(StrEnum):
     MODIFIED_AND_REPLAYED = "MODIFIED_AND_REPLAYED"
 
 
+def map_outbound_status_to_trace_status(status: OutboundDispatchStatus | str) -> IpTraceStatus:
+    """Maps an L5 OutboundDispatchStatus token to its corresponding IpTraceStatus."""
+    resolved = (
+        status if isinstance(status, OutboundDispatchStatus) else OutboundDispatchStatus(status)
+    )
+    if resolved is OutboundDispatchStatus.IN_FLIGHT:
+        return IpTraceStatus.PENDING
+    return IpTraceStatus(resolved.value)
+
+
 __all__ = [
     "IpTraceEventType",
     "IpTraceStatus",
     "PipelineStage",
     "TraceEventStatus",
+    "map_outbound_status_to_trace_status",
 ]

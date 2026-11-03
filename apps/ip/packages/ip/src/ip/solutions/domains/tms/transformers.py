@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import math
-
 from ip.engine.domain.normalization.enums import NormalizationRejectionReason
 from ip.engine.domain.normalization.transformation import (
     CanonicalDraft,
@@ -13,31 +11,8 @@ from ip.engine.domain.normalization.transformation import (
     TransformationResult,
 )
 from ip.engine.ports.outbound.transformer_port import TransformerPort
+from ip.solutions.domains.numeric import is_non_finite_number, to_finite_float
 from ip.solutions.domains.tms.canonical import TmsEntityType
-
-
-def _is_non_finite_number(val: object) -> bool:
-    if val is None or isinstance(val, bool):
-        return False
-    if isinstance(val, (int, float)):
-        return not math.isfinite(float(val))
-    if isinstance(val, str) and val.strip():
-        try:
-            parsed = float(val.strip())
-        except ValueError:
-            return False
-        return not math.isfinite(parsed)
-    return False
-
-
-def _to_float(val: object, default: float = 0.0) -> float:
-    if val is None or isinstance(val, bool):
-        return default
-    try:
-        parsed = float(val) if isinstance(val, (int, float)) else float(str(val))
-    except (ValueError, TypeError):
-        return default
-    return parsed if math.isfinite(parsed) else default
 
 
 class MercuryGateLoadTransformerV1(TransformerPort):
@@ -78,7 +53,7 @@ class MercuryGateLoadTransformerV1(TransformerPort):
             )
 
         for metric_field in ("total_weight_lbs", "freight_charge_usd"):
-            if _is_non_finite_number(payload.get(metric_field)):
+            if is_non_finite_number(payload.get(metric_field)):
                 return TransformationResult(
                     rejections=(
                         TransformationRejection(
@@ -89,8 +64,8 @@ class MercuryGateLoadTransformerV1(TransformerPort):
                     )
                 )
 
-        weight_lbs = _to_float(payload.get("total_weight_lbs"), 0.0)
-        charge_usd = _to_float(payload.get("freight_charge_usd"), 0.0)
+        weight_lbs = to_finite_float(payload.get("total_weight_lbs"), 0.0)
+        charge_usd = to_finite_float(payload.get("freight_charge_usd"), 0.0)
 
         return TransformationResult(
             drafts=(

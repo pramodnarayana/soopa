@@ -2,25 +2,27 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import (
+from ip.engine.domain.dispatch.enums import (
     HttpWriteOperation,
-    IngestionMode,
-    IpTraceEventType,
     OutboundDispatchStatus,
-    PipelineLayer,
-    TimelineStatus,
 )
-from ip.engine.domain.events import (
+from ip.engine.domain.dispatch.events import OutboundRecordCreatedEvent
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.normalization.events import NormalizedRecordCreatedEvent
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.events import (
     InboundRecordCreatedEvent,
-    NormalizedRecordCreatedEvent,
-    OutboundRecordCreatedEvent,
     ReplicaRecordChangedEvent,
 )
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.models.timeline_entry import IpTraceEvent
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.domain.trace.enums import (
+    IpTraceEventType,
+    PipelineStage,
+    TraceEventStatus,
+)
+from ip.engine.domain.trace.trace_event import IpTraceEvent
 
 
 def test_inbound_record_clone_for_replay_preserves_lineage_and_clears_external_event_id() -> None:
@@ -58,8 +60,8 @@ def test_inbound_record_clone_for_replay_preserves_lineage_and_clears_external_e
     assert isinstance(trace_evt, IpTraceEvent)
     assert trace_evt.event_type == IpTraceEventType.REPLAY_TRIGGERED.value
     assert trace_evt.actor == "support@soopa.io"
-    assert trace_evt.layer == PipelineLayer.L1_INGEST
-    assert trace_evt.status == TimelineStatus.RETRIED
+    assert trace_evt.stage == PipelineStage.INGEST
+    assert trace_evt.status == TraceEventStatus.RETRIED
 
     assert len(cloned.domain_events) == 1
     dom_evt = cloned.domain_events[0]
@@ -112,8 +114,8 @@ def test_replica_record_schedule_normalization_replay_emits_changed_event() -> N
     rep_trace_evt = replica.trace_events[0]
     assert isinstance(rep_trace_evt, IpTraceEvent)
     assert rep_trace_evt.event_type == IpTraceEventType.REPLAY_TRIGGERED.value
-    assert rep_trace_evt.layer == PipelineLayer.L2_REPLICA
-    assert rep_trace_evt.status == TimelineStatus.RETRIED
+    assert rep_trace_evt.stage == PipelineStage.REPLICA
+    assert rep_trace_evt.status == TraceEventStatus.RETRIED
 
     assert len(replica.domain_events) == 1
     dom_evt = replica.domain_events[0]
@@ -151,7 +153,7 @@ def test_normalized_record_clone_for_replay_supports_payload_modification() -> N
     nrm_trace_evt = replayed.trace_events[0]
     assert isinstance(nrm_trace_evt, IpTraceEvent)
     assert nrm_trace_evt.event_type == IpTraceEventType.MODIFIED_AND_REPLAYED.value
-    assert nrm_trace_evt.layer == PipelineLayer.L3_NORMALIZE
+    assert nrm_trace_evt.stage == PipelineStage.NORMALIZE
 
     assert len(replayed.domain_events) == 1
     dom_evt = replayed.domain_events[0]
@@ -206,8 +208,8 @@ def test_outbound_record_clone_for_delivery_retry_resets_status_and_idempotency_
     out_trace_evt = cloned.trace_events[0]
     assert isinstance(out_trace_evt, IpTraceEvent)
     assert out_trace_evt.event_type == IpTraceEventType.REPLAY_TRIGGERED.value
-    assert out_trace_evt.layer == PipelineLayer.L5_DELIVER
-    assert out_trace_evt.status == TimelineStatus.RETRIED
+    assert out_trace_evt.stage == PipelineStage.DELIVER
+    assert out_trace_evt.status == TraceEventStatus.RETRIED
 
     assert len(cloned.domain_events) == 1
     dom_evt = cloned.domain_events[0]

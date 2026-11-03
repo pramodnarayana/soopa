@@ -1,4 +1,4 @@
-"""Integration tests for Integration Platform Transactions, Trace Waterfall, Lineage, and Replay API routes."""
+"""Integration tests for Integration Platform Trace Waterfall, Lineage, and Stage Replay API routes."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ async def test_get_ip_trace_and_correlation_search(
 
     # 1. Fetch 5-layer trace waterfall
     trace_res = await auth_client.get(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{trace_id}",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{trace_id}",
     )
     assert trace_res.status_code == 200, trace_res.text
     trace_data = trace_res.json()
@@ -72,7 +72,7 @@ async def test_get_ip_trace_and_correlation_search(
 
     # 2. Search by correlation_id
     search_res = await auth_client.get(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/search?correlation_id=CORR-MTR-101",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/search?correlation_id=CORR-MTR-101",
     )
     assert search_res.status_code == 200, search_res.text
     search_items = search_res.json()
@@ -88,7 +88,7 @@ async def test_get_ip_trace_unknown_returns_404(
     tenant_id = seeded_api_token["tenant_id"]
 
     res = await auth_client.get(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/ip_trc_nonexistent_999",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/ip_trc_nonexistent_999",
     )
     assert res.status_code == 404, res.text
     assert res.json()["code"] == "TRACE_NOT_FOUND"
@@ -108,7 +108,7 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
 
     # 1. Replay from RETRY_INGEST -> 202 Accepted
     replay_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{root_trace_id}/replay",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{root_trace_id}/replay",
         json={"stage": "RETRY_INGEST"},
     )
     assert replay_res.status_code == 202, replay_res.text
@@ -121,7 +121,7 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
 
     # 2. Modify-and-Replay from child_trace_1 -> 202 Accepted
     mod_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{child_trace_1}/modify-and-replay",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{child_trace_1}/modify-and-replay",
         json={
             "stage": "RETRY_INGEST",
             "modified_payload": {
@@ -141,14 +141,14 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
 
     # Verify modified payload was persisted on child_trace_2
     child_trace_res = await auth_client.get(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{child_trace_2}",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{child_trace_2}",
     )
     assert child_trace_res.status_code == 200, child_trace_res.text
     assert child_trace_res.json()["inbound_record"]["request_body"]["kwh"] == 99.9
 
     # 3. Fetch full replay lineage tree from child_trace_2
     lineage_res = await auth_client.get(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{child_trace_2}/lineage",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{child_trace_2}/lineage",
     )
     assert lineage_res.status_code == 200, lineage_res.text
     lineage_items = lineage_res.json()
@@ -161,7 +161,7 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
 
     # 4. Replaying an unavailable stage (e.g. RETRY_DELIVER when only L1 exists) returns 409
     bad_stage_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{root_trace_id}/replay",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{root_trace_id}/replay",
         json={"stage": "RETRY_DELIVER"},
     )
     assert bad_stage_res.status_code == 409, bad_stage_res.text
@@ -169,7 +169,7 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
 
     # 5. Modify-and-replay with empty payload returns 400
     empty_mod_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/{root_trace_id}/modify-and-replay",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/{root_trace_id}/modify-and-replay",
         json={"stage": "RETRY_INGEST", "modified_payload": {}},
     )
     assert empty_mod_res.status_code == 400, empty_mod_res.text
@@ -177,7 +177,7 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
 
 
 @pytest.mark.asyncio
-async def test_bulk_replay_transactions_endpoint(
+async def test_bulk_replay_stages_endpoint(
     auth_client: httpx.AsyncClient,
     seeded_api_token: dict[str, str],
 ) -> None:
@@ -194,7 +194,7 @@ async def test_bulk_replay_transactions_endpoint(
     )
 
     bulk_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/transactions/bulk-replay",
+        f"/api/v1/tenants/{tenant_id}/ip/traces/bulk-replay",
         json={
             "trace_ids": [trace_1, trace_2, "ip_trc_missing_bulk"],
             "stage": "RETRY_INGEST",

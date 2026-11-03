@@ -715,7 +715,9 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
     expect(logger.entries).toHaveLength(1);
     expect(logger.entries[0]?.level).toBe(LogLevel.ERROR);
     expect(logger.entries[0]?.event).toBe('http_wire.schema_drift');
-    expect(logger.entries[0]?.attributes.context).toBe('GET /api/v1/tenants/ten_01/ip/catalog/apps');
+    expect(logger.entries[0]?.attributes.context).toBe(
+      'GET /api/v1/tenants/ten_01/ip/catalog/apps',
+    );
     expect(logger.entries[0]?.attributes.tenant_id).toBe('ten_01');
   });
 });

@@ -1,13 +1,13 @@
 """Unit tests for CanonicalWriterRegistry, CanonicalEntityRegistry, and ErrorPolicy."""
 
-from ip.engine.domain.normalization import CanonicalEntityDefinition
-from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
-from ip.engine.domain.services.canonical_writer_registry import (
-    InMemoryCanonicalWriterRegistry,
-)
-from ip.engine.domain.services.default_normalization_error_policy import (
+from ip.engine.domain.normalization.policies import (
     DefaultNormalizationErrorPolicy,
 )
+from ip.engine.domain.normalization.registries import (
+    CanonicalEntityRegistry,
+    CanonicalWriterRegistry,
+)
+from ip.engine.domain.normalization.transformation import CanonicalEntityDefinition
 from seedwork.domain.types import JsonDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,7 +52,7 @@ class DummyWriter:
 
 
 def test_canonical_writer_registry() -> None:
-    reg = InMemoryCanonicalWriterRegistry()
+    reg = CanonicalWriterRegistry()
     w1 = DummyWriter("energy.meter_reading")
     w2 = DummyWriter("energy.service_point")
 

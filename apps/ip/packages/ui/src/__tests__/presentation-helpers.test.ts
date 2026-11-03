@@ -97,7 +97,9 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
       oauth_token: '',
     });
 
-    expect(split.publicConfig).toEqual({ [ConnectorPropertyKey.BASE_URL]: 'https://mdm.itron.local' });
+    expect(split.publicConfig).toEqual({
+      [ConnectorPropertyKey.BASE_URL]: 'https://mdm.itron.local',
+    });
     expect(split.rawCredentials).toEqual({ api_secret: 'sec_live_99' });
 
     const specWithDefaults: ConnectorPropertySpec[] = [
@@ -112,7 +114,9 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     ];
 
     const splitDefaults = splitSpecFormValues(specWithDefaults, {});
-    expect(splitDefaults.publicConfig).toEqual({ [ConnectorPropertyKey.BASE_URL]: 'https://default.example.com' });
+    expect(splitDefaults.publicConfig).toEqual({
+      [ConnectorPropertyKey.BASE_URL]: 'https://default.example.com',
+    });
     expect(splitDefaults.rawCredentials).toEqual({ api_secret: 'default_secret_key' });
   });
 
@@ -194,30 +198,114 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     const tokenUrlProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.TOKEN_URL)!;
 
     // Bearer Token auth
-    expect(isPropertyVisible(tokenProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN }, httpSpecs)).toBe(true);
-    expect(isPropertyVisible(paramNameProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN }, httpSpecs)).toBe(false);
-    expect(isPropertyVisible(usernameProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN }, httpSpecs)).toBe(false);
-    expect(isPropertyVisible(tokenUrlProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN }, httpSpecs)).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        paramNameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenUrlProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(false);
     expect(resolvePropertyLabel(tokenProp, AuthType.BEARER_TOKEN)).toBe('Bearer Token');
 
     // API Key auth
-    expect(isPropertyVisible(tokenProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY }, httpSpecs)).toBe(true);
-    expect(isPropertyVisible(paramNameProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY }, httpSpecs)).toBe(true);
-    expect(isPropertyVisible(usernameProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY }, httpSpecs)).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        paramNameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY },
+        httpSpecs,
+      ),
+    ).toBe(false);
     expect(resolvePropertyLabel(tokenProp, AuthType.API_KEY)).toBe('API Key Secret');
 
     // Basic Auth
-    expect(isPropertyVisible(tokenProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH }, httpSpecs)).toBe(false);
-    expect(isPropertyVisible(usernameProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH }, httpSpecs)).toBe(true);
-    expect(isPropertyVisible(passwordProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH }, httpSpecs)).toBe(true);
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        passwordProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(true);
 
     // OAuth2 Client Credentials
-    expect(isPropertyVisible(tokenProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.OAUTH2_CLIENT_CREDENTIALS }, httpSpecs)).toBe(false);
-    expect(isPropertyVisible(tokenUrlProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.OAUTH2_CLIENT_CREDENTIALS }, httpSpecs)).toBe(true);
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.OAUTH2_CLIENT_CREDENTIALS },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenUrlProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.OAUTH2_CLIENT_CREDENTIALS },
+        httpSpecs,
+      ),
+    ).toBe(true);
 
     // No Auth
-    expect(isPropertyVisible(tokenProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.NO_AUTH }, httpSpecs)).toBe(false);
-    expect(isPropertyVisible(usernameProp, { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.NO_AUTH }, httpSpecs)).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.NO_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.NO_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(false);
 
     // Splitting values omits hidden fields with defaults (e.g. param_name with default X-API-Key is omitted in BEARER_TOKEN)
     const bearerSplit = splitSpecFormValues(httpSpecs, {

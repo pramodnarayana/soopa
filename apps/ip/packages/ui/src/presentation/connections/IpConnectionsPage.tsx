@@ -27,12 +27,16 @@ import React, { useMemo, useState } from 'react';
 import { useCatalogAppsQuery } from '../../application/use-catalog-queries';
 import { useConnectionsQuery } from '../../application/use-connection-queries';
 import type { CatalogAppSummary } from '../../domain/catalog';
-import type { Connection } from '../../domain/connection';
+import { type Connection, groupActiveConnectionsByApp } from '../../domain/connection';
 import { ConnectionStatus } from '../../domain/enums';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
-import { formatRelativeTimestamp, mapConnectionStatusTone } from '../shared/status-mapping';
+import {
+  formatRelativeTimestamp,
+  mapConnectionStatusDotClass,
+  mapConnectionStatusTone,
+} from '../shared/status-mapping';
 import { CreateConnectionModal } from './CreateConnectionModal';
 
 const ALL_TAB = 'ALL';
@@ -79,17 +83,12 @@ export function IpConnectionsPage() {
   });
   const apps = catalogView.data ?? [];
 
-  // 2. Fetch all connections to display active counts on app cards
+  // 2. Fetch all connections to display non-deactivated counts on app cards
   const allConnectionsView = useConnectionsQuery();
-  const connectionsByApp = useMemo(() => {
-    const map = new Map<string, Connection[]>();
-    for (const conn of allConnectionsView.data ?? []) {
-      const list = map.get(conn.appId) ?? [];
-      list.push(conn);
-      map.set(conn.appId, list);
-    }
-    return map;
-  }, [allConnectionsView.data]);
+  const connectionsByApp = useMemo(
+    () => groupActiveConnectionsByApp(allConnectionsView.data ?? []),
+    [allConnectionsView.data],
+  );
 
   // 3. Filtered connections for the Installed tab
   const filteredConnectionsView = useConnectionsQuery(
@@ -311,7 +310,9 @@ export function IpConnectionsPage() {
                                 }}
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
                               >
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${mapConnectionStatusDotClass(conn.status)}`}
+                                />
                                 <span>{conn.name}</span>
                               </button>
                             ))}

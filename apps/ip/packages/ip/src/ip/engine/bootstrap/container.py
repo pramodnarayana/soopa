@@ -215,7 +215,8 @@ from ip.engine.domain.normalization.registries import (
     CanonicalWriterRegistry,
 )
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
-from ip.engine.ports.outbound.connector_port import DestinationConnectorPort
+from ip.engine.ports.outbound.catalog_registry_port import CatalogConnectorMapping
+from ip.engine.ports.outbound.connector_port import ConnectorPort, DestinationConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
@@ -566,6 +567,10 @@ class Container(containers.DeclarativeContainer):
         allow_private_ips=config.allow_private_ips.as_(bool),
         auth_resolver=auth_resolver,
     )
+    connector_mapping: providers.Factory[Mapping[str, ConnectorPort]] = providers.Factory(
+        CatalogConnectorMapping,
+        registry=catalog_registry,
+    )
 
     extractor_registry = providers.Singleton(RecordExtractorRegistry)
 
@@ -665,7 +670,7 @@ class Container(containers.DeclarativeContainer):
         DiscoverCatalogUseCase,
         uow=cp_uow,
         cipher=cipher,
-        connectors=catalog_registry,
+        connectors=connector_mapping,
         token_manager=token_manager,
     )
     fetch_record_use_case = providers.Factory(
@@ -674,7 +679,7 @@ class Container(containers.DeclarativeContainer):
         data_plane_uow_provider=dp_uow_provider,
         tiered_storage=tiered_storage,
         cipher=cipher,
-        connectors=catalog_registry,
+        connectors=connector_mapping,
         token_manager=token_manager,
     )
     run_sync_use_case = providers.Factory(
@@ -683,13 +688,13 @@ class Container(containers.DeclarativeContainer):
         data_plane_uow_provider=dp_uow_provider,
         tiered_storage=tiered_storage,
         cipher=cipher,
-        connectors=catalog_registry,
+        connectors=connector_mapping,
         token_manager=token_manager,
     )
     deliver_outbound_record_use_case = providers.Factory(
         DeliverOutboundRecordUseCase,
         data_plane_uow_provider=dp_uow_provider,
-        connectors=catalog_registry,
+        connectors=connector_mapping,
         tiered_storage=tiered_storage,
         token_manager=token_manager,
     )
@@ -701,7 +706,7 @@ class Container(containers.DeclarativeContainer):
         SessionScopedOutboundDeliveryExecutor,
         db_router=db_router,
         dp_uow_provider=dp_uow_provider,
-        connectors=catalog_registry,
+        connectors=connector_mapping,
         tiered_storage=tiered_storage,
         cipher=cipher,
         token_refresher=oauth2_token_refresher,

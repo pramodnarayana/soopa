@@ -85,6 +85,19 @@ export function mapConnectionStatusTone(status: string): StatusToneValue {
   return CONNECTION_STATUS_TONE_MAP[status] ?? StatusTone.NEUTRAL;
 }
 
+const CONNECTION_STATUS_DOT_CLASS_MAP: Readonly<Record<StatusToneValue, string>> = {
+  [StatusTone.HEALTHY]: 'bg-emerald-500',
+  [StatusTone.WARNING]: 'bg-amber-500',
+  [StatusTone.CRITICAL]: 'bg-rose-500',
+  [StatusTone.NEUTRAL]: 'bg-muted-foreground',
+  [StatusTone.SHADOW]: 'bg-violet-500',
+  [StatusTone.REPLAY]: 'bg-sky-500',
+};
+
+export function mapConnectionStatusDotClass(status: string): string {
+  return CONNECTION_STATUS_DOT_CLASS_MAP[mapConnectionStatusTone(status)];
+}
+
 export function mapSyncRunStatusTone(status: string): StatusToneValue {
   return SYNC_RUN_STATUS_TONE_MAP[status] ?? StatusTone.NEUTRAL;
 }

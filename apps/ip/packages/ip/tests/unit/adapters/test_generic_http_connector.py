@@ -9,6 +9,8 @@ import httpx
 import pytest
 from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.connection.http_spec import MAX_HTTP_TIMEOUT_SECONDS, HttpSourceSpec
 from ip.engine.ports.outbound.connector_port import WriteRecordCommand
 from pytest_httpserver import HTTPServer
 from seedwork.domain.types import JsonDict
@@ -498,8 +500,35 @@ async def test_generic_http_connector_applies_per_connection_timeout_without_mut
         assert write_res.success is True
         assert observed_timeouts[-1] == {"connect": 30.0, "read": 30.0, "write": 30.0, "pool": 30.0}
 
-        # 4. Invalid timeout_seconds values are rejected cleanly
-        for bad_timeout in (0, -5, True, "nan", "abc"):
+        # 4. Exact upper bound (MAX_HTTP_TIMEOUT_SECONDS) is accepted
+        max_bound_res = await connector.check(
+            public_config={
+                "base_url": "http://127.0.0.1",
+                "auth_type": "NO_AUTH",
+                "timeout_seconds": MAX_HTTP_TIMEOUT_SECONDS,
+            },
+            credentials={},
+        )
+        assert max_bound_res.success is True
+        assert observed_timeouts[-1] == {
+            "connect": MAX_HTTP_TIMEOUT_SECONDS,
+            "read": MAX_HTTP_TIMEOUT_SECONDS,
+            "write": MAX_HTTP_TIMEOUT_SECONDS,
+            "pool": MAX_HTTP_TIMEOUT_SECONDS,
+        }
+
+        # 5. Invalid, overflowing, and out-of-range timeout_seconds values are rejected cleanly
+        for bad_timeout in (
+            0,
+            -5,
+            True,
+            "nan",
+            "abc",
+            10**400,
+            "1e400",
+            MAX_HTTP_TIMEOUT_SECONDS + 0.1,
+            1e9,
+        ):
             invalid_res = await connector.check(
                 public_config={
                     "base_url": "http://127.0.0.1",
@@ -510,3 +539,10 @@ async def test_generic_http_connector_applies_per_connection_timeout_without_mut
             )
             assert invalid_res.success is False
             assert invalid_res.error_code == "INVALID_CONFIG"
+
+    with pytest.raises(ValueError, match="timeout_seconds"):
+        HttpSourceSpec(
+            base_url="https://api.example.com",
+            auth_type=AuthType.NO_AUTH,
+            timeout_seconds=MAX_HTTP_TIMEOUT_SECONDS + 1.0,
+        )

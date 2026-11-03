@@ -120,8 +120,10 @@ def test_tms_load_transformer_rejects_non_finite_weight_and_charge() -> None:
         for field_name, bad_val in (
             ("total_weight_lbs", "nan"),
             ("total_weight_lbs", float("inf")),
+            ("total_weight_lbs", 10**400),
             ("freight_charge_usd", "-inf"),
             ("freight_charge_usd", float("nan")),
+            ("freight_charge_usd", -(10**400)),
         ):
             res = transformer.transform(
                 ReplicaSnapshot(

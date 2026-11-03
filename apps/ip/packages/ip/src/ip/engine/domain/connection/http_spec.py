@@ -15,6 +15,7 @@ from ip.engine.domain.replication.stream_definition import StreamDefinition
 
 __all__ = [
     "BLOCKED_HEADERS",
+    "MAX_HTTP_TIMEOUT_SECONDS",
     "DeclarativeManifest",
     "HttpActionSpec",
     "HttpRequestSpec",
@@ -24,6 +25,8 @@ __all__ = [
     "HttpWriteSpec",
     "PaginationConfig",
 ]
+
+MAX_HTTP_TIMEOUT_SECONDS: float = 300.0
 
 
 @dataclass(frozen=True)
@@ -153,9 +156,11 @@ class HttpSourceSpec:
             isinstance(self.timeout_seconds, bool)
             or not math.isfinite(self.timeout_seconds)
             or self.timeout_seconds <= 0
+            or self.timeout_seconds > MAX_HTTP_TIMEOUT_SECONDS
         ):
             raise ValueError(
-                f"Invalid timeout_seconds: '{self.timeout_seconds}'. Must be a positive finite number."
+                f"Invalid timeout_seconds: '{self.timeout_seconds}'. "
+                f"Must be a finite number in (0, {MAX_HTTP_TIMEOUT_SECONDS:g}]."
             )
 
     def get_stream(self, stream_name: str) -> HttpStreamDefinition | None:

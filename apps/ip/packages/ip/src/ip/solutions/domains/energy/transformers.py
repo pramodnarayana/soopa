@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from datetime import datetime
 
 from ip.engine.domain.normalization.enums import NormalizationRejectionReason
@@ -20,20 +19,12 @@ from ip.solutions.domains.energy.canonical import (
     MeterReadingQualityFlag,
     ServicePointStatus,
 )
-
-
-def _is_non_finite_number(val: object) -> bool:
-    if val is None or isinstance(val, bool):
-        return False
-    if isinstance(val, (int, float)):
-        return not math.isfinite(float(val))
-    if isinstance(val, str) and val.strip():
-        try:
-            parsed = float(val.strip())
-        except ValueError:
-            return False
-        return not math.isfinite(parsed)
-    return False
+from ip.solutions.domains.numeric import (
+    is_non_finite_number,
+    to_finite_float,
+    to_finite_int,
+    to_optional_finite_float,
+)
 
 
 def _is_valid_iso_timestamp(val: str) -> bool:
@@ -42,34 +33,6 @@ def _is_valid_iso_timestamp(val: str) -> bool:
     except ValueError:
         return False
     return True
-
-
-def _to_float(val: object, default: float = 0.0) -> float:
-    parsed = _to_optional_float(val)
-    return default if parsed is None else parsed
-
-
-def _to_optional_float(val: object) -> float | None:
-    if val is None or isinstance(val, bool):
-        return None
-    try:
-        parsed = float(val) if isinstance(val, (int, float)) else float(str(val))
-    except (ValueError, TypeError):
-        return None
-    return parsed if math.isfinite(parsed) else None
-
-
-def _to_int(val: object, default: int = 15) -> int:
-    if val is None or isinstance(val, bool):
-        return default
-    if isinstance(val, int):
-        return val
-    if isinstance(val, float):
-        return int(val) if math.isfinite(val) else default
-    try:
-        return int(str(val))
-    except (ValueError, TypeError, OverflowError):
-        return default
 
 
 class AmiMeterReadingTransformerV1(TransformerPort):
@@ -133,7 +96,7 @@ class AmiMeterReadingTransformerV1(TransformerPort):
             )
 
         for metric_field in ("kwh_delivered", "kwh_received"):
-            if _is_non_finite_number(payload.get(metric_field)):
+            if is_non_finite_number(payload.get(metric_field)):
                 return TransformationResult(
                     rejections=(
                         TransformationRejection(
@@ -144,9 +107,9 @@ class AmiMeterReadingTransformerV1(TransformerPort):
                     )
                 )
 
-        kwh_delivered = _to_float(payload.get("kwh_delivered"), 0.0)
-        kwh_received = _to_float(payload.get("kwh_received"), 0.0)
-        interval_minutes = _to_int(payload.get("interval_minutes"), 15)
+        kwh_delivered = to_finite_float(payload.get("kwh_delivered"), 0.0)
+        kwh_received = to_finite_float(payload.get("kwh_received"), 0.0)
+        interval_minutes = to_finite_int(payload.get("interval_minutes"), 15)
         quality_flag = str(payload.get("quality") or MeterReadingQualityFlag.VALIDATED.value)
         sp_id_raw = payload.get("service_point_id")
         sp_id = str(sp_id_raw).strip() if sp_id_raw is not None and str(sp_id_raw).strip() else None
@@ -205,9 +168,9 @@ class AmiMeterReadingTransformerV2(TransformerPort):
 
         base_draft = v1_res.drafts[0]
         payload = replica.data
-        voltage_avg = _to_optional_float(payload.get("voltage_avg"))
-        kwh_delivered = _to_float(base_draft.fields.get("kwh_delivered"), 0.0)
-        kwh_received = _to_float(base_draft.fields.get("kwh_received"), 0.0)
+        voltage_avg = to_optional_finite_float(payload.get("voltage_avg"))
+        kwh_delivered = to_finite_float(base_draft.fields.get("kwh_delivered"), 0.0)
+        kwh_received = to_finite_float(base_draft.fields.get("kwh_received"), 0.0)
         net_kwh = round(kwh_delivered - kwh_received, 4)
 
         updated_fields = dict(base_draft.fields)

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Iterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
 from typing import Annotated
 
 import structlog
@@ -16,7 +16,10 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
 )
 from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
 from ip.engine.domain.enums import PipelineStage
-from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
+from ip.engine.ports.outbound.catalog_registry_port import (
+    CatalogConnectorMapping,
+    CatalogRegistryPort,
+)
 from ip.engine.ports.outbound.connector_port import ConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
@@ -143,25 +146,6 @@ async def require_tenant_member(
     )
 
 
-class _ConnectorCatalogMapping(Mapping[str, ConnectorPort]):
-    """Read-only Mapping adapter over CatalogRegistryPort."""
-
-    def __init__(self, registry: CatalogRegistryPort) -> None:
-        self._registry = registry
-
-    def __getitem__(self, key: str) -> ConnectorPort:
-        result = self._registry.get_connector(key)
-        if result.is_ok and result.value is not None:
-            return result.value
-        raise KeyError(key)
-
-    def __len__(self) -> int:
-        return len(self._registry.list_apps())
-
-    def __iter__(self) -> Iterator[str]:
-        return (app.app_id for app in self._registry.list_apps())
-
-
 def get_catalog_registry(request: Request) -> CatalogRegistryPort:
     """Resolves a CatalogRegistryPort configured according to IP engine settings."""
     return _get_api_provider(request).get_catalog_registry()
@@ -171,7 +155,7 @@ def get_connectors(
     registry: Annotated[CatalogRegistryPort, Depends(get_catalog_registry)],
 ) -> Mapping[str, ConnectorPort]:
     """Resolves a Mapping[str, ConnectorPort] backed by CatalogRegistryPort."""
-    return _ConnectorCatalogMapping(registry)
+    return CatalogConnectorMapping(registry)
 
 
 def get_cipher(request: Request) -> CipherPort:

@@ -10,8 +10,12 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_list_catalog_apps(auth_client: httpx.AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/ip/catalog/apps")
+async def test_list_catalog_apps(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    response = await auth_client.get(f"/api/v1/tenants/{tenant_id}/ip/catalog/apps")
     assert response.status_code == 200, response.text
     apps = response.json()
     assert len(apps) >= 6
@@ -33,8 +37,12 @@ async def test_list_catalog_apps(auth_client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_filter_catalog_apps_by_category(auth_client: httpx.AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/ip/catalog/apps?category=CRM")
+async def test_filter_catalog_apps_by_category(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    response = await auth_client.get(f"/api/v1/tenants/{tenant_id}/ip/catalog/apps?category=CRM")
     assert response.status_code == 200, response.text
     apps = response.json()
     assert len(apps) >= 2
@@ -43,8 +51,12 @@ async def test_filter_catalog_apps_by_category(auth_client: httpx.AsyncClient) -
 
 
 @pytest.mark.asyncio
-async def test_filter_catalog_apps_by_search(auth_client: httpx.AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/ip/catalog/apps?search=stripe")
+async def test_filter_catalog_apps_by_search(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    response = await auth_client.get(f"/api/v1/tenants/{tenant_id}/ip/catalog/apps?search=stripe")
     assert response.status_code == 200, response.text
     apps = response.json()
     assert len(apps) == 1
@@ -53,8 +65,12 @@ async def test_filter_catalog_apps_by_search(auth_client: httpx.AsyncClient) -> 
 
 
 @pytest.mark.asyncio
-async def test_get_declarative_app_spec(auth_client: httpx.AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/ip/catalog/apps/salesforce/spec")
+async def test_get_declarative_app_spec(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    response = await auth_client.get(f"/api/v1/tenants/{tenant_id}/ip/catalog/apps/salesforce/spec")
     assert response.status_code == 200, response.text
     spec = response.json()
     assert spec["app_id"] == "salesforce"
@@ -68,8 +84,12 @@ async def test_get_declarative_app_spec(auth_client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_native_app_spec(auth_client: httpx.AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/ip/catalog/apps/sftp/spec")
+async def test_get_native_app_spec(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    response = await auth_client.get(f"/api/v1/tenants/{tenant_id}/ip/catalog/apps/sftp/spec")
     assert response.status_code == 200, response.text
     spec = response.json()
     assert spec["app_id"] == "sftp"
@@ -83,7 +103,13 @@ async def test_get_native_app_spec(auth_client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_unknown_app_spec_returns_404(auth_client: httpx.AsyncClient) -> None:
-    response = await auth_client.get("/api/v1/ip/catalog/apps/non_existent_app_xyz/spec")
+async def test_get_unknown_app_spec_returns_404(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+    response = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/ip/catalog/apps/non_existent_app_xyz/spec"
+    )
     assert response.status_code == 404, response.text
     assert "Connector 'non_existent_app_xyz' not found" in response.json()["detail"]

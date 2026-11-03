@@ -13,13 +13,15 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     OutboundRecordModel,
 )
 from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.enums import PipelineStage
-from ip.engine.domain.trace import IpTraceStatus
+from ip.engine.domain.trace import IpTraceStatus, map_outbound_status_to_trace_status
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope, EventProcessingLane
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from sqlalchemy import case
 from sqlalchemy.ext.asyncio import AsyncSession
 from strace.domain import TraceEvent, TraceStageAttemptRow
 from strace.orm import TraceEventSpec, TraceStageSpec, TraceStageSpecPort
@@ -44,6 +46,14 @@ IP_TRACE_EVENT_SPEC: TraceEventSpec[IpTraceEventModel] = TraceEventSpec(
     model_cls=IpTraceEventModel,
     to_domain_fn=trace_event_to_domain,
     to_orm_fn=_ip_trace_event_to_orm,
+)
+
+_OUTBOUND_TRACE_STATUS_COL = case(
+    (
+        OutboundRecordModel.status == OutboundDispatchStatus.IN_FLIGHT.value,
+        IpTraceStatus.PENDING.value,
+    ),
+    else_=OutboundRecordModel.status,
 )
 
 IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
@@ -82,12 +92,12 @@ IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
     TraceStageSpec(
         model_cls=OutboundRecordModel,
         timestamp_col=OutboundRecordModel.sent_at,
-        status_col=OutboundRecordModel.status,
+        status_col=_OUTBOUND_TRACE_STATUS_COL,
         correlation_cols=(OutboundRecordModel.correlation_id,),
         to_attempt_row=lambda out: TraceStageAttemptRow(
             trace_id=out.trace_id,
             correlation_id=out.correlation_id,
-            status=IpTraceStatus(out.status),
+            status=map_outbound_status_to_trace_status(out.status),
             primary_layer=PipelineStage.DELIVER,
             created_at=out.sent_at,
             replay_count=out.replay_count,

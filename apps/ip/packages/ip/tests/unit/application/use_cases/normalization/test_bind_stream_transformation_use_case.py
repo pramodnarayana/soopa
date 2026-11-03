@@ -7,10 +7,10 @@ from ip.engine.application.use_cases.normalization.bind_stream_transformation_us
     BindStreamTransformationCommand,
     BindStreamTransformationUseCase,
 )
-from ip.engine.domain.enums import TransformationMode
-from ip.engine.domain.events import TransformationChangedEvent
-from ip.engine.domain.normalization import Transformation
-from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.events import TransformationChangedEvent
+from ip.engine.domain.normalization.registries import TransformerRegistry
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
@@ -145,7 +145,7 @@ async def test_update_existing_stream_transformation() -> None:
 @pytest.mark.asyncio
 async def test_bind_stream_transformation_rejects_unregistered_version() -> None:
     uow = FakeControlPlaneUoW()
-    registry = InMemoryTransformerRegistry()
+    registry = TransformerRegistry()
     use_case = BindStreamTransformationUseCase(uow, transformer_registry=registry)
 
     command = BindStreamTransformationCommand(

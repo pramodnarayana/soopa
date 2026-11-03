@@ -1,39 +1,44 @@
-"""Pure zero-mock unit tests for IP Transactions HTTP DTO mappers."""
+"""Pure zero-mock unit tests for IP Trace HTTP DTO mappers."""
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from strace.domain import TraceStatus
-
-from ip.engine.adapters.inbound.api.dtos.transaction_dtos import (
+from ip.engine.adapters.inbound.api.dtos.replay_dtos import (
     map_bulk_replay_result_to_http,
-    map_ip_trace_dto_to_http,
-    map_lineage_item_to_http,
     map_replay_result_to_http,
 )
-from ip.engine.application.dtos.trace import (
-    BulkReplayFailureItemDTO,
-    BulkReplayResultDTO,
+from ip.engine.adapters.inbound.api.dtos.trace_dtos import (
+    map_ip_trace_dto_to_http,
+    map_lineage_item_to_http,
+)
+from ip.engine.application.responses import (
     IpTraceDTO,
     IpTraceLineageItemDTO,
-    ReplayTransactionResultDTO,
 )
-from ip.engine.domain.enums import (
-    OutboundDispatchStatus,
-    PipelineLayer,
+from ip.engine.application.use_cases.replay.bulk_replay_stage_use_case import (
+    BulkReplayFailureItemDTO,
+    BulkReplayStageResultDTO,
+)
+from ip.engine.application.use_cases.replay.replay_stage_use_case import (
     ReplayStage,
-    TimelineStatus,
+    ReplayStageResultDTO,
 )
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.enums import PipelineStage
 from ip.engine.domain.exceptions import IpErrorCode
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.models.timeline_entry import IpTraceEvent
-from ip.engine.domain.normalization import NormalizationRejectionEntry
+from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.trace import (
+    IpTraceEventType,
+    TraceEventStatus,
+)
+from ip.engine.domain.trace import IpTraceStatus as TraceStatus
+from ip.engine.domain.trace.trace_event import IpTraceEvent
 
 
 def test_map_ip_trace_dto_to_http_maps_all_five_layers_and_decimals() -> None:
@@ -126,10 +131,10 @@ def test_map_ip_trace_dto_to_http_maps_all_five_layers_and_decimals() -> None:
         tenant_id=tenant_id,
         trace_id=trace_id,
         correlation_id="MTR-100",
-        event_type="L5_DELIVERED",
+        event_type=IpTraceEventType.DISPATCH_DELIVERED.value,
         actor="SYSTEM",
-        layer=PipelineLayer.L5_DELIVER,
-        status=TimelineStatus.SUCCESS,
+        stage=PipelineStage.DELIVER,
+        status=TraceEventStatus.SUCCESS,
         summary_message="Delivered to SAP IS-U.",
     )
 
@@ -187,7 +192,7 @@ def test_map_lineage_and_replay_results_to_http() -> None:
     assert http_lineage.status == "INGESTED"
     assert http_lineage.created_at == now.isoformat()
 
-    replay_res = ReplayTransactionResultDTO(
+    replay_res = ReplayStageResultDTO(
         original_trace_id="ip_trc_root",
         parent_trace_id="ip_trc_root",
         new_trace_id="ip_trc_child",
@@ -200,7 +205,7 @@ def test_map_lineage_and_replay_results_to_http() -> None:
     assert http_replay.new_trace_id == "ip_trc_child"
     assert http_replay.stage == "RETRY_INGEST"
 
-    bulk_res = BulkReplayResultDTO(
+    bulk_res = BulkReplayStageResultDTO(
         stage=ReplayStage.RETRY_INGEST,
         replayed_count=1,
         succeeded_trace_ids=("ip_trc_root",),

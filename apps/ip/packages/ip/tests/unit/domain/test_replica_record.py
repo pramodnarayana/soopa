@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import CursorKind, IpTraceEventType, MergeOutcome
-from ip.engine.domain.events import ReplicaRecordChangedEvent
-from ip.engine.domain.models.replica_record import (
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    MergeOutcome,
+)
+from ip.engine.domain.replication.events import ReplicaRecordChangedEvent
+from ip.engine.domain.replication.replica_record import (
     ReplicaRecord,
     ReplicaRejection,
     _is_cursor_stale,
     compute_data_hash,
 )
+from ip.engine.domain.trace.enums import IpTraceEventType
 from strace.domain import TracedAggregateRoot
 
 
@@ -38,7 +42,7 @@ def test_replica_record_create_and_idempotent_update_snapshot() -> None:
     assert replica.id.startswith("ip_rep_")
     assert replica.version == 1
     assert len(replica.trace_events) == 1
-    assert replica.trace_events[0].event_type == IpTraceEventType.L2_REPLICA_CREATED.value
+    assert replica.trace_events[0].event_type == IpTraceEventType.REPLICA_CREATED.value
     assert len(replica.domain_events) == 1
     assert isinstance(replica.domain_events[0], ReplicaRecordChangedEvent)
     assert replica.domain_events[0].outcome == MergeOutcome.INSERT.value
@@ -73,7 +77,7 @@ def test_replica_record_create_and_idempotent_update_snapshot() -> None:
     assert replica.parent_trace_id == "ip_trc_01"
     assert replica.replay_count == 1
     assert len(replica.trace_events) == 1
-    assert replica.trace_events[0].event_type == IpTraceEventType.L2_REPLICA_UPDATED.value
+    assert replica.trace_events[0].event_type == IpTraceEventType.REPLICA_UPDATED.value
     assert len(replica.domain_events) == 1
     event = replica.domain_events[0]
     assert isinstance(event, ReplicaRecordChangedEvent)

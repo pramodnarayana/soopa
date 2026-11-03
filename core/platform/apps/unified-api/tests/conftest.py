@@ -8,10 +8,10 @@ import tempfile
 import database.provider
 import edi.bootstrap.lifespan
 import httpx
-import ip.application.domains.energy.models as _ip_energy_models
-import ip.application.domains.tms.models as _ip_tms_models
 import ip.engine.adapters.outbound.database.models.control_plane as _ip_cp_models
 import ip.engine.adapters.outbound.database.models.data_plane as _ip_dp_models
+import ip.solutions.domains.energy.models as _ip_energy_models
+import ip.solutions.domains.tms.models as _ip_tms_models
 import pytest
 import pytest_asyncio
 from database.constants import DatabaseShardStatus
