@@ -1,11 +1,11 @@
 import asyncio
 import datetime
-from typing import cast
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 from database.models.idempotency import IdempotencyResult
 from sqlalchemy import delete, select, tuple_
-from sqlalchemy.engine import CursorResult
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.ports.outbound.ucp_idempotency_cleanup_repository_port import (
     UcpIdempotencyCleanupRepositoryPort,
@@ -13,7 +13,9 @@ from ucp.ports.outbound.ucp_idempotency_cleanup_repository_port import (
 
 
 class SqlAlchemyUcpIdempotencyCleanupRepository(UcpIdempotencyCleanupRepositoryPort):
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
         self.session_factory = session_factory
 
     async def cleanup_idempotency_results(self, retention_days: int) -> int:
@@ -23,17 +25,19 @@ class SqlAlchemyUcpIdempotencyCleanupRepository(UcpIdempotencyCleanupRepositoryP
         idempotency_deleted = 0
         async with self.session_factory() as session:
             while True:
-                stmt_idempotency = delete(IdempotencyResult).where(
-                    tuple_(IdempotencyResult.tenant_id, IdempotencyResult.idempotency_key).in_(
-                        select(IdempotencyResult.tenant_id, IdempotencyResult.idempotency_key)
-                        .where(IdempotencyResult.created_at < cutoff_date)
-                        .limit(5000)
+                stmt_idempotency = (
+                    delete(IdempotencyResult)
+                    .where(
+                        tuple_(IdempotencyResult.tenant_id, IdempotencyResult.idempotency_key).in_(
+                            select(IdempotencyResult.tenant_id, IdempotencyResult.idempotency_key)
+                            .where(IdempotencyResult.created_at < cutoff_date)
+                            .limit(5000)
+                        )
                     )
+                    .returning(IdempotencyResult.idempotency_key)
                 )
-                res_idempotency = cast(
-                    CursorResult[tuple[()]], await session.execute(stmt_idempotency)
-                )
-                deleted = res_idempotency.rowcount
+                res_idempotency = await session.execute(stmt_idempotency)
+                deleted = len(res_idempotency.scalars().all())
                 idempotency_deleted += deleted
                 await session.commit()
                 if deleted < 5000:

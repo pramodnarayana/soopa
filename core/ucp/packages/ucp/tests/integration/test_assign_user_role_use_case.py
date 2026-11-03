@@ -1,17 +1,17 @@
 import pytest
-from identity.domain.models.authorization import Role
-from identity.domain.models.user import User
+from identity.domain.authorization import Role
+from identity.domain.user import User
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.roles.assign_user_role_use_case import (
     AssignUserRoleCommand,
     AssignUserRoleUseCase,
 )
-from ucp.domain.exceptions import ResourceNotFoundError
-from ucp.domain.models.tenant import Tenant
+from ucp.bootstrap.container import create_ucp_uow
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
+from ucp.domain.exceptions import UcpErrorCode
+from ucp.domain.tenant import Tenant
 
 pytestmark = pytest.mark.integration
 
@@ -22,35 +22,29 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
     Narrow integration test for AssignUserRoleUseCase.
     Uses the real PostgreSQL database and actual Repositories to test the full flow.
     """
-    uow = SqlAlchemyUcpUnitOfWork(db_session)
+    uow = create_ucp_uow(db_session)
     use_case = AssignUserRoleUseCase(uow)
 
-    # 1. Setup Data
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     user_id = generate_id(DomainIdPrefix.USER)
     role_id = generate_id(DomainIdPrefix.ROLE)
-
-    # Seed Tenant first (required for foreign key relationship)
 
     tenant = Tenant.create(
         id=tenant_id,
         name=f"Test Tenant {generate_random_hex(6)}",
         slug=f"test-tenant-{generate_random_hex(6)}",
         idp_tenant_id=None,
-    )  # Override generated ID for test consistency
+    ).unwrap()
     await uow.tenant_repo.save(tenant)
 
-    # Seed User
     user = User.create(
         id=user_id,
         idp_user_id=None,
         email=f"test_{generate_random_hex(6)}@example.com",
         name="Integration Test User",
-    )
+    ).unwrap()
     await uow.user_repo.save(user)
 
-    # Seed Role and assign to user — replaces the old TenantUser junction table.
-    # find_by_id_and_tenant now joins on identity.user_roles via PBAC.
     seed_role_id = generate_id(DomainIdPrefix.ROLE)
     seed_role = Role.create(
         id=seed_role_id,
@@ -63,7 +57,6 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
     await db_session.flush()
     await uow.role_repo.assign_user_role(tenant_id=tenant_id, user_id=user_id, role_id=seed_role_id)
 
-    # Seed Role
     role = Role.create(
         id=role_id,
         tenant_id=tenant_id,
@@ -74,52 +67,56 @@ async def test_assign_user_role_integration(db_session: AsyncSession) -> None:
     await uow.role_repo.save(role)
     await db_session.flush()
 
-    # 2. Execute Use Case
     request = AssignUserRoleCommand(user_id=user_id, role_id=role_id)
-    await use_case.execute(tenant_id=tenant_id, request=request)
+    res = await use_case.execute(tenant_id=tenant_id, request=request)
+    assert res.is_ok
 
-    # 3. Verify
-    # Check if the role capability is now attached to the user for that tenant
     capabilities = await uow.role_repo.get_user_capabilities(tenant_id, user_id)
     assert "users:write" in capabilities
 
 
 @pytest.mark.asyncio
 async def test_assign_user_role_not_found(db_session: AsyncSession) -> None:
-    uow = SqlAlchemyUcpUnitOfWork(db_session)
+    uow = create_ucp_uow(db_session)
     use_case = AssignUserRoleUseCase(uow)
 
     tenant_id = generate_id(DomainIdPrefix.TENANT)
-    request = AssignUserRoleCommand(user_id="iam_usr_doesnt_exist", role_id="iam_rol_xyz")
+    request = AssignUserRoleCommand(
+        user_id=generate_id(DomainIdPrefix.USER),
+        role_id=generate_id(DomainIdPrefix.ROLE),
+    )
 
-    with pytest.raises(ResourceNotFoundError):
-        await use_case.execute(tenant_id=tenant_id, request=request)
+    res = await use_case.execute(tenant_id=tenant_id, request=request)
+    assert res.is_err
+    assert res.unwrap_err().code == UcpErrorCode.USER_NOT_FOUND
 
 
 @pytest.mark.asyncio
 async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None:
     """
-    Narrow integration test: assigning a non-existent role_id must raise ResourceNotFoundError.
+    Narrow integration test: assigning a non-existent role_id must return ROLE_NOT_FOUND.
     The user and tenant exist — only the role is missing.
     """
-    uow = SqlAlchemyUcpUnitOfWork(db_session)
+    uow = create_ucp_uow(db_session)
     use_case = AssignUserRoleUseCase(uow)
 
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     user_id = generate_id(DomainIdPrefix.USER)
-    role_id = generate_id(DomainIdPrefix.ROLE)  # never seeded
+    role_id = generate_id(DomainIdPrefix.ROLE)
 
     tenant = Tenant.create(
         id=tenant_id,
         name=f"Tenant {tenant_id}",
         slug=f"tenant-{tenant_id}",
         idp_tenant_id=None,
-    )
+    ).unwrap()
     await uow.tenant_repo.save(tenant)
 
-    user = User.create(id=user_id, idp_user_id=None, email=f"{user_id}@test.com", name="Test User")
+    user = User.create(
+        id=user_id, idp_user_id=None, email=f"{user_id}@test.com", name="Test User"
+    ).unwrap()
     await uow.user_repo.save(user)
-    # Seed PBAC membership so find_by_id_and_tenant can resolve the user.
+
     seed_role_id2 = generate_id(DomainIdPrefix.ROLE)
     seed_role2 = Role.create(
         id=seed_role_id2,
@@ -137,5 +134,6 @@ async def test_assign_user_role_role_not_found(db_session: AsyncSession) -> None
 
     request = AssignUserRoleCommand(user_id=user_id, role_id=role_id)
 
-    with pytest.raises(ResourceNotFoundError):
-        await use_case.execute(tenant_id=tenant_id, request=request)
+    res = await use_case.execute(tenant_id=tenant_id, request=request)
+    assert res.is_err
+    assert res.unwrap_err().code == UcpErrorCode.ROLE_NOT_FOUND

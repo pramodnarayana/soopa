@@ -1,5 +1,5 @@
 import secrets
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from database.models.identity import Tenant as OrmTenant
@@ -93,6 +93,22 @@ async def test_api_token_repository_lifecycle(
         client_token = await repo.get_by_client_id(created_token.client_id)
         assert client_token is not None
         assert client_token.id == created_token.id
+
+        # 4b. Expired token is excluded by get_by_client_id
+        expired_domain = ApiToken(
+            id=f"{created_token.id}_expired",
+            tenant_id=created_token.tenant_id,
+            name="Expired Token",
+            client_id=f"{created_token.client_id}_expired",
+            secret_hash=created_token.secret_hash,
+            last_used_at=None,
+            expires_at=datetime.now(UTC) - timedelta(seconds=1),
+            active=True,
+            created_at=datetime.now(UTC) - timedelta(hours=1),
+            updated_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+        await repo.save(expired_domain)
+        assert await repo.get_by_client_id(expired_domain.client_id) is None
 
         # 5. Update Token via Aggregate Behavior + save()
         assert created_token.rename("Updated Token Name").is_ok

@@ -1,14 +1,20 @@
 from database.provider import DatabaseProvider
 from dependency_injector import containers, providers
-from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
-from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
-from identity.adapters.outbound.database.user_repository import PostgresUserRepository
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
+from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
+    SqlAlchemyGlobalOutboxRepository,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
+from ucp_models.events import UcpOutbox
 
-from ucp.adapters.outbound.database.postgres_app_repository import PostgresAppRepository
-from ucp.adapters.outbound.database.postgres_outbox_repository import PostgresOutboxRepository
-from ucp.adapters.outbound.database.tenant_query_service import DatabaseTenantQueryService
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.app_repository import SqlAlchemyAppRepository
+from ucp.adapters.outbound.database.idempotency_repository import SqlAlchemyIdempotencyRepository
+from ucp.adapters.outbound.database.tenant_query_service import SqlAlchemyTenantQueryService
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
+from ucp.adapters.outbound.database.webhook_repository import SqlAlchemyWebhookRepository
 from ucp.application.use_cases.api_tokens import (
     CreateApiTokenUseCase,
     DeleteApiTokenUseCase,
@@ -31,6 +37,21 @@ from ucp.application.use_cases.webhooks import (
     ListWebhooksUseCase,
     UpdateWebhookUseCase,
 )
+from ucp.domain.constants import UcpOutboxSource
+
+
+def create_ucp_uow(session: AsyncSession) -> SqlAlchemyUcpUnitOfWork:
+    """Composition root factory assembling SqlAlchemyUcpUnitOfWork with concrete repositories."""
+    return SqlAlchemyUcpUnitOfWork(
+        session,
+        tenant_repo=SqlAlchemyTenantRepository(session=session),
+        user_repo=SqlAlchemyUserRepository(session=session),
+        api_token_repo=SqlAlchemyApiTokenRepository(session=session),
+        app_repo=SqlAlchemyAppRepository(session=session),
+        role_repo=SqlAlchemyRoleRepository(session=session),
+        webhook_repo=SqlAlchemyWebhookRepository(session=session),
+        idempotency_repo=SqlAlchemyIdempotencyRepository(session=session),
+    )
 
 
 class Container(containers.DeclarativeContainer):
@@ -52,21 +73,24 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     # Database Repositories (Session provided at runtime via kwargs)
     # -----------------------------------------------------------------------
-    tenant_repo = providers.Factory(TenantRepository)
-    tenant_query_service = providers.Factory(DatabaseTenantQueryService)
-    app_repo = providers.Factory(PostgresAppRepository)
-    user_repo = providers.Factory(PostgresUserRepository)
-    api_token_repo = providers.Factory(PostgresApiTokenRepository)
-    role_repo = providers.Factory(PostgresRoleRepository)
+    tenant_repo = providers.Factory(SqlAlchemyTenantRepository)
+    tenant_query_service = providers.Factory(SqlAlchemyTenantQueryService)
+    app_repo = providers.Factory(SqlAlchemyAppRepository)
+    user_repo = providers.Factory(SqlAlchemyUserRepository)
+    api_token_repo = providers.Factory(SqlAlchemyApiTokenRepository)
+    role_repo = providers.Factory(SqlAlchemyRoleRepository)
     session_factory_provider = db_provider.provided.session_factory
     outbox_repo = providers.Factory(
-        PostgresOutboxRepository, session_factory=session_factory_provider
+        SqlAlchemyGlobalOutboxRepository,
+        session_factory=session_factory_provider,
+        model_cls=UcpOutbox,
+        source=UcpOutboxSource.UCP.value,
     )
 
     # -----------------------------------------------------------------------
     # Unit Of Work (Session provided at runtime via kwargs)
     # -----------------------------------------------------------------------
-    uow = providers.Factory(SqlAlchemyUcpUnitOfWork)
+    uow = providers.Factory(create_ucp_uow)
 
     # -----------------------------------------------------------------------
     # Services & Use Cases

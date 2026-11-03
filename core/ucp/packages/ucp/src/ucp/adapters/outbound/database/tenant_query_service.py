@@ -17,7 +17,7 @@ from ucp.ports.outbound.tenant_query_service_port import (
 logger = structlog.get_logger(__name__)
 
 
-class DatabaseTenantQueryService(TenantQueryServicePort):
+class SqlAlchemyTenantQueryService(TenantQueryServicePort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
@@ -26,7 +26,8 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
     # Fixes C2 (DRY violation: 3 identical construction blocks collapsed to 1).
     # ------------------------------------------------------------------
 
-    def _map_row(self, row: DbTenant, app_slugs: list[str]) -> TenantReadModel:
+    @staticmethod
+    def _to_read_model(row: DbTenant, app_slugs: list[str]) -> TenantReadModel:
         return TenantReadModel(
             id=row.id,
             name=row.name,
@@ -97,7 +98,7 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
         for tenant_id, app_slug in subs_result:
             subs_by_tenant.setdefault(tenant_id, []).append(app_slug)
 
-        items = [self._map_row(row, subs_by_tenant.get(row.id, [])) for row in rows]
+        items = [self._to_read_model(row, subs_by_tenant.get(row.id, [])) for row in rows]
         return PaginatedTenants(items=items, total=total, page=page, limit=limit)
 
     async def get_tenant_by_id(self, tenant_id: str) -> TenantReadModel | None:
@@ -112,7 +113,7 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
             return None
 
         app_slugs = await self._load_app_slugs(row.id)
-        return self._map_row(row, app_slugs)
+        return self._to_read_model(row, app_slugs)
 
     async def get_tenant_by_slug(self, slug: str) -> TenantReadModel | None:
         stmt = select(DbTenant).where(DbTenant.slug == slug, DbTenant.deleted_at.is_(None))
@@ -123,4 +124,4 @@ class DatabaseTenantQueryService(TenantQueryServicePort):
             return None
 
         app_slugs = await self._load_app_slugs(row.id)
-        return self._map_row(row, app_slugs)
+        return self._to_read_model(row, app_slugs)

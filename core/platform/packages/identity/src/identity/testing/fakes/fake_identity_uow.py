@@ -130,7 +130,14 @@ class FakeApiTokenRepository(ApiTokenRepositoryPort):
         return False
 
     async def get_by_client_id(self, client_id: str) -> ApiToken | None:
-        return next((t for t in self.tokens if t.client_id == client_id and t.active), None)
+        return next(
+            (
+                t
+                for t in self.tokens
+                if t.client_id == client_id and t.active and not t.is_expired()
+            ),
+            None,
+        )
 
 
 class FakeIdentityUnitOfWork(IdentityUnitOfWorkPort):

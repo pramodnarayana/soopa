@@ -30,6 +30,7 @@ from identity.adapters.outbound.zitadel import (
     ZitadelMachineAuthenticationError,
     ZitadelMachineTokenProvider,
 )
+from shttp import HttpClient
 from sqlalchemy import text
 
 load_dotenv()
@@ -141,9 +142,16 @@ async def main() -> None:
         )
     else:
         try:
-            async with httpx.AsyncClient() as http_client:
-                token_provider = ZitadelMachineTokenProvider(zitadel_url, machine_key)
-                access_token = await token_provider.get_access_token(http_client)
+            async with (
+                HttpClient(allow_private_ips=True) as auth_client,
+                httpx.AsyncClient() as http_client,
+            ):
+                token_provider = ZitadelMachineTokenProvider(
+                    zitadel_url,
+                    machine_key,
+                    allow_private_ips=True,
+                )
+                access_token = await token_provider.get_access_token(auth_client)
                 all_orgs = await list_all_orgs(http_client, zitadel_url, access_token)
 
                 tenant_orgs = [

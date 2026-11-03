@@ -1,4 +1,5 @@
 import asyncio
+import copy
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import TracebackType
@@ -46,7 +47,7 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
 
     @staticmethod
     def _envelope_to_dict(event: EventEnvelope) -> JsonDict:
-        return event.to_dict()
+        return copy.deepcopy(event.to_dict())
 
     async def publish(self, event: EventEnvelope) -> None:
         """Enqueue a single EventEnvelope as its dict representation."""
@@ -73,7 +74,7 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
             yield None
             return
 
-        payload = await self.queue.get()
+        stored_payload = await self.queue.get()
         acknowledged = False
 
         async def ack() -> None:
@@ -83,16 +84,16 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
 
         async def nack() -> None:
             nonlocal acknowledged
-            # Re-enqueue the message to simulate SQS redelivery after visibility timeout
-            await self.queue.put(payload)
+            # Re-enqueue an isolated broker copy to simulate SQS redelivery after visibility timeout
+            await self.queue.put(copy.deepcopy(stored_payload))
             self.queue.task_done()
             acknowledged = True
 
         try:
-            yield AckableMessage(payload=payload, ack=ack, nack=nack)
+            yield AckableMessage(payload=copy.deepcopy(stored_payload), ack=ack, nack=nack)
         finally:
             if not acknowledged:
-                await self.queue.put(payload)
+                await self.queue.put(copy.deepcopy(stored_payload))
                 self.queue.task_done()
 
     # -------------------------------------------------------------------------

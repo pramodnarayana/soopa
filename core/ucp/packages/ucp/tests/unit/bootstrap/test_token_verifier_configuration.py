@@ -44,6 +44,7 @@ def _make_settings(issuer: str, api_url: str):
         oauth_client_id="test-client-id",
         platform_org_id="test-org-id",
         tenant_role_group="TenantAdmin",
+        allow_private_ips=False,
     )
     return SimpleNamespace(
         # Raw fields

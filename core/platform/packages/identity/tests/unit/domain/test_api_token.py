@@ -95,3 +95,38 @@ def test_api_token_record_usage_validates_active_and_expiration() -> None:
     revoked_usage = token.record_usage(used_at=now)
     assert revoked_usage.is_err
     assert revoked_usage.unwrap_err().code == IdentityErrorCode.TOKEN_INACTIVE
+
+
+def test_api_token_is_expired_handles_none_boundary_and_naive_timestamps() -> None:
+    now = datetime.now(UTC)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+
+    non_expiring = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Non Expiring",
+        client_id=_client_id(),
+        secret_hash="hash_xyz",
+        expires_at=None,
+    ).unwrap()
+    assert non_expiring.is_expired(at=now + timedelta(days=3650)) is False
+
+    expiring = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Expiring",
+        client_id=_client_id(),
+        secret_hash="hash_xyz",
+        expires_at=now + timedelta(minutes=5),
+    ).unwrap()
+    assert expiring.is_expired(at=now + timedelta(minutes=4, seconds=59)) is False
+    assert expiring.is_expired(at=now + timedelta(minutes=5)) is True
+    assert expiring.is_expired(at=now + timedelta(minutes=6)) is True
+
+    naive_expiring = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Naive Expiring",
+        client_id=_client_id(),
+        secret_hash="hash_xyz",
+        expires_at=(now + timedelta(minutes=5)).replace(tzinfo=None),
+    ).unwrap()
+    assert naive_expiring.is_expired(at=now) is False
+    assert naive_expiring.is_expired(at=now + timedelta(minutes=5)) is True

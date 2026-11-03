@@ -5,7 +5,22 @@ This module has zero external dependencies and is fully testable in isolation.
 
 import re
 
-from ucp.domain.exceptions import InvalidTenantNameError
+from seedwork.domain.exceptions import Result
+
+from ucp.domain.exceptions import InvalidTenantNameError, InvalidTenantSlugError, UcpError
+
+
+def try_generate_slug(name: str) -> Result[str, UcpError]:
+    """Pure Result-returning variant of generate_slug for first-class error handling."""
+    slug = name.lower().strip()
+    slug = _transliterate(slug)
+    slug = re.sub(r"[^a-z0-9\s_\-]", "", slug)
+    slug = re.sub(r"[\s_]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug)
+    slug = slug.strip("-")
+    if not slug:
+        return Result.fail(InvalidTenantSlugError.for_name(name))
+    return Result.ok(slug)
 
 
 def generate_slug(name: str) -> str:

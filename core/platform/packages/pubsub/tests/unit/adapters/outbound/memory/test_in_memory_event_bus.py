@@ -217,3 +217,74 @@ async def test_full_round_trip_publish_poll_ack() -> None:
 def test_in_memory_event_bus_satisfies_message_consumer_port_protocol() -> None:
     bus = InMemoryEventBus()
     assert isinstance(bus, MessageConsumerPort)
+
+
+@pytest.mark.asyncio
+async def test_publish_and_publish_batch_snapshot_nested_payloads() -> None:
+    bus = InMemoryEventBus()
+    single_payload: JsonDict = {"nested": {"status": "new"}, "tags": ["a"]}
+    batch_payload: JsonDict = {"nested": {"count": 1}, "tags": ["b"]}
+
+    single_event = EventEnvelope(
+        id=generate_id(SystemIdPrefix.EVENT.value),
+        source="test-service",
+        event_type="order.updated",
+        tenant_id=generate_id("iam_ten"),
+        idempotency_key=generate_id(SystemIdPrefix.IDEMPOTENCY.value),
+        payload=single_payload,
+    )
+    batch_event = EventEnvelope(
+        id=generate_id(SystemIdPrefix.EVENT.value),
+        source="test-service",
+        event_type="order.batched",
+        tenant_id=generate_id("iam_ten"),
+        idempotency_key=generate_id(SystemIdPrefix.IDEMPOTENCY.value),
+        payload=batch_payload,
+    )
+
+    await bus.publish(single_event)
+    await bus.publish_batch([batch_event])
+
+    # Mutate nested structures in-place after publishing
+    assert isinstance(single_event.payload["nested"], dict)
+    assert isinstance(single_event.payload["tags"], list)
+    single_event.payload["nested"]["status"] = "mutated"
+    single_event.payload["tags"].append("leaked")
+
+    assert isinstance(batch_event.payload["nested"], dict)
+    assert isinstance(batch_event.payload["tags"], list)
+    batch_event.payload["nested"]["count"] = 999
+    batch_event.payload["tags"].append("leaked")
+
+    first = bus.queue.get_nowait()
+    second = bus.queue.get_nowait()
+    assert first["payload"] == {"nested": {"status": "new"}, "tags": ["a"]}
+    assert second["payload"] == {"nested": {"count": 1}, "tags": ["b"]}
+
+
+@pytest.mark.asyncio
+async def test_nack_redelivers_unmutated_payload_when_consumer_mutates_in_place() -> None:
+    bus = InMemoryEventBus()
+    event = EventEnvelope(
+        id=generate_id(SystemIdPrefix.EVENT.value),
+        source="test-service",
+        event_type="order.updated",
+        tenant_id=generate_id("iam_ten"),
+        idempotency_key=generate_id(SystemIdPrefix.IDEMPOTENCY.value),
+        payload={"nested": {"attempt": 0}},
+    )
+    await bus.publish(event)
+
+    async with bus.poll_raw_message() as msg:
+        assert msg is not None
+        inner_payload = msg.payload["payload"]
+        assert isinstance(inner_payload, dict)
+        nested = inner_payload["nested"]
+        assert isinstance(nested, dict)
+        nested["attempt"] = 99
+        await msg.nack()
+
+    async with bus.poll_raw_message() as redelivered:
+        assert redelivered is not None
+        assert redelivered.payload["payload"] == {"nested": {"attempt": 0}}
+        await redelivered.ack()

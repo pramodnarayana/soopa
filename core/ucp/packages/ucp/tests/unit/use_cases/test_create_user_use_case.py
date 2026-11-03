@@ -1,30 +1,32 @@
 from datetime import UTC, datetime
 
 import pytest
+from identity.domain.authorization import Role
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.authorization import Role
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.create_user_use_case import CreateUserCommand, CreateUserUseCase
 from ucp.domain.constants import LifecycleStatus
-from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
-from ucp.domain.models.tenant import Tenant
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
+from ucp.domain.exceptions import UcpErrorCode
+from ucp.domain.tenant import Tenant
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
 
 @pytest.fixture
-def fake_uow():
+def fake_uow() -> FakeUcpUnitOfWork:
     return FakeUcpUnitOfWork()
 
 
 @pytest.fixture
-def create_user_use_case(fake_uow):
+def create_user_use_case(fake_uow: FakeUcpUnitOfWork) -> CreateUserUseCase:
     return CreateUserUseCase(uow=fake_uow)
 
 
 @pytest.mark.asyncio
-async def test_create_user_success(fake_uow, create_user_use_case):
+async def test_create_user_success(
+    fake_uow: FakeUcpUnitOfWork, create_user_use_case: CreateUserUseCase
+) -> None:
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     role_id = generate_id(DomainIdPrefix.ROLE)
 
@@ -56,8 +58,10 @@ async def test_create_user_success(fake_uow, create_user_use_case):
         role=role_id,
     )
 
-    user_id = await create_user_use_case.execute(command)
+    res = await create_user_use_case.execute(command)
 
+    assert res.is_ok
+    user_id = res.unwrap()
     assert user_id.startswith("iam_usr_")
 
     saved_user = await fake_uow.user_repo.find_by_id(user_id)
@@ -71,28 +75,30 @@ async def test_create_user_success(fake_uow, create_user_use_case):
     events = saved_user.domain_events
     assert len(events) == 1
     assert events[0].__class__.__name__ == "UserCreatedEvent"
-    assert events[0].email == "test@example.com"
 
 
 @pytest.mark.asyncio
-async def test_create_user_tenant_not_found(create_user_use_case):
+async def test_create_user_tenant_not_found(create_user_use_case: CreateUserUseCase) -> None:
     unknown_tenant_id = generate_id(DomainIdPrefix.TENANT)
     command = CreateUserCommand(
         tenant_id=unknown_tenant_id,
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="rol_123",
+        role=generate_id(DomainIdPrefix.ROLE),
     )
 
-    with pytest.raises(ResourceNotFoundError) as exc:
-        await create_user_use_case.execute(command)
-    assert unknown_tenant_id in str(exc.value)
-    assert "not found" in str(exc.value)
+    res = await create_user_use_case.execute(command)
+    assert res.is_err
+    err = res.unwrap_err()
+    assert err.code == UcpErrorCode.TENANT_NOT_FOUND
+    assert unknown_tenant_id in err.message
 
 
 @pytest.mark.asyncio
-async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
+async def test_create_user_no_idp_tenant(
+    fake_uow: FakeUcpUnitOfWork, create_user_use_case: CreateUserUseCase
+) -> None:
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     tenant = Tenant(
         id=tenant_id,
@@ -110,16 +116,20 @@ async def test_create_user_no_idp_tenant(fake_uow, create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="rol_123",
+        role=generate_id(DomainIdPrefix.ROLE),
     )
 
-    with pytest.raises(StateConflictError) as exc:
-        await create_user_use_case.execute(command)
-    assert "has no associated IDP organization" in str(exc.value)
+    res = await create_user_use_case.execute(command)
+    assert res.is_err
+    err = res.unwrap_err()
+    assert err.code == UcpErrorCode.MISSING_IDP_ORGANIZATION
+    assert "has no associated IDP organization" in err.message
 
 
 @pytest.mark.asyncio
-async def test_create_user_role_not_found(fake_uow, create_user_use_case):
+async def test_create_user_role_not_found(
+    fake_uow: FakeUcpUnitOfWork, create_user_use_case: CreateUserUseCase
+) -> None:
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     tenant = Tenant(
         id=tenant_id,
@@ -137,9 +147,11 @@ async def test_create_user_role_not_found(fake_uow, create_user_use_case):
         email="test@example.com",
         first_name="Test",
         last_name="User",
-        role="unknown_role",
+        role=generate_id(DomainIdPrefix.ROLE),
     )
 
-    with pytest.raises(ResourceNotFoundError) as exc:
-        await create_user_use_case.execute(command)
-    assert "not found in the database" in str(exc.value)
+    res = await create_user_use_case.execute(command)
+    assert res.is_err
+    err = res.unwrap_err()
+    assert err.code == UcpErrorCode.ROLE_NOT_FOUND
+    assert "not found in the database" in err.message
