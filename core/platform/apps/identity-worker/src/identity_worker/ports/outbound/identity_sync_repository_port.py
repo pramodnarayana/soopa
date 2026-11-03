@@ -1,21 +1,25 @@
 from dataclasses import dataclass
-from typing import Any, Protocol
+from types import TracebackType
+from typing import Protocol
 
 
-@dataclass
+@dataclass(frozen=True)
 class SyncUser:
     id: str
     idp_user_id: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class SyncTenant:
     id: str
+    name: str
     idp_tenant_id: str | None
 
 
 class IdentitySyncRepositoryPort(Protocol):
     async def get_tenant(self, tenant_id: str) -> SyncTenant | None: ...
+
+    async def update_tenant_idp_mapping(self, tenant_id: str, idp_tenant_id: str) -> None: ...
 
     async def get_user(self, user_id: str) -> SyncUser | None: ...
 
@@ -25,9 +29,15 @@ class IdentitySyncRepositoryPort(Protocol):
 
 
 class IdentitySyncUnitOfWorkPort(Protocol):
-    repo: IdentitySyncRepositoryPort
+    @property
+    def repo(self) -> IdentitySyncRepositoryPort: ...
 
     async def __aenter__(self) -> "IdentitySyncUnitOfWorkPort": ...
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None: ...
     async def commit(self) -> None: ...
     async def rollback(self) -> None: ...

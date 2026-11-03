@@ -14,7 +14,7 @@ from edi.adapters.outbound.security.smime import (
     sign_payload,
     verify_signature,
 )
-from edi.domain.enums import As2EncryptionAlgorithm, EncryptionAlgorithm
+from edi.domain.partner.as2.enums import As2EncryptionAlgorithm, EncryptionAlgorithm
 
 
 def test_encryption_enums_reject_unsupported_algorithms() -> None:

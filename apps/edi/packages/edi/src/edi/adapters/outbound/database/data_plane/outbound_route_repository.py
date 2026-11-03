@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.data_plane.exceptions import ReadOnlyDataPlaneRepositoryError
-from edi.adapters.outbound.database.models.data_plane import OutboundRoute
-from edi.domain.enums import EdiConnectionType
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.adapters.outbound.database.models.data_plane import OutboundRoute as OrmOutboundRoute
+from edi.domain.routing.enums import EdiConnectionType
+from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 
 
@@ -14,38 +14,36 @@ class SqlAlchemyDataPlaneOutboundRouteRepository(OutboundRouteRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def save(self, aggregate: OutboundRouteDomainModel) -> None:
+    async def save(self, aggregate: OutboundRoute) -> None:
         raise ReadOnlyDataPlaneRepositoryError("Data Plane configs are read-only")
 
-    async def delete(self, aggregate: OutboundRouteDomainModel) -> None:
+    async def delete(self, aggregate: OutboundRoute) -> None:
         raise ReadOnlyDataPlaneRepositoryError("Data Plane configs are read-only")
 
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
-    ) -> OutboundRouteDomainModel | None:
-        stmt = select(OutboundRoute).where(
-            OutboundRoute.tenant_id == tenant_id,
-            OutboundRoute.trading_partner_id == trading_partner_id,
+    ) -> OutboundRoute | None:
+        stmt = select(OrmOutboundRoute).where(
+            OrmOutboundRoute.tenant_id == tenant_id,
+            OrmOutboundRoute.trading_partner_id == trading_partner_id,
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
-    async def get_outbound_route(
-        self, tenant_id: str, route_id: str
-    ) -> OutboundRouteDomainModel | None:
-        stmt = select(OutboundRoute).where(
-            OutboundRoute.tenant_id == tenant_id, OutboundRoute.id == route_id
+    async def get_outbound_route(self, tenant_id: str, route_id: str) -> OutboundRoute | None:
+        stmt = select(OrmOutboundRoute).where(
+            OrmOutboundRoute.tenant_id == tenant_id, OrmOutboundRoute.id == route_id
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
     async def list_outbound_routes(
         self, tenant_id: str, limit: int = 100, offset: int = 0
-    ) -> Sequence[OutboundRouteDomainModel]:
+    ) -> Sequence[OutboundRoute]:
         stmt = (
-            select(OutboundRoute)
-            .where(OutboundRoute.tenant_id == tenant_id)
-            .order_by(OutboundRoute.id)
+            select(OrmOutboundRoute)
+            .where(OrmOutboundRoute.tenant_id == tenant_id)
+            .order_by(OrmOutboundRoute.id)
             .limit(limit)
             .offset(offset)
         )
@@ -53,8 +51,8 @@ class SqlAlchemyDataPlaneOutboundRouteRepository(OutboundRouteRepositoryPort):
         return [self._to_domain_model(r) for r in records]
 
     @staticmethod
-    def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
-        return OutboundRouteDomainModel(
+    def _to_domain_model(record: OrmOutboundRoute) -> OutboundRoute:
+        return OutboundRoute(
             id=record.id,
             tenant_id=record.tenant_id,
             trading_partner_id=record.trading_partner_id,

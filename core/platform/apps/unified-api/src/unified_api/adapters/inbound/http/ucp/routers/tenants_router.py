@@ -4,14 +4,11 @@ from typing import Annotated
 import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from identity.domain.authorization import Capability
 from identity.domain.identity_context import IdentityContext
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-
-logger = structlog.get_logger(__name__)
-
-from identity.domain.models.authorization import Capability
-from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from ucp.application.use_cases.delete_tenant_use_case import DeleteTenantUseCase
 from ucp.application.use_cases.provision_tenant_use_case import (
     ProvisionTenantCommand,
@@ -36,8 +33,7 @@ from ucp.application.use_cases.update_tenant_name_use_case import (
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 from ucp.domain.constants import LifecycleStatus
-from ucp.domain.exceptions import ResourceNotFoundError
-from ucp.domain.models.tenant import Tenant
+from ucp.domain.tenant import Tenant
 from ucp.ports.outbound.tenant_query_service_port import TenantQueryServicePort
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
@@ -49,6 +45,9 @@ from unified_api.adapters.inbound.http.ucp.dtos.tenant_dtos import (
     UpdateTenantNameRequest,
     UpdateTenantStatusRequest,
 )
+from unified_api.adapters.inbound.http.ucp.error_mapper import raise_http_for_ucp_error
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/tenants", tags=["Tenants"])
 
@@ -115,7 +114,7 @@ async def get_roles(
     ]
 
 
-async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> "Tenant":
+async def resolve_tenant(id: str, tenant_repo: TenantRepositoryPort) -> Tenant:
     tenant = await tenant_repo.find_by_id(id)
     if not tenant:
         tenant = await tenant_repo.find_by_idp_tenant_id(id)
@@ -166,12 +165,11 @@ async def provision(
     use_case: ProvisionTenantUseCase = use_case_factory(uow__session=session)
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
-    # We enforce PLATFORM_ADMIN capability, so request.state.identity is guaranteed to be present
     identity: IdentityContext = request.state.identity
     creator_id = identity.subject
 
     if not creator_id:
-        logger.warning(
+        logger.error(
             "tenant_creation_failed",
             reason="missing_creator_id",
             error="creator ID missing from context",
@@ -182,8 +180,11 @@ async def provision(
         )
 
     command = ProvisionTenantCommand(name=dto.name)
-    tenant = await use_case.execute(command, idempotency_key)
+    res = await use_case.execute(command, idempotency_key)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
 
+    tenant = res.unwrap()
     tenant_rm = await query_service.get_tenant_by_id(tenant.id)
     assert tenant_rm is not None
     return TenantResponse.from_read_model(tenant_rm)
@@ -212,7 +213,9 @@ async def update_name(
     query_service: TenantQueryServicePort = query_service_factory(session=session)
 
     command = UpdateTenantNameCommand(tenant_id=tenant_id, name=dto.name)
-    await use_case.execute(command, idempotency_key)
+    res = await use_case.execute(command, idempotency_key)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
 
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     assert tenant_rm is not None
@@ -244,7 +247,9 @@ async def update_status(
     command = ToggleTenantStatusCommand(
         tenant_id=tenant_id, is_active=(LifecycleStatus(dto.status) == LifecycleStatus.ACTIVE)
     )
-    await use_case.execute(command, idempotency_key)
+    res = await use_case.execute(command, idempotency_key)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
 
     tenant_rm = await query_service.get_tenant_by_id(tenant_id)
     assert tenant_rm is not None
@@ -274,10 +279,10 @@ async def remove(
         uow__session=session,
     )
     tenant = await resolve_tenant(tenant_id, tenant_repo)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
-    await use_case.execute(tenant.id, idempotency_key)
+    res = await use_case.execute(tenant.id, idempotency_key)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
     return None
 
 
@@ -308,8 +313,6 @@ async def get_subscriptions(
 ) -> list[SubscriptionResponse]:
     tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
     tenant = await resolve_tenant(id, tenant_repo)
-    if not tenant:
-        raise HTTPException(status_code=404, detail="Tenant not found")
 
     return [
         SubscriptionResponse(
@@ -338,13 +341,9 @@ async def subscribe_app(
     use_case: SubscribeAppUseCase = use_case_factory(uow__session=session)
     command = SubscribeAppCommand(tenant_id=id, app_id=dto.appId)
 
-    try:
-        await use_case.execute(command, idempotency_key)
-    except ResourceNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        logger.exception("app_subscription_failed", tenant_id=id, app_id=dto.appId)
-        raise HTTPException(status_code=400, detail="Subscription failed") from e
+    res = await use_case.execute(command, idempotency_key)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
 
     return SubscriptionResponse(
         id=f"{id}_{dto.appId}", appId=dto.appId, tenantId=id, status=LifecycleStatus.ACTIVE
@@ -369,12 +368,8 @@ async def unsubscribe_app(
     use_case: UnsubscribeAppUseCase = use_case_factory(uow__session=session)
     command = UnsubscribeAppCommand(tenant_id=id, app_id=app_id)
 
-    try:
-        await use_case.execute(command, idempotency_key)
-    except ResourceNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e)) from e
-    except Exception as e:
-        logger.exception("app_unsubscription_failed", tenant_id=id, app_id=app_id)
-        raise HTTPException(status_code=400, detail="Unsubscription failed") from e
+    res = await use_case.execute(command, idempotency_key)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
 
     return {"success": True}

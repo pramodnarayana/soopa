@@ -1,13 +1,15 @@
+from edi.domain.exceptions import EdiTransformationError
+
+
 class TransformerError(Exception):
     """Base exception for all transformer domain errors."""
 
 
-class TransformationError(TransformerError):
+class TransformationError(TransformerError, EdiTransformationError):
     """Raised when the underlying EDI engine fails to parse the document."""
 
-    def __init__(self, message: str, errors: list[str] | None = None):
-        super().__init__(message)
-        self.errors = errors or []
+    def __init__(self, message: str, errors: list[str] | None = None) -> None:
+        EdiTransformationError.__init__(self, message=message, errors=errors)
 
 
 class ComplianceError(TransformerError):

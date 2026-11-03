@@ -5,8 +5,9 @@ from typing import Literal
 
 import structlog
 
-from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
+from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.identity_sync_repository_port import IdentitySyncUnitOfWorkPort
+from identity_worker.ports.outbound.organization_provider_port import OrganizationProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
@@ -37,14 +38,13 @@ class IdentitySyncService:
 
     def __init__(
         self,
-        identity_provider: IdentityProviderPort,
+        organization_provider: OrganizationProviderPort,
         user_identity_provider: UserIdentityProviderPort,
         uow_factory: typing.Callable[
             [], contextlib.AbstractAsyncContextManager[IdentitySyncUnitOfWorkPort]
-        ]
-        | None = None,
-    ):
-        self.identity_provider = identity_provider
+        ],
+    ) -> None:
+        self.organization_provider = organization_provider
         self.user_identity_provider = user_identity_provider
         self.uow_factory = uow_factory
 
@@ -53,10 +53,6 @@ class IdentitySyncService:
         Resolves the IDP tenant ID for the given platform tenant ID.
         Raises StateConflictError if the tenant is not provisioned.
         """
-        if self.uow_factory is None:
-            raise ValueError("uow_factory is required to resolve tenant IDs")
-
-        assert self.uow_factory is not None
         async with self.uow_factory() as uow:
             tenant = await uow.repo.get_tenant(tenant_id)
             if not tenant or not tenant.idp_tenant_id:
@@ -67,9 +63,6 @@ class IdentitySyncService:
 
     async def _resolve_idp_user_id(self, user_id: str) -> str:
         """Resolve a platform user ID to its provisioned IDP user ID."""
-        if self.uow_factory is None:
-            raise ValueError("uow_factory is required to resolve user IDs")
-
         async with self.uow_factory() as uow:
             user = await uow.repo.get_user(user_id)
             if not user or not user.idp_user_id:
@@ -83,30 +76,49 @@ class IdentitySyncService:
         Synchronizes a newly provisioned tenant to the Identity Provider.
         """
         bound_logger = logger.bind(tenant_id=tenant_id)
-        bound_logger.info("syncing_tenant_to_identity_provider", tenant_id=tenant_id)
+        bound_logger.info("syncing_tenant_to_identity_provider")
         try:
-            await self.identity_provider.sync_tenant(tenant_id)
-            bound_logger.info("identity_sync_tenant_successful", tenant_id=tenant_id)
+            async with self.uow_factory() as uow:
+                tenant = await uow.repo.get_tenant(tenant_id)
+                if not tenant:
+                    bound_logger.info("tenant_not_found_for_sync_skipping")
+                    return
+
+                if tenant.idp_tenant_id:
+                    bound_logger.info("tenant_already_synced", org_id=tenant.idp_tenant_id)
+                    return
+
+                org_id, grant_succeeded = await self.organization_provider.create_organization(
+                    tenant_id, tenant.name
+                )
+                if not grant_succeeded:
+                    raise IdentityProviderPortError(
+                        "Organization was created but its project grant could not be assigned"
+                    )
+
+                await uow.repo.update_tenant_idp_mapping(tenant_id, org_id)
+                await uow.commit()
+                bound_logger.info("identity_sync_tenant_successful", org_id=org_id)
         except Exception:
-            bound_logger.exception("identity_sync_tenant_failed", tenant_id=tenant_id)
+            bound_logger.exception("identity_sync_tenant_failed")
             raise
 
     async def handle_tenant_name_updated(self, tenant_id: str, new_name: str) -> None:
         logger.info("handling_tenant_name_updated", tenant_id=tenant_id, new_name=new_name)
         org_id = await self._resolve_idp_tenant_id(tenant_id)
-        await self.identity_provider.update_organization_name(org_id, new_name)
+        await self.organization_provider.update_organization_name(org_id, new_name)
         logger.info("tenant_name_updated_successfully", tenant_id=tenant_id, org_id=org_id)
 
     async def handle_tenant_status_toggled(self, tenant_id: str, active: bool) -> None:
         logger.info("handling_tenant_status_toggled", tenant_id=tenant_id, active=active)
         org_id = await self._resolve_idp_tenant_id(tenant_id)
-        await self.identity_provider.toggle_organization_status(org_id, active)
+        await self.organization_provider.toggle_organization_status(org_id, active)
         logger.info("tenant_status_toggled_successfully", tenant_id=tenant_id, org_id=org_id)
 
     async def handle_tenant_deleted(self, tenant_id: str) -> None:
         logger.info("handling_tenant_deleted", tenant_id=tenant_id)
         org_id = await self._resolve_idp_tenant_id(tenant_id)
-        await self.identity_provider.delete_organization(org_id)
+        await self.organization_provider.delete_organization(org_id)
         logger.info("tenant_deleted_successfully", tenant_id=tenant_id, org_id=org_id)
 
     async def handle_app_subscribed(self, tenant_id: str, idp_project_id: str | None) -> None:
@@ -121,7 +133,7 @@ class IdentitySyncService:
         bound_logger.info("syncing_app_subscription_to_identity_provider")
         try:
             idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
-            await self.identity_provider.grant_project_to_organization(
+            await self.organization_provider.grant_project_to_organization(
                 idp_tenant_id, idp_project_id
             )
             bound_logger.info("identity_sync_app_subscribed_successful")
@@ -141,7 +153,7 @@ class IdentitySyncService:
         bound_logger.info("syncing_app_unsubscription_to_identity_provider")
         try:
             idp_tenant_id = await self._resolve_idp_tenant_id(tenant_id)
-            await self.identity_provider.revoke_project_from_organization(
+            await self.organization_provider.revoke_project_from_organization(
                 idp_tenant_id, idp_project_id
             )
             bound_logger.info("identity_sync_app_unsubscribed_successful")
@@ -159,13 +171,10 @@ class IdentitySyncService:
         bound_logger = logger.bind(user_id=user_id, tenant_id=tenant_id, role=role)
         bound_logger.info("syncing_new_user_to_identity_provider", action="create")
         try:
-            if self.uow_factory is None:
-                raise ValueError("uow_factory is required to synchronize users")
-
             async with self.uow_factory() as uow:
                 local_user = await uow.repo.get_user_for_update(user_id)
                 if not local_user:
-                    bound_logger.warning("identity_sync_local_user_not_found_for_update")
+                    bound_logger.info("identity_sync_local_user_not_found_for_update")
                     return
 
                 tenant = await uow.repo.get_tenant(tenant_id)
@@ -279,7 +288,7 @@ class IdentitySyncService:
             bound_logger.exception("identity_sync_uow_rollback_failed")
 
         if created_idp_user_id and did_create:
-            bound_logger.warning(
+            bound_logger.info(
                 "identity_sync_compensating_by_deleting_user_from_idp",
                 idp_user_id=created_idp_user_id,
             )

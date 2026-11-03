@@ -1,18 +1,9 @@
 """
 EDI Domain Startup and Shutdown Hooks.
 
-These hooks initialize and tear down EDI infrastructure resources.
-They are called by the Shell's lifespan (unified_api/bootstrap/lifespan.py).
-
-Architecture note:
-  - Starlette does NOT call mounted sub-app lifespans when the parent app has
-    its own lifespan. All infrastructure initialization must therefore be
-    delegated to the Shell's lifespan via these explicit hooks.
-  - ``startup`` receives the EDI sub-app instance so that it can write
-    ``db_router`` to ``edi_app.state``. This is the same state object that
-    FastAPI's dependency injection layer reads from via ``request.app.state``
-    when a request is dispatched into the EDI sub-app.
-  - No business logic belongs here — only infrastructure wiring.
+These hooks initialize and tear down EDI infrastructure resources on the EDI
+sub-application's typed state without mutable module-level singletons or
+attribute reflection.
 """
 
 import structlog
@@ -20,14 +11,11 @@ from database.router import DatabaseRouter, DatabaseRouterPort
 from dependency_injector import providers
 from fastapi import FastAPI
 
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
 from edi.bootstrap.container import Container
 
 logger = structlog.get_logger(__name__)
-
-_db_router: DatabaseRouterPort | None = None
-_edi_container: Container | None = None
 
 
 async def startup(
@@ -40,69 +28,60 @@ async def startup(
     db_router: DatabaseRouterPort | None = None,
 ) -> None:
     """
-    Initializes the EDI DatabaseRouter and attaches it to the EDI sub-app's state.
-
-    ``app`` MUST be the EDI sub-app instance (not the Shell), because
-    ``request.app`` inside EDI route handlers resolves to the sub-app.
-    When called via ``EdiApiModule.startup(app, db_router)``, reuses the Shell's
-    shared ``db_router`` directly.
+    Initializes the EDI DatabaseRouter and attaches it to ``app.state``.
     """
-    global _db_router, _edi_container
-
+    owns_db_router = db_router is None
     if db_router is not None:
-        logger.info("EDI: Attaching shared DatabaseRouter from Host Shell.")
-        _db_router = db_router
+        logger.info("edi_attaching_shared_db_router")
+        resolved_router: DatabaseRouterPort = db_router
     else:
-        logger.info("EDI: Initializing DatabaseRouter.")
-        _db_router = DatabaseRouter(
+        logger.info("edi_initializing_db_router")
+        resolved_router = DatabaseRouter(
             global_db_url=global_db_url,
             pool_size=pool_size,
             max_overflow=max_overflow,
             shard_overrides=shard_overrides or {},
         )
-    app.state.db_router = _db_router
 
-    resolver = TenantResolver(_db_router)
+    app.state.db_router = resolved_router
+    app.state.owns_db_router = owns_db_router
+
+    resolver = SqlAlchemyTenantResolver(resolved_router)
     app.state.tenant_resolver = resolver
 
-    if hasattr(app, "container"):
-        app.container.tenant_resolver.override(providers.Object(resolver))
-        _edi_container = app.container
+    container: Container | None = app.state.edi_container
+    if container is not None:
+        container.tenant_resolver.override(providers.Object(resolver))
 
-    logger.info("EDI: DatabaseRouter initialized.")
+    logger.info("edi_db_router_initialized")
 
 
 async def shutdown(app: FastAPI | None = None) -> None:
     """
     Gracefully closes the EDI DatabaseRouter connection pool and container resources.
-    Called by the Shell lifespan or sub-app lifespan on application shutdown.
     """
-    global _db_router, _edi_container
+    if app is None:
+        return
 
-    container: Container | None = _edi_container
-    if container is None and app is not None:
-        candidate = app.__dict__.get("container")
-        if isinstance(candidate, Container):
-            container = candidate
-
-    if container:
-        logger.info("EDI: Shutting down as2_tester adapter.")
+    container: Container | None = app.state.edi_container
+    if container is not None:
+        logger.info("edi_shutting_down_as2_tester")
         try:
             tester = container.as2_tester()
             if isinstance(tester, HttpxAS2TesterAdapter):
                 await tester.close()
         except Exception:
             logger.exception("edi_as2_tester_close_failed")
-        _edi_container = None
 
-    db_router: DatabaseRouterPort | None = _db_router
-    if db_router is None and app is not None and "db_router" in app.state._state:
-        db_router = app.state.db_router
-
-    if db_router:
-        logger.info("EDI: Shutting down DatabaseRouter.")
+    db_router: DatabaseRouterPort | None = app.state.db_router
+    owns_db_router: bool = bool(app.state.owns_db_router)
+    if db_router is not None and owns_db_router:
+        logger.info("edi_shutting_down_db_router")
         try:
             await db_router.close_all()
         except Exception:
             logger.exception("edi_db_router_close_failed")
-        _db_router = None
+
+    app.state.db_router = None
+    app.state.owns_db_router = False
+    app.state.tenant_resolver = None

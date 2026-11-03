@@ -1,4 +1,4 @@
-from edi.adapters.outbound.transformer.domain.models import (
+from edi.adapters.outbound.transformer.domain.parsed_payload import (
     MappingRule,
     ParsedEdiPayload,
     TransactionSet,

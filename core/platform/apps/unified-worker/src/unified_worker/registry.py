@@ -1,4 +1,5 @@
 import importlib
+from typing import cast
 
 from seedwork.infra.worker import LaunchableWorker
 
@@ -37,4 +38,4 @@ def get_worker_instance(worker_name: str) -> LaunchableWorker:
         raise RuntimeError(f"Failed to load worker class {registry[worker_name]}: {e}") from e
 
     # We assume the module class has a zero-argument constructor that satisfies LaunchableWorker
-    return worker_class()
+    return cast(LaunchableWorker, worker_class())

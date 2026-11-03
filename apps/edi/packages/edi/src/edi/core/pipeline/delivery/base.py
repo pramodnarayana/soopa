@@ -3,8 +3,8 @@ from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
-from edi.domain.enums import PipelineEventType
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import PipelineEventType
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -62,7 +62,7 @@ class BaseDeliveryStrategy:
         self,
         trace_id: str,
         partner_id: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         idempotency_key: str | None = None,
     ) -> None:
         raise NotImplementedError

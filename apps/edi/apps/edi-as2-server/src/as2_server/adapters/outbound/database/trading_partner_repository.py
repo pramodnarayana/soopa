@@ -5,9 +5,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from as2_server.ports.outbound.repository_port import PartnerEntity
 
 
-class TradingPartnerRepositoryAdapter:
+class SqlAlchemyAS2TradingPartnerRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    @staticmethod
+    def _to_domain_model(partner: AS2Partner) -> PartnerEntity:
+        return PartnerEntity(
+            as2_id=partner.as2_id,
+            public_cert_pem=partner.public_cert_pem,
+            active=partner.active,
+            private_key_vault_ref=partner.private_key_vault_ref,
+        )
 
     async def find_by_as2_id(self, tenant_id: str, as2_id: str) -> PartnerEntity | None:
         result = await self.session.execute(
@@ -20,9 +29,4 @@ class TradingPartnerRepositoryAdapter:
         partner = result.scalar_one_or_none()
         if not partner:
             return None
-        return PartnerEntity(
-            as2_id=partner.as2_id,
-            public_cert_pem=partner.public_cert_pem,
-            active=partner.active,
-            private_key_vault_ref=partner.private_key_vault_ref,
-        )
+        return self._to_domain_model(partner)

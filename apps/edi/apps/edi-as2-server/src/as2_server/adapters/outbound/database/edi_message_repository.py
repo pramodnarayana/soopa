@@ -1,25 +1,27 @@
 import typing
-from typing import Any
 
 from database.outbox_serializer import serialize_domain_event
-from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox, EdiMessage
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.adapters.outbound.database.models.data_plane import EdiMessage as OrmEdiMessage
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 from edi.domain.enums import EdiOutboxSource
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
 from seedwork.events import EventEnvelope
-from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if typing.TYPE_CHECKING:
-    from edi.domain.models.transactions import EdiMessageDomainModel
+    from edi.domain.transaction.edi_message import EdiMessage
 
 
-class EdiMessageRepositoryAdapter:
+class SqlAlchemyAS2EdiMessageRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def save_message(self, aggregate: "EdiMessageDomainModel") -> list["EventEnvelope"]:
-        record = EdiMessage(
+    @staticmethod
+    def _to_orm_record(aggregate: "EdiMessage") -> OrmEdiMessage:
+        return OrmEdiMessage(
             id=aggregate.id,
             tenant_id=aggregate.tenant_id,
             trace_id=aggregate.trace_id,
@@ -31,6 +33,9 @@ class EdiMessageRepositoryAdapter:
             status=aggregate.status,
             message_id=aggregate.message_id,
         )
+
+    async def save_message(self, aggregate: "EdiMessage") -> list["EventEnvelope"]:
+        record = self._to_orm_record(aggregate)
         self.session.add(record)
 
         envelopes = []
@@ -63,8 +68,8 @@ class EdiMessageRepositoryAdapter:
         return envelopes
 
 
-class EdiMessageRepositoryFactory:
+class SqlAlchemyAS2EdiMessageRepositoryFactory:
     """Implements EdiMessageRepositoryFactoryPort to create tenant-scoped repo instances."""
 
-    def create_repo(self, tenant_session: Any) -> EdiMessageRepositoryAdapter:
-        return EdiMessageRepositoryAdapter(tenant_session)
+    def create_repo(self, tenant_session: AsyncSession) -> SqlAlchemyAS2EdiMessageRepository:
+        return SqlAlchemyAS2EdiMessageRepository(tenant_session)

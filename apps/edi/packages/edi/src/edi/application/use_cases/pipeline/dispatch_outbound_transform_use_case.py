@@ -1,6 +1,6 @@
-import typing
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from typing import Protocol
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
@@ -10,24 +10,26 @@ from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
-from edi.domain.constants import WILDCARD_TRANSACTION_TYPE
-from edi.domain.enums import (
-    EdiDirection,
-    EdiStandard,
-    PipelineEventType,
-)
 from edi.domain.exceptions import (
     OutboundRouteNotFoundError,
-    TransactionNotFoundError,
+    TraceNotFoundError,
     UnresolvableTransactionTypeError,
 )
-from edi.domain.models.headers import OutboundEdiHeaderDomainModel
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
-from edi.domain.models.transactions import EdiJsonDomainModel
+from edi.domain.routing.constants import WILDCARD_TRANSACTION_TYPE
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.routing.outbound_header import OutboundEdiHeader
+from edi.domain.routing.outbound_route import OutboundRoute
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.enums import EdiStandard, PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
+
+
+class OutboundTransformSettingsPort(Protocol):
+    @property
+    def edi_environment(self) -> str: ...
 
 
 class DispatchOutboundTransformUseCase:
@@ -39,7 +41,7 @@ class DispatchOutboundTransformUseCase:
         self,
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
-        settings: typing.Any,
+        settings: OutboundTransformSettingsPort,
         publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
@@ -48,8 +50,8 @@ class DispatchOutboundTransformUseCase:
         self.publisher = publisher
 
     async def _resolve_route_config(
-        self, edi_json: EdiJsonDomainModel, trace_id: str, uow: DataPlaneUnitOfWorkPort
-    ) -> tuple[str, OutboundEdiHeaderDomainModel, OutboundRouteDomainModel]:
+        self, edi_json: EdiJson, trace_id: str, uow: DataPlaneUnitOfWorkPort
+    ) -> tuple[str, OutboundEdiHeader, OutboundRoute]:
         trading_partner_id = edi_json.trading_partner_id
         tenant_id = edi_json.tenant_id
 
@@ -60,10 +62,10 @@ class DispatchOutboundTransformUseCase:
             trading_partner_id = str(tp_id) if tp_id else None
 
         if not trading_partner_id:
-            raise TransactionNotFoundError(trace_id)
+            raise TraceNotFoundError(trace_id)
 
         if tenant_id is None:
-            raise TransactionNotFoundError(trace_id)
+            raise TraceNotFoundError(trace_id)
 
         edi_headers = await uow.edi_headers.get_outbound_edi_header_by_trading_partner_id(
             trading_partner_id=trading_partner_id, tenant_id=tenant_id
@@ -86,7 +88,7 @@ class DispatchOutboundTransformUseCase:
         tenant_id: str,
         standard: str,
         transaction_type: str,
-        edi_headers: OutboundEdiHeaderDomainModel,
+        edi_headers: OutboundEdiHeader,
         uow: DataPlaneUnitOfWorkPort,
         trading_partner_id: str,
         idempotency_key: str | None = None,
@@ -136,8 +138,8 @@ class DispatchOutboundTransformUseCase:
 
     def _resolve_transaction_type(
         self,
-        edi_headers: OutboundEdiHeaderDomainModel,
-        edi_json: EdiJsonDomainModel,
+        edi_headers: OutboundEdiHeader,
+        edi_json: EdiJson,
         trace_id: str,
         trading_partner_id: str,
     ) -> str:
@@ -172,7 +174,7 @@ class DispatchOutboundTransformUseCase:
                 and all(isinstance(node, dict) for node in json_payload)
             )
         ):
-            raise TransactionNotFoundError(trace_id)
+            raise TraceNotFoundError(trace_id)
 
     # Extraction logic lives exclusively in TransactionTypeResolver (DRY).
     async def execute(self, trace_id: str, idempotency_key: str | None = None) -> None:
@@ -180,9 +182,9 @@ class DispatchOutboundTransformUseCase:
         logger.info("outbound_transform.started", trace_id=trace_id)
 
         async with self.uow_factory() as uow, uow:
-            edi_json = await uow.transactions.get_edi_json(trace_id)
+            edi_json = await uow.edi_jsons.get_edi_json(trace_id)
             if not edi_json:
-                raise TransactionNotFoundError(trace_id)
+                raise TraceNotFoundError(trace_id)
 
             if idempotency_key:
                 is_new = await uow.record_idempotency(edi_json.tenant_id, idempotency_key)

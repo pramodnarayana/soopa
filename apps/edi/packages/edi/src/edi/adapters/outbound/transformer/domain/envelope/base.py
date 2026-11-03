@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
 from edi.domain.types import AstNode
 
 

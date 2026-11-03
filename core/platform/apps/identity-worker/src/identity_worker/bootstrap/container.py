@@ -1,25 +1,25 @@
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
-from typing import Literal
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 import structlog
-from database.provider import get_async_engine
+from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
-from identity.domain.constants import IdentityEventType
+from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
-from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from shttp import HttpClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity_worker.adapters.inbound.workers.identity_event_dispatcher import (
     IdentityEventDispatcher,
 )
+from identity_worker.adapters.inbound.workers.identity_event_handlers import (
+    register_identity_handlers,
+)
 from identity_worker.adapters.outbound.database.identity_sync_repository import (
-    PostgresIdentitySyncUnitOfWork,
+    SqlAlchemyIdentitySyncRepository,
 )
-from identity_worker.adapters.outbound.identity_provider.zitadel_identity_provider import (
-    ZitadelIdentityProviderPort,
-)
+from identity_worker.adapters.outbound.database.uow import SqlAlchemyIdentitySyncUnitOfWork
 from identity_worker.adapters.outbound.identity_provider.zitadel_organizations_adapter import (
     ZitadelOrganizationsAdapter,
 )
@@ -31,72 +31,18 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
 )
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
 from identity_worker.config.settings import AppSettings, get_settings
-from identity_worker.ports.inbound.identity_event_consumer_port import IdentityEventMessage
 
 logger = structlog.get_logger(__name__)
 
 
-class TenantProvisionedPayload(BaseModel):
-    tenant_id: str
-
-
-class TenantNameUpdatedPayload(BaseModel):
-    org_id: str
-    name: str
-
-
-class TenantStatusToggledPayload(BaseModel):
-    org_id: str
-    active: bool
-
-
-class TenantDeletedPayload(BaseModel):
-    org_id: str
-
-
-class AppSubscribedPayload(BaseModel):
-    tenant_id: str
-    idp_project_id: str | None = None
-
-
-class AppUnsubscribedPayload(BaseModel):
-    tenant_id: str
-    app_id: str
-    idp_project_id: str | None = None
-
-
-class UserCreatedPayload(BaseModel):
-    user_id: str
-    tenant_id: str
-    email: str
-    first_name: str
-    last_name: str
-    role: str
-
-
-class UserUpdatedPayload(BaseModel):
-    idp_user_id: str
-    tenant_id: str
-    first_name: str
-    last_name: str
-    role: str
-
-
-class UserRoleAssignedPayload(BaseModel):
-    user_id: str
-    idp_user_id: str | None = None
-    tenant_id: str
-    role_name: str
-
-
-class UserStatusToggledPayload(BaseModel):
-    idp_user_id: str
-    tenant_id: str
-    action: Literal["activate", "deactivate"]
-
-
-class UserDeletedPayload(BaseModel):
-    idp_user_id: str
+def create_identity_sync_uow(
+    session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+) -> SqlAlchemyIdentitySyncUnitOfWork:
+    """Composition root factory assembling SqlAlchemyIdentitySyncUnitOfWork."""
+    return SqlAlchemyIdentitySyncUnitOfWork(
+        session_factory,
+        repo_factory=SqlAlchemyIdentitySyncRepository,
+    )
 
 
 class WorkerContainer:
@@ -109,141 +55,52 @@ class WorkerContainer:
         if not database_url:
             raise ValueError("database_url is required in Settings")
 
-        database_url = normalize_to_asyncpg(database_url)
-        self.database_url = database_url
-
-        self._engine = get_async_engine(self.database_url)
-        self.session_factory = async_sessionmaker(
-            self._engine, expire_on_commit=False, class_=AsyncSession
-        )
+        self.database_url = normalize_to_asyncpg(database_url)
+        self.db_provider = DatabaseProvider.from_url(self.database_url)
+        self._zitadel_client: HttpClient | None = None
+        self.events_dispatcher: IdentityEventDispatcher | None = None
+        self.events_consumer: SqsConsumerManager | None = None
 
     def wire(self) -> None:
         self._wire_events_consumer()
 
-    def _register_identity_handlers(  # noqa: C901
-        self,
-        consumer: IdentityEventDispatcher,
-        identity_service: IdentitySyncService,
-    ) -> None:
-        async def identity_tenant_provisioned_handler(event: IdentityEventMessage) -> None:
-            payload = TenantProvisionedPayload.model_validate(event.payload)
-            await identity_service.handle_tenant_provisioned(payload.tenant_id)
-
-        async def identity_tenant_name_updated_handler(event: IdentityEventMessage) -> None:
-            payload = TenantNameUpdatedPayload.model_validate(event.payload)
-            await identity_service.handle_tenant_name_updated(payload.org_id, payload.name)
-
-        async def identity_tenant_status_toggled_handler(event: IdentityEventMessage) -> None:
-            payload = TenantStatusToggledPayload.model_validate(event.payload)
-            await identity_service.handle_tenant_status_toggled(payload.org_id, payload.active)
-
-        async def identity_tenant_deleted_handler(event: IdentityEventMessage) -> None:
-            payload = TenantDeletedPayload.model_validate(event.payload)
-            await identity_service.handle_tenant_deleted(payload.org_id)
-
-        async def identity_app_subscribed_handler(event: IdentityEventMessage) -> None:
-            payload = AppSubscribedPayload.model_validate(event.payload)
-            await identity_service.handle_app_subscribed(
-                tenant_id=payload.tenant_id, idp_project_id=payload.idp_project_id
-            )
-
-        async def identity_app_unsubscribed_handler(event: IdentityEventMessage) -> None:
-            payload = AppUnsubscribedPayload.model_validate(event.payload)
-            await identity_service.handle_app_unsubscribed(
-                tenant_id=payload.tenant_id, idp_project_id=payload.idp_project_id
-            )
-
-        async def identity_user_created_handler(event: IdentityEventMessage) -> None:
-            payload = UserCreatedPayload.model_validate(event.payload)
-            await identity_service.handle_user_created(
-                user_id=payload.user_id,
-                tenant_id=payload.tenant_id,
-                email=payload.email,
-                first_name=payload.first_name,
-                last_name=payload.last_name,
-                role=payload.role,
-            )
-
-        async def identity_user_updated_handler(event: IdentityEventMessage) -> None:
-            payload = UserUpdatedPayload.model_validate(event.payload)
-            await identity_service.handle_user_updated(
-                idp_user_id=payload.idp_user_id,
-                tenant_id=payload.tenant_id,
-                first_name=payload.first_name,
-                last_name=payload.last_name,
-                role=payload.role,
-            )
-
-        async def identity_user_role_assigned_handler(event: IdentityEventMessage) -> None:
-            payload = UserRoleAssignedPayload.model_validate(event.payload)
-            await identity_service.handle_user_role_assigned(
-                user_id=payload.user_id,
-                idp_user_id=payload.idp_user_id,
-                tenant_id=payload.tenant_id,
-                role=payload.role_name,
-            )
-
-        async def identity_user_status_toggled_handler(event: IdentityEventMessage) -> None:
-            payload = UserStatusToggledPayload.model_validate(event.payload)
-            await identity_service.handle_user_status_toggled(
-                idp_user_id=payload.idp_user_id,
-                tenant_id=payload.tenant_id,
-                action=payload.action,
-            )
-
-        async def identity_user_deleted_handler(event: IdentityEventMessage) -> None:
-            payload = UserDeletedPayload.model_validate(event.payload)
-            await identity_service.handle_user_deleted(idp_user_id=payload.idp_user_id)
-
-        consumer.subscribe(
-            IdentityEventType.TENANT_PROVISIONED, identity_tenant_provisioned_handler
-        )
-        consumer.subscribe(
-            IdentityEventType.TENANT_NAME_UPDATED, identity_tenant_name_updated_handler
-        )
-        consumer.subscribe(
-            IdentityEventType.TENANT_STATUS_TOGGLED, identity_tenant_status_toggled_handler
-        )
-        consumer.subscribe(IdentityEventType.TENANT_DELETED, identity_tenant_deleted_handler)
-        consumer.subscribe(IdentityEventType.APP_SUBSCRIBED, identity_app_subscribed_handler)
-        consumer.subscribe(IdentityEventType.APP_UNSUBSCRIBED, identity_app_unsubscribed_handler)
-        consumer.subscribe(IdentityEventType.USER_INVITED, identity_user_created_handler)
-        consumer.subscribe(IdentityEventType.USER_UPDATED, identity_user_updated_handler)
-        consumer.subscribe(
-            IdentityEventType.USER_ROLE_ASSIGNED, identity_user_role_assigned_handler
-        )
-        consumer.subscribe(
-            IdentityEventType.USER_STATUS_TOGGLED, identity_user_status_toggled_handler
-        )
-        consumer.subscribe(IdentityEventType.USER_DELETED, identity_user_deleted_handler)
-
     def _wire_events_consumer(self) -> None:
-        @asynccontextmanager
-        async def session_factory() -> AsyncGenerator[AsyncSession, None]:
-            async with self.session_factory() as session:
-                yield session
+        allow_private_ips = self.settings.identity.allow_private_ips
+        token_provider = ZitadelMachineTokenProvider(
+            api_url=self.settings.zitadel_api_url,
+            machine_key=self.settings.zitadel_machine_key,
+            allow_private_ips=allow_private_ips,
+        )
+        zitadel_client = HttpClient(
+            base_url=self.settings.zitadel_api_url or None,
+            token_provider=token_provider,
+            default_headers={"Accept": "application/json"},
+            allow_private_ips=allow_private_ips,
+        )
+        self._zitadel_client = zitadel_client
 
-        project_provider = ZitadelProjectsAdapter(settings=self.settings)
+        project_provider = ZitadelProjectsAdapter(
+            http_client=zitadel_client,
+            settings=self.settings,
+        )
         org_provider = ZitadelOrganizationsAdapter(
-            project_provider=project_provider, settings=self.settings
+            http_client=zitadel_client,
+            project_provider=project_provider,
+            settings=self.settings,
         )
-
-        idp = ZitadelIdentityProviderPort(
-            org_provider=org_provider, session_factory=session_factory
+        idp_users = ZitadelUsersAdapter(
+            http_client=zitadel_client,
+            settings=self.settings,
         )
-        idp_users = ZitadelUsersAdapter(settings=self.settings)
 
         identity_service = IdentitySyncService(
-            identity_provider=idp,
+            organization_provider=org_provider,
             user_identity_provider=idp_users,
-            uow_factory=lambda: PostgresIdentitySyncUnitOfWork(session_factory),
+            uow_factory=lambda: create_identity_sync_uow(self.db_provider.session),
         )
 
         self.events_dispatcher = IdentityEventDispatcher()
-
-        self._register_identity_handlers(self.events_dispatcher, identity_service)
-
-        # Wire up the new centralized SqsConsumerManager from pubsub
+        register_identity_handlers(self.events_dispatcher, identity_service)
 
         identity_sync_consumer = AwsSqsConsumer(
             queue_url=self.settings.sqs_identity_sync_queue_url,
@@ -257,5 +114,6 @@ class WorkerContainer:
         )
 
     async def dispose(self) -> None:
-        if self._engine:
-            await self._engine.dispose()
+        if self._zitadel_client is not None:
+            await self._zitadel_client.close()
+        await self.db_provider.close()

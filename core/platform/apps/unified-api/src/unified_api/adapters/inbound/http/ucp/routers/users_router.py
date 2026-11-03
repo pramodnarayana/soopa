@@ -3,10 +3,10 @@ from typing import Annotated
 
 import structlog
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from identity.domain.authorization import Capability
 from identity.domain.constants import UserStatus
 from identity.domain.identity_context import IdentityContext
-from identity.domain.models.authorization import Capability
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,7 +28,6 @@ from ucp.application.use_cases.update_user_use_case import (
 )
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
-from ucp.domain.exceptions import ResourceNotFoundError
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
 from unified_api.adapters.inbound.http.guards.require_capability_guard import RequireCapability
@@ -41,6 +40,7 @@ from unified_api.adapters.inbound.http.ucp.dtos.user_dtos import (
     UserResponse,
     UserStateResponse,
 )
+from unified_api.adapters.inbound.http.ucp.error_mapper import raise_http_for_ucp_error
 
 router = APIRouter(prefix="/tenants/{tenant_id}/users", tags=["Users"])
 logger = structlog.get_logger(__name__)
@@ -73,7 +73,7 @@ async def get_users(
     canonical_tenant_id = request.state.ucp_tenant_id
     tenant = await tenant_repo.find_by_id(canonical_tenant_id)
     if not tenant:
-        logger.warning("get_users.tenant_not_found", tenant_id=canonical_tenant_id)
+        logger.error("get_users.tenant_not_found", tenant_id=canonical_tenant_id)
         raise HTTPException(status_code=404, detail="Tenant not found")
 
     users = await user_repo.find_users_by_tenant(canonical_tenant_id)
@@ -88,14 +88,14 @@ async def get_users(
             UserResponse(
                 id=u.id,
                 email=u.email,
-                displayName=u.name,
-                firstName=first_name,
-                lastName=last_name,
+                display_name=u.name,
+                first_name=first_name,
+                last_name=last_name,
                 state=UserStateResponse.INACTIVE
                 if u.status == UserStatus.INACTIVE
                 else UserStateResponse.ACTIVE,
                 role=u.role,
-                createdAt=u.created_at.isoformat(),
+                created_at=u.created_at.isoformat(),
             )
         )
 
@@ -124,15 +124,12 @@ async def create_user(
         role=dto.role,
     )
 
-    try:
-        user_id = await use_case.execute(command)
-        return {"userId": user_id}
-    except ResourceNotFoundError as e:
-        logger.exception("create_user.failed", reason="resource_not_found")
-        raise HTTPException(status_code=422, detail=str(e))
-    except ValueError as e:
-        logger.exception("create_user.failed", reason="value_error")
-        raise HTTPException(status_code=400, detail=str(e))
+    res = await use_case.execute(command)
+    if res.is_err:
+        raise_http_for_ucp_error(
+            res.unwrap_err(), not_found_status=status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
+    return {"userId": res.unwrap()}
 
 
 @router.patch("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
@@ -158,15 +155,10 @@ async def update_user(
         role=dto.role,
     )
 
-    try:
-        await use_case.execute(command)
-        return {"success": True}
-    except ResourceNotFoundError as e:
-        logger.exception("update_user.failed", reason="resource_not_found")
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        logger.exception("update_user.failed", reason="value_error")
-        raise HTTPException(status_code=400, detail=str(e))
+    res = await use_case.execute(command)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
+    return {"success": True}
 
 
 @router.patch(
@@ -192,15 +184,10 @@ async def toggle_status(
         is_active=(dto.action == ToggleUserAction.ACTIVATE),
     )
 
-    try:
-        await use_case.execute(command)
-        return {"success": True}
-    except ResourceNotFoundError as e:
-        logger.exception("toggle_status.failed", reason="resource_not_found")
-        raise HTTPException(status_code=404, detail=str(e))
-    except ValueError as e:
-        logger.exception("toggle_status.failed", reason="value_error")
-        raise HTTPException(status_code=400, detail=str(e))
+    res = await use_case.execute(command)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
+    return {"success": True}
 
 
 @router.delete("/{user_id}", dependencies=[Depends(RequireCapability(Capability.USERS_WRITE))])
@@ -222,9 +209,7 @@ async def delete_user(
         user_id=user_id,
     )
 
-    try:
-        await use_case.execute(command)
-        return {"success": True}
-    except ResourceNotFoundError as e:
-        logger.exception("delete_user.failed", reason="resource_not_found")
-        raise HTTPException(status_code=404, detail=str(e))
+    res = await use_case.execute(command)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
+    return {"success": True}

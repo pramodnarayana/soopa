@@ -21,6 +21,7 @@ from identity.application.authenticate_use_case import (
     TenantNotProvisionedError,
 )
 from identity.domain.authentication_strategy import AuthenticationStrategyPort
+from identity.domain.identity_context import IdentityContext
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.types import ASGIApp
 
@@ -55,12 +56,17 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         self.public_paths = public_paths
 
     @staticmethod
-    def _preserve_bearer_challenge(response: Response, identity: object | None) -> Response:
+    def _preserve_bearer_challenge(
+        response: Response, identity: IdentityContext | None
+    ) -> Response:
         if identity is None:
             response.headers.setdefault("WWW-Authenticate", "Bearer")
         return response
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        request.state.identity = None
+        request.scope["identity"] = None
+
         logger.debug(
             "auth_middleware_intercepted_request",
             path=request.url.path,
@@ -106,33 +112,31 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                     except AuthenticationError:
                         # Don't reject here — let route-specific guards raise 401/403.
                         logger.debug(
-                            "Bearer token present but failed validation at middleware layer "
-                            "for path=%s — downstream guards will enforce.",
-                            request.url.path,
+                            "auth_middleware_authentication_failed",
+                            path=request.url.path,
                         )
                         request.state.identity = None
                         request.scope["identity"] = None
                         break
                     except TenantNotProvisionedError as e:
-                        logger.warning(
+                        logger.error(
                             "auth_middleware_tenant_not_provisioned",
                             tenant_id=e.tenant_id,
                         )
                         return JSONResponse(status_code=403, content={"detail": str(e)})
 
             if not strategy_found:
-                logger.warning("auth_middleware_no_strategy_found")
-                request.state.identity = None
-                request.scope["identity"] = None
+                logger.error(
+                    "auth_middleware_no_strategy_found",
+                    path=request.url.path,
+                )
         else:
-            logger.debug("auth_middleware_no_authorization_header")
-            request.state.identity = None
-            request.scope["identity"] = None
+            logger.debug("auth_middleware_no_authorization_header", path=request.url.path)
 
         logger.debug(
             "auth_middleware_proceeding",
             path=request.url.path,
-            has_identity=hasattr(request.state, "identity") and request.state.identity is not None,
+            has_identity=request.state.identity is not None,
         )
         response = await call_next(request)
         return self._preserve_bearer_challenge(response, request.state.identity)

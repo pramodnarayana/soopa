@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request, status
 from notification.application.get_user_preferences_use_case import GetUserPreferencesUseCase
 from notification.application.update_user_preference_use_case import UpdateUserPreferenceUseCase
 from notification.bootstrap.container import Container
-from notification.domain.models import Channel
+from notification.domain.enums import Channel
 from pydantic import BaseModel
 
 from unified_api.adapters.inbound.http.guards.notification_auth_guard import (

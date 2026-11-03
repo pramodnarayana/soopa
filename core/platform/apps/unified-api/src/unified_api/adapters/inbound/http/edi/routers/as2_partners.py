@@ -1,5 +1,4 @@
-from typing import Any
-
+import structlog
 from edi.application.use_cases.as2_partners import (
     CreateAS2PartnerUseCase,
     DeleteAS2PartnerUseCase,
@@ -16,32 +15,37 @@ from edi.application.use_cases.as2_partners.update_as2_partner_use_case import (
     UpdateAS2TradingPartnerCmd,
 )
 from edi.config.constants import SecretCategory
-from edi.domain.certificate import generate_self_signed_cert
 from edi.domain.exceptions import (
     IdempotencyConflictError,
     OrchestrationError,
-    PartnerAlreadyExistsError,
-    PartnerInUseError,
 )
+from edi.ports.outbound.certificate_generator_port import CertificateGeneratorPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.domain.types import UNSET
+from seedwork.domain.types import UNSET, JsonDict
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_platform_user_profile
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.headers import get_idempotency_key
-from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
+from unified_api.adapters.inbound.http.dependencies.edi.services import (
+    get_certificate_generator,
+    get_secret_store,
+)
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     AS2TradingPartnerResponse,
+    CertificateExportResponse,
     CreateAS2TradingPartnerRequest,
     GenerateCertRequest,
     GenerateCertResponse,
     RotateCertificateRequest,
     UpdateAS2TradingPartnerRequest,
 )
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 from unified_api.settings import get_settings
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["Partners - AS2"])
 
@@ -54,12 +58,15 @@ router = APIRouter(tags=["Partners - AS2"])
 async def generate_certificate(
     request: GenerateCertRequest,
     secret_store: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+    certificate_generator: CertificateGeneratorPort = Depends(get_certificate_generator),
+) -> GenerateCertResponse:
     """
     Generates a new self-signed AS2 certificate and stores the private key in Vault.
     Returns the public cert PEM and the vault reference for the private key.
     """
-    private_key_bytes, public_cert_bytes = generate_self_signed_cert(common_name=request.as2_id)
+    private_key_bytes, public_cert_bytes = certificate_generator.generate_self_signed_cert(
+        common_name=request.as2_id
+    )
 
     private_key_vault_ref = await secret_store.store_private_key(
         private_key_pem=private_key_bytes,
@@ -72,11 +79,9 @@ async def generate_certificate(
     )
 
 
-import structlog
-
-from unified_api.adapters.inbound.http.edi.dtos.dtos import CertificateExportResponse
-
-logger = structlog.get_logger(__name__)
+def _has_permission(profile: JsonDict, permission: str) -> bool:
+    permissions = profile.get("permissions")
+    return isinstance(permissions, list) and permission in permissions
 
 
 async def _rotate_as2_certificates(
@@ -85,16 +90,16 @@ async def _rotate_as2_certificates(
     tenant_id: str,
     uow: ControlPlaneUnitOfWorkPort,
     idempotency_key: str | None,
-    profile: dict[str, Any],
+    profile: JsonDict,
     secret_store: SecretStorePort,
+    certificate_generator: CertificateGeneratorPort,
 ) -> AS2TradingPartnerResponse:
     """Shared coroutine for certificate rotation workflow."""
     partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
     if not partner:
         raise HTTPException(status_code=404, detail="Partner not found")
 
-    # Require certificates:rotate for all partners
-    if "certificates:rotate" not in profile["permissions"]:
+    if not _has_permission(profile, "certificates:rotate"):
         raise HTTPException(
             status_code=403, detail="Insufficient permissions to rotate certificates."
         )
@@ -106,19 +111,25 @@ async def _rotate_as2_certificates(
     )
 
     try:
-        use_case = RotateAS2CertificatesUseCase(uow=uow)
-        updated_partner = await use_case.execute(
+        use_case = RotateAS2CertificatesUseCase(
+            uow=uow,
+            certificate_generator=certificate_generator,
+        )
+        rot_res = await use_case.execute(
             tenant_id=tenant_id,
             partner_id=partner_id,
             cmd=cmd,
             secret_store=secret_store,
             idempotency_key=idempotency_key,
         )
+        if rot_res.is_err:
+            raise_http_for_edi_error(rot_res.unwrap_err())
+        updated_partner = rot_res.unwrap()
         await uow.commit()
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.exception("Unexpected error during certificate rotation")
+        logger.exception("Unexpected error during certificate rotation", reason=str(e))
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
     return AS2TradingPartnerResponse(
@@ -140,9 +151,10 @@ async def rotate_as2_certificates(
     request: RotateCertificateRequest,
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    profile: dict[str, Any] = Depends(get_platform_user_profile),
+    profile: JsonDict = Depends(get_platform_user_profile),
     secret_store: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+    certificate_generator: CertificateGeneratorPort = Depends(get_certificate_generator),
+) -> AS2TradingPartnerResponse:
     """Rotates certificates for a Platform AS2 partner."""
     async with uow:
         return await _rotate_as2_certificates(
@@ -153,6 +165,7 @@ async def rotate_as2_certificates(
             idempotency_key=idempotency_key,
             profile=profile,
             secret_store=secret_store,
+            certificate_generator=certificate_generator,
         )
 
 
@@ -164,9 +177,9 @@ async def export_as2_certificates(
     partner_id: str,
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    profile: dict[str, Any] = Depends(get_platform_user_profile),
+    profile: JsonDict = Depends(get_platform_user_profile),
     secret_store: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+) -> CertificateExportResponse:
     """Exports current and previous certificates for a Platform AS2 partner."""
     async with uow:
         partner = await uow.as2_partners.get_as2_partner(
@@ -181,7 +194,7 @@ async def export_as2_certificates(
         )
 
         if partner.is_local:
-            if "certificates:export_private" not in profile["permissions"]:
+            if not _has_permission(profile, "certificates:export_private"):
                 raise HTTPException(
                     status_code=403, detail="Insufficient permissions to export private keys."
                 )
@@ -250,8 +263,8 @@ async def create_as2_partner(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
     secret_store: SecretStorePort = Depends(get_secret_store),
-    _: Any = Depends(get_platform_user_profile),
-) -> Any:
+    _profile: JsonDict = Depends(get_platform_user_profile),
+) -> AS2TradingPartnerResponse:
     """
     Creates a new Global AS2 Trading Partner (Local or Remote) in the Control Plane.
     If is_local is True, automatically generates a self-signed cert and stores private key in Vault.
@@ -276,9 +289,9 @@ async def create_as2_partner(
         url = configured_url
 
     cmd = CreateAS2TradingPartnerCmd(
-        name=request.name if request.name is not None else UNSET,
-        as2_id=request.as2_id if request.as2_id is not None else UNSET,
-        is_local=request.is_local if request.is_local is not None else UNSET,
+        name=request.name,
+        as2_id=request.as2_id,
+        is_local=request.is_local,
         url=url,
         public_cert_pem=request.public_cert_pem,
         private_key_pem=request.private_key_pem,
@@ -288,14 +301,16 @@ async def create_as2_partner(
 
     try:
         use_case = CreateAS2PartnerUseCase(uow=uow, secret_store=secret_store)
-        entity = await use_case.execute(
+        create_res = await use_case.execute(
             tenant_id=PLATFORM_TENANT_ID,
             cmd=cmd,
             idempotency_key=idempotency_key,
         )
+        if create_res.is_err:
+            raise_http_for_edi_error(create_res.unwrap_err())
+        entity = create_res.unwrap()
         await uow.commit()
 
-        # Re-fetch from DB to get the actual ID (or we can just return entity if it has the ID)
         p = await uow.as2_partners.get_as2_partner(
             tenant_id=PLATFORM_TENANT_ID, partner_id=entity.id
         )
@@ -310,12 +325,10 @@ async def create_as2_partner(
             url=p.url,
             active=p.active,
         )
+    except HTTPException:
+        raise
     except IdempotencyConflictError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
-    except PartnerAlreadyExistsError as e:
-        raise HTTPException(status_code=400, detail="AS2 ID already exists for this tenant.") from e
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
     except OrchestrationError as e:
         raise HTTPException(
             status_code=500, detail="Failed to orchestrate AS2 partner creation"
@@ -325,7 +338,7 @@ async def create_as2_partner(
 @router.get("/as2/trading-partners", response_model=list[AS2TradingPartnerResponse])
 async def list_as2_partners(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-) -> Any:
+) -> list[AS2TradingPartnerResponse]:
     """
     Returns all global AS2 partners (tenant_id = 0).
     """
@@ -350,7 +363,7 @@ async def update_as2_partner(
     request: UpdateAS2TradingPartnerRequest,
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-) -> Any:
+) -> AS2TradingPartnerResponse:
     """Updates a global AS2 partner."""
     logger.info(
         "api_update_as2_partner_request_received",
@@ -361,12 +374,15 @@ async def update_as2_partner(
         use_case = UpdateAS2PartnerUseCase(uow=uow)
         cmd = UpdateAS2TradingPartnerCmd(**request.model_dump(mode="json", exclude_unset=True))
         try:
-            await use_case.execute(
+            upd_res = await use_case.execute(
                 tenant_id=PLATFORM_TENANT_ID,
                 partner_id=partner_id,
                 cmd=cmd,
                 idempotency_key=idempotency_key,
             )
+            if upd_res.is_err:
+                raise_http_for_edi_error(upd_res.unwrap_err())
+
             updated_partner = await uow.as2_partners.get_as2_partner(
                 tenant_id=PLATFORM_TENANT_ID, partner_id=partner_id
             )
@@ -384,10 +400,6 @@ async def update_as2_partner(
             )
         except HTTPException:
             raise
-        except PartnerAlreadyExistsError as e:
-            raise HTTPException(
-                status_code=400, detail="AS2 ID already exists for this tenant."
-            ) from e
         except OrchestrationError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -402,15 +414,15 @@ async def delete_as2_partner(
     async with uow:
         use_case = DeleteAS2PartnerUseCase(uow=uow)
         try:
-            await use_case.execute(
+            del_res = await use_case.execute(
                 tenant_id=PLATFORM_TENANT_ID,
                 partner_id=partner_id,
                 idempotency_key=idempotency_key,
             )
+            if del_res.is_err:
+                raise_http_for_edi_error(del_res.unwrap_err())
             await uow.commit()
-        except PartnerInUseError as e:
-            raise HTTPException(
-                status_code=400, detail="Partner is in use and cannot be deleted."
-            ) from e
+        except HTTPException:
+            raise
         except OrchestrationError as e:
             raise HTTPException(status_code=500, detail=str(e)) from e

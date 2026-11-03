@@ -1,62 +1,62 @@
-from edi.domain.events import TransformRequestedEvent
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiJsonDomainModel
-from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
-
 """
 Layer 2 — Application Use Case Tests: ProcessApiEdiJsonUseCase.
 
 This is the Outbound API ingestion use case. It:
 1. Resolves transaction_type from payload if not supplied in the command
 2. Extracts business_metadata using MetadataExtractorService
-3. Persists EdiJson via UoW.transactions.create_edi_json
+3. Persists EdiJson via UoW.edi_jsons.save
 4. Publishes a TRANSFORMATION_REQUESTED outbox event
 
 We inject a port-conforming in-memory UoW — no DB, no HTTP, no patches.
 """
 
-from typing import Any
+from typing import cast
 
 import pytest
+from seedwork.events import EventEnvelope
 from seedwork.utils import generate_id
+
+from edi.application.use_cases.process_api_edi_json_use_case import (
+    ProcessApiEdiJsonCommand,
+    ProcessApiEdiJsonUseCase,
+)
+from edi.domain.routing.enums import Direction
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.enums import RecordStatus
+from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 
 TP_001 = generate_id("tp")
 TP_007 = generate_id("tp")
 TP_META = generate_id("tp")
 TP_X = generate_id("tp")
 
-from edi.application.use_cases.process_api_edi_json_use_case import (
-    ProcessApiEdiJsonCommand,
-    ProcessApiEdiJsonUseCase,
-)
 
 # ---------------------------------------------------------------------------
 # Fake port implementations
 # ---------------------------------------------------------------------------
 
 
-class FakeTransactionRepository:
-    """Minimal TransactionRepositoryPort conforming in-memory store."""
+class FakeEdiJsonRepository:
+    """Minimal EdiJsonRepositoryPort conforming in-memory store."""
 
-    def __init__(self):
-        self.created_edi_jsons: list[dict[str, Any]] = []
-        self.outbox_events: list[dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.created_edi_jsons: list[dict[str, object]] = []
+        self.outbox_events: list[dict[str, object]] = []
 
-    async def save_json(self, aggregate: Any) -> list:
+    async def save(self, aggregate: EdiJson) -> list[EventEnvelope]:
         self.created_edi_jsons.append(
             {
                 "tenant_id": aggregate.tenant_id,
                 "payload": {
                     "trace_id": aggregate.trace_id,
                     "direction": aggregate.direction.value
-                    if hasattr(aggregate.direction, "value")
-                    else aggregate.direction,
+                    if aggregate.direction is not None
+                    else None,
                     "transaction_type": aggregate.transaction_type,
                     "business_metadata": aggregate.business_metadata,
                     "payload": aggregate.payload,
-                    "status": aggregate.status.value
-                    if hasattr(aggregate.status, "value")
-                    else aggregate.status,
+                    "status": aggregate.status.value if aggregate.status is not None else None,
                 },
             }
         )
@@ -87,22 +87,28 @@ class FakeTraceRepository:
         return None
 
 
+class FakeOutboxRepo:
+    async def mark_completed(self, event_id: str) -> None:
+        _ = event_id
+
+
 class FakeDataPlaneUnitOfWork:
-    def __init__(self, repo: FakeTransactionRepository):
-        self.transactions = repo
+    def __init__(self, repo: FakeEdiJsonRepository) -> None:
+        self.edi_jsons = repo
         self.traces = FakeTraceRepository()
+        self.outbox = FakeOutboxRepo()
         self.committed = False
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "FakeDataPlaneUnitOfWork":
         return self
 
-    async def __aexit__(self, *args):
-        pass
+    async def __aexit__(self, *args: object) -> None:
+        _ = args
 
-    async def commit(self):
+    async def commit(self) -> None:
         self.committed = True
 
-    async def rollback(self):
+    async def rollback(self) -> None:
         pass
 
 
@@ -112,10 +118,13 @@ class FakeDataPlaneUnitOfWork:
 
 
 class TestProcessApiEdiJsonUseCaseHappyPath:
-    def setup_method(self):
-        self.repo = FakeTransactionRepository()
+    def setup_method(self) -> None:
+        self.repo = FakeEdiJsonRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
-        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
+        self.use_case = ProcessApiEdiJsonUseCase(
+            uow=cast(DataPlaneUnitOfWorkPort, self.uow),
+            publisher=FakeOutboxPublisher(),
+        )
 
     @pytest.mark.asyncio
     async def test_returns_a_trace_id_string(self):
@@ -194,7 +203,7 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
     @pytest.mark.asyncio
     async def test_fake_preserves_event_idempotency_key(self):
 
-        aggregate = EdiJsonDomainModel(
+        aggregate = EdiJson(
             id="json-1",
             tenant_id="ten_001",
             trace_id="trace-1",
@@ -202,15 +211,9 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
             status=RecordStatus.RECEIVED,
             payload={},
         )
-        aggregate.add_domain_event(
-            TransformRequestedEvent(
-                trace_id="trace-1",
-                tenant_id="ten_001",
-                idempotency_key="request-1",
-            )
-        )
+        aggregate.request_transformation(idempotency_key="request-1")
 
-        await self.repo.save_json(aggregate)
+        await self.repo.save(aggregate)
 
         key = self.repo.outbox_events[0]["idempotency_key"]
         assert key == "request-1"
@@ -229,10 +232,13 @@ class TestProcessApiEdiJsonUseCaseHappyPath:
 
 
 class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
-    def setup_method(self):
-        self.repo = FakeTransactionRepository()
+    def setup_method(self) -> None:
+        self.repo = FakeEdiJsonRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
-        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
+        self.use_case = ProcessApiEdiJsonUseCase(
+            uow=cast(DataPlaneUnitOfWorkPort, self.uow),
+            publisher=FakeOutboxPublisher(),
+        )
 
     @pytest.mark.asyncio
     async def test_uses_explicit_transaction_type_from_command(self):
@@ -341,10 +347,13 @@ class TestProcessApiEdiJsonUseCaseTransactionTypeResolution:
 
 
 class TestProcessApiEdiJsonUseCaseListPayload:
-    def setup_method(self):
-        self.repo = FakeTransactionRepository()
+    def setup_method(self) -> None:
+        self.repo = FakeEdiJsonRepository()
         self.uow = FakeDataPlaneUnitOfWork(self.repo)
-        self.use_case = ProcessApiEdiJsonUseCase(uow=self.uow, publisher=FakeOutboxPublisher())
+        self.use_case = ProcessApiEdiJsonUseCase(
+            uow=cast(DataPlaneUnitOfWorkPort, self.uow),
+            publisher=FakeOutboxPublisher(),
+        )
 
     @pytest.mark.asyncio
     async def test_handles_list_payload_with_multiple_items(self):

@@ -1,7 +1,4 @@
-from edi.core.bots.domain.models import (
-    create_field_definition,
-    create_structure_node,
-)
+from edi.core.bots.domain.structure import create_field_definition, create_structure_node
 
 """
 test_message_advanced.py

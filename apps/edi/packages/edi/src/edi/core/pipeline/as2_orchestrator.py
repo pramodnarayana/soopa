@@ -17,14 +17,10 @@ import functools
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 
-from edi.adapters.inbound.as2.builder import build_outbound_message
-from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
-from edi.application.dtos.partners import (
-    AS2PartnershipDTO,
-    LocalAS2PartnerDTO,
-    RemoteAS2PartnerDTO,
-)
-from edi.domain.models.as2 import OutboundAS2Message
+from edi.domain.partner.as2.builder import build_outbound_message
+from edi.domain.partner.as2.messages import OutboundAS2Message
+from edi.domain.partner.as2.partner import AS2Partner
+from edi.domain.partner.as2.partnership import AS2Partnership
 from edi.ports.outbound.crypto_service_port import CryptoServicePort
 
 logger = structlog.get_logger(__name__)
@@ -64,14 +60,14 @@ class AS2MessageOrchestrator:
         crypto_service: CryptoServicePort | None = None,
     ) -> None:
         self.secret_store = vault
-        self.crypto_service: CryptoServicePort = crypto_service or SmimeCryptoService()
+        self.crypto_service: CryptoServicePort | None = crypto_service
 
     async def build(
         self,
         raw_payload: bytes,
-        local_partner: LocalAS2PartnerDTO | None,
-        remote_partner: RemoteAS2PartnerDTO,
-        partnership: AS2PartnershipDTO,
+        local_partner: AS2Partner | None,
+        remote_partner: AS2Partner,
+        partnership: AS2Partnership,
         idempotency_key: str | None = None,
     ) -> OutboundAS2Message:
         """
@@ -79,9 +75,9 @@ class AS2MessageOrchestrator:
 
         Args:
             raw_payload:    Raw EDI bytes from S3.
-            local_partner:  Local AS2 partner DTO (for signing key/cert).
-            remote_partner: Remote AS2 partner DTO.
-            partnership:    AS2 Partnership DTO containing negotiated settings.
+            local_partner:  Local AS2 partner aggregate (for signing key/cert).
+            remote_partner: Remote AS2 partner aggregate.
+            partnership:    AS2 Partnership aggregate containing negotiated settings.
 
         Returns:
             OutboundAS2Message with `.body`, `.headers`, and `.mic`.
@@ -121,13 +117,25 @@ class AS2MessageOrchestrator:
         )
 
         # ── Build sign / encrypt callables via functools.partial ──────────────
+        needs_signing = bool(local_private_key_pem and local_cert_pem)
+        needs_encryption = bool(remote_cert_pem)
+        if (needs_signing or needs_encryption) and self.crypto_service is None:
+            raise ValueError(
+                "CryptoServicePort is required when AS2 signing or encryption is configured."
+            )
+
         sign_fn = (
             functools.partial(
                 self.crypto_service.sign,
                 private_key_pem=local_private_key_pem,
                 public_cert_pem=local_cert_pem,
             )
-            if (local_private_key_pem and local_cert_pem)
+            if (
+                needs_signing
+                and self.crypto_service is not None
+                and local_private_key_pem
+                and local_cert_pem
+            )
             else None
         )
 
@@ -138,7 +146,7 @@ class AS2MessageOrchestrator:
                 public_cert_pem=remote_cert_pem,
                 algorithm=encryption_alg,
             )
-            if remote_cert_pem
+            if (needs_encryption and self.crypto_service is not None and remote_cert_pem)
             else None
         )
 

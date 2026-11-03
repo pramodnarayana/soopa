@@ -8,8 +8,9 @@ from edi.application.use_cases.pipeline.compute_transform_use_case import (
     ComputeTransformCommand,
     ComputeTransformUseCase,
 )
-from edi.domain.enums import EdiDirection, MessageStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import MessageStatus
 from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
 from edi.testing.fakes.pipeline_fakes import (
     FakeDataPlaneUnitOfWork,
@@ -34,7 +35,7 @@ class ErrorTransformer(TransformerPort):
 class FailingRepositoryAdapter(InMemoryRepositoryAdapter):
     async def get_edi_message(
         self, trace_id: str, tenant_id: str | None = None
-    ) -> EdiMessageDomainModel | None:
+    ) -> EdiMessage | None:
         raise ValueError("Corrupt internal state")
 
 
@@ -44,7 +45,7 @@ async def test_transformer_value_error_is_classified_as_terminal() -> None:
     trace_id = str(uuid.uuid4())
     tenant_id = "tenant-test"
 
-    msg = EdiMessageDomainModel(
+    msg = EdiMessage(
         id="msg-err-1",
         trace_id=trace_id,
         tenant_id=tenant_id,
@@ -52,7 +53,7 @@ async def test_transformer_value_error_is_classified_as_terminal() -> None:
         edi_data="ISA*00*test~",
         status=MessageStatus.RECEIVED,
     )
-    await uow.transactions.save(msg)
+    await uow.edi_messages.save(msg)
 
     @contextlib.asynccontextmanager
     async def uow_factory():
@@ -76,7 +77,7 @@ async def test_transformer_value_error_is_classified_as_terminal() -> None:
     await use_case.execute(command)
 
     # Verify message was permanently marked as transform failed
-    updated_msg = await uow.transactions.get_edi_message(trace_id)
+    updated_msg = await uow.edi_messages.get_edi_message(trace_id)
     assert updated_msg is not None
     assert updated_msg.status == MessageStatus.FAILED
     assert updated_msg.error_code == ErrorCode.TRANSFORMATION_FAILED

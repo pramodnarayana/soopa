@@ -1,15 +1,12 @@
 import asyncio
-import typing
 
 import structlog
 from observability import ObservabilityProvider
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from edi_cp_jobs_worker.bootstrap.container import WorkerContainer
 
 logger = structlog.get_logger(__name__)
-
-
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class EdiCpJobsWorkerModule(LaunchableWorker):
@@ -23,20 +20,10 @@ class EdiCpJobsWorkerModule(LaunchableWorker):
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
         tasks: list[asyncio.Task[object]] = []
-        if self.container.cp_manager and hasattr(self.container.cp_manager, "background_tasks"):
-            tasks.extend(
-                typing.cast(
-                    list[asyncio.Task[object]], self.container.cp_manager.background_tasks()
-                )
-            )
-        if self.container.cp_outbox_relay and hasattr(
-            self.container.cp_outbox_relay, "background_tasks"
-        ):
-            tasks.extend(
-                typing.cast(
-                    list[asyncio.Task[object]], self.container.cp_outbox_relay.background_tasks()
-                )
-            )
+        if self.container.cp_manager is not None:
+            tasks.extend(self.container.cp_manager.background_tasks())
+        if self.container.cp_outbox_relay is not None:
+            tasks.extend(self.container.cp_outbox_relay.background_tasks())
         return tasks
 
     async def stop(self) -> None:

@@ -22,10 +22,10 @@ from edi.adapters.inbound.ucp_adapter import UcpAdapter
 from edi.module import create_edi_app
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
-from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
-from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.application.use_cases.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
@@ -85,27 +85,27 @@ app.add_middleware(
 # It uses the Strategy Pattern to dynamically evaluate different token types
 # (M2M API Keys, IdP JWTs) without needing modification when adding new methods.
 @contextlib.asynccontextmanager
-async def api_token_repo_factory() -> collections.abc.AsyncIterator[PostgresApiTokenRepository]:
+async def api_token_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyApiTokenRepository]:
     async with app.state.db_provider.session() as session:
-        yield PostgresApiTokenRepository(session)
+        yield SqlAlchemyApiTokenRepository(session)
 
 
 @contextlib.asynccontextmanager
-async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepository]:
+async def tenant_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyTenantRepository]:
     async with app.state.db_provider.session() as session:
-        yield TenantRepository(session)
+        yield SqlAlchemyTenantRepository(session)
 
 
 @contextlib.asynccontextmanager
-async def user_repo_factory() -> collections.abc.AsyncIterator[PostgresUserRepository]:
+async def user_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyUserRepository]:
     async with app.state.db_provider.session() as session:
-        yield PostgresUserRepository(session)
+        yield SqlAlchemyUserRepository(session)
 
 
 @contextlib.asynccontextmanager
-async def role_repo_factory() -> collections.abc.AsyncIterator[PostgresRoleRepository]:
+async def role_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyRoleRepository]:
     async with app.state.db_provider.session() as session:
-        yield PostgresRoleRepository(session)
+        yield SqlAlchemyRoleRepository(session)
 
 
 app.add_middleware(

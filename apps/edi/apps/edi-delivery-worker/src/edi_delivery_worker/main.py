@@ -3,11 +3,14 @@ import asyncio
 
 import structlog
 from observability import ObservabilityProvider
-from seedwork.infra.worker import run_worker_app, run_worker_app_async
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
+
+from edi_delivery_worker.data.main import (
+    EdiDeliveryDlqWorkerModule,
+    EdiDeliveryWorkerModule,
+)
 
 logger = structlog.get_logger(__name__)
-
-from edi_delivery_worker.data.main import EdiDeliveryWorkerModule
 
 
 async def main(stop_event: asyncio.Event | None = None) -> None:
@@ -15,12 +18,14 @@ async def main(stop_event: asyncio.Event | None = None) -> None:
     parser.add_argument("--dlq", action="store_true", help="Run as DLQ consumer")
     args, _ = parser.parse_known_args()
 
-    ObservabilityProvider.auto_configure_from_env(
-        "edi-delivery-dlq-worker" if args.dlq else "edi-delivery-worker"
-    )
-    logger.info("delivery_worker_starting", is_dlq=args.dlq)
+    if args.dlq:
+        ObservabilityProvider.auto_configure_from_env("edi-delivery-dlq-worker")
+        module: LaunchableWorker = EdiDeliveryDlqWorkerModule()
+    else:
+        ObservabilityProvider.auto_configure_from_env("edi-delivery-worker")
+        module = EdiDeliveryWorkerModule()
 
-    module = EdiDeliveryWorkerModule(is_dlq=args.dlq)
+    logger.info("delivery_worker_starting", mode="dlq" if args.dlq else "primary")
     await run_worker_app_async(module, stop_event=stop_event)
 
 

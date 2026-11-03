@@ -1,7 +1,7 @@
 import pytest
 from database.models.identity import Tenant
 from database.router import DatabaseRouterPort
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from seedwork import generate_id
 from sqlalchemy import select, text
 from ucp_models.sharding import DatabaseShard, ShardRegistry
@@ -46,7 +46,7 @@ async def test_tenant_resolver_success(db_router: DatabaseRouterPort) -> None:
         await session.commit()
         expected_shard_id = shard.id
 
-    resolver = TenantResolver(db_router=db_router, ttl_secs=300)
+    resolver = SqlAlchemyTenantResolver(db_router=db_router, ttl_secs=300)
 
     # First resolve should hit DB
     shard_name, shard_dsn = await resolver.resolve_shard(tenant_id=test_tenant_id)
@@ -70,7 +70,7 @@ async def test_tenant_resolver_success(db_router: DatabaseRouterPort) -> None:
 @pytest.mark.integration
 async def test_tenant_resolver_not_found(db_router: DatabaseRouterPort) -> None:
 
-    resolver = TenantResolver(db_router=db_router, ttl_secs=300)
+    resolver = SqlAlchemyTenantResolver(db_router=db_router, ttl_secs=300)
 
     with pytest.raises(ValueError, match="Tenant 999 not found in Global DB"):
         await resolver.resolve_shard(tenant_id="999")
@@ -80,7 +80,7 @@ async def test_tenant_resolver_not_found(db_router: DatabaseRouterPort) -> None:
 async def test_tenant_resolver_eviction(db_router: DatabaseRouterPort) -> None:
 
     # Small cache size to force eviction
-    resolver = TenantResolver(db_router=db_router, ttl_secs=300, max_entries=2)
+    resolver = SqlAlchemyTenantResolver(db_router=db_router, ttl_secs=300, max_entries=2)
 
     # Insert 3 tenants
     t1, t2, t3 = generate_id("t1"), generate_id("t2"), generate_id("t3")

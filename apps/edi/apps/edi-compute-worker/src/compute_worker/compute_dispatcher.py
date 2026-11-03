@@ -11,9 +11,10 @@ from edi.application.use_cases.pipeline.compute_transform_use_case import (
     ComputeTransformCommand,
     ComputeTransformUseCase,
 )
-from edi.domain.enums import EdiDirection, EdiStandard
 from edi.domain.exceptions import InvalidMessageError
-from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
+from edi.domain.transaction.enums import EdiStandard
 from pubsub.exceptions import ConsumerTerminalError
 
 logger = structlog.get_logger(__name__)

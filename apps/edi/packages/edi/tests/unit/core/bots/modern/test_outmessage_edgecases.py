@@ -2,9 +2,9 @@ import pytest
 
 from edi.core.bots.config.botsconfig import FORMATFROMGRAMMAR, SFIELD, VALUE
 from edi.core.bots.domain.exceptions import OutMessageError
-from edi.core.bots.domain.models import create_field_definition, create_structure_node
 from edi.core.bots.domain.node import Node
 from edi.core.bots.domain.outmessage import Outmessage
+from edi.core.bots.domain.structure import create_field_definition, create_structure_node
 
 
 class FakeGrammar:

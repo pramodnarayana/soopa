@@ -7,10 +7,12 @@ from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
-from edi.domain.enums import EdiConnectionType, EdiDirection, PipelineEventType
 from edi.domain.exceptions import MissingRoutingInformationError, RouteNotFoundError
-from edi.domain.models.inbound_routes import InboundRouteDomainModel
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.domain.routing.enums import EdiConnectionType, EdiDirection
+from edi.domain.routing.inbound_route import InboundRoute
+from edi.domain.routing.outbound_route import OutboundRoute
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import PipelineEventType
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -38,11 +40,11 @@ class DeliveryRouterUseCase:
         logger.info("Starting delivery pipeline for trace_id={trace_id}", trace_id=trace_id)
 
         async with self.uow_factory() as uow, uow:
-            edi_msg = await uow.transactions.get_edi_message(trace_id)
+            edi_msg = await uow.edi_messages.get_edi_message(trace_id)
             if not edi_msg:
-                edi_json = await uow.transactions.get_edi_json(trace_id)
+                edi_json = await uow.edi_jsons.get_edi_json(trace_id)
                 if edi_json and edi_json.parent_trace_id:
-                    edi_msg = await uow.transactions.get_edi_message(edi_json.parent_trace_id)
+                    edi_msg = await uow.edi_messages.get_edi_message(edi_json.parent_trace_id)
             if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={trace_id}")
 
@@ -68,15 +70,15 @@ class DeliveryRouterUseCase:
             logger.exception("sync_dispatch_failed_falling_back_to_sweeper", error=str(e))
 
     async def _resolve_route(
-        self, edi_msg, uow: DataPlaneUnitOfWorkPort
-    ) -> OutboundRouteDomainModel | InboundRouteDomainModel:
+        self, edi_msg: EdiMessage, uow: DataPlaneUnitOfWorkPort
+    ) -> OutboundRoute | InboundRoute:
         if edi_msg.direction == EdiDirection.OUTBOUND:
             return await self._get_outbound_route(edi_msg, uow)
         return await self._get_inbound_route(edi_msg, uow)
 
     async def _get_outbound_route(
-        self, edi_msg, uow: DataPlaneUnitOfWorkPort
-    ) -> OutboundRouteDomainModel:
+        self, edi_msg: EdiMessage, uow: DataPlaneUnitOfWorkPort
+    ) -> OutboundRoute:
         if not edi_msg.trading_partner_id:
             raise ValueError(
                 f"EDI Message {edi_msg.trace_id} is missing trading_partner_id for OUTBOUND routing."
@@ -97,8 +99,8 @@ class DeliveryRouterUseCase:
         return route
 
     async def _get_inbound_route(
-        self, edi_msg, uow: DataPlaneUnitOfWorkPort
-    ) -> InboundRouteDomainModel:
+        self, edi_msg: EdiMessage, uow: DataPlaneUnitOfWorkPort
+    ) -> InboundRoute:
         sender_id = edi_msg.sender_id
         receiver_id = edi_msg.receiver_id
         transaction_type = edi_msg.transaction_type
@@ -131,32 +133,32 @@ class DeliveryRouterUseCase:
             )
         return route
 
+    @staticmethod
+    def _resolve_destination(route: OutboundRoute | InboundRoute) -> tuple[str, str | None]:
+        if route.connection_type == EdiConnectionType.SFTP:
+            return "sftp_partner_id", route.sftp_partner_id
+        if route.connection_type == EdiConnectionType.AS2:
+            return "as2_partner_id", route.as2_partner_id
+        if route.connection_type == EdiConnectionType.WEBHOOK:
+            return "webhook_id", route.webhook_id
+        raise ValueError(f"Unsupported connection type: {route.connection_type}")
+
     async def _dispatch_to_outbox(
         self,
         trace_id: str,
-        route: OutboundRouteDomainModel | InboundRouteDomainModel,
-        edi_msg,
+        route: OutboundRoute | InboundRoute,
+        edi_msg: EdiMessage,
         uow: DataPlaneUnitOfWorkPort,
         idempotency_key: str | None,
     ) -> EventEnvelope:
-        DESTINATION_RESOLVER = {
-            EdiConnectionType.SFTP: lambda r: ("sftp_partner_id", r.sftp_partner_id),
-            EdiConnectionType.AS2: lambda r: ("as2_partner_id", r.as2_partner_id),
-            EdiConnectionType.WEBHOOK: lambda r: ("webhook_id", r.webhook_id),
-        }
-
         if not route.connection_type:
-            route_id = route.id if isinstance(route, OutboundRouteDomainModel) else "inbound_route"
+            route_id = route.id if isinstance(route, OutboundRoute) else "inbound_route"
             raise ValueError(f"Route {route_id} does not specify a connection_type.")
 
-        resolver = DESTINATION_RESOLVER.get(route.connection_type)
-        if not resolver:
-            raise ValueError(f"Unsupported connection type: {route.connection_type}")
-
-        strategy_type, partner_id = resolver(route)
+        strategy_type, partner_id = self._resolve_destination(route)
 
         if not partner_id:
-            route_id = route.id if isinstance(route, OutboundRouteDomainModel) else "inbound_route"
+            route_id = route.id if isinstance(route, OutboundRoute) else "inbound_route"
             raise ValueError(
                 f"Route {route_id} is configured for {route.connection_type} but destination ID is missing."
             )

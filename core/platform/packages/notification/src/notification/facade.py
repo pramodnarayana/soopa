@@ -20,12 +20,18 @@ def notify(
     to dispatch notifications asynchronously. The returned event MUST be saved
     to the caller's local outbox repository in the same transaction as their domain changes.
     """
+    envelope_id = generate_id(SystemIdPrefix.GENERIC)
+    effective_idempotency_key = (
+        idempotency_key.strip()
+        if isinstance(idempotency_key, str) and idempotency_key.strip()
+        else envelope_id
+    )
     return EventEnvelope(
-        id=generate_id(SystemIdPrefix.GENERIC),
+        id=envelope_id,
         source=source,
         event_type=NotificationEventType.NOTIFICATION_TRIGGERED.value,
         tenant_id=tenant_id,
-        idempotency_key=idempotency_key,
+        idempotency_key=effective_idempotency_key,
         payload={
             "notification_type": notification_type,
             "notification_data": notification_data,

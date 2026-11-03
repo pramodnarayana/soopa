@@ -1,13 +1,4 @@
-from typing import Any
-
 import structlog
-from database.exceptions import DuplicateEntityError
-from edi.application.dtos import (
-    UNSET,
-    EncryptionAlgorithm,
-    MDNType,
-    SignatureAlgorithm,
-)
 from edi.application.use_cases.as2_partnerships.create_as2_partnership_use_case import (
     CreateAS2PartnershipCmd,
     CreateAS2PartnershipUseCase,
@@ -20,11 +11,19 @@ from edi.application.use_cases.as2_partnerships.update_as2_partnership_use_case 
     UpdateAS2PartnershipUseCase,
 )
 from edi.domain.exceptions import OrchestrationError
+from edi.domain.partner.as2.enums import (
+    EncryptionAlgorithm,
+    MDNType,
+    SignatureAlgorithm,
+)
+from edi.domain.partner.as2.partner import AS2Partner
+from edi.domain.partner.as2.partnership import AS2Partnership
 from edi.ports.outbound.as2_tester import AS2TesterPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.services import (
@@ -39,30 +38,17 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     TradingPartnerStatusResponse,
     UpdateAS2PartnershipRequest,
 )
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["Partners - AS2 Partnerships"])
 
 
-@router.post(
-    "/as2/partnerships/{partnership_id}/test",
-    response_model=TestAS2ConnectionResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def test_as2_partnership_connection(  # noqa: C901
+async def _load_partnership_participants(
+    uow: ControlPlaneUnitOfWorkPort,
     partnership_id: str,
-    request: TestAS2ConnectionRequest | None = None,
-    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-    as2_tester: AS2TesterPort = Depends(get_as2_tester),
-    vault_port: SecretStorePort = Depends(get_secret_store),
-) -> Any:
-    """
-    Tests an AS2 connection for a configured partnership.
-
-    Sends a synthetic AS2 ping (or custom payload) to the remote partner's URL
-    using the partnership's configured cryptographic material.
-    """
+) -> tuple[AS2Partnership, AS2Partner | None, AS2Partner | None]:
     async with uow:
         partnership = await uow.as2_partnerships.get_as2_partnership(
             tenant_id=PLATFORM_TENANT_ID, partnership_id=partnership_id
@@ -76,6 +62,95 @@ async def test_as2_partnership_connection(  # noqa: C901
         remote_partner = await uow.as2_partners.get_as2_partner(
             tenant_id=PLATFORM_TENANT_ID, partner_id=partnership.remote_partner_id
         )
+    return partnership, local_partner, remote_partner
+
+
+async def _resolve_partnership_crypto_material(
+    local_partner: AS2Partner,
+    remote_partner: AS2Partner,
+    vault_port: SecretStorePort,
+) -> tuple[bytes | None, bytes | None, bytes | None]:
+    local_private_key_pem: bytes | None = None
+    local_cert_pem: bytes | None = None
+    remote_cert_pem: bytes | None = None
+
+    if local_partner.private_key_vault_ref:
+        local_private_key_pem = await vault_port.retrieve_secret(
+            local_partner.private_key_vault_ref
+        )
+    if local_partner.public_cert_vault_ref:
+        local_cert_pem = await vault_port.retrieve_secret(local_partner.public_cert_vault_ref)
+    elif local_partner.public_cert_pem:
+        local_cert_pem = local_partner.public_cert_pem.encode()
+    if remote_partner.public_cert_vault_ref:
+        remote_cert_pem = await vault_port.retrieve_secret(remote_partner.public_cert_vault_ref)
+    elif remote_partner.public_cert_pem:
+        remote_cert_pem = remote_partner.public_cert_pem.encode()
+
+    return local_private_key_pem, local_cert_pem, remote_cert_pem
+
+
+def _evaluate_mdn_disposition(
+    raw_disposition: str | None,
+    sent_payload: str | None,
+    raw_mdn: str | None,
+) -> TestAS2ConnectionResponse:
+    disposition = raw_disposition or ""
+    parts = disposition.split(";", 1)
+    status_part = parts[1].strip().lower() if len(parts) == 2 else disposition.strip().lower()
+    is_success = (
+        status_part.startswith("processed")
+        and "error" not in status_part
+        and "failed" not in status_part
+    )
+    return TestAS2ConnectionResponse(
+        success=is_success,
+        mdn_disposition=status_part,
+        reason=None if is_success else status_part or disposition,
+        sent_payload=sent_payload,
+        raw_mdn=raw_mdn,
+    )
+
+
+def _to_partnership_response(p: AS2Partnership, *, tenant_id: str) -> AS2PartnershipResponse:
+    return AS2PartnershipResponse(
+        id=str(p.id),
+        tenant_id=tenant_id,
+        name=p.name,
+        local_partner_id=str(p.local_partner_id),
+        remote_partner_id=str(p.remote_partner_id),
+        mdn_type=p.mdn_type,
+        mdn_url=p.mdn_url,
+        encryption_algorithm=p.encryption_algorithm,
+        signature_algorithm=p.signature_algorithm,
+        status=TradingPartnerStatusResponse.ACTIVE
+        if p.active
+        else TradingPartnerStatusResponse.INACTIVE,
+        active=p.active,
+    )
+
+
+@router.post(
+    "/as2/partnerships/{partnership_id}/test",
+    response_model=TestAS2ConnectionResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def test_as2_partnership_connection(
+    partnership_id: str,
+    request: TestAS2ConnectionRequest | None = None,
+    uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
+    as2_tester: AS2TesterPort = Depends(get_as2_tester),
+    vault_port: SecretStorePort = Depends(get_secret_store),
+) -> TestAS2ConnectionResponse:
+    """
+    Tests an AS2 connection for a configured partnership.
+
+    Sends a synthetic AS2 ping (or custom payload) to the remote partner's URL
+    using the partnership's configured cryptographic material.
+    """
+    partnership, local_partner, remote_partner = await _load_partnership_participants(
+        uow, partnership_id
+    )
 
     if not local_partner:
         return TestAS2ConnectionResponse(
@@ -90,24 +165,12 @@ async def test_as2_partnership_connection(  # noqa: C901
             success=False, reason="Remote partner has no URL configured."
         )
 
-    # Resolve cryptographic material from Vault or inline PEM
-    local_private_key_pem: bytes | None = None
-    local_cert_pem: bytes | None = None
-    remote_cert_pem: bytes | None = None
-
     try:
-        if local_partner.private_key_vault_ref:
-            local_private_key_pem = await vault_port.retrieve_secret(
-                local_partner.private_key_vault_ref
-            )
-        if local_partner.public_cert_vault_ref:
-            local_cert_pem = await vault_port.retrieve_secret(local_partner.public_cert_vault_ref)
-        elif local_partner.public_cert_pem:
-            local_cert_pem = local_partner.public_cert_pem.encode()
-        if remote_partner.public_cert_vault_ref:
-            remote_cert_pem = await vault_port.retrieve_secret(remote_partner.public_cert_vault_ref)
-        elif remote_partner.public_cert_pem:
-            remote_cert_pem = remote_partner.public_cert_pem.encode()
+        (
+            local_private_key_pem,
+            local_cert_pem,
+            remote_cert_pem,
+        ) = await _resolve_partnership_crypto_material(local_partner, remote_partner, vault_port)
     except OrchestrationError as e:
         return TestAS2ConnectionResponse(
             success=False, reason=f"Failed to retrieve cryptographic material: {e}"
@@ -130,30 +193,18 @@ async def test_as2_partnership_connection(  # noqa: C901
             success=False, reason=raw_disposition, sent_payload=sent_payload, raw_mdn=raw_mdn
         )
 
-    # Business rule (RFC 4130): MDN disposition must start with "processed"
-    disposition = raw_disposition or ""
-    parts = disposition.split(";", 1)
-    status_part = parts[1].strip().lower() if len(parts) == 2 else disposition.strip().lower()
-    is_success = (
-        status_part.startswith("processed")
-        and "error" not in status_part
-        and "failed" not in status_part
-    )
-
-    return TestAS2ConnectionResponse(
-        success=is_success,
-        mdn_disposition=status_part,
-        reason=None if is_success else status_part or disposition,
-        sent_payload=sent_payload,
-        raw_mdn=raw_mdn,
-    )
+    return _evaluate_mdn_disposition(raw_disposition, sent_payload, raw_mdn)
 
 
-@router.post("/as2/partnerships", response_model=Any, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/as2/partnerships",
+    response_model=AS2PartnershipResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_as2_partnership(
     request: CreateAS2PartnershipRequest,
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-) -> Any:
+) -> AS2PartnershipResponse:
     """
     Creates a new AS2 Partnership directly in the Control Plane (used by Platform Admins).
     """
@@ -172,7 +223,10 @@ async def create_as2_partnership(
             )
 
             svc = CreateAS2PartnershipUseCase(uow=uow)
-            entity = await svc.create_as2_partnership(tenant_id=PLATFORM_TENANT_ID, cmd=cmd)
+            create_res = await svc.create_as2_partnership(tenant_id=PLATFORM_TENANT_ID, cmd=cmd)
+            if create_res.is_err:
+                raise_http_for_edi_error(create_res.unwrap_err())
+            entity = create_res.unwrap()
             await uow.commit()
             p = await uow.as2_partnerships.get_as2_partnership(
                 tenant_id=PLATFORM_TENANT_ID, partnership_id=entity.id
@@ -180,29 +234,11 @@ async def create_as2_partnership(
             if not p:
                 raise HTTPException(status_code=404, detail="Partnership not found")
 
-            return AS2PartnershipResponse(
-                id=str(entity.id),
-                tenant_id=PLATFORM_TENANT_ID,
-                name=p.name,
-                local_partner_id=str(p.local_partner_id),
-                remote_partner_id=str(p.remote_partner_id),
-                mdn_type=p.mdn_type,
-                mdn_url=p.mdn_url,
-                encryption_algorithm=p.encryption_algorithm,
-                signature_algorithm=p.signature_algorithm,
-                status=TradingPartnerStatusResponse.ACTIVE
-                if p.active
-                else TradingPartnerStatusResponse.INACTIVE,
-                active=p.active,
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except DuplicateEntityError as e:
-        raise HTTPException(
-            status_code=400, detail="AS2 Partnership already exists for these partners."
-        ) from e
+            return _to_partnership_response(p, tenant_id=PLATFORM_TENANT_ID)
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.put("/as2/partnerships/{partnership_id}", response_model=AS2PartnershipResponse)
@@ -210,7 +246,7 @@ async def update_as2_partnership(
     partnership_id: str,
     request: UpdateAS2PartnershipRequest,
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-) -> Any:
+) -> AS2PartnershipResponse:
     try:
         async with uow:
             mdn_url_val = (
@@ -257,9 +293,11 @@ async def update_as2_partnership(
                 active=request.active if "active" in request.model_fields_set else UNSET,
             )
             svc = UpdateAS2PartnershipUseCase(uow=uow)
-            await svc.update_as2_partnership(
+            upd_res = await svc.update_as2_partnership(
                 tenant_id=PLATFORM_TENANT_ID, partnership_id=partnership_id, cmd=cmd
             )
+            if upd_res.is_err:
+                raise_http_for_edi_error(upd_res.unwrap_err())
             await uow.commit()
 
             p = await uow.as2_partnerships.get_as2_partnership(
@@ -268,29 +306,11 @@ async def update_as2_partnership(
             if not p:
                 raise HTTPException(status_code=404, detail="Partnership not found")
 
-            return AS2PartnershipResponse(
-                id=str(p.id),
-                tenant_id=p.tenant_id,
-                name=p.name,
-                local_partner_id=str(p.local_partner_id),
-                remote_partner_id=str(p.remote_partner_id),
-                mdn_type=p.mdn_type,
-                mdn_url=p.mdn_url,
-                encryption_algorithm=p.encryption_algorithm,
-                signature_algorithm=p.signature_algorithm,
-                status=TradingPartnerStatusResponse.ACTIVE
-                if p.active
-                else TradingPartnerStatusResponse.INACTIVE,
-                active=p.active,
-            )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    except DuplicateEntityError as e:
-        raise HTTPException(
-            status_code=400, detail="AS2 Partnership already exists for these partners."
-        ) from e
+            return _to_partnership_response(p, tenant_id=p.tenant_id or PLATFORM_TENANT_ID)
     except HTTPException:
         raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except OrchestrationError as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
@@ -307,19 +327,23 @@ async def delete_as2_partnership(
     try:
         async with uow:
             svc = DeleteAS2PartnershipUseCase(uow=uow)
-            await svc.delete_as2_partnership(
+            del_res = await svc.delete_as2_partnership(
                 tenant_id=PLATFORM_TENANT_ID, partnership_id=partnership_id
             )
+            if del_res.is_err:
+                raise_http_for_edi_error(del_res.unwrap_err())
             await uow.commit()
+    except HTTPException:
+        raise
     except OrchestrationError as err:
-        logger.exception("Internal error deleting platform AS2 partnership")
+        logger.exception("Internal error deleting platform AS2 partnership", reason=str(err))
         raise HTTPException(status_code=500, detail="An internal server error occurred.") from err
 
 
 @router.get("/as2/partnerships", response_model=list[AS2PartnershipResponse])
 async def list_as2_partnerships(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-) -> Any:
+) -> list[AS2PartnershipResponse]:
     """
     Returns all global AS2 partnerships (tenant_id = 0).
     """
@@ -329,20 +353,6 @@ async def list_as2_partnerships(
         )
 
         return [
-            AS2PartnershipResponse(
-                id=str(p.id),
-                tenant_id=p.tenant_id,
-                name=p.name,
-                local_partner_id=str(p.local_partner_id),
-                remote_partner_id=str(p.remote_partner_id),
-                mdn_type=p.mdn_type,
-                mdn_url=p.mdn_url,
-                encryption_algorithm=p.encryption_algorithm,
-                signature_algorithm=p.signature_algorithm,
-                status=TradingPartnerStatusResponse.ACTIVE
-                if p.active
-                else TradingPartnerStatusResponse.INACTIVE,
-                active=p.active,
-            )
+            _to_partnership_response(p, tenant_id=p.tenant_id or PLATFORM_TENANT_ID)
             for p in partnerships
         ]

@@ -2,7 +2,7 @@ import pytest
 
 pytestmark = pytest.mark.integration
 
-from edi.domain.certificate import generate_self_signed_cert
+from edi.adapters.outbound.security.certificates import generate_self_signed_cert
 
 
 def test_generate_self_signed_cert():

@@ -7,14 +7,10 @@ from sqlalchemy import or_, select, update
 
 from database.models import Webhook
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.models.control_plane import (
-    AS2Partner,
-    InboundRoute,
-    SFTPPartner,
-)
-from edi.domain.enums import EdiConnectionType
-from edi.domain.models.base import ProcessingMode
-from edi.domain.models.inbound_routes import InboundRouteDomainModel
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, SFTPPartner
+from edi.adapters.outbound.database.models.control_plane import InboundRoute as OrmInboundRoute
+from edi.domain.routing.enums import EdiConnectionType, ProcessingMode
+from edi.domain.routing.inbound_route import InboundRoute
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 
 
@@ -22,9 +18,8 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
-    def _update_record_from_domain(
-        self, record: InboundRoute, aggregate: InboundRouteDomainModel
-    ) -> None:
+    @staticmethod
+    def _update_record_from_domain(record: OrmInboundRoute, aggregate: InboundRoute) -> None:
         record.tenant_id = aggregate.tenant_id
         record.name = aggregate.name
         record.isa_sender_id = aggregate.isa_sender_id
@@ -45,8 +40,8 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         )
 
     @staticmethod
-    def _to_domain_model(record: InboundRoute) -> InboundRouteDomainModel:
-        return InboundRouteDomainModel(
+    def _to_domain_model(record: OrmInboundRoute) -> InboundRoute:
+        return InboundRoute(
             id=record.id,
             tenant_id=record.tenant_id,
             name=record.name,
@@ -55,7 +50,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             active=record.active,
             created_at=record.created_at,
             updated_at=record.updated_at,
-            trading_partner_id=getattr(record, "trading_partner_id", None),
+            trading_partner_id=record.trading_partner_id,
             gs_sender_id=record.gs_sender_id,
             gs_receiver_id=record.gs_receiver_id,
             transaction_type=record.transaction_type,
@@ -133,7 +128,7 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
                     f"SFTP partner {sftp_id} not found or does not belong to this tenant"
                 )
 
-    async def save(self, aggregate: InboundRouteDomainModel) -> None:
+    async def save(self, aggregate: InboundRoute) -> None:
         await self._validate_inbound_destination(
             aggregate.tenant_id,
             aggregate.webhook_id,
@@ -142,20 +137,20 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         )
 
         result = await self.session.execute(
-            select(InboundRoute).where(
-                InboundRoute.id == aggregate.id,
-                InboundRoute.tenant_id == aggregate.tenant_id,
-                InboundRoute.deleted_at.is_(None),
+            select(OrmInboundRoute).where(
+                OrmInboundRoute.id == aggregate.id,
+                OrmInboundRoute.tenant_id == aggregate.tenant_id,
+                OrmInboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
         if not record:
-            record = InboundRoute(id=aggregate.id)
+            record = OrmInboundRoute(id=aggregate.id)
             self.session.add(record)
 
         self._update_record_from_domain(record, aggregate)
 
-        self._drain_events(aggregate)
+        await self._drain_events(aggregate)
         await self.session.flush()
 
     async def get_inbound_route(
@@ -164,44 +159,44 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
         isa_receiver_id: str,
         tenant_id: str,
         transaction_type: str | None = None,
-    ) -> InboundRouteDomainModel | None:
-        stmt = select(InboundRoute).where(
-            InboundRoute.isa_sender_id == isa_sender_id,
-            InboundRoute.isa_receiver_id == isa_receiver_id,
-            InboundRoute.tenant_id == tenant_id,
-            InboundRoute.active.is_(True),
-            InboundRoute.deleted_at.is_(None),
+    ) -> InboundRoute | None:
+        stmt = select(OrmInboundRoute).where(
+            OrmInboundRoute.isa_sender_id == isa_sender_id,
+            OrmInboundRoute.isa_receiver_id == isa_receiver_id,
+            OrmInboundRoute.tenant_id == tenant_id,
+            OrmInboundRoute.active.is_(True),
+            OrmInboundRoute.deleted_at.is_(None),
         )
         if transaction_type:
             stmt = stmt.where(
                 or_(
-                    InboundRoute.transaction_type == transaction_type,
-                    InboundRoute.transaction_type.is_(None),
+                    OrmInboundRoute.transaction_type == transaction_type,
+                    OrmInboundRoute.transaction_type.is_(None),
                 )
-            ).order_by(InboundRoute.transaction_type.desc().nullslast())
+            ).order_by(OrmInboundRoute.transaction_type.desc().nullslast())
         else:
-            stmt = stmt.where(InboundRoute.transaction_type.is_(None)).order_by(InboundRoute.id)
+            stmt = stmt.where(OrmInboundRoute.transaction_type.is_(None)).order_by(
+                OrmInboundRoute.id
+            )
 
         result = await self.session.execute(stmt)
         record = result.scalars().first()
         return self._to_domain_model(record) if record else None
 
-    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
+    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRoute]:
         result = await self.session.execute(
-            select(InboundRoute).where(
-                InboundRoute.tenant_id == tenant_id, InboundRoute.deleted_at.is_(None)
+            select(OrmInboundRoute).where(
+                OrmInboundRoute.tenant_id == tenant_id, OrmInboundRoute.deleted_at.is_(None)
             )
         )
         return [self._to_domain_model(r) for r in result.scalars().all()]
 
-    async def get_inbound_route_by_id(
-        self, tenant_id: str, route_id: str
-    ) -> InboundRouteDomainModel | None:
+    async def get_inbound_route_by_id(self, tenant_id: str, route_id: str) -> InboundRoute | None:
         result = await self.session.execute(
-            select(InboundRoute).where(
-                InboundRoute.id == route_id,
-                InboundRoute.tenant_id == tenant_id,
-                InboundRoute.deleted_at.is_(None),
+            select(OrmInboundRoute).where(
+                OrmInboundRoute.id == route_id,
+                OrmInboundRoute.tenant_id == tenant_id,
+                OrmInboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalars().first()
@@ -209,11 +204,11 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
 
     async def get_tenant_by_isa(self, isa_sender_id: str, isa_receiver_id: str) -> str | None:
         result = await self.session.execute(
-            select(InboundRoute.tenant_id).where(
-                InboundRoute.isa_sender_id == isa_sender_id,
-                InboundRoute.isa_receiver_id == isa_receiver_id,
-                InboundRoute.active.is_(True),
-                InboundRoute.deleted_at.is_(None),
+            select(OrmInboundRoute.tenant_id).where(
+                OrmInboundRoute.isa_sender_id == isa_sender_id,
+                OrmInboundRoute.isa_receiver_id == isa_receiver_id,
+                OrmInboundRoute.active.is_(True),
+                OrmInboundRoute.deleted_at.is_(None),
             )
         )
         rows = result.scalars().all()
@@ -225,16 +220,16 @@ class SqlAlchemyInboundRouteRepository(InboundRouteRepositoryPort, GlobalSqlAlch
             )
         return str(rows[0]) if rows else None
 
-    async def delete(self, aggregate: InboundRouteDomainModel) -> None:
+    async def delete(self, aggregate: InboundRoute) -> None:
         await self.session.execute(
-            update(InboundRoute)
+            update(OrmInboundRoute)
             .where(
-                InboundRoute.id == aggregate.id,
-                InboundRoute.tenant_id == aggregate.tenant_id,
-                InboundRoute.deleted_at.is_(None),
+                OrmInboundRoute.id == aggregate.id,
+                OrmInboundRoute.tenant_id == aggregate.tenant_id,
+                OrmInboundRoute.deleted_at.is_(None),
             )
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
 
-        self._drain_events(aggregate)
+        await self._drain_events(aggregate)
         await self.session.flush()

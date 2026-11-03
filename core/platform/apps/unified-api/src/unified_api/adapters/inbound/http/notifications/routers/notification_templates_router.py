@@ -8,13 +8,14 @@ import jinja2
 import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
 from notification.bootstrap.container import Container
 from notification.config import NotificationEngineSettings
-from notification.domain.models import Channel, Template
+from notification.domain.enums import Channel
+from notification.domain.template import Template
 from notification.ports.outbound.notification_templates_repository_port import (
     NotificationTemplatesRepositoryPort,
 )
+from notification.ports.outbound.template_renderer_port import TemplateRendererPort
 from pydantic import BaseModel, Field, field_validator
 
 from unified_api.adapters.inbound.http.guards.notification_auth_guard import (
@@ -167,7 +168,7 @@ async def preview_template(
     tenant_id: str,
     body: PreviewTemplateRequest,
     request: Request,
-    renderer: Jinja2TemplateRenderer = Depends(Provide[Container.template_renderer]),
+    renderer: TemplateRendererPort = Depends(Provide[Container.template_renderer]),
     settings: NotificationEngineSettings = Depends(Provide[Container.engine_settings]),
 ) -> PreviewTemplateResponse:
     assert_tenant_authorized(request, tenant_id)

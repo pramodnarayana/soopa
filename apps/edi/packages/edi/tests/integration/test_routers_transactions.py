@@ -9,10 +9,11 @@ from httpx import AsyncClient
 from seedwork.utils import generate_id
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.outbound.database.models.data_plane import EdiJson, EdiMessage
-from edi.domain.enums import ReplayCheckpoint
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.adapters.outbound.database.models.data_plane import EdiJson
+from edi.adapters.outbound.database.models.data_plane import EdiMessage as OrmEdiMessage
+from edi.domain.routing.enums import Direction
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import RecordStatus, ReplayCheckpoint
 
 
 @pytest.mark.asyncio
@@ -23,7 +24,7 @@ async def test_list_transactions(
     tenant_id = "1"
     trace_id = generate_id("trace")
 
-    msg = EdiMessageDomainModel(
+    msg = EdiMessage(
         id=generate_id("msg"),
         tenant_id=tenant_id,
         trace_id=trace_id,
@@ -34,7 +35,7 @@ async def test_list_transactions(
 
     # We use the tenant_db_session to persist the model manually since it's a tenant data plane record
 
-    db_msg = EdiMessage(
+    db_msg = OrmEdiMessage(
         id=msg.id,
         tenant_id=msg.tenant_id,
         trace_id=msg.trace_id,
@@ -62,7 +63,7 @@ async def test_get_transaction_trace(client: AsyncClient, tenant_db_session: Asy
     tenant_id = "1"
     trace_id = generate_id("trace")
 
-    db_msg = EdiMessage(
+    db_msg = OrmEdiMessage(
         id=generate_id("msg"),
         tenant_id=tenant_id,
         trace_id=trace_id,
@@ -123,7 +124,7 @@ async def test_replay_transaction(client: AsyncClient, tenant_db_session: AsyncS
     tenant_id = "1"
     trace_id = generate_id("trace")
 
-    db_msg = EdiMessage(
+    db_msg = OrmEdiMessage(
         id=generate_id("msg"),
         tenant_id=tenant_id,
         trace_id=trace_id,
@@ -154,7 +155,7 @@ async def test_bulk_replay_transactions(
     trace_id_2 = generate_id("trace2")
 
     tenant_db_session.add(
-        EdiMessage(
+        OrmEdiMessage(
             id=generate_id("msg"),
             tenant_id=tenant_id,
             trace_id=trace_id_1,
@@ -166,7 +167,7 @@ async def test_bulk_replay_transactions(
         )
     )
     tenant_db_session.add(
-        EdiMessage(
+        OrmEdiMessage(
             id=generate_id("msg"),
             tenant_id=tenant_id,
             trace_id=trace_id_2,
@@ -200,7 +201,7 @@ async def test_get_transaction_trace_lineage_and_modify_and_replay(
     trace_id = generate_id("trace")
 
     tenant_db_session.add(
-        EdiMessage(
+        OrmEdiMessage(
             id=generate_id("msg"),
             tenant_id=tenant_id,
             trace_id=trace_id,

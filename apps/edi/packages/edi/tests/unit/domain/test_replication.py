@@ -3,35 +3,25 @@ Unit tests for declarative replication dependency graph and topological sorting.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Any
 
 import pytest
 
-from edi.domain.replication import (
+from edi.domain.replication.graph import (
     EntityDependency,
     EntitySpec,
+    EntitySpecProtocol,
     topological_layers,
     validate_replication_graph,
 )
 
 
-def _dummy_mapper(_entity: Any) -> Mapping[str, object]:
+def _dummy_mapper(_entity: object) -> Mapping[str, object]:
     return {}
 
 
-@dataclass
-class DummyControlPlaneModel:
-    pass
-
-
-@dataclass
-class DummyDataPlaneModel:
-    pass
-
-
 class ControlPlaneA:
-    pass
+    parent_a_id: str | None = None
+    b_id: str | None = None
 
 
 class DataPlaneA:
@@ -39,7 +29,7 @@ class DataPlaneA:
 
 
 class ControlPlaneB:
-    pass
+    a_id: str | None = None
 
 
 class DataPlaneB:
@@ -47,7 +37,7 @@ class DataPlaneB:
 
 
 class ControlPlaneC:
-    pass
+    b_id: str | None = None
 
 
 class DataPlaneC:
@@ -55,7 +45,7 @@ class DataPlaneC:
 
 
 def test_topological_layers_acyclic() -> None:
-    graph = {
+    graph: dict[str, EntitySpecProtocol] = {
         "A": EntitySpec(
             control_plane_model=ControlPlaneA,
             data_plane_model=DataPlaneA,
@@ -65,17 +55,25 @@ def test_topological_layers_acyclic() -> None:
             control_plane_model=ControlPlaneB,
             data_plane_model=DataPlaneB,
             mapper=_dummy_mapper,
-            dependencies=[
-                EntityDependency(fk_attr="a_id", target_key="A"),
-            ],
+            dependencies=(
+                EntityDependency(
+                    fk_name="a_id",
+                    fk_getter=lambda b: b.a_id,
+                    target_key="A",
+                ),
+            ),
         ),
         "C": EntitySpec(
             control_plane_model=ControlPlaneC,
             data_plane_model=DataPlaneC,
             mapper=_dummy_mapper,
-            dependencies=[
-                EntityDependency(fk_attr="b_id", target_key="B"),
-            ],
+            dependencies=(
+                EntityDependency(
+                    fk_name="b_id",
+                    fk_getter=lambda c: c.b_id,
+                    target_key="B",
+                ),
+            ),
         ),
     }
 
@@ -84,22 +82,30 @@ def test_topological_layers_acyclic() -> None:
 
 
 def test_topological_layers_cyclic_raises_value_error() -> None:
-    graph = {
+    graph: dict[str, EntitySpecProtocol] = {
         "A": EntitySpec(
             control_plane_model=ControlPlaneA,
             data_plane_model=DataPlaneA,
             mapper=_dummy_mapper,
-            dependencies=[
-                EntityDependency(fk_attr="b_id", target_key="B"),
-            ],
+            dependencies=(
+                EntityDependency(
+                    fk_name="b_id",
+                    fk_getter=lambda a: a.b_id,
+                    target_key="B",
+                ),
+            ),
         ),
         "B": EntitySpec(
             control_plane_model=ControlPlaneB,
             data_plane_model=DataPlaneB,
             mapper=_dummy_mapper,
-            dependencies=[
-                EntityDependency(fk_attr="a_id", target_key="A"),
-            ],
+            dependencies=(
+                EntityDependency(
+                    fk_name="a_id",
+                    fk_getter=lambda b: b.a_id,
+                    target_key="A",
+                ),
+            ),
         ),
     }
 
@@ -108,7 +114,7 @@ def test_topological_layers_cyclic_raises_value_error() -> None:
 
 
 def test_validate_replication_graph_valid() -> None:
-    graph = {
+    graph: dict[str, EntitySpecProtocol] = {
         "A": EntitySpec(
             control_plane_model=ControlPlaneA,
             data_plane_model=DataPlaneA,
@@ -118,23 +124,31 @@ def test_validate_replication_graph_valid() -> None:
             control_plane_model=ControlPlaneB,
             data_plane_model=DataPlaneB,
             mapper=_dummy_mapper,
-            dependencies=[
-                EntityDependency(fk_attr="a_id", target_key="A"),
-            ],
+            dependencies=(
+                EntityDependency(
+                    fk_name="a_id",
+                    fk_getter=lambda b: b.a_id,
+                    target_key="A",
+                ),
+            ),
         ),
     }
     validate_replication_graph(graph)
 
 
 def test_validate_replication_graph_self_dependency_raises_value_error() -> None:
-    graph = {
+    graph: dict[str, EntitySpecProtocol] = {
         "A": EntitySpec(
             control_plane_model=ControlPlaneA,
             data_plane_model=DataPlaneA,
             mapper=_dummy_mapper,
-            dependencies=[
-                EntityDependency(fk_attr="parent_a_id", target_key="A"),
-            ],
+            dependencies=(
+                EntityDependency(
+                    fk_name="parent_a_id",
+                    fk_getter=lambda a: a.parent_a_id,
+                    target_key="A",
+                ),
+            ),
         ),
     }
     with pytest.raises(ValueError, match="specifies self-dependency"):

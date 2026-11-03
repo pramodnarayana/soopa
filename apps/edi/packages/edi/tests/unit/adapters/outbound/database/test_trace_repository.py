@@ -4,7 +4,9 @@ import pytest
 from database.types import TenantSession
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.outbound.database.transaction_repository import SqlAlchemyTransactionRepository
+from edi.adapters.outbound.database.data_plane.edi_message_repository import (
+    SqlAlchemyEdiMessageRepository,
+)
 
 
 class UnusedStorage:
@@ -27,6 +29,9 @@ class EmptyResult:
     def scalars(self) -> EmptyScalars:
         return EmptyScalars()
 
+    def scalar_one_or_none(self) -> None:
+        return None
+
 
 class RecordingSession:
     def __init__(self) -> None:
@@ -39,14 +44,14 @@ class RecordingSession:
 
 
 @pytest.mark.asyncio
-async def test_get_edi_message_dto_selects_only_the_newest_edi_message() -> None:
+async def test_get_edi_message_selects_only_the_newest_edi_message() -> None:
     session = RecordingSession()
-    repository = SqlAlchemyTransactionRepository(
+    repository = SqlAlchemyEdiMessageRepository(
         TenantSession(cast(AsyncSession, session)),
         UnusedStorage(),
     )
 
-    assert await repository.get_edi_message_dto("tenant-1", "trace-1") is None
+    assert await repository.get_edi_message("trace-1", tenant_id="tenant-1") is None
 
     compiled = str(session.statements[0].compile(compile_kwargs={"literal_binds": True}))
     assert "ORDER BY edi_messages.created_at DESC" in compiled

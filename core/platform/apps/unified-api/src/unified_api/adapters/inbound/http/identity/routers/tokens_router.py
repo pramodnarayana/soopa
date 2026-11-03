@@ -2,12 +2,8 @@ from collections.abc import Callable
 from typing import Annotated
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from identity.domain.identity_context import IdentityContext
-from identity.domain.models.api_token_models import (
-    CreateApiTokenCommand,
-    UpdateApiTokenCommand,
-)
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.application.use_cases.api_tokens import (
     CreateApiTokenUseCase,
@@ -15,6 +11,8 @@ from ucp.application.use_cases.api_tokens import (
     ListApiTokensUseCase,
     UpdateApiTokenUseCase,
 )
+from ucp.application.use_cases.api_tokens.create_api_token_use_case import CreateApiTokenCommand
+from ucp.application.use_cases.api_tokens.update_api_token_use_case import UpdateApiTokenCommand
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
 
@@ -25,6 +23,7 @@ from unified_api.adapters.inbound.http.identity.dtos.api_token_dtos import (
     CreateApiTokenRequest,
     UpdateApiTokenRequest,
 )
+from unified_api.adapters.inbound.http.ucp.error_mapper import raise_http_for_ucp_error
 
 # This is mounted under /tenants/{tenant_id}/tokens, but we define the prefix at include_router
 router = APIRouter(tags=["API Tokens"])
@@ -63,7 +62,10 @@ async def create_token(
     """
     use_case: CreateApiTokenUseCase = use_case_factory(uow__session=session)
     command = CreateApiTokenCommand(name=request.name, expires_at=request.expires_at)
-    result = await use_case.execute(tenant_id, command)
+    res = await use_case.execute(tenant_id, command)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
+    result = res.unwrap()
     return ApiTokenCreatedResponse(
         id=result.id,
         name=result.name,
@@ -91,10 +93,10 @@ async def update_token(
     """Updates token metadata (e.g. name or active status)."""
     use_case: UpdateApiTokenUseCase = use_case_factory(uow__session=session)
     command = UpdateApiTokenCommand(name=request.name, active=request.active)
-    token = await use_case.execute(token_id, tenant_id, command)
-    if not token:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
-    return ApiTokenResponse.model_validate(token)
+    res = await use_case.execute(token_id, tenant_id, command)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())
+    return ApiTokenResponse.model_validate(res.unwrap())
 
 
 @router.delete("/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -110,6 +112,6 @@ async def delete_token(
 ) -> None:
     """Permanently deletes an API token."""
     use_case: DeleteApiTokenUseCase = use_case_factory(uow__session=session)
-    deleted = await use_case.execute(token_id, tenant_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Token not found")
+    res = await use_case.execute(token_id, tenant_id)
+    if res.is_err:
+        raise_http_for_ucp_error(res.unwrap_err())

@@ -33,7 +33,7 @@ async def test_drain_events_prefers_explicit_event_idempotency_key(
         )
     )
 
-    repository._drain_events(aggregate)
+    await repository._drain_events(aggregate)
 
     # The outbox event is added to the session
     added_objects = list(db_session.new)

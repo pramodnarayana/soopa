@@ -4,8 +4,8 @@ import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.pipeline.http import HttpxDeliveryClient
+from edi.bootstrap.container import create_edi_data_plane_uow
 from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher
 from pytest_httpserver import HTTPServer
 from seedwork import generate_random_hex
@@ -42,7 +42,7 @@ class FakeTenantUowProvider:
             async for session in self.db_router.get_tenant_session(
                 tenant_id, "fake_shard", "fake_dsn"
             ):
-                yield SqlAlchemyDataPlaneUnitOfWork(session, FakeStorage())
+                yield create_edi_data_plane_uow(session, FakeStorage())
 
         return factory
 

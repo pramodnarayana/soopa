@@ -1,10 +1,10 @@
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import CheckConstraint, ForeignKey, Index, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
 from database.models.common import OutboxMixin, SoftDeleteMixin, TimestampMixin
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 
 from .base import EdiGlobalBase
 from .mixins import (

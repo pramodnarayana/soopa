@@ -112,4 +112,8 @@ async def test_fake_api_token_lookup_excludes_inactive_tokens() -> None:
     repo.tokens.extend((expired_token, valid_token))
 
     assert await repo.get_by_client_id(expired_token.client_id) is None
+    assert (
+        await repo.get_by_client_id(expired_token.client_id, now=now - timedelta(minutes=1))
+        is expired_token
+    )
     assert await repo.get_by_client_id(valid_token.client_id) is valid_token

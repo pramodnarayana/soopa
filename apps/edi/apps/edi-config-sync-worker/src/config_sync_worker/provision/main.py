@@ -4,10 +4,10 @@ import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from observability import ObservabilityProvider
-from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from pubsub.provider import PubSubProvider
 
 from config_sync_worker.adapters.acl.registry import DefaultEventTranslator
 from config_sync_worker.adapters.inbound.workers.edi_config_sync_sqs_dispatcher import (
@@ -37,7 +37,7 @@ class EdiConfigSyncWorkerModule(LaunchableWorker):
             shard_overrides=settings.database.shard_overrides,
         )
         assert self.db_router is not None
-        tenant_adapter = TenantResolver(self.db_router)
+        tenant_adapter = SqlAlchemyTenantResolver(self.db_router)
         replication_adapter = SqlAlchemyReplicationAdapter(self.db_router, tenant_adapter)
 
         logger.info("starting_unified_provisioning_worker")
@@ -50,15 +50,11 @@ class EdiConfigSyncWorkerModule(LaunchableWorker):
             domain_service=replication_service, transformer_port=translator
         )
 
-        provisioning_consumer = AwsSqsConsumer(
+        self.sqs_manager = PubSubProvider.create_consumer_manager(
             queue_url=settings.sqs.provisioning_queue_url,
+            handler=dispatcher.dispatch_raw,
             region_name=settings.aws.resolved_region,
             endpoint_url=settings.aws.endpoint_url,
-        )
-        self.sqs_manager = SqsConsumerManager(
-            consumer=provisioning_consumer,
-            queue_name=settings.sqs.provisioning_queue_url.rsplit("/", 1)[-1],
-            handler=dispatcher.dispatch_raw,
         )
         assert self.sqs_manager is not None
         self.sqs_manager.start()

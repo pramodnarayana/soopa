@@ -22,17 +22,14 @@ from edi.application.use_cases.sftp_partners.update_sftp_partner_use_case import
     UpdateSFTPPartnerCmd,
     UpdateSFTPPartnerUseCase,
 )
-from edi.domain.enums import EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.as2 import AS2PartnerDomainModel, AS2PartnershipDomainModel
+from edi.domain.partner.as2.partner import AS2Partner
+from edi.domain.partner.as2.partnership import AS2Partnership
 from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 
 
-def make_as2_partner(
-    partner_id: str, as2_id: str, tenant_id: str = "tenant-1"
-) -> AS2PartnerDomainModel:
+def make_as2_partner(partner_id: str, as2_id: str, tenant_id: str = "tenant-1") -> AS2Partner:
     now = datetime.now(UTC)
-    return AS2PartnerDomainModel(
+    return AS2Partner(
         id=partner_id,
         tenant_id=tenant_id,
         as2_id=as2_id,
@@ -80,14 +77,7 @@ async def test_route_mutations_reject_a_different_tenant():
 async def test_save_serializes_and_clears_aggregate_domain_events():
     uow = FakeControlPlaneUnitOfWork()
     partner = make_as2_partner("local-id", "LOCAL")
-    partner.add_domain_event(
-        ProvisioningEvent(
-            tenant_id="tenant-1",
-            event_type=EdiEventType.edi_as2_partner_updated,
-            resource_id=partner.id,
-            idempotency_key="request-1",
-        )
-    )
+    partner.update(name="LOCAL_UPDATED", idempotency_key="request-1")
 
     await uow.as2_partners.save(partner)
 
@@ -111,7 +101,7 @@ async def test_get_partnership_by_as2_ids_resolves_partners_and_partnership():
     local = make_as2_partner("local-id", "LOCAL")
     remote = make_as2_partner("remote-id", "REMOTE")
     now = datetime.now(UTC)
-    partnership = AS2PartnershipDomainModel(
+    partnership = AS2Partnership(
         id="partnership-id",
         tenant_id="tenant-1",
         name="partnership",
@@ -139,7 +129,7 @@ async def test_get_partnership_by_as2_ids_rejects_cross_tenant_partners():
     local = make_as2_partner("local-id", "LOCAL", tenant_id="tenant-1")
     remote = make_as2_partner("remote-id", "REMOTE", tenant_id="tenant-2")
     now = datetime.now(UTC)
-    partnership = AS2PartnershipDomainModel(
+    partnership = AS2Partnership(
         id="partnership-id",
         tenant_id="tenant-1",
         name="partnership",
@@ -160,13 +150,19 @@ async def test_get_partnership_by_as2_ids_rejects_cross_tenant_partners():
 
 
 class FakeFieldEncryption:
-    def encrypt(self, data: str) -> str:
-        return f"encrypted:{data}"
+    def encrypt_str(self, text: str) -> str:
+        return f"encrypted:{text}"
 
-    def decrypt(self, token: str) -> str:
-        if token.startswith("encrypted:"):
-            return token[10:]
-        return token
+    def decrypt_str(self, ciphertext: str) -> str:
+        if ciphertext.startswith("encrypted:"):
+            return ciphertext[10:]
+        return ciphertext
+
+    def encrypt_dict(self, data: dict[str, object]) -> bytes:
+        return b"{}"
+
+    def decrypt_dict(self, encrypted_bytes: bytes) -> dict[str, object]:
+        return {}
 
 
 @pytest.mark.asyncio
@@ -181,11 +177,46 @@ async def test_update_sftp_password_maps_to_encrypted_field():
         field_encryption=FakeFieldEncryption(),
     )
 
-    partner = await use_case.update_sftp_partner(
+    res = await use_case.update_sftp_partner(
         "tenant-1",
         partner_id,
         UpdateSFTPPartnerCmd(password=os.environ.get("DUMMY_PASSWORD", "secret")),
     )
+    assert res.is_ok
+    partner = res.unwrap()
 
     assert partner.password_encrypted == f"encrypted:{os.environ.get('DUMMY_PASSWORD', 'secret')}"
-    assert not hasattr(partner, "password")
+    assert "password" not in type(partner).__dataclass_fields__
+
+
+@pytest.mark.asyncio
+async def test_save_finalizes_idempotency_reservation_in_fake_outbox() -> None:
+    uow = FakeControlPlaneUnitOfWork()
+    await uow.control_plane_outbox.create_reservation(
+        tenant_id="tenant-1",
+        idempotency_key="idem-42",
+        fingerprint="fp-abc",
+    )
+    partner = AS2Partner.create(
+        tenant_id="tenant-1",
+        name="Remote Partner",
+        as2_id="REMOTE_42",
+        is_local=False,
+        url="https://remote.example.com/as2",
+        public_cert_pem="-----BEGIN CERTIFICATE-----\ncert\n-----END CERTIFICATE-----",
+        idempotency_key="idem-42",
+    ).unwrap()
+
+    await uow.as2_partners.save(partner)
+
+    finalized = await uow.control_plane_outbox.get_event_by_idempotency_key("idem-42")
+    assert finalized is not None
+    assert finalized.id == "reservation_idem-42"
+    assert finalized.event_type == "edi.as2_partner.created"
+    assert finalized.payload == {
+        "fingerprint": "fp-abc",
+        "idempotency_key": "idem-42",
+        "tenant_id": "tenant-1",
+        "event_type": "edi.as2_partner.created",
+        "resource_id": partner.id,
+    }
