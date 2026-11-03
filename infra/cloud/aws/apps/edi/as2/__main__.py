@@ -4,7 +4,7 @@ Application Layer (Layer 3) - EDI Bounded Context: AS2 Server
 Provisions only the AS2 Server ECS Fargate service.
 
 Tier 6: Deployed on every code push (image_tag change).
-Depends on: edi/messaging (queue URLs), platform (cluster, ECR, ALB), data (DB).
+Depends on: edi/messaging (queue URLs), edi/storage (S3 payloads bucket), platform (cluster, ECR, ALB), data (DB).
 """
 
 import json
@@ -28,12 +28,13 @@ foundation_stack_ref = config.get("foundation_stack") or f"organization/foundati
 platform_stack_ref = config.get("platform_stack") or f"organization/platform/{_env}"
 data_stack_ref = config.get("data_stack") or f"organization/data/{_env}"
 messaging_stack_ref = config.get("messaging_stack") or f"organization/edi-messaging/{_env}"
+storage_stack_ref = config.get("storage_stack") or f"organization/edi-storage/{_env}"
 
 foundation = pulumi.StackReference(foundation_stack_ref)
 platform = pulumi.StackReference(platform_stack_ref)
 data = pulumi.StackReference(data_stack_ref)
 messaging = pulumi.StackReference(messaging_stack_ref)
-# Storage stack is not used by AS2 server.
+storage = pulumi.StackReference(storage_stack_ref)
 obs_stack_ref = config.get("openobserve_stack") or f"organization/organization-openobserve/{_env}"
 obs = pulumi.StackReference(obs_stack_ref)
 
@@ -55,7 +56,8 @@ edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
-# S3 and SNS are not used by the AS2 server (payloads saved to DB).
+as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
+as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 queue_env_vars = messaging.require_output("queue_env_vars")
 queue_arns = resolve_messaging_queue_arns(messaging)
 
@@ -160,6 +162,7 @@ as2_env_vars: pulumi.Output = pulumi.Output.all(
     public_base_url=pulumi.Output.concat("https://api.", staging_domain),
     as2_receive_url=pulumi.Output.concat("https://edi.", staging_domain, "/as2/inbox"),
     identity_issuer=pulumi.Output.concat("https://identity.", staging_domain),
+    s3_bucket=as2_payloads_bucket_name,
 ).apply(
     lambda args: queue_env_vars_to_ecs_format(
         queue_env_vars=args["queue_env_vars"],
@@ -172,6 +175,7 @@ as2_env_vars: pulumi.Output = pulumi.Output.all(
             "PUBLIC_BASE_URL": args["public_base_url"],
             "AS2_RECEIVE_URL": args["as2_receive_url"],
             "IDENTITY_ISSUER": args["identity_issuer"],
+            "S3_BUCKET": args["s3_bucket"],
         },
     )
 )
@@ -218,6 +222,16 @@ as2_server = provision_fargate_service(
             "Resource": f"arn:aws:secretsmanager:{_region.name}:{_identity.account_id}:secret:edi/*",
         },
         {"Effect": "Allow", "Action": ["secretsmanager:ListSecrets"], "Resource": "*"},
+        {
+            "Effect": "Allow",
+            "Action": ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"],
+            "Resource": pulumi.Output.concat(as2_payloads_bucket_arn, "/*"),
+        },
+        {
+            "Effect": "Allow",
+            "Action": ["s3:ListBucket"],
+            "Resource": as2_payloads_bucket_arn,
+        },
         {
             "Effect": "Allow",
             "Action": [

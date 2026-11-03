@@ -39,6 +39,16 @@ class ObservabilityDefaults:
     DEFAULT_S3_NONCURRENT_RETENTION_DAYS: int = 30
 
 
+@dataclass(frozen=True)
+class S3Constants:
+    MIN_BUCKET_NAME_LENGTH: int = 3
+    MAX_BUCKET_NAME_LENGTH: int = 63
+    LIFECYCLE_RULE_ID: str = "cost-optimization-cleanup"
+    STATUS_ENABLED: str = "Enabled"
+    SSE_AES256: str = "AES256"
+    SSE_AWS_KMS: str = "aws:kms"
+
+
 def validate_log_retention(days: int) -> int:
     """
     Enforces enterprise retention policy governance.
