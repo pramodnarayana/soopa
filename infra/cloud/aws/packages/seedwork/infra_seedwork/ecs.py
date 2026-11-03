@@ -1,4 +1,5 @@
 import json
+from collections.abc import Sequence
 from typing import TypedDict
 
 import pulumi
@@ -85,7 +86,7 @@ class IamPolicyStatement(TypedDict, total=False):
     Sid: str
     Effect: str
     Action: list[str]
-    Resource: list[str] | str
+    Resource: pulumi.Input[Sequence[pulumi.Input[str]]] | pulumi.Input[str]
 
 
 class TargetGroupConfig(TypedDict, total=False):

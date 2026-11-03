@@ -66,11 +66,18 @@ pulumi up -s <env> -C infra/cloud/zitadel
 
 ---
 
-## Phase 4: Database Migrations & Data Seeding
+## Phase 4: Messaging Topology, Database Migrations & Data Seeding
 
-Now that the core infrastructure and identity configurations are deployed, we must align the database schemas and insert the required system constants (Webhooks, Identity configs, Event Types) *before* deploying the Application code.
+Now that the core infrastructure and identity configurations are deployed, we converge bounded-context messaging/storage resources, align database schemas, and insert the required system constants (Webhooks, Identity configs, Event Types) *before* deploying the Application code.
 
 ```bash
+# 0. Converge Bounded-Context Messaging & Storage Stacks (Topology SSOT)
+pulumi up -s <env> -C infra/cloud/aws/apps/ucp/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/identity/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/notification/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/edi/messaging
+pulumi up -s <env> -C infra/cloud/aws/apps/edi/storage
+
 # From the bastion host, local machine (via VPN), or ECS run-task:
 
 # 1. Deploy the Database Migrator Task Templates (Platform & EDI)
@@ -136,13 +143,14 @@ Deployments and infrastructure provisioning are orchestrated entirely via native
    - Manages Foundation, Data, Platform, OpenObserve, Zitadel, OpenAS2, Dashboard Infra, and Global Routing.
    - **Static Checks (`check-infra.yml`)**: Fast, unprivileged workflow (zero AWS credentials) running linters and pure unit tests without cloud mocks on any `infra/**` PR.
    - **Speculative Cloud Diff (`preview-infra.yml`)**: OIDC-authenticated workflow generating `pulumi preview` diffs against live AWS infrastructure stacks.
-   - **Cloud Infra Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding app ECS service stacks `api`, `ucp`, `edi`, and `migrator`, which roll out via App Service Rollout; `openas2`, `dashboard`, and `routing` still roll out through `provision-infra.yml`).
+   - **Cloud Infra Rollout (`provision-infra.yml`)**: Event-driven rollout executing `pulumi up` on merge to `development` / `main` for platform infrastructure paths (excluding bounded-context app and messaging stacks `api`, `ucp`, `identity`, `notification`, `edi`, and `migrator`, which roll out atomically via App Service Rollout; `openas2`, `dashboard`, and `routing` still roll out through `provision-infra.yml`).
 
 2. **App Continuous Delivery (`ci.yml`, `preview-app-iac.yml`, `cd-staging.yml` / `cd-prod.yml` calling `deploy.yml`)**:
    - **App CI (`ci.yml`)**: Gated on linting, unit/integration testing, and Docker image build test for pure application services (zero infra mocks).
-   - **App IaC Preview (`preview-app-iac.yml`)**: Event-driven speculative diff workflow triggered when app infrastructure (`infra/cloud/aws/apps/**`) is modified, generating real Pulumi diffs against the staging cluster.
+   - **App IaC Preview (`preview-app-iac.yml`)**: Event-driven speculative diff workflow triggered when topology manifests or bounded-context app infrastructure (`infra/topology.json`, `infra/cloud/aws/apps/**`) are modified, generating real Pulumi diffs against the staging cluster.
    - **App Service Rollout (`deploy.yml`)**: Triggered post-CI via `cd-staging.yml` / `cd-prod.yml`.
    - Builds and tags the single modular monolith container image (`sha-*`).
+   - Converges bounded-context messaging and storage topology stacks (`ucp`, `identity`, `notification`, `edi`) before migrations and compute rollout.
    - Runs domain-scoped database migrations via typed ECS tasks (`run_ecs_task`).
    - Executes rolling updates for API, UCP workers, EDI workers, and AS2 servers.
    - Builds and deploys frontend dashboard assets to S3/CloudFront (`deploy-dashboard.sh`).

@@ -23,6 +23,7 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.messaging import resolve_messaging_queue_arns
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-edi-"
@@ -65,13 +66,7 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 as2_payloads_bucket_name = storage.require_output("as2_payloads_bucket_name")
 as2_payloads_bucket_arn = storage.require_output("as2_payloads_bucket_arn")
 sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
-queue_arns = [
-    messaging.require_output("sqs_edi_data_plane_jobs_arn"),
-    messaging.require_output("sqs_edi_deliver_arn"),
-    pulumi.Output.concat(messaging.require_output("sqs_edi_deliver_arn"), "-dlq"),
-    messaging.require_output("sqs_edi_orchestrator_arn"),
-    messaging.require_output("sqs_edi_compute_arn"),
-]
+queue_arns = resolve_messaging_queue_arns(messaging)
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
