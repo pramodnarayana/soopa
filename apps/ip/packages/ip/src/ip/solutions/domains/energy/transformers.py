@@ -171,7 +171,7 @@ class AmiMeterReadingTransformerV2(TransformerPort):
         voltage_avg = to_optional_finite_float(payload.get("voltage_avg"))
         kwh_delivered = to_finite_float(base_draft.fields.get("kwh_delivered"), 0.0)
         kwh_received = to_finite_float(base_draft.fields.get("kwh_received"), 0.0)
-        net_kwh = round(kwh_delivered - kwh_received, 4)
+        net_kwh = to_optional_finite_float(round(kwh_delivered - kwh_received, 4))
 
         updated_fields = dict(base_draft.fields)
         updated_fields["voltage_avg"] = voltage_avg

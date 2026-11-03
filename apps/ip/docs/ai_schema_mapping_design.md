@@ -3,7 +3,7 @@
 - **Document:** ARCH-IP-012 — AI-Assisted Schema Profiling, Inbound Code Synthesis & Visual Stitch Engine
 - **Product:** Soopa Integration Platform (`apps/ip`)
 - **Status:** Approved Architecture Specification
-- **Related Specs:** [ai_schema_mapping_prd.md](file:///Users/apple/soopa_mono/apps/ip/docs/ai_schema_mapping_prd.md), [l3_normalization_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l3_normalization_design.md), [frontend_architecture_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/frontend_architecture_design.md)
+- **Related Specs:** [ai_schema_mapping_prd.md](ai_schema_mapping_prd.md), [l3_normalization_design.md](l3_normalization_design.md), [frontend_architecture_design.md](frontend_architecture_design.md)
 - **Architecture Style:** Hexagonal Architecture • Decoupled 5-Stage Pipeline • Offline AI Synthesis + Deterministic Fast-Path Execution
 
 ---

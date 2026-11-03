@@ -4,7 +4,7 @@
 - **Product:** Soopa Integration Platform (`apps/ip`)
 - **Status:** Approved Architecture Specification (Gold Standard)
 - **Bounded Context:** External Connectivity & Ingress/Egress Adapters
-- **Related Specs:** [ai_autonomous_connector_factory_prd.md](file:///Users/apple/soopa_mono/apps/ip/docs/ai_autonomous_connector_factory_prd.md), [generic_http_connector_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/generic_http_connector_design.md)
+- **Related Specs:** [ai_autonomous_connector_factory_prd.md](ai_autonomous_connector_factory_prd.md), [generic_http_connector_design.md](generic_http_connector_design.md)
 - **Architecture Style:** Hexagonal Architecture • Common Intermediate Representation (IR) • Automated CI/CD Feedback Loop
 
 ---

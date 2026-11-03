@@ -5,7 +5,7 @@
 - **Status:** Approved Specification (Gold Standard)
 - **Bounded Context:** Lineage, Traceability & Support Operations (`L9 Operational Glass Box`)
 - **Target Audience:** Tier-1/Tier-2 Support Engineers, Utility Operations Specialists, Integration Architects
-- **Related Specs:** [l9_timeline_and_replay_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l9_timeline_and_replay_design.md), [frontend_architecture_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/frontend_architecture_design.md)
+- **Related Specs:** [l9_timeline_and_replay_design.md](l9_timeline_and_replay_design.md), [frontend_architecture_design.md](frontend_architecture_design.md)
 
 ---
 

@@ -4,7 +4,7 @@
 - **Product:** Soopa Integration Platform (`apps/ip`)
 - **Status:** Approved Architecture Specification (Gold Standard)
 - **Bounded Context:** Normalization & Transformation (`L3 Normalization`)
-- **Related Specs:** [ai_shadow_testing_and_rules_prd.md](file:///Users/apple/soopa_mono/apps/ip/docs/ai_shadow_testing_and_rules_prd.md), [l3_normalization_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l3_normalization_design.md)
+- **Related Specs:** [ai_shadow_testing_and_rules_prd.md](ai_shadow_testing_and_rules_prd.md), [l3_normalization_design.md](l3_normalization_design.md)
 - **Architecture Style:** Hexagonal Architecture • Asynchronous Shadow Dispatch • Deterministic AST Compilation
 
 ---
@@ -27,7 +27,7 @@ flowchart TB
         WorkerPool["L3 Worker Execution Engine"]
         ActiveTransformer["Active Transformer (v1.0)\n[FAST-PATH BLOCKING]"]
         ShadowDispatcher["Shadow Dispatcher\n[ASYNC FIRE-AND-FORGET]"]
-        ShadowTransformer["Shadow Transformer (v2.0)\n[ISOLATED EXECUTION]"]
+        ShadowTransformer["Shadow Transformer (v2.0)\n[SANDBOXED SUBPROCESS: NO FS / NO NET]"]
     end
 
     subgraph TelemetryStore["Storage & Telemetry"]
@@ -67,7 +67,7 @@ Rather than custom-crafting traffic mirroring proxies, diffing engines, or fuzze
    - Delay active L3 $\rightarrow$ L4 transformation latency.
    - Halt worker execution loops.
    - Corrupt production database transactions.
-2. **Deterministic AST Static Analysis:** Code generated from natural language prompts passes through Python's `ast.parse` and an immutable security visitor. Code is verified to contain **zero dynamic imports, zero file system access, and zero network calls** before saving to the database.
+2. **Defense-in-Depth Static Pre-Filter & Sandboxed Subprocess Isolation:** Code generated from natural language prompts first passes through Python's `ast.parse` and `TransformerAstSecurityVisitor` as a deterministic **static pre-filter** (blocking disallowed imports and direct forbidden builtin calls). Because AST pre-filtering alone cannot block aliased builtins or indirect attribute access (`__builtins__`), generated code NEVER executes in-process: shadow execution runs exclusively inside `SandboxedSubprocessRunner` (a dedicated subprocess boundary matching `ai_schema_mapping_design.md` §4.3, with a 256 MB memory cap, strict wall-clock timeout, filesystem access disabled, and network sockets disabled).
 3. **Bounded Shadow Telemetry & Chunked Purging:** `ip_shadow_evaluations` stores diff records with a 48-hour expiration. A background cron job purges expired rows strictly in **chunked batches (`DELETE ... WHERE ctid IN (SELECT ctid FROM ... WHERE created_at < NOW() - INTERVAL '48 hours' LIMIT 1000)` + `commit()` + `await asyncio.sleep(0.1)`)** to prevent table lock escalation and WAL contention.
 
 ---
@@ -199,9 +199,9 @@ FOR ALL USING (tenant_id = current_setting('platform.current_tenant_id', true));
 
 ---
 
-## 5. AST Parsing & Safety Visitor Implementation
+## 5. AST Pre-Filter & Sandboxed Subprocess Isolation
 
-Before any generated Python code is saved or compiled into executable bytecode, it is audited by a custom `ast.NodeVisitor`:
+Before any generated Python code is saved, it passes through `TransformerAstSecurityVisitor` as a fast **static pre-filter**. Static AST validation does not replace OS-level runtime isolation—at shadow execution time, `ShadowDispatcher` invokes `SandboxedSubprocessRunner` (a dedicated subprocess with read/write filesystem access disabled, network access disabled, 256 MB memory limit, and strict execution timeout) to enforce runtime containment:
 
 ```python
 # apps/ip/packages/ip/src/ip/adapters/outbound/ast_security_validator.py

@@ -5,7 +5,7 @@
 - **Status:** Approved Specification (Gold Standard)
 - **Bounded Context:** Ingestion & Real-Time Data Quality (`L1/L2 Streaming`)
 - **Target Audience:** Utility Operations Engineers, Grid Quality Analysts, Enterprise Data Stewards
-- **Related Specs:** [l1_ingestion_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l1_ingestion_design.md), [l2_replica_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l2_replica_design.md), [l3_normalization_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l3_normalization_design.md)
+- **Related Specs:** [l1_ingestion_design.md](l1_ingestion_design.md), [l2_replica_design.md](l2_replica_design.md), [l3_normalization_design.md](l3_normalization_design.md)
 
 ---
 

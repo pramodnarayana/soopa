@@ -4,7 +4,7 @@
 - **Product:** Soopa Integration Platform (`apps/ip`)
 - **Target Audience:** Integration Engineers, Utility Operations Teams, Solutions Architects
 - **Status:** Approved Specification
-- **Related Specs:** [architecture.md](file:///Users/apple/soopa_mono/apps/ip/docs/architecture.md), [l3_normalization_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l3_normalization_design.md), [frontend_architecture_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/frontend_architecture_design.md)
+- **Related Specs:** [architecture.md](architecture.md), [l3_normalization_design.md](l3_normalization_design.md), [frontend_architecture_design.md](frontend_architecture_design.md)
 
 ---
 
@@ -119,7 +119,7 @@ sequenceDiagram
 
 | ID | Requirement | Description | Acceptance Criteria |
 | :--- | :--- | :--- | :--- |
-| **FR-STH-01** | Visual Canvas Auto-Wiring | When opening a Stitch mapping, the AI MUST automatically connect source Canonical ports to target Destination ports based on semantic similarity and historical destination payloads. | Pre-connects fields with confidence score $\ge 70\%$; highlights high-confidence ($\ge 90\%$) in green and medium-confidence ($70–89\%$) in amber. |
+| **FR-STH-01** | Visual Canvas Auto-Wiring | When opening a Stitch mapping, the AI MUST automatically connect source Canonical ports to target Destination ports based on semantic similarity and historical destination payloads. | Pre-connects fields with confidence score $\ge 75\%$; highlights high-confidence ($\ge 95\%$) in green and medium-confidence ($75\text{--}94\%$) in amber, while leaving scores $< 75\%$ disconnected in the Suggested Mappings drawer. |
 | **FR-STH-02** | Formula & Lookup Suggestions | For fields requiring transformation (e.g., concatenating `first_name + ' ' + last_name` or multiplying `kwh * rate`), the AI MUST suggest declarative formulas. | Formulas are written in standard declarative Stitch expressions (e.g., `JSONata` or CEL), editable visually. |
 | **FR-STH-03** | Interactive Review & Tweak | The user MUST be able to break any AI-generated wire, drag a new wire, change formulas, or map constant values visually on the canvas. | Any manual edit immediately updates the live preview drawer. |
 | **FR-STH-04** | Declarative JSON Serialization | Saving the visual Stitch MUST compile the canvas into an immutable, declarative JSON Stitch specification (`stitch_spec_v1`). | Zero Python code generation required for L3 $\rightarrow$ L5; executes via deterministic high-throughput JSONata/CEL runtime. |
@@ -137,7 +137,8 @@ Confidence Score 75% - 94%: Auto-connected on canvas; amber badge; flagged with 
 Confidence Score < 75%: Not connected; displayed in "Suggested Mappings" drawer for manual drag-and-drop.
 ```
 
-### Non-Negotiable Reliability Invariants:
+### Non-Negotiable Reliability Invariants
+
 1. **Never Execute AI in the Fast-Path:** The real-time streaming engine (processing 10M records/hr) NEVER calls LLMs. It executes compiled Python code (L2 $\rightarrow$ L3) or declarative JSON specs (L3 $\rightarrow$ L5) with `<15ms` execution time.
 2. **Mandatory Human-in-the-Loop for Active Deployment:** AI-generated mappings can run in `SHADOW` or `DRAFT` mode automatically, but promoting to `ACTIVE` production traffic requires an explicit human click and review.
 3. **Audit Trail:** Every AI-suggested field mapping stores metadata: model version, prompt hash, confidence score, and timestamp of human approval.

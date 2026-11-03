@@ -8,6 +8,7 @@ from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
     build_ip_outbox_record_from_envelope,
 )
 from ip.engine.adapters.outbound.database.models.data_plane import (
+    IpDataPlaneOutboxRecord,
     IpProcessedEventModel,
 )
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
@@ -120,9 +121,27 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         await self.tenant_session.execute(stmt)
 
     async def stage_outbox_envelope(self, envelope: EventEnvelope) -> None:
-        """Stages an EventEnvelope into `public.ip_outbox` within the current shard transaction."""
-        self.tenant_session.add(build_ip_outbox_record_from_envelope(envelope))
-        await self.tenant_session.flush()
+        """Idempotently stages an EventEnvelope into `public.ip_outbox` within the current shard transaction."""
+        record = build_ip_outbox_record_from_envelope(envelope)
+        stmt = (
+            pg_insert(IpDataPlaneOutboxRecord)
+            .values(
+                id=record.id,
+                tenant_id=record.tenant_id,
+                idempotency_key=record.idempotency_key,
+                event_type=record.event_type,
+                trace_id=record.trace_id,
+                correlation_id=record.correlation_id,
+                lane=record.lane,
+                payload=record.payload,
+                status=record.status,
+                attempts=record.attempts,
+                created_at=record.created_at,
+                updated_at=record.updated_at,
+            )
+            .on_conflict_do_nothing(index_elements=[IpDataPlaneOutboxRecord.idempotency_key])
+        )
+        await self.tenant_session.execute(stmt)
 
 
 __all__ = ["SqlAlchemyIpDataPlaneUnitOfWork"]

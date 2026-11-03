@@ -206,6 +206,25 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
     assert draft_fields["interval_minutes"] == 15
     assert draft_fields["net_kwh"] == 10.0
 
+    overflow_diff_res = v2.transform(
+        ReplicaSnapshot(
+            id="rep_overflow_diff",
+            connection_id="conn_01",
+            stream="meter_reads",
+            record_key="MTR-1:2026-10-29T00:30:00Z",
+            version=1,
+            data={
+                "meter_serial": "MTR-1",
+                "timestamp": "2026-10-29T00:30:00Z",
+                "kwh_delivered": 1e308,
+                "kwh_received": -1e308,
+            },
+        ),
+        ctx,
+    )
+    assert len(overflow_diff_res.drafts) == 1
+    assert overflow_diff_res.drafts[0].fields["net_kwh"] is None
+
     assert is_non_finite_number(10**400) is True
     assert to_optional_finite_float(10**400) is None
     assert to_finite_float(10**400, 0.0) == 0.0

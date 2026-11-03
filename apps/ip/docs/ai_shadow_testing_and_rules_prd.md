@@ -5,7 +5,7 @@
 - **Status:** Approved Specification (Gold Standard)
 - **Bounded Context:** Normalization & Transformation (`L3 Normalization`)
 - **Target Audience:** Integration Engineers, Utility Systems Architects, Billing Operations Leads
-- **Related Specs:** [l3_normalization_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l3_normalization_design.md), [ai_schema_mapping_prd.md](file:///Users/apple/soopa_mono/apps/ip/docs/ai_schema_mapping_prd.md), [frontend_architecture_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/frontend_architecture_design.md)
+- **Related Specs:** [l3_normalization_design.md](l3_normalization_design.md), [ai_schema_mapping_prd.md](ai_schema_mapping_prd.md), [frontend_architecture_design.md](frontend_architecture_design.md)
 
 ---
 

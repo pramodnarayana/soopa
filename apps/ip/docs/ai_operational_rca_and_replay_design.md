@@ -4,7 +4,7 @@
 - **Product:** Soopa Integration Platform (`apps/ip`)
 - **Status:** Approved Architecture Specification (Gold Standard)
 - **Bounded Context:** Lineage, Traceability & Support Operations (`L9 Operational Glass Box`)
-- **Related Specs:** [ai_operational_rca_and_replay_prd.md](file:///Users/apple/soopa_mono/apps/ip/docs/ai_operational_rca_and_replay_prd.md), [l9_timeline_and_replay_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l9_timeline_and_replay_design.md)
+- **Related Specs:** [ai_operational_rca_and_replay_prd.md](ai_operational_rca_and_replay_prd.md), [l9_timeline_and_replay_design.md](l9_timeline_and_replay_design.md)
 - **Architecture Style:** Hexagonal Architecture • Vector Catalog Pre-Matching • Immutable Parent-Child Lineage
 
 ---

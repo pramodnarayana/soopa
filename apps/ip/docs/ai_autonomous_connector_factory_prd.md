@@ -5,7 +5,7 @@
 - **Status:** Approved Specification (Gold Standard)
 - **Bounded Context:** External Connectivity & Ingress/Egress Adapters
 - **Target Audience:** Platform Engineers, Connector Developers, Third-Party Ecosystem Integrators
-- **Related Specs:** [generic_http_connector_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/generic_http_connector_design.md), [architecture.md](file:///Users/apple/soopa_mono/apps/ip/docs/architecture.md)
+- **Related Specs:** [generic_http_connector_design.md](generic_http_connector_design.md), [architecture.md](architecture.md)
 
 ---
 

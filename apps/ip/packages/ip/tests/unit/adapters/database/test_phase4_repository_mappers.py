@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
+from database.provider import DatabaseProvider, get_async_engine
 from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
     SqlAlchemyCatalogRepository,
@@ -24,6 +26,7 @@ from ip.engine.adapters.outbound.database.data_plane.replica_record_repository i
 from ip.engine.adapters.outbound.database.data_plane.replica_rejection_repository import (
     SqlAlchemyReplicaRejectionRepository,
 )
+from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 from ip.engine.domain.connection.catalog import ConnectionCatalog
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
@@ -33,15 +36,28 @@ from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
 from ip.engine.domain.replication.enums import CursorKind, RejectionReason, SyncMode
 from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
 from ip.engine.domain.replication.stream_state import ConnectionStreamState
+from ip.solutions.domains.energy import models as _energy_models
 from ip.solutions.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
 )
+from ip.solutions.domains.energy.ports import ENERGY_DOMAIN_REPOSITORY_KEY
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
+from ip.solutions.domains.tms import models as _tms_models
 from ip.solutions.domains.tms.canonical import CanonicalCarrierDTO, CanonicalLoadDTO
+from ip.solutions.domains.tms.ports import TMS_DOMAIN_REPOSITORY_KEY
 from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+
+_REGISTERED_VERTICAL_MODELS = (_energy_models, _tms_models)
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_for_sqlite(_type: JSONB, _compiler: object, **_kw: object) -> str:
+    return "JSON"
 
 
 def test_ip_data_plane_and_control_plane_to_orm_and_domain_mappers() -> None:
@@ -307,3 +323,173 @@ def test_ip_solution_domain_repositories_have_explicit_bidirectional_mappers() -
     )
     carrier_orm = SqlAlchemyTmsDomainRepository._to_carrier_orm(carrier_dto, resolved_id=carrier_id)
     assert SqlAlchemyTmsDomainRepository._to_carrier_dto(carrier_orm) == carrier_dto
+
+
+@pytest.mark.asyncio
+async def test_ip_solution_domain_repositories_persist_and_read_back_all_fields() -> None:
+    provider = DatabaseProvider(get_async_engine("sqlite+aiosqlite:///:memory:"))
+    try:
+        async with provider.engine.begin() as conn:
+            await conn.run_sync(IpTenantBase.metadata.create_all)
+
+        async with provider.session_factory() as session:
+            energy_repo = SqlAlchemyEnergyDomainRepository(session)
+            tms_repo = SqlAlchemyTmsDomainRepository(session)
+
+            assert ENERGY_DOMAIN_REPOSITORY_KEY.narrow(energy_repo) is energy_repo
+            assert TMS_DOMAIN_REPOSITORY_KEY.narrow(tms_repo) is tms_repo
+
+            tenant_id = "ten_domain_rt"
+            reading_ts = datetime(2026, 11, 3, 6, 15, 0, tzinfo=UTC)
+            recorded_ts = datetime(2026, 11, 3, 6, 16, 0, tzinfo=UTC)
+
+            sp_dto = CanonicalServicePointDTO(
+                id="ip_mdms_rt_1",
+                tenant_id=tenant_id,
+                trace_id="ip_trc_rt_1",
+                correlation_id="CORR-SP-1",
+                parent_trace_id="ip_trc_parent_1",
+                original_trace_id="ip_trc_orig_1",
+                replay_count=2,
+                source_connection_id="ip_conn_itron",
+                source_replica_id="ip_rep_sp_1",
+                transformation_id="energy.ami_service_point",
+                transformation_version=1,
+                service_point_external_id="SP-EXT-RT-1",
+                meter_serial_number="MTR-RT-1",
+                customer_external_id="CUST-RT-1",
+                service_address="500 Energy Plaza",
+                grid_region="ERCOT",
+                status="ACTIVE",
+                updated_at=recorded_ts,
+            )
+            await energy_repo.save_service_point(sp_dto)
+
+            reading_dto = CanonicalMeterReadingDTO(
+                id="ip_mdmr_rt_1",
+                tenant_id=tenant_id,
+                trace_id="ip_trc_rt_1",
+                correlation_id="CORR-MR-1",
+                parent_trace_id="ip_trc_parent_1",
+                original_trace_id="ip_trc_orig_1",
+                replay_count=1,
+                source_connection_id="ip_conn_itron",
+                source_replica_id="ip_rep_mr_1",
+                transformation_id="energy.ami_meter_reading",
+                transformation_version=2,
+                meter_serial_number="MTR-RT-1",
+                service_point_id="SP-EXT-RT-1",
+                reading_timestamp=reading_ts,
+                interval_minutes=15,
+                kwh_delivered=18.4,
+                kwh_received=0.5,
+                voltage_avg=241.0,
+                quality_flag="VALIDATED",
+                recorded_at=recorded_ts,
+            )
+            await energy_repo.save_meter_reading(reading_dto)
+
+            persisted_sp = await energy_repo.get_service_point_by_external_id(
+                tenant_id, "SP-EXT-RT-1"
+            )
+            assert persisted_sp is not None
+            assert persisted_sp.id == "ip_mdms_rt_1"
+            assert persisted_sp.meter_serial_number == "MTR-RT-1"
+            assert persisted_sp.customer_external_id == "CUST-RT-1"
+            assert persisted_sp.service_address == "500 Energy Plaza"
+            assert persisted_sp.grid_region == "ERCOT"
+            assert persisted_sp.status == "ACTIVE"
+            assert persisted_sp.replay_count == 2
+            assert persisted_sp.updated_at.replace(tzinfo=UTC) == recorded_ts
+
+            readings = await energy_repo.list_readings_by_meter(tenant_id, "MTR-RT-1")
+            assert len(readings) == 1
+            persisted_mr = readings[0]
+            assert persisted_mr.id == "ip_mdmr_rt_1"
+            assert persisted_mr.service_point_id == "SP-EXT-RT-1"
+            assert persisted_mr.reading_timestamp.replace(tzinfo=UTC) == reading_ts
+            assert persisted_mr.interval_minutes == 15
+            assert persisted_mr.kwh_delivered == 18.4
+            assert persisted_mr.kwh_received == 0.5
+            assert persisted_mr.voltage_avg == 241.0
+            assert persisted_mr.quality_flag == "VALIDATED"
+            assert persisted_mr.transformation_version == 2
+            assert persisted_mr.replay_count == 1
+
+            carrier_dto = CanonicalCarrierDTO(
+                id="ip_tmsc_rt_1",
+                tenant_id=tenant_id,
+                trace_id="ip_trc_rt_2",
+                correlation_id="CORR-CAR-1",
+                parent_trace_id="ip_trc_parent_2",
+                original_trace_id="ip_trc_orig_2",
+                replay_count=1,
+                source_connection_id="ip_conn_mg",
+                source_replica_id="ip_rep_car_1",
+                scac_code="SWFT",
+                carrier_name="Swift Transportation",
+                dot_number="DOT-999",
+                mc_number="MC-999",
+                safety_rating="SATISFACTORY",
+                status="ACTIVE",
+                updated_at=recorded_ts,
+            )
+            await tms_repo.save_carrier(carrier_dto)
+
+            load_dto = CanonicalLoadDTO(
+                id="ip_tmsl_rt_1",
+                tenant_id=tenant_id,
+                trace_id="ip_trc_rt_2",
+                correlation_id="CORR-LD-1",
+                parent_trace_id="ip_trc_parent_2",
+                original_trace_id="ip_trc_orig_2",
+                replay_count=3,
+                source_connection_id="ip_conn_mg",
+                source_replica_id="ip_rep_ld_1",
+                load_reference_number="LOAD-700",
+                carrier_scac="SWFT",
+                origin_city="Houston",
+                origin_state="TX",
+                destination_city="Chicago",
+                destination_state="IL",
+                status="IN_TRANSIT",
+                total_weight_lbs=38500.0,
+                freight_charge_usd=Decimal("3100.25"),
+                pickup_scheduled_at=reading_ts,
+                delivery_scheduled_at=recorded_ts,
+                updated_at=recorded_ts,
+            )
+            await tms_repo.save_load(load_dto)
+
+            persisted_carrier = await tms_repo.get_carrier_by_scac(tenant_id, "SWFT")
+            assert persisted_carrier is not None
+            assert persisted_carrier.id == "ip_tmsc_rt_1"
+            assert persisted_carrier.scac_code == "SWFT"
+            assert persisted_carrier.carrier_name == "Swift Transportation"
+            assert persisted_carrier.dot_number == "DOT-999"
+            assert persisted_carrier.mc_number == "MC-999"
+            assert persisted_carrier.safety_rating == "SATISFACTORY"
+            assert persisted_carrier.status == "ACTIVE"
+            assert persisted_carrier.replay_count == 1
+            assert persisted_carrier.updated_at.replace(tzinfo=UTC) == recorded_ts
+
+            loads = await tms_repo.list_loads_by_status(tenant_id, "IN_TRANSIT")
+            assert len(loads) == 1
+            persisted_load = loads[0]
+            assert persisted_load.id == "ip_tmsl_rt_1"
+            assert persisted_load.load_reference_number == "LOAD-700"
+            assert persisted_load.carrier_scac == "SWFT"
+            assert persisted_load.origin_city == "Houston"
+            assert persisted_load.origin_state == "TX"
+            assert persisted_load.destination_city == "Chicago"
+            assert persisted_load.destination_state == "IL"
+            assert persisted_load.total_weight_lbs == 38500.0
+            assert isinstance(persisted_load.freight_charge_usd, Decimal)
+            assert persisted_load.freight_charge_usd == Decimal("3100.25")
+            assert persisted_load.pickup_scheduled_at is not None
+            assert persisted_load.pickup_scheduled_at.replace(tzinfo=UTC) == reading_ts
+            assert persisted_load.delivery_scheduled_at is not None
+            assert persisted_load.delivery_scheduled_at.replace(tzinfo=UTC) == recorded_ts
+            assert persisted_load.replay_count == 3
+    finally:
+        await provider.close()

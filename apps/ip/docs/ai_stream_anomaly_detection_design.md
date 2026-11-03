@@ -4,7 +4,7 @@
 - **Product:** Soopa Integration Platform (`apps/ip`)
 - **Status:** Approved Architecture Specification (Gold Standard)
 - **Bounded Context:** Ingestion & Real-Time Data Quality (`L1/L2 Streaming`)
-- **Related Specs:** [ai_stream_anomaly_detection_prd.md](file:///Users/apple/soopa_mono/apps/ip/docs/ai_stream_anomaly_detection_prd.md), [l1_ingestion_design.md](file:///Users/apple/soopa_mono/apps/ip/docs/l1_ingestion_design.md)
+- **Related Specs:** [ai_stream_anomaly_detection_prd.md](ai_stream_anomaly_detection_prd.md), [l1_ingestion_design.md](l1_ingestion_design.md)
 - **Architecture Style:** Hexagonal Architecture • Two-Tier Vectorized Fast-Path • Asynchronous Baseline Learning
 
 ---

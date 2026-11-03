@@ -404,6 +404,19 @@ async def test_trace_stage_specs_maps_in_flight_outbound_status_in_sql_and_uow_d
             )
             expected = build_ip_outbox_record_from_envelope(envelope)
             await uow.stage_outbox_envelope(envelope)
+            retry_envelope = EventEnvelope(
+                id="evt_02_retry",
+                event_type="notification.requested",
+                source="soopa.ip",
+                tenant_id="ten_01",
+                trace_id="ip_trc_inflight_01",
+                correlation_id="MTR-INFLIGHT-99",
+                idempotency_key="idem_notify_01",
+                lane=EventProcessingLane.REALTIME,
+                payload={"subject": "Alert Retry"},
+            )
+            await uow.stage_outbox_envelope(envelope)
+            await uow.stage_outbox_envelope(retry_envelope)
 
             rows = (
                 (

@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ip.solutions.domains.tms.canonical import CanonicalCarrierDTO, CanonicalLoadDTO
 from ip.solutions.domains.tms.models import TmsCarrierRecord, TmsLoadRecord
+from ip.solutions.domains.tms.ports import TmsDomainRepositoryPort
 
 
-class SqlAlchemyTmsDomainRepository:
+class SqlAlchemyTmsDomainRepository(TmsDomainRepositoryPort):
     """Repository persisting and querying dedicated TMS canonical tables."""
 
     def __init__(self, session: AsyncSession) -> None:
@@ -153,3 +154,18 @@ class SqlAlchemyTmsDomainRepository:
         orm = self._to_carrier_orm(dto, resolved_id=resolved_id)
         await self._session.merge(orm)
         await self._session.flush()
+
+    async def get_carrier_by_scac(
+        self,
+        tenant_id: str,
+        scac_code: str,
+    ) -> CanonicalCarrierDTO | None:
+        stmt = select(TmsCarrierRecord).where(
+            TmsCarrierRecord.tenant_id == tenant_id,
+            TmsCarrierRecord.scac_code == scac_code,
+        )
+        result = await self._session.execute(stmt)
+        orm = result.scalar_one_or_none()
+        if orm is None:
+            return None
+        return self._to_carrier_dto(orm)
