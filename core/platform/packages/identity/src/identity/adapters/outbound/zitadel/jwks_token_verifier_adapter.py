@@ -1,7 +1,8 @@
 import asyncio
 import hashlib
 import time
-from dataclasses import dataclass, fields
+from collections.abc import Mapping
+from dataclasses import dataclass
 
 import httpx
 import jwt
@@ -18,7 +19,7 @@ logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
-class ZitadelTokenVerifierPortOptions:
+class ZitadelTokenVerifierOptions:
     issuer: str
     audience: str | list[str]
     jwks_url: str | None = None
@@ -29,12 +30,13 @@ class ZitadelTokenVerifierPortOptions:
     # instance routing. Keeps JWKS traffic internal (no ALB hairpin) while
     # satisfying Zitadel's host-header validation.
     jwks_host_header: str | None = None
+    allow_private_ips: bool = False
 
 
-class ZitadelTokenVerifierPort(TokenVerifierPort):
+class ZitadelTokenVerifierAdapter(TokenVerifierPort):
     def __init__(
         self,
-        options: ZitadelTokenVerifierPortOptions,
+        options: ZitadelTokenVerifierOptions,
         client: HttpClient | None = None,
     ) -> None:
         self._options = options
@@ -45,7 +47,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         self._jwks_client = PyJWKClient(self._jwks_url, headers=jwks_headers)
         self._client: HttpClient = client or HttpClient(
             create_http_client(timeout=httpx.Timeout(5.0, connect=3.0)),
-            allow_private_ips=True,
+            allow_private_ips=options.allow_private_ips,
         )
         # Thread-safe async cache for userinfo to prevent network calls on every request
         # Format: {jti: (userinfo_dict, timestamp)}
@@ -61,45 +63,82 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         """The Host header sent with JWKS requests, or None if not overridden."""
         return self._options.jwks_host_header
 
-    async def verify(self, token: str) -> TokenClaims:  # noqa: C901
+    async def verify(self, token: str) -> TokenClaims:
+        payload, raw_claims = await self._decode_jwt_payload(token)
+        await self._enrich_missing_project_roles(token, payload)
+        self._map_platform_org_sentinel(payload)
+        self._populate_normalized_tenant_claims(payload)
+
+        try:
+            return self._to_token_claims(payload, raw_claims)
+        except Exception as e:
+            logger.exception("token_claims_validation_failed", exc_info=e)
+            raise TokenValidationError(f"Invalid token claims: {e}") from e
+
+    async def _decode_jwt_payload(self, token: str) -> tuple[dict[str, object], JsonDict]:
         try:
             signing_key = await self._get_signing_key(token)
-            payload = jwt.decode(
+            raw_claims: JsonDict = jwt.decode(
                 token,
                 signing_key.key,
                 algorithms=["RS256"],
                 audience=self._options.audience,
                 issuer=self._options.issuer,
             )
-            raw_claims = dict(payload)
+            decoded: dict[str, object] = dict(raw_claims)
+            return decoded, raw_claims
         except jwt.PyJWTError as e:
-            logger.exception("JWT decode failed", exc_info=e)
+            logger.exception("jwt_decode_failed", exc_info=e)
             raise TokenValidationError(str(e)) from e
         except Exception as e:
-            logger.exception("Failed to get signing key or decode JWT", exc_info=e)
+            logger.exception("signing_key_or_jwt_decode_failed", exc_info=e)
             raise TokenValidationError(str(e)) from e
 
-        # Fallback to /userinfo if roles are missing (with enterprise caching)
-        if ZitadelClaims.PROJECT_ROLES not in payload:
-            jti = payload.get("jti")
-            if jti is None:
-                # Hash token to derive cache key when jti is absent
-                jti = hashlib.sha256(token.encode()).hexdigest()
-            try:
-                userinfo = await self._get_cached_userinfo(token, jti)
-                payload.update(userinfo)
-            except (HttpError, ValueError, TypeError) as e:
-                logger.error("failed_to_fetch_userinfo", exc_info=e)
+    async def _enrich_missing_project_roles(self, token: str, payload: dict[str, object]) -> None:
+        if ZitadelClaims.PROJECT_ROLES in payload:
+            return
+        raw_jti = payload.get("jti")
+        jti = (
+            raw_jti
+            if isinstance(raw_jti, str) and raw_jti
+            else hashlib.sha256(token.encode()).hexdigest()
+        )
+        try:
+            userinfo = await self._get_cached_userinfo(token, jti)
+            payload.update(userinfo)
+        except (HttpError, ValueError, TypeError) as e:
+            logger.error("failed_to_fetch_userinfo", exc_info=e)
 
-        # Adapter translation: map the actual Zitadel Platform Org ID to the domain's sentinel ID
+    def _map_platform_org_sentinel(self, payload: dict[str, object]) -> None:
+        if not self._options.platform_org_id:
+            return
         roles_dict = payload.get(ZitadelClaims.PROJECT_ROLES)
-        if roles_dict and isinstance(roles_dict, dict) and self._options.platform_org_id:
-            for _role, orgs in roles_dict.items():
-                if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
-                    orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
+        if not isinstance(roles_dict, dict):
+            return
+        for orgs in roles_dict.values():
+            if isinstance(orgs, dict) and self._options.platform_org_id in orgs:
+                orgs[PLATFORM_TENANT_ID] = orgs[self._options.platform_org_id]
 
-        # Adapter translation: Map raw Zitadel payload to pure Domain TokenClaims
-        authorized_tenants = set()
+    @staticmethod
+    def _collect_org_role_map(
+        role_map: Mapping[object, object],
+        authorized_tenants: set[str],
+        tenant_roles: dict[str, list[str]],
+        roles: list[str],
+    ) -> None:
+        for role, orgs in role_map.items():
+            if not isinstance(orgs, Mapping):
+                continue
+            role_str = str(role)
+            for org_id in orgs:
+                org_str = str(org_id)
+                authorized_tenants.add(org_str)
+                tenant_roles.setdefault(org_str, []).append(role_str)
+                roles.append(role_str)
+
+    @classmethod
+    def _populate_normalized_tenant_claims(cls, payload: dict[str, object]) -> None:
+        authorized_tenants: set[str] = set()
         tenant_roles: dict[str, list[str]] = {}
         roles: list[str] = []
 
@@ -111,47 +150,79 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         if idp_org_id:
             authorized_tenants.add(str(idp_org_id))
 
-        project_roles_found = False
-        for key, value in payload.items():
-            if key == ZitadelClaims.PROJECT_ROLES:
-                project_roles_found = True
-                if isinstance(value, dict):
-                    for role, orgs in value.items():
-                        if isinstance(orgs, dict):
-                            for org_id in orgs:
-                                authorized_tenants.add(str(org_id))
-                                if org_id not in tenant_roles:
-                                    tenant_roles[str(org_id)] = []
-                                tenant_roles[str(org_id)].append(str(role))
-                                roles.append(str(role))
-
-        if not project_roles_found:
+        if ZitadelClaims.PROJECT_ROLES in payload:
+            project_roles = payload.get(ZitadelClaims.PROJECT_ROLES)
+            if isinstance(project_roles, Mapping):
+                cls._collect_org_role_map(project_roles, authorized_tenants, tenant_roles, roles)
+        else:
             generic_roles = payload.get("roles")
-            if isinstance(generic_roles, dict):
-                for role, orgs in generic_roles.items():
-                    if isinstance(orgs, dict):
-                        for org_id in orgs:
-                            authorized_tenants.add(str(org_id))
-                            if org_id not in tenant_roles:
-                                tenant_roles[str(org_id)] = []
-                            tenant_roles[str(org_id)].append(str(role))
-                            roles.append(str(role))
+            if isinstance(generic_roles, Mapping):
+                cls._collect_org_role_map(generic_roles, authorized_tenants, tenant_roles, roles)
             elif isinstance(generic_roles, list):
                 roles = [str(r) for r in generic_roles]
 
         payload["tenant_id"] = str(tenant_id) if tenant_id else None
-        payload["authorized_tenants"] = list(authorized_tenants)
+        payload["authorized_tenants"] = authorized_tenants
         payload["tenant_roles"] = tenant_roles
         payload["roles"] = roles
 
-        try:
-            valid_keys = {f.name for f in fields(TokenClaims)}
-            filtered_payload = {k: v for k, v in payload.items() if k in valid_keys}
-            filtered_payload["raw_claims"] = raw_claims
-            return TokenClaims(**filtered_payload)
-        except Exception as e:
-            logger.exception("Token claims validation failed", exc_info=e)
-            raise TokenValidationError(f"Invalid token claims: {e}") from e
+    @staticmethod
+    def _to_token_claims(payload: Mapping[str, object], raw_claims: JsonDict) -> TokenClaims:
+        sub = payload.get("sub")
+        iss = payload.get("iss")
+        aud_raw = payload.get("aud")
+        exp_raw = payload.get("exp")
+        if not isinstance(sub, str) or not isinstance(iss, str) or not isinstance(exp_raw, int):
+            raise TypeError("Missing or invalid required JWT claims (sub, iss, exp)")
+        if isinstance(aud_raw, str):
+            aud: str | list[str] = aud_raw
+        elif isinstance(aud_raw, list):
+            aud = [str(item) for item in aud_raw]
+        else:
+            raise TypeError("Invalid JWT audience claim")
+
+        iat_raw = payload.get("iat")
+        iat = iat_raw if isinstance(iat_raw, int) else None
+
+        tenant_id_raw = payload.get("tenant_id")
+        tenant_id = str(tenant_id_raw) if tenant_id_raw is not None else None
+
+        org_id_raw = payload.get("organization_id")
+        organization_id = str(org_id_raw) if org_id_raw is not None else None
+
+        auth_tenants_raw = payload.get("authorized_tenants")
+        if isinstance(auth_tenants_raw, (set, list, tuple)):
+            authorized_tenants: set[str] = {str(t) for t in auth_tenants_raw}
+        else:
+            authorized_tenants = set()
+
+        roles_raw = payload.get("roles")
+        roles: list[str] = [str(r) for r in roles_raw] if isinstance(roles_raw, list) else []
+
+        perms_raw = payload.get("permissions")
+        permissions: list[str] = [str(p) for p in perms_raw] if isinstance(perms_raw, list) else []
+
+        tenant_roles_raw = payload.get("tenant_roles")
+        tenant_roles: dict[str, list[str]] = {}
+        if isinstance(tenant_roles_raw, Mapping):
+            for t_key, r_vals in tenant_roles_raw.items():
+                if isinstance(r_vals, list):
+                    tenant_roles[str(t_key)] = [str(r) for r in r_vals]
+
+        return TokenClaims(
+            sub=sub,
+            iss=iss,
+            aud=aud,
+            exp=exp_raw,
+            iat=iat,
+            tenant_id=tenant_id,
+            organization_id=organization_id,
+            authorized_tenants=authorized_tenants,
+            roles=roles,
+            permissions=permissions,
+            tenant_roles=tenant_roles,
+            raw_claims=raw_claims,
+        )
 
     async def _get_signing_key(self, token: str) -> PyJWK:
         return await asyncio.to_thread(self._jwks_client.get_signing_key_from_jwt, token)
@@ -164,8 +235,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
             userinfo, timestamp = self._userinfo_cache[jti]
             if now - timestamp < 3600:
                 return userinfo
-            else:
-                del self._userinfo_cache[jti]
+            del self._userinfo_cache[jti]
 
         # Fetch from Zitadel asynchronously using shttp HttpClient
         url = f"{self._options.issuer}/oidc/v1/userinfo"
@@ -174,7 +244,7 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
         response = await self._client.get(
             url,
             headers=headers,
-            allow_private_ips=True,
+            allow_private_ips=self._options.allow_private_ips,
         )
         if response.status_code >= 400:
             logger.error(
@@ -194,8 +264,6 @@ class ZitadelTokenVerifierPort(TokenVerifierPort):
 
         # O(1) eviction for maxsize
         if len(self._userinfo_cache) > 1000:
-            # Dictionaries in Python 3.7+ maintain insertion order.
-            # Delete the oldest key (the first one added)
             oldest_key = next(iter(self._userinfo_cache))
             del self._userinfo_cache[oldest_key]
 

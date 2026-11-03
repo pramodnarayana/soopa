@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.domain.constants import UserStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.user import User
+from identity.domain.user import User
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
 logger = structlog.get_logger(__name__)
@@ -20,13 +20,46 @@ def _safe_user_status(status_str: str) -> UserStatus:
     try:
         return UserStatus(status_str)
     except ValueError:
-        logger.warning("invalid_user_status_found", status=status_str)
+        logger.error("invalid_user_status_found", status=status_str)
         return UserStatus.INACTIVE
 
 
-class PostgresUserRepository(UserRepositoryPort):
+class SqlAlchemyUserRepository(UserRepositoryPort):
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    @staticmethod
+    def _to_domain_model(db_user: DbUser, role: str | None = None) -> User:
+        user = User(
+            id=db_user.id,
+            idp_user_id=db_user.idp_user_id,
+            email=db_user.email,
+            name=db_user.name or "",
+            status=_safe_user_status(db_user.status),
+            created_at=db_user.created_at.replace(tzinfo=UTC),
+            updated_at=db_user.updated_at.replace(tzinfo=UTC),
+        )
+        if role is not None:
+            user.role = role
+        return user
+
+    @staticmethod
+    def _to_orm_record(user: User) -> DbUser:
+        return DbUser(
+            id=user.id,
+            idp_user_id=user.idp_user_id,
+            email=user.email,
+            name=user.name,
+            status=user.status.value,
+            created_at=user.created_at.replace(tzinfo=None),
+        )
+
+    @staticmethod
+    def _update_record_from_domain(db_user: DbUser, user: User) -> None:
+        db_user.email = user.email
+        db_user.name = user.name
+        db_user.idp_user_id = user.idp_user_id
+        db_user.status = user.status.value
 
     async def has_any_tenant_memberships(self, user_id: str) -> bool:
         stmt = (
@@ -59,21 +92,11 @@ class PostgresUserRepository(UserRepositoryPort):
         result = await self.session.execute(stmt)
         rows = result.all()
 
-        users_by_id = {}
+        users_by_id: dict[str, User] = {}
         for db_user, role in rows:
             if db_user.id not in users_by_id:
-                u = User(
-                    id=db_user.id,
-                    idp_user_id=db_user.idp_user_id,
-                    email=db_user.email,
-                    name=db_user.name or "",
-                    status=_safe_user_status(db_user.status),
-                    created_at=db_user.created_at.replace(tzinfo=UTC),
-                    updated_at=db_user.updated_at.replace(tzinfo=UTC),
-                )
                 # Enforce a canonical role (alphabetically first) when multiple exist
-                u.role = role
-                users_by_id[db_user.id] = u
+                users_by_id[db_user.id] = self._to_domain_model(db_user, role=role)
 
         return list(users_by_id.values())
 
@@ -85,15 +108,7 @@ class PostgresUserRepository(UserRepositoryPort):
         if not db_user:
             return None
 
-        return User(
-            id=db_user.id,
-            idp_user_id=db_user.idp_user_id,
-            email=db_user.email,
-            name=db_user.name or "",
-            status=_safe_user_status(db_user.status),
-            created_at=db_user.created_at.replace(tzinfo=UTC),
-            updated_at=db_user.updated_at.replace(tzinfo=UTC),
-        )
+        return self._to_domain_model(db_user)
 
     async def find_by_idp_user_id(self, idp_user_id: str) -> User | None:
         stmt = select(DbUser).where(
@@ -105,15 +120,7 @@ class PostgresUserRepository(UserRepositoryPort):
         if not db_user:
             return None
 
-        return User(
-            id=db_user.id,
-            idp_user_id=db_user.idp_user_id,
-            email=db_user.email,
-            name=db_user.name or "",
-            status=_safe_user_status(db_user.status),
-            created_at=db_user.created_at.replace(tzinfo=UTC),
-            updated_at=db_user.updated_at.replace(tzinfo=UTC),
-        )
+        return self._to_domain_model(db_user)
 
     async def find_by_id(self, user_id: str) -> User | None:
         stmt = select(DbUser).where(and_(DbUser.id == user_id, DbUser.deleted_at.is_(None)))
@@ -123,15 +130,7 @@ class PostgresUserRepository(UserRepositoryPort):
         if not db_user:
             return None
 
-        return User(
-            id=db_user.id,
-            idp_user_id=db_user.idp_user_id,
-            email=db_user.email,
-            name=db_user.name or "",
-            status=_safe_user_status(db_user.status),
-            created_at=db_user.created_at.replace(tzinfo=UTC),
-            updated_at=db_user.updated_at.replace(tzinfo=UTC),
-        )
+        return self._to_domain_model(db_user)
 
     async def find_by_id_and_tenant(self, user_id: str, tenant_id: str) -> User | None:
         stmt = (
@@ -156,17 +155,7 @@ class PostgresUserRepository(UserRepositoryPort):
             return None
 
         db_user, role = row
-        u = User(
-            id=db_user.id,
-            idp_user_id=db_user.idp_user_id,
-            email=db_user.email,
-            name=db_user.name or "",
-            status=_safe_user_status(db_user.status),
-            created_at=db_user.created_at.replace(tzinfo=UTC),
-            updated_at=db_user.updated_at.replace(tzinfo=UTC),
-        )
-        u.role = role
-        return u
+        return self._to_domain_model(db_user, role=role)
 
     async def delete(self, user: User) -> None:
         stmt = select(DbUser).where(DbUser.id == user.id)
@@ -186,19 +175,9 @@ class PostgresUserRepository(UserRepositoryPort):
         db_user = result.scalar_one_or_none()
 
         if db_user:
-            db_user.email = user.email
-            db_user.name = user.name
-            db_user.idp_user_id = user.idp_user_id
-            db_user.status = user.status.value
+            self._update_record_from_domain(db_user, user)
         else:
-            db_user = DbUser(
-                id=user.id,
-                idp_user_id=user.idp_user_id,
-                email=user.email,
-                name=user.name,
-                status=user.status.value,
-                created_at=user.created_at.replace(tzinfo=None),
-            )
+            db_user = self._to_orm_record(user)
             self.session.add(db_user)
 
         self._flush_events(user)

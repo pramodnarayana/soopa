@@ -2,40 +2,12 @@ import datetime
 
 import pytest
 
+from identity.domain.api_token import ApiToken
 from identity.domain.authentication_strategy import AuthenticationStrategyPort
 from identity.domain.identity_context import IdentityContext
-from identity.domain.models.api_token import ApiTokenDomainModel
-from identity.domain.models.api_token_models import (
-    ApiTokenCreatedResult,
-    CreateApiTokenCommand,
-    UpdateApiTokenCommand,
-)
 from identity.ports.outbound.token_verifier_port import TokenValidationError
 from identity.testing.fakes.fake_identity_uow import FakeIdentityUnitOfWork
 from identity.testing.fakes.fake_token_verifier import FakeTokenVerifier
-
-
-def test_api_token_models():
-    cmd = CreateApiTokenCommand(name="test")
-    assert cmd.name == "test"
-    assert cmd.expires_at is None
-
-    cmd2 = UpdateApiTokenCommand(name="test2", active=True)
-    assert cmd2.name == "test2"
-    assert cmd2.active is True
-
-    res = ApiTokenCreatedResult(
-        id="123",
-        name="test",
-        client_id="client123",
-        active=True,
-        last_used_at=None,
-        expires_at=None,
-        created_at=datetime.datetime.now(),
-        token="super_secret_token",
-    )
-    assert res.id == "123"
-    assert res.token == "super_secret_token"
 
 
 def test_authentication_strategy_port():
@@ -76,34 +48,35 @@ async def test_fake_identity_uow_commit_rollback():
 @pytest.mark.asyncio
 async def test_fake_api_token_repo():
     uow = FakeIdentityUnitOfWork()
+    now = datetime.datetime.now(datetime.UTC)
 
-    token = ApiTokenDomainModel(
-        id="123",
+    token = ApiToken(
+        id="iam_tok_123",
         name="test",
-        tenant_id="tenant_1",
-        client_id="client_1",
+        tenant_id="iam_ten_1",
+        client_id="cli_1",
         active=True,
         secret_hash="hash",
-        created_at=datetime.datetime.now(),
-        updated_at=datetime.datetime.now(),
+        created_at=now,
+        updated_at=now,
         last_used_at=None,
         expires_at=None,
     )
-    await uow.api_token_repo.create(token)
+    await uow.api_token_repo.save(token)
 
-    found = await uow.api_token_repo.get_by_id("123", "tenant_1")
+    found = await uow.api_token_repo.get_by_id("iam_tok_123", "iam_ten_1")
     assert found is not None
     assert found.name == "test"
 
-    found_client = await uow.api_token_repo.get_by_client_id("client_1")
+    found_client = await uow.api_token_repo.get_by_client_id("cli_1")
     assert found_client is not None
-    assert found_client.id == "123"
+    assert found_client.id == "iam_tok_123"
 
-    all_tokens = await uow.api_token_repo.get_all_by_tenant("tenant_1")
+    all_tokens = await uow.api_token_repo.get_all_by_tenant("iam_ten_1")
     assert len(all_tokens) == 1
 
-    await uow.api_token_repo.delete("123", "tenant_1")
-    assert await uow.api_token_repo.get_by_id("123", "tenant_1") is None
+    await uow.api_token_repo.delete("iam_tok_123", "iam_ten_1")
+    assert await uow.api_token_repo.get_by_id("iam_tok_123", "iam_ten_1") is None
 
 
 @pytest.mark.asyncio

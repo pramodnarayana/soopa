@@ -2,10 +2,11 @@ from datetime import UTC, datetime
 
 import pytest
 
+from identity.domain.api_token import ApiToken
+from identity.domain.authorization import Role
+from identity.domain.constants import UserStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.api_token import ApiTokenDomainModel
-from identity.domain.models.authorization import Role
-from identity.domain.models.user import User
+from identity.domain.user import User
 from identity.testing.fakes.fake_identity_uow import (
     FakeApiTokenRepository,
     FakeRoleRepository,
@@ -20,7 +21,7 @@ def _user(user_id: str) -> User:
         idp_user_id=None,
         email=f"{user_id}@example.com",
         name=user_id,
-        status="active",
+        status=UserStatus.ACTIVE,
         created_at=now,
         updated_at=now,
     )
@@ -68,7 +69,7 @@ async def test_fake_role_repository_normalizes_platform_tenant() -> None:
 async def test_fake_api_token_lookup_excludes_inactive_tokens() -> None:
     repo = FakeApiTokenRepository()
     now = datetime.now(UTC)
-    inactive_token = ApiTokenDomainModel(
+    inactive_token = ApiToken(
         id="iam_tok_inactive",
         tenant_id="iam_ten_first",
         name="Inactive",

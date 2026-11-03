@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, Protocol, runtime_checkable
+from types import TracebackType
+from typing import Protocol, runtime_checkable
 
 from pubsub.message import AckableMessage
 
@@ -16,7 +17,12 @@ class MessageConsumerPort(Protocol):
 
     async def __aenter__(self) -> "MessageConsumerPort": ...
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None: ...
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None: ...
 
     @asynccontextmanager
     def poll_raw_message(self) -> AsyncGenerator[AckableMessage | None, None]: ...

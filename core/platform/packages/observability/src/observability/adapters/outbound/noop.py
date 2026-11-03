@@ -49,20 +49,20 @@ class NoOpMetrics(MetricsPort):
 
 
 class NoOpLogger(LoggerPort):
-    def debug(self, event: str, **kwargs: Any) -> None:
+    def debug(self, event: str, **kwargs: object) -> None:
         pass
 
-    def info(self, event: str, **kwargs: Any) -> None:
+    def info(self, event: str, **kwargs: object) -> None:
         pass
 
-    def warning(self, event: str, **kwargs: Any) -> None:
+    def warning(self, event: str, **kwargs: object) -> None:
         pass
 
-    def error(self, event: str, **kwargs: Any) -> None:
+    def error(self, event: str, **kwargs: object) -> None:
         pass
 
-    def exception(self, event: str, **kwargs: Any) -> None:
+    def exception(self, event: str, **kwargs: object) -> None:
         pass
 
-    def bind(self, **kwargs: Any) -> "NoOpLogger":
+    def bind(self, **kwargs: object) -> "NoOpLogger":
         return self

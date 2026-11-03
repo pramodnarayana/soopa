@@ -1,28 +1,21 @@
 from abc import ABC, abstractmethod
-from typing import Any
 
-from identity.domain.models.api_token import ApiTokenDomainModel
+from identity.domain.api_token import ApiToken
 
 
 class ApiTokenRepositoryPort(ABC):
-    """Port for managing API Token CRUD operations within the UCP bounded context."""
+    """Port for managing API Token persistence operations."""
 
     @abstractmethod
-    async def get_all_by_tenant(self, tenant_id: str) -> list[ApiTokenDomainModel]:
+    async def get_all_by_tenant(self, tenant_id: str) -> list[ApiToken]:
         pass
 
     @abstractmethod
-    async def get_by_id(self, token_id: str, tenant_id: str) -> ApiTokenDomainModel | None:
+    async def get_by_id(self, token_id: str, tenant_id: str) -> ApiToken | None:
         pass
 
     @abstractmethod
-    async def create(self, token: ApiTokenDomainModel) -> ApiTokenDomainModel:
-        pass
-
-    @abstractmethod
-    async def update(
-        self, token_id: str, tenant_id: str, **kwargs: Any
-    ) -> ApiTokenDomainModel | None:
+    async def save(self, token: ApiToken) -> ApiToken:
         pass
 
     @abstractmethod
@@ -30,5 +23,5 @@ class ApiTokenRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_client_id(self, client_id: str) -> ApiTokenDomainModel | None:
+    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
         pass

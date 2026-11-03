@@ -8,11 +8,11 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from shttp import HttpError
+from shttp import HttpError, SsrfSecurityError
 
 from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
-    ZitadelTokenVerifierPort,
-    ZitadelTokenVerifierPortOptions,
+    ZitadelTokenVerifierAdapter,
+    ZitadelTokenVerifierOptions,
 )
 from identity.ports.outbound.token_verifier_port import TokenValidationError
 
@@ -70,23 +70,23 @@ def jwks_server() -> Generator[str, None, None]:
 
 
 @pytest.fixture
-def options(jwks_server: str) -> ZitadelTokenVerifierPortOptions:
-    return ZitadelTokenVerifierPortOptions(
+def options(jwks_server: str) -> ZitadelTokenVerifierOptions:
+    return ZitadelTokenVerifierOptions(
         issuer=jwks_server,
         audience="my-api",
+        allow_private_ips=True,
     )
 
 
 @pytest.fixture
-def verifier(options: ZitadelTokenVerifierPortOptions) -> ZitadelTokenVerifierPort:
-    return ZitadelTokenVerifierPort(options)
+def verifier(options: ZitadelTokenVerifierOptions) -> ZitadelTokenVerifierAdapter:
+    return ZitadelTokenVerifierAdapter(options)
 
 
 @pytest.mark.asyncio
 async def test_verify_valid_token(
-    verifier: ZitadelTokenVerifierPort, options: ZitadelTokenVerifierPortOptions
+    verifier: ZitadelTokenVerifierAdapter, options: ZitadelTokenVerifierOptions
 ) -> None:
-    # Sign a real JWT with our private key
     payload = {
         "sub": "user-123",
         "iss": options.issuer,
@@ -106,9 +106,8 @@ async def test_verify_valid_token(
 
 @pytest.mark.asyncio
 async def test_verify_expired_token(
-    verifier: ZitadelTokenVerifierPort, options: ZitadelTokenVerifierPortOptions
+    verifier: ZitadelTokenVerifierAdapter, options: ZitadelTokenVerifierOptions
 ) -> None:
-    # Sign an expired token
     payload = {
         "sub": "user-123",
         "iss": options.issuer,
@@ -123,17 +122,33 @@ async def test_verify_expired_token(
 
 
 @pytest.mark.asyncio
+async def test_default_options_enforce_ssrf_protection_against_private_ips(httpserver) -> None:
+    default_options = ZitadelTokenVerifierOptions(
+        issuer=httpserver.url_for("/").rstrip("/"),
+        audience="my-api",
+    )
+    assert default_options.allow_private_ips is False
+    verifier = ZitadelTokenVerifierAdapter(default_options)
+    try:
+        with pytest.raises(SsrfSecurityError):
+            await verifier._get_cached_userinfo("token", "jti")
+    finally:
+        await verifier.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("userinfo", [None, 42, [], "invalid"])
 async def test_get_cached_userinfo_rejects_non_object_json(httpserver, userinfo: object) -> None:
-    # Configure httpserver to return the invalid JSON object
     httpserver.expect_request("/oidc/v1/userinfo").respond_with_data(
         json.dumps(userinfo), status=200, content_type="application/json"
     )
 
-    options = ZitadelTokenVerifierPortOptions(
-        issuer=httpserver.url_for("/").rstrip("/"), audience="my-api"
+    options = ZitadelTokenVerifierOptions(
+        issuer=httpserver.url_for("/").rstrip("/"),
+        audience="my-api",
+        allow_private_ips=True,
     )
-    verifier = ZitadelTokenVerifierPort(options)
+    verifier = ZitadelTokenVerifierAdapter(options)
 
     with pytest.raises(TypeError, match="userinfo response must be a JSON object"):
         await verifier._get_cached_userinfo("token", "jti")
@@ -148,10 +163,12 @@ async def test_get_cached_userinfo_raises_http_error_on_status_error(httpserver)
         "Bad Request", status=400, content_type="text/plain"
     )
 
-    options = ZitadelTokenVerifierPortOptions(
-        issuer=httpserver.url_for("/").rstrip("/"), audience="my-api"
+    options = ZitadelTokenVerifierOptions(
+        issuer=httpserver.url_for("/").rstrip("/"),
+        audience="my-api",
+        allow_private_ips=True,
     )
-    verifier = ZitadelTokenVerifierPort(options)
+    verifier = ZitadelTokenVerifierAdapter(options)
 
     with pytest.raises(HttpError) as exc_info:
         await verifier._get_cached_userinfo("token", "jti")
@@ -167,10 +184,12 @@ async def test_get_cached_userinfo_caches_and_returns_valid_object(httpserver) -
         {"email": "user@example.com", "name": "Test User"}
     )
 
-    options = ZitadelTokenVerifierPortOptions(
-        issuer=httpserver.url_for("/").rstrip("/"), audience="my-api"
+    options = ZitadelTokenVerifierOptions(
+        issuer=httpserver.url_for("/").rstrip("/"),
+        audience="my-api",
+        allow_private_ips=True,
     )
-    verifier = ZitadelTokenVerifierPort(options)
+    verifier = ZitadelTokenVerifierAdapter(options)
 
     userinfo = await verifier._get_cached_userinfo("token", "jti")
     assert userinfo == {"email": "user@example.com", "name": "Test User"}
