@@ -33,6 +33,48 @@ class UcpJobName(StrEnum):
 
 
 class UcpCleanupJobName(StrEnum):
+    """
+    Canonical event type names for UCP cleanup scheduled jobs.
+    These must match the event_type values dispatched by the scheduler.
+    """
+
     UCP_OUTBOX_CLEANUP = "UCP_OUTBOX_CLEANUP"
     UCP_IDEMPOTENCY_CLEANUP = "UCP_IDEMPOTENCY_CLEANUP"
     UCP_AUDIT_LOG_CLEANUP = "UCP_AUDIT_LOG_CLEANUP"
+
+
+class UcpIdPrefix(StrEnum):
+    """Domain-specific ID prefixes for the UCP bounded context."""
+
+    TENANT = "iam_ten"
+    USER = "iam_usr"
+    TOKEN = "iam_tok"  # noqa: S105 - Entity ID prefix for IAM API tokens, not a secret credential
+    KEY = "iam_key"
+    ROLE = "iam_rol"
+    USER_ROLE = "iam_usr_rol"
+    APP = "ucp_app"
+    UCP_APP = "ucp_app"
+    SHARD = "ucp_shard"
+    UCP_SHARD = "ucp_shard"
+    OUTBOX = "ucp_ob"
+    UCP_OUTBOX = "ucp_ob"
+    WEBHOOK = "ucp_wh"
+    UCP_WEBHOOK = "ucp_wh"
+
+
+class UcpOutboxSource(StrEnum):
+    """Canonical outbox source identifier for UCP events."""
+
+    UCP = "soopa.ucp"
+
+
+__all__ = [
+    "IdempotencyStatus",
+    "LifecycleStatus",
+    "SubscriptionTier",
+    "UcpCleanupJobName",
+    "UcpEventType",
+    "UcpIdPrefix",
+    "UcpJobName",
+    "UcpOutboxSource",
+]

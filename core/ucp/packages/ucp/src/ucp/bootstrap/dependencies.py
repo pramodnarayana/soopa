@@ -5,8 +5,8 @@ from urllib.parse import urlparse
 from database.provider import DatabaseProvider
 from fastapi import Request
 from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
-    ZitadelTokenVerifierPort,
-    ZitadelTokenVerifierPortOptions,
+    ZitadelTokenVerifierAdapter,
+    ZitadelTokenVerifierOptions,
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +20,7 @@ async def get_db_session(request: Request) -> AsyncGenerator[AsyncSession, None]
 
 
 @lru_cache(maxsize=1)
-def get_token_verifier() -> ZitadelTokenVerifierPort:
+def get_token_verifier() -> ZitadelTokenVerifierAdapter:
     settings = get_settings()
 
     # JWKS fetching uses the internal Cloud Map URL (no ALB hairpin) but overrides
@@ -39,7 +39,7 @@ def get_token_verifier() -> ZitadelTokenVerifierPort:
     # (e.g. "https://host/path") are handled correctly.
     jwks_host_header = urlparse(settings.zitadel_issuer).netloc if settings.zitadel_issuer else None
 
-    options = ZitadelTokenVerifierPortOptions(
+    options = ZitadelTokenVerifierOptions(
         issuer=settings.zitadel_issuer,
         audience=[
             settings.zitadel_ucp_project_id,
@@ -48,5 +48,6 @@ def get_token_verifier() -> ZitadelTokenVerifierPort:
         platform_org_id=settings.zitadel_platform_org_id,
         jwks_url=jwks_url,
         jwks_host_header=jwks_host_header,
+        allow_private_ips=settings.identity.allow_private_ips,
     )
-    return ZitadelTokenVerifierPort(options)
+    return ZitadelTokenVerifierAdapter(options)

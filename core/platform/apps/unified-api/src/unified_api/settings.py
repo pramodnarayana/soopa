@@ -2,9 +2,9 @@ import typing
 from functools import lru_cache
 
 from edi.config.models import CommonSettings, SecretsSettings
+from identity import PlatformIdentitySettings
 from pydantic import Field
 from seedwork.infra.config import load_settings_safely
-from seedwork.infra.config_models import PlatformIdentitySettings
 
 
 class ApiSettings(CommonSettings):

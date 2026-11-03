@@ -2,14 +2,12 @@ import asyncio
 
 import structlog
 from observability import ObservabilityProvider
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 from ucp.config.settings import get_settings
 
 from ucp_worker.bootstrap.container import WorkerContainer
 
 logger = structlog.get_logger(__name__)
-
-
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class UcpWorkerModule(LaunchableWorker):
@@ -27,14 +25,9 @@ class UcpWorkerModule(LaunchableWorker):
             logger.info("ucp_event_sqs_consumer_started_in_worker")
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
-        tasks = []
-        if (
-            self.container
-            and self.container.events_consumer
-            and getattr(self.container.events_consumer, "task", None)
-        ):
-            tasks.append(self.container.events_consumer.task)
-        return tasks
+        if self.container is not None and self.container.events_consumer is not None:
+            return self.container.events_consumer.background_tasks()
+        return []
 
     async def stop(self) -> None:
         logger.info("ucp_worker_shutting_down_tasks")

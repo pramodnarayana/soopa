@@ -2,7 +2,7 @@ import pytest
 
 from scheduler.adapters.outbound.messaging.dummy_job_dispatcher import DummyJobDispatcher
 from scheduler.domain.constants import JobStatus
-from scheduler.domain.models import ScheduledJob
+from scheduler.domain.scheduled_job import ScheduledJob
 
 
 @pytest.mark.asyncio

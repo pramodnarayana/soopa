@@ -4,13 +4,14 @@ from enum import StrEnum
 from typing import cast
 
 import structlog
-from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
-from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
-from edi.domain.enums import EdiStandard
-from edi.domain.exceptions import OrchestrationError
-from fastapi import APIRouter, HTTPException
+from edi.domain.exceptions import EdiTransformationError, OrchestrationError
+from edi.domain.transaction.enums import EdiStandard
+from edi.ports.outbound.edi_ast_codec_port import EdiAstCodecPort
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from seedwork.domain.types import JsonDict
+
+from unified_api.adapters.inbound.http.dependencies.edi.services import get_edi_ast_codec
 
 logger = structlog.get_logger(__name__)
 
@@ -34,16 +35,13 @@ class TransformResponse(BaseModel):
 
 
 async def _handle_edi_to_json(
-    request: TransformRequest, adapter: BotsEDIAdapter
+    request: TransformRequest, codec: EdiAstCodecPort
 ) -> TransformResponse:
     raw_bytes = request.payload.encode("utf-8")
     logger.info("edi_tool.received_payload", payload_length=len(raw_bytes))
 
-    # Delegate parsing and validation to the common BotsEDIAdapter
-    ast_dict, errors = await asyncio.to_thread(adapter.get_raw_ast, raw_bytes)
+    ast_dict, errors = await asyncio.to_thread(codec.get_raw_ast, raw_bytes)
 
-    # We embed validation errors into an API envelope wrapper
-    # so the payload (ast) remains pristine and unpolluted.
     if errors:
         envelope = {"meta": {"valid": False, "validation_errors": errors}, "data": ast_dict}
         return TransformResponse(result=json.dumps(envelope, indent=2), valid=False)
@@ -55,30 +53,29 @@ async def _handle_edi_to_json(
 
 
 async def _handle_json_to_edi(
-    request: TransformRequest, adapter: BotsEDIAdapter
+    request: TransformRequest, codec: EdiAstCodecPort
 ) -> TransformResponse:
     payload_dict = json.loads(request.payload)
 
-    # Smart Extractor: Strip the API Envelope if it exists
-    if isinstance(payload_dict, dict) and "data" in payload_dict and "meta" in payload_dict:
-        ast_dict = cast(JsonDict, payload_dict["data"])
-    else:
-        ast_dict = cast(JsonDict, payload_dict)
+    raw_ast = (
+        payload_dict["data"]
+        if isinstance(payload_dict, dict) and "data" in payload_dict and "meta" in payload_dict
+        else payload_dict
+    )
 
-    # Delegate EDI serialization to the common BotsEDIAdapter
-    # We assume X12 by default for now, but this could be inferred
-    # from the AST (e.g. presence of interchange_UNB)
-    if not isinstance(ast_dict, (dict, list)):
+    if not isinstance(raw_ast, (dict, list)):
         raise HTTPException(
             status_code=400,
             detail="Invalid JSON payload structure. Must be an object or a list of objects.",
         )
 
-    if isinstance(ast_dict, list) and not all(isinstance(item, dict) for item in ast_dict):
+    if isinstance(raw_ast, list) and not all(isinstance(item, dict) for item in raw_ast):
         raise HTTPException(
             status_code=400,
             detail="Invalid JSON payload structure. Every element of the list must be an object.",
         )
+
+    ast_dict = cast("JsonDict | list[JsonDict]", raw_ast)
 
     standard = EdiStandard.X12
     if "interchange_UNB" in ast_dict or (
@@ -86,11 +83,8 @@ async def _handle_json_to_edi(
     ):
         standard = EdiStandard.EDIFACT
 
-    edi_str, errors = await asyncio.to_thread(
-        adapter.serialize_to_edi, cast(dict[str, object], ast_dict), standard=standard
-    )
+    edi_str, errors = await asyncio.to_thread(codec.serialize_to_edi, ast_dict, standard=standard)
 
-    # Filter out warnings
     fatal_errors = [e for e in errors if not e.startswith("[W")]
 
     if fatal_errors:
@@ -100,7 +94,10 @@ async def _handle_json_to_edi(
 
 
 @router.post("/transform", response_model=TransformResponse)
-async def transform_payload(request: TransformRequest) -> TransformResponse:
+async def transform_payload(
+    request: TransformRequest,
+    codec: EdiAstCodecPort = Depends(get_edi_ast_codec),
+) -> TransformResponse:
     handlers = {
         TransformAction.EDI_TO_JSON: _handle_edi_to_json,
         TransformAction.JSON_TO_EDI: _handle_json_to_edi,
@@ -111,12 +108,9 @@ async def transform_payload(request: TransformRequest) -> TransformResponse:
         raise HTTPException(status_code=400, detail="Invalid action provided.")
 
     try:
-        adapter = BotsEDIAdapter()
-        return await handler(request, adapter)
+        return await handler(request, codec)
 
-    except TransformationError as e:
-        # If the AST generation completely crashed (e.g. fatal syntax error),
-        # get_raw_ast will still raise TransformationError
+    except EdiTransformationError as e:
         if e.errors:
             logger.info("edi_tool.validation_failed", errors=e.errors)
             structured_error = {"status": "fatal_validation_failed", "errors": e.errors}
@@ -143,7 +137,6 @@ async def transform_payload(request: TransformRequest) -> TransformResponse:
         logger.exception("Transformation failed")
         error_msg = str(e)
 
-        # Fallback for unexpected system errors
         return TransformResponse(
             result=None,
             valid=False,

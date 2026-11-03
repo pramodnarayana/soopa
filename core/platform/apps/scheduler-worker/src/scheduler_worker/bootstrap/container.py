@@ -1,10 +1,11 @@
-from typing import Any
+from collections.abc import Callable
 
 from dependency_injector import containers, providers
-from scheduler.adapters.outbound.database.uow import SqlAlchemySchedulerUnitOfWork
 from scheduler.adapters.outbound.messaging.sqs_job_dispatcher import SQSJobDispatcher
 from scheduler.application.job_executor_use_case import JobExecutorUseCase
 from scheduler.application.job_sweeper_use_case import JobSweeperUseCase
+from scheduler.bootstrap.uow_factory import create_scheduler_uow
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from scheduler_worker.adapters.inbound.workers.scheduler_poller import SchedulerPoller
 
@@ -15,10 +16,10 @@ class Container(containers.DeclarativeContainer):
     """
 
     config = providers.Configuration()
-    session_factory: providers.Dependency[Any] = providers.Dependency()
+    session_factory: providers.Dependency[Callable[[], AsyncSession]] = providers.Dependency()
 
     uow_factory = providers.Factory(
-        SqlAlchemySchedulerUnitOfWork,
+        create_scheduler_uow,
         session=providers.Factory(
             lambda session_factory: session_factory(), session_factory=session_factory
         ),

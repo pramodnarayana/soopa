@@ -6,19 +6,19 @@ from database.models.identity import IdentityOutbox
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
+from identity.domain.authorization import Role as DomainRole
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.authorization import Role as DomainRole
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 
 logger = structlog.get_logger(__name__)
 
 
-class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
+class SqlAlchemyRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
     """
     PostgreSQL adapter for the Role Repository.
     """
@@ -26,12 +26,8 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
     def __init__(self, session: AsyncSession):
         BaseSqlAlchemyRepository.__init__(self, session)
 
-    async def get_by_id(self, role_id: str) -> DomainRole | None:
-        stmt = select(OrmRole).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
-        result = await self.session.execute(stmt)
-        row = result.scalar_one_or_none()
-        if not row:
-            return None
+    @staticmethod
+    def _to_domain_model(row: OrmRole) -> DomainRole:
         return DomainRole(
             id=row.id,
             tenant_id=row.tenant_id,
@@ -39,6 +35,30 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
             description=row.description,
             capabilities=list(row.capabilities) if row.capabilities else [],
         )
+
+    @staticmethod
+    def _to_orm_record(role: DomainRole) -> OrmRole:
+        return OrmRole(
+            id=role.id,
+            tenant_id=role.tenant_id,
+            name=role.name,
+            description=role.description,
+            capabilities=role.capabilities,
+        )
+
+    @staticmethod
+    def _update_record_from_domain(orm_role: OrmRole, role: DomainRole) -> None:
+        orm_role.name = role.name
+        orm_role.description = role.description
+        orm_role.capabilities = role.capabilities
+
+    async def get_by_id(self, role_id: str) -> DomainRole | None:
+        stmt = select(OrmRole).where(OrmRole.id == role_id, OrmRole.deleted_at.is_(None))
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        if not row:
+            return None
+        return self._to_domain_model(row)
 
     async def get_platform_role_by_name(self, name: str) -> DomainRole | None:
         stmt = select(OrmRole).where(
@@ -50,13 +70,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         row = result.scalar_one_or_none()
         if not row:
             return None
-        return DomainRole(
-            id=row.id,
-            tenant_id=row.tenant_id,
-            name=row.name,
-            description=row.description,
-            capabilities=list(row.capabilities) if row.capabilities else [],
-        )
+        return self._to_domain_model(row)
 
     async def get_platform_role_by_id(self, role_id: str) -> DomainRole | None:
         stmt = select(OrmRole).where(
@@ -68,13 +82,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         row = result.scalar_one_or_none()
         if not row:
             return None
-        return DomainRole(
-            id=row.id,
-            tenant_id=row.tenant_id,
-            name=row.name,
-            description=row.description,
-            capabilities=list(row.capabilities) if row.capabilities else [],
-        )
+        return self._to_domain_model(row)
 
     async def get_platform_roles(self) -> list[DomainRole]:
         bound_logger = logger.bind()
@@ -88,16 +96,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
 
         bound_logger.debug("role_repo.get_platform_roles.completed", roles_found=len(rows))
 
-        return [
-            DomainRole(
-                id=row.id,
-                tenant_id=row.tenant_id,
-                name=row.name,
-                description=row.description,
-                capabilities=list(row.capabilities) if row.capabilities else [],
-            )
-            for row in rows
-        ]
+        return [self._to_domain_model(row) for row in rows]
 
     async def get_user_capabilities(self, tenant_id: str | None, user_id: str) -> set[str]:
         """
@@ -145,17 +144,9 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         orm_role = result.scalar_one_or_none()
 
         if orm_role:
-            orm_role.name = role.name
-            orm_role.description = role.description
-            orm_role.capabilities = role.capabilities
+            self._update_record_from_domain(orm_role, role)
         else:
-            orm_role = OrmRole(
-                id=role.id,
-                tenant_id=role.tenant_id,
-                name=role.name,
-                description=role.description,
-                capabilities=role.capabilities,
-            )
+            orm_role = self._to_orm_record(role)
             self.session.add(orm_role)
 
         self._flush_events(role)
@@ -190,7 +181,7 @@ class PostgresRoleRepository(RoleRepositoryPort, BaseSqlAlchemyRepository):
         if not result.scalar_one_or_none():
             raise ResourceNotFoundError(f"Role '{role_id}' not found or is inactive.")
 
-        user_role_id = generate_id(DomainIdPrefix.USER_ROLE)
+        user_role_id = generate_id(IdentityIdPrefix.USER_ROLE)
         user_role = UserRole(
             id=user_role_id,
             tenant_id=tenant_id,

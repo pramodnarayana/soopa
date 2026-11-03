@@ -3,7 +3,8 @@
 from dependency_injector.wiring import Provide, inject
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from notification.bootstrap.container import Container
-from notification.domain.models import Channel, NotificationPreference
+from notification.domain.enums import Channel
+from notification.domain.preference import NotificationPreference
 from notification.ports.outbound.notification_preferences_repository_port import (
     NotificationPreferencesRepositoryPort,
 )

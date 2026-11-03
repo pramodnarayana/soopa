@@ -1,12 +1,12 @@
 from functools import lru_cache
 
+from identity.config import PlatformIdentitySettings
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
-    PlatformIdentitySettings,
 )
 
 
@@ -61,57 +61,57 @@ class AppSettings(BaseSettings):
         default_factory=lambda: PlatformIdentityProvisioningSettings()
     )
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def sns_identity_events_topic_arn(self) -> str:
         return self.aws.sns_identity_events_topic_arn
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def sqs_identity_sync_queue_url(self) -> str:
         return self.sqs.identity_sync_queue_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def aws_region(self) -> str:
         return self.aws.resolved_region
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def zitadel_api_url(self) -> str:
         return self.identity.api_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def zitadel_machine_key(self) -> str:
         return self.identity.machine_key
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def zitadel_ucp_project_id(self) -> str:
         return self.identity.ucp_project_id
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def zitadel_default_user_password(self) -> str:
         return self.identity.default_user_password
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def zitadel_tenant_role_group(self) -> str:
         return self.identity.tenant_role_group
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def zitadel_platform_org_id(self) -> str:
         return self.identity.platform_org_id

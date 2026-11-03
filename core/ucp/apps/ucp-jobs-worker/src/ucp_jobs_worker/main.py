@@ -2,14 +2,12 @@ import asyncio
 
 import structlog
 from observability import ObservabilityProvider
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 from ucp.config.settings import get_settings
 
 from ucp_jobs_worker.bootstrap.container import WorkerContainer as Container
 
 logger = structlog.get_logger(__name__)
-
-
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class UcpJobsWorkerModule(LaunchableWorker):
@@ -29,11 +27,11 @@ class UcpJobsWorkerModule(LaunchableWorker):
             logger.info("ucp_jobs_consumer_started")
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
-        tasks = []
-        if self.container.outbox_relay and getattr(self.container.outbox_relay, "task", None):
-            tasks.append(self.container.outbox_relay.task)
-        if self.container.jobs_consumer and getattr(self.container.jobs_consumer, "task", None):
-            tasks.append(self.container.jobs_consumer.task)
+        tasks: list[asyncio.Task[object]] = []
+        if self.container.outbox_relay is not None:
+            tasks.extend(self.container.outbox_relay.background_tasks())
+        if self.container.jobs_consumer is not None:
+            tasks.extend(self.container.jobs_consumer.background_tasks())
         return tasks
 
     async def stop(self) -> None:

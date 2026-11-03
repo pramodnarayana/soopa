@@ -1,34 +1,28 @@
 import contextlib
-import typing
 from collections.abc import AsyncGenerator, Callable
-from typing import cast
 
-from database.router import DatabaseRouter
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.adapters.outbound.pipeline.storage import S3StorageClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from database.router import DatabaseRouterPort
+from edi.ports.outbound.tenant_port import TenantPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 
-class TenantUowProvider:
+class SqlAlchemyTenantUoWProvider:
     """
-    Dependency Injection factory that abstracts away the complex multi-tenant
-    database shard resolution. It provides a clean, scoped Unit of Work
-    factory without leaking database connection logic to Application Services.
+    Dependency Injection factory that abstracts away multi-tenant database shard
+    resolution and yields a scoped DataPlaneUnitOfWorkPort via an injected builder.
     """
 
     def __init__(
         self,
-        resolver: TenantResolver,
-        db_router: DatabaseRouter,
-        settings: typing.Any,
-        s3_bucket: str,
-        aws_endpoint: str | None,
+        resolver: TenantPort,
+        db_router: DatabaseRouterPort,
+        uow_builder: Callable[[AsyncSession], DataPlaneUnitOfWorkPort],
     ) -> None:
         self._resolver = resolver
         self._db_router = db_router
-        self._settings = settings
-        self._storage = S3StorageClient(bucket_name=s3_bucket, endpoint_url=aws_endpoint)
+        self._uow_builder = uow_builder
 
     async def get_uow_factory(
         self, tenant_id: str
@@ -45,10 +39,7 @@ class TenantUowProvider:
                 self._db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
             ) as session_gen:
                 async for session in session_gen:
-                    uow = SqlAlchemyDataPlaneUnitOfWork(
-                        tenant_session=session, storage=self._storage
-                    )
-                    yield cast(DataPlaneUnitOfWorkPort, uow)
+                    yield self._uow_builder(session)
                     break
 
         return uow_factory

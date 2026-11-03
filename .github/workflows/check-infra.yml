@@ -5,8 +5,12 @@ on:
     branches: [ "main", "development" ]
     paths:
       - 'infra/cloud/**'
+      - 'infra/topology.json'
+      - 'core/platform/topology.json'
+      - 'apps/*/topology.json'
       - '.github/workflows/*infra*.yml'
       - '.github/workflows/preview-app-iac.yml'
+      - '.github/workflows/deploy.yml'
       - '.github/actions/pulumi-*/**'
   workflow_dispatch:
 

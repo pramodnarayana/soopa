@@ -172,6 +172,7 @@ mypy_path = [
     "core/platform/packages/secret-store/src",
     "core/platform/packages/sftp/src",
     "core/platform/packages/shttp/src",
+    "core/platform/packages/storage/src",
     "core/platform/packages/strace/src",
     "core/platform/packages/seedwork/src",
 ]
@@ -180,6 +181,9 @@ mypy_path = [
 module = [
     "hvac.*",
     "aioboto3.*",
+    "botocore.*",
+    "endesive.*",
+    "asn1crypto.*",
     "asyncpg.*",
     "sse_starlette.*",
     "opentelemetry.*",

@@ -1,6 +1,7 @@
 from typing import Protocol
 
-from notification.domain.models import Channel, Template
+from notification.domain.enums import Channel
+from notification.domain.template import Template
 
 
 class TemplateRepositoryPort(Protocol):

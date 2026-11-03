@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
+from seedwork.domain.aggregate import AggregateRoot
 from seedwork.events import DomainEvent
-from seedwork.models import AggregateRoot
 
 
 @dataclass(frozen=True)
@@ -63,3 +63,14 @@ def test_domain_events_property_bypassed_init():
     assert len(aggregate.domain_events) == 1
     aggregate.clear_domain_events()
     assert len(aggregate.domain_events) == 0
+
+
+def test_pull_domain_events_returns_and_clears_events():
+    aggregate = DummyAggregate()
+    event = DummyEvent(aggregate_id="456")
+    aggregate.add_domain_event(event)
+
+    pulled = aggregate.pull_domain_events()
+    assert pulled == [event]
+    assert aggregate.domain_events == []
+    assert aggregate.pull_domain_events() == []

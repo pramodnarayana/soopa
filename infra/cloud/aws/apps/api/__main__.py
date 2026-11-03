@@ -9,6 +9,7 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.messaging import resolve_messaging_queue_arns
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -212,14 +213,8 @@ api_service = provision_fargate_service(
         },
         {
             "Effect": "Allow",
-            "Action": ["sqs:SendMessage", "sqs:GetQueueUrl", "sqs:GetQueueAttributes"],
-            "Resource": pulumi.Output.concat(
-                "arn:aws:sqs:",
-                aws.get_region().name,
-                ":",
-                aws.get_caller_identity().account_id,
-                f":{_env}-edi-*",
-            ),
+            "Action": ["sqs:SendMessage", "sqs:GetQueueAttributes"],
+            "Resource": resolve_messaging_queue_arns(messaging),
         },
         {
             "Effect": "Allow",

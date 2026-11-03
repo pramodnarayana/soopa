@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from notification.domain.models import NotificationPreference
+from notification.domain.preference import NotificationPreference
 
 
 class NotificationPreferencesRepositoryPort(Protocol):

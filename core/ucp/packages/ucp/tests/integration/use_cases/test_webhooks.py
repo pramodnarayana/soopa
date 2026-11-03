@@ -2,18 +2,18 @@ import json
 
 import pytest
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import UcpOutbox
 
-from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.webhooks import (
     CreateWebhookUseCase,
     DeleteWebhookUseCase,
     ListWebhooksUseCase,
     UpdateWebhookUseCase,
 )
+from ucp.bootstrap.container import create_ucp_uow
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -27,30 +27,27 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     """
     tenant_id = generate_id(DomainIdPrefix.TENANT.value)
 
-    # Create Use Cases
-    uow = SqlAlchemyUcpUnitOfWork(db_session)
+    uow = create_ucp_uow(db_session)
     create_uc = CreateWebhookUseCase(uow)
     update_uc = UpdateWebhookUseCase(uow)
     list_uc = ListWebhooksUseCase(uow)
     delete_uc = DeleteWebhookUseCase(uow)
 
-    # Call use cases directly — each manages its own `async with self.uow` + commit() internally.
-    # This mirrors production usage exactly and avoids double-nesting the SQLAlchemy transaction.
-
     # 1. CREATE
-    created_webhook = await create_uc.execute(
+    create_res = await create_uc.execute(
         tenant_id=tenant_id,
         name="Test Webhook",
         url="https://example.com/hook",
         auth_header_vault_ref=None,
     )
+    assert create_res.is_ok
+    created_webhook = create_res.unwrap()
 
     assert created_webhook.id.startswith("ucp_wh_")
     assert created_webhook.name == "Test Webhook"
     assert created_webhook.url == "https://example.com/hook"
     assert created_webhook.active is True
 
-    # Verify outbox event was created in the DB
     stmt = select(UcpOutbox).where(UcpOutbox.tenant_id == tenant_id)
     outbox_records = (await db_session.execute(stmt)).scalars().all()
     assert len(outbox_records) == 1
@@ -62,7 +59,6 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
 
     assert payload["webhook_id"] == created_webhook.id
 
-    # Clear outbox for next test step
     for record in outbox_records:
         await db_session.delete(record)
     await db_session.flush()
@@ -73,18 +69,19 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     assert webhooks[0].id == created_webhook.id
 
     # 3. UPDATE
-    updated_webhook = await update_uc.execute(
+    update_res = await update_uc.execute(
         tenant_id=tenant_id,
         webhook_id=created_webhook.id,
         name="Updated Webhook",
         url=None,
         active=False,
     )
+    assert update_res.is_ok
+    updated_webhook = update_res.unwrap()
     assert updated_webhook.name == "Updated Webhook"
-    assert updated_webhook.url == "https://example.com/hook"  # unchanged
+    assert updated_webhook.url == "https://example.com/hook"
     assert updated_webhook.active is False
 
-    # Verify update outbox event
     outbox_records = (await db_session.execute(stmt)).scalars().all()
     assert len(outbox_records) == 1
     assert outbox_records[0].event_type == "webhook.updated"
@@ -94,17 +91,16 @@ async def test_webhook_lifecycle_integration(db_session: AsyncSession) -> None:
     await db_session.flush()
 
     # 4. DELETE
-    await delete_uc.execute(
+    del_res = await delete_uc.execute(
         tenant_id=tenant_id,
         webhook_id=created_webhook.id,
         deleted_by="test-runner",
     )
+    assert del_res.is_ok
 
-    # Verify delete outbox event
     outbox_records = (await db_session.execute(stmt)).scalars().all()
     assert len(outbox_records) == 1
     assert outbox_records[0].event_type == "webhook.deleted"
 
-    # Verify no longer lists
     webhooks = await list_uc.execute(tenant_id)
     assert len(webhooks) == 0

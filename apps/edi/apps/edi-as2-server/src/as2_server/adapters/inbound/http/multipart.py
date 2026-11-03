@@ -1,4 +1,4 @@
-from edi.domain.models.as2 import AS2MDN
+from edi.domain.partner.as2.messages import AS2MDN
 
 
 def render_mdn_report(mdn: AS2MDN, boundary: str = "----=_MDNBoundary") -> bytes:
@@ -6,7 +6,7 @@ def render_mdn_report(mdn: AS2MDN, boundary: str = "----=_MDNBoundary") -> bytes
     Renders the MDN dataclass into a raw HTTP multipart/report payload.
     This is an HTTP transport concern, so it belongs in the AS2 Server adapters.
     """
-    disp_val = mdn.disposition.value if hasattr(mdn.disposition, "value") else str(mdn.disposition)
+    disp_val = str(mdn.disposition)
 
     if "decryption-failed" in disp_val:
         text = "The AS2 message failed decryption."

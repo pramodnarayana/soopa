@@ -12,7 +12,8 @@ import contextlib
 
 import pytest
 
-from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.enums import MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork, FakeTransformerAdapter
 
 

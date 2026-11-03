@@ -1,10 +1,10 @@
 from collections.abc import Awaitable, Callable
 
 import structlog
-from edi.domain.constants import ProvisioningEventType
-from edi.domain.enums import EdiEventType, WebhookEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.replication import PermanentProvisioningError, TransientProvisioningError
+from edi.domain.enums import EdiEventType
+from edi.domain.events import ProvisioningEvent, ProvisioningEventType
+from edi.domain.replication.graph import PermanentProvisioningError, TransientProvisioningError
+from edi.domain.routing.enums import WebhookEventType
 from edi.ports.outbound.replication_port import ReplicationPort
 from edi.ports.outbound.tenant_port import TenantPort
 from identity.domain.identity_context import PLATFORM_TENANT_ID

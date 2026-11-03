@@ -4,8 +4,10 @@ from datetime import UTC, datetime
 from sqlalchemy import select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.models.control_plane import OutboundEdiHeader
-from edi.domain.models.headers import OutboundEdiHeaderDomainModel
+from edi.adapters.outbound.database.models.control_plane import (
+    OutboundEdiHeader as OrmOutboundEdiHeader,
+)
+from edi.domain.routing.outbound_header import OutboundEdiHeader
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 
 
@@ -13,8 +15,9 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
     def __init__(self, session: GlobalSession) -> None:
         GlobalSqlAlchemyRepository.__init__(self, session)
 
+    @staticmethod
     def _update_record_from_domain(
-        self, record: OutboundEdiHeader, aggregate: OutboundEdiHeaderDomainModel
+        record: OrmOutboundEdiHeader, aggregate: OutboundEdiHeader
     ) -> None:
         record.tenant_id = aggregate.tenant_id
         record.trading_partner_id = aggregate.trading_partner_id
@@ -29,39 +32,40 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
         record.default_standard = aggregate.default_standard
         record.default_version = aggregate.default_version
 
-    async def save(self, aggregate: OutboundEdiHeaderDomainModel) -> None:
+    async def save(self, aggregate: OutboundEdiHeader) -> None:
         result = await self.session.execute(
-            select(OutboundEdiHeader).where(
-                OutboundEdiHeader.id == aggregate.id,
-                OutboundEdiHeader.tenant_id == aggregate.tenant_id,
-                OutboundEdiHeader.deleted_at.is_(None),
+            select(OrmOutboundEdiHeader).where(
+                OrmOutboundEdiHeader.id == aggregate.id,
+                OrmOutboundEdiHeader.tenant_id == aggregate.tenant_id,
+                OrmOutboundEdiHeader.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
         if not record:
-            record = OutboundEdiHeader(id=aggregate.id)
+            record = OrmOutboundEdiHeader(id=aggregate.id)
             self.session.add(record)
 
         self._update_record_from_domain(record, aggregate)
 
-        self._drain_events(aggregate)
+        await self._drain_events(aggregate)
         await self.session.flush()
 
-    async def delete(self, aggregate: OutboundEdiHeaderDomainModel) -> None:
+    async def delete(self, aggregate: OutboundEdiHeader) -> None:
         await self.session.execute(
-            update(OutboundEdiHeader)
+            update(OrmOutboundEdiHeader)
             .where(
-                OutboundEdiHeader.id == aggregate.id,
-                OutboundEdiHeader.tenant_id == aggregate.tenant_id,
-                OutboundEdiHeader.deleted_at.is_(None),
+                OrmOutboundEdiHeader.id == aggregate.id,
+                OrmOutboundEdiHeader.tenant_id == aggregate.tenant_id,
+                OrmOutboundEdiHeader.deleted_at.is_(None),
             )
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None))
         )
-        self._drain_events(aggregate)
+        await self._drain_events(aggregate)
         await self.session.flush()
 
-    def _map_record_to_domain(self, record: OutboundEdiHeader) -> OutboundEdiHeaderDomainModel:
-        return OutboundEdiHeaderDomainModel(
+    @staticmethod
+    def _to_domain_model(record: OrmOutboundEdiHeader) -> OutboundEdiHeader:
+        return OutboundEdiHeader(
             id=str(record.id),
             tenant_id=str(record.tenant_id),
             trading_partner_id=str(record.trading_partner_id),
@@ -81,33 +85,31 @@ class SqlAlchemyEdiHeaderRepository(EdiHeaderRepositoryPort, GlobalSqlAlchemyRep
 
     async def get_outbound_edi_header(
         self, tenant_id: str, header_id: str
-    ) -> OutboundEdiHeaderDomainModel | None:
-        stmt = select(OutboundEdiHeader).where(
-            OutboundEdiHeader.tenant_id == tenant_id,
-            OutboundEdiHeader.id == header_id,
-            OutboundEdiHeader.deleted_at.is_(None),
+    ) -> OutboundEdiHeader | None:
+        stmt = select(OrmOutboundEdiHeader).where(
+            OrmOutboundEdiHeader.tenant_id == tenant_id,
+            OrmOutboundEdiHeader.id == header_id,
+            OrmOutboundEdiHeader.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
-        return self._map_record_to_domain(record) if record else None
+        return self._to_domain_model(record) if record else None
 
-    async def get_outbound_edi_headers(
-        self, tenant_id: str
-    ) -> Sequence[OutboundEdiHeaderDomainModel]:
-        stmt = select(OutboundEdiHeader).where(
-            OutboundEdiHeader.tenant_id == tenant_id, OutboundEdiHeader.deleted_at.is_(None)
+    async def get_outbound_edi_headers(self, tenant_id: str) -> Sequence[OutboundEdiHeader]:
+        stmt = select(OrmOutboundEdiHeader).where(
+            OrmOutboundEdiHeader.tenant_id == tenant_id, OrmOutboundEdiHeader.deleted_at.is_(None)
         )
         result = await self.session.execute(stmt)
-        return [self._map_record_to_domain(r) for r in result.scalars().all()]
+        return [self._to_domain_model(r) for r in result.scalars().all()]
 
     async def get_outbound_edi_header_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
-    ) -> OutboundEdiHeaderDomainModel | None:
-        stmt = select(OutboundEdiHeader).where(
-            OutboundEdiHeader.tenant_id == tenant_id,
-            OutboundEdiHeader.trading_partner_id == trading_partner_id,
-            OutboundEdiHeader.deleted_at.is_(None),
+    ) -> OutboundEdiHeader | None:
+        stmt = select(OrmOutboundEdiHeader).where(
+            OrmOutboundEdiHeader.tenant_id == tenant_id,
+            OrmOutboundEdiHeader.trading_partner_id == trading_partner_id,
+            OrmOutboundEdiHeader.deleted_at.is_(None),
         )
         result = await self.session.execute(stmt)
         record = result.scalar_one_or_none()
-        return self._map_record_to_domain(record) if record else None
+        return self._to_domain_model(record) if record else None

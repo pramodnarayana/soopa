@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:
-    from seedwork.domain.types import JsonDict
-    from seedwork.events import EventEnvelope
+from typing import cast
 
 import structlog
+from seedwork.domain.types import JsonDict, JsonValue
+from seedwork.events import EventEnvelope
 
 logger = structlog.get_logger(__name__)
 
@@ -20,8 +18,9 @@ class DispatchKey(StrEnum):
     EVENT_TYPE = "event_type"
 
 
-# Type alias for a simple async handler that accepts either a raw message dict or an EventEnvelope.
-MessageHandler = Callable[[dict[str, Any] | Any], Awaitable[None]]
+JsonMessageHandler = Callable[[JsonDict], Awaitable[None]]
+EnvelopeMessageHandler = Callable[[EventEnvelope], Awaitable[None]]
+MessageHandler = JsonMessageHandler | EnvelopeMessageHandler
 
 
 class MessageDispatcher:
@@ -39,9 +38,15 @@ class MessageDispatcher:
         self._handlers[key_value] = handler
 
     async def dispatch(self, message: JsonDict | EventEnvelope) -> None:
-        if hasattr(message, "payload"):
-            key_value = getattr(message, self.dispatch_key, None)
-            if key_value is None:
+        key_value: JsonValue
+        if isinstance(message, EventEnvelope):
+            if self.dispatch_key == DispatchKey.EVENT_TYPE.value:
+                key_value = message.event_type
+            elif self.dispatch_key == "id":
+                key_value = message.id
+            elif self.dispatch_key == "source":
+                key_value = message.source
+            else:
                 key_value = message.payload.get(self.dispatch_key, "")
         else:
             key_value = message.get(self.dispatch_key, "")
@@ -54,4 +59,7 @@ class MessageDispatcher:
             )
             raise ValueError(f"Unknown value for '{self.dispatch_key}': {key_value}")
 
-        await handler(message)
+        if isinstance(message, EventEnvelope):
+            await cast(EnvelopeMessageHandler, handler)(message)
+        else:
+            await cast(JsonMessageHandler, handler)(message)

@@ -10,12 +10,12 @@ from typing import Any
 
 import pytest
 import pytest_asyncio
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
     ComputeOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
-from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.bootstrap.container import create_edi_data_plane_uow
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
 from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
@@ -103,7 +103,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     async def fake_use_case_factory(tenant_id: str):
         @contextlib.asynccontextmanager
         async def fake_uow_factory():
-            yield SqlAlchemyDataPlaneUnitOfWork(
+            yield create_edi_data_plane_uow(
                 tenant_session=db_session_factory(), storage=InMemoryStorageAdapter()
             )
 
@@ -114,7 +114,7 @@ async def test_compute_worker_transforms_edi_and_publishes_event(
     async def fake_outbound_use_case_factory(tenant_id: str):
         @contextlib.asynccontextmanager
         async def fake_uow_factory():
-            yield SqlAlchemyDataPlaneUnitOfWork(
+            yield create_edi_data_plane_uow(
                 tenant_session=db_session_factory(), storage=InMemoryStorageAdapter()
             )
 

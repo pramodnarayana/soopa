@@ -13,7 +13,7 @@ from edi.application.use_cases.edi_headers.update_outbound_edi_header_use_case i
     UpdateOutboundEdiHeaderUseCase,
 )
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pydantic import BaseModel, ConfigDict
 
@@ -24,6 +24,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     CreateOutboundEdiHeaderRequest,
     UpdateOutboundEdiHeaderRequest,
 )
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/edi/edi-headers", tags=["EDI Headers"])
 
@@ -53,9 +54,7 @@ async def list_edi_headers(
     publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[OutboundEdiHeaderItem]:
-    """
-    List all Outbound EDI Headers for the current Tenant.
-    """
+    """List all Outbound EDI Headers for the current Tenant."""
     async with uow:
         service = GetOutboundEdiHeadersUseCase(uow=uow)
         headers = await service.get_outbound_edi_headers(tenant_id)
@@ -69,14 +68,12 @@ async def create_edi_header(
     publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
-    """
-    Creates a new Outbound EDI Header in the Tenant Data Plane.
-    """
+    """Creates a new Outbound EDI Header in the Tenant Data Plane."""
     async with uow:
         service = CreateOutboundEdiHeaderUseCase(uow=uow)
 
         cmd = CreateOutboundEdiHeaderCmd(
-            name=request.name if hasattr(request, "name") else None,
+            name=request.name,
             trading_partner_id=request.trading_partner_id,
             isa_sender_id=request.isa_sender_id,
             isa_receiver_id=request.isa_receiver_id,
@@ -85,14 +82,13 @@ async def create_edi_header(
             gs_sender_id=request.gs_sender_id,
             gs_receiver_id=request.gs_receiver_id,
             transaction_type=request.transaction_type,
-            default_standard=request.default_standard
-            if hasattr(request, "default_standard")
-            else None,
-            default_version=request.default_version
-            if hasattr(request, "default_version")
-            else None,
+            default_standard=request.default_standard,
+            default_version=request.default_version,
         )
-        header_id = await service.create_outbound_edi_header(tenant_id, cmd)
+        create_res = await service.create_outbound_edi_header(tenant_id, cmd)
+        if create_res.is_err:
+            raise_http_for_edi_error(create_res.unwrap_err())
+        header_id = create_res.unwrap()
         await uow.commit()
 
         return {"id": header_id}
@@ -106,20 +102,16 @@ async def update_edi_header(
     publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
-    """
-    Updates an Outbound EDI Header for the current Tenant.
-    """
+    """Updates an Outbound EDI Header for the current Tenant."""
     async with uow:
         service = UpdateOutboundEdiHeaderUseCase(uow=uow)
 
         dump = request.model_dump(exclude_unset=True)
         cmd = UpdateOutboundEdiHeaderCmd(**dump)
 
-        success = await service.update_outbound_edi_header(tenant_id, header_id, cmd)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="EDI Header not found"
-            )
+        upd_res = await service.update_outbound_edi_header(tenant_id, header_id, cmd)
+        if upd_res.is_err:
+            raise_http_for_edi_error(upd_res.unwrap_err())
         await uow.commit()
     return {"status": "ok"}
 
@@ -131,14 +123,10 @@ async def delete_edi_header(
     publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
-    """
-    Deletes an Outbound EDI Header for the current Tenant.
-    """
+    """Deletes an Outbound EDI Header for the current Tenant."""
     async with uow:
         service = DeleteOutboundEdiHeaderUseCase(uow=uow)
-        success = await service.delete_outbound_edi_header(tenant_id, header_id)
-        if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="EDI Header not found"
-            )
+        del_res = await service.delete_outbound_edi_header(tenant_id, header_id)
+        if del_res.is_err:
+            raise_http_for_edi_error(del_res.unwrap_err())
         await uow.commit()

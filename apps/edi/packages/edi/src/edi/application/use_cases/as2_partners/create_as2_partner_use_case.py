@@ -5,14 +5,17 @@ from datetime import UTC, datetime
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
+from seedwork.domain.exceptions import Result
 
 from edi.config.constants import SecretCategory
-from edi.domain.enums import EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.exceptions import IdempotencyConflictError
-from edi.domain.models.as2 import AS2PartnerDomainModel
+from edi.domain.exceptions import (
+    EdiError,
+    EdiValidationError,
+    IdempotencyConflictError,
+    PartnerAlreadyExistsEdiError,
+    PartnerAlreadyExistsError,
+)
+from edi.domain.partner.as2.partner import AS2Partner
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -31,10 +34,7 @@ class CreateAS2TradingPartnerCmd:
 
 
 class CreateAS2PartnerUseCase:
-    """
-    Use Case for creating a new AS2 Trading Partner.
-    Handles idempotency, certificate generation, secret vault storage, and database orchestration.
-    """
+    """Use Case for creating a new AS2 Trading Partner."""
 
     def __init__(self, uow: ControlPlaneUnitOfWorkPort, secret_store: SecretStorePort) -> None:
         self.uow = uow
@@ -42,41 +42,53 @@ class CreateAS2PartnerUseCase:
 
     async def _provision_local_key(
         self, cmd: CreateAS2TradingPartnerCmd
-    ) -> tuple[bool, str | None, str | None]:
+    ) -> Result[tuple[bool, str | None, str | None], EdiError]:
         private_key_vault_ref = cmd.private_key_vault_ref
         public_cert_pem = cmd.public_cert_pem
 
         is_new_key = False
         if private_key_vault_ref:
-            pass  # Pre-stored vault ref — use as-is
+            pass
         elif cmd.private_key_pem:
-            # User explicitly provided a private key — store it in vault
             private_key_vault_ref = await self.secret_store.store_private_key(
                 private_key_pem=cmd.private_key_pem.encode(),
                 category=SecretCategory.AS2_KEY,
             )
             is_new_key = True
         else:
-            # No key material provided. Certificate generation is an explicit user action
-            # via POST /as2/certificates/generate. This endpoint must never auto-generate.
-            raise ValueError(
-                "No private key material provided for a local AS2 partner. "
-                "Use the 'Generate Certificate' action first and supply the resulting "
-                "private_key_vault_ref, or provide your own private_key_pem."
+            return Result.fail(
+                EdiValidationError.with_message(
+                    "No private key material provided for a local AS2 partner. "
+                    "Use the 'Generate Certificate' action first and supply the resulting "
+                    "private_key_vault_ref, or provide your own private_key_pem."
+                )
             )
 
         if cmd.public_cert_pem and not private_key_vault_ref:
-            # Defensive guard: cert without key is always an invalid configuration.
-            raise ValueError(
-                "A public_cert_pem was provided without a corresponding private key. "
-                "Supply private_key_pem or private_key_vault_ref."
+            return Result.fail(
+                EdiValidationError.with_message(
+                    "A public_cert_pem was provided without a corresponding private key. "
+                    "Supply private_key_pem or private_key_vault_ref."
+                )
             )
 
-        return is_new_key, private_key_vault_ref, public_cert_pem
+        return Result.ok((is_new_key, private_key_vault_ref, public_cert_pem))
+
+    async def _cleanup_vault_secret(self, vault_ref: str | None) -> None:
+        if not vault_ref:
+            return
+        try:
+            await self.secret_store.delete_secret(vault_ref)
+        except Exception as cleanup_err:
+            logger.exception(
+                "failed_to_cleanup_vault_secret",
+                vault_ref=vault_ref,
+                reason=str(cleanup_err),
+            )
 
     async def _check_idempotency(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str
-    ) -> AS2PartnerDomainModel | None:
+    ) -> AS2Partner | None:
         private_key_digest = None
         if cmd.private_key_pem:
             private_key_digest = hashlib.sha256(cmd.private_key_pem.encode()).hexdigest()
@@ -131,7 +143,7 @@ class CreateAS2PartnerUseCase:
                             created_at=datetime.now(UTC),
                             updated_at=datetime.now(UTC),
                         )
-                        return AS2PartnerDomainModel(
+                        return AS2Partner(
                             id=existing_partner_id,
                             tenant_id=tenant_id,
                             name=existing_partner.name,
@@ -143,9 +155,38 @@ class CreateAS2PartnerUseCase:
                         )
         return None
 
+    async def _persist_partner(
+        self,
+        aggregate: AS2Partner,
+        tenant_id: str,
+        as2_id: str,
+        auto_generated: bool,
+        private_key_vault_ref: str | None,
+    ) -> Result[AS2Partner, EdiError]:
+        try:
+            await self.uow.as2_partners.save(aggregate)
+        except PartnerAlreadyExistsError:
+            if auto_generated:
+                await self._cleanup_vault_secret(private_key_vault_ref)
+            exists_err = PartnerAlreadyExistsEdiError.for_as2_id(as2_id, tenant_id)
+            logger.error(
+                "provisioning_as2_partner_conflict",
+                as2_id=as2_id,
+                tenant_id=tenant_id,
+                error_code=exists_err.code,
+            )
+            return Result.fail(exists_err)
+
+        logger.info(
+            "provisioning_as2_partner_completed",
+            id=aggregate.id,
+            tenant_id=tenant_id,
+        )
+        return Result.ok(aggregate)
+
     async def execute(
         self, tenant_id: str, cmd: CreateAS2TradingPartnerCmd, idempotency_key: str | None = None
-    ) -> AS2PartnerDomainModel:
+    ) -> Result[AS2Partner, EdiError]:
         logger.info(
             "provisioning_as2_partner_started",
             cmd_name=cmd.name,
@@ -162,19 +203,23 @@ class CreateAS2PartnerUseCase:
             if idempotency_key:
                 existing_partner = await self._check_idempotency(tenant_id, cmd, idempotency_key)
                 if existing_partner:
-                    return existing_partner
+                    return Result.ok(existing_partner)
 
             if cmd.is_local:
-                (
-                    auto_generated,
-                    private_key_vault_ref,
-                    public_cert_pem,
-                ) = await self._provision_local_key(cmd)
+                key_res = await self._provision_local_key(cmd)
+                if key_res.is_err:
+                    err = key_res.unwrap_err()
+                    logger.error(
+                        "provisioning_as2_partner_validation_failed",
+                        cmd_name=cmd.name,
+                        tenant_id=tenant_id,
+                        error_code=err.code,
+                        reason=err.message,
+                    )
+                    return Result.fail(err)
+                auto_generated, private_key_vault_ref, public_cert_pem = key_res.unwrap()
 
-            partner_id = generate_id(AS2PartnerDomainModel.ID_PREFIX)
-
-            aggregate = AS2PartnerDomainModel(
-                id=partner_id,
+            create_res = AS2Partner.create(
                 tenant_id=tenant_id,
                 name=cmd.name,
                 as2_id=cmd.as2_id,
@@ -183,46 +228,37 @@ class CreateAS2PartnerUseCase:
                 public_cert_pem=public_cert_pem,
                 public_cert_vault_ref=cmd.public_cert_vault_ref,
                 private_key_vault_ref=private_key_vault_ref,
-                created_at=datetime.now(UTC).replace(tzinfo=None),
-                updated_at=datetime.now(UTC).replace(tzinfo=None),
                 active=False,
+                idempotency_key=idempotency_key,
             )
+            if create_res.is_err:
+                if auto_generated:
+                    await self._cleanup_vault_secret(private_key_vault_ref)
+                domain_err = create_res.unwrap_err()
+                logger.error(
+                    "provisioning_as2_partner_domain_rejected",
+                    cmd_name=cmd.name,
+                    tenant_id=tenant_id,
+                    error_code=domain_err.code,
+                    reason=domain_err.message,
+                )
+                return Result.fail(domain_err)
 
-            event = ProvisioningEvent(
+            return await self._persist_partner(
+                aggregate=create_res.unwrap(),
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partner_created,
-                resource_id=partner_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                as2_id=cmd.as2_id,
+                auto_generated=auto_generated,
+                private_key_vault_ref=private_key_vault_ref,
             )
-
-            aggregate.add_domain_event(event)
-
-            await self.uow.as2_partners.save(aggregate)
-
-            logger.info(
-                "provisioning_as2_partner_completed",
-                id=partner_id,
-                tenant_id=tenant_id,
-            )
-
-            return aggregate
 
         except Exception as e:
-            # Note: We don't catch PartnerAlreadyExistsError specifically because we want it to bubble up,
-            # but we STILL want to clean up the vault if it was generated during this request.
             logger.exception(
                 "provisioning_as2_partner_failed",
                 cmd_name=cmd.name,
                 tenant_id=tenant_id,
                 reason=str(e),
             )
-            if auto_generated and private_key_vault_ref:
-                try:
-                    await self.secret_store.delete_secret(private_key_vault_ref)
-                except Exception as cleanup_err:
-                    logger.exception(
-                        "failed_to_cleanup_vault_secret",
-                        vault_ref=private_key_vault_ref,
-                        reason=str(cleanup_err),
-                    )
+            if auto_generated:
+                await self._cleanup_vault_secret(private_key_vault_ref)
             raise

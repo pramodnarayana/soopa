@@ -5,10 +5,7 @@ import pytest
 from database.router import DatabaseRouter
 from database.types import GlobalSession, TenantSession
 from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
-from edi.domain.replication import (
-    PermanentProvisioningError,
-    TransientProvisioningError,
-)
+from edi.domain.replication.graph import PermanentProvisioningError, TransientProvisioningError
 from edi.ports.outbound.tenant_port import TenantPort
 
 

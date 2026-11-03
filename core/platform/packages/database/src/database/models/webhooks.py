@@ -1,8 +1,7 @@
-import os
-
-from seedwork.id_registry import DomainIdPrefix
+from seedwork.utils import generate_id
 from sqlalchemy import Boolean, String, text
 from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import UcpIdPrefix
 
 from database.models.common import SoftDeleteMixin, TimestampMixin
 from database.models.core import UcpBase
@@ -10,11 +9,11 @@ from database.models.core import UcpBase
 
 class Webhook(UcpBase, TimestampMixin, SoftDeleteMixin):
     __tablename__ = "webhooks"
-    ID_PREFIX = DomainIdPrefix.UCP_WEBHOOK.value
+    ID_PREFIX = UcpIdPrefix.WEBHOOK.value
 
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: f"wh_{os.urandom(12).hex()}"
+        String(128), primary_key=True, default=lambda: generate_id(UcpIdPrefix.WEBHOOK.value)
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str] = mapped_column(String(1024), nullable=False)

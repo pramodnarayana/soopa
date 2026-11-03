@@ -38,6 +38,7 @@ build-backend = "hatchling.build"
 packages = ["src/unified_api"]
 [tool.mypy]
 strict = true
+plugins = ["pydantic.mypy"]
 disable_error_code = ["prop-decorator"]
 
 [tool.uv.sources]

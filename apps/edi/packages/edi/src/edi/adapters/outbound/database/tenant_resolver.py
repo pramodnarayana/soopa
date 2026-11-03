@@ -5,12 +5,12 @@ from database.tenant_shard_resolver import TenantNotFoundError, TenantShardResol
 
 EDI_APP_SLUG = "edi"
 
-__all__ = ["EDI_APP_SLUG", "TenantNotFoundError", "TenantResolver"]
+__all__ = ["EDI_APP_SLUG", "SqlAlchemyTenantResolver", "TenantNotFoundError"]
 
 
-class TenantResolver(TenantShardResolver):
+class SqlAlchemyTenantResolver(TenantShardResolver):
     """
-    EDI-specific TenantResolver inheriting from the platform TenantShardResolver.
+    EDI-specific SqlAlchemyTenantResolver inheriting from the platform TenantShardResolver.
     """
 
     def __init__(

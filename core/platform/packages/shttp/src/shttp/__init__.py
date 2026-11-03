@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from .auth import (
+    BearerTokenProvider,
+    HttpRequestAuthenticator,
+)
 from .client import (
     DEFAULT_LIMITS,
     DEFAULT_TIMEOUT,
@@ -67,6 +71,7 @@ __all__ = [
     "DEFAULT_TRANSIENT_STATUS_CODES",
     "TRANSIENT_NETWORK_EXCEPTIONS",
     "BackoffStrategy",
+    "BearerTokenProvider",
     "BodyErrorPredicate",
     "ExponentialBackoffStrategy",
     "FailureDisposition",
@@ -83,6 +88,7 @@ __all__ = [
     "HttpNotFoundError",
     "HttpRateLimitError",
     "HttpRequest",
+    "HttpRequestAuthenticator",
     "HttpResponsePolicy",
     "HttpRetriesExhaustedError",
     "HttpServerError",

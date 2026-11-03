@@ -1,3 +1,4 @@
+from .constants import UcpModelIdPrefix
 from .events import UcpOutbox
 from .sharding import DatabaseShard, ShardRegistry
 from .subscriptions import App, AppSubscription
@@ -7,5 +8,6 @@ __all__ = [
     "AppSubscription",
     "DatabaseShard",
     "ShardRegistry",
+    "UcpModelIdPrefix",
     "UcpOutbox",
 ]

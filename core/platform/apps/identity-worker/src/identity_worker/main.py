@@ -26,13 +26,11 @@ class IdentityWorkerModule(LaunchableWorker):
             logger.info("identity_event_sqs_consumer_started_in_worker")
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
-        tasks = []
-        if (
-            self.container
-            and self.container.events_consumer
-            and getattr(self.container.events_consumer, "task", None)
-        ):
-            tasks.append(self.container.events_consumer.task)
+        tasks: list[asyncio.Task[object]] = []
+        if self.container and self.container.events_consumer:
+            consumer_task: asyncio.Task[object] | None = self.container.events_consumer.task
+            if consumer_task is not None:
+                tasks.append(consumer_task)
         return tasks
 
     async def stop(self) -> None:

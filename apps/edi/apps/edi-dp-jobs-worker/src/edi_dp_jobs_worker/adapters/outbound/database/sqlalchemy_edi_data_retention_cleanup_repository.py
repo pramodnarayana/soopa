@@ -1,11 +1,12 @@
 import asyncio
 import datetime
 from collections.abc import Callable
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.models.data_plane import ProcessedEvent, TraceEvent
+from edi.domain.constants import EdiConstants
 from sqlalchemy import CursorResult, Delete, delete, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +22,11 @@ _StmtFactory = Callable[[datetime.datetime], Delete]
 class SqlAlchemyEdiDataRetentionCleanupRepository(EdiDataRetentionCleanupRepositoryPort):
     _BATCH_SIZE: int = 5000
 
-    def __init__(self, db_router: DatabaseRouterPort, app_slug: str = "edi") -> None:
+    def __init__(
+        self,
+        db_router: DatabaseRouterPort,
+        app_slug: str = EdiConstants.EDI_APP_SLUG.value,
+    ) -> None:
         self.db_router = db_router
         self.app_slug = app_slug
 
@@ -116,7 +121,7 @@ class SqlAlchemyEdiDataRetentionCleanupRepository(EdiDataRetentionCleanupReposit
     ) -> int:
         deleted_total = 0
         while True:
-            res = cast(CursorResult[Any], await session.execute(stmt_factory(cutoff_date)))
+            res = cast(CursorResult[tuple[()]], await session.execute(stmt_factory(cutoff_date)))
             deleted = res.rowcount
             deleted_total += deleted
             await session.commit()

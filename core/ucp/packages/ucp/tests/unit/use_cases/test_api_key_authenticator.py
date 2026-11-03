@@ -1,56 +1,70 @@
 import hashlib
-from datetime import UTC, datetime
+import secrets
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from database.provider import DatabaseProvider
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
 from identity.application.authenticate_use_case import AuthenticationError
+from identity.domain.api_token import ApiToken
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
-from identity.domain.models.api_token import ApiTokenDomainModel
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
+from sqlalchemy import text
 
-from ucp.application.use_cases.api_key_authenticator import (
-    _token_cache,
-    authenticate_api_key,
-    invalidate_api_key_cache,
+from ucp.application.use_cases import api_key_authenticator
+from ucp.application.use_cases.api_key_authenticator import authenticate_api_key
+from ucp.application.use_cases.api_tokens.delete_api_token_use_case import DeleteApiTokenUseCase
+from ucp.application.use_cases.api_tokens.update_api_token_use_case import (
+    UpdateApiTokenCommand,
+    UpdateApiTokenUseCase,
 )
-from ucp.testing.fakes import DummyApiTokenRepository
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
+from ucp.testing.fakes import DummyApiTokenRepository, FakeUcpUnitOfWork
+
+
+class SharedTestApiTokenRepository(DummyApiTokenRepository):
+    """In-memory repository representing authoritative shared database state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tokens_by_client_id: dict[str, ApiToken] = {}
+
+    async def get_by_client_id(
+        self, client_id: str, now: datetime | None = None
+    ) -> ApiToken | None:
+        token = self.tokens_by_client_id.get(client_id)
+        if token is None or not token.active or token.is_expired(at=now):
+            return None
+        return token
 
 
 @pytest.fixture
-def fake_token_repo():
-    class TestApiTokenRepository(DummyApiTokenRepository):
-        def __init__(self):
-            self.tokens = {}
-
-        async def get_by_client_id(self, client_id: str) -> ApiTokenDomainModel | None:
-            return self.tokens.get(client_id)
-
-    return TestApiTokenRepository()
+def fake_token_repo() -> SharedTestApiTokenRepository:
+    return SharedTestApiTokenRepository()
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    _token_cache.clear()
-    yield
-    _token_cache.clear()
+def test_authenticator_has_zero_process_local_mutable_cache() -> None:
+    assert not hasattr(api_key_authenticator, "_token_cache")
+    assert not hasattr(api_key_authenticator, "invalidate_api_key_cache")
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_success_and_cache(fake_token_repo):
+async def test_authenticate_api_key_success_and_shared_state_revocation(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     client_id = "test_client_id"
-    client_key_val = "test_client_secret"
-    token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_key_val}"
+    raw_secret = secrets.token_hex(16)
+    token = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     token_id = generate_id(DomainIdPrefix.TOKEN)
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
 
-    secret_hash = hashlib.sha256(client_key_val.encode("utf-8")).hexdigest()
-
-    fake_token_repo.tokens[client_id] = ApiTokenDomainModel(
+    fake_token_repo.tokens_by_client_id[client_id] = ApiToken(
         id=token_id,
         tenant_id=tenant_id,
         client_id=client_id,
         secret_hash=secret_hash,
-        name="Test Token",
+        name="Non-Expiring Shared Token",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         last_used_at=None,
@@ -58,7 +72,6 @@ async def test_authenticate_api_key_success_and_cache(fake_token_repo):
         active=True,
     )
 
-    # First call - DB lookup
     identity = await authenticate_api_key(token, fake_token_repo)
     assert identity.subject == f"machine_{client_id}"
     assert identity.tenant_id == tenant_id
@@ -66,20 +79,18 @@ async def test_authenticate_api_key_success_and_cache(fake_token_repo):
     assert "m2m_api_client" in identity.roles
     assert identity.claims["is_m2m"] is True
 
-    assert client_id in _token_cache
+    # Simulate revocation on another API replica mutating shared DB state directly
+    fake_token_repo.tokens_by_client_id[client_id].revoke()
 
-    # Second call - Cache hit (prove it hits cache by removing from DB)
-    del fake_token_repo.tokens[client_id]
-    identity2 = await authenticate_api_key(token, fake_token_repo)
-    assert identity2.tenant_id == tenant_id
-
-    # Invalidate cache
-    invalidate_api_key_cache(client_id)
-    assert client_id not in _token_cache
+    with pytest.raises(AuthenticationError) as exc:
+        await authenticate_api_key(token, fake_token_repo)
+    assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_invalid_prefix(fake_token_repo):
+async def test_authenticate_api_key_invalid_prefix(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key("wrong_prefix.client.secret", fake_token_repo)
 
@@ -87,7 +98,9 @@ async def test_authenticate_api_key_invalid_prefix(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_invalid_format(fake_token_repo):
+async def test_authenticate_api_key_invalid_format(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(f"{M2M_API_KEY_PREFIX}invalid_format_no_dot", fake_token_repo)
 
@@ -95,7 +108,9 @@ async def test_authenticate_api_key_invalid_format(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_not_found(fake_token_repo):
+async def test_authenticate_api_key_not_found(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     token = f"{M2M_API_KEY_PREFIX}unknown_client.secret"
     with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(token, fake_token_repo)
@@ -104,15 +119,16 @@ async def test_authenticate_api_key_not_found(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_wrong_secret(fake_token_repo):
+async def test_authenticate_api_key_wrong_secret(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     client_id = "test_client_id"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.wrong_secret"
     token_id = generate_id(DomainIdPrefix.TOKEN)
     tenant_id = generate_id(DomainIdPrefix.TENANT)
-
     secret_hash = hashlib.sha256(b"correct_secret").hexdigest()
 
-    fake_token_repo.tokens[client_id] = ApiTokenDomainModel(
+    fake_token_repo.tokens_by_client_id[client_id] = ApiToken(
         id=token_id,
         tenant_id=tenant_id,
         client_id=client_id,
@@ -129,3 +145,162 @@ async def test_authenticate_api_key_wrong_secret(fake_token_repo):
         await authenticate_api_key(token, fake_token_repo)
 
     assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
+
+
+@pytest.mark.asyncio
+async def test_authenticate_api_key_rejects_expired_token_even_if_repo_returns_row() -> None:
+    class UnfilteredTokenRepo(DummyApiTokenRepository):
+        def __init__(self, record: ApiToken) -> None:
+            self.record = record
+
+        async def get_by_client_id(
+            self, client_id: str, now: datetime | None = None
+        ) -> ApiToken | None:
+            _ = now
+            return self.record if client_id == self.record.client_id else None
+
+    now = datetime.now(UTC)
+    client_id = "expired_db_client"
+    raw_secret = secrets.token_hex(16)
+    token = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    token_id = generate_id(DomainIdPrefix.TOKEN)
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+    expires_at = now + timedelta(minutes=5)
+
+    repo = UnfilteredTokenRepo(
+        ApiToken(
+            id=token_id,
+            tenant_id=tenant_id,
+            client_id=client_id,
+            secret_hash=secret_hash,
+            name="Short-Lived Token",
+            created_at=now,
+            updated_at=now,
+            last_used_at=None,
+            expires_at=expires_at,
+            active=True,
+        )
+    )
+
+    valid_identity = await authenticate_api_key(
+        token, repo, now=now + timedelta(minutes=4, seconds=59)
+    )
+    assert valid_identity.tenant_id == tenant_id
+
+    with pytest.raises(AuthenticationError) as exc:
+        await authenticate_api_key(token, repo, now=expires_at)
+    assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
+
+
+@pytest.mark.asyncio
+async def test_revoke_and_delete_use_cases_enforce_shared_state_across_instances() -> None:
+    uow = FakeUcpUnitOfWork()
+    now = datetime.now(UTC)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    client_id = "revocable_client"
+    raw_secret = secrets.token_hex(16)
+    raw_key = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+
+    seeded = ApiToken.create(
+        tenant_id=tenant_id,
+        name="Revocable Token",
+        client_id=client_id,
+        secret_hash=secret_hash,
+        expires_at=None,
+        now=now,
+    ).unwrap()
+    await uow.api_token_repo.save(seeded)
+
+    identity = await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert identity.tenant_id == tenant_id
+
+    revoke_uc = UpdateApiTokenUseCase(uow=uow)
+    assert (
+        await revoke_uc.execute(
+            token_id=seeded.id,
+            tenant_id=tenant_id,
+            command=UpdateApiTokenCommand(active=False),
+        )
+    ).is_ok
+
+    with pytest.raises(AuthenticationError) as exc_revoked:
+        await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert str(exc_revoked.value) == "APIKEY_INVALID_OR_REVOKED"
+
+    assert (
+        await revoke_uc.execute(
+            token_id=seeded.id,
+            tenant_id=tenant_id,
+            command=UpdateApiTokenCommand(active=True),
+        )
+    ).is_ok
+    reactivated_identity = await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert reactivated_identity.tenant_id == tenant_id
+
+    delete_uc = DeleteApiTokenUseCase(uow=uow)
+    assert (await delete_uc.execute(token_id=seeded.id, tenant_id=tenant_id)).is_ok
+
+    with pytest.raises(AuthenticationError) as exc_deleted:
+        await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert str(exc_deleted.value) == "APIKEY_INVALID_OR_REVOKED"
+
+
+@pytest.mark.asyncio
+async def test_authenticate_api_key_sql_repository_honors_past_reference_now() -> None:
+    provider = DatabaseProvider.from_url("sqlite+aiosqlite:///:memory:")
+    wall_now = datetime.now(UTC)
+    past_now = wall_now - timedelta(minutes=10)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    client_id = "sql_past_ref_client"
+    raw_secret = secrets.token_hex(16)
+    raw_key = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+
+    async with provider.session_factory() as session:
+        await session.execute(text("ATTACH DATABASE ':memory:' AS identity"))
+        await session.execute(
+            text(
+                """
+                CREATE TABLE identity.api_tokens (
+                    id VARCHAR(128) PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    client_id VARCHAR(64) NOT NULL UNIQUE,
+                    secret_hash VARCHAR(64) NOT NULL,
+                    last_used_at TIMESTAMP NULL,
+                    expires_at TIMESTAMP NULL,
+                    active BOOLEAN NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    deleted_at TIMESTAMP NULL,
+                    deleted_by VARCHAR(128) NULL
+                )
+                """
+            )
+        )
+        token_entity = ApiToken.create(
+            tenant_id=tenant_id,
+            name="Past Window Token",
+            client_id=client_id,
+            secret_hash=secret_hash,
+            expires_at=wall_now - timedelta(minutes=2),
+            now=wall_now - timedelta(hours=1),
+        ).unwrap()
+
+        sql_repo = SqlAlchemyApiTokenRepository(session)
+        await sql_repo.save(token_entity)
+        await session.commit()
+
+        # Valid at past_now (8 minutes before expires_at), even though already expired at wall_now
+        identity = await authenticate_api_key(raw_key, sql_repo, now=past_now)
+        assert identity.tenant_id == tenant_id
+        assert identity.subject == f"machine_{client_id}"
+
+        # Rejected at current wall-clock time
+        with pytest.raises(AuthenticationError) as exc_now:
+            await authenticate_api_key(raw_key, sql_repo)
+        assert str(exc_now.value) == "APIKEY_INVALID_OR_REVOKED"
+
+    await provider.engine.dispose()

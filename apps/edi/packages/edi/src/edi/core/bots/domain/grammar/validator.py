@@ -17,9 +17,7 @@ from edi.core.bots.config.botsconfig import (
     SUBFIELDS,
 )
 from edi.core.bots.domain.exceptions import GrammarError
-from edi.core.bots.domain.models import (
-    create_structure_node,
-)
+from edi.core.bots.domain.structure import create_structure_node
 from edi.core.bots.utils.botslib import gettext as _
 
 ERROR_IN_GRAMMAR = "BOTS_error_1$%3@7#!%+_)_+[{]}"

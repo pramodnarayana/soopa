@@ -1,19 +1,19 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonValue
-from seedwork.utils import generate_id
 
-from edi.domain.enums import (
-    EdiEventType,
-    EncryptionAlgorithm,
-    MDNType,
-    SignatureAlgorithm,
+from edi.domain.exceptions import (
+    EdiError,
+    EdiValidationError,
+    PartnershipAlreadyExistsError,
 )
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.as2 import AS2PartnershipDomainModel
+from edi.domain.partner.as2.enums import EncryptionAlgorithm, MDNType, SignatureAlgorithm
+from edi.domain.partner.as2.partnership import AS2Partnership
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -31,27 +31,44 @@ class CreateAS2PartnershipCmd:
     advanced_flags: dict[str, JsonValue] | None = None
 
 
-logger = structlog.get_logger(__name__)
-
-
 class CreateAS2PartnershipUseCase:
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_as2_partnership(
         self, tenant_id: str, cmd: CreateAS2PartnershipCmd
-    ) -> AS2PartnershipDomainModel:
+    ) -> Result[AS2Partnership, EdiError]:
         local_partner = await self.uow.as2_partners.get_as2_partner(
             tenant_id, str(cmd.local_partner_id)
         )
         if not local_partner:
-            raise ValueError(f"Local AS2 partner {cmd.local_partner_id} not found")
+            err = EdiValidationError.with_message(
+                f"Local AS2 partner {cmd.local_partner_id} not found",
+                details={"local_partner_id": str(cmd.local_partner_id)},
+            )
+            logger.error(
+                "edi_as2_partnership_local_partner_not_found",
+                local_partner_id=cmd.local_partner_id,
+                tenant_id=tenant_id,
+                error_code=err.code,
+            )
+            return Result.fail(err)
 
         remote_partner = await self.uow.as2_partners.get_as2_partner(
             tenant_id, str(cmd.remote_partner_id)
         )
         if not remote_partner:
-            raise ValueError(f"Remote AS2 partner {cmd.remote_partner_id} not found")
+            err = EdiValidationError.with_message(
+                f"Remote AS2 partner {cmd.remote_partner_id} not found",
+                details={"remote_partner_id": str(cmd.remote_partner_id)},
+            )
+            logger.error(
+                "edi_as2_partnership_remote_partner_not_found",
+                remote_partner_id=cmd.remote_partner_id,
+                tenant_id=tenant_id,
+                error_code=err.code,
+            )
+            return Result.fail(err)
 
         logger.info(
             "edi_as2_partnership_creation_started",
@@ -60,50 +77,49 @@ class CreateAS2PartnershipUseCase:
             tenant_id=tenant_id,
         )
 
-        partner_id = generate_id(AS2PartnershipDomainModel.ID_PREFIX)
-
-        aggregate = AS2PartnershipDomainModel(
-            id=partner_id,
+        create_res = AS2Partnership.create(
+            tenant_id=tenant_id,
             name=cmd.name,
             local_partner_id=str(cmd.local_partner_id),
             remote_partner_id=str(cmd.remote_partner_id),
             mdn_type=cmd.mdn_type,
             encryption_algorithm=cmd.encryption_algorithm,
             signature_algorithm=cmd.signature_algorithm,
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
-            tenant_id=tenant_id,
             active=True,
             mdn_url=cmd.mdn_url,
             credentials_vault_ref=cmd.credentials_vault_ref,
             advanced_flags=cmd.advanced_flags,
         )
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
+        if create_res.is_err:
+            domain_err = create_res.unwrap_err()
+            logger.error(
+                "edi_as2_partnership_validation_failed",
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partnership_created,
-                resource_id=partner_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
             )
-        )
+            return Result.fail(domain_err)
 
-        logger.debug(
-            "edi_as2_partnership_aggregate_created",
-            partnership_id=partner_id,
-            local_partner_id=cmd.local_partner_id,
-            remote_partner_id=cmd.remote_partner_id,
-            encryption_algorithm=cmd.encryption_algorithm,
-            signature_algorithm=cmd.signature_algorithm,
-            mdn_type=cmd.mdn_type,
-            tenant_id=tenant_id,
-        )
-
-        await self.uow.as2_partnerships.save(aggregate)
+        aggregate = create_res.unwrap()
+        try:
+            await self.uow.as2_partnerships.save(aggregate)
+        except PartnershipAlreadyExistsError:
+            conflict_err = EdiValidationError.with_message(
+                "AS2 Partnership already exists for these partners."
+            )
+            logger.error(
+                "edi_as2_partnership_already_exists",
+                tenant_id=tenant_id,
+                local_partner_id=cmd.local_partner_id,
+                remote_partner_id=cmd.remote_partner_id,
+                error_code=conflict_err.code,
+            )
+            return Result.fail(conflict_err)
 
         logger.info(
             "edi_as2_partnership_created",
-            partnership_id=partner_id,
+            partnership_id=aggregate.id,
             tenant_id=tenant_id,
         )
 
-        return aggregate
+        return Result.ok(aggregate)

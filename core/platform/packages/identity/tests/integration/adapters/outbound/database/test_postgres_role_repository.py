@@ -4,14 +4,14 @@ import pytest
 from database.models.identity import Tenant as OrmTenant
 from database.models.identity import User as OrmUser
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp.domain.constants import LifecycleStatus
 from ucp.domain.exceptions import IdempotencyConflictError, ResourceNotFoundError
 
-from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
+from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.domain.authorization import Role as DomainRole
+from identity.domain.constants import IdentityIdPrefix as DomainIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.authorization import Role as DomainRole
 
 pytestmark = pytest.mark.integration
 
@@ -64,7 +64,7 @@ async def _setup_data(db_session):
 async def test_postgres_role_repository_crud_operations(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         _test_tenant_id, _test_user_id, platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         # test save (new role)
         role_id = generate_id(DomainIdPrefix.ROLE.value)
@@ -113,7 +113,7 @@ async def test_postgres_role_repository_crud_operations(db_session_factory):
 async def test_postgres_role_repository_assignments(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         role_id = generate_id(DomainIdPrefix.ROLE.value)
         role = DomainRole(
@@ -144,7 +144,7 @@ async def test_postgres_role_repository_assignments(db_session_factory):
 async def test_duplicate_assignment_raises_idempotency_error(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         role_id = generate_id(DomainIdPrefix.ROLE.value)
         role = DomainRole(
@@ -168,7 +168,7 @@ async def test_duplicate_assignment_raises_idempotency_error(db_session_factory)
 async def test_assign_user_role_missing_role_error(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         with pytest.raises(ResourceNotFoundError, match="not found or is inactive"):
             await repo.assign_user_role(test_tenant_id, user_id, "role_missing")
@@ -178,7 +178,7 @@ async def test_assign_user_role_missing_role_error(db_session_factory):
 async def test_assign_user_role_cross_tenant_error(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         other_tenant_id = generate_id(DomainIdPrefix.TENANT.value)
         await db_session.execute(
@@ -213,7 +213,7 @@ async def test_assign_user_role_cross_tenant_error(db_session_factory):
 async def test_assign_user_role_global_role_as_platform(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         _test_tenant_id, user_id, platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         role_global = DomainRole(
             id=generate_id(DomainIdPrefix.ROLE.value),
@@ -233,7 +233,7 @@ async def test_assign_user_role_global_role_as_platform(db_session_factory):
 async def test_value_errors(db_session_factory):
     async with db_session_factory() as db_session, db_session.begin_nested():
         _test_tenant_id, user_id, _platform_tenant_id = await _setup_data(db_session)
-        repo = PostgresRoleRepository(db_session)
+        repo = SqlAlchemyRoleRepository(db_session)
 
         with pytest.raises(ValueError):
             await repo.assign_user_role("", user_id, "role_id")

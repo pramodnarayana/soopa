@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from ucp.domain.models.app import App
+from ucp.domain.app import App
 
 
 class AppRepositoryPort(Protocol):

@@ -1,5 +1,6 @@
 import pytest
-from seedwork.id_registry import DomainIdPrefix
+
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 from datetime import UTC, datetime
@@ -8,9 +9,9 @@ import pytest
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.domain.constants import LifecycleStatus
-from ucp.domain.models.tenant import Tenant
+from ucp.domain.tenant import Tenant
 
 
 async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None:
@@ -19,7 +20,7 @@ async def test_tenant_repository_save_and_find(db_session: AsyncSession) -> None
     Uses session.begin_nested() to isolate changes without polluting the test database.
     """
     async with db_session.begin_nested():
-        repo = TenantRepository(db_session)
+        repo = SqlAlchemyTenantRepository(db_session)
         tenant_id = generate_id(DomainIdPrefix.TENANT.value)
 
         new_tenant = Tenant(

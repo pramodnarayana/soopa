@@ -4,8 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.data_plane.exceptions import ReadOnlyDataPlaneRepositoryError
-from edi.adapters.outbound.database.models.data_plane import OutboundEdiHeader
-from edi.domain.models.headers import OutboundEdiHeaderDomainModel
+from edi.adapters.outbound.database.models.data_plane import (
+    OutboundEdiHeader as OrmOutboundEdiHeader,
+)
+from edi.domain.routing.outbound_header import OutboundEdiHeader
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
 
 
@@ -13,41 +15,39 @@ class SqlAlchemyDataPlaneEdiHeaderRepository(EdiHeaderRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def save(self, aggregate: OutboundEdiHeaderDomainModel) -> None:
+    async def save(self, aggregate: OutboundEdiHeader) -> None:
         raise ReadOnlyDataPlaneRepositoryError("Data Plane configs are read-only")
 
-    async def delete(self, aggregate: OutboundEdiHeaderDomainModel) -> None:
+    async def delete(self, aggregate: OutboundEdiHeader) -> None:
         raise ReadOnlyDataPlaneRepositoryError("Data Plane configs are read-only")
 
     async def get_outbound_edi_header(
         self, tenant_id: str, header_id: str
-    ) -> OutboundEdiHeaderDomainModel | None:
-        stmt = select(OutboundEdiHeader).where(
-            OutboundEdiHeader.tenant_id == tenant_id, OutboundEdiHeader.id == header_id
+    ) -> OutboundEdiHeader | None:
+        stmt = select(OrmOutboundEdiHeader).where(
+            OrmOutboundEdiHeader.tenant_id == tenant_id, OrmOutboundEdiHeader.id == header_id
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
     async def get_outbound_edi_header_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
-    ) -> OutboundEdiHeaderDomainModel | None:
-        stmt = select(OutboundEdiHeader).where(
-            OutboundEdiHeader.tenant_id == tenant_id,
-            OutboundEdiHeader.trading_partner_id == trading_partner_id,
+    ) -> OutboundEdiHeader | None:
+        stmt = select(OrmOutboundEdiHeader).where(
+            OrmOutboundEdiHeader.tenant_id == tenant_id,
+            OrmOutboundEdiHeader.trading_partner_id == trading_partner_id,
         )
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
-    async def get_outbound_edi_headers(
-        self, tenant_id: str
-    ) -> Sequence[OutboundEdiHeaderDomainModel]:
-        stmt = select(OutboundEdiHeader).where(OutboundEdiHeader.tenant_id == tenant_id)
+    async def get_outbound_edi_headers(self, tenant_id: str) -> Sequence[OutboundEdiHeader]:
+        stmt = select(OrmOutboundEdiHeader).where(OrmOutboundEdiHeader.tenant_id == tenant_id)
         records = (await self.session.execute(stmt)).scalars().all()
         return [self._to_domain_model(r) for r in records]
 
     @staticmethod
-    def _to_domain_model(record: OutboundEdiHeader) -> OutboundEdiHeaderDomainModel:
-        return OutboundEdiHeaderDomainModel(
+    def _to_domain_model(record: OrmOutboundEdiHeader) -> OutboundEdiHeader:
+        return OutboundEdiHeader(
             id=record.id,
             tenant_id=record.tenant_id,
             trading_partner_id=record.trading_partner_id,

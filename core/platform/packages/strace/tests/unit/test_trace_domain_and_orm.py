@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
@@ -10,12 +11,6 @@ from seedwork.domain.types import JsonValue
 from sqlalchemy import String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from strace.adapters import (
-    TenantTraceableOrmModel,
-    TenantTraceLineageOrmModel,
-    TraceEventMixin,
-    drain_trace_events,
-)
 from strace.application import (
     TraceLineageContext,
     TraceLineageItemDTO,
@@ -30,6 +25,12 @@ from strace.domain import (
     TraceEventType,
     TraceReplayMetadata,
     TraceStatus,
+)
+from strace.orm import (
+    TenantTraceableOrmModel,
+    TenantTraceLineageOrmModel,
+    TraceEventMixin,
+    drain_trace_events,
 )
 from strace.testing import InMemoryTraceRepository
 
@@ -195,7 +196,7 @@ def test_aggregate_trace_lineage_attempts_merges_stages_in_pipeline_order() -> N
         TraceStageAttemptRow(
             trace_id="trc_root",
             correlation_id="MTR-100",
-            status=TraceStatus.INGESTED,
+            status=TraceStatus.PROCESSING,
             primary_layer="L1_INGEST",
             created_at=t0,
             replay_count=0,
@@ -217,7 +218,7 @@ def test_aggregate_trace_lineage_attempts_merges_stages_in_pipeline_order() -> N
         TraceStageAttemptRow(
             trace_id="trc_replay_1",
             correlation_id="MTR-100",
-            status=TraceStatus.DELIVERED,
+            status=TraceStatus.COMPLETED,
             primary_layer="L5_DELIVER",
             created_at=t1,
             replay_count=1,
@@ -238,7 +239,7 @@ def test_aggregate_trace_lineage_attempts_merges_stages_in_pipeline_order() -> N
     assert merged[0].created_at == t0
 
     assert merged[1].trace_id == "trc_replay_1"
-    assert merged[1].status == TraceStatus.DELIVERED
+    assert merged[1].status == TraceStatus.COMPLETED
     assert merged[1].replay_count == 1
     assert merged[1].parent_trace_id == "trc_root"
 
@@ -273,10 +274,12 @@ def test_drain_trace_events_persists_and_clears_aggregate_events() -> None:
     assert agg.trace_events == []
 
 
-def test_traced_aggregate_root_and_trace_event() -> None:
-    class SampleTracedRoot(TracedAggregateRoot):
-        ID_PREFIX = "test"
+@dataclass(kw_only=True, eq=False)
+class SampleTracedRoot(TracedAggregateRoot):
+    ID_PREFIX = "test"
 
+
+def test_traced_aggregate_root_and_trace_event() -> None:
     root = SampleTracedRoot(
         trace_id="trc_001",
         tenant_id="ten_001",
@@ -310,12 +313,11 @@ def test_traced_aggregate_root_and_trace_event() -> None:
     root.clear_trace_events()
     assert len(root.trace_events) == 0
 
-    # Also verify lazy initialization when _trace_events is missing (e.g., unpickled instances)
-    unpickled_root = object.__new__(SampleTracedRoot)
-    assert unpickled_root.trace_events == []
-    del unpickled_root._trace_events
-    unpickled_root.add_trace_event(event)
-    assert len(unpickled_root.trace_events) == 1
+    copied_root = copy.deepcopy(root)
+    assert copied_root.trace_events == []
+    copied_root.add_trace_event(event)
+    assert len(copied_root.trace_events) == 1
+    assert root.trace_events == []
 
 
 @pytest.mark.asyncio
@@ -337,7 +339,7 @@ async def test_in_memory_trace_repository_satisfies_trace_repository_port() -> N
         id="evt_2",
         tenant_id="ten_1",
         trace_id="trc_root",
-        event_type=TraceEventType.DELIVERY_FAILED,
+        event_type=TraceEventType.FAILED,
         actor="SYSTEM",
         correlation_id="PO-100",
         created_at=t1,
@@ -366,7 +368,7 @@ async def test_in_memory_trace_repository_satisfies_trace_repository_port() -> N
         TraceLineageItemDTO(
             trace_id="trc_child",
             correlation_id="PO-100",
-            status=TraceStatus.DELIVERED,
+            status=TraceStatus.COMPLETED,
             primary_layer="STAGE_2",
             created_at=t1,
             replay_count=1,

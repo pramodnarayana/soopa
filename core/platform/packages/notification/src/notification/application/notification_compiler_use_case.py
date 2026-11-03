@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 import structlog
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_id
 
-from ..domain.models import NotificationDispatch
+from notification.domain.dispatch import NotificationDispatch
+
 from ..ports.outbound.template_renderer_port import TemplateRendererPort
 from ..ports.outbound.uow_port import NotificationUnitOfWorkPort
 
@@ -17,6 +20,16 @@ class CompileNotificationCommand:
     tenant_id: str
     event_type: str
     data: JsonDict = field(default_factory=dict)
+    idempotency_key: str | None = None
+
+
+def _resolve_dedupe_token(event: CompileNotificationCommand) -> str:
+    if event.idempotency_key is not None and event.idempotency_key.strip():
+        return event.idempotency_key.strip()
+    raw_event_id = event.data.get("event_id")
+    if isinstance(raw_event_id, str) and raw_event_id.strip():
+        return raw_event_id.strip()
+    return generate_id(SystemIdPrefix.IDEMPOTENCY.value)
 
 
 class NotificationCompilerUseCase:
@@ -43,6 +56,8 @@ class NotificationCompilerUseCase:
             if not channels:
                 bound_logger.info("notification_compiler.dropped_no_route")
                 return
+
+        dedupe_token = _resolve_dedupe_token(event)
 
         for channel in channels:
             # Check user-level preferences if this is a user-specific event
@@ -77,9 +92,10 @@ class NotificationCompilerUseCase:
                 else None
             )
 
-            # Generate deterministic idempotency key
-            event_id = event.data.get("event_id", "")
-            idempotency_input = f"{event.tenant_id}:{event.event_type}:{channel.value}:{event_id}"
+            # Generate deterministic per-notification, per-channel idempotency key
+            idempotency_input = (
+                f"{event.tenant_id}:{event.event_type}:{channel.value}:{dedupe_token}"
+            )
             idempotency_key = hashlib.sha256(idempotency_input.encode()).hexdigest()
 
             async with self.uow:

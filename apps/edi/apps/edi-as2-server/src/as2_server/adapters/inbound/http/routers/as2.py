@@ -5,7 +5,7 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
 from edi.domain.exceptions import OrchestrationError
-from edi.domain.services.as2_protocol import build_mdn
+from edi.domain.partner.as2.protocol import build_mdn
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from observability import ObservabilityProvider
 

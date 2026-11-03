@@ -1,28 +1,59 @@
+from enum import IntEnum
 from typing import Literal
 
+import httpx
 import structlog
-from identity.adapters.outbound.zitadel.client import ZitadelClient
+from seedwork.domain.types import JsonValue
+from shttp import HttpClient
 
 from identity_worker.adapters.outbound.identity_provider.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
 )
-from identity_worker.config.settings import AppSettings, get_settings
+from identity_worker.config.settings import AppSettings
 from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
-    def __init__(self, settings: AppSettings | None = None) -> None:
-        self.settings = settings or get_settings()
-        super().__init__(
-            api_url=self.settings.zitadel_api_url,
-            machine_key=self.settings.zitadel_machine_key,
-            ucp_project_id=self.settings.zitadel_ucp_project_id,
-            default_user_password=self.settings.zitadel_default_user_password,
-            platform_org_id=self.settings.zitadel_platform_org_id,
-        )
+class _GrpcStatusCode(IntEnum):
+    FAILED_PRECONDITION = 9
+
+
+_ZITADEL_STATE_PRECONDITIONS: dict[Literal["activate", "deactivate"], str] = {
+    "activate": "already active",
+    "deactivate": "already inactive",
+}
+
+
+def _is_already_in_target_status(
+    response: httpx.Response,
+    action: Literal["activate", "deactivate"],
+) -> bool:
+    """Inspect structured Zitadel gRPC-Gateway error envelope for idempotent state transitions."""
+    try:
+        payload: object = response.json()
+    except ValueError:
+        return False
+    if not isinstance(payload, dict):
+        return False
+    code = payload.get("code")
+    message = payload.get("message")
+    if code != _GrpcStatusCode.FAILED_PRECONDITION or not isinstance(message, str):
+        return False
+    return _ZITADEL_STATE_PRECONDITIONS[action] in message.lower()
+
+
+class ZitadelUsersAdapter(UserIdentityProviderPort):
+    def __init__(
+        self,
+        http_client: HttpClient,
+        settings: AppSettings,
+    ) -> None:
+        self._http_client = http_client
+        self.settings = settings
+        self.ucp_project_id = self.settings.zitadel_ucp_project_id
+        self.default_user_password = self.settings.zitadel_default_user_password
 
     def _mask_email(self, email: str) -> str:
         parts = email.split("@")
@@ -47,9 +78,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             org_id=org_id,
             user_id=user_id,
         )
-        res = await self.fetch_with_auth(
-            endpoint="/v2/users/human",
-            method="POST",
+        res = await self._http_client.post(
+            "/v2/users/human",
             headers={"x-zitadel-orgid": org_id},
             json={
                 "userId": user_id,
@@ -81,9 +111,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
                 user_id=user_id,
             )
             # Deterministic idempotency: Verify if user exists with OUR specific UUID
-            get_res = await self.fetch_with_auth(
-                endpoint=f"/management/v1/users/{user_id}",
-                method="GET",
+            get_res = await self._http_client.get(
+                f"/management/v1/users/{user_id}",
                 headers={"x-zitadel-orgid": org_id},
             )
             if get_res.status_code == 200:
@@ -117,9 +146,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         raise IdentityProviderPortError(f"Failed to create user: {res.text}")
 
     async def get_user_by_email(self, org_id: str, email: str) -> str | None:
-        res = await self.fetch_with_auth(
-            endpoint="/management/v1/users/_search",
-            method="POST",
+        res = await self._http_client.post(
+            "/management/v1/users/_search",
             headers={"x-zitadel-orgid": org_id},
             json={
                 "query": {"limit": 1},
@@ -153,11 +181,11 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
 
     async def _get_project_grant_id(self, org_id: str) -> str:
         """Internal helper to get the UCP Project Grant ID for an organization."""
-        grant_search_res = await self.fetch_with_auth(
-            endpoint=f"/management/v1/projects/{self.ucp_project_id}/grants/_search",
-            method="POST",
+        empty_queries: list[JsonValue] = []
+        grant_search_res = await self._http_client.post(
+            f"/management/v1/projects/{self.ucp_project_id}/grants/_search",
             headers={"x-zitadel-orgid": self.settings.zitadel_platform_org_id},
-            json={"queries": []},
+            json={"queries": empty_queries},
         )
         if grant_search_res.is_error:
             logger.error(
@@ -190,14 +218,14 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             org_id=org_id,
         )
         grant_id = await self._get_project_grant_id(org_id)
-        res = await self.fetch_with_auth(
-            endpoint=f"/management/v1/users/{user_id}/grants",
-            method="POST",
+        role_keys: list[JsonValue] = [role]
+        res = await self._http_client.post(
+            f"/management/v1/users/{user_id}/grants",
             headers={"x-zitadel-orgid": org_id},
             json={
                 "projectId": self.ucp_project_id,
                 "projectGrantId": grant_id,
-                "roleKeys": [role],
+                "roleKeys": role_keys,
             },
         )
         if res.status_code in (200, 201):
@@ -222,9 +250,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             user_id=user_id,
             org_id=org_id,
         )
-        grants_res = await self.fetch_with_auth(
-            endpoint="/management/v1/users/grants/_search",
-            method="POST",
+        grants_res = await self._http_client.post(
+            "/management/v1/users/grants/_search",
             headers={"x-zitadel-orgid": org_id},
             json={"queries": [{"userIdQuery": {"userId": user_id}}]},
         )
@@ -245,11 +272,11 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         )
 
         if user_grant:
-            update_res = await self.fetch_with_auth(
-                endpoint=f"/management/v1/users/{user_id}/grants/{user_grant.id}",
-                method="PUT",
+            role_keys: list[JsonValue] = [role]
+            update_res = await self._http_client.put(
+                f"/management/v1/users/{user_id}/grants/{user_grant.id}",
                 headers={"x-zitadel-orgid": org_id},
-                json={"roleKeys": [role]},
+                json={"roleKeys": role_keys},
             )
             if not update_res.is_success:
                 logger.error(
@@ -273,9 +300,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         all_grants = []
 
         while True:
-            grants_res = await self.fetch_with_auth(
-                endpoint="/management/v1/users/grants/_search",
-                method="POST",
+            grants_res = await self._http_client.post(
+                "/management/v1/users/grants/_search",
                 headers={"x-zitadel-orgid": org_id},
                 json={
                     "query": {"limit": limit, "offset": offset},
@@ -310,9 +336,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         user_grant = next((g for g in all_grants if g.project_id == self.ucp_project_id), None)
 
         if user_grant:
-            del_res = await self.fetch_with_auth(
-                endpoint=f"/management/v1/users/{user_id}/grants/{user_grant.id}",
-                method="DELETE",
+            del_res = await self._http_client.delete(
+                f"/management/v1/users/{user_id}/grants/{user_grant.id}",
                 headers={"x-zitadel-orgid": org_id},
             )
             if del_res.status_code not in (200, 204, 404):
@@ -332,9 +357,8 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         last_name: str,
     ) -> None:
         logger.info("updating_profile_for_user_in_zitadel", user_id=user_id, org_id=org_id)
-        res = await self.fetch_with_auth(
-            endpoint=f"/management/v1/users/{user_id}/profile",
-            method="PUT",
+        res = await self._http_client.put(
+            f"/management/v1/users/{user_id}/profile",
             headers={"x-zitadel-orgid": org_id},
             json={
                 "firstName": first_name,
@@ -357,9 +381,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
 
     async def delete_user(self, user_id: str) -> None:
         logger.info("deleting_user_from_zitadel", user_id=user_id)
-        res = await self.fetch_with_auth(
-            endpoint=f"/management/v1/users/{user_id}", method="DELETE"
-        )
+        res = await self._http_client.delete(f"/management/v1/users/{user_id}")
         if res.status_code in (200, 204):
             return
         if res.status_code == 404:
@@ -383,18 +405,14 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
         logger.info("toggling_user_status_in_zitadel", user_id=user_id, action=action)
 
         endpoint = "_reactivate" if action == "activate" else "_deactivate"
-        res = await self.fetch_with_auth(
-            endpoint=f"/management/v1/users/{user_id}/{endpoint}",
-            method="POST",
+        res = await self._http_client.post(
+            f"/management/v1/users/{user_id}/{endpoint}",
             headers={"x-zitadel-orgid": org_id},
         )
         if res.status_code in (200, 204):
             return
 
-        body = res.text
-        if (action == "deactivate" and "User already inactive" in body) or (
-            action == "activate" and "User already active" in body
-        ):
+        if _is_already_in_target_status(res, action):
             logger.info(
                 "user_already_in_target_status_ignoring_error",
                 user_id=user_id,
@@ -402,6 +420,7 @@ class ZitadelUsersAdapter(ZitadelClient, UserIdentityProviderPort):
             )
             return
 
+        body = res.text
         logger.error(
             "error_toggling_user_status",
             user_id=user_id,

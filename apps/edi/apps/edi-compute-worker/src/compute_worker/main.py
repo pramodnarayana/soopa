@@ -1,7 +1,10 @@
 import asyncio
 
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
+from edi.bootstrap.container import (
+    create_edi_control_plane_uow,
+    create_edi_tenant_uow_provider,
+)
 
 load_dotenv()
 
@@ -10,14 +13,13 @@ from collections.abc import AsyncGenerator
 
 import structlog
 from database.router import DatabaseRouter
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
-from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
+from edi.adapters.outbound.transformer.bots_transformer_adapter import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
     ComputeOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
+from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from observability import ObservabilityProvider
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
@@ -56,17 +58,16 @@ class EdiComputeWorkerModule(LaunchableWorker):
             assert self.db_router is not None
             async with contextlib.aclosing(self.db_router.get_global_session()) as session_gen:
                 async for session in session_gen:
-                    yield SqlAlchemyControlPlaneUnitOfWork(global_session=session)
+                    yield create_edi_control_plane_uow(global_session=session)
                     break
 
-        resolver = TenantResolver(self.db_router)
+        resolver = SqlAlchemyTenantResolver(self.db_router)
 
         transformer = BotsTransformerAdapter()
 
-        uow_provider = TenantUowProvider(
+        uow_provider = create_edi_tenant_uow_provider(
             resolver=resolver,
             db_router=self.db_router,
-            settings=settings,
             s3_bucket=s3_bucket,
             aws_endpoint=aws_endpoint,
         )

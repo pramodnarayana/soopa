@@ -4,7 +4,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
+from edi.bootstrap.container import create_edi_data_plane_uow
 from tests.test_settings import get_test_settings
 
 load_dotenv()
@@ -231,7 +231,7 @@ async def client(
         await gs_gen.__anext__()
         ts = await ts_gen.__anext__()
         try:
-            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=ts, storage=InMemoryStorageAdapter())
+            yield create_edi_data_plane_uow(tenant_session=ts, storage=InMemoryStorageAdapter())
         finally:
             await gs_gen.aclose()
             await ts_gen.aclose()
@@ -248,9 +248,7 @@ async def client(
             ts = await ts_gen.__anext__()
 
             try:
-                yield SqlAlchemyDataPlaneUnitOfWork(
-                    tenant_session=ts, storage=InMemoryStorageAdapter()
-                )
+                yield create_edi_data_plane_uow(tenant_session=ts, storage=InMemoryStorageAdapter())
             finally:
                 await ts_gen.aclose()
 

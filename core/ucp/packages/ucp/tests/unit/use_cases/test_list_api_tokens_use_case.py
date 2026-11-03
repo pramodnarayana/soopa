@@ -1,8 +1,8 @@
 import pytest
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
 from ucp.application.use_cases.api_tokens.list_api_tokens_use_case import ListApiTokensUseCase
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
 

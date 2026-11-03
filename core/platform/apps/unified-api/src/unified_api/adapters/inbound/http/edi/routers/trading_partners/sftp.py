@@ -1,9 +1,7 @@
+import asyncio
 import ipaddress
 import socket
-from typing import Any
 
-from database.exceptions import DuplicateEntityError
-from edi.adapters.outbound.database.encryption import db_encryption
 from edi.application.use_cases.sftp_partners.create_sftp_partner_use_case import (
     CreateSFTPPartnerCmd,
     CreateSFTPPartnerUseCase,
@@ -20,12 +18,13 @@ from edi.ports.outbound.sftp_tester import SftpTesterPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException, status
 from secret_store.ports.secret_store_port import SecretStorePort
-from seedwork.domain.types import UNSET
+from security.ports.cipher_port import CipherPort
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.headers import get_idempotency_key
 from unified_api.adapters.inbound.http.dependencies.edi.services import (
+    get_field_encryption,
     get_secret_store,
     get_sftp_tester,
 )
@@ -37,6 +36,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     TradingPartnerStatusResponse,
     UpdateSFTPPartnerRequest,
 )
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 router = APIRouter(tags=["Partners — SFTP"])
 
@@ -46,21 +46,27 @@ async def _get_client_key_from_vault(vault_ref: str, secret_store_port: SecretSt
     return vault_secret.decode("utf-8") if isinstance(vault_secret, bytes) else vault_secret
 
 
-def _is_ssrf_blocked(host: str) -> bool:
-    """Return True if the resolved host is a non-global address (loopback, private, link-local, etc.)."""
+async def _is_ssrf_blocked(host: str) -> bool:
+    """Return True if any resolved IP for `host` is a non-global address."""
     try:
-        # Resolve the hostname to an IP address — catches DNS rebinding
-        resolved_ip = ipaddress.ip_address(socket.gethostbyname(host))
-        return not resolved_ip.is_global
-    except (socket.gaierror, ValueError):
-        # If resolution fails or the address is invalid, block it
+        loop = asyncio.get_running_loop()
+        addr_infos = await loop.getaddrinfo(host, None, type=socket.SOCK_STREAM)
+        if not addr_infos:
+            return True
+        for info in addr_infos:
+            sockaddr = info[4]
+            resolved_ip = ipaddress.ip_address(sockaddr[0])
+            if not resolved_ip.is_global:
+                return True
+        return False
+    except (socket.gaierror, ValueError, OSError):
         return True
 
 
-def _validate_sftp_request(
+async def _validate_sftp_request(
     request: TestSFTPConnectionRequest, tenant_id: str
 ) -> TestConnectionResponse | None:
-    if _is_ssrf_blocked(request.host):
+    if await _is_ssrf_blocked(request.host):
         return TestConnectionResponse(success=False, reason="SSRF blocked: Invalid target host")
 
     if request.credentials_vault_ref and not request.credentials_vault_ref.startswith(
@@ -78,14 +84,14 @@ async def test_sftp_connection(
     tenant_id: str = Depends(get_current_tenant_id),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
     vault_port: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+) -> TestConnectionResponse:
     """Tests an SFTP connection without saving a partner."""
     if not request.password and not request.credentials_vault_ref:
         return TestConnectionResponse(
             success=False, reason="Must provide either password or SSH key"
         )
 
-    if validation_err := _validate_sftp_request(request, tenant_id):
+    if validation_err := await _validate_sftp_request(request, tenant_id):
         return validation_err
 
     client_key_string = None
@@ -123,7 +129,8 @@ async def test_existing_sftp_connection(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     sftp_tester: SftpTesterPort = Depends(get_sftp_tester),
     vault_port: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+    field_encryption: CipherPort = Depends(get_field_encryption),
+) -> TestConnectionResponse:
     """Tests an SFTP connection for an existing partner, pulling missing credentials from the DB."""
 
     if not request.password and not request.credentials_vault_ref:
@@ -132,7 +139,7 @@ async def test_existing_sftp_connection(
             if partner:
                 if partner.password_encrypted:
                     try:
-                        request.password = db_encryption.decrypt(partner.password_encrypted)
+                        request.password = field_encryption.decrypt_str(partner.password_encrypted)
                     except (ValueError, VaultError) as e:
                         return TestConnectionResponse(
                             success=False,
@@ -146,7 +153,7 @@ async def test_existing_sftp_connection(
             success=False, reason="Must provide either password or SSH key"
         )
 
-    if validation_err := _validate_sftp_request(request, tenant_id):
+    if validation_err := await _validate_sftp_request(request, tenant_id):
         return validation_err
 
     client_key_string = None
@@ -173,7 +180,8 @@ async def create_sftp_partner(
     tenant_id: str = Depends(get_current_tenant_id),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-) -> Any:
+    field_encryption: CipherPort = Depends(get_field_encryption),
+) -> PartnerResponse:
     """Creates a new SFTP Partner directly in the Tenant Data Plane."""
 
     if not request.password and not request.credentials_vault_ref:
@@ -182,10 +190,10 @@ async def create_sftp_partner(
         )
 
     async with uow:
-        service = CreateSFTPPartnerUseCase(uow=uow)
+        service = CreateSFTPPartnerUseCase(uow=uow, field_encryption=field_encryption)
 
         cmd = CreateSFTPPartnerCmd(
-            name=request.name if request.name is not None else UNSET,
+            name=request.name,
             host=request.host,
             port=request.port,
             username=request.username,
@@ -194,19 +202,19 @@ async def create_sftp_partner(
             password=request.password,
             credentials_vault_ref=str(request.credentials_vault_ref)
             if request.credentials_vault_ref
-            else "",
+            else None,
         )
 
-        try:
-            _ = await service.create_sftp_partner(tenant_id, cmd, idempotency_key=idempotency_key)
-            await uow.commit()
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        except DuplicateEntityError as e:
-            raise HTTPException(status_code=400, detail="Database integrity error.") from e
+        create_res = await service.create_sftp_partner(
+            tenant_id, cmd, idempotency_key=idempotency_key
+        )
+        if create_res.is_err:
+            raise_http_for_edi_error(create_res.unwrap_err())
+        created = create_res.unwrap()
+        await uow.commit()
 
         async with uow:
-            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, _.id)
+            partner = await uow.sftp_partners.get_sftp_partner(tenant_id, created.id)
             if not partner:
                 raise HTTPException(status_code=404, detail="Partner not found after creation")
 
@@ -235,21 +243,19 @@ async def update_sftp_partner(
     tenant_id: str = Depends(get_current_tenant_id),
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-) -> Any:
+    field_encryption: CipherPort = Depends(get_field_encryption),
+) -> PartnerResponse:
     """Updates an SFTP Partner in the Tenant Data Plane."""
 
     async with uow:
-        service = UpdateSFTPPartnerUseCase(uow=uow, field_encryption=db_encryption)
+        service = UpdateSFTPPartnerUseCase(uow=uow, field_encryption=field_encryption)
         cmd = UpdateSFTPPartnerCmd(**request.model_dump(exclude_unset=True))
-        try:
-            _ = await service.update_sftp_partner(
-                tenant_id, partner_id, cmd, idempotency_key=idempotency_key
-            )
-            await uow.commit()
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        except DuplicateEntityError as e:
-            raise HTTPException(status_code=400, detail="Database integrity error.") from e
+        upd_res = await service.update_sftp_partner(
+            tenant_id, partner_id, cmd, idempotency_key=idempotency_key
+        )
+        if upd_res.is_err:
+            raise_http_for_edi_error(upd_res.unwrap_err())
+        await uow.commit()
 
         async with uow:
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
@@ -285,17 +291,13 @@ async def delete_sftp_partner(
     async with uow:
         try:
             use_case = DeleteSFTPPartnerUseCase(uow=uow)
-            await use_case.delete_sftp_partner(
+            del_res = await use_case.delete_sftp_partner(
                 tenant_id, partner_id, idempotency_key=idempotency_key
             )
+            if del_res.is_err:
+                raise_http_for_edi_error(del_res.unwrap_err())
             await uow.commit()
-        except DuplicateEntityError as e:
-            raise HTTPException(
-                status_code=400, detail="Partner is in use and cannot be deleted."
-            ) from e
         except HTTPException:
             raise
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
         except OrchestrationError as e:
             raise OrchestrationError("Failed to update SFTP partner") from e

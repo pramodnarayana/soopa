@@ -9,7 +9,8 @@ polluting the production router with test logic or violating the Open/Closed Pri
 """
 
 import asyncio
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 from typing import cast
 
 from seedwork.infra.config_models import PlatformDatabaseSettings
@@ -50,6 +51,11 @@ class TransactionalTestRouter(DatabaseRouterPort):
             async with factory() as session:
                 session.info["session_type"] = "global"
                 yield cast(GlobalSession, session)
+
+    @asynccontextmanager
+    async def global_session_scope(self) -> AsyncIterator[GlobalSession]:
+        async for session in self.get_global_session():
+            yield session
 
     async def get_tenant_session(
         self, tenant_id: str, shard_key: str, shard_url: str

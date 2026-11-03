@@ -91,7 +91,38 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Step 1: Database Migrators (Platform & EDI)
+      # Step 1: Bounded-Context Messaging & Storage Topology Convergence
+      - name: Deploy UCP Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/ucp/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Identity Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/identity/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy Notification Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/notification/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy EDI Messaging Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Deploy EDI Storage Stack
+        uses: ./.github/actions/pulumi-stack-up
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/storage
+          stack-name: ${{ env.TARGET_ENV }}
+
+      # Step 2: Database Migrators (Platform & EDI)
       - name: Deploy Platform Migrator Stack
         uses: ./.github/actions/pulumi-stack-up
         with:
@@ -138,7 +169,7 @@ jobs:
             --stack-dir infra/cloud/aws/apps/edi/migrator \
             --command "python apps/edi/scripts/seed_jobs.py"
 
-      # Step 2: Main HTTP API Service
+      # Step 3: Main HTTP API Service
       - name: Deploy Unified API Stack
         uses: ./.github/actions/pulumi-stack-up
         with:
@@ -146,7 +177,7 @@ jobs:
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
 
-      # Step 3: Background Worker Containers (Unified Monolith Deployment)
+      # Step 4: Background Worker Containers (Unified Monolith Deployment)
       - name: Deploy UCP Workers Stack
         uses: ./.github/actions/pulumi-stack-up
         with:
@@ -161,7 +192,7 @@ jobs:
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
 
-      # Step 4: EDI AS2 Partner Server
+      # Step 5: EDI AS2 Partner Server
       - name: Deploy EDI AS2 Server Stack
         uses: ./.github/actions/pulumi-stack-up
         with:
@@ -169,7 +200,7 @@ jobs:
           stack-name: ${{ env.TARGET_ENV }}
           image-tag: ${{ env.IMAGE_TAG }}
 
-      # Step 5: Frontend Dashboard Assets (Vite Build & S3 Upload)
+      # Step 6: Frontend Dashboard Assets (Vite Build & S3 Upload)
       - name: Build & Deploy Frontend Dashboard Assets
         shell: bash
         run: |

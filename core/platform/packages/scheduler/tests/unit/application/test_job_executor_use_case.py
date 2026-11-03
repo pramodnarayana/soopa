@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 from scheduler.application.job_executor_use_case import JobExecutorUseCase
 from scheduler.domain.constants import JobStatus
-from scheduler.domain.models import ScheduledJob
+from scheduler.domain.scheduled_job import ScheduledJob
 from tests.fakes.fake_dispatcher import FakeJobDispatcher
 from tests.fakes.fake_uow import FakeJobRepository, FakeSchedulerUow
 

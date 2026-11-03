@@ -2,40 +2,48 @@ from database.uow import BaseSqlAlchemyUnitOfWork
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from notification.adapters.outbound.database.postgres_notification_record_repository import (
-    SqlAlchemyNotificationRecordRepository,
+from notification.domain.constants import NotificationOutboxChannel
+from notification.ports.outbound.notification_outbox_repository_port import (
+    NotificationOutboxRepositoryPort,
 )
-from notification.adapters.outbound.database.postgres_outbox_repository import (
-    SqlAlchemyNotificationOutboxPublisher,
+from notification.ports.outbound.notification_record_repository_port import (
+    NotificationRecordRepositoryPort,
 )
-from notification.adapters.outbound.database.postgres_route_repository import (
-    SqlAlchemyNotificationRouteRepository,
+from notification.ports.outbound.notification_route_repository_port import (
+    NotificationRouteRepositoryPort,
 )
-from notification.adapters.outbound.database.postgres_template_repository import (
-    SqlAlchemyTemplateRepository,
-)
-from notification.adapters.outbound.database.postgres_user_preference_repository import (
-    SqlAlchemyUserNotificationPreferenceRepository,
-)
+from notification.ports.outbound.template_repository_port import TemplateRepositoryPort
 from notification.ports.outbound.uow_port import NotificationUnitOfWorkPort
+from notification.ports.outbound.user_notification_preference_repository_port import (
+    UserNotificationPreferenceRepositoryPort,
+)
 
 
 class SqlAlchemyNotificationUnitOfWork(BaseSqlAlchemyUnitOfWork, NotificationUnitOfWorkPort):
     """
     Concrete Unit of Work adapter for the Notification context.
+    Collaborating repositories are injected as abstract Ports by the Composition Root.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        user_preference_repo: UserNotificationPreferenceRepositoryPort,
+        template_repo: TemplateRepositoryPort,
+        record_repo: NotificationRecordRepositoryPort,
+        route_repo: NotificationRouteRepositoryPort,
+        outbox_repo: NotificationOutboxRepositoryPort,
+    ) -> None:
         super().__init__(session)
-        self.user_preference_repo = SqlAlchemyUserNotificationPreferenceRepository(
-            session=self.session
-        )
-        self.template_repo = SqlAlchemyTemplateRepository(session=self.session)
-        self.record_repo = SqlAlchemyNotificationRecordRepository(session=self.session)
-        self.route_repo = SqlAlchemyNotificationRouteRepository(session=self.session)
-        self.outbox_repo = SqlAlchemyNotificationOutboxPublisher(session=self.session)
+        self.user_preference_repo = user_preference_repo
+        self.template_repo = template_repo
+        self.record_repo = record_repo
+        self.route_repo = route_repo
+        self.outbox_repo = outbox_repo
 
     async def _pre_commit(self) -> None:
-
         # Wake up the delivery outbox relay
-        await self.session.execute(text("NOTIFY notification_delivery_outbox_wakeup;"))
+        await self.session.execute(
+            text(f"NOTIFY {NotificationOutboxChannel.DELIVERY_WAKEUP.value};")
+        )

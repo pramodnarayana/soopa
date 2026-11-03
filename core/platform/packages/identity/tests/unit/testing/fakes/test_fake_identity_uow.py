@@ -1,11 +1,12 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from identity.domain.api_token import ApiToken
+from identity.domain.authorization import Role
+from identity.domain.constants import UserStatus
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.api_token import ApiTokenDomainModel
-from identity.domain.models.authorization import Role
-from identity.domain.models.user import User
+from identity.domain.user import User
 from identity.testing.fakes.fake_identity_uow import (
     FakeApiTokenRepository,
     FakeRoleRepository,
@@ -20,7 +21,7 @@ def _user(user_id: str) -> User:
         idp_user_id=None,
         email=f"{user_id}@example.com",
         name=user_id,
-        status="active",
+        status=UserStatus.ACTIVE,
         created_at=now,
         updated_at=now,
     )
@@ -68,7 +69,7 @@ async def test_fake_role_repository_normalizes_platform_tenant() -> None:
 async def test_fake_api_token_lookup_excludes_inactive_tokens() -> None:
     repo = FakeApiTokenRepository()
     now = datetime.now(UTC)
-    inactive_token = ApiTokenDomainModel(
+    inactive_token = ApiToken(
         id="iam_tok_inactive",
         tenant_id="iam_ten_first",
         name="Inactive",
@@ -83,3 +84,36 @@ async def test_fake_api_token_lookup_excludes_inactive_tokens() -> None:
     repo.tokens.append(inactive_token)
 
     assert await repo.get_by_client_id(inactive_token.client_id) is None
+
+    expired_token = ApiToken(
+        id="iam_tok_expired",
+        tenant_id="iam_ten_first",
+        name="Expired",
+        client_id="client_expired",
+        secret_hash="hash",
+        last_used_at=None,
+        expires_at=now - timedelta(seconds=1),
+        active=True,
+        created_at=now - timedelta(hours=1),
+        updated_at=now - timedelta(hours=1),
+    )
+    valid_token = ApiToken(
+        id="iam_tok_valid",
+        tenant_id="iam_ten_first",
+        name="Valid",
+        client_id="client_valid",
+        secret_hash="hash",
+        last_used_at=None,
+        expires_at=now + timedelta(hours=1),
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    repo.tokens.extend((expired_token, valid_token))
+
+    assert await repo.get_by_client_id(expired_token.client_id) is None
+    assert (
+        await repo.get_by_client_id(expired_token.client_id, now=now - timedelta(minutes=1))
+        is expired_token
+    )
+    assert await repo.get_by_client_id(valid_token.client_id) is valid_token

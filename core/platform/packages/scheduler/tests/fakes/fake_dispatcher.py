@@ -1,4 +1,4 @@
-from scheduler.domain.models import ScheduledJob
+from scheduler.domain.scheduled_job import ScheduledJob
 from scheduler.ports.outbound.job_dispatcher_port import JobDispatcherPort
 
 

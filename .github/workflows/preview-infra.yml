@@ -7,6 +7,8 @@ on:
       - 'infra/cloud/aws/**'
       - '!infra/cloud/aws/apps/api/**'
       - '!infra/cloud/aws/apps/ucp/**'
+      - '!infra/cloud/aws/apps/identity/**'
+      - '!infra/cloud/aws/apps/notification/**'
       - '!infra/cloud/aws/apps/edi/**'
       - '!infra/cloud/aws/platform/migrator/**'
       - 'infra/cloud/zitadel/**'

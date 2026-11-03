@@ -1,11 +1,11 @@
 import json
 
-import httpx
 import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from pytest_httpserver import HTTPServer
+from shttp import HttpClient
 from werkzeug.wrappers import Response
 
 from identity.adapters.outbound.zitadel.machine_key_auth import (
@@ -38,6 +38,19 @@ def test_machine_key_requires_all_signing_fields() -> None:
 
 
 @pytest.mark.asyncio
+async def test_machine_key_enforces_ssrf_by_default_against_loopback(
+    httpserver: HTTPServer,
+) -> None:
+    provider = ZitadelMachineTokenProvider(
+        httpserver.url_for("/"),
+        _machine_key_json(),
+    )
+    async with HttpClient() as client:
+        with pytest.raises(ZitadelMachineAuthenticationError):
+            await provider.get_access_token(client)
+
+
+@pytest.mark.asyncio
 async def test_machine_key_is_exchanged_and_access_token_is_cached(httpserver: HTTPServer) -> None:
     token_requests = 0
 
@@ -65,8 +78,9 @@ async def test_machine_key_is_exchanged_and_access_token_is_cached(httpserver: H
     provider = ZitadelMachineTokenProvider(
         httpserver.url_for("/"),
         _machine_key_json(),
+        allow_private_ips=True,
     )
-    async with httpx.AsyncClient() as client:
+    async with HttpClient(allow_private_ips=True) as client:
         first_token = await provider.get_access_token(client)
         second_token = await provider.get_access_token(client)
 

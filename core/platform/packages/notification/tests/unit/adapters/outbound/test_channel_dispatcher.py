@@ -2,7 +2,7 @@ import pytest
 from seedwork.domain.types import JsonDict
 
 from notification.adapters.outbound.channel_dispatcher import NotificationChannelDispatcher
-from notification.domain.models import Channel
+from notification.domain.enums import Channel
 from notification.ports.outbound.notification_channel_strategy_port import DeliveryStrategyPort
 
 

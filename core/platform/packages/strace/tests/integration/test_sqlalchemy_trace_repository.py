@@ -19,20 +19,20 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from strace.adapters import (
-    SqlAlchemyTraceRepository,
+from strace.adapters import SqlAlchemyTraceRepository
+from strace.domain import (
+    TraceEvent,
+    TraceEventType,
+    TraceStageAttemptRow,
+    TraceStatus,
+)
+from strace.orm import (
     TenantTraceableOrmModel,
     TenantTraceLineageOrmModel,
     TraceEventMixin,
     TraceEventSpec,
     TraceStageSpec,
     TraceStageSpecPort,
-)
-from strace.domain import (
-    TraceEvent,
-    TraceEventType,
-    TraceStageAttemptRow,
-    TraceStatus,
 )
 
 load_dotenv()
@@ -212,7 +212,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
         tenant_id=tenant_id,
         trace_id=root_trace_id,
         correlation_id="ORD-777",
-        event_type=TraceEventType.DELIVERY_FAILED,
+        event_type=TraceEventType.FAILED,
         actor="WORKER",
         metadata={"step": 2, "status_code": 502},
         created_at=t1,
@@ -246,7 +246,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 parent_trace_id=None,
                 original_trace_id=root_trace_id,
                 replay_count=0,
-                status=TraceStatus.INGESTED.value,
+                status=TraceStatus.STARTED.value,
                 created_at=t0,
             ),
             _Stage2Orm(
@@ -266,7 +266,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 parent_trace_id=root_trace_id,
                 original_trace_id=root_trace_id,
                 replay_count=1,
-                status=TraceStatus.DELIVERED.value,
+                status=TraceStatus.COMPLETED.value,
                 created_at=t2,
             ),
         ]
@@ -296,7 +296,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     assert lineage[0].primary_layer == "STAGE_2"
     assert lineage[0].replay_count == 0
     assert lineage[1].trace_id == child_trace_id
-    assert lineage[1].status == TraceStatus.DELIVERED.value
+    assert lineage[1].status == TraceStatus.COMPLETED.value
     assert lineage[1].primary_layer == "STAGE_2"
     assert lineage[1].replay_count == 1
     assert lineage[1].parent_trace_id == root_trace_id
@@ -321,7 +321,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 parent_trace_id=None,
                 original_trace_id=later_trace_id,
                 replay_count=0,
-                status=TraceStatus.INGESTED.value,
+                status=TraceStatus.STARTED.value,
                 created_at=t3,
             ),
             _Stage1Orm(
@@ -332,7 +332,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 parent_trace_id=None,
                 original_trace_id=None,
                 replay_count=0,
-                status=TraceStatus.INGESTED.value,
+                status=TraceStatus.STARTED.value,
                 created_at=t3 + timedelta(seconds=5),
             ),
         ]
@@ -355,7 +355,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     limited_items = await repo.list_recent_traces(tenant_id, limit=2)
     assert [item.trace_id for item in limited_items] == [later_trace_id, child_trace_id]
 
-    # 8. Verify SQL pushdown for status & min_replay_count never starves older FAILED/INGESTED rows across >300 newer DELIVERED rows
+    # 8. Verify SQL pushdown for status & min_replay_count never starves older FAILED/STARTED rows across >300 newer COMPLETED rows
     bulk_rows: list[_Stage1Orm | _Stage2Orm] = []
     for idx in range(320):
         bulk_trc_id = f"trc_{os.urandom(12).hex()}"
@@ -369,7 +369,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 parent_trace_id=None,
                 original_trace_id=bulk_trc_id,
                 replay_count=0,
-                status=TraceStatus.INGESTED.value,
+                status=TraceStatus.STARTED.value,
                 created_at=bulk_ts,
             )
         )
@@ -381,7 +381,7 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
                 parent_trace_id=None,
                 original_trace_id=bulk_trc_id,
                 replay_count=0,
-                status=TraceStatus.DELIVERED.value,
+                status=TraceStatus.COMPLETED.value,
                 created_at=bulk_ts + timedelta(seconds=1),
             )
         )
@@ -397,13 +397,13 @@ async def test_sqlalchemy_trace_repository_events_lineage_and_correlation_round_
     assert failed_items[0].correlation_id == "ORD-777"
     assert failed_items[0].primary_layer == "STAGE_2"
 
-    ingested_only_items = await repo.list_recent_traces(
+    started_only_items = await repo.list_recent_traces(
         tenant_id,
-        status=TraceStatus.INGESTED,
+        status=TraceStatus.STARTED,
         limit=10,
     )
-    assert [item.trace_id for item in ingested_only_items] == [later_trace_id]
-    assert ingested_only_items[0].primary_layer == "STAGE_1"
+    assert [item.trace_id for item in started_only_items] == [later_trace_id]
+    assert started_only_items[0].primary_layer == "STAGE_1"
 
     replayed_items = await repo.list_recent_traces(
         tenant_id,

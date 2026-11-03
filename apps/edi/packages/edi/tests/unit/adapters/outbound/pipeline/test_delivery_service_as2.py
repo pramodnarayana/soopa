@@ -19,7 +19,7 @@ from edi.application.use_cases.pipeline.delivery_router_use_case import (
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.core.pipeline.delivery.as2 import As2DeliveryStrategy
 from edi.core.pipeline.delivery.base import TerminalDeliveryError, TransientDeliveryError
-from edi.domain.enums import PipelineEventType
+from edi.domain.transaction.enums import PipelineEventType
 from edi.testing.fakes.pipeline_fakes import (
     FakeAS2DeliveryAdapter,
     FakeDataPlaneUnitOfWork,

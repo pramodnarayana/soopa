@@ -1,14 +1,18 @@
 import structlog
-from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
-    PostgresEdiControlPlaneOutboxRepository,
-)
 from database.router import DatabaseRouter
-from edi.domain.enums import EdiConstants, EdiJobName
-from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
+from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
+from edi.domain.constants import EdiConstants
+from edi.domain.enums import EdiJobName, EdiOutboxSource
+from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
+    SqlAlchemyGlobalOutboxRepository,
+)
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.provider import PubSubProvider
@@ -19,9 +23,6 @@ from edi_cp_jobs_worker.adapters.inbound.jobs.edi_control_plane_outbox_cleanup_j
 )
 from edi_cp_jobs_worker.adapters.inbound.jobs.edi_control_plane_outbox_sweeper_job import (
     EdiControlPlaneOutboxSweeperJobHandler,
-)
-from edi_cp_jobs_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_cleanup_repository import (
-    SqlAlchemyEdiControlPlaneOutboxCleanupRepository,
 )
 from edi_cp_jobs_worker.settings import get_settings
 
@@ -38,14 +39,18 @@ class WorkerContainer:
             shard_overrides=self.settings.database.shard_overrides,
         )
 
-        self.cp_outbox_relay: PostgresOutboxRelay | None = None
+        self.cp_outbox_relay: NotifyOutboxRelay | None = None
         self.cp_manager: SqsConsumerManager | None = None
         self.cp_sweeper_job_handler: EdiControlPlaneOutboxSweeperJobHandler | None = None
         self.cp_cleanup_job_handler: EdiControlPlaneOutboxCleanupJobHandler | None = None
         self.cp_outbox_publisher: OutboxPublisherPort | None = None
 
     def wire(self) -> None:
-        cp_outbox_repo = PostgresEdiControlPlaneOutboxRepository(db_router=self.db_router)
+        cp_outbox_repo = SqlAlchemyGlobalOutboxRepository(
+            session_factory=self.db_router.global_session_scope,
+            model_cls=ControlPlaneOutbox,
+            source=EdiOutboxSource.EDI_CONTROL_PLANE.value,
+        )
 
         self.cp_outbox_publisher = PubSubProvider.create_topic_publisher(
             topic_arn=self.settings.aws.sns_topic_arn,
@@ -53,31 +58,31 @@ class WorkerContainer:
             endpoint_url=self.settings.aws.endpoint_url,
         )
 
-        self._wire_scheduled_jobs(cp_outbox_repo, self.cp_outbox_publisher)
+        self._wire_scheduled_jobs(cp_outbox_repo, cp_outbox_repo, self.cp_outbox_publisher)
         self._wire_outbox_relay(cp_outbox_repo, self.cp_outbox_publisher)
         self._wire_jobs_consumers()
 
     def _wire_scheduled_jobs(
         self,
-        cp_repo: PostgresEdiControlPlaneOutboxRepository,
+        cp_repo: OutboxRepositoryPort,
+        cp_cleanup_repo: OutboxCleanupRepositoryPort,
         cp_pub: OutboxPublisherPort,
     ) -> None:
         cp_sweeper_use_case = OutboxSweeperUseCase(cp_repo, cp_pub)
         self.cp_sweeper_job_handler = EdiControlPlaneOutboxSweeperJobHandler(cp_sweeper_use_case)
 
-        cp_cleanup_repo = SqlAlchemyEdiControlPlaneOutboxCleanupRepository(db_router=self.db_router)
         self.cp_cleanup_job_handler = EdiControlPlaneOutboxCleanupJobHandler(
             OutboxCleanerUseCase(cp_cleanup_repo)
         )
 
     def _wire_outbox_relay(
-        self, cp_repo: PostgresEdiControlPlaneOutboxRepository, cp_pub: OutboxPublisherPort
+        self, cp_repo: OutboxRepositoryPort, cp_pub: OutboxPublisherPort
     ) -> None:
         outbox_processor = OutboxProcessorUseCase(
             repository=cp_repo,
             publisher=cp_pub,
         )
-        self.cp_outbox_relay = PostgresOutboxRelay(
+        self.cp_outbox_relay = NotifyOutboxRelay(
             processor=outbox_processor,
             database_url=self.settings.database.global_url,
             listen_channel=EdiConstants.OUTBOX_CHANNEL.value,

@@ -24,6 +24,8 @@ class TokenClaims:
 PLATFORM_TENANT_ID = "ten_000000000000000000000000"
 
 M2M_API_KEY_PREFIX = "sp_api_"
+M2M_CLIENT_ID_PREFIX = "cli_"
+M2M_CLIENT_SECRET_PREFIX = "sec_"  # noqa: S105 - Identifier prefix constant for M2M client secrets, not a secret value
 
 
 @dataclass(frozen=True)

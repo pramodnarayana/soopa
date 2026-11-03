@@ -1,4 +1,3 @@
-import typing
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
@@ -7,7 +6,8 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
-from edi.domain.enums import EdiDirection, PipelineEventType
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.enums import PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -23,7 +23,7 @@ class DispatchInboundTransformUseCase:
         self,
         uow_factory: Callable[[], AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         transformer: TransformerPort,
-        settings: typing.Any,
+        settings: object,
         publisher: OutboxPublisherPort,
     ) -> None:
         self.uow_factory = uow_factory
@@ -36,7 +36,7 @@ class DispatchInboundTransformUseCase:
         logger.info("inbound_transform.started", trace_id=trace_id)
 
         async with self.uow_factory() as uow, uow:
-            edi_msg = await uow.transactions.get_edi_message(trace_id)
+            edi_msg = await uow.edi_messages.get_edi_message(trace_id)
             if not edi_msg:
                 raise ValueError(f"No EDI message found for trace_id={trace_id}")
 

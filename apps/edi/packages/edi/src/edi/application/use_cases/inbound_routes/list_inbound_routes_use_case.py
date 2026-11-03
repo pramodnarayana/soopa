@@ -1,8 +1,7 @@
 import structlog
 
-from edi.domain.enums import EdiDirection
-from edi.domain.models.base import ConnectionType
-from edi.domain.models.inbound_routes import InboundRouteDomainModel
+from edi.domain.routing.enums import ConnectionType, EdiDirection
+from edi.domain.routing.inbound_route import InboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -12,7 +11,7 @@ class ListInboundRoutesUseCase:
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
-    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRouteDomainModel]:
+    async def list_inbound_routes(self, tenant_id: str) -> list[InboundRoute]:
         inbound = await self.uow.inbound_routes.list_inbound_routes(tenant_id)
 
         as2_ids: set[str] = set()
@@ -42,9 +41,9 @@ class ListInboundRoutesUseCase:
         sftp_names = {p.id: p.name for p in sftp_partners}
         webhook_names: dict[str, str] = {}
 
-        results: list[InboundRouteDomainModel] = []
+        results: list[InboundRoute] = []
 
-        def _resolve_destination(r: InboundRouteDomainModel) -> tuple[ConnectionType | str, str]:
+        def _resolve_destination(r: InboundRoute) -> tuple[ConnectionType | str, str]:
             if r.as2_partner_id:
                 return ConnectionType.AS2, as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
             if r.sftp_partner_id:
@@ -61,7 +60,7 @@ class ListInboundRoutesUseCase:
             _dest_type, _dest_name = _resolve_destination(r)
 
             results.append(
-                InboundRouteDomainModel(
+                InboundRoute(
                     id=r.id,
                     tenant_id=tenant_id,
                     name=r.name,

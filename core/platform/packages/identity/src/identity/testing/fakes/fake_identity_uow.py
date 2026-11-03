@@ -1,10 +1,11 @@
+from datetime import datetime
 from types import TracebackType
-from typing import Any, Self
+from typing import Self
 
+from identity.domain.api_token import ApiToken
+from identity.domain.authorization import Role
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.api_token import ApiTokenDomainModel
-from identity.domain.models.authorization import Role
-from identity.domain.models.user import User
+from identity.domain.user import User
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.uow_port import IdentityUnitOfWorkPort
@@ -107,25 +108,19 @@ class FakeRoleRepository(RoleRepositoryPort):
 
 class FakeApiTokenRepository(ApiTokenRepositoryPort):
     def __init__(self) -> None:
-        self.tokens: list[ApiTokenDomainModel] = []
+        self.tokens: list[ApiToken] = []
 
-    async def get_all_by_tenant(self, tenant_id: str) -> list[ApiTokenDomainModel]:
+    async def get_all_by_tenant(self, tenant_id: str) -> list[ApiToken]:
         return [t for t in self.tokens if t.tenant_id == tenant_id]
 
-    async def get_by_id(self, token_id: str, tenant_id: str) -> ApiTokenDomainModel | None:
+    async def get_by_id(self, token_id: str, tenant_id: str) -> ApiToken | None:
         return next((t for t in self.tokens if t.id == token_id and t.tenant_id == tenant_id), None)
 
-    async def create(self, token: ApiTokenDomainModel) -> ApiTokenDomainModel:
+    async def save(self, token: ApiToken) -> ApiToken:
+        existing = await self.get_by_id(token.id, token.tenant_id)
+        if existing is not None:
+            self.tokens.remove(existing)
         self.tokens.append(token)
-        return token
-
-    async def update(
-        self, token_id: str, tenant_id: str, **kwargs: Any
-    ) -> ApiTokenDomainModel | None:
-        token = await self.get_by_id(token_id, tenant_id)
-        if token:
-            for k, v in kwargs.items():
-                setattr(token, k, v)
         return token
 
     async def delete(self, token_id: str, tenant_id: str) -> bool:
@@ -135,8 +130,17 @@ class FakeApiTokenRepository(ApiTokenRepositoryPort):
             return True
         return False
 
-    async def get_by_client_id(self, client_id: str) -> ApiTokenDomainModel | None:
-        return next((t for t in self.tokens if t.client_id == client_id and t.active), None)
+    async def get_by_client_id(
+        self, client_id: str, now: datetime | None = None
+    ) -> ApiToken | None:
+        return next(
+            (
+                t
+                for t in self.tokens
+                if t.client_id == client_id and t.active and not t.is_expired(at=now)
+            ),
+            None,
+        )
 
 
 class FakeIdentityUnitOfWork(IdentityUnitOfWorkPort):

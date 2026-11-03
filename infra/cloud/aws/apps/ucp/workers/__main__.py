@@ -20,6 +20,7 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.messaging import merge_messaging_queue_arns
 
 _env = pulumi.get_stack()
 _prefix = f"{_env}-ucp-"
@@ -74,9 +75,8 @@ edi_shard_db_secret_arn = data.require_output("edi_shard_db_secret_arn")
 global_db_endpoint = data.require_output("global_db_endpoint")
 global_db_secret_arn = data.require_output("global_db_secret_arn")
 
-ucp_jobs_queue_arn = ucp.require_output("ucp_jobs_queue_arn")
-ucp_events_queue_arn = ucp.require_output("ucp_events_queue_arn")
 sns_platform_events_topic_arn = platform.require_output("sns_platform_events_topic_arn")
+all_worker_queue_arns = merge_messaging_queue_arns(ucp, identity, edi, notification)
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")
@@ -223,21 +223,7 @@ extra_task_policy_statements = [
             "sqs:ChangeMessageVisibility",
             "sqs:SendMessage",
         ],
-        "Resource": [
-            ucp_jobs_queue_arn,
-            ucp_events_queue_arn,
-            identity.require_output("identity_events_queue_arn"),
-            identity.require_output("identity_jobs_queue_arn"),
-            edi.require_output("sqs_edi_compute_arn"),
-            edi.require_output("sqs_edi_config_sync_queue_arn"),
-            edi.require_output("sqs_edi_control_plane_jobs_arn"),
-            edi.require_output("sqs_edi_data_plane_jobs_arn"),
-            edi.require_output("sqs_edi_deliver_arn"),
-            edi.require_output("sqs_edi_orchestrator_arn"),
-            edi.require_output("sqs_edi_priority_notifications_arn"),
-            notification.require_output("email_channel_queue_arn"),
-            notification.require_output("notification_jobs_queue_arn"),
-        ],
+        "Resource": all_worker_queue_arns,
     },
     {
         "Sid": "SnsPermissions",

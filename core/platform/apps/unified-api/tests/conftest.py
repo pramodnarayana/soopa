@@ -16,11 +16,11 @@ from database.models.identity import ApiToken as ApiTokenORM
 from database.models.identity import Tenant as TenantORM
 from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
-from identity.adapters.outbound.database.user_repository import PostgresUserRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from secret_store import AwsSecretsManagerAdapter
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator
@@ -111,10 +111,24 @@ class FakeDatabaseRouter:
             session.info["session_type"] = "global"
             yield session
 
+    @contextlib.asynccontextmanager
+    async def global_session_scope(self):
+        async with self.session_factory() as session:
+            session.info["session_type"] = "global"
+            yield session
+
     async def get_tenant_session(self, *args, **kwargs):
         async with self.session_factory() as session:
             session.info["session_type"] = "tenant"
             yield session
+
+    async def get_shard_session(self, *args, **kwargs):
+        async with self.session_factory() as session:
+            session.info["session_type"] = "tenant"
+            yield session
+
+    async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
+        return []
 
     async def close_all(self):
         pass
@@ -139,7 +153,9 @@ async def db_session_factory(db_engine, monkeypatch):
     fake_router = FakeDatabaseRouter(SessionLocal)
 
     monkeypatch.setattr(
-        database.provider.DatabaseProvider, "from_url", classmethod(lambda cls, url: fake_provider)
+        database.provider.DatabaseProvider,
+        "from_url",
+        classmethod(lambda cls, url, **kwargs: fake_provider),
     )
 
     monkeypatch.setattr(
@@ -211,7 +227,7 @@ async def seeded_api_token(db_session_factory):
             )
             session.add(admin_role)
 
-        tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+        tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
         tenant = await session.get(TenantORM, tenant_id)
         if not tenant:
             tenant = TenantORM(
@@ -287,7 +303,7 @@ async def seeded_api_token(db_session_factory):
 
         client_id = "client_test_123"
         token = ApiTokenORM(
-            id=generate_id(DomainIdPrefix.TOKEN.value),
+            id=generate_id(IdentityIdPrefix.TOKEN.value),
             tenant_id=tenant_id,
             name="Integration Test Token",
             client_id=client_id,
@@ -303,9 +319,6 @@ async def seeded_api_token(db_session_factory):
             "raw_secret": raw_secret,
             "header_value": f"sp_api_{client_id}.{raw_secret}",
         }
-
-
-from identity.domain.identity_context import IdentityContext
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -360,7 +373,7 @@ async def simulate_idp_provisioning(db_session_factory):
 
     async def _provision(user_id: str) -> None:
         async with db_session_factory() as session:
-            repo = PostgresUserRepository(session)
+            repo = SqlAlchemyUserRepository(session)
             user = await repo.find_by_id(user_id)
             if user is None:
                 raise ValueError(
@@ -369,7 +382,8 @@ async def simulate_idp_provisioning(db_session_factory):
                 )
             # Mirror what the identity worker does: set the IDP user ID on the
             # domain model, then persist via the repository (not raw SQL).
-            user.set_idp_user_id(f"fake_idp_{user_id}")
+            set_res = user.set_idp_user_id(f"fake_idp_{user_id}")
+            assert set_res.is_ok
             await repo.save(user)
             await session.commit()
 

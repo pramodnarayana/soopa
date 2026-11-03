@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 from seedwork import generate_id
 from seedwork.domain.types import JsonValue
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
@@ -18,10 +17,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import text
 from sqlalchemy.types import TypeDecorator
-from strace.adapters import TenantTraceLineageOrmModel, TraceEventMixin
+from strace.orm import TenantTraceLineageOrmModel, TraceEventMixin
 
 from database.models.common import OutboxMixin, TimestampMixin
-from edi.domain.enums import MessageStatus
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.transaction.enums import MessageStatus
 
 from .mixins import (
     AS2PartnerMixin,
@@ -354,7 +354,9 @@ class AckReceipt(TenantBase, TenantAwareMixin):
     __tablename__ = "ack_receipts"
 
     id: Mapped[str] = mapped_column(
-        String(128), primary_key=True, default=lambda: generate_id("edi_ack")
+        String(128),
+        primary_key=True,
+        default=lambda: generate_id(DomainIdPrefix.EDI_ACK.value),
     )
     trace_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     type: Mapped[str] = mapped_column(String(50), nullable=False)  # MDN, 997, CONTRL

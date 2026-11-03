@@ -19,12 +19,13 @@ Architecture note:
   NOT be imported or used from the Application or Domain layers.
 """
 
-from typing import Any
+from collections.abc import Callable
 
 import structlog
 from dependency_injector.wiring import Provide, inject
 from fastapi import Depends, HTTPException, Path, Request, status
 from identity.domain.identity_context import IdentityContext
+from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.bootstrap.container import Container
 from ucp.bootstrap.dependencies import get_db_session
@@ -37,8 +38,12 @@ logger = structlog.get_logger(__name__)
 async def require_tenant_member(
     request: Request,
     session: AsyncSession = Depends(get_db_session),
-    tenant_repo_factory: Any = Depends(Provide[Container.tenant_repo.provider]),
-    role_repo_factory: Any = Depends(Provide[Container.role_repo.provider]),
+    tenant_repo_factory: Callable[[AsyncSession], TenantRepositoryPort] = Depends(
+        Provide[Container.tenant_repo.provider]
+    ),
+    role_repo_factory: Callable[[AsyncSession], RoleRepositoryPort] = Depends(
+        Provide[Container.role_repo.provider]
+    ),
     # Path param name matches the route definition: /tenants/{tenant_id}/...
     tenant_id: str = Path(...),
 ) -> IdentityContext:
@@ -64,7 +69,7 @@ async def require_tenant_member(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    tenant_repo: TenantRepositoryPort = tenant_repo_factory(session=session)
+    tenant_repo = tenant_repo_factory(session)
 
     # Platform Admins bypass all tenant-level ACL checks.
     # But we still need to normalize the tenant_id if it's an IdP Org ID.
@@ -74,7 +79,7 @@ async def require_tenant_member(
         canonical_tenant_id = resolved.id if resolved else tenant_id
 
         # Load capabilities for this specific tenant, as the user might be accessing it cross-tenant
-        role_repo = role_repo_factory(session=session)
+        role_repo = role_repo_factory(session)
         tenant_caps = await role_repo.get_user_capabilities(
             tenant_id=canonical_tenant_id, user_id=identity.subject
         )
@@ -93,7 +98,7 @@ async def require_tenant_member(
         canonical_tenant_id = str(identity.tenant_mapping.get(tenant_id, tenant_id))
 
         # Load capabilities for this specific tenant, since the JWT might have a different default tenant
-        role_repo = role_repo_factory(session=session)
+        role_repo = role_repo_factory(session)
         tenant_caps = await role_repo.get_user_capabilities(
             tenant_id=canonical_tenant_id, user_id=identity.subject
         )
@@ -109,11 +114,11 @@ async def require_tenant_member(
 
     # If the user reaches this point, they do not have the requested tenant in their context.
     # The middleware is responsible for mapping IdP IDs to Canonical IDs.
-    logger.debug(
-        "Tenant authorization failed. requested=%s context_tenant=%s authorized_tenants=%s",
-        tenant_id,
-        identity.tenant_id,
-        identity.authorized_tenants,
+    logger.error(
+        "tenant_authorization_failed",
+        requested_tenant_id=tenant_id,
+        context_tenant_id=identity.tenant_id,
+        authorized_tenants=sorted(identity.authorized_tenants),
     )
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

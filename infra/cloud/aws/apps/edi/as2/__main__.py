@@ -14,6 +14,7 @@ import pulumi_aws as aws
 from infra_seedwork import load_autoscaling_config_from_pulumi
 from infra_seedwork.ecs import provision_fargate_service
 from infra_seedwork.env import queue_env_vars_to_ecs_format
+from infra_seedwork.messaging import resolve_messaging_queue_arns
 from infra_seedwork.network import provision_target_group_and_rule
 
 _env = pulumi.get_stack()
@@ -56,12 +57,7 @@ global_db_secret_arn = data.require_output("global_db_secret_arn")
 
 # S3 and SNS are not used by the AS2 server (payloads saved to DB).
 queue_env_vars = messaging.require_output("queue_env_vars")
-queue_arns = [
-    messaging.require_output("sqs_edi_data_plane_jobs_arn"),
-    messaging.require_output("sqs_edi_deliver_arn"),
-    messaging.require_output("sqs_edi_orchestrator_arn"),
-    messaging.require_output("sqs_edi_compute_arn"),
-]
+queue_arns = resolve_messaging_queue_arns(messaging)
 
 image_tag = config.get("image_tag") or "latest"
 enable_observability = config.get_bool("enable_observability")

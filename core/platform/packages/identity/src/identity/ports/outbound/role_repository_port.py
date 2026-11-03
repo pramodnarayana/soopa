@@ -1,6 +1,6 @@
 import abc
 
-from identity.domain.models.authorization import Role
+from identity.domain.authorization import Role
 
 
 class RoleRepositoryPort(abc.ABC):

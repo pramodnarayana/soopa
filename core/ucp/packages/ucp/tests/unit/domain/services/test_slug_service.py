@@ -1,13 +1,17 @@
 """Unit tests for ucp.domain.services.slug_service.
 
-These tests cover the pure generate_slug() and generate_unique_slug() functions.
+These tests cover the pure generate_slug(), try_generate_slug(), and generate_unique_slug() functions.
 No fakes are needed — pure function, zero external dependencies.
 """
 
 import pytest
 
-from ucp.domain.exceptions import InvalidTenantNameError
-from ucp.domain.services.slug_service import generate_slug, generate_unique_slug
+from ucp.domain.exceptions import InvalidTenantNameError, UcpErrorCode
+from ucp.domain.services.slug_service import (
+    generate_slug,
+    generate_unique_slug,
+    try_generate_slug,
+)
 
 
 class TestGenerateSlug:
@@ -44,7 +48,6 @@ class TestGenerateSlug:
         assert generate_slug("Platform") == "platform"
 
     def test_unicode_ae_ligature(self) -> None:
-        # Æ → "ae", ø is not in the transliteration map so it is stripped entirely.
         assert generate_slug("Ærø") == "aer"
 
     def test_empty_string_raises(self) -> None:
@@ -58,6 +61,20 @@ class TestGenerateSlug:
     def test_only_spaces_raises(self) -> None:
         with pytest.raises(InvalidTenantNameError):
             generate_slug("   ")
+
+
+class TestTryGenerateSlug:
+    """Tests for try_generate_slug() — Result-based slug generation."""
+
+    def test_valid_name_returns_ok(self) -> None:
+        res = try_generate_slug("Acme Corp")
+        assert res.is_ok
+        assert res.unwrap() == "acme-corp"
+
+    def test_invalid_name_returns_typed_error(self) -> None:
+        res = try_generate_slug("!!!")
+        assert res.is_err
+        assert res.unwrap_err().code == UcpErrorCode.INVALID_TENANT_NAME
 
 
 class TestGenerateUniqueSlug:
@@ -74,7 +91,6 @@ class TestGenerateUniqueSlug:
         assert generate_unique_slug("Acme Corp", existing) == "acme-corp-4"
 
     def test_non_contiguous_gap_skipped(self) -> None:
-        # acme-corp-2 is free even though acme-corp-3 is taken
         existing = {"acme-corp", "acme-corp-3"}
         assert generate_unique_slug("Acme Corp", existing) == "acme-corp-2"
 
