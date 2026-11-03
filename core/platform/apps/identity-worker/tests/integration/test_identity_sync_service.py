@@ -8,12 +8,7 @@ import uuid
 import pytest
 from database.models.identity import Tenant as DbTenant
 from database.models.identity import User as DbUser
-from identity_worker.adapters.outbound.database.identity_sync_repository import (
-    PostgresIdentitySyncUnitOfWork,
-)
-from identity_worker.adapters.outbound.identity_provider.zitadel_identity_provider import (
-    ZitadelIdentityProviderPort,
-)
+from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
 from identity_worker.adapters.outbound.identity_provider.zitadel_organizations_adapter import (
     ZitadelOrganizationsAdapter,
 )
@@ -24,8 +19,10 @@ from identity_worker.adapters.outbound.identity_provider.zitadel_users_adapter i
     ZitadelUsersAdapter,
 )
 from identity_worker.application.use_cases.identity_sync_service import IdentitySyncService
+from identity_worker.bootstrap.container import create_identity_sync_uow
 from identity_worker.config.settings import get_settings
 from seedwork import generate_id
+from shttp import HttpClient
 
 pytestmark = [
     pytest.mark.integration,
@@ -40,20 +37,37 @@ pytestmark = [
 
 
 @pytest.fixture
-def zitadel_projects_adapter():
-    return ZitadelProjectsAdapter(settings=get_settings())
-
-
-@pytest.fixture
-def zitadel_orgs_adapter(zitadel_projects_adapter):
-    return ZitadelOrganizationsAdapter(
-        project_provider=zitadel_projects_adapter, settings=get_settings()
+def zitadel_http_client() -> HttpClient:
+    settings = get_settings()
+    token_provider = ZitadelMachineTokenProvider(
+        api_url=settings.zitadel_api_url,
+        machine_key=settings.zitadel_machine_key,
+    )
+    return HttpClient(
+        base_url=settings.zitadel_api_url,
+        token_provider=token_provider,
+        default_headers={"Accept": "application/json"},
+        allow_private_ips=True,
     )
 
 
 @pytest.fixture
-def zitadel_users_adapter():
-    adapter = ZitadelUsersAdapter()
+def zitadel_projects_adapter(zitadel_http_client):
+    return ZitadelProjectsAdapter(http_client=zitadel_http_client, settings=get_settings())
+
+
+@pytest.fixture
+def zitadel_orgs_adapter(zitadel_http_client, zitadel_projects_adapter):
+    return ZitadelOrganizationsAdapter(
+        http_client=zitadel_http_client,
+        project_provider=zitadel_projects_adapter,
+        settings=get_settings(),
+    )
+
+
+@pytest.fixture
+def zitadel_users_adapter(zitadel_http_client):
+    adapter = ZitadelUsersAdapter(http_client=zitadel_http_client, settings=get_settings())
     adapter.default_user_password = f"Pass_{uuid.uuid4().hex}!1A"
     return adapter
 
@@ -62,13 +76,11 @@ def zitadel_users_adapter():
 def identity_sync_service(
     zitadel_orgs_adapter, zitadel_users_adapter, db_session_factory
 ) -> IdentitySyncService:
-    identity_provider = ZitadelIdentityProviderPort(zitadel_orgs_adapter, db_session_factory)
-
     def uow_factory():
-        return PostgresIdentitySyncUnitOfWork(db_session_factory)
+        return create_identity_sync_uow(db_session_factory)
 
     return IdentitySyncService(
-        identity_provider=identity_provider,
+        organization_provider=zitadel_orgs_adapter,
         user_identity_provider=zitadel_users_adapter,
         uow_factory=uow_factory,
     )

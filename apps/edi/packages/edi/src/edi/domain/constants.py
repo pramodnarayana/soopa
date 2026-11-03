@@ -1,32 +1,35 @@
-"""
-EDI Domain Constants
-====================
+"""EDI Domain Constants and Identifier Prefixes."""
 
-Non-enumeration constants for the EDI bounded context.
-All StrEnum definitions live in ``edi.domain.enums``.
-"""
+from enum import StrEnum
 
-from typing import Final
 
-# ── Route configuration sentinels ────────────────────────────────────────────
-# Used in OutboundEdiHeader.transaction_type to mean "accept any transaction
-# type and resolve it from the payload at transform-time".
-WILDCARD_TRANSACTION_TYPE: Final[str] = "*"
+class EdiConstants(StrEnum):
+    OUTBOX_CHANNEL = "edi_outbox_channel"
+    EDI_APP_SLUG = "edi"
 
-# ── ID prefixes ──────────────────────────────────────────────────────────────
-# Moved to core/platform/packages/seedwork/src/seedwork/constants.py (DomainIdPrefix)
 
-from edi.domain.enums import (
-    EdiEventType,
-    UcpEventType,
-    WebhookEventType,
-)
+class EdiIdPrefix(StrEnum):
+    """Domain-specific ID prefixes for EDI aggregates and entities."""
 
-# ── Aggregated provisioning event set ────────────────────────────────────────
-ProvisioningEventType = EdiEventType | WebhookEventType | UcpEventType
+    TENANT = "iam_ten"
+    EDI_CP_OUTBOX = "edi_cp_ob"
+    EDI_DP_OUTBOX = "edi_dp_ob"
+    EDI_AS2_SERVER = "edi_as2"
+    EDI_AS2_PARTNER = "edi_as2_tp"
+    EDI_AS2_PARTNERSHIP = "edi_as2_pship"
+    EDI_SFTP_PARTNER = "edi_sftp"
+    EDI_WEBHOOK = "edi_dp_wh"
+    EDI_INBOUND_ROUTE = "edi_inb_rt"
+    EDI_OUTBOUND_HEADER = "edi_outb_hdr"
+    EDI_OUTBOUND_ROUTE = "edi_outb_rt"
+    EDI_MESSAGE = "edi_msg"
+    EDI_JSON = "edi_json"
+    EDI_API_GATEWAY = "edi_api_gw"
+    EDI_TRACE_EVENT = "edi_trace_evt"
+    EDI_ACK = "edi_ack"
 
-ALL_PROVISIONING_EVENT_TYPES = (
-    [e.value for e in EdiEventType]
-    + [e.value for e in WebhookEventType]
-    + [e.value for e in UcpEventType]
-)
+
+__all__ = [
+    "EdiConstants",
+    "EdiIdPrefix",
+]

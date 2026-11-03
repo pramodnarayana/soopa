@@ -1,5 +1,5 @@
 exact = false
-forbid_circular_dependencies = false
+forbid_circular_dependencies = true
 ignore_type_checking_imports = true
 source_roots = [
     "core/ucp/packages/ucp/src",
@@ -37,11 +37,19 @@ depends_on = [
 ]
 
 [[modules]]
+path = "strace.orm"
+depends_on = [
+    "strace.domain",
+    "database.models"
+]
+
+[[modules]]
 path = "strace.adapters"
 depends_on = [
     "strace.domain",
     "strace.ports",
     "strace.application",
+    "strace.orm",
     "database.models"
 ]
 
@@ -76,6 +84,14 @@ depends_on = [
     "orchestration.ports",
     "orchestration.application",
     "database.models"
+]
+
+[[modules]]
+path = "orchestration.bootstrap"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.adapters"
 ]
 
 [[modules]]
@@ -274,7 +290,7 @@ depends_on = [
     "shttp",
     "strace.domain",
     "strace.ports",
-    "strace.adapters"
+    "strace.orm"
 ]
 
 [[modules]]
@@ -287,6 +303,5 @@ depends_on = [
     "ucp.domain",
     "ucp.ports",
     "identity",
-    "database.models",
     "schemas"
 ]

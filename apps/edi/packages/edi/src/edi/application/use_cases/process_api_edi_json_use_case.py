@@ -5,15 +5,13 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import JsonValue
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
-from strace.domain import TraceEventType
 
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
 from edi.core.pipeline.transaction_type_resolver import TransactionTypeResolver
-from edi.domain.enums import EdiDirection
-from edi.domain.events import TransformRequestedEvent
 from edi.domain.exceptions import IdempotencyConflictError
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiJsonDomainModel
+from edi.domain.routing.enums import Direction
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.enums import RecordStatus
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -61,7 +59,7 @@ class ProcessApiEdiJsonUseCase:
             )
 
             if command.idempotency_key:
-                existing = await self.uow.transactions.get_edi_json_by_idempotency_key(
+                existing = await self.uow.edi_jsons.get_edi_json_by_idempotency_key(
                     command.tenant_id, command.idempotency_key
                 )
                 if existing:
@@ -95,7 +93,7 @@ class ProcessApiEdiJsonUseCase:
                 domain_payload = command.payload
 
             # 3. Instantiate Domain Model and record event
-            edi_json_aggregate = EdiJsonDomainModel(
+            edi_json_aggregate = EdiJson(
                 id=generate_id(SystemIdPrefix.GENERIC),
                 tenant_id=command.tenant_id,
                 trace_id=trace_id,
@@ -108,26 +106,20 @@ class ProcessApiEdiJsonUseCase:
                 status=RecordStatus.RECEIVED,
             )
 
-            edi_json_aggregate._append_trace(TraceEventType.RECEIVED)
+            edi_json_aggregate.record_received()
 
             # 4. Queue the transform atomically through the transaction aggregate
-            event_kwargs = {
-                "trace_id": str(trace_id),
-                "tenant_id": command.tenant_id,
-                "trading_partner_id": command.trading_partner_id,
-                "direction": EdiDirection.OUTBOUND.value,
-            }
-            if command.idempotency_key:
-                event_kwargs["idempotency_key"] = command.idempotency_key
-
-            edi_json_aggregate.add_domain_event(TransformRequestedEvent(**event_kwargs))
+            edi_json_aggregate.request_transformation(
+                trading_partner_id=command.trading_partner_id,
+                idempotency_key=command.idempotency_key,
+            )
 
             # 5. Save aggregate and let Repository drain events to the outbox atomically.
             # If a concurrent request with the same idempotency key already committed,
             # the DB unique constraint will raise a conflict which we catch and resolve
             # by looking up the already-persisted record.
             try:
-                envelopes = await self.uow.transactions.save_json(edi_json_aggregate)
+                envelopes = await self.uow.edi_jsons.save(edi_json_aggregate)
                 await self.uow.commit()
                 for env in envelopes:
                     await self.publisher.publish(env)
@@ -136,7 +128,7 @@ class ProcessApiEdiJsonUseCase:
 
             except IdempotencyConflictError:
                 if command.idempotency_key:
-                    existing = await self.uow.transactions.get_edi_json_by_idempotency_key(
+                    existing = await self.uow.edi_jsons.get_edi_json_by_idempotency_key(
                         command.tenant_id, command.idempotency_key
                     )
                     if existing:

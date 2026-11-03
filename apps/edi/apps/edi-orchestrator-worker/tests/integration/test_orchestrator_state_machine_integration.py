@@ -1,5 +1,4 @@
 import contextlib
-import dataclasses
 import json
 from collections.abc import Callable
 from typing import Any
@@ -9,8 +8,7 @@ from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 from database.testing import TransactionalTestRouter
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.adapters.outbound.transformer.bots_transformer_adapter import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
     DispatchInboundTransformUseCase,
@@ -18,7 +16,8 @@ from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case impo
 from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case import (
     DispatchOutboundTransformUseCase,
 )
-from edi.domain.enums import PipelineEventType
+from edi.bootstrap.container import create_edi_data_plane_uow
+from edi.domain.transaction.enums import PipelineEventType
 from seedwork import generate_random_hex
 from seedwork.events import EventEnvelope
 from sqlalchemy import text
@@ -67,7 +66,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
             await session.execute(
                 text(f"SELECT set_config('platform.current_tenant_id', '{tenant_id}', true)")
             )
-            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session, storage=transformer)
+            yield create_edi_data_plane_uow(tenant_session=session, storage=transformer)
             break
 
     async def run_inbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
@@ -98,7 +97,7 @@ async def test_inbound_routing_state_machine_transition(db_router: Transactional
     )
 
     # Execute the state machine transition
-    await dispatcher.handle(dataclasses.asdict(sqs_body))
+    await dispatcher.handle(sqs_body.to_dict())
 
     # 4. Verify Database State Machine Outbox Event
     async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
@@ -188,7 +187,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
             )
             # We don't have a fake storage, use the real Transformer adapter
             # or just leave it empty if not used by WebhookDeliveryStrategy
-            yield SqlAlchemyDataPlaneUnitOfWork(
+            yield create_edi_data_plane_uow(
                 tenant_session=session, storage=BotsTransformerAdapter()
             )
             break
@@ -229,7 +228,7 @@ async def test_inbound_webhook_dispatch_transition(db_router: TransactionalTestR
         payload={"trace_id": trace_id, "direction": "INBOUND"},
     )
 
-    await dispatcher.handle(dataclasses.asdict(sqs_body))
+    await dispatcher.handle(sqs_body.to_dict())
 
     # 4. Verify Delivery Success Outbox Event was written
     async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):
@@ -342,7 +341,7 @@ async def test_outbound_routing_state_machine_transition(
             await session.execute(
                 text(f"SELECT set_config('platform.current_tenant_id', '{tenant_id}', true)")
             )
-            yield SqlAlchemyDataPlaneUnitOfWork(tenant_session=session, storage=transformer)
+            yield create_edi_data_plane_uow(tenant_session=session, storage=transformer)
             break
 
     async def run_outbound(e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]) -> None:
@@ -370,7 +369,7 @@ async def test_outbound_routing_state_machine_transition(
         event_type=PipelineEventType.TRANSFORMATION_REQUESTED.value,
         payload={"trace_id": trace_id, "direction": "OUTBOUND"},
     )
-    await dispatcher.handle(dataclasses.asdict(sqs_body))
+    await dispatcher.handle(sqs_body.to_dict())
 
     # 4. Assert COMPUTE_TRANSFORMATION_COMMAND outbox event was written with correct EDI headers
     async for test_session in db_router.get_shard_session("ucp_shard_1", "fake_dsn"):

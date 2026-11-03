@@ -113,7 +113,7 @@ def test_webhook_app_and_tenant_query_mappers() -> None:
         created_at=now_naive,
         updated_at=now_naive,
     )
-    read_model = SqlAlchemyTenantQueryService._to_read_model(db_tenant, ["edi", "ip"])
+    read_model = SqlAlchemyTenantQueryService._to_read_model(db_tenant, ["edi", "billing"])
     assert read_model.id == tenant_id
-    assert read_model.subscriptions == ["edi", "ip"]
+    assert read_model.subscriptions == ["edi", "billing"]
     assert read_model.created_at.tzinfo == UTC

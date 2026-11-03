@@ -1,108 +1,27 @@
-from datetime import UTC, datetime
-from enum import Enum
-from typing import Generic, TypeVar
-
 from outbox.domain.constants import OutboxStatus
-from seedwork.domain.types import JsonValue
-from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
-from seedwork.utils import generate_id, generate_random_hex
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_id
 from sqlalchemy import insert, select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.exceptions import DuplicateEntityError
 from database.interceptors import intercept_db_errors
-from database.outbox_serializer import serialize_domain_event
-from database.types import GlobalSession, TenantSession
-from edi.adapters.outbound.database.base_repository import (
-    GlobalSqlAlchemyRepository,
-    TenantSqlAlchemyRepository,
-)
+from database.types import GlobalSession
+from edi.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
-from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from edi.domain.events import ProvisioningEvent
+from edi.domain.events import OutboxEvent
 from edi.domain.exceptions import IdempotencyConflictError
-from edi.domain.models.outbox_event import OutboxEvent
 from edi.ports.outbound.control_plane_outbox_repository_port import (
     ControlPlaneOutboxRepositoryPort,
 )
-from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
-
-T_Session = TypeVar("T_Session", bound=AsyncSession)
-
-
-class SqlAlchemyOutboxRepositoryMixin(Generic[T_Session]):
-    session: T_Session
-
-    model_class: type[ControlPlaneOutbox]
-    id_prefix: str = "obevt_"
-
-    async def flush(self) -> None: ...
-
-    async def _publish_record(
-        self,
-        tenant_id: str,
-        event_type: str,
-        payload: dict[str, JsonValue],
-        idempotency_key: str | None = None,
-    ) -> str:
-        tid_str = tenant_id if tenant_id is not None else None
-        event_type_str = event_type.value if isinstance(event_type, Enum) else str(event_type)
-        event_id = f"{self.id_prefix}{generate_random_hex(6)}"
-        record = self.model_class(
-            id=event_id,
-            tenant_id=tid_str,
-            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
-            event_type=event_type_str,
-            payload=payload,
-            status=OutboxStatus.PENDING,
-        )
-        self.session.add(record)
-        await self.flush()
-        return event_id
-
-    async def publish_outbox_events_bulk(
-        self,
-        tenant_id: str,
-        events: list[dict[str, JsonValue]],
-    ) -> list[str]:
-        tid_str = tenant_id if tenant_id is not None else None
-        event_ids = []
-
-        insert_stmts = []
-        for event in events:
-            event_type = event["event_type"]
-            event_type_str = event_type.value if isinstance(event_type, Enum) else str(event_type)
-            event_id = f"{self.id_prefix}{generate_random_hex(6)}"
-
-            insert_stmts.append(
-                {
-                    "id": event_id,
-                    "tenant_id": tid_str,
-                    "idempotency_key": event.get("idempotency_key")
-                    or generate_id(SystemIdPrefix.GENERIC),
-                    "event_type": event_type_str,
-                    "payload": event.get("payload", {}),
-                    "status": OutboxStatus.PENDING,
-                }
-            )
-            event_ids.append(event_id)
-
-        if insert_stmts:
-            stmt = pg_insert(self.model_class).values(insert_stmts)
-            stmt = stmt.on_conflict_do_nothing(index_elements=["idempotency_key"])
-            await self.session.execute(stmt)
-
-        return event_ids
 
 
 class SqlAlchemyControlPlaneOutboxRepository(
-    SqlAlchemyOutboxRepositoryMixin, GlobalSqlAlchemyRepository, ControlPlaneOutboxRepositoryPort
+    GlobalSqlAlchemyRepository, ControlPlaneOutboxRepositoryPort
 ):
     """
     Outbox repository for the Control Plane (Global DB).
-    Writes provisioning events (AS2_PARTNER_CREATED, etc.) that are later
-    polled by the Provisioning Worker to replicate config to tenant shards.
+    Provides idempotency reservation management and lookup for provisioning commands;
+    domain events are persisted atomically via `GlobalSqlAlchemyRepository._drain_events`.
     """
 
     def __init__(
@@ -112,56 +31,8 @@ class SqlAlchemyControlPlaneOutboxRepository(
     ) -> None:
         super().__init__(session)
         self.model_class = model_class
-        self.id_prefix = "edi_cobevt_"
-
-    async def publish_outbox_event(
-        self,
-        event: ProvisioningEvent,
-        idempotency_key: str | None = None,
-    ) -> str:
-
-        serialized_event = serialize_domain_event(event)
-        if idempotency_key:
-            result = await self.session.execute(
-                select(self.model_class).where(
-                    self.model_class.idempotency_key == idempotency_key,
-                    self.model_class.status == OutboxStatus.RESERVED,
-                )
-            )
-            reservation = result.scalar_one_or_none()
-            if reservation is not None:
-                event_type_val = (
-                    event.event_type.value
-                    if hasattr(event.event_type, "value")
-                    else event.event_type
-                )
-
-                # We know reservation is an instance of our outbox model class
-                reservation.event_type = str(event_type_val)
-                current_payload = reservation.payload or {}
-
-                # Check if current_payload is a dict to satisfy type checking before unpacking
-                if isinstance(current_payload, dict):
-                    reservation.payload = {**current_payload, **serialized_event}
-                else:
-                    reservation.payload = serialized_event
-
-                reservation.status = OutboxStatus.PENDING
-                await self.flush()
-                return str(reservation.id)
-
-        event_id = await self._publish_record(
-            tenant_id=event.tenant_id,
-            event_type=str(
-                event.event_type.value if hasattr(event.event_type, "value") else event.event_type
-            ),
-            payload=serialized_event,
-            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
-        )
-        return event_id
 
     async def get_event_by_idempotency_key(self, idempotency_key: str) -> OutboxEvent | None:
-
         stmt = select(self.model_class).where(self.model_class.idempotency_key == idempotency_key)
         res = await self.session.execute(stmt)
         db_model = res.scalar_one_or_none()
@@ -179,7 +50,6 @@ class SqlAlchemyControlPlaneOutboxRepository(
     async def create_reservation(
         self, tenant_id: str, idempotency_key: str, fingerprint: str
     ) -> None:
-
         insert_stmt = insert(self.model_class).values(
             id=f"reservation_{idempotency_key}",
             tenant_id=tenant_id,
@@ -195,37 +65,3 @@ class SqlAlchemyControlPlaneOutboxRepository(
                 await self.flush()
         except DuplicateEntityError as e:
             raise IdempotencyConflictError() from e
-
-
-class SqlAlchemyDataPlaneOutboxRepository(
-    TenantSqlAlchemyRepository, DataPlaneOutboxRepositoryPort
-):
-    """
-    Outbox repository for the Data Plane (Tenant Shard).
-    Writes pipeline events (TRANSFORMATION_REQUESTED, DELIVERY_REQUESTED, etc.) consumed
-    by the Sync-Dispatch mechanism — lightweight INSERT only, no sweeper columns.
-    """
-
-    def __init__(self, session: TenantSession) -> None:
-        super().__init__(session)
-        self.id_prefix = DomainIdPrefix.EDI_DP_OUTBOX
-
-    async def publish_outbox_event(
-        self,
-        tenant_id: str,
-        event_type: str,
-        payload: dict[str, JsonValue],
-        idempotency_key: str | None = None,
-    ) -> str:
-        event_id = f"{self.id_prefix}{generate_random_hex(6)}"
-        record = DataPlaneOutbox(
-            id=event_id,
-            tenant_id=tenant_id,
-            idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
-            event_type=event_type.value if isinstance(event_type, Enum) else str(event_type),
-            payload=payload,
-            created_at=datetime.now(UTC),
-        )
-        self.session.add(record)
-        await self.session.flush()
-        return event_id

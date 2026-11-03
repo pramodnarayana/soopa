@@ -10,6 +10,18 @@ from identity.domain.api_token import ApiToken
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 
 
+def _normalize_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _normalize_optional_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return _normalize_utc(value)
+
+
 class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -22,11 +34,11 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
             name=orm_model.name,
             client_id=orm_model.client_id,
             secret_hash=orm_model.secret_hash,
-            last_used_at=orm_model.last_used_at,
-            expires_at=orm_model.expires_at,
+            last_used_at=_normalize_optional_utc(orm_model.last_used_at),
+            expires_at=_normalize_optional_utc(orm_model.expires_at),
             active=orm_model.active,
-            created_at=orm_model.created_at,
-            updated_at=orm_model.updated_at,
+            created_at=_normalize_utc(orm_model.created_at),
+            updated_at=_normalize_utc(orm_model.updated_at),
         )
 
     @staticmethod
@@ -37,20 +49,20 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
             name=domain_model.name,
             client_id=domain_model.client_id,
             secret_hash=domain_model.secret_hash,
-            last_used_at=domain_model.last_used_at,
-            expires_at=domain_model.expires_at,
+            last_used_at=_normalize_optional_utc(domain_model.last_used_at),
+            expires_at=_normalize_optional_utc(domain_model.expires_at),
             active=domain_model.active,
-            created_at=domain_model.created_at,
-            updated_at=domain_model.updated_at,
+            created_at=_normalize_utc(domain_model.created_at),
+            updated_at=_normalize_utc(domain_model.updated_at),
         )
 
     @staticmethod
     def _update_record_from_domain(orm_model: ApiTokenORM, domain_model: ApiToken) -> None:
         orm_model.name = domain_model.name
-        orm_model.last_used_at = domain_model.last_used_at
-        orm_model.expires_at = domain_model.expires_at
+        orm_model.last_used_at = _normalize_optional_utc(domain_model.last_used_at)
+        orm_model.expires_at = _normalize_optional_utc(domain_model.expires_at)
         orm_model.active = domain_model.active
-        orm_model.updated_at = domain_model.updated_at
+        orm_model.updated_at = _normalize_utc(domain_model.updated_at)
 
     async def get_all_by_tenant(self, tenant_id: str) -> list[ApiToken]:
         result = await self.session.execute(
@@ -100,14 +112,16 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         )
         return cast(CursorResult[tuple[()]], result).rowcount > 0
 
-    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
-        now = datetime.now(UTC)
+    async def get_by_client_id(
+        self, client_id: str, now: datetime | None = None
+    ) -> ApiToken | None:
+        effective_now = _normalize_utc(now) if now is not None else datetime.now(UTC)
         result = await self.session.execute(
             select(ApiTokenORM).where(
                 ApiTokenORM.client_id == client_id,
                 ApiTokenORM.active.is_(True),
                 ApiTokenORM.deleted_at.is_(None),
-                or_(ApiTokenORM.expires_at.is_(None), ApiTokenORM.expires_at > now),
+                or_(ApiTokenORM.expires_at.is_(None), ApiTokenORM.expires_at > effective_now),
             )
         )
         orm_model = result.scalar_one_or_none()

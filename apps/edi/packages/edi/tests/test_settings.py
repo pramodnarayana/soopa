@@ -1,8 +1,8 @@
 import typing
 
+from identity import PlatformIdentitySettings
 from pydantic import Field
 from seedwork.infra.config import load_settings_safely
-from seedwork.infra.config_models import PlatformIdentitySettings
 
 from edi.config.models import (
     CommonSettings,

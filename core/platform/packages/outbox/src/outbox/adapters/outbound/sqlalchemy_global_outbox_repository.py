@@ -29,7 +29,7 @@ class SqlAlchemyGlobalOutboxRepository(
 ):
     """
     Generic SQLAlchemy 2.0 ORM Outbox repository for a Bounded Context's Global DB outbox table
-    (e.g. `ip.outbox`, `notifications.notification_outbox`). Zero raw SQL `text()` queries.
+    (e.g. `identity.outbox`, `notifications.notification_outbox`). Zero raw SQL `text()` queries.
     """
 
     _SWEEP_BATCH_SIZE: int = 5000

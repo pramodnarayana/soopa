@@ -3,12 +3,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.domain.constants import EdiConstants
+from edi.domain.enums import EdiOutboxSource
+from outbox.adapters.outbound.sqlalchemy_sharded_outbox_repository import (
+    SqlAlchemyShardedOutboxRepository,
+)
 from outbox.domain.constants import OutboxStatus
 from sqlalchemy import select
-
-from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_sweeper_repository import (
-    SqlAlchemyEdiDataPlaneOutboxSweeperRepository,
-)
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
@@ -16,12 +17,18 @@ pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 @pytest.fixture
 async def sweeper_repo(
     db_router: DatabaseRouterPort,
-) -> SqlAlchemyEdiDataPlaneOutboxSweeperRepository:
-    return SqlAlchemyEdiDataPlaneOutboxSweeperRepository(db_router)
+) -> SqlAlchemyShardedOutboxRepository:
+    return SqlAlchemyShardedOutboxRepository(
+        db_router=db_router,
+        model_cls=DataPlaneOutbox,
+        app_slug=EdiConstants.EDI_APP_SLUG.value,
+        source=EdiOutboxSource.EDI_DATA_PLANE.value,
+        min_pending_age_seconds=60,
+    )
 
 
 async def test_sweep_stuck_events(
-    sweeper_repo: SqlAlchemyEdiDataPlaneOutboxSweeperRepository,
+    sweeper_repo: SqlAlchemyShardedOutboxRepository,
     db_router: DatabaseRouterPort,
 ) -> None:
     tenant_id = "test_tenant_sweep"

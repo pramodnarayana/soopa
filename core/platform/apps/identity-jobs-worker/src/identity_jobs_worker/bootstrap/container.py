@@ -1,16 +1,17 @@
 import structlog
+from database.models.identity import IdentityOutbox
 from database.provider import DatabaseProvider
-from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
-    SqlAlchemyIdentityOutboxCleanupRepository,
+from identity.domain.constants import IdentityJobName, IdentityOutboxSource
+from outbox.adapters.inbound.notify_outbox_relay import NotifyOutboxRelay
+from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
+    SqlAlchemyGlobalOutboxRepository,
 )
-from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
-    PostgresIdentityOutboxRepository,
-)
-from identity.domain.constants import IdentityJobName
-from outbox.adapters.inbound.postgres_outbox_relay import PostgresOutboxRelay
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
+from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from pubsub.aws.aws_sns_publisher import AwsSnsPublisher
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
@@ -41,39 +42,45 @@ class WorkerContainer:
         self.sqs_jobs_queue_url = settings.sqs_identity_jobs_queue_url
         self.aws_region = settings.aws_region
 
-        self.outbox_relay: PostgresOutboxRelay | None = None
+        self.outbox_relay: NotifyOutboxRelay | None = None
         self.jobs_consumer: SqsConsumerManager | None = None
         self.sweeper_job_handler: IdentityOutboxSweeperJobHandler | None = None
         self.outbox_cleanup_job_handler: IdentityOutboxCleanupJobHandler | None = None
 
     def wire(self) -> None:
-        outbox_repo = PostgresIdentityOutboxRepository(self.session_factory)
+        outbox_repo = SqlAlchemyGlobalOutboxRepository(
+            session_factory=self.session_factory,
+            model_cls=IdentityOutbox,
+            source=IdentityOutboxSource.IDENTITY.value,
+        )
         outbox_pub = AwsSnsPublisher(
             topic_arn=self.sns_identity_events_topic_arn,
             endpoint_url=self.aws_endpoint_url,
         )
-        self._wire_scheduled_jobs(outbox_repo, outbox_pub)
+        self._wire_scheduled_jobs(outbox_repo, outbox_repo, outbox_pub)
         self._wire_outbox_relay(outbox_repo, outbox_pub)
         self._wire_jobs_consumer()
 
     def _wire_scheduled_jobs(
-        self, outbox_repo: PostgresIdentityOutboxRepository, outbox_pub: AwsSnsPublisher
+        self,
+        outbox_repo: OutboxRepositoryPort,
+        outbox_cleanup_repo: OutboxCleanupRepositoryPort,
+        outbox_pub: OutboxPublisherPort,
     ) -> None:
         sweeper_use_case = OutboxSweeperUseCase(outbox_repo, outbox_pub)
         self.sweeper_job_handler = IdentityOutboxSweeperJobHandler(sweeper_use_case)
 
-        outbox_cleanup_repo = SqlAlchemyIdentityOutboxCleanupRepository(self.session_factory)
         outbox_cleaner_use_case = OutboxCleanerUseCase(outbox_cleanup_repo)
         self.outbox_cleanup_job_handler = IdentityOutboxCleanupJobHandler(outbox_cleaner_use_case)
 
     def _wire_outbox_relay(
-        self, outbox_repo: PostgresIdentityOutboxRepository, outbox_pub: AwsSnsPublisher
+        self, outbox_repo: OutboxRepositoryPort, outbox_pub: OutboxPublisherPort
     ) -> None:
         outbox_processor = OutboxProcessorUseCase(
             repository=outbox_repo,
             publisher=outbox_pub,
         )
-        self.outbox_relay = PostgresOutboxRelay(
+        self.outbox_relay = NotifyOutboxRelay(
             processor=outbox_processor,
             database_url=self.database_url,
             listen_channel="identity_outbox_wakeup",

@@ -58,39 +58,49 @@ class TransactionTypeResolver:
         return TransactionTypeResolver._extract_from_dict(first)
 
     @staticmethod
-    def _extract_from_dict(payload_dict: Mapping[str, object]) -> str | None:  # noqa: C901
-        """Extract from a single payload dict using the ordered cascade."""
+    def _resolve_heading_dict(payload_dict: Mapping[str, object]) -> Mapping[str, object] | None:
+        heading = payload_dict.get("heading")
+        if isinstance(heading, dict):
+            return heading
+        interchange = payload_dict.get("interchange")
+        if not isinstance(interchange, dict):
+            return None
+        transaction_sets = interchange.get("transaction_sets")
+        if not isinstance(transaction_sets, list) or not transaction_sets:
+            return None
+        first_set = transaction_sets[0]
+        if not isinstance(first_set, dict):
+            return None
+        nested_heading = first_set.get("heading")
+        return nested_heading if isinstance(nested_heading, dict) else None
 
-        # Pattern 1: flat field
+    @staticmethod
+    def _extract_st_from_heading(heading: Mapping[str, object]) -> str | None:
+        for key, inner in heading.items():
+            if not key.startswith("transaction_set_header_ST"):
+                continue
+            if isinstance(inner, dict):
+                inner_val = inner.get("transaction_set_identifier_code") or inner.get(
+                    "transaction_set_identifier_code_01"
+                )
+                if isinstance(inner_val, str) and inner_val.strip():
+                    return inner_val.strip()
+            break
+        return None
+
+    @staticmethod
+    def _extract_from_dict(payload_dict: Mapping[str, object]) -> str | None:
+        """Extract from a single payload dict using the ordered cascade."""
         val = payload_dict.get("transaction_type")
         if isinstance(val, str) and val.strip():
             return val.strip()
 
-        # Pattern 2: heading-based EDI JSON structure
-        # Support both flat heading and Stedi's interchange > transaction_sets structure
-        heading = payload_dict.get("heading")
-        if not heading:
-            interchange = payload_dict.get("interchange")
-            if isinstance(interchange, dict):
-                transaction_sets = interchange.get("transaction_sets")
-                if isinstance(transaction_sets, list) and transaction_sets:
-                    first_set = transaction_sets[0]
-                    if isinstance(first_set, dict):
-                        heading = first_set.get("heading")
+        heading = TransactionTypeResolver._resolve_heading_dict(payload_dict)
+        if heading is not None:
+            from_heading = TransactionTypeResolver._extract_st_from_heading(heading)
+            if from_heading is not None:
+                return from_heading
 
-        if isinstance(heading, dict):
-            for key in heading:
-                if isinstance(key, str) and key.startswith("transaction_set_header_ST"):
-                    inner = heading[key]
-                    if isinstance(inner, dict):
-                        inner_val = inner.get("transaction_set_identifier_code") or inner.get(
-                            "transaction_set_identifier_code_01"
-                        )
-                        if isinstance(inner_val, str) and inner_val.strip():
-                            return inner_val.strip()
-                    break  # Only one ST header per transaction
-
-        # Pattern 3: raw ST segment shorthand
         st = payload_dict.get("ST")
         if isinstance(st, dict):
             st01 = st.get("ST01")

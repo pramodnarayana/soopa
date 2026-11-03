@@ -88,8 +88,8 @@ class _RecordingShardedRepo(SqlAlchemyShardedOutboxRepository[_DummyOutboxModel]
         super().__init__(
             router,
             model_cls=_DummyOutboxModel,
-            app_slug="ip",
-            source="ip",
+            app_slug="edi",
+            source="edi",
         )
         self.completed_calls: list[tuple[str, str, tuple[str, ...], str]] = []
         self.failed_calls: list[tuple[str, str, tuple[str, ...], str, str]] = []
@@ -136,8 +136,8 @@ class _StubRouter(DatabaseRouterPort):
         raise NotImplementedError
 
     async def get_all_shards(self, app_slug: str | None = None) -> list[tuple[str, str]]:
-        assert app_slug == "ip"
-        return [("ip_shard_1", "dsn://s1"), ("ip_shard_2", "dsn://s2")]
+        assert app_slug == "edi"
+        return [("edi_shard_1", "dsn://s1"), ("edi_shard_2", "dsn://s2")]
 
     async def close_all(self) -> None:
         return None
@@ -183,12 +183,12 @@ async def test_sharded_outbox_repository_is_stateless_and_fans_out_batches() -> 
 
     await repo.mark_completed_batch(["evt_1", "evt_2"], "worker_a")
     assert sorted(repo.completed_calls) == [
-        ("ip_shard_1", "dsn://s1", ("evt_1", "evt_2"), "worker_a"),
-        ("ip_shard_2", "dsn://s2", ("evt_1", "evt_2"), "worker_a"),
+        ("edi_shard_1", "dsn://s1", ("evt_1", "evt_2"), "worker_a"),
+        ("edi_shard_2", "dsn://s2", ("evt_1", "evt_2"), "worker_a"),
     ]
 
     await repo.mark_failed_batch(["evt_3"], "worker_a", "boom")
     assert sorted(repo.failed_calls) == [
-        ("ip_shard_1", "dsn://s1", ("evt_3",), "worker_a", "boom"),
-        ("ip_shard_2", "dsn://s2", ("evt_3",), "worker_a", "boom"),
+        ("edi_shard_1", "dsn://s1", ("evt_3",), "worker_a", "boom"),
+        ("edi_shard_2", "dsn://s2", ("evt_3",), "worker_a", "boom"),
     ]

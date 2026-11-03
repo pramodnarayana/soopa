@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 
 from identity.domain.api_token import ApiToken
 
@@ -23,5 +24,7 @@ class ApiTokenRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+    async def get_by_client_id(
+        self, client_id: str, now: datetime | None = None
+    ) -> ApiToken | None:
         pass

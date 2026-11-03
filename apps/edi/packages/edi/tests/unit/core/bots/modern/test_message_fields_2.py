@@ -2,8 +2,8 @@ import pytest
 
 from edi.core.bots.config.botsconfig import SFIELD, VALUE
 from edi.core.bots.domain.message import Message, MessageRootError
-from edi.core.bots.domain.models import create_field_definition, create_structure_node
 from edi.core.bots.domain.node import Node
+from edi.core.bots.domain.structure import create_field_definition, create_structure_node
 
 
 class FakeGrammarForMessage:

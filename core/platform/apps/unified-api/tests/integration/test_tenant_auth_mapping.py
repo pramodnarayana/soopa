@@ -3,28 +3,32 @@ import pytest
 pytestmark = pytest.mark.integration
 
 import datetime
-from typing import Any
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 import pytest
 from fastapi import Request
+from identity.domain.authorization import Capability
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import IdentityContext
-from identity.domain.models.authorization import Capability
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
-from ucp.domain.models.tenant import LifecycleStatus, Tenant
+from sqlalchemy.ext.asyncio import AsyncSession
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
+from ucp.domain.tenant import LifecycleStatus, Tenant
 
 from unified_api.adapters.inbound.http.guards.tenant_auth_guard import require_tenant_member
 
 
 @pytest.mark.asyncio
-async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> None:
+async def test_tenant_auth_mapping_resolves_idp_id(
+    db_session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+) -> None:
     async with db_session_factory() as session:
         # 1. Insert a fake tenant into the DB so the middleware can map it.
-        canonical_id = generate_id(DomainIdPrefix.TENANT.value)
+        canonical_id = generate_id(IdentityIdPrefix.TENANT.value)
         idp_id = generate_id("idp")
 
-        repo = TenantRepository(session)
+        repo = SqlAlchemyTenantRepository(session)
         unique_suffix = generate_random_hex(6)
         tenant = Tenant(
             id=canonical_id,
@@ -41,7 +45,7 @@ async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> N
 
         # 2. We create an IdentityContext exactly like Zitadel gives us natively.
         raw_identity = IdentityContext(
-            subject=generate_id(DomainIdPrefix.USER.value),
+            subject=generate_id(IdentityIdPrefix.USER.value),
             tenant_id=None,
             authorized_tenants={idp_id},
             tenant_mapping={idp_id: canonical_id},
@@ -53,8 +57,8 @@ async def test_tenant_auth_mapping_resolves_idp_id(db_session_factory: Any) -> N
         request = Request(scope={"type": "http", "state": {}})
         request.state.identity = raw_identity
 
-        def fake_tenant_repo_factory(session: Any) -> TenantRepository:
-            return TenantRepository(session)
+        def fake_tenant_repo_factory(db: AsyncSession) -> SqlAlchemyTenantRepository:
+            return SqlAlchemyTenantRepository(db)
 
         # The guard should successfully authorize and map the IdP ID to the Canonical ID
         identity = await require_tenant_member(

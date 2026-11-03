@@ -104,7 +104,8 @@ async def test_claim_next_jobs(test_session: AsyncSession) -> None:
     jobs = await repo.claim_next_jobs(worker_id="worker-1", limit=10, lock_lease_ms=5000)
 
     assert len(jobs) == 3
-    assert jobs[0].id == null_job_id
+    assert {jobs[0].id, jobs[1].id} == {job_1_id, job_2_id}
+    assert jobs[-1].id == null_job_id
     claimed_ids = {job.id for job in jobs}
     assert claimed_ids == {null_job_id, job_1_id, job_2_id}
 

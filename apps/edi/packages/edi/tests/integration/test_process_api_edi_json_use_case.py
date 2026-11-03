@@ -8,16 +8,16 @@ import json
 
 import pytest
 import pytest_asyncio
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.application.use_cases.process_api_edi_json_use_case import (
     ProcessApiEdiJsonCommand,
     ProcessApiEdiJsonUseCase,
 )
+from edi.bootstrap.container import create_edi_data_plane_uow
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
@@ -36,7 +36,7 @@ async def tenant_session(tenant_db_connection):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_success(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
+    uow = create_edi_data_plane_uow(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     tenant_id = generate_id(DomainIdPrefix.TENANT)
@@ -79,7 +79,7 @@ async def test_process_api_edi_json_success(tenant_session):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_heading(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
+    uow = create_edi_data_plane_uow(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     trace_id = await svc.process_api_edi_json(
@@ -108,7 +108,7 @@ async def test_process_api_edi_json_heading(tenant_session):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_st_segment(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
+    uow = create_edi_data_plane_uow(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     trace_id = await svc.process_api_edi_json(
@@ -131,7 +131,7 @@ async def test_process_api_edi_json_st_segment(tenant_session):
 
 @pytest.mark.asyncio
 async def test_process_api_edi_json_list_extraction(tenant_session):
-    uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, InMemoryStorageAdapter())
+    uow = create_edi_data_plane_uow(tenant_session, InMemoryStorageAdapter())
     svc = ProcessApiEdiJsonUseCase(uow, publisher=FakeOutboxPublisher())
 
     payload = [

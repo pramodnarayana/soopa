@@ -3,10 +3,11 @@ import json
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from identity.adapters.outbound.zitadel.client import ZitadelClient
+from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
 from identity_worker.config.settings import get_settings
 from pytest_httpserver import HTTPServer
-from werkzeug.wrappers import Response
+from shttp import HttpClient
+from werkzeug.wrappers import Request, Response
 
 
 def _machine_key_json() -> str:
@@ -35,15 +36,16 @@ async def test_client_authenticates_when_only_machine_key_is_configured(
     monkeypatch.setenv("IDENTITY_API_URL", httpserver.url_for("/"))
     get_settings.cache_clear()
 
-    def zitadel_token(request) -> Response:
+    def zitadel_token(_request: Request) -> Response:
         return Response(
             json.dumps({"access_token": "short-lived-token", "expires_in": 300}),
             status=200,
             content_type="application/json",
         )
 
-    def zitadel_search(request) -> Response:
+    def zitadel_search(request: Request) -> Response:
         assert request.headers["Authorization"] == "Bearer short-lived-token"
+        assert request.headers["Accept"] == "application/json"
         return Response(json.dumps({"result": []}), status=200, content_type="application/json")
 
     httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_handler(zitadel_token)
@@ -52,11 +54,18 @@ async def test_client_authenticates_when_only_machine_key_is_configured(
     )
 
     settings = get_settings()
-    client = ZitadelClient(
-        api_url=settings.zitadel_api_url, machine_key=settings.zitadel_machine_key
+    token_provider = ZitadelMachineTokenProvider(
+        api_url=settings.zitadel_api_url,
+        machine_key=settings.zitadel_machine_key,
+    )
+    client = HttpClient(
+        base_url=settings.zitadel_api_url,
+        token_provider=token_provider,
+        default_headers={"Accept": "application/json"},
+        allow_private_ips=True,
     )
     try:
-        response = await client.fetch_with_auth("/management/v1/orgs/_search", method="POST")
+        response = await client.post("/management/v1/orgs/_search")
     finally:
         await client.close()
         get_settings.cache_clear()

@@ -39,6 +39,8 @@ packages = ["src/notification_channel_worker"]
 
 [tool.mypy]
 strict = true
+plugins = ["pydantic.mypy"]
+disable_error_code = ["prop-decorator"]
 
 [[tool.mypy.overrides]]
 module = [

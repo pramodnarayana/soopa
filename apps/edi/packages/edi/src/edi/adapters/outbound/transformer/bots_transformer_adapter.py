@@ -1,0 +1,92 @@
+import asyncio
+
+from edi.adapters.outbound.transformer.domain.envelope.edifact import (
+    EdifactEnvelopeBuilder,
+)
+from edi.adapters.outbound.transformer.domain.envelope.x12 import X12EnvelopeBuilder
+from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
+from edi.adapters.outbound.transformer.infrastructure.adapters.bots_adapter import BotsEDIAdapter
+from edi.domain.routing.constants import WILDCARD_TRANSACTION_TYPE
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
+from edi.domain.transaction.enums import EdiStandard, EdiTransactionType
+from edi.domain.types import AstNode
+from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
+
+
+class BotsTransformerAdapter(TransformerPort):
+    """
+    Concrete implementation of TransformerPort using the BotsEDIAdapter from the transformer lib.
+    """
+
+    def __init__(self, adapter: BotsEDIAdapter | None = None) -> None:
+        self._adapter = adapter or BotsEDIAdapter()
+
+    async def transform_edi_to_json(
+        self, payload: bytes, standard: str, transaction_type: str
+    ) -> list[ParsedEdiMessage]:
+        """
+        Transforms EDI to JSON using the wrapped BOTS facade.
+        """
+        messagetype = (
+            EdiTransactionType.ENVELOPE.value
+            if not transaction_type or transaction_type == WILDCARD_TRANSACTION_TYPE
+            else transaction_type
+        )
+        parsed_payload = await self._adapter.transform(
+            payload, editype=standard.lower(), messagetype=messagetype
+        )
+        transactions = []
+        for txn in parsed_payload.transactions:
+            if (
+                not transaction_type
+                or transaction_type == WILDCARD_TRANSACTION_TYPE
+                or txn.transaction_type == transaction_type
+            ):
+                transactions.append(
+                    ParsedEdiMessage(
+                        transaction_type=txn.transaction_type,
+                        isa_sender_id=parsed_payload.sender_id,
+                        isa_receiver_id=parsed_payload.receiver_id,
+                        gs_sender_id=txn.gs_sender_id,
+                        gs_receiver_id=txn.gs_receiver_id,
+                        control_number=txn.control_number,
+                        payload=txn.data,
+                    )
+                )
+        return transactions
+
+    async def transform_json_to_edi(
+        self,
+        payload: AstNode | list[AstNode],
+        standard: str,
+        transaction_type: str,
+        edi_headers: EdiEnvelopeHeaders,
+    ) -> bytes:
+        """
+        Transforms JSON to EDI using the wrapped BOTS facade.
+        """
+        if isinstance(payload, dict) and (
+            "interchange_ISA" in payload or "interchange_UNB" in payload
+        ):
+            ast_dict: AstNode = payload
+        else:
+            if standard.lower() == EdiStandard.X12:
+                ast_dict = X12EnvelopeBuilder.build(edi_headers, payload)
+            elif standard.lower() == EdiStandard.EDIFACT:
+                ast_dict = EdifactEnvelopeBuilder.build(edi_headers, payload)
+            else:
+                raise TransformationError(
+                    message=f"Unsupported standard for envelope building: {standard}"
+                )
+
+        edi_str, errors = await asyncio.to_thread(
+            self._adapter.serialize_to_edi,
+            ast_dict,
+            standard=standard.lower(),
+        )
+
+        fatal_errors = [e for e in errors if not e.startswith("[W")]
+        if fatal_errors:
+            raise TransformationError(message="\n".join(fatal_errors), errors=fatal_errors)
+
+        return edi_str.encode("utf-8")

@@ -49,6 +49,12 @@
       "env_var": "SQS_EMAIL_CHANNEL_QUEUE_URL"
     },
     {
+      "name": "notifications",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_NOTIFICATION_QUEUE_URL"
+    },
+    {
       "name": "edi-config-sync-queue",
       "fifo": true,
       "dlq": true,
@@ -85,12 +91,6 @@
       "env_var": "SQS_DELIVER_QUEUE_URL",
       "dlq_env_var": "SQS_DELIVER_DLQ_URL",
       "max_receive_count": 3
-    },
-    {
-      "name": "edi-priority-notifications",
-      "fifo": true,
-      "dlq": true,
-      "env_var": "SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL"
     },
     {
       "name": "ip-orchestrator-realtime",

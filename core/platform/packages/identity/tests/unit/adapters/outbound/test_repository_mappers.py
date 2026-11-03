@@ -221,6 +221,14 @@ async def test_sqlalchemy_api_token_repository_get_by_client_id_excludes_expired
         await setup_session.commit()
 
         assert await repo.get_by_client_id("cli_expired_db") is None
+        # When evaluated against a past reference timestamp prior to expiry, SQL lookup returns the token
+        fetched_past = await repo.get_by_client_id("cli_expired_db", now=now - timedelta(minutes=5))
+        assert fetched_past is not None
+        assert fetched_past.id == expired.id
+        # When evaluated against a past reference timestamp prior to expiry, SQL lookup returns the token
+        fetched_past = await repo.get_by_client_id("cli_expired_db", now=now - timedelta(minutes=5))
+        assert fetched_past is not None
+        assert fetched_past.id == expired.id
         fetched_valid = await repo.get_by_client_id("cli_valid_db")
         assert fetched_valid is not None
         assert fetched_valid.id == valid.id

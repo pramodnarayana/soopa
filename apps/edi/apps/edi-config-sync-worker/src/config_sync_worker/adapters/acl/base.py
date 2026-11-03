@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import Any
+
+from seedwork.domain.types import JsonDict
 
 
 class EventTranslator(ABC):
@@ -9,7 +10,7 @@ class EventTranslator(ABC):
     """
 
     @abstractmethod
-    def translate(self, external_payload: dict[str, Any]) -> dict[str, Any]:
+    def translate(self, external_payload: JsonDict) -> JsonDict:
         """
         Translates an external event payload to an internal event payload.
 

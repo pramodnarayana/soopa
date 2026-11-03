@@ -1,13 +1,11 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
+from seedwork.domain.exceptions import Result
 
-from edi.domain.enums import EdiConnectionType, EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.domain.exceptions import EdiError
+from edi.domain.routing.enums import EdiConnectionType
+from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -31,41 +29,39 @@ class CreateOutboundRouteUseCase:
 
     async def execute(
         self, tenant_id: str, cmd: CreateOutboundRouteCmd, idempotency_key: str | None = None
-    ) -> OutboundRouteDomainModel:
+    ) -> Result[OutboundRoute, EdiError]:
         logger.info(
             "creating_outbound_route",
             trading_partner_id=cmd.trading_partner_id,
             tenant_id=tenant_id,
         )
-        route_id = OutboundRouteDomainModel.new_id()
 
-        aggregate = OutboundRouteDomainModel(
-            id=route_id,
+        create_res = OutboundRoute.create(
             tenant_id=tenant_id,
             trading_partner_id=cmd.trading_partner_id,
             name=cmd.name,
-            active=False,
-            created_at=datetime.now(UTC).replace(tzinfo=None),
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
             as2_partner_id=str(cmd.as2_partner_id) if cmd.as2_partner_id else None,
             sftp_partner_id=str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None,
             connection_type=cmd.connection_type,
+            idempotency_key=idempotency_key,
         )
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
+        if create_res.is_err:
+            domain_err = create_res.unwrap_err()
+            logger.error(
+                "outbound_route_create_validation_failed",
+                trading_partner_id=cmd.trading_partner_id,
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_outbound_route_created,
-                resource_id=route_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                error_code=domain_err.code,
+                reason=domain_err.message,
             )
-        )
+            return Result.fail(domain_err)
 
+        aggregate = create_res.unwrap()
         await self.uow.outbound_routes.save(aggregate)
 
         logger.info(
             "outbound_route_created",
-            route_id=route_id,
+            route_id=aggregate.id,
             tenant_id=tenant_id,
         )
-        return aggregate
+        return Result.ok(aggregate)

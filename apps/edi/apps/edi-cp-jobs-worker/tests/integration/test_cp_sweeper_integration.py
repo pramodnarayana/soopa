@@ -1,12 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from config_sync_worker.adapters.outbound.database.postgres_edi_control_plane_outbox_repository import (
-    PostgresEdiControlPlaneOutboxRepository,
-)
 from database.router import DatabaseRouterPort
-from edi.domain.enums import EdiEventType
+from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
+from edi.domain.enums import EdiEventType, EdiOutboxSource
 from edi.testing.factories.outbox import ControlPlaneOutboxBuilder
+from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
+    SqlAlchemyGlobalOutboxRepository,
+)
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from outbox.domain.constants import OutboxStatus
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
@@ -33,7 +34,11 @@ async def test_cp_sweeper_fetches_and_processes_events(db_router: DatabaseRouter
 
     # 2. Use InMemoryEventBus test infra
     event_bus = InMemoryEventBus()
-    repo = PostgresEdiControlPlaneOutboxRepository(db_router=db_router)
+    repo = SqlAlchemyGlobalOutboxRepository(
+        session_factory=db_router.global_session_scope,
+        model_cls=ControlPlaneOutbox,
+        source=EdiOutboxSource.EDI_CONTROL_PLANE.value,
+    )
 
     use_case = OutboxSweeperUseCase(repository=repo, publisher=event_bus)
 

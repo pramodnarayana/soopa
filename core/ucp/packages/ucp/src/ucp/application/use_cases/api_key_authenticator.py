@@ -58,7 +58,7 @@ async def authenticate_api_key(
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
     reference_now = _normalize_utc(now)
 
-    token_record = await token_repo.get_by_client_id(client_id)
+    token_record = await token_repo.get_by_client_id(client_id, now=reference_now)
     candidate_hash = token_record.secret_hash if token_record is not None else _DUMMY_SHA256_HEX
     digest_matches = hmac.compare_digest(candidate_hash, secret_hash)
     is_valid_token = (

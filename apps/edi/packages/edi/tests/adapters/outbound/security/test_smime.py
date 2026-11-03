@@ -8,7 +8,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 
 from edi.adapters.outbound.security.smime import sign_payload, verify_signature
-from edi.domain.enums import As2SignatureAlgorithm
+from edi.domain.partner.as2.enums import As2SignatureAlgorithm
 
 
 @pytest.fixture

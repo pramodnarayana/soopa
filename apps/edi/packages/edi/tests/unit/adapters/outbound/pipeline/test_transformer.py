@@ -1,8 +1,8 @@
 import pytest
 
-from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload, TransactionSet
-from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.adapters.outbound.transformer.bots_transformer_adapter import BotsTransformerAdapter
+from edi.adapters.outbound.transformer.domain.parsed_payload import ParsedEdiPayload, TransactionSet
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
 
 pytestmark = pytest.mark.asyncio
 

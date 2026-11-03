@@ -6,13 +6,14 @@ from identity_worker.application.use_cases.identity_sync_service import (
     IdentitySyncService,
     StateConflictError,
 )
-from identity_worker.ports.outbound.identity_provider_port import IdentityProviderPort
+from identity_worker.domain.exceptions import IdentityProviderPortError
 from identity_worker.ports.outbound.identity_sync_repository_port import (
     IdentitySyncRepositoryPort,
     IdentitySyncUnitOfWorkPort,
     SyncTenant,
     SyncUser,
 )
+from identity_worker.ports.outbound.organization_provider_port import OrganizationProviderPort
 from identity_worker.ports.outbound.user_identity_provider_port import UserIdentityProviderPort
 from seedwork import generate_id
 
@@ -20,12 +21,21 @@ pytestmark = [pytest.mark.asyncio]
 
 
 class FakeIdentitySyncRepository(IdentitySyncRepositoryPort):
-    def __init__(self, tenants: dict[str, SyncTenant], users: dict[str, SyncUser]):
+    def __init__(self, tenants: dict[str, SyncTenant], users: dict[str, SyncUser]) -> None:
         self.tenants = tenants
         self.users = users
 
     async def get_tenant(self, tenant_id: str) -> SyncTenant | None:
         return self.tenants.get(tenant_id)
+
+    async def update_tenant_idp_mapping(self, tenant_id: str, idp_tenant_id: str) -> None:
+        existing = self.tenants.get(tenant_id)
+        if existing is not None:
+            self.tenants[tenant_id] = SyncTenant(
+                id=existing.id,
+                name=existing.name,
+                idp_tenant_id=idp_tenant_id,
+            )
 
     async def get_user(self, user_id: str) -> SyncUser | None:
         return self.users.get(user_id)
@@ -39,10 +49,14 @@ class FakeIdentitySyncRepository(IdentitySyncRepositoryPort):
 
 
 class FakeIdentitySyncUnitOfWork(IdentitySyncUnitOfWorkPort):
-    def __init__(self, repo: FakeIdentitySyncRepository):
-        self.repo = repo
+    def __init__(self, repo: FakeIdentitySyncRepository) -> None:
+        self._repo = repo
         self.committed = False
         self.rolled_back = False
+
+    @property
+    def repo(self) -> FakeIdentitySyncRepository:
+        return self._repo
 
     async def __aenter__(self) -> "FakeIdentitySyncUnitOfWork":
         return self
@@ -57,12 +71,15 @@ class FakeIdentitySyncUnitOfWork(IdentitySyncUnitOfWorkPort):
         self.rolled_back = True
 
 
-class FakeIdentityProvider(IdentityProviderPort):
-    def __init__(self):
-        self.synced_tenants = set()
+class FakeOrganizationProvider(OrganizationProviderPort):
+    def __init__(self) -> None:
+        self.created_orgs: dict[str, str] = {}
+        self.grant_succeeded = True
 
-    async def sync_tenant(self, tenant_id: str) -> None:
-        self.synced_tenants.add(tenant_id)
+    async def create_organization(self, tenant_id: str, name: str) -> tuple[str, bool]:
+        org_id = f"idp_org_{tenant_id}"
+        self.created_orgs[tenant_id] = name
+        return org_id, self.grant_succeeded
 
     async def update_organization_name(self, org_id: str, name: str) -> None:
         pass
@@ -81,10 +98,10 @@ class FakeIdentityProvider(IdentityProviderPort):
 
 
 class FakeUserIdentityProvider(UserIdentityProviderPort):
-    def __init__(self):
-        self.users = {}
-        self.user_roles = {}
-        self.user_status = {}
+    def __init__(self) -> None:
+        self.users: dict[str, dict[str, str]] = {}
+        self.user_roles: dict[str, str] = {}
+        self.user_status: dict[str, str] = {}
         self.fail_role_assignment = False
 
     async def create_user(
@@ -137,20 +154,22 @@ class FakeUserIdentityProvider(UserIdentityProviderPort):
 
 
 @pytest.fixture
-def fakes():
-    return FakeIdentityProvider(), FakeUserIdentityProvider()
+def fakes() -> tuple[FakeOrganizationProvider, FakeUserIdentityProvider]:
+    return FakeOrganizationProvider(), FakeUserIdentityProvider()
 
 
 @pytest.fixture
-def test_data():
+def test_data() -> dict[str, object]:
     tenant_id = generate_id("id")
     idp_tenant_id = f"idp_org_{uuid.uuid4()}"
     unprovisioned_tenant_id = generate_id("id")
     user_id = generate_id("id")
 
     tenants = {
-        tenant_id: SyncTenant(id=tenant_id, idp_tenant_id=idp_tenant_id),
-        unprovisioned_tenant_id: SyncTenant(id=unprovisioned_tenant_id, idp_tenant_id=None),
+        tenant_id: SyncTenant(id=tenant_id, name="Provisioned Org", idp_tenant_id=idp_tenant_id),
+        unprovisioned_tenant_id: SyncTenant(
+            id=unprovisioned_tenant_id, name="Pending Org", idp_tenant_id=None
+        ),
     }
     users = {
         user_id: SyncUser(id=user_id, idp_user_id=None),
@@ -171,19 +190,45 @@ def uow_factory(test_data):
     return lambda: FakeIdentitySyncUnitOfWork(repo)
 
 
-async def test_handle_tenant_provisioned(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_tenant_provisioned(fakes, uow_factory, test_data) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
-    tenant_id = test_data["tenant_id"]
-    await service.handle_tenant_provisioned(tenant_id)
+    unprovisioned_id = test_data["unprovisioned_tenant_id"]
+    await service.handle_tenant_provisioned(unprovisioned_id)
 
-    assert tenant_id in idp.synced_tenants
+    assert org_idp.created_orgs[unprovisioned_id] == "Pending Org"
+    assert test_data["tenants"][unprovisioned_id].idp_tenant_id == f"idp_org_{unprovisioned_id}"
 
 
-async def test_handle_user_created(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_tenant_provisioned_idempotent_when_already_synced(
+    fakes, uow_factory, test_data
+) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
+
+    await service.handle_tenant_provisioned(test_data["tenant_id"])
+
+    assert org_idp.created_orgs == {}
+
+
+async def test_handle_tenant_provisioned_raises_when_project_grant_fails(
+    fakes, uow_factory, test_data
+) -> None:
+    org_idp, user_idp = fakes
+    org_idp.grant_succeeded = False
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
+
+    unprovisioned_id = test_data["unprovisioned_tenant_id"]
+    with pytest.raises(IdentityProviderPortError, match="project grant could not be assigned"):
+        await service.handle_tenant_provisioned(unprovisioned_id)
+
+    assert test_data["tenants"][unprovisioned_id].idp_tenant_id is None
+
+
+async def test_handle_user_created(fakes, uow_factory, test_data) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     user_id = test_data["user_id"]
     tenant_id = test_data["tenant_id"]
@@ -200,17 +245,14 @@ async def test_handle_user_created(fakes, uow_factory, test_data):
     assert len(user_idp.users) == 1
     created_idp_user_id = next(iter(user_idp.users.keys()))
 
-    # Assert fakes state
     assert user_idp.users[created_idp_user_id]["email"] == "john@test.com"
     assert user_idp.user_roles[created_idp_user_id] == "admin"
-
-    # Assert repository state updated with idp_user_id
     assert test_data["users"][user_id].idp_user_id == created_idp_user_id
 
 
-async def test_handle_user_created_unprovisioned_tenant(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_user_created_unprovisioned_tenant(fakes, uow_factory, test_data) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     user_id = test_data["user_id"]
     unprovisioned_tenant_id = test_data["unprovisioned_tenant_id"]
@@ -228,9 +270,9 @@ async def test_handle_user_created_unprovisioned_tenant(fakes, uow_factory, test
 
 async def test_handle_user_created_missing_local_user_has_no_external_side_effects(
     fakes, uow_factory, test_data
-):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     await service.handle_user_created(
         user_id=generate_id("id"),
@@ -245,9 +287,11 @@ async def test_handle_user_created_missing_local_user_has_no_external_side_effec
     assert user_idp.user_roles == {}
 
 
-async def test_handle_user_created_reconciles_existing_idp_user(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_user_created_reconciles_existing_idp_user(
+    fakes, uow_factory, test_data
+) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
     existing_idp_user_id = "idp_existing"
 
     test_data["users"][test_data["user_id"]] = SyncUser(
@@ -269,10 +313,10 @@ async def test_handle_user_created_reconciles_existing_idp_user(fakes, uow_facto
 
 async def test_handle_user_created_compensates_failed_role_assignment(
     fakes, uow_factory, test_data
-):
-    idp, user_idp = fakes
+) -> None:
+    org_idp, user_idp = fakes
     user_idp.fail_role_assignment = True
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     with pytest.raises(RuntimeError, match="role assignment failed"):
         await service.handle_user_created(
@@ -288,11 +332,10 @@ async def test_handle_user_created_compensates_failed_role_assignment(
     assert test_data["users"][test_data["user_id"]].idp_user_id is None
 
 
-async def test_handle_user_updated(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_user_updated(fakes, uow_factory, test_data) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
-    # Pre-populate fake user
     idp_user_id, _ = await user_idp.create_user(
         test_data["idp_tenant_id"], f"idp_{uuid.uuid4()}", "old@test.com", "Old", "Name"
     )
@@ -309,9 +352,9 @@ async def test_handle_user_updated(fakes, uow_factory, test_data):
     assert user_idp.user_roles[idp_user_id] == "member"
 
 
-async def test_handle_user_status_toggled(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_user_status_toggled(fakes, uow_factory, test_data) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     idp_user_id, _ = await user_idp.create_user(
         test_data["idp_tenant_id"], f"idp_{uuid.uuid4()}", "test@test.com", "F", "L"
@@ -325,9 +368,9 @@ async def test_handle_user_status_toggled(fakes, uow_factory, test_data):
     assert user_idp.user_status[idp_user_id] == "deactivate"
 
 
-async def test_handle_user_deleted(fakes, uow_factory, test_data):
-    idp, user_idp = fakes
-    service = IdentitySyncService(idp, user_idp, uow_factory)
+async def test_handle_user_deleted(fakes, uow_factory, test_data) -> None:
+    org_idp, user_idp = fakes
+    service = IdentitySyncService(org_idp, user_idp, uow_factory)
 
     idp_user_id, _ = await user_idp.create_user(
         test_data["idp_tenant_id"], f"idp_{uuid.uuid4()}", "test@test.com", "F", "L"

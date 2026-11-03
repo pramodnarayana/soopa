@@ -1,7 +1,12 @@
 import structlog
 from database.router import DatabaseRouter
-from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
-from edi.domain.enums import EdiJobName
+from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
+from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
+from edi.domain.constants import EdiConstants
+from edi.domain.enums import EdiJobName, EdiOutboxSource
+from outbox.adapters.outbound.sqlalchemy_sharded_outbox_repository import (
+    SqlAlchemyShardedOutboxRepository,
+)
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
@@ -17,12 +22,6 @@ from edi_dp_jobs_worker.adapters.inbound.jobs.edi_data_plane_outbox_sweeper_job 
 )
 from edi_dp_jobs_worker.adapters.inbound.jobs.edi_data_retention_cleanup_job import (
     EdiDataRetentionCleanupJobHandler,
-)
-from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_cleanup_repository import (
-    SqlAlchemyEdiDataPlaneOutboxCleanupRepository,
-)
-from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_plane_outbox_sweeper_repository import (
-    SqlAlchemyEdiDataPlaneOutboxSweeperRepository,
 )
 from edi_dp_jobs_worker.adapters.outbound.database.sqlalchemy_edi_data_retention_cleanup_repository import (
     SqlAlchemyEdiDataRetentionCleanupRepository,
@@ -55,9 +54,15 @@ class WorkerContainer:
         self._wire_jobs_consumers()
 
     def _wire_scheduled_jobs(self) -> None:
-        dp_cleanup_repo = SqlAlchemyEdiDataPlaneOutboxCleanupRepository(db_router=self.db_router)
+        sharded_outbox_repo = SqlAlchemyShardedOutboxRepository(
+            db_router=self.db_router,
+            model_cls=DataPlaneOutbox,
+            app_slug=EdiConstants.EDI_APP_SLUG.value,
+            source=EdiOutboxSource.EDI_DATA_PLANE.value,
+            min_pending_age_seconds=60,
+        )
         self.dp_cleanup_job_handler = EdiDataPlaneOutboxCleanupJobHandler(
-            OutboxCleanerUseCase(dp_cleanup_repo)
+            OutboxCleanerUseCase(sharded_outbox_repo)
         )
 
         retention_cleanup_repo = SqlAlchemyEdiDataRetentionCleanupRepository(
@@ -67,7 +72,6 @@ class WorkerContainer:
             EdiDataRetentionCleanupUseCase(retention_cleanup_repo)
         )
 
-        sweeper_repo = SqlAlchemyEdiDataPlaneOutboxSweeperRepository(db_router=self.db_router)
         publisher = create_edi_pipeline_publisher(
             compute_queue_url=self.settings.sqs.compute_queue_url,
             orchestrator_queue_url=self.settings.sqs.orchestrator_queue_url,
@@ -77,7 +81,7 @@ class WorkerContainer:
         )
 
         self.dp_sweeper_job_handler = EdiDataPlaneOutboxSweeperJobHandler(
-            OutboxSweeperUseCase(repository=sweeper_repo, publisher=publisher)
+            OutboxSweeperUseCase(repository=sharded_outbox_repo, publisher=publisher)
         )
 
     def _wire_jobs_consumers(self) -> None:

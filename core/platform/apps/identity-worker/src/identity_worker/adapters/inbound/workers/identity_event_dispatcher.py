@@ -1,6 +1,5 @@
 import inspect
 from collections.abc import Awaitable, Callable
-from typing import cast
 
 import structlog
 from seedwork.domain.types import JsonDict
@@ -17,16 +16,13 @@ class IdentityEventDispatcher:
     """
 
     def __init__(self) -> None:
-        # Route mapping: event_type -> list of async handlers
         self._handlers: dict[str, list[Callable[[IdentityEventMessage], Awaitable[None]]]] = {}
 
     def subscribe(
         self, event_type: str, handler: Callable[[IdentityEventMessage], Awaitable[None]]
     ) -> None:
         """Register a handler for a specific domain event type."""
-        if event_type not in self._handlers:
-            self._handlers[event_type] = []
-        self._handlers[event_type].append(handler)
+        self._handlers.setdefault(event_type, []).append(handler)
 
     async def dispatch_raw(self, payload: JsonDict) -> None:
         """Entrypoint called by the SqsConsumerManager."""
@@ -36,15 +32,18 @@ class IdentityEventDispatcher:
             logger.error("identity_event_dispatcher_missing_event_type", payload=payload)
             raise ValueError("Malformed message: missing event type")
 
+        raw_event_payload = payload.get("payload")
+        event_payload: JsonDict = raw_event_payload if isinstance(raw_event_payload, dict) else {}
+        raw_idem = payload.get("idempotencyKey") or payload.get("idempotency_key")
+        raw_tenant = payload.get("tenantId") or payload.get("tenant_id")
+
         event = IdentityEventMessage(
             id=str(payload.get("eventId") or payload.get("id") or ""),
             source=str(payload.get("source") or ""),
             event_type=event_type,
-            payload=cast(JsonDict, payload.get("payload", {})),
-            idempotency_key=cast(
-                str | None, payload.get("idempotencyKey") or payload.get("idempotency_key")
-            ),
-            tenant_id=cast(str | None, payload.get("tenantId") or payload.get("tenant_id")),
+            payload=event_payload,
+            idempotency_key=raw_idem if isinstance(raw_idem, str) else None,
+            tenant_id=raw_tenant if isinstance(raw_tenant, str) else None,
         )
         await self._dispatch(event)
 
@@ -54,18 +53,15 @@ class IdentityEventDispatcher:
             logger.debug("no_handlers_registered_for_event", event_type=event.event_type)
             return
 
-        # Execute all handlers for this event sequentially or concurrently.
-        # Running sequentially here to ensure if one fails, the message is not deleted.
         for handler in handlers:
             try:
                 result = handler(event)
                 if inspect.isawaitable(result):
                     await result
             except Exception:
-                handler_name = getattr(handler, "__name__", repr(handler))
                 logger.exception(
                     "handler_failed_processing_event",
                     event_type=event.event_type,
-                    handler_name=handler_name,
+                    handler_name=repr(handler),
                 )
-                raise  # Propagate to prevent message deletion
+                raise

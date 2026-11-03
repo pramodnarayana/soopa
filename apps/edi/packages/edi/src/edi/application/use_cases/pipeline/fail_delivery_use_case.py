@@ -5,8 +5,7 @@ from dataclasses import dataclass
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 
-from edi.domain.enums import MessageStatus
-from edi.domain.events import DeliveryFailed
+from edi.domain.transaction.enums import MessageStatus
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -41,10 +40,10 @@ class FailDeliveryUseCase:
         )
 
         async with self.uow_factory() as uow, uow:
-            edi_msg = await uow.transactions.get_edi_message(command.trace_id)
+            edi_msg = await uow.edi_messages.get_edi_message(command.trace_id)
             edi_json = None
             if not edi_msg:
-                edi_json = await uow.transactions.get_edi_json(command.trace_id)
+                edi_json = await uow.edi_jsons.get_edi_json(command.trace_id)
                 if not edi_json:
                     bound_logger.error("fail_delivery.record_not_found")
                     return
@@ -63,31 +62,25 @@ class FailDeliveryUseCase:
 
             bound_logger.info("fail_delivery.updating_state")
 
-            # Update the domain model (status, status_message, and appends trace event)
-            target.mark_delivery_failed(reason=command.reason)
-
-            # Drop an event into the outbox for notifications
-            domain_event = DeliveryFailed(
+            # Update the domain model (status, status_message, trace event, and DeliveryFailed outbox event)
+            target.fail_delivery(
+                reason=command.reason,
                 trace_id=command.trace_id,
                 tenant_id=command.tenant_id,
                 direction=target.direction.value if target.direction else "OUTBOUND",
-                failure_reason=command.reason,
-                error_code=target.error_code,
-                error_details=target.error_details,
             )
-            target.add_domain_event(domain_event)
 
             # Save changes and persist outbox / trace events
             if edi_msg:
-                await uow.transactions.update_edi_message_status(
+                await uow.edi_messages.update_edi_message_status(
                     trace_id=command.trace_id,
-                    status=edi_msg.status.value,
+                    status=edi_msg.status,
                 )
-                await uow.transactions.update_outbound_delivery_metadata(edi_msg)
-                envelopes = await uow.transactions.flush_events(edi_msg)
+                await uow.edi_messages.update_outbound_delivery_metadata(edi_msg)
+                envelopes = await uow.edi_messages.flush_events(edi_msg)
             else:
                 assert edi_json is not None
-                envelopes = await uow.transactions.save_json(edi_json)
+                envelopes = await uow.edi_jsons.save(edi_json)
 
             await uow.commit()
 

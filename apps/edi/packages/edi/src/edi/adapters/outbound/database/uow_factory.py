@@ -1,11 +1,10 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from typing import cast
+
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.router import DatabaseRouterPort
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.ports.outbound.storage_port import StoragePort
+from edi.ports.outbound.tenant_port import TenantPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 
@@ -13,13 +12,13 @@ from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 class SqlAlchemyDataPlaneUnitOfWorkFactory(DataPlaneUnitOfWorkFactoryPort):
     def __init__(
         self,
-        resolver: TenantResolver,
+        resolver: TenantPort,
         db_router: DatabaseRouterPort,
-        storage: StoragePort,
+        uow_builder: Callable[[AsyncSession], DataPlaneUnitOfWorkPort],
     ) -> None:
         self.resolver = resolver
         self.db_router = db_router
-        self.storage = storage
+        self._uow_builder = uow_builder
 
     @asynccontextmanager
     async def get_data_plane_uow(
@@ -27,14 +26,12 @@ class SqlAlchemyDataPlaneUnitOfWorkFactory(DataPlaneUnitOfWorkFactoryPort):
     ) -> AsyncGenerator[DataPlaneUnitOfWorkPort, None]:
         shard_name, shard_dsn = await self.resolver.resolve_shard(tenant_id)
 
-        # Get tenant session
         async_gen_tenant = self.db_router.get_tenant_session(tenant_id, shard_name, shard_dsn)
         tenant_session = await anext(async_gen_tenant)
 
-        # Provision Unit of Work
-        uow = SqlAlchemyDataPlaneUnitOfWork(tenant_session, self.storage)
+        uow = self._uow_builder(tenant_session)
         try:
             async with uow:
-                yield cast(DataPlaneUnitOfWorkPort, uow)
+                yield uow
         finally:
             await async_gen_tenant.aclose()

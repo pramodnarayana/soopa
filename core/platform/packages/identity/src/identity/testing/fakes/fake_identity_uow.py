@@ -1,3 +1,4 @@
+from datetime import datetime
 from types import TracebackType
 from typing import Self
 
@@ -129,12 +130,14 @@ class FakeApiTokenRepository(ApiTokenRepositoryPort):
             return True
         return False
 
-    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+    async def get_by_client_id(
+        self, client_id: str, now: datetime | None = None
+    ) -> ApiToken | None:
         return next(
             (
                 t
                 for t in self.tokens
-                if t.client_id == client_id and t.active and not t.is_expired()
+                if t.client_id == client_id and t.active and not t.is_expired(at=now)
             ),
             None,
         )

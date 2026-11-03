@@ -1,4 +1,4 @@
-from edi.core.bots.domain.models import (
+from edi.core.bots.domain.structure import (
     StructureNode,
     create_field_definition,
     create_structure_node,

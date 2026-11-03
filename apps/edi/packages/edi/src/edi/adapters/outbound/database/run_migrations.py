@@ -11,7 +11,8 @@ from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from database.provider import get_async_engine
+from database.interceptors import PostgresErrorCodes, extract_postgres_error_metadata
+from database.provider import DatabaseProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -21,7 +22,8 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
     Connect to the global DB and fetch all registered shard URLs.
     If none exist (e.g., initial bootstrap), fallback to defaults.
     """
-    engine = get_async_engine(global_url)
+    provider = DatabaseProvider.from_url(global_url, pool_size=2, max_overflow=2)
+    engine = provider.engine
     shard_map: dict[str, str] = {}
     edi_shard_ids: set[str] = set()
     try:
@@ -39,9 +41,11 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
                 edi_shard_ids = {str(row[0]).lower() for row in registry_res.fetchall()}
             except SQLAlchemyError as reg_err:
                 await conn.rollback()
-                sqlstate = getattr(reg_err, "orig", reg_err)
-                pgcode = getattr(sqlstate, "pgcode", None)
-                if pgcode in ("42P01", "3F000"):
+                pgcode, _ = extract_postgres_error_metadata(reg_err)
+                if pgcode in (
+                    PostgresErrorCodes.UNDEFINED_TABLE.value,
+                    PostgresErrorCodes.INVALID_SCHEMA_NAME.value,
+                ):
                     logger.info(
                         "ucp.shard_registry does not exist yet. Falling back to shard ID convention."
                     )
@@ -56,11 +60,11 @@ async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) ->
                 if shard_key in edi_shard_ids or shard_key.startswith("edi_"):
                     shard_map[shard_key] = dsn
     except Exception as e:
-        # Check for SQLSTATE codes indicating missing database objects:
-        # 42P01 = undefined_table, 3F000 = invalid_schema_name
-        sqlstate = getattr(e, "orig", e)
-        pgcode = getattr(sqlstate, "pgcode", None)
-        if pgcode in ("42P01", "3F000"):
+        pgcode, _ = extract_postgres_error_metadata(e)
+        if pgcode in (
+            PostgresErrorCodes.UNDEFINED_TABLE.value,
+            PostgresErrorCodes.INVALID_SCHEMA_NAME.value,
+        ):
             logger.info("ucp.database_shards does not exist yet. Falling back to default shards.")
         else:
             logger.exception("Failed to query database_shards from global DB")

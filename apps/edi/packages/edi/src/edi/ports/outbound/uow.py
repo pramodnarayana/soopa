@@ -11,12 +11,13 @@ from edi.ports.outbound.control_plane_outbox_repository_port import (
 )
 from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 from edi.ports.outbound.edi_header_repository import EdiHeaderRepositoryPort
+from edi.ports.outbound.edi_json_repository import EdiJsonRepositoryPort
+from edi.ports.outbound.edi_message_repository import EdiMessageRepositoryPort
 from edi.ports.outbound.inbound_route_repository import InboundRouteRepositoryPort
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 from edi.ports.outbound.settings_repository import SettingsRepositoryPort
 from edi.ports.outbound.sftp_repository import SFTPPartnerRepositoryPort
 from edi.ports.outbound.tenant_repository import TenantRepositoryPort
-from edi.ports.outbound.transaction_repository import TransactionRepositoryPort
 from edi.ports.outbound.webhook_repository import WebhookRepositoryPort
 
 
@@ -57,8 +58,9 @@ class DataPlaneUnitOfWorkPort(Protocol):
     Exposes abstract repository interfaces.
     """
 
-    api_gateway_transactions: ApiGatewayRepositoryPort
-    transactions: TransactionRepositoryPort
+    edi_messages: EdiMessageRepositoryPort
+    edi_jsons: EdiJsonRepositoryPort
+    api_gateway_receipts: ApiGatewayRepositoryPort
     traces: TraceRepositoryPort
     outbox: DataPlaneOutboxRepositoryPort
 

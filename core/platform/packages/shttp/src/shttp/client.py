@@ -152,13 +152,18 @@ class HttpClient:
         effective_policy = policy or self._response_policy
         effective_timeout = timeout if timeout is not None else httpx.USE_CLIENT_DEFAULT
 
-        merged_headers: dict[str, str] = dict(self._default_headers)
+        merged_headers = httpx.Headers()
+        for header_name, header_value in self._default_headers.items():
+            merged_headers[header_name] = header_value
         if self._token_provider is not None and self._auth_transport is not None:
             access_token = await self._token_provider.get_access_token(self._auth_transport)
             merged_headers["Authorization"] = f"Bearer {access_token}"
         if headers is not None:
-            merged_headers.update(headers)
-        effective_headers: Mapping[str, str] | None = merged_headers if merged_headers else None
+            for header_name, header_value in headers.items():
+                merged_headers[header_name] = header_value
+        effective_headers: httpx.Headers | None = (
+            merged_headers if len(merged_headers) > 0 else None
+        )
 
         with ssrf_safe_context(resolved_url, allow_private_ips=check_private):
             response = await self._backoff_handler.execute(

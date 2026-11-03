@@ -30,7 +30,7 @@ logger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Shell application lifespan context manager."""
-    settings = app.state.settings if "settings" in app.state._state else get_settings()
+    settings = app.state.settings or get_settings()
 
     db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
     db_provider = DatabaseProvider.from_url(db_url)
@@ -44,13 +44,11 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     app.state.db_router = db_router
 
-    ucp_container = app.state.ucp_container if "ucp_container" in app.state._state else None
+    ucp_container = app.state.ucp_container
     if ucp_container is not None:
         ucp_container.db_provider.override(providers.Object(db_provider))
 
-    api_modules: list[LaunchableApiModule] = (
-        list(app.state.api_modules) if "api_modules" in app.state._state else []
-    )
+    api_modules: list[LaunchableApiModule] = list(app.state.api_modules)
     started_modules: list[LaunchableApiModule] = []
 
     logger.info("shell_startup_ucp_initializing")

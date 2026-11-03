@@ -4,8 +4,8 @@ import pytest
 
 from edi.core.bots.config.botsconfig import SFIELD, VALUE
 from edi.core.bots.domain.exceptions import InMessageError
-from edi.core.bots.domain.models import create_field_definition, create_structure_node
 from edi.core.bots.domain.parsers.base import var
+from edi.core.bots.domain.structure import create_field_definition, create_structure_node
 
 
 class FakeParser(var):

@@ -1,8 +1,8 @@
 import pytest
 
 from edi.core.bots.domain.exceptions import MappingFormatError
-from edi.core.bots.domain.models import create_field_definition, create_structure_node
 from edi.core.bots.domain.node import Node
+from edi.core.bots.domain.structure import create_field_definition, create_structure_node
 
 
 def test_node_mpath_grammar_check():

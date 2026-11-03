@@ -2,14 +2,12 @@ import pytest
 from database.models.identity import Tenant
 from database.router import DatabaseRouterPort
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.adapters.outbound.database.tenant_uow_provider import TenantUowProvider
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
+from edi.bootstrap.container import create_edi_tenant_uow_provider
 from seedwork import generate_id
 from sqlalchemy import select, text
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
-
-from config_sync_worker.provision.settings import get_settings
 
 
 @pytest.mark.integration
@@ -49,13 +47,11 @@ async def test_tenant_uow_provider_success(test_db_router: DatabaseRouterPort) -
         await session.commit()
 
     # 2. Use Real components
-    real_resolver = TenantResolver(db_router=test_db_router, ttl_secs=300)
-    real_settings = get_settings()
+    real_resolver = SqlAlchemyTenantResolver(db_router=test_db_router, ttl_secs=300)
 
-    provider = TenantUowProvider(
+    provider = create_edi_tenant_uow_provider(
         resolver=real_resolver,
         db_router=test_db_router,
-        settings=real_settings,
         s3_bucket="fake-bucket",
         aws_endpoint=None,
     )

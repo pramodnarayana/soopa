@@ -1,71 +1,55 @@
 """
-Unit tests for RoutingResolutionUseCase.
+Unit tests for RoutingResolutionUseCase against single-aggregate repositories.
 
-Critical coverage: the null-EdiMessage paths that occur during the outbound replay
-race window (EdiJson committed, EdiMessage not yet created by the transform worker).
-These tests would have caught the AttributeError crash that caused the "Not Found"
-blank screen before it ever reached production.
+Covers:
+- Outbound replay race window (EdiMessage absent while EdiJson is committed)
+- Outbound resolution via OutboundRoute -> AS2Partner / SFTPPartner and business_metadata fallback
+- Inbound resolution via AS2 sender ID and InboundRoute -> SFTPPartner / Webhook
+- ResolvedRoutingContextDTO.enrich_message connection_type hydration
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pytest
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.domain.types import JsonDict
 
-from edi.application.dtos.transactions import EdiJsonDTO, EdiMessageDTO
-from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
-from edi.ports.outbound.routing_resolver_repository import RoutingResolverRepositoryPort
+from edi.application.responses import EdiJsonDTO, EdiMessageDTO
+from edi.application.use_cases.routing_resolution_use_case import (
+    ResolvedRoutingContextDTO,
+    ResolveRoutingContextQuery,
+    RoutingResolutionUseCase,
+)
+from edi.domain.partner.as2.partner import AS2Partner
+from edi.domain.partner.sftp.partner import SFTPPartner
+from edi.domain.routing.enums import ConnectionType
+from edi.domain.routing.inbound_route import InboundRoute
+from edi.domain.routing.outbound_route import OutboundRoute
+from edi.domain.routing.webhook import Webhook
+from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 
-# ---------------------------------------------------------------------------
-# Fake repository
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class FakeRoutingResolverRepository(RoutingResolverRepositoryPort):
-    outbound_route: tuple[str, str] | None = None
-    inbound_route: tuple[str, str] | None = None
-    as2_route: tuple[str, str] | None = None
-    business_metadata_name: str | None = None
-
-    async def resolve_outbound_route(self, trading_partner_id: str) -> tuple[str, str] | None:
-        return self.outbound_route
-
-    async def resolve_inbound_route(
-        self, sender_id: str, receiver_id: str, transaction_type: str | None
-    ) -> tuple[str, str] | None:
-        return self.inbound_route
-
-    async def resolve_as2_inbound(self, as2_sender_id: str) -> tuple[str, str] | None:
-        return self.as2_route
-
-    async def resolve_business_metadata(self, trading_partner_ids: list[str]) -> str | None:
-        return self.business_metadata_name
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+TENANT_ID = "tenant-001"
 
 
 def _make_edi_json(
     trace_id: str = "trace-001",
     direction: str = "OUTBOUND",
     trading_partner_id: str | None = "tp-001",
-    is_replay: bool = False,
-    original_trace_id: str | None = None,
-    business_metadata: dict | None = None,
+    transaction_type: str | None = "850",
+    business_metadata: JsonDict | None = None,
 ) -> EdiJsonDTO:
+    now = datetime.now(UTC)
     return EdiJsonDTO(
         id="json-001",
         trace_id=trace_id,
         direction=direction,
         trading_partner_id=trading_partner_id,
+        transaction_type=transaction_type,
         business_metadata=business_metadata,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+        created_at=now,
+        updated_at=now,
     )
 
 
@@ -74,191 +58,317 @@ def _make_edi_message(
     direction: str = "OUTBOUND",
     trading_partner_id: str | None = "tp-001",
     connection_type: str | None = "AS2",
-    is_replay: bool = False,
 ) -> EdiMessageDTO:
+    now = datetime.now(UTC)
     return EdiMessageDTO(
         id="msg-001",
         trace_id=trace_id,
         direction=direction,
         trading_partner_id=trading_partner_id,
         connection_type=connection_type,
-        created_at=datetime.now(UTC),
-        updated_at=datetime.now(UTC),
+        created_at=now,
+        updated_at=now,
     )
 
 
-# ---------------------------------------------------------------------------
-# Tests: outbound replay race window (msg=None)
-# ---------------------------------------------------------------------------
+def _seed_as2_partner(
+    uow: FakeControlPlaneUnitOfWork,
+    *,
+    partner_id: str,
+    as2_id: str,
+    name: str,
+) -> None:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    uow.as2_partners.partners[partner_id] = AS2Partner(
+        id=partner_id,
+        tenant_id=PLATFORM_TENANT_ID,
+        as2_id=as2_id,
+        name=name,
+        is_local=False,
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+def _seed_sftp_partner(
+    uow: FakeControlPlaneUnitOfWork,
+    *,
+    partner_id: str,
+    name: str,
+) -> None:
+    now = datetime.now(UTC).replace(tzinfo=None)
+    uow.sftp_partners.sftp_partners[partner_id] = SFTPPartner(
+        id=partner_id,
+        tenant_id=TENANT_ID,
+        name=name,
+        host="sftp.example.com",
+        port=22,
+        username="edi",
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 class TestResolveRoutingContextMsgAbsent:
-    """
-    Covers the outbound replay race window: EdiJson committed first;
-    EdiMessage created asynchronously by the transform worker.
-    The previous code crashed with AttributeError on msg.connection_type.
-    """
-
     @pytest.mark.asyncio
-    async def test_outbound_replay_race_window_returns_without_crash(self):
-        """
-        REGRESSION: Reproduces the exact scenario that caused the 'Not Found' blank screen.
-        msg=None, edi_json direction=OUTBOUND, no routing match.
-        Before fix: AttributeError: 'NoneType' object has no attribute 'connection_type'
-        After fix:  returns (None, None) gracefully.
-        """
-        repo = FakeRoutingResolverRepository(outbound_route=None)
-        use_case = RoutingResolutionUseCase(repo)
-        edi_json = _make_edi_json(
-            direction="OUTBOUND",
+    async def test_outbound_replay_race_window_returns_without_crash(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        use_case = RoutingResolutionUseCase(uow)
+        edi_json = _make_edi_json(direction="OUTBOUND")
+
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(
+                tenant_id=TENANT_ID,
+                edi_message=None,
+                edi_jsons=(edi_json,),
+            )
         )
 
-        result = await use_case.resolve_routing_context(msg=None, edi_jsons=[edi_json])
-
-        assert result == (None, None)
+        assert result == ResolvedRoutingContextDTO(trading_partner_name=None, connection_type=None)
 
     @pytest.mark.asyncio
-    async def test_outbound_replay_resolves_via_metadata_partner_id(self):
-        """
-        msg=None but edi_json has _routing.trading_partner_id in business_metadata.
-        Resolver must find the outbound route from the repository.
-        """
-        repo = FakeRoutingResolverRepository(outbound_route=("Acme Corp", "AS2"))
-        use_case = RoutingResolutionUseCase(repo)
+    async def test_outbound_replay_resolves_via_metadata_partner_id(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        _seed_as2_partner(uow, partner_id="as2-001", as2_id="ACME_AS2", name="Acme Corp")
+        uow.outbound_routes.outbound_routes["route-1"] = OutboundRoute(
+            id="route-1",
+            tenant_id=TENANT_ID,
+            trading_partner_id="tp-001",
+            name="Acme Outbound",
+            active=True,
+            as2_partner_id="as2-001",
+            created_at=now,
+            updated_at=now,
+        )
+
+        use_case = RoutingResolutionUseCase(uow)
         edi_json = _make_edi_json(
             direction="OUTBOUND",
             business_metadata={"_routing": {"trading_partner_id": "tp-001"}},
         )
 
-        name, conn_type = await use_case.resolve_routing_context(msg=None, edi_jsons=[edi_json])
-
-        assert name == "Acme Corp"
-        assert conn_type == "AS2"
-
-    @pytest.mark.asyncio
-    async def test_inbound_replay_race_window_returns_without_crash(self):
-        """
-        msg=None and direction=INBOUND.
-        Must not crash on msg.as2_sender_id or msg.sender_id.
-        """
-        repo = FakeRoutingResolverRepository(inbound_route=None)
-        use_case = RoutingResolutionUseCase(repo)
-        edi_json = _make_edi_json(
-            direction="INBOUND",
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(
+                tenant_id=TENANT_ID,
+                edi_message=None,
+                edi_jsons=(edi_json,),
+            )
         )
 
-        result = await use_case.resolve_routing_context(msg=None, edi_jsons=[edi_json])
-
-        assert result == (None, None)
+        assert result.trading_partner_name == "Acme Corp"
+        assert result.connection_type == ConnectionType.AS2.value
 
     @pytest.mark.asyncio
-    async def test_no_edi_jsons_and_no_msg_returns_none_tuple(self):
-        """
-        Edge case: both msg and edi_jsons absent. Must not crash.
-        """
-        repo = FakeRoutingResolverRepository()
-        use_case = RoutingResolutionUseCase(repo)
+    async def test_outbound_replay_falls_back_to_direct_partner_id_in_business_metadata(
+        self,
+    ) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        _seed_sftp_partner(uow, partner_id="sftp-direct", name="Direct SFTP Partner")
+        use_case = RoutingResolutionUseCase(uow)
+        edi_json = _make_edi_json(
+            direction="OUTBOUND",
+            business_metadata={"_routing": {"trading_partner_id": "sftp-direct"}},
+        )
 
-        result = await use_case.resolve_routing_context(msg=None, edi_jsons=[])
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(
+                tenant_id=TENANT_ID,
+                edi_message=None,
+                edi_jsons=(edi_json,),
+            )
+        )
 
-        assert result == (None, None)
+        assert result.trading_partner_name == "Direct SFTP Partner"
+        assert result.connection_type is None
 
+    @pytest.mark.asyncio
+    async def test_inbound_replay_race_window_returns_without_crash(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        use_case = RoutingResolutionUseCase(uow)
+        edi_json = _make_edi_json(direction="INBOUND")
 
-# ---------------------------------------------------------------------------
-# Tests: normal outbound with EdiMessage present
-# ---------------------------------------------------------------------------
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(
+                tenant_id=TENANT_ID,
+                edi_message=None,
+                edi_jsons=(edi_json,),
+            )
+        )
+
+        assert result == ResolvedRoutingContextDTO(trading_partner_name=None, connection_type=None)
+
+    @pytest.mark.asyncio
+    async def test_no_edi_jsons_and_no_msg_returns_empty_context(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        use_case = RoutingResolutionUseCase(uow)
+
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(tenant_id=TENANT_ID, edi_message=None, edi_jsons=())
+        )
+
+        assert result == ResolvedRoutingContextDTO(trading_partner_name=None, connection_type=None)
 
 
 class TestResolveOutboundRoutingWithMsg:
     @pytest.mark.asyncio
-    async def test_resolves_via_trading_partner_id(self):
-        repo = FakeRoutingResolverRepository(outbound_route=("Partner A", "SFTP"))
-        use_case = RoutingResolutionUseCase(repo)
-        msg = _make_edi_message(trading_partner_id="tp-001", connection_type="SFTP")
-
-        name, conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[])
-
-        assert name == "Partner A"
-        assert conn_type == "SFTP"
-
-    @pytest.mark.asyncio
-    async def test_returns_connection_type_when_partner_not_found_in_routes(self):
-        repo = FakeRoutingResolverRepository(outbound_route=None)
-        use_case = RoutingResolutionUseCase(repo)
-        msg = _make_edi_message(trading_partner_id="tp-999", connection_type="AS2")
-
-        name, conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[])
-
-        assert name is None
-        assert conn_type == "AS2"
-
-    @pytest.mark.asyncio
-    async def test_is_replay_flag_does_not_affect_routing_resolution(self):
-        """
-        A replayed transaction with a full EdiMessage (retry_deliver path)
-        must resolve routing identically to a non-replayed transaction.
-        """
-        repo = FakeRoutingResolverRepository(outbound_route=("Partner B", "AS2"))
-        use_case = RoutingResolutionUseCase(repo)
-        msg = _make_edi_message(
+    async def test_resolves_via_trading_partner_id(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        _seed_sftp_partner(uow, partner_id="sftp-1", name="Partner A")
+        uow.outbound_routes.outbound_routes["route-sftp"] = OutboundRoute(
+            id="route-sftp",
+            tenant_id=TENANT_ID,
             trading_partner_id="tp-001",
+            name="Partner A Route",
+            active=True,
+            sftp_partner_id="sftp-1",
+            created_at=now,
+            updated_at=now,
         )
 
-        name, conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[])
+        use_case = RoutingResolutionUseCase(uow)
+        msg = _make_edi_message(trading_partner_id="tp-001", connection_type="UNKNOWN")
 
-        assert name == "Partner B"
-        assert conn_type == "AS2"
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(tenant_id=TENANT_ID, edi_message=msg, edi_jsons=())
+        )
+        enriched = result.enrich_message(msg)
 
+        assert result.trading_partner_name == "Partner A"
+        assert result.connection_type == ConnectionType.SFTP.value
+        assert enriched is not None
+        assert enriched.connection_type == "SFTP"
 
-# ---------------------------------------------------------------------------
-# Tests: normal inbound with EdiMessage present
-# ---------------------------------------------------------------------------
+    @pytest.mark.asyncio
+    async def test_returns_connection_type_when_partner_not_found_in_routes(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        use_case = RoutingResolutionUseCase(uow)
+        msg = _make_edi_message(trading_partner_id="tp-999", connection_type="AS2")
+
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(tenant_id=TENANT_ID, edi_message=msg, edi_jsons=())
+        )
+
+        assert result.trading_partner_name is None
+        assert result.connection_type == "AS2"
 
 
 class TestResolveInboundRoutingWithMsg:
     @pytest.mark.asyncio
-    async def test_resolves_via_as2_sender_id(self):
-        repo = FakeRoutingResolverRepository(as2_route=("AS2 Partner", "AS2"))
-        use_case = RoutingResolutionUseCase(repo)
+    async def test_resolves_via_as2_sender_id(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        _seed_as2_partner(uow, partner_id="as2-in", as2_id="SENDER_AS2_ID", name="AS2 Partner")
+        use_case = RoutingResolutionUseCase(uow)
+        now = datetime.now(UTC)
         msg = EdiMessageDTO(
             id="msg-001",
             trace_id="trace-001",
             direction="INBOUND",
             connection_type="AS2",
             as2_sender_id="SENDER_AS2_ID",
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=now,
+            updated_at=now,
         )
 
-        name, conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[])
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(tenant_id=TENANT_ID, edi_message=msg, edi_jsons=())
+        )
 
-        assert name == "AS2 Partner"
-        assert conn_type == "AS2"
+        assert result.trading_partner_name == "AS2 Partner"
+        assert result.connection_type == "AS2"
 
     @pytest.mark.asyncio
-    async def test_resolves_via_inbound_route_when_as2_absent(self):
-        repo = FakeRoutingResolverRepository(as2_route=None, inbound_route=("SFTP Partner", "SFTP"))
-        use_case = RoutingResolutionUseCase(repo)
-        msg = EdiMessageDTO(
+    async def test_resolves_via_inbound_route_sftp_and_webhook(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        _seed_sftp_partner(uow, partner_id="sftp-in", name="SFTP Partner")
+        uow.inbound_routes.inbound_routes["in-route-1"] = InboundRoute(
+            id="in-route-1",
+            tenant_id=TENANT_ID,
+            name="Inbound SFTP",
+            isa_sender_id="SENDER-01",
+            isa_receiver_id="RECEIVER-01",
+            transaction_type="850",
+            sftp_partner_id="sftp-in",
+            active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        uow.webhooks.webhooks["wh-1"] = Webhook(
+            id="wh-1",
+            tenant_id=TENANT_ID,
+            name="ERP Hook",
+            url="https://erp.example.com/edi",
+            active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        uow.inbound_routes.inbound_routes["in-route-wh"] = InboundRoute(
+            id="in-route-wh",
+            tenant_id=TENANT_ID,
+            name="Inbound Webhook",
+            isa_sender_id="SENDER-WH",
+            isa_receiver_id="RECEIVER-WH",
+            transaction_type="810",
+            webhook_id="wh-1",
+            active=True,
+            created_at=now,
+            updated_at=now,
+        )
+
+        use_case = RoutingResolutionUseCase(uow)
+        ts = datetime.now(UTC)
+        sftp_msg = EdiMessageDTO(
             id="msg-001",
             trace_id="trace-001",
             direction="INBOUND",
             connection_type="SFTP",
             sender_id="SENDER-01",
             receiver_id="RECEIVER-01",
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=ts,
+            updated_at=ts,
         )
-        edi_json = _make_edi_json(direction="INBOUND", trading_partner_id=None)
+        edi_json = _make_edi_json(
+            direction="INBOUND", trading_partner_id=None, transaction_type="850"
+        )
+        sftp_result = await use_case.execute(
+            ResolveRoutingContextQuery(
+                tenant_id=TENANT_ID,
+                edi_message=sftp_msg,
+                edi_jsons=(edi_json,),
+            )
+        )
+        assert sftp_result.trading_partner_name == "SFTP Partner"
+        assert sftp_result.connection_type == "SFTP"
 
-        name, _conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[edi_json])
-
-        assert name == "SFTP Partner"
+        wh_msg = EdiMessageDTO(
+            id="msg-002",
+            trace_id="trace-002",
+            direction="INBOUND",
+            connection_type="UNKNOWN",
+            sender_id="SENDER-WH",
+            receiver_id="RECEIVER-WH",
+            transaction_type="810",
+            created_at=ts,
+            updated_at=ts,
+        )
+        wh_result = await use_case.execute(
+            ResolveRoutingContextQuery(tenant_id=TENANT_ID, edi_message=wh_msg, edi_jsons=())
+        )
+        assert wh_result.trading_partner_name == "https://erp.example.com/edi"
+        assert wh_result.connection_type == "WEBHOOK"
+        enriched_wh = wh_result.enrich_message(wh_msg)
+        assert enriched_wh is not None
+        assert enriched_wh.connection_type == "WEBHOOK"
 
     @pytest.mark.asyncio
-    async def test_returns_none_name_and_connection_type_when_no_route_found(self):
-        repo = FakeRoutingResolverRepository(as2_route=None, inbound_route=None)
-        use_case = RoutingResolutionUseCase(repo)
+    async def test_returns_none_name_and_connection_type_when_no_route_found(self) -> None:
+        uow = FakeControlPlaneUnitOfWork()
+        use_case = RoutingResolutionUseCase(uow)
+        now = datetime.now(UTC)
         msg = EdiMessageDTO(
             id="msg-001",
             trace_id="trace-001",
@@ -266,11 +376,13 @@ class TestResolveInboundRoutingWithMsg:
             connection_type="SFTP",
             sender_id="S",
             receiver_id="R",
-            created_at=datetime.now(UTC),
-            updated_at=datetime.now(UTC),
+            created_at=now,
+            updated_at=now,
         )
 
-        name, conn_type = await use_case.resolve_routing_context(msg=msg, edi_jsons=[])
+        result = await use_case.execute(
+            ResolveRoutingContextQuery(tenant_id=TENANT_ID, edi_message=msg, edi_jsons=())
+        )
 
-        assert name is None
-        assert conn_type == "SFTP"
+        assert result.trading_partner_name is None
+        assert result.connection_type == "SFTP"

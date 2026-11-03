@@ -1,21 +1,22 @@
-import dataclasses
-from typing import Any
+from dataclasses import dataclass
 
 import structlog
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import UNSET, UnsetType
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
 
-from edi.domain.enums import EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.exceptions import PartnerNotFoundError
-from edi.domain.models.as2 import AS2PartnerDomainModel
+from edi.domain.exceptions import (
+    EdiError,
+    PartnerAlreadyExistsEdiError,
+    PartnerAlreadyExistsError,
+    PartnerNotFoundEdiError,
+)
+from edi.domain.partner.as2.partner import AS2Partner
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclass(frozen=True)
 class UpdateAS2TradingPartnerCmd:
     name: str | UnsetType = UNSET
     as2_id: str | UnsetType = UNSET
@@ -28,9 +29,7 @@ class UpdateAS2TradingPartnerCmd:
 
 
 class UpdateAS2PartnerUseCase:
-    """
-    Use Case for updating an existing AS2 Trading Partner.
-    """
+    """Use Case for updating an existing AS2 Trading Partner."""
 
     def __init__(self, uow: ControlPlaneUnitOfWorkPort) -> None:
         self.uow = uow
@@ -41,67 +40,63 @@ class UpdateAS2PartnerUseCase:
         partner_id: str,
         cmd: UpdateAS2TradingPartnerCmd,
         idempotency_key: str | None = None,
-    ) -> AS2PartnerDomainModel:
+    ) -> Result[AS2Partner, EdiError]:
         logger.info(
             "update_as2_partner_started",
             id=partner_id,
             tenant_id=tenant_id,
-            cmd_fields=dataclasses.asdict(cmd),
         )
         aggregate = await self.uow.as2_partners.get_as2_partner(tenant_id, partner_id)
         if not aggregate:
-            raise PartnerNotFoundError(partner_id, tenant_id)
-
-        updated_fields: dict[str, Any] = {}
-
-        if not isinstance(cmd.name, UnsetType):
-            aggregate.name = cmd.name
-            updated_fields["name"] = cmd.name
-        if not isinstance(cmd.as2_id, UnsetType):
-            aggregate.as2_id = cmd.as2_id
-            updated_fields["as2_id"] = cmd.as2_id
-        if not isinstance(cmd.is_local, UnsetType):
-            aggregate.is_local = cmd.is_local
-            updated_fields["is_local"] = cmd.is_local
-        if not isinstance(cmd.url, UnsetType):
-            aggregate.url = cmd.url
-            updated_fields["url"] = cmd.url
-        if not isinstance(cmd.public_cert_pem, UnsetType):
-            aggregate.public_cert_pem = cmd.public_cert_pem
-            updated_fields["public_cert_pem"] = cmd.public_cert_pem
-        if not isinstance(cmd.public_cert_vault_ref, UnsetType):
-            aggregate.public_cert_vault_ref = cmd.public_cert_vault_ref
-            updated_fields["public_cert_vault_ref"] = cmd.public_cert_vault_ref
-        if not isinstance(cmd.private_key_vault_ref, UnsetType):
-            aggregate.private_key_vault_ref = cmd.private_key_vault_ref
-            updated_fields["private_key_vault_ref"] = cmd.private_key_vault_ref
-        if not isinstance(cmd.active, UnsetType):
-            aggregate.active = cmd.active
-            updated_fields["active"] = cmd.active
-
-        logger.info(
-            "update_as2_partner_fields_resolved",
-            id=partner_id,
-            tenant_id=tenant_id,
-            updated_fields=updated_fields,
-            final_active_status=aggregate.active,
-        )
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
+            not_found = PartnerNotFoundEdiError.for_id(partner_id, tenant_id)
+            logger.error(
+                "update_as2_partner_not_found",
+                id=partner_id,
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_as2_partner_updated,
-                resource_id=partner_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                error_code=not_found.code,
             )
-        )
+            return Result.fail(not_found)
 
-        await self.uow.as2_partners.save(aggregate)
+        upd_res = aggregate.update(
+            name=cmd.name,
+            as2_id=cmd.as2_id,
+            is_local=cmd.is_local,
+            url=cmd.url,
+            public_cert_pem=cmd.public_cert_pem,
+            public_cert_vault_ref=cmd.public_cert_vault_ref,
+            private_key_vault_ref=cmd.private_key_vault_ref,
+            active=cmd.active,
+            idempotency_key=idempotency_key,
+        )
+        if upd_res.is_err:
+            domain_err = upd_res.unwrap_err()
+            logger.error(
+                "update_as2_partner_validation_failed",
+                id=partner_id,
+                tenant_id=tenant_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
+            )
+            return Result.fail(domain_err)
+
+        try:
+            await self.uow.as2_partners.save(aggregate)
+        except PartnerAlreadyExistsError:
+            exists_err = PartnerAlreadyExistsEdiError.for_as2_id(aggregate.as2_id, tenant_id)
+            logger.error(
+                "update_as2_partner_conflict",
+                id=partner_id,
+                as2_id=aggregate.as2_id,
+                tenant_id=tenant_id,
+                error_code=exists_err.code,
+            )
+            return Result.fail(exists_err)
 
         logger.info(
             "update_as2_partner_completed",
             id=partner_id,
             tenant_id=tenant_id,
+            final_active_status=aggregate.active,
         )
 
-        return aggregate
+        return Result.ok(aggregate)

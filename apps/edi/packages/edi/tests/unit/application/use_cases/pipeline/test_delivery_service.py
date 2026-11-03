@@ -13,8 +13,9 @@ from edi.application.use_cases.pipeline.delivery_router_use_case import (
     DeliveryRouterUseCase,
 )
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
-from edi.domain.enums import EdiConnectionType, EdiDirection, MessageStatus
 from edi.domain.exceptions import RouteNotFoundError
+from edi.domain.routing.enums import EdiConnectionType, EdiDirection
+from edi.domain.transaction.enums import MessageStatus
 from edi.testing.fakes.pipeline_fakes import (
     FakeDataPlaneUnitOfWork,
     FakeHttpDeliveryAdapter,
@@ -57,7 +58,7 @@ async def test_delivery_service_inbound_webhook() -> None:
         "edi_data": "FAKE*EDI*DATA~",
         "status": MessageStatus.PENDING_DELIVERY,
     }
-    uow.api_gateway_transactions.api_gateway[trace_id] = {
+    uow.api_gateway_receipts.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "payload": {"metadata": {"foo": "bar"}, "transactions": [{"hello": "world"}]},
         "status": MessageStatus.PENDING_DELIVERY,

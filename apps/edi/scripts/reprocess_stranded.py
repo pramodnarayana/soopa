@@ -4,7 +4,7 @@ import structlog
 from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.config.models import get_worker_settings
-from edi.domain.enums import PipelineEventType
+from edi.domain.transaction.enums import PipelineEventType
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 from sqlalchemy import text

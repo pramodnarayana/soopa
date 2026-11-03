@@ -1,6 +1,6 @@
 import base64
 
-from edi.domain.models.as2 import AS2Message
+from edi.domain.partner.as2.messages import AS2Message
 
 """
 Layer 1 — Pure Domain Unit Tests: AS2 Protocol Domain Service.
@@ -12,7 +12,7 @@ Zero fakes required; fakes are not needed at this layer.
 
 import pytest
 
-from edi.domain.services.as2_protocol import (
+from edi.domain.partner.as2.protocol import (
     build_mdn,
     calculate_mic,
     generate_mdn,

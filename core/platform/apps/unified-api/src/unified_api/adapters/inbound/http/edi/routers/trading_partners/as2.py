@@ -1,11 +1,11 @@
-from typing import Any
-
 import structlog
 from edi.domain.exceptions import OrchestrationError
+from edi.ports.outbound.certificate_generator_port import CertificateGeneratorPort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, HTTPException
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from secret_store.ports.secret_store_port import SecretStorePort
+from seedwork.domain.types import JsonDict
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
@@ -14,22 +14,22 @@ from unified_api.adapters.inbound.http.dependencies.edi.auth import (
 )
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_control_plane_uow
 from unified_api.adapters.inbound.http.dependencies.edi.headers import get_idempotency_key
-from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
+from unified_api.adapters.inbound.http.dependencies.edi.services import (
+    get_certificate_generator,
+    get_secret_store,
+)
 from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     AS2TradingPartnerResponse,
     CertificateExportResponse,
     RotateCertificateRequest,
 )
+from unified_api.adapters.inbound.http.edi.routers.as2_partners import (
+    _rotate_as2_certificates,
+)
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["Partners — AS2"])
-
-
-# Import shared rotation helper
-from unified_api.adapters.inbound.http.edi.routers.as2_partners import (
-    _rotate_as2_certificates,
-)
 
 
 @router.get(
@@ -40,10 +40,10 @@ async def export_as2_certificates(
     partner_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
-    token_payload: dict[str, Any] = Depends(get_raw_jwt),
-    profile: dict[str, Any] = Depends(get_current_user_profile),
+    token_payload: JsonDict = Depends(get_raw_jwt),
+    profile: JsonDict = Depends(get_current_user_profile),
     secret_store: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+) -> CertificateExportResponse:
     """Exports current and previous certificates for an AS2 partner."""
     async with uow:
         partner = await uow.as2_partners.get_as2_partner(tenant_id, partner_id)
@@ -56,7 +56,10 @@ async def export_as2_certificates(
         )
 
         if partner.is_local:
-            if "certificates:export_private" not in profile["permissions"]:
+            permissions = profile.get("permissions")
+            if not isinstance(permissions, (list, tuple, set)) or (
+                "certificates:export_private" not in permissions
+            ):
                 raise HTTPException(
                     status_code=403, detail="Insufficient permissions to export private keys."
                 )
@@ -97,9 +100,10 @@ async def rotate_as2_certificates(
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
     idempotency_key: str | None = Depends(get_idempotency_key),
-    profile: dict[str, Any] = Depends(get_current_user_profile),
+    profile: JsonDict = Depends(get_current_user_profile),
     secret_store: SecretStorePort = Depends(get_secret_store),
-) -> Any:
+    certificate_generator: CertificateGeneratorPort = Depends(get_certificate_generator),
+) -> AS2TradingPartnerResponse:
     """Rotates certificates for an AS2 partner."""
     async with uow:
         # Resolve actual tenant ID from partner
@@ -119,4 +123,5 @@ async def rotate_as2_certificates(
             idempotency_key=idempotency_key,
             profile=profile,
             secret_store=secret_store,
+            certificate_generator=certificate_generator,
         )

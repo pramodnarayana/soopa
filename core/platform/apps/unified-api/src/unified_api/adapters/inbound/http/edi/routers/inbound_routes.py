@@ -1,5 +1,3 @@
-from typing import Any
-
 from edi.application.use_cases.inbound_routes.create_inbound_route_use_case import (
     CreateInboundRouteCmd,
     CreateInboundRouteUseCase,
@@ -14,9 +12,11 @@ from edi.application.use_cases.inbound_routes.update_inbound_route_use_case impo
     UpdateInboundRouteCmd,
     UpdateInboundRouteUseCase,
 )
-from edi.domain.models.inbound_routes import InboundRouteDomainModel
+from edi.domain.routing.constants import WILDCARD_TRANSACTION_TYPE
+from edi.domain.routing.enums import EdiDirection, ProcessingMode
+from edi.domain.routing.inbound_route import InboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from seedwork.domain.types import UNSET
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
@@ -28,6 +28,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     RouteResponse,
     UpdateRouteRequest,
 )
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/edi/inbound-routes",
@@ -43,37 +44,32 @@ _PROTOCOL_DESTINATION_MAP = {
 }
 
 
-def _to_dto(domain: InboundRouteDomainModel) -> dict[str, Any]:
+def _to_item(domain: InboundRoute) -> InboundRouteItem:
     dest_type = "Unknown"
     if domain.connection_type:
         dest_type = _PROTOCOL_DESTINATION_MAP.get(
             domain.connection_type.value, domain.connection_type.value
         )
 
-    return {
-        "route_id": domain.id,
-        "tenant_id": domain.tenant_id,
-        "name": domain.name or "",
-        "destination_type": dest_type,
-        "destination_name": "",
-        "trading_partner_id": domain.trading_partner_id,
-        "webhook_id": domain.webhook_id,
-        "as2_partner_id": domain.as2_partner_id,
-        "sftp_partner_id": domain.sftp_partner_id,
-        "active": domain.active,
-        "isa_sender_id": domain.isa_sender_id,
-        "isa_receiver_id": domain.isa_receiver_id,
-        "gs_sender_id": domain.gs_sender_id,
-        "gs_receiver_id": domain.gs_receiver_id,
-        "transaction_type": domain.transaction_type or "*",
-        "processing_mode": (
-            domain.processing_mode.value
-            if hasattr(domain.processing_mode, "value")
-            else str(domain.processing_mode)
-        )
+    return InboundRouteItem(
+        route_id=domain.id,
+        name=domain.name or "",
+        destination_type=dest_type,
+        destination_name="",
+        trading_partner_id=domain.trading_partner_id,
+        webhook_id=domain.webhook_id,
+        as2_partner_id=domain.as2_partner_id,
+        sftp_partner_id=domain.sftp_partner_id,
+        active=domain.active,
+        isa_sender_id=domain.isa_sender_id,
+        isa_receiver_id=domain.isa_receiver_id,
+        gs_sender_id=domain.gs_sender_id,
+        gs_receiver_id=domain.gs_receiver_id,
+        transaction_type=domain.transaction_type or WILDCARD_TRANSACTION_TYPE,
+        processing_mode=domain.processing_mode.value
         if domain.processing_mode
-        else "TRANSFORM",
-    }
+        else ProcessingMode.TRANSFORM.value,
+    )
 
 
 @router.get("", response_model=list[InboundRouteItem], status_code=status.HTTP_200_OK)
@@ -81,13 +77,11 @@ async def list_inbound_routes(
     tenant_id: str = Depends(get_current_tenant_id),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[InboundRouteItem]:
-    """
-    List all Inbound Routes for the current Tenant.
-    """
+    """List all Inbound Routes for the current Tenant."""
     async with uow:
         use_case = ListInboundRoutesUseCase(uow=uow)
         routes = await use_case.list_inbound_routes(tenant_id)
-        return [InboundRouteItem.model_validate(_to_dto(r)) for r in routes]
+        return [_to_item(r) for r in routes]
 
 
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
@@ -97,9 +91,7 @@ async def create_inbound_route(
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> RouteResponse:
-    """
-    Creates a new Inbound Route for the current Tenant.
-    """
+    """Creates a new Inbound Route for the current Tenant."""
     async with uow:
         use_case = CreateInboundRouteUseCase(uow=uow)
 
@@ -117,12 +109,19 @@ async def create_inbound_route(
             sftp_partner_id=request.sftp_partner_id if request.sftp_partner_id else None,
         )
 
-        entity = await use_case.create_inbound_route(
+        create_res = await use_case.create_inbound_route(
             tenant_id, cmd, idempotency_key=idempotency_key
         )
+        if create_res.is_err:
+            raise_http_for_edi_error(create_res.unwrap_err())
+        entity = create_res.unwrap()
         await uow.commit()
 
-        return RouteResponse(route_id=entity.id, tenant_id=entity.tenant_id, direction="INBOUND")
+        return RouteResponse(
+            route_id=entity.id,
+            tenant_id=entity.tenant_id,
+            direction=EdiDirection.INBOUND.value,
+        )
 
 
 @router.patch("/{route_id}", status_code=status.HTTP_200_OK)
@@ -133,9 +132,7 @@ async def update_inbound_route(
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
-    """
-    Updates an Inbound Route for the current Tenant.
-    """
+    """Updates an Inbound Route for the current Tenant."""
     async with uow:
         use_case = UpdateInboundRouteUseCase(uow=uow)
 
@@ -155,11 +152,11 @@ async def update_inbound_route(
             active=dump.get("active", UNSET),
         )
 
-        success = await use_case.update_inbound_route(
+        upd_res = await use_case.update_inbound_route(
             tenant_id, route_id, cmd, idempotency_key=idempotency_key
         )
-        if not success:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        if upd_res.is_err:
+            raise_http_for_edi_error(upd_res.unwrap_err())
         await uow.commit()
     return {"status": "ok"}
 
@@ -171,14 +168,12 @@ async def delete_inbound_route(
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
-    """
-    Deletes an Inbound Route for the current Tenant.
-    """
+    """Deletes an Inbound Route for the current Tenant."""
     async with uow:
         use_case = DeleteInboundRouteUseCase(uow=uow)
-        success = await use_case.delete_inbound_route(
+        del_res = await use_case.delete_inbound_route(
             tenant_id, route_id, idempotency_key=idempotency_key
         )
-        if not success:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        if del_res.is_err:
+            raise_http_for_edi_error(del_res.unwrap_err())
         await uow.commit()

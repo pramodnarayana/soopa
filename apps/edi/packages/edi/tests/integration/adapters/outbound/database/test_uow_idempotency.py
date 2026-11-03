@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from edi.adapters.outbound.database.base_repository import TenantSession
 from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.data_plane import ProcessedEvent
+from edi.bootstrap.container import create_edi_data_plane_uow
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 
@@ -18,7 +19,7 @@ async def uow(tenant_db_session: AsyncSession) -> SqlAlchemyDataPlaneUnitOfWork:
 
     tenant_db_session.info["session_type"] = "tenant"
     tenant_session = TenantSession(tenant_db_session)
-    return SqlAlchemyDataPlaneUnitOfWork(
+    return create_edi_data_plane_uow(
         tenant_session=tenant_session, storage=InMemoryStorageAdapter()
     )
 

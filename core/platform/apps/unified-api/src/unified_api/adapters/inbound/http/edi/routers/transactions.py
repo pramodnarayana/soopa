@@ -1,58 +1,62 @@
-from dataclasses import replace
+from collections.abc import Mapping
 
 import structlog
-from edi.adapters.outbound.database.routing_resolver_repository import (
-    SqlAlchemyRoutingResolverRepository,
-)
-from edi.application.dtos.transactions import (
+from edi.application.responses import (
     ApiGatewayDTO,
     EdiJsonDTO,
     EdiMessageDTO,
 )
-from edi.application.use_cases.routing_resolution_use_case import RoutingResolutionUseCase
-from edi.application.use_cases.transactions.bulk_replay_transactions_use_case import (
-    BulkReplayTransactionsUseCase,
+from edi.application.use_cases.replay.bulk_replay_stage_use_case import (
+    BulkReplayStageCommand,
+    BulkReplayStageUseCase,
 )
-from edi.application.use_cases.transactions.get_edi_trace_lineage_use_case import (
+from edi.application.use_cases.replay.modify_and_replay_use_case import (
+    ModifyAndReplayCommand,
+    ModifyAndReplayUseCase,
+)
+from edi.application.use_cases.replay.replay_stage_use_case import (
+    ReplayStageCommand,
+    ReplayStageUseCase,
+)
+from edi.application.use_cases.replay.stage_replay_processor import (
+    EdiStageReplayProcessorPort,
+)
+from edi.application.use_cases.routing_resolution_use_case import (
+    ResolveRoutingContextQuery,
+    RoutingResolutionUseCase,
+)
+from edi.application.use_cases.trace.get_edi_trace_lineage_use_case import (
+    GetEdiTraceLineageQuery,
     GetEdiTraceLineageUseCase,
 )
-from edi.application.use_cases.transactions.get_edi_trace_use_case import (
+from edi.application.use_cases.trace.get_edi_trace_use_case import (
+    GetEdiTraceQuery,
     GetEdiTraceUseCase,
 )
-from edi.application.use_cases.transactions.list_edi_json_use_case import (
+from edi.application.use_cases.trace.list_edi_json_use_case import (
+    ListEdiJsonQuery,
     ListEdiJsonUseCase,
 )
-from edi.application.use_cases.transactions.list_edi_messages_use_case import (
+from edi.application.use_cases.trace.list_edi_messages_use_case import (
+    ListEdiMessagesQuery,
     ListEdiMessagesUseCase,
 )
-from edi.application.use_cases.transactions.modify_and_replay_use_case import (
-    ModifyAndReplayTransactionUseCase,
-)
-from edi.application.use_cases.transactions.replay_transaction_use_case import (
-    ReplayTransactionUseCase,
-)
-from edi.domain.enums import EdiConnectionType, ReplayCheckpoint
-from edi.domain.exceptions import TransactionNotFoundError
+from edi.domain.transaction.enums import ReplayCheckpoint
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from fastapi import APIRouter, Depends, Header, Query
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from strace.domain import TraceLineageItemDTO
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
-from unified_api.adapters.inbound.http.dependencies.edi.database import (
-    get_data_plane_uow,
-    get_global_session,
-    get_tenant_session,
+from unified_api.adapters.inbound.http.dependencies.edi.database import get_data_plane_uow
+from unified_api.adapters.inbound.http.dependencies.edi.services import (
+    get_edi_stage_replay_processors,
 )
-from unified_api.adapters.inbound.http.dependencies.edi.services import get_outbox_publisher
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/edi/transactions", tags=["Transactions"])
-
-# --- DTOs ---
 
 
 class EdiMessageListResponse(BaseModel):
@@ -65,8 +69,7 @@ class EdiJsonListResponse(BaseModel):
 
 class EdiTraceResponse(BaseModel):
     # edi_message is Optional: outbound replay commits EdiJson as the root record;
-    # EdiMessage is created asynchronously by the transform worker. The HTTP contract
-    # must reflect this — a non-nullable field here causes a 500 on in-flight traces.
+    # EdiMessage is created asynchronously by the transform worker.
     edi_message: EdiMessageDTO | None = None
     edi_json: list[EdiJsonDTO]
     api_gateway: list[ApiGatewayDTO]
@@ -84,8 +87,8 @@ class ReplayRequest(BaseModel):
 
 class ReplayResponse(BaseModel):
     status: str
-    trace_id: str  # original trace that was replayed
-    replay_trace_id: str  # newly generated immutable trace
+    trace_id: str
+    replay_trace_id: str
 
 
 class BulkReplayResponse(BaseModel):
@@ -103,9 +106,6 @@ class ModifyAndReplayResponse(BaseModel):
     new_trace_id: str
 
 
-# --- Endpoints ---
-
-
 @router.post(
     "/{trace_id}/modify-and-replay", status_code=202, response_model=ModifyAndReplayResponse
 )
@@ -113,24 +113,30 @@ async def modify_and_replay_transaction(
     trace_id: str,
     request: ModifyAndReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> ModifyAndReplayResponse:
     actor = "USER"
     log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
     log.info("modify_and_replay_transaction.received")
     async with uow:
-        try:
-            use_case = ModifyAndReplayTransactionUseCase(uow, publisher=publisher)
-            new_trace_id = await use_case.execute(
-                tenant_id, trace_id, request.modified_payload, actor
+        use_case = ModifyAndReplayUseCase(uow)
+        replay_res = await use_case.execute(
+            ModifyAndReplayCommand(
+                tenant_id=tenant_id,
+                original_trace_id=trace_id,
+                modified_payload=request.modified_payload,
+                actor=actor,
             )
-        except TransactionNotFoundError as exc:
-            log.warning("modify_and_replay_transaction.not_found", reason=str(exc))
-            raise HTTPException(status_code=404, detail=str(exc))
-        except ValueError as exc:
-            log.warning("modify_and_replay_transaction.bad_request", reason=str(exc))
-            raise HTTPException(status_code=400, detail=str(exc))
+        )
+        if replay_res.is_err:
+            err = replay_res.unwrap_err()
+            log.error(
+                "modify_and_replay_transaction.failed",
+                error_code=err.code,
+                reason=err.message,
+            )
+            raise_http_for_edi_error(err)
+        new_trace_id = replay_res.unwrap()
     log.info("modify_and_replay_transaction.accepted", new_trace_id=new_trace_id)
     return ModifyAndReplayResponse(
         status="accepted", original_trace_id=trace_id, new_trace_id=new_trace_id
@@ -140,7 +146,6 @@ async def modify_and_replay_transaction(
 @router.get("/messages", response_model=EdiMessageListResponse)
 async def list_edi_messages(
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -150,20 +155,18 @@ async def list_edi_messages(
     ),
     direction: str | None = Query(None, description="INBOUND or OUTBOUND"),
 ) -> EdiMessageListResponse:
-    """
-    List EDI messages for the current tenant (Tab 1 in UI).
-    """
+    """List EDI messages for the current tenant (Tab 1 in UI)."""
     async with uow:
-        svc = ListEdiMessagesUseCase(uow)
-        messages = await svc.list_edi_messages(
-            tenant_id=tenant_id,
-            limit=limit,
-            offset=offset,
-            partner_id=partner_id,
-            transaction_type=transaction_type,
-            direction=direction,
+        messages = await ListEdiMessagesUseCase(uow).execute(
+            ListEdiMessagesQuery(
+                tenant_id=tenant_id,
+                limit=limit,
+                offset=offset,
+                partner_id=partner_id,
+                transaction_type=transaction_type,
+                direction=direction,
+            )
         )
-
         return EdiMessageListResponse(items=list(messages))
 
 
@@ -172,15 +175,13 @@ async def list_edi_json(
     key: str = Query(..., description="Business metadata key (e.g. shipment_id)"),
     value: str = Query(..., description="Business metadata value (e.g. 12345)"),
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> EdiJsonListResponse:
-    """
-    Get a chronological thread of EDI JSON documents sharing a specific business metadata key/value (Tab 2 in UI).
-    """
+    """Get a chronological thread of EDI JSON documents sharing a business metadata key/value."""
     async with uow:
-        svc = ListEdiJsonUseCase(uow)
-        json_records = await svc.list_edi_json(tenant_id, key, value)
+        json_records = await ListEdiJsonUseCase(uow).execute(
+            ListEdiJsonQuery(tenant_id=tenant_id, key=key, value=value)
+        )
         return EdiJsonListResponse(items=list(json_records))
 
 
@@ -188,56 +189,43 @@ async def list_edi_json(
 async def get_edi_trace(
     trace_id: str,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
-    global_session: AsyncSession = Depends(get_global_session),
-    tenant_session: AsyncSession = Depends(get_tenant_session),
 ) -> EdiTraceResponse:
-    """
-    Get the full deep-dive trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway.
-    """
+    """Get the full deep-dive trace lifecycle spanning EdiMessage, EdiJson, and ApiGateway."""
     log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
     log.info("get_edi_trace.received")
 
-    resolver_repo = SqlAlchemyRoutingResolverRepository(global_session, tenant_session)
-    resolver = RoutingResolutionUseCase(resolver_repo)
-
     async with uow:
-        svc = GetEdiTraceUseCase(uow)
-        try:
-            result = await svc.get_edi_trace(tenant_id, trace_id, resolver)
+        trace_res = await GetEdiTraceUseCase(uow).execute(
+            GetEdiTraceQuery(tenant_id=tenant_id, trace_id=trace_id)
+        )
+        if trace_res.is_err:
+            err = trace_res.unwrap_err()
+            log.error("get_edi_trace.not_found", error_code=err.code, reason=err.message)
+            raise_http_for_edi_error(err)
+        result = trace_res.unwrap()
 
-            log.info(
-                "get_edi_trace.use_case_result",
-                has_edi_message=result.edi_message is not None,
-                edi_json_count=len(result.edi_jsons),
-                api_gateway_count=len(result.api_gateways),
+        log.info(
+            "get_edi_trace.use_case_result",
+            has_edi_message=result.edi_message is not None,
+            edi_json_count=len(result.edi_jsons),
+            api_gateway_count=len(result.api_gateways),
+        )
+
+        routing_ctx = await RoutingResolutionUseCase(uow).execute(
+            ResolveRoutingContextQuery(
+                tenant_id=tenant_id,
+                edi_message=result.edi_message,
+                edi_jsons=result.edi_jsons,
             )
+        )
 
-            trading_partner_name, _new_conn_type = await resolver.resolve_routing_context(
-                result.edi_message, result.edi_jsons
-            )
-
-            edi_message = result.edi_message
-            if (
-                edi_message
-                and _new_conn_type
-                and (
-                    not edi_message.connection_type
-                    or edi_message.connection_type == EdiConnectionType.UNKNOWN.value
-                )
-            ):
-                edi_message = replace(edi_message, connection_type=_new_conn_type.upper())
-
-            return EdiTraceResponse(
-                edi_message=edi_message,
-                edi_json=result.edi_jsons,
-                api_gateway=result.api_gateways,
-                trading_partner_name=trading_partner_name,
-            )
-        except TransactionNotFoundError as e:
-            log.warning("get_edi_trace.not_found", reason=str(e))
-            raise HTTPException(status_code=404, detail=str(e))
+        return EdiTraceResponse(
+            edi_message=routing_ctx.enrich_message(result.edi_message),
+            edi_json=list(result.edi_jsons),
+            api_gateway=list(result.api_gateways),
+            trading_partner_name=routing_ctx.trading_partner_name,
+        )
 
 
 @router.get("/{trace_id}/lineage", response_model=list[TraceLineageItemDTO])
@@ -246,15 +234,13 @@ async def get_edi_trace_lineage(
     tenant_id: str = Depends(get_current_tenant_id),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
 ) -> list[TraceLineageItemDTO]:
-    """
-    Returns the full lineage of replay attempts for a given trace.
-    Returns lightweight summaries suitable for UI breadcrumbs.
-    """
+    """Returns the full lineage of replay attempts for a given trace."""
     log = logger.bind(tenant_id=tenant_id, trace_id=trace_id)
     log.info("get_edi_trace_lineage.received")
     async with uow:
-        svc = GetEdiTraceLineageUseCase(uow)
-        lineage = await svc.execute(tenant_id, trace_id)
+        lineage = await GetEdiTraceLineageUseCase(uow).execute(
+            GetEdiTraceLineageQuery(tenant_id=tenant_id, trace_id=trace_id)
+        )
         return list(lineage)
 
 
@@ -263,23 +249,28 @@ async def replay_transaction(
     trace_id: str,
     request: ReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+    stage_processors: Mapping[ReplayCheckpoint, EdiStageReplayProcessorPort] = Depends(
+        get_edi_stage_replay_processors
+    ),
 ) -> ReplayResponse:
-    actor = "USER"  # TODO: extract from token
+    actor = "USER"
     log = logger.bind(tenant_id=tenant_id, trace_id=trace_id, checkpoint=request.checkpoint)
     log.info("replay_transaction.received")
     async with uow:
-        try:
-            use_case = ReplayTransactionUseCase(uow, publisher=publisher)
-            match request.checkpoint:
-                case ReplayCheckpoint.TRANSFORM:
-                    replay_trace_id = await use_case.retry_transform(tenant_id, trace_id, actor)
-                case ReplayCheckpoint.DELIVERY:
-                    replay_trace_id = await use_case.retry_deliver(tenant_id, trace_id, actor)
-        except TransactionNotFoundError as exc:
-            log.warning("replay_transaction.not_found", reason=str(exc))
-            raise HTTPException(status_code=404, detail=str(exc))
+        replay_res = await ReplayStageUseCase(uow, stage_processors).execute(
+            ReplayStageCommand(
+                tenant_id=tenant_id,
+                trace_id=trace_id,
+                checkpoint=request.checkpoint,
+                actor=actor,
+            )
+        )
+        if replay_res.is_err:
+            err = replay_res.unwrap_err()
+            log.error("replay_transaction.failed", error_code=err.code, reason=err.message)
+            raise_http_for_edi_error(err)
+        replay_trace_id = replay_res.unwrap()
     log.info("replay_transaction.accepted", replay_trace_id=replay_trace_id)
     return ReplayResponse(status="accepted", trace_id=trace_id, replay_trace_id=replay_trace_id)
 
@@ -288,8 +279,10 @@ async def replay_transaction(
 async def bulk_replay(
     request: BulkReplayRequest,
     tenant_id: str = Depends(get_current_tenant_id),
-    publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: DataPlaneUnitOfWorkPort = Depends(get_data_plane_uow),
+    stage_processors: Mapping[ReplayCheckpoint, EdiStageReplayProcessorPort] = Depends(
+        get_edi_stage_replay_processors
+    ),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ) -> BulkReplayResponse:
     actor = "USER"
@@ -298,20 +291,20 @@ async def bulk_replay(
     )
     log.info("bulk_replay_transaction.received")
     async with uow:
-        try:
-            use_case = BulkReplayTransactionsUseCase(uow, publisher=publisher)
-            match request.checkpoint:
-                case ReplayCheckpoint.TRANSFORM:
-                    processed = await use_case.bulk_retry_transform(
-                        tenant_id, request.trace_ids, actor, command_key=idempotency_key
-                    )
-                case ReplayCheckpoint.DELIVERY:
-                    processed = await use_case.bulk_retry_deliver(
-                        tenant_id, request.trace_ids, actor, command_key=idempotency_key
-                    )
-        except TransactionNotFoundError as exc:
-            log.warning("bulk_replay_transaction.not_found", reason=str(exc))
-            raise HTTPException(status_code=404, detail=str(exc))
+        bulk_res = await BulkReplayStageUseCase(uow, stage_processors).execute(
+            BulkReplayStageCommand(
+                tenant_id=tenant_id,
+                trace_ids=tuple(request.trace_ids),
+                checkpoint=request.checkpoint,
+                actor=actor,
+                command_key=idempotency_key,
+            )
+        )
+        if bulk_res.is_err:
+            err = bulk_res.unwrap_err()
+            log.error("bulk_replay_transaction.failed", error_code=err.code, reason=err.message)
+            raise_http_for_edi_error(err)
+        processed = bulk_res.unwrap()
 
     log.info("bulk_replay_transaction.accepted", processed_count=processed)
     return BulkReplayResponse(status="accepted", processed_count=processed)

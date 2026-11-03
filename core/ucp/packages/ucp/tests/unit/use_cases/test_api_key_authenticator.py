@@ -3,10 +3,13 @@ import secrets
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from database.provider import DatabaseProvider
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
 from identity.application.authenticate_use_case import AuthenticationError
 from identity.domain.api_token import ApiToken
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from seedwork.utils import generate_id
+from sqlalchemy import text
 
 from ucp.application.use_cases import api_key_authenticator
 from ucp.application.use_cases.api_key_authenticator import authenticate_api_key
@@ -26,9 +29,11 @@ class SharedTestApiTokenRepository(DummyApiTokenRepository):
         super().__init__()
         self.tokens_by_client_id: dict[str, ApiToken] = {}
 
-    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+    async def get_by_client_id(
+        self, client_id: str, now: datetime | None = None
+    ) -> ApiToken | None:
         token = self.tokens_by_client_id.get(client_id)
-        if token is None or not token.active or token.is_expired():
+        if token is None or not token.active or token.is_expired(at=now):
             return None
         return token
 
@@ -148,7 +153,10 @@ async def test_authenticate_api_key_rejects_expired_token_even_if_repo_returns_r
         def __init__(self, record: ApiToken) -> None:
             self.record = record
 
-        async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+        async def get_by_client_id(
+            self, client_id: str, now: datetime | None = None
+        ) -> ApiToken | None:
+            _ = now
             return self.record if client_id == self.record.client_id else None
 
     now = datetime.now(UTC)
@@ -237,3 +245,62 @@ async def test_revoke_and_delete_use_cases_enforce_shared_state_across_instances
     with pytest.raises(AuthenticationError) as exc_deleted:
         await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
     assert str(exc_deleted.value) == "APIKEY_INVALID_OR_REVOKED"
+
+
+@pytest.mark.asyncio
+async def test_authenticate_api_key_sql_repository_honors_past_reference_now() -> None:
+    provider = DatabaseProvider.from_url("sqlite+aiosqlite:///:memory:")
+    wall_now = datetime.now(UTC)
+    past_now = wall_now - timedelta(minutes=10)
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    client_id = "sql_past_ref_client"
+    raw_secret = secrets.token_hex(16)
+    raw_key = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
+
+    async with provider.session_factory() as session:
+        await session.execute(text("ATTACH DATABASE ':memory:' AS identity"))
+        await session.execute(
+            text(
+                """
+                CREATE TABLE identity.api_tokens (
+                    id VARCHAR(128) PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    client_id VARCHAR(64) NOT NULL UNIQUE,
+                    secret_hash VARCHAR(64) NOT NULL,
+                    last_used_at TIMESTAMP NULL,
+                    expires_at TIMESTAMP NULL,
+                    active BOOLEAN NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    deleted_at TIMESTAMP NULL,
+                    deleted_by VARCHAR(128) NULL
+                )
+                """
+            )
+        )
+        token_entity = ApiToken.create(
+            tenant_id=tenant_id,
+            name="Past Window Token",
+            client_id=client_id,
+            secret_hash=secret_hash,
+            expires_at=wall_now - timedelta(minutes=2),
+            now=wall_now - timedelta(hours=1),
+        ).unwrap()
+
+        sql_repo = SqlAlchemyApiTokenRepository(session)
+        await sql_repo.save(token_entity)
+        await session.commit()
+
+        # Valid at past_now (8 minutes before expires_at), even though already expired at wall_now
+        identity = await authenticate_api_key(raw_key, sql_repo, now=past_now)
+        assert identity.tenant_id == tenant_id
+        assert identity.subject == f"machine_{client_id}"
+
+        # Rejected at current wall-clock time
+        with pytest.raises(AuthenticationError) as exc_now:
+            await authenticate_api_key(raw_key, sql_repo)
+        assert str(exc_now.value) == "APIKEY_INVALID_OR_REVOKED"
+
+    await provider.engine.dispose()

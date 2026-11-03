@@ -1,13 +1,12 @@
-from collections.abc import MutableMapping
-from typing import Any, cast
+from __future__ import annotations
 
 import structlog
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.routing import Match, Mount
-from starlette.types import ASGIApp
+from starlette.routing import Match, Mount, Router
+from starlette.types import ASGIApp, Scope
 
 logger = structlog.get_logger(__name__)
 
@@ -43,36 +42,52 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         self.public_paths = public_paths
         self.tenant_exempt_paths = tenant_exempt_paths or frozenset()
 
-    def _extract_tenant_id_from_route(
-        self, router: ASGIApp, scope: MutableMapping[str, Any]
-    ) -> str | None:
+    def _extract_tenant_id_from_route(self, router: ASGIApp, scope: Scope) -> str | None:
         """
         Recursively traverses the FastAPI/Starlette routing tree to resolve the route
         for the current request and extract the `tenant_id` path parameter.
         This provides a robust, enterprise-grade fallback for dynamic endpoints
         without hardcoding URL path string manipulation.
         """
-        if not hasattr(router, "routes"):
+        if not isinstance(router, Router):
             return None
 
         for route in router.routes:
             match, child_scope = route.matches(scope)
             if match == Match.FULL:
                 if isinstance(route, Mount):
-                    new_scope = dict(scope)
-                    new_scope.update(child_scope)
-                    return self._extract_tenant_id_from_route(route.app, new_scope)
-                else:
-                    return cast(str | None, child_scope.get("path_params", {}).get("tenant_id"))
+                    merged_scope: Scope = dict(scope)
+                    merged_scope.update(child_scope)
+                    return self._extract_tenant_id_from_route(route.app, merged_scope)
+                path_params = child_scope.get("path_params")
+                if isinstance(path_params, dict):
+                    raw_tid = path_params.get("tenant_id")
+                    if isinstance(raw_tid, str):
+                        return raw_tid
+                return None
+        return None
+
+    @staticmethod
+    def _resolve_identity(request: Request) -> IdentityContext | None:
+        scoped_identity = request.scope.get("identity")
+        if isinstance(scoped_identity, IdentityContext):
+            return scoped_identity
+        scope_state = request.scope.get("state")
+        if isinstance(scope_state, dict):
+            state_identity = scope_state.get("identity")
+            if isinstance(state_identity, IdentityContext):
+                return state_identity
         return None
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        request.state.tenant_id = None
+
         if request.url.path in self.public_paths:
             return await call_next(request)
 
         # Retrieve the IdentityContext populated by AuthenticationMiddleware
-        identity: IdentityContext | None = getattr(request.state, "identity", None)
-        if not identity:
+        identity = self._resolve_identity(request)
+        if identity is None:
             # If no identity exists, either it failed authentication (and was ignored to let a guard catch it),
             # or it's a completely unauthenticated route. We don't enforce tenant context here if there's no identity.
             return await call_next(request)
@@ -102,8 +117,8 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         if not active_tenant_id:
             if is_exempt:
                 return await call_next(request)
-            logger.warning(
-                "[TENANT_CONTEXT_MIDDLEWARE] Tenant ID missing from request.",
+            logger.error(
+                "tenant_context_missing_tenant_id",
                 path=request.url.path,
                 is_exempt=is_exempt,
             )
@@ -122,8 +137,8 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             and active_tenant_id not in identity.authorized_tenants
             and not is_exempt
         ):
-            logger.warning(
-                "[TENANT_CONTEXT_MIDDLEWARE] Identity {identity_subject} attempted to access unauthorized tenant {active_tenant_id}.",
+            logger.error(
+                "tenant_context_unauthorized_tenant",
                 identity_subject=identity.subject,
                 active_tenant_id=active_tenant_id,
             )
@@ -134,7 +149,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
 
         # 3. Inject Context
         logger.debug(
-            "[TENANT_CONTEXT_MIDDLEWARE] Active Tenant resolved: {active_tenant_id}",
+            "tenant_context_resolved",
             active_tenant_id=active_tenant_id,
         )
 

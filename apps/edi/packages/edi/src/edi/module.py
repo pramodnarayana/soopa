@@ -1,33 +1,29 @@
 import os
-import typing
-
-import structlog
-from dotenv import load_dotenv
-from seedwork.domain.types import JsonValue
-from seedwork.infra.config import load_settings_safely
-from unified_api.adapters.inbound.http.dependencies.edi.auth import (
-    get_current_tenant_id,
-    get_current_user_profile,
-)
-from unified_api.adapters.inbound.http.dependencies.edi.database import get_tenant_session
-
-load_dotenv()
-
-# ---------------------------------------------------------------------------
-# Logging
-# Managed centrally by the Unified API Shell (composition root).
-# Do not configure root loggers or StreamHandlers here.
-# ---------------------------------------------------------------------------
+from collections.abc import AsyncGenerator
+from typing import ClassVar, Protocol
 
 import fastapi
+import structlog
 from database.router import DatabaseRouterPort
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
+from identity import PlatformIdentitySettings
+from pydantic.fields import FieldInfo
+from pydantic_settings import BaseSettings
+from seedwork.domain.types import JsonValue
+from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
-from unified_api.adapters.inbound.http.dependencies.edi.auth import require_platform_admin
+from unified_api.adapters.inbound.http.dependencies.edi.auth import (
+    get_current_tenant_id,
+    get_current_user_profile,
+    require_platform_admin,
+)
+from unified_api.adapters.inbound.http.dependencies.edi.database import get_tenant_session
 from unified_api.adapters.inbound.http.edi.routers import (
     as2_partners,
     as2_partnerships,
@@ -48,7 +44,21 @@ from edi.bootstrap.lifespan import shutdown, startup
 from edi.config.models import EdiAwsSettings, EdiDataPlaneSqsSettings, S3Settings
 from edi.domain.exceptions import OrchestrationError, VaultError
 
+load_dotenv()
+
 logger = structlog.get_logger(__name__)
+
+
+class EdiHostSettingsProtocol(Protocol):
+    database: PlatformDatabaseSettings
+    identity: PlatformIdentitySettings
+    model_fields: ClassVar[dict[str, FieldInfo]]
+
+
+class EdiFastAPI(FastAPI):
+    """Typed FastAPI application subclass carrying the EDI IoC Container."""
+
+    container: Container
 
 
 def _register_edi_domain_exception_handlers(app: FastAPI) -> None:
@@ -90,7 +100,6 @@ def _setup_edi_exception_handlers(app: FastAPI) -> None:
             error_dict = dict(error)
             error_dict.pop("input", None)
             error_dict.pop("url", None)
-            # 'ctx' may contain the raw exception object, which is not JSON-serializable.
             ctx = error_dict.pop("ctx", None)
             if ctx:
                 error_dict["ctx"] = {k: str(v) for k, v in ctx.items()}
@@ -120,32 +129,37 @@ def _setup_edi_exception_handlers(app: FastAPI) -> None:
         )
 
 
-def create_edi_app(settings: typing.Any = None) -> FastAPI:
+def create_edi_app(settings: EdiHostSettingsProtocol | None = None) -> EdiFastAPI:
     if settings is None:
         raise ValueError("Settings must be injected into create_edi_app")
+    if not isinstance(settings, BaseSettings):
+        raise TypeError("create_edi_app requires a Pydantic BaseSettings instance")
+
+    db_settings = settings.database
+    identity_settings = settings.identity
 
     @fastapi.concurrency.asynccontextmanager
-    async def app_lifespan(app: FastAPI) -> typing.AsyncGenerator[None, None]:
+    async def app_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await startup(
             app,
-            global_db_url=str(settings.database.global_url),
-            pool_size=settings.database.pool_size,
-            max_overflow=settings.database.max_overflow,
-            shard_overrides=settings.database.shard_overrides,
+            global_db_url=str(db_settings.global_url),
+            pool_size=db_settings.pool_size,
+            max_overflow=db_settings.max_overflow,
+            shard_overrides=db_settings.shard_overrides,
         )
         try:
             yield
         finally:
             await shutdown(app)
 
-    app = FastAPI(
+    app = EdiFastAPI(
         title="EDI AS2 Platform API",
         description="Main gateway for the EDI AS2 Platform",
         version="1.0.0",
         lifespan=app_lifespan,
         swagger_ui_oauth2_redirect_url="/docs/oauth2-redirect",
         swagger_ui_init_oauth={
-            "clientId": settings.identity.oauth_client_id,
+            "clientId": identity_settings.oauth_client_id,
             "appName": "EDI AS2 Platform API",
             "usePkceWithAuthorizationCodeGrant": True,
             "scopes": "openid profile email",
@@ -188,7 +202,6 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
         """
         Returns the current user's resolved tenant_id, role, feature flags, and verifies database access.
         """
-        # 1. Verify RLS (Data Plane isolation)
         rls_result = await session.execute(
             text("SELECT current_setting('platform.current_tenant_id')")
         )
@@ -203,17 +216,23 @@ def create_edi_app(settings: typing.Any = None) -> FastAPI:
 
     container = Container()
     container.config.from_pydantic(settings)
-    if not hasattr(settings, "s3"):
+    declared_fields = type(settings).model_fields
+    if "s3" not in declared_fields:
         container.config.s3.from_pydantic(load_settings_safely(S3Settings))
-    if not hasattr(settings, "sqs"):
+    if "sqs" not in declared_fields:
         container.config.sqs.from_pydantic(load_settings_safely(EdiDataPlaneSqsSettings))
-    if not hasattr(settings, "aws"):
-        container.config.aws.from_pydantic(load_settings_safely(EdiAwsSettings))
+    aws_settings = load_settings_safely(EdiAwsSettings)
+    if "aws" not in declared_fields:
+        container.config.aws.from_pydantic(aws_settings)
 
-    # Expose the resolved AWS endpoint url to the DI container for localstack support
+    container.config.aws.resolved_region.from_value(aws_settings.resolved_region)
     container.config.aws.endpoint_url.from_value(os.getenv("AWS_ENDPOINT_URL"))
 
-    object.__setattr__(app, "container", container)
+    app.container = container
+    app.state.db_router = None
+    app.state.owns_db_router = False
+    app.state.tenant_resolver = None
+    app.state.edi_container = container
 
     return app
 
@@ -222,7 +241,7 @@ class EdiApiModule:
     """Self-contained API module for the EDI bounded context."""
 
     def __init__(self) -> None:
-        self._edi_app: FastAPI | None = None
+        self._edi_app: EdiFastAPI | None = None
 
     @property
     def name(self) -> str:
@@ -230,10 +249,11 @@ class EdiApiModule:
 
     def register_routes(self, app: FastAPI) -> None:
         """Creates and mounts the EDI sub-application onto the host FastAPI shell."""
-        if "settings" not in app.state._state or app.state.settings is None:
+        host_settings: EdiHostSettingsProtocol | None = app.state.settings
+        if host_settings is None:
             raise ValueError("Host FastAPI shell must attach settings to app.state.settings")
         _register_edi_domain_exception_handlers(app)
-        edi_app = create_edi_app(settings=app.state.settings)
+        edi_app = create_edi_app(settings=host_settings)
         self._edi_app = edi_app
         app.state.edi_app = edi_app
         app.mount("/", edi_app)
@@ -244,7 +264,7 @@ class EdiApiModule:
         edi_app = self._edi_app
         if edi_app is None:
             return
-        if "db_provider" in app.state._state:
+        if app.state.db_provider is not None:
             edi_app.state.db_provider = app.state.db_provider
         await startup(edi_app, db_router=db_router)
 

@@ -7,13 +7,10 @@ from seedwork.domain.types import UnsetType
 from sqlalchemy import select, update
 
 from edi.adapters.outbound.database.base_repository import GlobalSession, GlobalSqlAlchemyRepository
-from edi.adapters.outbound.database.models.control_plane import (
-    AS2Partner,
-    OutboundRoute,
-    SFTPPartner,
-)
-from edi.domain.enums import EdiConnectionType
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.adapters.outbound.database.models.control_plane import AS2Partner, SFTPPartner
+from edi.adapters.outbound.database.models.control_plane import OutboundRoute as OrmOutboundRoute
+from edi.domain.routing.enums import EdiConnectionType
+from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.outbound_route_repository import OutboundRouteRepositoryPort
 
 
@@ -22,7 +19,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         GlobalSqlAlchemyRepository.__init__(self, session)
 
     def _update_record_from_domain(
-        self, record: OutboundRoute, aggregate: OutboundRouteDomainModel
+        self, record: OrmOutboundRoute, aggregate: OutboundRoute
     ) -> None:
         record.tenant_id = aggregate.tenant_id
         record.trading_partner_id = aggregate.trading_partner_id
@@ -36,8 +33,8 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         record.webhook_id = aggregate.webhook_id
 
     @staticmethod
-    def _to_domain_model(record: OutboundRoute) -> OutboundRouteDomainModel:
-        return OutboundRouteDomainModel(
+    def _to_domain_model(record: OrmOutboundRoute) -> OutboundRoute:
+        return OutboundRoute(
             id=record.id,
             tenant_id=record.tenant_id,
             trading_partner_id=record.trading_partner_id,
@@ -53,13 +50,11 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
             webhook_id=record.webhook_id,
         )
 
-    async def get_outbound_route(
-        self, tenant_id: str, route_id: str
-    ) -> OutboundRouteDomainModel | None:
-        stmt = select(OutboundRoute).where(
-            OutboundRoute.id == route_id,
-            OutboundRoute.tenant_id == tenant_id,
-            OutboundRoute.deleted_at.is_(None),
+    async def get_outbound_route(self, tenant_id: str, route_id: str) -> OutboundRoute | None:
+        stmt = select(OrmOutboundRoute).where(
+            OrmOutboundRoute.id == route_id,
+            OrmOutboundRoute.tenant_id == tenant_id,
+            OrmOutboundRoute.deleted_at.is_(None),
         )
         res = await self.session.execute(stmt)
         record = res.scalar_one_or_none()
@@ -67,12 +62,12 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
 
     async def get_outbound_route_by_trading_partner_id(
         self, tenant_id: str, trading_partner_id: str
-    ) -> OutboundRouteDomainModel | None:
+    ) -> OutboundRoute | None:
         result = await self.session.execute(
-            select(OutboundRoute).where(
-                OutboundRoute.tenant_id == tenant_id,
-                OutboundRoute.trading_partner_id == trading_partner_id,
-                OutboundRoute.deleted_at.is_(None),
+            select(OrmOutboundRoute).where(
+                OrmOutboundRoute.tenant_id == tenant_id,
+                OrmOutboundRoute.trading_partner_id == trading_partner_id,
+                OrmOutboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
@@ -119,7 +114,7 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
                     f"SFTP partner {sftp_id} not found or does not belong to this tenant"
                 )
 
-    async def save(self, aggregate: OutboundRouteDomainModel) -> None:
+    async def save(self, aggregate: OutboundRoute) -> None:
         await self._validate_outbound_destination(
             aggregate.tenant_id,
             aggregate.as2_partner_id,
@@ -128,44 +123,44 @@ class SqlAlchemyOutboundRouteRepository(OutboundRouteRepositoryPort, GlobalSqlAl
         )
 
         result = await self.session.execute(
-            select(OutboundRoute).where(
-                OutboundRoute.id == aggregate.id,
-                OutboundRoute.tenant_id == aggregate.tenant_id,
-                OutboundRoute.deleted_at.is_(None),
+            select(OrmOutboundRoute).where(
+                OrmOutboundRoute.id == aggregate.id,
+                OrmOutboundRoute.tenant_id == aggregate.tenant_id,
+                OrmOutboundRoute.deleted_at.is_(None),
             )
         )
         record = result.scalar_one_or_none()
         if not record:
-            record = OutboundRoute(id=aggregate.id)
+            record = OrmOutboundRoute(id=aggregate.id)
             self.session.add(record)
 
         self._update_record_from_domain(record, aggregate)
 
-        self._drain_events(aggregate)
+        await self._drain_events(aggregate)
         await self.session.flush()
 
-    async def delete(self, aggregate: OutboundRouteDomainModel) -> None:
+    async def delete(self, aggregate: OutboundRoute) -> None:
         await self.session.execute(
-            update(OutboundRoute)
+            update(OrmOutboundRoute)
             .where(
-                OutboundRoute.id == aggregate.id,
-                OutboundRoute.tenant_id == aggregate.tenant_id,
-                OutboundRoute.deleted_at.is_(None),
+                OrmOutboundRoute.id == aggregate.id,
+                OrmOutboundRoute.tenant_id == aggregate.tenant_id,
+                OrmOutboundRoute.deleted_at.is_(None),
             )
             .values(deleted_at=datetime.now(UTC).replace(tzinfo=None), active=False)
         )
 
-        self._drain_events(aggregate)
+        await self._drain_events(aggregate)
         await self.session.flush()
 
     async def list_outbound_routes(
         self, tenant_id: str, limit: int = 100, offset: int = 0
-    ) -> Sequence[OutboundRouteDomainModel]:
+    ) -> Sequence[OutboundRoute]:
         stmt = (
-            select(OutboundRoute)
+            select(OrmOutboundRoute)
             .where(
-                OutboundRoute.tenant_id == tenant_id,
-                OutboundRoute.deleted_at.is_(None),
+                OrmOutboundRoute.tenant_id == tenant_id,
+                OrmOutboundRoute.deleted_at.is_(None),
             )
             .limit(limit)
             .offset(offset)

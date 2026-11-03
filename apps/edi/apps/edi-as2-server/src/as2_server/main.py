@@ -1,6 +1,3 @@
-from database.router import DatabaseRouter
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-
 """
 Production-ready FastAPI application for the EDI AS2 Server.
 """
@@ -8,8 +5,11 @@ Production-ready FastAPI application for the EDI AS2 Server.
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
+from database.router import DatabaseRouter
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
+from edi.bootstrap.container import create_edi_control_plane_uow, create_edi_dp_uow_factory
+from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
 from fastapi import FastAPI
 from observability import (
     ObservabilityProvider,
@@ -54,7 +54,6 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     logger = ObservabilityProvider.logger(__name__)
 
-    # Initialize the global DatabaseRouter and mount it to app state
     db_router = DatabaseRouter(
         global_db_url=settings.database.global_url,
         shard_overrides=settings.database.shard_overrides,
@@ -62,17 +61,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         max_overflow=settings.database.max_overflow,
     )
     app.state.db_router = db_router
-    app.state.tenant_resolver = TenantResolver(db_router=db_router)
+    app.state.tenant_resolver = SqlAlchemyTenantResolver(db_router=db_router)
     logger.info("as2_server_db_router_initialized")
 
     logger.info("as2_server_started", env=settings.env)
     yield
     logger.info("as2_server_stopped")
-    if hasattr(app.state, "db_router"):
+    if app.state.db_router is not None:
         await app.state.db_router.close_all()
+        app.state.db_router = None
 
 
-app = FastAPI(title="AS2 Server", version="1.0.0", lifespan=lifespan)
+def create_as2_app() -> FastAPI:
+    application = FastAPI(title="AS2 Server", version="1.0.0", lifespan=lifespan)
+    application.state.s3_storage = None
+    application.state.db_router = None
+    application.state.tenant_resolver = None
+    application.state.publisher = None
+    application.state.crypto_service = None
+    application.state.cp_uow_factory = create_edi_control_plane_uow
+    application.state.dp_uow_factory_cls = create_edi_dp_uow_factory
+    application.include_router(ops.router)
+    application.include_router(as2.router)
+    return application
 
-app.include_router(ops.router)
-app.include_router(as2.router)
+
+app = create_as2_app()

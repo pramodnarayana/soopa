@@ -9,9 +9,9 @@ from edi.config.models import (
     S3Settings,
     SecretsSettings,
 )
+from identity import PlatformIdentitySettings
 from pydantic import Field
 from seedwork.infra.config import load_settings_safely
-from seedwork.infra.config_models import PlatformIdentitySettings
 
 
 class WorkerSettings(CommonSettings):

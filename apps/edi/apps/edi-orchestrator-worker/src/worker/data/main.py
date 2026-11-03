@@ -1,20 +1,14 @@
 import asyncio
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
-from typing import Any
 
 import structlog
 from database.router import DatabaseRouter
 from database.tenant_shard_resolver import TenantNotFoundError
 from dotenv import load_dotenv
-from edi.adapters.outbound.database.tenant_resolver import (
-    TenantResolver,
-)
-from edi.adapters.outbound.database.tenant_uow_provider import (
-    TenantUowProvider,
-)
-from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
-from edi.adapters.outbound.pubsub.publisher_factory import create_edi_pipeline_publisher
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
+from edi.adapters.outbound.database.tenant_uow_provider import SqlAlchemyTenantUoWProvider
+from edi.adapters.outbound.transformer.bots_transformer_adapter import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
 from edi.application.use_cases.pipeline.dispatch_inbound_transform_use_case import (
@@ -24,12 +18,17 @@ from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case imp
     DispatchOutboundTransformUseCase,
 )
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.domain.enums import EdiDirection, PipelineEventType
+from edi.bootstrap.container import create_edi_tenant_uow_provider
+from edi.bootstrap.publisher_factory import create_edi_pipeline_publisher
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.enums import PipelineEventType
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.exceptions import ConsumerTerminalError
 from pubsub.provider import PubSubProvider
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,
@@ -47,7 +46,7 @@ logger = structlog.get_logger(__name__)
 def _build_orchestrator_route_registry(
     transformer: TransformerPort,
     settings: WorkerSettings,
-    publisher: Any,
+    publisher: OutboxPublisherPort,
 ) -> EdiDataPlaneRouteRegistry:
     def router_factory(uow_fact: UowFactory) -> DeliveryRouterUseCase:
         return DeliveryRouterUseCase(uow_factory=uow_fact, publisher=publisher)
@@ -64,30 +63,22 @@ def _build_orchestrator_route_registry(
             uow_fact, transformer, settings, publisher=publisher
         ).execute(e.trace_id, idempotency_key=e.idempotency_key)
 
-    async def run_transform_successful(
-        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
-    ) -> None:
+    async def run_transform_successful(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_transform_successful(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
-    async def run_transform_failed(
-        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
-    ) -> None:
+    async def run_transform_failed(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_transform_failed(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
-    async def run_delivery_successful(
-        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
-    ) -> None:
+    async def run_delivery_successful(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_delivery_successful(
             e.tenant_id, e.idempotency_key, e.payload
         )
 
-    async def run_delivery_failed(
-        e: EdiDataPlaneEventMessage, uow_fact: Callable[..., Any]
-    ) -> None:
+    async def run_delivery_failed(e: EdiDataPlaneEventMessage, uow_fact: UowFactory) -> None:
         await PipelineLifecycleUseCase(uow_fact, publisher=publisher).handle_delivery_failed(
             e.tenant_id, e.idempotency_key, e.payload
         )
@@ -138,7 +129,7 @@ def _build_orchestrator_route_registry(
 def _setup_registry(
     transformer: TransformerPort,
     settings: WorkerSettings,
-    uow_provider: TenantUowProvider,
+    uow_provider: SqlAlchemyTenantUoWProvider,
 ) -> EdiDataPlaneEventDispatcher:
     publisher = create_edi_pipeline_publisher(
         compute_queue_url=settings.sqs.compute_queue_url,
@@ -165,9 +156,6 @@ def _setup_registry(
     return EdiDataPlaneEventDispatcher(callback=route_event)
 
 
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
-
-
 class EdiOrchestratorWorkerModule(LaunchableWorker):
     def __init__(self) -> None:
         self.db_router: DatabaseRouter | None = None
@@ -183,14 +171,13 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
             global_db_url=settings.database.global_url,
             shard_overrides=settings.database.shard_overrides,
         )
-        resolver = TenantResolver(self.db_router)
+        resolver = SqlAlchemyTenantResolver(self.db_router)
 
         transformer = BotsTransformerAdapter()
 
-        uow_provider = TenantUowProvider(
+        uow_provider = create_edi_tenant_uow_provider(
             resolver=resolver,
             db_router=self.db_router,
-            settings=settings,
             s3_bucket=s3_bucket,
             aws_endpoint=aws_endpoint,
         )
@@ -203,7 +190,6 @@ class EdiOrchestratorWorkerModule(LaunchableWorker):
             region_name=settings.aws.resolved_region,
             endpoint_url=aws_endpoint,
         )
-        assert self.orchestrator_manager is not None
         self.orchestrator_manager.start()
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:

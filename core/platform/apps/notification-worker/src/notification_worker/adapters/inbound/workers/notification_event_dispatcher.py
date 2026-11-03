@@ -1,22 +1,28 @@
+from collections.abc import Mapping
+from typing import Protocol
+
 import structlog
 from notification.application.notification_compiler_use_case import (
     CompileNotificationCommand,
-    NotificationCompilerUseCase,
 )
 from notification.domain.constants import NotificationEventType
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonValue
 
 logger = structlog.get_logger(__name__)
+
+
+class NotificationCompilerPort(Protocol):
+    async def execute(self, event: CompileNotificationCommand) -> None: ...
 
 
 class NotificationEventDispatcher:
     def __init__(
         self,
-        notification_compiler: NotificationCompilerUseCase,
+        notification_compiler: NotificationCompilerPort,
     ) -> None:
         self.notification_compiler = notification_compiler
 
-    async def dispatch_raw(self, body: JsonDict) -> None:
+    async def dispatch_raw(self, body: Mapping[str, JsonValue]) -> None:
         """
         Parses the incoming SQS payload (which matches the Outbox event payload)
         and passes it to the domain use case.
@@ -57,7 +63,7 @@ class NotificationEventDispatcher:
                 event_type=top_level_event_type,
             )
             return
-        payload = raw_data
+        payload = dict(raw_data)
 
         # Ensure tenant_id is available in the payload if not already there
         if "tenant_id" not in payload and isinstance(top_level_tenant_id, str):
@@ -74,11 +80,20 @@ class NotificationEventDispatcher:
             logger.error("SQS message payload missing 'event_type' / domain_event_type")
             return
 
+        raw_idempotency_key = body.get("idempotency_key")
+        raw_envelope_id = body.get("id")
+        resolved_idempotency_key: str | None = None
+        if isinstance(raw_idempotency_key, str) and raw_idempotency_key.strip():
+            resolved_idempotency_key = raw_idempotency_key.strip()
+        elif isinstance(raw_envelope_id, str) and raw_envelope_id.strip():
+            resolved_idempotency_key = raw_envelope_id.strip()
+
         logger.info("notification_event_dispatching", domain_event_type=domain_event_type)
 
         notification_event = CompileNotificationCommand(
             tenant_id=tenant_id,
             event_type=domain_event_type,
             data=payload,
+            idempotency_key=resolved_idempotency_key,
         )
         await self.notification_compiler.execute(notification_event)

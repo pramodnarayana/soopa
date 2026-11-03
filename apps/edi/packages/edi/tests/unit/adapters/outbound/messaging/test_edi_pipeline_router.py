@@ -5,7 +5,7 @@ from edi.adapters.outbound.pubsub.edi_pipeline_router import (
     EdiPipelineEventRouter,
     UnroutableEventError,
 )
-from edi.domain.enums import PipelineEventType
+from edi.domain.transaction.enums import PipelineEventType
 
 
 class RecordingPublisher:

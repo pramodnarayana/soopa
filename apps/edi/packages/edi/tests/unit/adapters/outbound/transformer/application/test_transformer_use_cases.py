@@ -1,7 +1,7 @@
 import pytest
 
 from edi.adapters.outbound.transformer.application.use_cases import ProcessInboundEdiUseCase
-from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload, TransactionSet
+from edi.adapters.outbound.transformer.domain.parsed_payload import ParsedEdiPayload, TransactionSet
 
 
 class FakeStoragePort:

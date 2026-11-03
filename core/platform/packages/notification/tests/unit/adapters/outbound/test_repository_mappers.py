@@ -19,7 +19,7 @@ from identity.domain.constants import IdentityIdPrefix
 from seedwork.events import EventEnvelope
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
-from sqlalchemy import func, select, text
+from sqlalchemy import event, func, select, text
 
 from notification.adapters.outbound.database.sqlalchemy_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
@@ -386,7 +386,40 @@ async def test_notification_record_and_outbox_repositories_are_idempotent_on_red
     await provider.engine.dispose()
 
 
-def test_notification_outbox_channel_constants_are_canonical() -> None:
+@pytest.mark.asyncio
+async def test_notification_uow_pre_commit_emits_canonical_wakeup_notify() -> None:
     assert NotificationOutboxChannel.DELIVERY_WAKEUP.value == "notification_delivery_outbox_wakeup"
     assert NotificationOutboxChannel.IN_APP_NOTIFICATIONS.value == "in_app_notifications"
-    assert SqlAlchemyNotificationUnitOfWork._pre_commit is not None
+
+    provider = DatabaseProvider.from_url("sqlite+aiosqlite:///:memory:")
+    executed_statements: list[str] = []
+
+    def _capture_do_execute(
+        cursor: object,
+        statement: str,
+        parameters: object,
+        context: object,
+    ) -> bool | None:
+        del cursor, parameters, context
+        executed_statements.append(statement)
+        if statement.startswith("NOTIFY "):
+            return True
+        return None
+
+    event.listen(provider.engine.sync_engine, "do_execute", _capture_do_execute, retval=True)
+    try:
+        async with provider.session_factory() as session:
+            uow = SqlAlchemyNotificationUnitOfWork(
+                session=session,
+                user_preference_repo=SqlAlchemyUserNotificationPreferenceRepository(session),
+                template_repo=SqlAlchemyTemplateRepository(session),
+                record_repo=SqlAlchemyNotificationRecordRepository(session),
+                route_repo=SqlAlchemyNotificationRouteRepository(session),
+                outbox_repo=SqlAlchemyNotificationOutboxRepository(session),
+            )
+            await uow._pre_commit()
+    finally:
+        event.remove(provider.engine.sync_engine, "do_execute", _capture_do_execute)
+        await provider.engine.dispose()
+
+    assert executed_statements == ["NOTIFY notification_delivery_outbox_wakeup;"]
