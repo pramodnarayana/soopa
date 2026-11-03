@@ -1,51 +1,57 @@
-import datetime
+import secrets
+from datetime import UTC, datetime
 
 import pytest
 from database.models.identity import Tenant as OrmTenant
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
-from identity.domain.models.api_token import ApiTokenDomainModel
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.domain.api_token import ApiToken
+from identity.domain.constants import IdentityIdPrefix as DomainIdPrefix
+from identity.domain.identity_context import M2M_CLIENT_ID_PREFIX
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def dummy_tenant_data():
+def dummy_tenant_data() -> dict[str, object]:
     tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    now_naive = datetime.now(UTC).replace(tzinfo=None)
     return {
         "id": tenant_id,
         "name": f"Api Token Test Tenant {generate_random_hex(6)}",
         "slug": f"api-token-tenant-{generate_random_hex(6)}",
-        "idp_tenant_id": generate_id("idp"),
+        "idp_tenant_id": f"zitadel_org_{generate_random_hex(8)}",
         "status": "active",
-        "created_at": datetime.datetime.now().replace(tzinfo=None),
-        "updated_at": datetime.datetime.now().replace(tzinfo=None),
+        "created_at": now_naive,
+        "updated_at": now_naive,
     }
 
 
 @pytest.fixture
-def dummy_token_data(dummy_tenant_data: dict) -> dict:
+def dummy_token_data(dummy_tenant_data: dict[str, object]) -> dict[str, object]:
+    now = datetime.now(UTC)
     return {
         "id": generate_id(DomainIdPrefix.TOKEN.value),
-        "tenant_id": dummy_tenant_data["id"],
+        "tenant_id": str(dummy_tenant_data["id"]),
         "name": "Test Token",
-        "client_id": generate_id("client"),
+        "client_id": f"{M2M_CLIENT_ID_PREFIX}{secrets.token_hex(16)}",
         "secret_hash": "hash_xyz",
         "active": True,
-        "created_at": datetime.datetime.now().replace(tzinfo=None),
-        "updated_at": datetime.datetime.now().replace(tzinfo=None),
+        "created_at": now,
+        "updated_at": now,
     }
 
 
 @pytest.mark.asyncio
 async def test_api_token_repository_lifecycle(
-    db_session_factory, dummy_tenant_data, dummy_token_data
+    db_session_factory,
+    dummy_tenant_data: dict[str, object],
+    dummy_token_data: dict[str, object],
 ) -> None:
     async with db_session_factory() as db_session, db_session.begin_nested():
-        repo = PostgresApiTokenRepository(db_session)
+        repo = SqlAlchemyApiTokenRepository(db_session)
 
         # Insert Tenant First
         stmt = (
@@ -55,21 +61,21 @@ async def test_api_token_repository_lifecycle(
         )
         await db_session.execute(stmt)
 
-        # 1. Create Token
-        domain_model = ApiTokenDomainModel(
-            id=dummy_token_data["id"],
-            tenant_id=dummy_token_data["tenant_id"],
-            name=dummy_token_data["name"],
-            client_id=dummy_token_data["client_id"],
-            secret_hash=dummy_token_data["secret_hash"],
+        # 1. Save New Token
+        domain_model = ApiToken(
+            id=str(dummy_token_data["id"]),
+            tenant_id=str(dummy_token_data["tenant_id"]),
+            name=str(dummy_token_data["name"]),
+            client_id=str(dummy_token_data["client_id"]),
+            secret_hash=str(dummy_token_data["secret_hash"]),
             last_used_at=None,
             expires_at=None,
-            active=dummy_token_data["active"],
-            created_at=dummy_token_data["created_at"],
-            updated_at=dummy_token_data["updated_at"],
+            active=bool(dummy_token_data["active"]),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
-        created_token = await repo.create(domain_model)
+        created_token = await repo.save(domain_model)
         assert created_token.id == dummy_token_data["id"]
         assert created_token.name == dummy_token_data["name"]
 
@@ -88,11 +94,9 @@ async def test_api_token_repository_lifecycle(
         assert client_token is not None
         assert client_token.id == created_token.id
 
-        # 5. Update Token
-        updated_token = await repo.update(
-            created_token.id, created_token.tenant_id, name="Updated Token Name"
-        )
-        assert updated_token is not None
+        # 5. Update Token via Aggregate Behavior + save()
+        assert created_token.rename("Updated Token Name").is_ok
+        updated_token = await repo.save(created_token)
         assert updated_token.name == "Updated Token Name"
 
         # 6. Delete Token

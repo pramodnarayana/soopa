@@ -1,11 +1,11 @@
+from dataclasses import dataclass
 from typing import Protocol
-
-from pydantic import BaseModel
 
 from identity.domain.identity_context import IdentityContext
 
 
-class UserProfile(BaseModel):
+@dataclass(frozen=True)
+class UserProfile:
     subject: str
     email: str | None = None
     display_name: str | None = None

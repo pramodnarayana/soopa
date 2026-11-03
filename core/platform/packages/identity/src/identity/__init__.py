@@ -7,6 +7,7 @@ from identity.application.authenticate_use_case import (
     AuthenticationError,
     authenticate_bearer_token,
 )
+from identity.config import PlatformIdentitySettings
 from identity.domain.identity_context import IdentityContext, TokenClaims
 from identity.domain.permissions import (
     AuthorizationError,
@@ -20,6 +21,7 @@ __all__ = [
     "AuthenticationError",
     "AuthorizationError",
     "IdentityContext",
+    "PlatformIdentitySettings",
     "TokenClaims",
     "attach_identity_to_request",
     "authenticate_bearer_token",

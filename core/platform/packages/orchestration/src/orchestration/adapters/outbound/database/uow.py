@@ -2,21 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 from database.uow import BaseSqlAlchemyUnitOfWork
-from seedwork.domain.types import JsonDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orchestration.adapters.outbound.database.repositories import (
-    SqlAlchemyWorkflowConcurrencyRepository,
-    SqlAlchemyWorkflowIdempotencyRepository,
-    SqlAlchemyWorkflowMatchRepository,
-    SqlAlchemyWorkflowPayloadStoreRepository,
-    SqlAlchemyWorkflowQueueRepository,
-    SqlAlchemyWorkflowRateLimitRepository,
-    SqlAlchemyWorkflowRunRepository,
-)
 from orchestration.ports.outbound.repository_ports import (
     WorkflowConcurrencyPort,
     WorkflowIdempotencyPort,
@@ -30,7 +18,7 @@ from orchestration.ports.outbound.repository_ports import (
 
 
 class SqlAlchemyWorkflowUnitOfWork(BaseSqlAlchemyUnitOfWork, WorkflowUnitOfWorkPort):
-    """Concrete SQLAlchemy Unit of Work assembling all 7 Workflow Engine repositories."""
+    """Concrete SQLAlchemy Unit of Work assembling all 7 Workflow Engine repository ports."""
 
     runs: WorkflowRunRepositoryPort
     matches: WorkflowMatchRepositoryPort
@@ -43,16 +31,23 @@ class SqlAlchemyWorkflowUnitOfWork(BaseSqlAlchemyUnitOfWork, WorkflowUnitOfWorkP
     def __init__(
         self,
         session: AsyncSession,
-        outbox_sink: Callable[[str, str, str | None, JsonDict], None] | None = None,
+        *,
+        runs: WorkflowRunRepositoryPort,
+        matches: WorkflowMatchRepositoryPort,
+        queue: WorkflowQueuePort,
+        concurrency: WorkflowConcurrencyPort,
+        rate_limits: WorkflowRateLimitPort,
+        payloads: WorkflowPayloadStorePort,
+        idempotency: WorkflowIdempotencyPort,
     ) -> None:
         super().__init__(session)
-        self.runs = SqlAlchemyWorkflowRunRepository(session, outbox_sink=outbox_sink)
-        self.matches = SqlAlchemyWorkflowMatchRepository(session)
-        self.queue = SqlAlchemyWorkflowQueueRepository(session)
-        self.concurrency = SqlAlchemyWorkflowConcurrencyRepository(session)
-        self.rate_limits = SqlAlchemyWorkflowRateLimitRepository(session)
-        self.payloads = SqlAlchemyWorkflowPayloadStoreRepository(session)
-        self.idempotency = SqlAlchemyWorkflowIdempotencyRepository(session)
+        self.runs = runs
+        self.matches = matches
+        self.queue = queue
+        self.concurrency = concurrency
+        self.rate_limits = rate_limits
+        self.payloads = payloads
+        self.idempotency = idempotency
 
 
 __all__ = ["SqlAlchemyWorkflowUnitOfWork"]

@@ -1,7 +1,6 @@
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 import structlog
 from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
@@ -67,8 +66,11 @@ class SqsConsumerManager:
         self.is_running = False
         self._task: asyncio.Task[None] | None = None
 
-    def background_tasks(self) -> list[asyncio.Task[Any]]:
-        return [self._task] if self._task else []
+    def background_tasks(self) -> list[asyncio.Task[object]]:
+        tasks: list[asyncio.Task[object]] = []
+        if self._task is not None:
+            tasks.append(self._task)
+        return tasks
 
     @property
     def task(self) -> asyncio.Task[None] | None:

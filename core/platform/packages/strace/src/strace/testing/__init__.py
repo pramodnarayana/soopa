@@ -91,14 +91,14 @@ class InMemoryTraceRepository(TraceRepositoryPort):
         self,
         tenant_id: str,
         *,
-        status: TraceStatus | None = None,
+        status: TraceStatus | str | None = None,
         min_replay_count: int | None = None,
         limit: int = 50,
     ) -> list[TraceLineageItemDTO]:
         items = [
             item
             for item in self._lineage_by_tenant.get(tenant_id, [])
-            if (status is None or str(item.status) == status.value)
+            if (status is None or str(item.status) == str(status))
             and (min_replay_count is None or item.replay_count >= min_replay_count)
         ]
         sorted_items = sorted(

@@ -1,0 +1,157 @@
+"""Pure zero-mock Phase 4 unit tests for Identity SQLAlchemy Data Mappers and TokenClaims mapper."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+
+from database.models.identity import ApiToken as ApiTokenORM
+from database.models.identity import Role as OrmRole
+from database.models.identity import User as DbUser
+from seedwork.domain.types import JsonDict
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_id
+
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
+from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
+    ZitadelTokenVerifierAdapter,
+)
+from identity.domain.api_token import ApiToken
+from identity.domain.authorization import Role as DomainRole
+from identity.domain.constants import IdentityIdPrefix, UserStatus
+from identity.domain.user import User
+
+
+def test_user_repository_mappers_round_trip() -> None:
+    now_naive = datetime.now(UTC).replace(tzinfo=None)
+    user_id_1 = generate_id(IdentityIdPrefix.USER.value)
+    user_id_2 = generate_id(IdentityIdPrefix.USER.value)
+    idp_user_1 = generate_id(SystemIdPrefix.GENERIC.value)
+    idp_user_2 = generate_id(SystemIdPrefix.GENERIC.value)
+
+    db_user = DbUser(
+        id=user_id_1,
+        idp_user_id=idp_user_1,
+        email="alice@acme.test",
+        name="Alice Smith",
+        status=UserStatus.ACTIVE.value,
+        created_at=now_naive,
+        updated_at=now_naive,
+    )
+
+    domain_user = SqlAlchemyUserRepository._to_domain_model(db_user, role="TenantAdmin")
+    assert domain_user.id == user_id_1
+    assert domain_user.status == UserStatus.ACTIVE
+    assert domain_user.role == "TenantAdmin"
+    assert domain_user.created_at.tzinfo == UTC
+
+    domain_user.deactivate()
+    domain_user.name = "AliceUpdated"
+    SqlAlchemyUserRepository._update_record_from_domain(db_user, domain_user)
+    assert db_user.name == "AliceUpdated"
+    assert db_user.status == UserStatus.INACTIVE.value
+
+    fresh_user = User.create(
+        id=user_id_2,
+        idp_user_id=idp_user_2,
+        email="bob@acme.test",
+        name="Bob Jones",
+    ).unwrap()
+    new_orm = SqlAlchemyUserRepository._to_orm_record(fresh_user)
+    assert new_orm.id == user_id_2
+    assert new_orm.email == "bob@acme.test"
+    assert new_orm.created_at.tzinfo is None
+
+
+def test_role_repository_mappers_round_trip() -> None:
+    role_id = generate_id(IdentityIdPrefix.ROLE.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+
+    orm_role = OrmRole(
+        id=role_id,
+        tenant_id=tenant_id,
+        name="CustomEditor",
+        description="Can edit EDI routes",
+        capabilities=["webhooks:read", "webhooks:write"],
+    )
+    domain_role = SqlAlchemyRoleRepository._to_domain_model(orm_role)
+    assert domain_role.id == role_id
+    assert domain_role.tenant_id == tenant_id
+    assert domain_role.capabilities == ["webhooks:read", "webhooks:write"]
+
+    updated = DomainRole(
+        id=role_id,
+        tenant_id=tenant_id,
+        name="SeniorEditor",
+        description="Updated description",
+        capabilities=["webhooks:read"],
+    )
+    SqlAlchemyRoleRepository._update_record_from_domain(orm_role, updated)
+    assert orm_role.name == "SeniorEditor"
+    assert orm_role.description == "Updated description"
+    assert orm_role.capabilities == ["webhooks:read"]
+
+    created_orm = SqlAlchemyRoleRepository._to_orm_record(updated)
+    assert created_orm.id == role_id
+    assert created_orm.tenant_id == tenant_id
+    assert created_orm.name == "SeniorEditor"
+
+
+def test_api_token_repository_bidirectional_mappers() -> None:
+    now = datetime.now(UTC)
+    token_id = generate_id(IdentityIdPrefix.TOKEN.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    client_id = generate_id(SystemIdPrefix.CLIENT.value)
+
+    token = ApiToken.create(
+        token_id=token_id,
+        tenant_id=tenant_id,
+        name="ERP Production Key",
+        client_id=client_id,
+        secret_hash="sha256_digest_fixture",
+        expires_at=now,
+    ).unwrap()
+
+    orm_record: ApiTokenORM = SqlAlchemyApiTokenRepository._to_orm_record(token)
+    assert orm_record.id == token_id
+    assert orm_record.tenant_id == tenant_id
+    assert orm_record.client_id == client_id
+
+    mapped = SqlAlchemyApiTokenRepository._to_domain_model(orm_record)
+    assert mapped.id == token_id
+    assert mapped.tenant_id == tenant_id
+    assert mapped.name == "ERP Production Key"
+    assert mapped.client_id == client_id
+
+
+def test_jwks_token_verifier_explicit_token_claims_mapper() -> None:
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    subject_id = generate_id(IdentityIdPrefix.USER.value)
+    org_id = generate_id(SystemIdPrefix.GENERIC.value)
+
+    raw_claims: JsonDict = {
+        "sub": subject_id,
+        "iss": "https://auth.soopa.test",
+        "aud": ["soopa-api"],
+        "exp": 1999999999,
+        "iat": 1700000000,
+        "unexpected_vendor_claim": "ignored_cleanly",
+    }
+    payload: dict[str, object] = {
+        **raw_claims,
+        "tenant_id": tenant_id,
+        "organization_id": org_id,
+        "authorized_tenants": {tenant_id},
+        "roles": ["TenantAdmin"],
+        "permissions": ["users:read"],
+        "tenant_roles": {tenant_id: ["TenantAdmin"]},
+    }
+    claims = ZitadelTokenVerifierAdapter._to_token_claims(payload, raw_claims)
+    assert claims.sub == subject_id
+    assert claims.tenant_id == tenant_id
+    assert claims.organization_id == org_id
+    assert claims.authorized_tenants == {tenant_id}
+    assert claims.roles == ["TenantAdmin"]
+    assert claims.tenant_roles == {tenant_id: ["TenantAdmin"]}
+    assert claims.raw_claims["unexpected_vendor_claim"] == "ignored_cleanly"

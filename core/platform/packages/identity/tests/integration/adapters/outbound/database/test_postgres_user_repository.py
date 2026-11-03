@@ -6,15 +6,14 @@ from database.models.identity import Role as OrmRole
 from database.models.identity import Tenant as OrmTenant
 from database.models.identity import UserRole as OrmUserRole
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp.domain.constants import LifecycleStatus
 
-from identity.adapters.outbound.database.user_repository import PostgresUserRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
 from identity.domain.constants import IdentityEventType, UserStatus
-from identity.domain.events import UserCreatedEvent
-from identity.domain.models.user import User
+from identity.domain.constants import IdentityIdPrefix as DomainIdPrefix
+from identity.domain.user import User
 
 pytestmark = pytest.mark.integration
 
@@ -49,7 +48,7 @@ async def test_user_repository_lifecycle(
     db_session_factory, dummy_tenant_data, dummy_role_data
 ) -> None:
     async with db_session_factory() as db_session, db_session.begin_nested():
-        repo = PostgresUserRepository(db_session)
+        repo = SqlAlchemyUserRepository(db_session)
 
         # Pre-requisites: Insert tenant and role
         await db_session.execute(
@@ -79,15 +78,11 @@ async def test_user_repository_lifecycle(
         )
 
         # Add a domain event to test outbox flushing
-        user.domain_events.append(
-            UserCreatedEvent(
-                user_id=user.id,
-                tenant_id=dummy_tenant_data["id"],
-                email=user.email,
-                first_name="Test",
-                last_name="User",
-                role=dummy_role_data["name"],
-            )
+        user.record_invitation(
+            tenant_id=dummy_tenant_data["id"],
+            first_name="Test",
+            last_name="User",
+            role=dummy_role_data["name"],
         )
 
         await repo.save(user)

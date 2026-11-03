@@ -5,7 +5,6 @@ The concrete implementation (structlog, loguru, stdlib, etc.) is injected at sta
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
 
 
 class LoggerPort(ABC):
@@ -15,22 +14,22 @@ class LoggerPort(ABC):
     """
 
     @abstractmethod
-    def debug(self, event: str, **kwargs: Any) -> None: ...
+    def debug(self, event: str, **kwargs: object) -> None: ...
 
     @abstractmethod
-    def info(self, event: str, **kwargs: Any) -> None: ...
+    def info(self, event: str, **kwargs: object) -> None: ...
 
     @abstractmethod
-    def warning(self, event: str, **kwargs: Any) -> None: ...
+    def warning(self, event: str, **kwargs: object) -> None: ...
 
     @abstractmethod
-    def error(self, event: str, **kwargs: Any) -> None: ...
+    def error(self, event: str, **kwargs: object) -> None: ...
 
     @abstractmethod
-    def exception(self, event: str, **kwargs: Any) -> None: ...
+    def exception(self, event: str, **kwargs: object) -> None: ...
 
     @abstractmethod
-    def bind(self, **kwargs: Any) -> "LoggerPort":
+    def bind(self, **kwargs: object) -> "LoggerPort":
         """
         Returns a new logger with the given fields permanently bound.
         Useful for injecting request-scoped context (e.g., tenant_id, message_id).

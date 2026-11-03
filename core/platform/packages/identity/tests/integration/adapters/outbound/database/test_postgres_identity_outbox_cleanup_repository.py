@@ -2,19 +2,24 @@ import datetime
 
 import pytest
 from database.models.identity import IdentityOutbox
+from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
+    SqlAlchemyGlobalOutboxRepository,
+)
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
 
-from identity.adapters.outbound.database.postgres_identity_outbox_cleanup_repository import (
-    SqlAlchemyIdentityOutboxCleanupRepository,
-)
+from identity.domain.constants import IdentityOutboxSource
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
 async def test_identity_outbox_cleanup(db_session_factory):
-    repo = SqlAlchemyIdentityOutboxCleanupRepository(db_session_factory)
+    repo = SqlAlchemyGlobalOutboxRepository(
+        session_factory=db_session_factory,
+        model_cls=IdentityOutbox,
+        source=IdentityOutboxSource.IDENTITY.value,
+    )
     now = datetime.datetime.now(datetime.UTC)
 
     # Create old processed event

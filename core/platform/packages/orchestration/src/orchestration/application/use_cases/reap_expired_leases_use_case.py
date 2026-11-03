@@ -8,7 +8,6 @@ from datetime import UTC, datetime
 
 from observability import ObservabilityProvider
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from orchestration.application.use_cases.complete_step_use_case import (
@@ -19,7 +18,7 @@ from orchestration.application.use_cases.fail_step_use_case import (
     FailStepCommand,
     FailStepUseCase,
 )
-from orchestration.domain.constants import EffectPolicy, StepFailureCode
+from orchestration.domain.constants import EffectPolicy, StepFailureCode, WorkflowIdPrefix
 from orchestration.domain.definition import NodeDefinition
 from orchestration.domain.exceptions import Result, WorkflowError
 from orchestration.domain.failures import ReconcileOutcome, RetryableFailure
@@ -138,7 +137,7 @@ class ReapExpiredLeasesUseCase:
                 node_key=step.node_key,
                 fencing_retry_count=lease.retry_count,
                 worker_id=lease.worker_id,
-                attempt_id=generate_id(SystemIdPrefix.WORKFLOW_ATTEMPT.value),
+                attempt_id=generate_id(WorkflowIdPrefix.ATTEMPT.value),
                 failure=RetryableFailure(
                     code=StepFailureCode.TIMEOUT,
                     detail="Step execution exceeded timeout_at.",
@@ -183,7 +182,7 @@ class ReapExpiredLeasesUseCase:
                         node_key=step.node_key,
                         fencing_retry_count=lease.retry_count,
                         worker_id=lease.worker_id,
-                        attempt_id=generate_id(SystemIdPrefix.WORKFLOW_ATTEMPT.value),
+                        attempt_id=generate_id(WorkflowIdPrefix.ATTEMPT.value),
                         output_payload=adopted_payload,
                         now=now,
                     )
@@ -202,7 +201,7 @@ class ReapExpiredLeasesUseCase:
                 node_key=step.node_key,
                 fencing_retry_count=lease.retry_count,
                 worker_id=lease.worker_id,
-                attempt_id=generate_id(SystemIdPrefix.WORKFLOW_ATTEMPT.value),
+                attempt_id=generate_id(WorkflowIdPrefix.ATTEMPT.value),
                 failure=RetryableFailure(
                     code=StepFailureCode.LEASE_EXPIRED,
                     detail="Worker heartbeat lease expired before step completion.",

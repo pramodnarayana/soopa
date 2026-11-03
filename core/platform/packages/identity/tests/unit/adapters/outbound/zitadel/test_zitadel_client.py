@@ -10,7 +10,7 @@ from shttp import HttpClient, create_http_client
 from shttp.resilience import HeaderWaitTimeStrategy, HttpBackoffHandler
 from werkzeug.wrappers import Request, Response
 
-from identity.adapters.outbound.zitadel.client import ZitadelClient
+from identity.adapters.outbound.zitadel.machine_key_auth import ZitadelMachineTokenProvider
 
 
 def _generate_machine_key() -> str:
@@ -30,8 +30,27 @@ def _generate_machine_key() -> str:
     )
 
 
+def _create_authenticated_http_client(
+    api_url: str,
+    machine_key: str,
+    *,
+    backoff_handler: HttpBackoffHandler | None = None,
+) -> HttpClient:
+    token_provider = ZitadelMachineTokenProvider(api_url=api_url, machine_key=machine_key)
+    return HttpClient(
+        client=create_http_client(follow_redirects=False),
+        backoff_handler=backoff_handler,
+        allow_private_ips=True,
+        base_url=api_url,
+        token_provider=token_provider,
+        default_headers={"Accept": "application/json"},
+    )
+
+
 @pytest.mark.asyncio
-async def test_zitadel_client_uses_http_client_and_authenticates(httpserver: HTTPServer) -> None:
+async def test_zitadel_token_provider_authenticates_via_shttp_client(
+    httpserver: HTTPServer,
+) -> None:
     httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_json(
         {"access_token": "valid_token_xyz", "expires_in": 300}
     )
@@ -39,15 +58,14 @@ async def test_zitadel_client_uses_http_client_and_authenticates(httpserver: HTT
         {"result": [{"id": "prj_1", "name": "soopa"}]}
     )
 
-    client = ZitadelClient(
+    client = _create_authenticated_http_client(
         api_url=httpserver.url_for(""),
         machine_key=_generate_machine_key(),
     )
 
-    assert isinstance(client._get_client(), HttpClient)
     assert client.raw_client is not None
 
-    resp = await client.fetch_with_auth("/management/v1/projects/_search", method="POST")
+    resp = await client.post("/management/v1/projects/_search")
     assert resp.status_code == 200
     assert resp.json() == {"result": [{"id": "prj_1", "name": "soopa"}]}
 
@@ -55,7 +73,7 @@ async def test_zitadel_client_uses_http_client_and_authenticates(httpserver: HTT
 
 
 @pytest.mark.asyncio
-async def test_zitadel_client_handles_429_rate_limit_backoff(httpserver: HTTPServer) -> None:
+async def test_zitadel_http_client_handles_429_rate_limit_backoff(httpserver: HTTPServer) -> None:
     httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_json(
         {"access_token": "valid_token_xyz", "expires_in": 300}
     )
@@ -75,21 +93,14 @@ async def test_zitadel_client_handles_429_rate_limit_backoff(httpserver: HTTPSer
         flakey_handler
     )
 
-    # Use max_wait_seconds=0.0 to verify retry logic without real sleep
     fast_backoff = HttpBackoffHandler(strategies=[HeaderWaitTimeStrategy(max_wait_seconds=0.0)])
-    fast_http_client = HttpClient(
-        client=create_http_client(follow_redirects=False),
-        backoff_handler=fast_backoff,
-        allow_private_ips=True,
-    )
-
-    client = ZitadelClient(
+    client = _create_authenticated_http_client(
         api_url=httpserver.url_for(""),
         machine_key=_generate_machine_key(),
-        client=fast_http_client,
+        backoff_handler=fast_backoff,
     )
 
-    resp = await client.fetch_with_auth("/management/v1/orgs/_search", method="POST")
+    resp = await client.post("/management/v1/orgs/_search")
     assert resp.status_code == 200
     assert resp.json() == {"result": [{"id": "org_1"}]}
     assert call_count == 2
@@ -98,7 +109,7 @@ async def test_zitadel_client_handles_429_rate_limit_backoff(httpserver: HTTPSer
 
 
 @pytest.mark.asyncio
-async def test_zitadel_client_returns_http_status_responses(httpserver: HTTPServer) -> None:
+async def test_zitadel_http_client_returns_http_status_responses(httpserver: HTTPServer) -> None:
     httpserver.expect_request("/oauth/v2/token", method="POST").respond_with_json(
         {"access_token": "valid_token_xyz", "expires_in": 300}
     )
@@ -112,20 +123,20 @@ async def test_zitadel_client_returns_http_status_responses(httpserver: HTTPServ
         {"error": "conflict"}, status=409
     )
 
-    client = ZitadelClient(
+    client = _create_authenticated_http_client(
         api_url=httpserver.url_for(""),
         machine_key=_generate_machine_key(),
     )
 
-    res_400 = await client.fetch_with_auth("/err/400")
+    res_400 = await client.get("/err/400")
     assert res_400.status_code == 400
     assert res_400.json() == {"error": "bad_request"}
 
-    res_404 = await client.fetch_with_auth("/err/404")
+    res_404 = await client.get("/err/404")
     assert res_404.status_code == 404
     assert res_404.json() == {"error": "not_found"}
 
-    res_409 = await client.fetch_with_auth("/err/409")
+    res_409 = await client.get("/err/409")
     assert res_409.status_code == 409
     assert res_409.json() == {"error": "conflict"}
 

@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from orchestration.adapters.outbound.database import SqlAlchemyWorkflowUnitOfWork
 from orchestration.application.default_error_policy import DefaultStepErrorPolicy
 from orchestration.application.services import (
     InMemoryWorkflowDefinitionRegistry,
@@ -24,6 +23,7 @@ from orchestration.application.use_cases import (
     StartRunCommand,
     StartRunUseCase,
 )
+from orchestration.bootstrap import create_workflow_uow
 from orchestration.domain.constants import (
     ConcurrencyStrategy,
     ErrorDecisionKind,
@@ -48,7 +48,7 @@ async def test_postgres_savepoint_full_workflow_lifecycle_and_429_parking(
     workflow_session: AsyncSession,
 ) -> None:
     now = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
-    uow = SqlAlchemyWorkflowUnitOfWork(workflow_session)
+    uow = create_workflow_uow(workflow_session)
     definitions = InMemoryWorkflowDefinitionRegistry()
     scheduler = WorkflowStepSchedulerService()
     error_policy = DefaultStepErrorPolicy()
