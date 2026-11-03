@@ -4,12 +4,15 @@ on:
   pull_request:
     branches: [ "main", "development" ]
     paths:
+      - 'infra/topology.json'
+      - 'core/platform/topology.json'
+      - 'apps/*/topology.json'
       - 'infra/cloud/aws/**'
       - '!infra/cloud/aws/apps/api/**'
-      - '!infra/cloud/aws/apps/ucp/**'
-      - '!infra/cloud/aws/apps/identity/**'
-      - '!infra/cloud/aws/apps/notification/**'
-      - '!infra/cloud/aws/apps/edi/**'
+      - '!infra/cloud/aws/apps/ucp/workers/**'
+      - '!infra/cloud/aws/apps/edi/migrator/**'
+      - '!infra/cloud/aws/apps/edi/workers/**'
+      - '!infra/cloud/aws/apps/edi/as2/**'
       - '!infra/cloud/aws/platform/migrator/**'
       - 'infra/cloud/zitadel/**'
       - 'versions.env'
@@ -115,6 +118,41 @@ jobs:
         uses: ./.github/actions/pulumi-stack-preview
         with:
           stack-dir: infra/cloud/aws/platform
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview UCP Messaging Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/ucp/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Identity Messaging Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/identity/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview Notification Messaging Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/notification/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview EDI Messaging Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/messaging
+          stack-name: ${{ env.TARGET_ENV }}
+
+      - name: Preview EDI Storage Stack
+        if: steps.check-fork.outputs.is_fork != 'true'
+        uses: ./.github/actions/pulumi-stack-preview
+        with:
+          stack-dir: infra/cloud/aws/apps/edi/storage
           stack-name: ${{ env.TARGET_ENV }}
 
       - name: Preview OpenObserve

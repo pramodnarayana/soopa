@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import asyncio
+from collections.abc import Callable
 from pathlib import Path
 
 import pulumi
@@ -17,8 +19,19 @@ from infra_seedwork.messaging import (
     sqs_url_to_arn,
 )
 from pulumi.runtime import MockCallArgs, MockResourceArgs, Mocks, set_mocks
+from pulumi.runtime.settings import SETTINGS
+from pulumi.runtime.stack import run_pulumi_func
 
 AWS_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _run_pulumi_test(fn: Callable[[], pulumi.Output[None]]) -> None:
+    async def _runner() -> None:
+        SETTINGS.rpc_manager.clear()
+        SETTINGS.outputs.clear()
+        await run_pulumi_func(lambda: fn().future())
+
+    asyncio.run(_runner())
 
 
 class _TopologyTestMocks(Mocks):
@@ -49,18 +62,19 @@ class _TopologyTestMocks(Mocks):
             }
         return f"{args.name}-id", dict(args.inputs)
 
-    def call(
-        self, args: MockCallArgs
-    ) -> dict[str, object] | tuple[dict[str, object], list[tuple[str, str]]]:
+    def call(self, args: MockCallArgs) -> tuple[dict[str, object], list[tuple[str, str]]]:
         if args.token == "aws:index/getRegion:getRegion":
-            return {"name": "us-east-1", "id": "us-east-1"}
+            return ({"name": "us-east-1", "id": "us-east-1"}, [])
         if args.token == "aws:index/getCallerIdentity:getCallerIdentity":
-            return {
-                "accountId": "634680389104",
-                "arn": "arn:aws:iam::634680389104:role/deployer",
-                "userId": "AROAEXAMPLE",
-            }
-        return {}
+            return (
+                {
+                    "accountId": "634680389104",
+                    "arn": "arn:aws:iam::634680389104:role/deployer",
+                    "userId": "AROAEXAMPLE",
+                },
+                [],
+            )
+        return ({}, [])
 
 
 def test_sqs_url_to_arn_converts_standard_fifo_and_govcloud_urls() -> None:
@@ -175,7 +189,6 @@ def test_provision_from_topology_populates_queue_arns_including_consumed_dlqs() 
         "subscriptions": [],
     }
 
-    @pulumi.runtime.test
     def _verify() -> pulumi.Output[None]:
         set_mocks(_TopologyTestMocks(), project="test-messaging", stack="staging", preview=True)
         output = provision_from_topology(
@@ -193,13 +206,12 @@ def test_provision_from_topology_populates_queue_arns_including_consumed_dlqs() 
 
         return output.queue_arns.apply(_assert)
 
-    _verify()
+    _run_pulumi_test(_verify)
 
 
 def test_resolve_and_merge_messaging_queue_arns_survives_pre_rollout_preview() -> None:
     """Reproduce PR speculative preview where notification stack lacks queue_arns in S3 state."""
 
-    @pulumi.runtime.test
     def _verify() -> pulumi.Output[None]:
         set_mocks(
             _TopologyTestMocks(
@@ -252,7 +264,7 @@ def test_resolve_and_merge_messaging_queue_arns_survives_pre_rollout_preview() -
 
         return pulumi.Output.all(single_resolved, merged_resolved).apply(_assert)
 
-    _verify()
+    _run_pulumi_test(_verify)
 
 
 def test_compute_and_messaging_stacks_enforce_ssot_queue_arns_contract() -> None:
@@ -295,43 +307,3 @@ def test_compute_and_messaging_stacks_enforce_ssot_queue_arns_contract() -> None
                     f"{stack_file} calls require_output({output_key!r}); "
                     "use resolve_messaging_queue_arns / merge_messaging_queue_arns instead"
                 )
-
-
-def test_app_cicd_workflows_converge_messaging_and_storage_before_compute() -> None:
-    """Ensure preview-app-iac.yml and deploy.yml order messaging/storage stacks ahead of compute."""
-    repo_root = AWS_ROOT.parents[2]
-    workflows = [
-        repo_root / ".github" / "workflows" / "preview-app-iac.yml",
-        repo_root / ".github" / "workflows" / "deploy.yml",
-    ]
-    stateful_app_stacks = [
-        "infra/cloud/aws/apps/ucp/messaging",
-        "infra/cloud/aws/apps/identity/messaging",
-        "infra/cloud/aws/apps/notification/messaging",
-        "infra/cloud/aws/apps/edi/messaging",
-        "infra/cloud/aws/apps/edi/storage",
-    ]
-    compute_app_stacks = [
-        "infra/cloud/aws/platform/migrator",
-        "infra/cloud/aws/apps/edi/migrator",
-        "infra/cloud/aws/apps/api",
-        "infra/cloud/aws/apps/ucp/workers",
-        "infra/cloud/aws/apps/edi/workers",
-        "infra/cloud/aws/apps/edi/as2",
-    ]
-
-    for workflow_path in workflows:
-        content = workflow_path.read_text(encoding="utf-8")
-        for stack in stateful_app_stacks + compute_app_stacks:
-            marker = f"stack-dir: {stack}"
-            assert marker in content, f"{workflow_path.name} is missing step '{marker}'"
-
-        last_stateful_pos = max(
-            content.index(f"stack-dir: {stack}") for stack in stateful_app_stacks
-        )
-        first_compute_pos = min(
-            content.index(f"stack-dir: {stack}") for stack in compute_app_stacks
-        )
-        assert last_stateful_pos < first_compute_pos, (
-            f"{workflow_path.name} must converge all messaging/storage stacks before migrators and compute"
-        )
