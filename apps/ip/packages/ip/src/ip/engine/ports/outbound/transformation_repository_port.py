@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ip.engine.domain.normalization import Transformation
+from ip.engine.domain.normalization.transformation import Transformation
 
 
 class TransformationRepositoryPort(Protocol):

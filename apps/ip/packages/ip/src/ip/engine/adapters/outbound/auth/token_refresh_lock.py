@@ -72,7 +72,9 @@ class SqlAlchemyTokenRefreshLockAdapter(TokenRefreshLockPort):
                     break
 
             if not acquired:
-                raise RuntimeError("DatabaseRouter did not yield a GlobalSession for advisory lock.")
+                raise RuntimeError(
+                    "DatabaseRouter did not yield a GlobalSession for advisory lock."
+                )
 
 
 __all__ = [

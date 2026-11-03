@@ -8,14 +8,14 @@ from datetime import UTC, datetime
 
 import structlog
 from ip.engine.domain.constants import RESERVED_RAW_BYTES_KEY, WRAPPED_SCALAR_KEY
-from ip.engine.domain.enums import MergeOutcome
 from ip.engine.domain.exceptions import IpError, PayloadNotFoundError, Result
-from ip.engine.domain.models.replica_record import (
+from ip.engine.domain.replication.enums import MergeOutcome
+from ip.engine.domain.replication.replica_record import (
     ReplicaRejection,
     compute_data_hash,
     compute_record_key,
 )
-from ip.engine.domain.models.stream_definition import StreamDefinition
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,

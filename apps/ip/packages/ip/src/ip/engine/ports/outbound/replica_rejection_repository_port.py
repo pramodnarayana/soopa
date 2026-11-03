@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.models.replica_record import ReplicaRejection
+from ip.engine.domain.replication.replica_record import ReplicaRejection
 
 
 class ReplicaRejectionRepositoryPort(Protocol):

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 from database.types import TenantSession
-from ip.application.domains.energy.canonical import EnergyEntityType
 from ip.engine.adapters.outbound.database.data_plane.entity_map_repository import (
     SqlAlchemyGlobalEntityMapRepository,
 )
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
+from ip.solutions.domains.energy.canonical import EnergyEntityType
 
 pytestmark = pytest.mark.integration
 

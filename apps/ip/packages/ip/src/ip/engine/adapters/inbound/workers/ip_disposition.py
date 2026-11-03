@@ -9,7 +9,10 @@ import structlog
 from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case import (
     DeliverOutboundRecordResponse,
 )
-from ip.engine.domain.enums import FailureDisposition, OutboundDispatchStatus
+from ip.engine.domain.dispatch.enums import (
+    FailureDisposition,
+    OutboundDispatchStatus,
+)
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from pubsub.enums import ConsumerAction
 from seedwork.events import EventEnvelope

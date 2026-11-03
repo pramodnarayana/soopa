@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ip.engine.domain.models.stream_definition import StreamDefinition
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 
 IpStreamDefinitionResolver = Callable[[str, str, str], StreamDefinition | None]
 

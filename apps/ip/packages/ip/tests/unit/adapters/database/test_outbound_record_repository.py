@@ -5,12 +5,12 @@ from __future__ import annotations
 from ip.engine.adapters.outbound.database.data_plane.outbound_record_repository import (
     SqlAlchemyOutboundRecordRepository,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.dispatch.enums import (
     HttpWriteOperation,
     OutboundDispatchStatus,
     OutboundFailureCategory,
 )
-from ip.engine.domain.models.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 
 
 def test_outbound_record_orm_and_domain_roundtrip_mapper() -> None:

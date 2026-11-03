@@ -10,14 +10,14 @@ from datetime import UTC, datetime
 import paramiko
 import structlog
 from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
-from ip.engine.application.responses import CatalogAppSummaryDTO
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     PayloadNotFoundError,
     Result,
     SftpConnectionError,
 )
-from ip.engine.ports.types import (
+from ip.engine.ports.outbound.catalog_registry_port import CatalogAppSummaryDTO
+from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
     ConnectorPropertyDTO,

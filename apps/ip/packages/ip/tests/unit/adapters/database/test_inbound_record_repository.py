@@ -5,7 +5,7 @@ from __future__ import annotations
 from ip.engine.adapters.outbound.database.data_plane.inbound_record_repository import (
     SqlAlchemyInboundRecordRepository,
 )
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.replication.inbound_record import InboundRecord
 
 
 def test_inbound_record_orm_and_domain_roundtrip_mapper() -> None:

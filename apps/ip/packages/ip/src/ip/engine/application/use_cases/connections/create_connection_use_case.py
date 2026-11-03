@@ -9,15 +9,14 @@ from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict
 
 from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
+from ip.engine.domain.connection.connection import Connection, compute_connection_fingerprint
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    ConnectionStatus,
+)
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
     InvalidConnectionConfigError,
-)
-from ip.engine.domain.models.connection import (
-    AuthType,
-    Connection,
-    ConnectionStatus,
-    compute_connection_fingerprint,
 )
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 

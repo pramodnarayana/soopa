@@ -6,8 +6,8 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonValue
 
-from ip.engine.domain.models.stream_definition import ExtractionBatch, StreamDefinition
-from ip.engine.domain.services.declarative_record_extractor import DeclarativeRecordExtractor
+from ip.engine.domain.replication.extractor import DeclarativeRecordExtractor
+from ip.engine.domain.replication.stream_definition import ExtractionBatch, StreamDefinition
 
 
 class RecordExtractorPort(Protocol):

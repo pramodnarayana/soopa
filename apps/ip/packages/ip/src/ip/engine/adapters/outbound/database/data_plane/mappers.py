@@ -12,15 +12,15 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     ReplicaRecordModel,
     ReplicaRejectionModel,
 )
-from ip.engine.domain.enums import IngestionMode, OutboundDispatchStatus
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.models.timeline_entry import IpTraceEvent
-from ip.engine.domain.normalization import NormalizationRejectionEntry
-from ip.engine.domain.services.outbound_error_classifier import redact_sensitive_headers
+from ip.engine.domain.dispatch.classifier import redact_sensitive_headers
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.trace.trace_event import IpTraceEvent
 
 
 def inbound_record_to_domain(orm: InboundRecordModel) -> InboundRecord:

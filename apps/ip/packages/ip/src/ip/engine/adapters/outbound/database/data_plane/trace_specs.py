@@ -18,15 +18,13 @@ from ip.engine.domain.enums import PipelineStage
 from ip.engine.domain.trace import IpTraceStatus, map_outbound_status_to_trace_status
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonDict
-from seedwork.events import EventEnvelope, EventProcessingLane
+from seedwork.events import EventProcessingLane
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import case
 from sqlalchemy.ext.asyncio import AsyncSession
 from strace.domain import TraceEvent, TraceStageAttemptRow
 from strace.orm import TraceEventSpec, TraceStageSpec, TraceStageSpecPort
-
-from database.outbox_serializer import serialize_domain_event
 
 
 def _ip_trace_event_to_orm(event: TraceEvent) -> IpTraceEventModel:
@@ -139,28 +137,8 @@ def stage_workflow_outbox_event(
     )
 
 
-def build_ip_outbox_record_from_envelope(envelope: EventEnvelope) -> IpDataPlaneOutboxRecord:
-    """Builds an IpDataPlaneOutboxRecord for staging an EventEnvelope."""
-    now = datetime.now(UTC)
-    return IpDataPlaneOutboxRecord(
-        id=generate_id(IpIdPrefix.OUTBOX.value),
-        tenant_id=envelope.tenant_id or "",
-        idempotency_key=envelope.idempotency_key or generate_id(SystemIdPrefix.IDEMPOTENCY.value),
-        event_type=envelope.event_type,
-        trace_id=envelope.trace_id,
-        correlation_id=envelope.correlation_id,
-        lane=envelope.lane.value,
-        payload=serialize_domain_event(envelope),
-        status=OutboxStatus.PENDING.value,
-        attempts=0,
-        created_at=now,
-        updated_at=now,
-    )
-
-
 __all__ = [
     "IP_TRACE_EVENT_SPEC",
     "IP_TRACE_STAGE_SPECS",
-    "build_ip_outbox_record_from_envelope",
     "stage_workflow_outbox_event",
 ]

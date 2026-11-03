@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import SyncMode
+from ip.engine.domain.connection.catalog import ConnectionCatalog
+from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
 from ip.engine.domain.exceptions import InvalidConnectionConfigError, IpErrorCode
-from ip.engine.domain.models.catalog import (
-    ConnectionCatalog,
-    StreamField,
-    StreamSchema,
-)
+from ip.engine.domain.replication.enums import SyncMode
 
 
 def test_catalog_create_deterministic_hash_is_order_independent() -> None:

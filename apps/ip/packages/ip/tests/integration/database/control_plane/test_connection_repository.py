@@ -10,13 +10,13 @@ from ip.engine.adapters.outbound.database.control_plane.connection_repository im
     SqlAlchemyConnectionRepository,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
-    IpEventType,
 )
+from ip.engine.domain.enums import IpEventType
 from ip.engine.domain.exceptions import DuplicateConnectionFingerprintError, IpErrorCode
-from ip.engine.domain.models.connection import Connection
 from sqlalchemy import select
 
 pytestmark = pytest.mark.integration

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.models.sync_run import SyncRun
+from ip.engine.domain.replication.sync_run import SyncRun
 
 
 class SyncRunRepositoryPort(Protocol):

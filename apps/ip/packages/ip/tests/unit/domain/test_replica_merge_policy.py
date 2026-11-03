@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ip.engine.domain.enums import CursorKind, MergeOutcome
-from ip.engine.domain.models.replica_record import ReplicaMergePolicy, ReplicaRecord
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    MergeOutcome,
+)
+from ip.engine.domain.replication.replica_record import ReplicaMergePolicy, ReplicaRecord
 
 
 def _make_existing(

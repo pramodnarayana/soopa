@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ip.application.domains.tms.canonical import TmsEntityType
-from ip.application.transformers.tms.mercury_gate import MercuryGateTransformer
 from ip.engine.ports.outbound.transformer_hook_port import ReplicaSnapshotDTO
+from ip.solutions.domains.tms.canonical import TmsEntityType
+from ip.solutions.transformers.tms.mercury_gate import MercuryGateTransformer
 
 
 def test_mercury_gate_transformer_normalizes_loads() -> None:

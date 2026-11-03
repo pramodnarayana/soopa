@@ -8,7 +8,11 @@ from ip.engine.adapters.outbound.database.control_plane.connection_repository im
     SqlAlchemyConnectionRepository,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import ConnectionRecord
-from ip.engine.domain.models.connection import AuthType, Connection, ConnectionStatus
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    ConnectionStatus,
+)
 
 
 def test_connection_record_to_domain_model_mapping() -> None:

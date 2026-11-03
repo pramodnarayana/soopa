@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 
-from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
-    build_ip_outbox_record_from_envelope,
-)
 from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
     IpProcessedEventModel,
 )
+from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
@@ -35,13 +34,36 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
     TDomainRepo,
 )
+from outbox.domain.constants import OutboxStatus
 from seedwork.events import EventEnvelope
+from seedwork.id_registry import SystemIdPrefix
+from seedwork.utils import generate_id
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from strace.ports import TraceRepositoryPort
 
+from database.outbox_serializer import serialize_domain_event
 from database.uow import BaseSqlAlchemyUnitOfWork
+
+
+def build_ip_outbox_record_from_envelope(envelope: EventEnvelope) -> IpDataPlaneOutboxRecord:
+    """Builds an IpDataPlaneOutboxRecord for staging an EventEnvelope."""
+    now = datetime.now(UTC)
+    return IpDataPlaneOutboxRecord(
+        id=generate_id(IpIdPrefix.OUTBOX.value),
+        tenant_id=envelope.tenant_id or "",
+        idempotency_key=envelope.idempotency_key or generate_id(SystemIdPrefix.IDEMPOTENCY.value),
+        event_type=envelope.event_type,
+        trace_id=envelope.trace_id,
+        correlation_id=envelope.correlation_id,
+        lane=envelope.lane.value,
+        payload=serialize_domain_event(envelope),
+        status=OutboxStatus.PENDING.value,
+        attempts=0,
+        created_at=now,
+        updated_at=now,
+    )
 
 
 class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitOfWorkPort):
@@ -144,4 +166,4 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         await self.tenant_session.execute(stmt)
 
 
-__all__ = ["SqlAlchemyIpDataPlaneUnitOfWork"]
+__all__ = ["SqlAlchemyIpDataPlaneUnitOfWork", "build_ip_outbox_record_from_envelope"]

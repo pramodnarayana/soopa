@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import TransformationMode
+from ip.engine.domain.normalization.enums import TransformationMode
 from pydantic import BaseModel, Field
 from seedwork.domain.types import JsonDict
 

@@ -10,9 +10,9 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict
 
-from ip.engine.domain.enums import AckVerdict
+from ip.engine.domain.dispatch.enums import AckVerdict
 from ip.engine.domain.exceptions import ConnectionCheckError, Result
-from ip.engine.domain.models.stream_definition import StreamDefinition
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 
 
 @dataclass(frozen=True)

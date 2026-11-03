@@ -30,16 +30,18 @@ from ip.engine.application.worker_ports import (
     IpOutboundDeliveryExecutorPort,
     IpRunSyncExecutorPort,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
-    FetchRecordStatus,
-    IpEventType,
     OutboundDispatchStatus,
+)
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
+from ip.engine.domain.replication.enums import (
+    FetchRecordStatus,
     SyncErrorCode,
     SyncRunStatus,
 )
-from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
-from ip.engine.domain.models.outbound_record import OutboundRecord
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
     TieredStorageResultDTO,

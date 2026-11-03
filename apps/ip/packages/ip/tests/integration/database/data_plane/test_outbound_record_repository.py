@@ -7,8 +7,8 @@ from database.types import TenantSession
 from ip.engine.adapters.outbound.database.data_plane.outbound_record_repository import (
     SqlAlchemyOutboundRecordRepository,
 )
-from ip.engine.domain.enums import OutboundDispatchStatus
-from ip.engine.domain.models.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 
 pytestmark = pytest.mark.integration
 

@@ -7,9 +7,9 @@ from ip.engine.application.use_cases.normalization.promote_transformation_versio
     PromoteTransformationVersionCommand,
     PromoteTransformationVersionUseCase,
 )
-from ip.engine.domain.enums import TransformationMode
-from ip.engine.domain.events import TransformationVersionPromotedEvent
-from ip.engine.domain.normalization import Transformation
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.events import TransformationVersionPromotedEvent
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort

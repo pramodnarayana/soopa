@@ -6,9 +6,11 @@ from dataclasses import dataclass
 import structlog
 from seedwork.domain.types import JsonDict
 
-from ip.engine.application.responses import ConnectionCheckResultDTO
 from ip.engine.domain.exceptions import ConnectorNotFoundError
-from ip.engine.ports.outbound.connector_port import ConnectorMetadataPort
+from ip.engine.ports.outbound.connector_port import (
+    ConnectionCheckResultDTO,
+    ConnectorMetadataPort,
+)
 
 logger = structlog.get_logger(__name__)
 

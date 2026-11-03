@@ -13,9 +13,10 @@ from ip.engine.application.use_cases.ingestion.ingest_stream_batch_use_case impo
     IngestStreamBatchCommand,
     IngestStreamBatchUseCase,
 )
-from ip.engine.domain.enums import AckVerdict, IngestionMode
+from ip.engine.domain.dispatch.enums import AckVerdict
 from ip.engine.domain.exceptions import PayloadNotFoundError, Result
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort

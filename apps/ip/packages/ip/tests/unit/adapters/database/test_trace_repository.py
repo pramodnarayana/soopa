@@ -20,6 +20,8 @@ from ip.engine.adapters.outbound.database.data_plane.mappers import (
 from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
     IP_TRACE_EVENT_SPEC,
     IP_TRACE_STAGE_SPECS,
+)
+from ip.engine.adapters.outbound.database.data_plane.uow import (
     build_ip_outbox_record_from_envelope,
 )
 from ip.engine.adapters.outbound.database.models.base import IpTenantBase

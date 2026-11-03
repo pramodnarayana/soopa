@@ -6,14 +6,14 @@ from dataclasses import dataclass
 
 import structlog
 
-from ip.engine.domain.enums import TransformationMode
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
     IpError,
     Result,
     TransformationNotFoundError,
 )
-from ip.engine.domain.normalization import Transformation
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.ports.outbound.transformer_port import TransformerRegistryPort
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 

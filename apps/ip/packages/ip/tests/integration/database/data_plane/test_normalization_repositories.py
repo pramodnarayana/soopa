@@ -16,18 +16,18 @@ from ip.engine.adapters.outbound.database.data_plane.pending_reference_repositor
 from ip.engine.adapters.outbound.database.data_plane.replica_record_repository import (
     SqlAlchemyReplicaRecordRepository,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
 )
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
 )
+from ip.engine.domain.replication.replica_record import ReplicaRecord
 
 pytestmark = pytest.mark.integration
 

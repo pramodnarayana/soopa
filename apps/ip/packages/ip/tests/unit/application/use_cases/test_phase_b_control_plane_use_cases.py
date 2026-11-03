@@ -11,14 +11,6 @@ from types import TracebackType
 import pytest
 from database.router import DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
-from ip.application.domains.energy.canonical import EnergyEntityType
-from ip.application.stitches.registry_loader import (
-    create_default_workflow_definition_registry,
-    register_default_stitches,
-)
-from ip.application.transformers.registry_loader import (
-    create_default_transformer_registry,
-)
 from ip.engine.adapters.outbound.stitches.stitch_adapters import (
     IpStitchCanonicalDispatcherAdapter,
 )
@@ -71,12 +63,10 @@ from ip.engine.application.use_cases.stitch.stitch_control_plane_use_cases impor
     TriggerStitchEventCommand,
     TriggerStitchEventUseCase,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
-    SyncRunKind,
-    SyncRunStatus,
-    TransformationMode,
 )
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
@@ -87,15 +77,25 @@ from ip.engine.domain.exceptions import (
     StitchRunNotFoundError,
     TenantShardNotFoundError,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.stream_state import ConnectionStreamState
-from ip.engine.domain.models.sync_run import SyncRun
-from ip.engine.domain.normalization import Transformation
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.transformation import Transformation
+from ip.engine.domain.replication.enums import (
+    SyncRunKind,
+    SyncRunStatus,
+)
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.sync_run import SyncRun
+from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
-from ip.engine.ports.outbound.connector_port import SourceConnectorPort
+from ip.engine.ports.outbound.connector_port import (
+    AppSpecDTO,
+    ConnectionCheckResultDTO,
+    DiscoveredCatalogDTO,
+    RecordEnvelopeDTO,
+    SourceConnectorPort,
+)
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
@@ -135,11 +135,13 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
 )
-from ip.engine.ports.types import (
-    AppSpecDTO,
-    ConnectionCheckResultDTO,
-    DiscoveredCatalogDTO,
-    RecordEnvelopeDTO,
+from ip.solutions.domains.energy.canonical import EnergyEntityType
+from ip.solutions.stitches.registry_loader import (
+    create_default_workflow_definition_registry,
+    register_default_stitches,
+)
+from ip.solutions.transformers.registry_loader import (
+    create_default_transformer_registry,
 )
 from orchestration.application.services import WorkflowStepSchedulerService
 from orchestration.application.use_cases import (

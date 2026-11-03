@@ -10,7 +10,7 @@ from ip.engine.adapters.outbound.database.control_plane.stream_state_repository 
 from ip.engine.adapters.outbound.database.models.control_plane import (
     ConnectionStreamStateRecord,
 )
-from ip.engine.domain.models.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
 
 
 def test_to_domain_model_mapping() -> None:

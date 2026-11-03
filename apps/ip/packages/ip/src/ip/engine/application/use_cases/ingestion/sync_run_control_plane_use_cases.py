@@ -7,7 +7,7 @@ from datetime import datetime
 
 import structlog
 
-from ip.engine.domain.enums import ConnectionStatus, SyncRunKind
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import (
     ActiveSyncRunAlreadyExistsError,
     ConnectionDeactivatedError,
@@ -16,8 +16,9 @@ from ip.engine.domain.exceptions import (
     Result,
     SyncRunNotFoundError,
 )
-from ip.engine.domain.models.stream_state import ConnectionStreamState
-from ip.engine.domain.models.sync_run import SyncRun
+from ip.engine.domain.replication.enums import SyncRunKind
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

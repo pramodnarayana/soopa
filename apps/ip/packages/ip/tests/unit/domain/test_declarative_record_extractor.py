@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import CursorKind, RejectionReason
-from ip.engine.domain.models.stream_definition import DeletionMarker, StreamDefinition
-from ip.engine.domain.services.declarative_record_extractor import DeclarativeRecordExtractor
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    RejectionReason,
+)
+from ip.engine.domain.replication.extractor import DeclarativeRecordExtractor
+from ip.engine.domain.replication.stream_definition import DeletionMarker, StreamDefinition
 
 
 def test_extractor_extracts_from_nested_record_path() -> None:

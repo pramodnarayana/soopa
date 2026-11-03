@@ -8,7 +8,7 @@ from decimal import Decimal
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import normalized_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import NormalizedRecordModel
-from ip.engine.domain.models.normalized_record import NormalizedRecord
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )

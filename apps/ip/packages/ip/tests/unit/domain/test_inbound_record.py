@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import json
 
-from ip.engine.domain.events import InboundRecordCreatedEvent
-from ip.engine.domain.models.inbound_record import (
-    InboundRecord,
-    compute_payload_sha256,
-)
+from ip.engine.domain.replication.events import InboundRecordCreatedEvent
+from ip.engine.domain.replication.inbound_record import InboundRecord, compute_payload_sha256
 from seedwork.domain.types import JsonDict
 from strace.domain import TracedAggregateRoot
 

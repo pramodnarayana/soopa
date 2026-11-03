@@ -20,7 +20,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
-from strace.adapters import TenantTraceableOrmModel, TraceEventMixin
+from strace.orm import TenantTraceableOrmModel, TraceEventMixin
 
 from database.models.common import OutboxMixin, ProcessedEventMixin
 
