@@ -51,6 +51,13 @@ def test_fernet_cipher_dict_and_str_roundtrip() -> None:
     assert dec_str == text
 
 
+def test_fernet_cipher_accepts_64_char_hex_db_encryption_key() -> None:
+    hex_key = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+    cipher = SecurityProvider.get_fernet_cipher(env={"DB_ENCRYPTION_KEY": hex_key})
+    enc_str = cipher.encrypt_str("sftp_pass_123")
+    assert cipher.decrypt_str(enc_str) == "sftp_pass_123"
+
+
 def test_hmac_signer_verification() -> None:
     secret = "webhook_shared_secret"
     signer = HmacSigner(secret)

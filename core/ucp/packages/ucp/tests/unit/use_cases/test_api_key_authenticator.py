@@ -8,11 +8,8 @@ from identity.domain.api_token import ApiToken
 from identity.domain.identity_context import M2M_API_KEY_PREFIX
 from seedwork.utils import generate_id
 
-from ucp.application.use_cases.api_key_authenticator import (
-    _token_cache,
-    authenticate_api_key,
-    invalidate_api_key_cache,
-)
+from ucp.application.use_cases import api_key_authenticator
+from ucp.application.use_cases.api_key_authenticator import authenticate_api_key
 from ucp.application.use_cases.api_tokens.delete_api_token_use_case import DeleteApiTokenUseCase
 from ucp.application.use_cases.api_tokens.update_api_token_use_case import (
     UpdateApiTokenCommand,
@@ -22,41 +19,47 @@ from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 from ucp.testing.fakes import DummyApiTokenRepository, FakeUcpUnitOfWork
 
 
+class SharedTestApiTokenRepository(DummyApiTokenRepository):
+    """In-memory repository representing authoritative shared database state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tokens_by_client_id: dict[str, ApiToken] = {}
+
+    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+        token = self.tokens_by_client_id.get(client_id)
+        if token is None or not token.active or token.is_expired():
+            return None
+        return token
+
+
 @pytest.fixture
-def fake_token_repo():
-    class TestApiTokenRepository(DummyApiTokenRepository):
-        def __init__(self):
-            self.tokens = {}
-
-        async def get_by_client_id(self, client_id: str) -> ApiToken | None:
-            return self.tokens.get(client_id)
-
-    return TestApiTokenRepository()
+def fake_token_repo() -> SharedTestApiTokenRepository:
+    return SharedTestApiTokenRepository()
 
 
-@pytest.fixture(autouse=True)
-def clear_cache():
-    _token_cache.clear()
-    yield
-    _token_cache.clear()
+def test_authenticator_has_zero_process_local_mutable_cache() -> None:
+    assert not hasattr(api_key_authenticator, "_token_cache")
+    assert not hasattr(api_key_authenticator, "invalidate_api_key_cache")
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_success_and_cache(fake_token_repo):
+async def test_authenticate_api_key_success_and_shared_state_revocation(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     client_id = "test_client_id"
-    client_key_val = "test_client_secret"
-    token = f"{M2M_API_KEY_PREFIX}{client_id}.{client_key_val}"
+    raw_secret = secrets.token_hex(16)
+    token = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     token_id = generate_id(DomainIdPrefix.TOKEN)
+    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
 
-    secret_hash = hashlib.sha256(client_key_val.encode("utf-8")).hexdigest()
-
-    fake_token_repo.tokens[client_id] = ApiToken(
+    fake_token_repo.tokens_by_client_id[client_id] = ApiToken(
         id=token_id,
         tenant_id=tenant_id,
         client_id=client_id,
         secret_hash=secret_hash,
-        name="Test Token",
+        name="Non-Expiring Shared Token",
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
         last_used_at=None,
@@ -64,7 +67,6 @@ async def test_authenticate_api_key_success_and_cache(fake_token_repo):
         active=True,
     )
 
-    # First call - DB lookup
     identity = await authenticate_api_key(token, fake_token_repo)
     assert identity.subject == f"machine_{client_id}"
     assert identity.tenant_id == tenant_id
@@ -72,20 +74,18 @@ async def test_authenticate_api_key_success_and_cache(fake_token_repo):
     assert "m2m_api_client" in identity.roles
     assert identity.claims["is_m2m"] is True
 
-    assert client_id in _token_cache
+    # Simulate revocation on another API replica mutating shared DB state directly
+    fake_token_repo.tokens_by_client_id[client_id].revoke()
 
-    # Second call - Cache hit (prove it hits cache by removing from DB)
-    del fake_token_repo.tokens[client_id]
-    identity2 = await authenticate_api_key(token, fake_token_repo)
-    assert identity2.tenant_id == tenant_id
-
-    # Invalidate cache
-    invalidate_api_key_cache(client_id)
-    assert client_id not in _token_cache
+    with pytest.raises(AuthenticationError) as exc:
+        await authenticate_api_key(token, fake_token_repo)
+    assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_invalid_prefix(fake_token_repo):
+async def test_authenticate_api_key_invalid_prefix(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key("wrong_prefix.client.secret", fake_token_repo)
 
@@ -93,7 +93,9 @@ async def test_authenticate_api_key_invalid_prefix(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_invalid_format(fake_token_repo):
+async def test_authenticate_api_key_invalid_format(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(f"{M2M_API_KEY_PREFIX}invalid_format_no_dot", fake_token_repo)
 
@@ -101,7 +103,9 @@ async def test_authenticate_api_key_invalid_format(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_not_found(fake_token_repo):
+async def test_authenticate_api_key_not_found(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     token = f"{M2M_API_KEY_PREFIX}unknown_client.secret"
     with pytest.raises(AuthenticationError) as exc:
         await authenticate_api_key(token, fake_token_repo)
@@ -110,15 +114,16 @@ async def test_authenticate_api_key_not_found(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_wrong_secret(fake_token_repo):
+async def test_authenticate_api_key_wrong_secret(
+    fake_token_repo: SharedTestApiTokenRepository,
+) -> None:
     client_id = "test_client_id"
     token = f"{M2M_API_KEY_PREFIX}{client_id}.wrong_secret"
     token_id = generate_id(DomainIdPrefix.TOKEN)
     tenant_id = generate_id(DomainIdPrefix.TENANT)
-
     secret_hash = hashlib.sha256(b"correct_secret").hexdigest()
 
-    fake_token_repo.tokens[client_id] = ApiToken(
+    fake_token_repo.tokens_by_client_id[client_id] = ApiToken(
         id=token_id,
         tenant_id=tenant_id,
         client_id=client_id,
@@ -138,7 +143,14 @@ async def test_authenticate_api_key_wrong_secret(fake_token_repo):
 
 
 @pytest.mark.asyncio
-async def test_authenticate_api_key_rejects_expired_token_on_db_lookup(fake_token_repo):
+async def test_authenticate_api_key_rejects_expired_token_even_if_repo_returns_row() -> None:
+    class UnfilteredTokenRepo(DummyApiTokenRepository):
+        def __init__(self, record: ApiToken) -> None:
+            self.record = record
+
+        async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+            return self.record if client_id == self.record.client_id else None
+
     now = datetime.now(UTC)
     client_id = "expired_db_client"
     raw_secret = secrets.token_hex(16)
@@ -146,73 +158,35 @@ async def test_authenticate_api_key_rejects_expired_token_on_db_lookup(fake_toke
     tenant_id = generate_id(DomainIdPrefix.TENANT)
     token_id = generate_id(DomainIdPrefix.TOKEN)
     secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
-
-    fake_token_repo.tokens[client_id] = ApiToken(
-        id=token_id,
-        tenant_id=tenant_id,
-        client_id=client_id,
-        secret_hash=secret_hash,
-        name="Already Expired Token",
-        created_at=now - timedelta(hours=2),
-        updated_at=now - timedelta(hours=2),
-        last_used_at=None,
-        expires_at=now - timedelta(seconds=1),
-        active=True,
-    )
-
-    with pytest.raises(AuthenticationError) as exc:
-        await authenticate_api_key(token, fake_token_repo, now=now)
-
-    assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
-    assert client_id not in _token_cache
-
-
-@pytest.mark.asyncio
-async def test_authenticate_api_key_rejects_expired_token_on_cache_hit_and_evicts(fake_token_repo):
-    now = datetime.now(UTC)
-    client_id = "expiring_cached_client"
-    raw_secret = secrets.token_hex(16)
-    token = f"{M2M_API_KEY_PREFIX}{client_id}.{raw_secret}"
-    tenant_id = generate_id(DomainIdPrefix.TENANT)
-    token_id = generate_id(DomainIdPrefix.TOKEN)
-    secret_hash = hashlib.sha256(raw_secret.encode("utf-8")).hexdigest()
     expires_at = now + timedelta(minutes=5)
 
-    fake_token_repo.tokens[client_id] = ApiToken(
-        id=token_id,
-        tenant_id=tenant_id,
-        client_id=client_id,
-        secret_hash=secret_hash,
-        name="Short-Lived Token",
-        created_at=now,
-        updated_at=now,
-        last_used_at=None,
-        expires_at=expires_at,
-        active=True,
+    repo = UnfilteredTokenRepo(
+        ApiToken(
+            id=token_id,
+            tenant_id=tenant_id,
+            client_id=client_id,
+            secret_hash=secret_hash,
+            name="Short-Lived Token",
+            created_at=now,
+            updated_at=now,
+            last_used_at=None,
+            expires_at=expires_at,
+            active=True,
+        )
     )
 
-    # Initial DB lookup succeeds before expiry and populates cache
-    first_identity = await authenticate_api_key(token, fake_token_repo, now=now)
-    assert first_identity.tenant_id == tenant_id
-    assert client_id in _token_cache
-
-    # Remove DB record to prove subsequent unexpired check comes from cache
-    del fake_token_repo.tokens[client_id]
-    cached_identity = await authenticate_api_key(
-        token, fake_token_repo, now=now + timedelta(minutes=4)
+    valid_identity = await authenticate_api_key(
+        token, repo, now=now + timedelta(minutes=4, seconds=59)
     )
-    assert cached_identity.tenant_id == tenant_id
+    assert valid_identity.tenant_id == tenant_id
 
-    # At exact expiry timestamp (and after), cache-hit path must reject and evict
     with pytest.raises(AuthenticationError) as exc:
-        await authenticate_api_key(token, fake_token_repo, now=expires_at)
-
+        await authenticate_api_key(token, repo, now=expires_at)
     assert str(exc.value) == "APIKEY_INVALID_OR_REVOKED"
-    assert client_id not in _token_cache
 
 
 @pytest.mark.asyncio
-async def test_revoke_and_delete_use_cases_evict_api_key_cache() -> None:
+async def test_revoke_and_delete_use_cases_enforce_shared_state_across_instances() -> None:
     uow = FakeUcpUnitOfWork()
     now = datetime.now(UTC)
     tenant_id = generate_id(DomainIdPrefix.TENANT)
@@ -226,23 +200,27 @@ async def test_revoke_and_delete_use_cases_evict_api_key_cache() -> None:
         name="Revocable Token",
         client_id=client_id,
         secret_hash=secret_hash,
-        expires_at=now + timedelta(hours=1),
+        expires_at=None,
+        now=now,
     ).unwrap()
     await uow.api_token_repo.save(seeded)
 
-    await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
-    assert client_id in _token_cache
+    identity = await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert identity.tenant_id == tenant_id
 
     revoke_uc = UpdateApiTokenUseCase(uow=uow)
-    revoke_res = await revoke_uc.execute(
-        token_id=seeded.id,
-        tenant_id=tenant_id,
-        command=UpdateApiTokenCommand(active=False),
-    )
-    assert revoke_res.is_ok
-    assert client_id not in _token_cache
+    assert (
+        await revoke_uc.execute(
+            token_id=seeded.id,
+            tenant_id=tenant_id,
+            command=UpdateApiTokenCommand(active=False),
+        )
+    ).is_ok
 
-    # Re-activate, re-cache, then delete and verify cache eviction
+    with pytest.raises(AuthenticationError) as exc_revoked:
+        await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert str(exc_revoked.value) == "APIKEY_INVALID_OR_REVOKED"
+
     assert (
         await revoke_uc.execute(
             token_id=seeded.id,
@@ -250,9 +228,12 @@ async def test_revoke_and_delete_use_cases_evict_api_key_cache() -> None:
             command=UpdateApiTokenCommand(active=True),
         )
     ).is_ok
-    await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
-    assert client_id in _token_cache
+    reactivated_identity = await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert reactivated_identity.tenant_id == tenant_id
 
     delete_uc = DeleteApiTokenUseCase(uow=uow)
     assert (await delete_uc.execute(token_id=seeded.id, tenant_id=tenant_id)).is_ok
-    assert client_id not in _token_cache
+
+    with pytest.raises(AuthenticationError) as exc_deleted:
+        await authenticate_api_key(raw_key, uow.api_token_repo, now=now)
+    assert str(exc_deleted.value) == "APIKEY_INVALID_OR_REVOKED"

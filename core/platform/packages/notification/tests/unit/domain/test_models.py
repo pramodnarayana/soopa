@@ -1,4 +1,5 @@
-from notification.domain.models import Channel, NotificationDispatch
+from notification.domain.dispatch import NotificationDispatch
+from notification.domain.enums import Channel
 
 
 def test_notification_dispatch_uses_legacy_target_user_id() -> None:

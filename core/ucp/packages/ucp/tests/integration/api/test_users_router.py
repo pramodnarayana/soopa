@@ -3,9 +3,10 @@ from database.models.identity import Tenant as OrmTenant
 from httpx import AsyncClient
 from identity.domain.constants import IdentityEventType
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 

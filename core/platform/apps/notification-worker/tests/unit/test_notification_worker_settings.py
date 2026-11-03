@@ -22,7 +22,7 @@ from notification_worker.config.settings import get_settings
 def notification_worker_env() -> Generator[None, None, None]:
     """Inject the minimum required environment variables for AppSettings construction."""
     os.environ["DATABASE_URL"] = "postgres://global"
-    os.environ["SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL"] = "http://sqs.localhost/000/priority.fifo"
+    os.environ["SQS_NOTIFICATION_QUEUE_URL"] = "http://sqs.localhost/000/notifications.fifo"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
     get_settings.cache_clear()
 
@@ -30,7 +30,7 @@ def notification_worker_env() -> Generator[None, None, None]:
         yield
     finally:
         os.environ.pop("DATABASE_URL", None)
-        os.environ.pop("SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL", None)
+        os.environ.pop("SQS_NOTIFICATION_QUEUE_URL", None)
         os.environ.pop("AWS_DEFAULT_REGION", None)
 
 
@@ -45,14 +45,11 @@ def test_app_settings_database_nested_model_loads_from_env() -> None:
 
 
 def test_app_settings_sqs_nested_model_loads_from_env() -> None:
-    """SqsSettings.priority_notifications_queue_url must load from SQS_PRIORITY_NOTIFICATIONS_QUEUE_URL."""
+    """SqsSettings.notification_queue_url must load from SQS_NOTIFICATION_QUEUE_URL."""
     settings = get_settings()
 
-    assert settings.sqs.priority_notifications_queue_url == "http://sqs.localhost/000/priority.fifo"
-    assert (
-        settings.sqs_priority_notifications_queue_url
-        == settings.sqs.priority_notifications_queue_url
-    )
+    assert settings.sqs.notification_queue_url == "http://sqs.localhost/000/notifications.fifo"
+    assert settings.sqs_notification_queue_url == settings.sqs.notification_queue_url
 
 
 def test_app_settings_aws_nested_model_loads_from_env() -> None:

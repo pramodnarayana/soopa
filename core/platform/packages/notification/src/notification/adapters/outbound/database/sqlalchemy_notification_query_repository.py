@@ -1,8 +1,7 @@
 from collections.abc import Callable
-from typing import cast
 
 from database.models.notifications import NotificationRecord
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from notification.ports.outbound.notification_query_port import (
@@ -14,6 +13,17 @@ from notification.ports.outbound.notification_query_port import (
 class SqlAlchemyNotificationQueryRepository(NotificationQueryPort):
     def __init__(self, session_factory: Callable[[], AsyncSession]):
         self.session_factory = session_factory
+
+    @staticmethod
+    def _to_dto(notif: NotificationRecord) -> NotificationDTO:
+        return NotificationDTO(
+            id=notif.id,
+            title=notif.title,
+            body=notif.body,
+            severity=notif.severity,
+            is_read=notif.is_read,
+            created_at=notif.created_at.isoformat() if notif.created_at else None,
+        )
 
     async def get_in_app_notifications(
         self, tenant_id: str, user_id: str, limit: int = 50
@@ -31,17 +41,7 @@ class SqlAlchemyNotificationQueryRepository(NotificationQueryPort):
             result = await session.execute(stmt)
             notifications = result.scalars().all()
 
-            return [
-                NotificationDTO(
-                    id=notif.id,
-                    title=notif.title,
-                    body=notif.body,
-                    severity=notif.severity,
-                    is_read=notif.is_read,
-                    created_at=notif.created_at.isoformat() if notif.created_at else None,
-                )
-                for notif in notifications
-            ]
+            return [self._to_dto(notif) for notif in notifications]
 
     async def mark_as_read(self, tenant_id: str, user_id: str, notification_id: str) -> bool:
         async with self.session_factory() as session, session.begin():
@@ -53,6 +53,7 @@ class SqlAlchemyNotificationQueryRepository(NotificationQueryPort):
                     NotificationRecord.user_id == user_id,
                 )
                 .values(is_read=True)
+                .returning(NotificationRecord.id)
             )
-            result = cast(CursorResult[tuple[()]], await session.execute(stmt))
-            return result.rowcount > 0
+            result = await session.execute(stmt)
+            return result.scalar_one_or_none() is not None

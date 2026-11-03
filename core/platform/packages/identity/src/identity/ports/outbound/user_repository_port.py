@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from identity.domain.models.user import User
+from identity.domain.user import User
 
 
 class UserRepositoryPort(Protocol):

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
@@ -14,7 +13,6 @@ from identity.ports.outbound.api_token_repository_port import ApiTokenRepository
 logger = structlog.get_logger(__name__)
 
 _DUMMY_SHA256_HEX = "0" * 64
-_MAX_CACHE_SIZE = 5000
 _M2M_ROLE = "m2m_api_client"
 
 
@@ -26,34 +24,12 @@ class ApiKeyAuthErrorCode(StrEnum):
     INVALID_OR_REVOKED = "APIKEY_INVALID_OR_REVOKED"
 
 
-@dataclass(frozen=True)
-class _CachedApiTokenEntry:
-    tenant_id: str
-    secret_hash: str
-    expires_at: datetime | None
-
-    def is_expired(self, *, at: datetime) -> bool:
-        if self.expires_at is None:
-            return False
-        normalized_expiry = (
-            self.expires_at
-            if self.expires_at.tzinfo is not None
-            else self.expires_at.replace(tzinfo=UTC)
-        )
-        return at >= normalized_expiry.astimezone(UTC)
-
-
 def _normalize_utc(value: datetime | None) -> datetime:
     if value is None:
         return datetime.now(UTC)
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
-
-
-# In-process cache: { client_id -> _CachedApiTokenEntry }
-# Short-circuits the DB lookup for repeated calls within the same process.
-_token_cache: dict[str, _CachedApiTokenEntry] = {}
 
 
 async def authenticate_api_key(
@@ -63,8 +39,12 @@ async def authenticate_api_key(
     now: datetime | None = None,
 ) -> IdentityContext:
     """
-    Validates an M2M API token and returns a Machine IdentityContext.
-    Enforces secret digest verification and expiration on both cache-hit and database paths.
+    Validates an M2M API token against authoritative shared repository state
+    and returns a Machine IdentityContext.
+
+    Always verifies active status, expiration, and constant-time secret digest
+    directly against shared storage so token revocation and deletion take effect
+    immediately across all API replicas and worker processes.
     """
     if not token.startswith(M2M_API_KEY_PREFIX):
         raise AuthenticationError(ApiKeyAuthErrorCode.INVALID_PREFIX.value)
@@ -78,15 +58,6 @@ async def authenticate_api_key(
     secret_hash = hashlib.sha256(client_secret.encode("utf-8")).hexdigest()
     reference_now = _normalize_utc(now)
 
-    # Cache hit: enforce expiration before returning cached machine identity
-    cached_entry = _token_cache.get(client_id)
-    if cached_entry is not None:
-        if cached_entry.is_expired(at=reference_now):
-            _token_cache.pop(client_id, None)
-        elif hmac.compare_digest(cached_entry.secret_hash, secret_hash):
-            return _build_machine_identity(client_id, cached_entry.tenant_id)
-
-    # DB Lookup (constant-time digest verification on every lookup)
     token_record = await token_repo.get_by_client_id(client_id)
     candidate_hash = token_record.secret_hash if token_record is not None else _DUMMY_SHA256_HEX
     digest_matches = hmac.compare_digest(candidate_hash, secret_hash)
@@ -97,23 +68,11 @@ async def authenticate_api_key(
         and digest_matches
     )
     if not is_valid_token:
-        _token_cache.pop(client_id, None)
         logger.error("api_key_authentication_failed", client_id=client_id)
         raise AuthenticationError(ApiKeyAuthErrorCode.INVALID_OR_REVOKED.value)
 
     assert token_record is not None
-    tenant_id = token_record.tenant_id
-
-    # Populate bounded cache with expiration metadata
-    if len(_token_cache) >= _MAX_CACHE_SIZE and client_id not in _token_cache:
-        _token_cache.pop(next(iter(_token_cache)))
-    _token_cache[client_id] = _CachedApiTokenEntry(
-        tenant_id=tenant_id,
-        secret_hash=secret_hash,
-        expires_at=token_record.expires_at,
-    )
-
-    return _build_machine_identity(client_id, tenant_id)
+    return _build_machine_identity(client_id, token_record.tenant_id)
 
 
 def _build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
@@ -126,7 +85,3 @@ def _build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
         permissions=(),
         claims={"client_id": client_id, "is_m2m": True},
     )
-
-
-def invalidate_api_key_cache(client_id: str) -> None:
-    _token_cache.pop(client_id, None)

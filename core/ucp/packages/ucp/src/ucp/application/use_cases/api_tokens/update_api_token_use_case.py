@@ -7,7 +7,6 @@ from identity.domain.api_token import ApiToken
 from seedwork.domain.exceptions import Result
 
 from ucp.application.use_cases._identity_error_translator import translate_identity_error
-from ucp.application.use_cases.api_key_authenticator import invalidate_api_key_cache
 from ucp.domain.exceptions import TokenNotFoundUcpError, UcpError
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
@@ -71,9 +70,6 @@ class UpdateApiTokenUseCase:
 
             saved = await self.uow.api_token_repo.save(token)
             await self.uow.commit()
-
-        if not saved.active:
-            invalidate_api_key_cache(saved.client_id)
 
         bound_logger.info("api_token_update.completed", active=saved.active)
         return Result.ok(saved)

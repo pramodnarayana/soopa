@@ -14,6 +14,7 @@ class IdentityErrorCode(StrEnum):
 
     VALIDATION_FAILED = "VALIDATION_FAILED"
     INVALID_TOKEN_NAME = "INVALID_TOKEN_NAME"  # noqa: S105 - Domain error code enum constant, not a secret credential
+    INVALID_TOKEN_EXPIRATION = "INVALID_TOKEN_EXPIRATION"  # noqa: S105 - Domain error code enum constant, not a secret credential
     TOKEN_NOT_FOUND = "TOKEN_NOT_FOUND"  # noqa: S105 - Domain error code enum constant, not a secret credential
     TOKEN_ALREADY_REVOKED = "TOKEN_ALREADY_REVOKED"  # noqa: S105 - Domain error code enum constant, not a secret credential
     TOKEN_INACTIVE = "TOKEN_INACTIVE"  # noqa: S105 - Domain error code enum constant, not a secret credential

@@ -7,10 +7,8 @@ from notification.application.notification_compiler_use_case import (
     CompileNotificationCommand,
     NotificationCompilerUseCase,
 )
-from notification.domain.models import (
-    Channel,
-    Template,
-)
+from notification.domain.enums import Channel
+from notification.domain.template import Template
 from notification.testing.fakes import (
     FakeNotificationUow,
     FakeOutboxRepo,

@@ -18,6 +18,7 @@ def translate_identity_error(error: IdentityError) -> UcpError:
     if error.code in (
         IdentityErrorCode.VALIDATION_FAILED,
         IdentityErrorCode.INVALID_TOKEN_NAME,
+        IdentityErrorCode.INVALID_TOKEN_EXPIRATION,
         IdentityErrorCode.INVALID_USER_STATUS_ACTION,
     ):
         return UcpValidationError(message=error.message, details=dict(error.details))

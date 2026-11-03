@@ -113,7 +113,8 @@ def test_api_token_repository_bidirectional_mappers() -> None:
         name="ERP Production Key",
         client_id=client_id,
         secret_hash="sha256_digest_fixture",
-        expires_at=now,
+        expires_at=now + timedelta(days=30),
+        now=now,
     ).unwrap()
 
     orm_record: ApiTokenORM = SqlAlchemyApiTokenRepository._to_orm_record(token)
@@ -196,6 +197,7 @@ async def test_sqlalchemy_api_token_repository_get_by_client_id_excludes_expired
             client_id="cli_expired_db",
             secret_hash="hash_1",
             expires_at=now - timedelta(minutes=1),
+            now=now - timedelta(hours=1),
         ).unwrap()
         valid = ApiToken.create(
             tenant_id=tenant_id,
