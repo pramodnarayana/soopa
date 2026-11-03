@@ -1,17 +1,17 @@
 from datetime import UTC, datetime
 
 from seedwork.constants import LifecycleStatus
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import UcpIdPrefix
 
 from database.models.core import UcpBase
 
 
 class App(UcpBase):
     __tablename__ = "apps"
-    ID_PREFIX = DomainIdPrefix.UCP_APP.value
+    ID_PREFIX = UcpIdPrefix.APP.value
 
     id: Mapped[str] = mapped_column(
         String(128), primary_key=True, default=lambda: generate_id(App.ID_PREFIX)

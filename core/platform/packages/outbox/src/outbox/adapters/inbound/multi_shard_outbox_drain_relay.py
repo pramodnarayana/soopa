@@ -4,54 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from collections.abc import Sequence
-from typing import Protocol
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from seedwork.events import EventEnvelope
+from outbox.ports.outbox_relay_port import OutboxRelayPort
+from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 logger = structlog.get_logger(__name__)
 
 
-class ShardOutboxDrainPort(Protocol):
-    """Port for high-speed per-shard outbox claiming and single-query batch completion."""
-
-    async def list_shards(self) -> list[tuple[str, str]]: ...
-
-    async def claim_shard_events(
-        self,
-        *,
-        shard_name: str,
-        shard_dsn: str,
-        worker_id: str,
-        limit: int,
-        lock_lease_ms: int,
-    ) -> list[EventEnvelope]: ...
-
-    async def mark_shard_completed_batch(
-        self,
-        *,
-        shard_name: str,
-        shard_dsn: str,
-        event_ids: Sequence[str],
-        worker_id: str,
-    ) -> None: ...
-
-    async def mark_shard_failed_batch(
-        self,
-        *,
-        shard_name: str,
-        shard_dsn: str,
-        event_ids: Sequence[str],
-        worker_id: str,
-        error_message: str,
-    ) -> None: ...
-
-
-class MultiShardOutboxDrainRelay:
+class MultiShardOutboxDrainRelay(OutboxRelayPort):
     """
     Pillar 3 High-Speed "Drain-Until-Empty" Outbox Relay for multi-shard Data Planes.
 
@@ -86,9 +50,9 @@ class MultiShardOutboxDrainRelay:
         self.poll_interval_seconds = poll_interval_seconds
         self.worker_id = worker_id or generate_id(SystemIdPrefix.GENERIC)
         self.is_running = False
-        self._task: asyncio.Task[None] | None = None
+        self._task: asyncio.Task[object] | None = None
 
-    def background_tasks(self) -> list[asyncio.Task[None]]:
+    def background_tasks(self) -> list[asyncio.Task[object]]:
         return [self._task] if self._task is not None else []
 
     def start(self) -> None:
@@ -223,4 +187,4 @@ class MultiShardOutboxDrainRelay:
                 await asyncio.sleep(1.0)
 
 
-__all__ = ["MultiShardOutboxDrainRelay", "ShardOutboxDrainPort"]
+__all__ = ["MultiShardOutboxDrainRelay"]

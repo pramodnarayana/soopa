@@ -10,8 +10,9 @@ production engine manager or a transactional test double.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
-from typing import Protocol, cast
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from typing import Protocol, cast, runtime_checkable
 
 import structlog
 from sqlalchemy import or_, select, text
@@ -27,6 +28,7 @@ from database.utils import shard_connect_args
 logger = structlog.get_logger(__name__)
 
 
+@runtime_checkable
 class DatabaseRouterPort(Protocol):
     """
     Interface for dynamic database routing.
@@ -34,6 +36,8 @@ class DatabaseRouterPort(Protocol):
     """
 
     def get_global_session(self) -> AsyncGenerator[GlobalSession, None]: ...
+
+    def global_session_scope(self) -> AbstractAsyncContextManager[GlobalSession]: ...
 
     def get_tenant_session(
         self, tenant_id: str, shard_key: str, shard_url: str
@@ -140,6 +144,12 @@ class DatabaseRouter(DatabaseRouterPort):
             session.info["session_type"] = "global"
             yield cast(GlobalSession, session)
 
+    @asynccontextmanager
+    async def global_session_scope(self) -> AsyncIterator[GlobalSession]:
+        """Async context manager yielding a GlobalSession."""
+        async for session in self.get_global_session():
+            yield session
+
     async def get_tenant_session(
         self, tenant_id: str, shard_key: str, shard_url: str
     ) -> AsyncGenerator[TenantSession, None]:
@@ -221,7 +231,7 @@ class DatabaseRouter(DatabaseRouterPort):
             result = await session.execute(stmt)
             shards = []
             for row in result:
-                dsn = self._resolve_dsn(row.dsn, row.id, getattr(row, "name", None))
+                dsn = self._resolve_dsn(row.dsn, row.id, row.name)
                 shards.append((row.id, dsn))
             return shards
         return []
