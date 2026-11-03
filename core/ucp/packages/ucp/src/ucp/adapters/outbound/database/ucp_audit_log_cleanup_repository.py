@@ -1,10 +1,11 @@
 import asyncio
 import datetime
-from typing import cast
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 from database.models.observability import SystemAuditLog
-from sqlalchemy import CursorResult, delete, select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ucp.ports.outbound.ucp_audit_log_cleanup_repository_port import (
     UcpAuditLogCleanupRepositoryPort,
@@ -12,7 +13,9 @@ from ucp.ports.outbound.ucp_audit_log_cleanup_repository_port import (
 
 
 class SqlAlchemyUcpAuditLogCleanupRepository(UcpAuditLogCleanupRepositoryPort):
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
         self.session_factory = session_factory
 
     async def cleanup_system_audit_logs(self, retention_days: int) -> int:
@@ -22,15 +25,19 @@ class SqlAlchemyUcpAuditLogCleanupRepository(UcpAuditLogCleanupRepositoryPort):
         audit_deleted = 0
         async with self.session_factory() as session:
             while True:
-                stmt_audit = delete(SystemAuditLog).where(
-                    SystemAuditLog.id.in_(
-                        select(SystemAuditLog.id)
-                        .where(SystemAuditLog.created_at < cutoff_date)
-                        .limit(5000)
+                stmt_audit = (
+                    delete(SystemAuditLog)
+                    .where(
+                        SystemAuditLog.id.in_(
+                            select(SystemAuditLog.id)
+                            .where(SystemAuditLog.created_at < cutoff_date)
+                            .limit(5000)
+                        )
                     )
+                    .returning(SystemAuditLog.id)
                 )
-                res_audit = cast(CursorResult[tuple[()]], await session.execute(stmt_audit))
-                deleted = res_audit.rowcount
+                res_audit = await session.execute(stmt_audit)
+                deleted = len(res_audit.scalars().all())
                 audit_deleted += deleted
                 await session.commit()
                 if deleted < 5000:

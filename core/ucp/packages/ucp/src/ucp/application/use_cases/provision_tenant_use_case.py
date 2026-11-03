@@ -1,12 +1,14 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import structlog
-from database.exceptions import DuplicateEntityError
+from seedwork.domain.exceptions import Result
 from seedwork.utils import generate_id
 
-from ucp.domain.exceptions import SlugExhaustedException
-from ucp.domain.models.tenant import Tenant
-from ucp.domain.services.slug_service import generate_slug
+from ucp.domain.exceptions import SlugExhaustedError, UcpError
+from ucp.domain.services.slug_service import try_generate_slug
+from ucp.domain.tenant import Tenant
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 
@@ -28,12 +30,20 @@ class ProvisionTenantUseCase:
 
     async def execute(
         self, command: ProvisionTenantCommand, idempotency_key: str | None = None
-    ) -> Tenant:
-        # NOTE: Tenant ID generation intentionally lives here (application layer)
-        # because it requires os.urandom — a side-effectful infrastructure call.
-        # A future improvement is a TenantId value object with a generate() factory.
+    ) -> Result[Tenant, UcpError]:
+        slug_res = try_generate_slug(command.name)
+        if slug_res.is_err:
+            err = slug_res.unwrap_err()
+            logger.error(
+                "provision_tenant.invalid_name",
+                tenant_name=command.name,
+                code=err.code.value,
+                reason=err.message,
+            )
+            return Result.fail(err)
+
+        base_slug = slug_res.unwrap()
         local_id = generate_id(Tenant.ID_PREFIX)
-        base_slug = generate_slug(command.name)
 
         logger.info(
             "provision_tenant.started",
@@ -43,41 +53,33 @@ class ProvisionTenantUseCase:
             idempotency_key=idempotency_key,
         )
 
-        # Optimistic insert with DB-level uniqueness retry.
-        #
-        # We do NOT pre-load all existing slugs (TOCTOU race condition).
-        # Instead, we attempt an INSERT and retry with a numeric suffix on
-        # UNIQUE constraint violations — letting the database be the final
-        # authority. This is correct under concurrent provisioning.
+        # Optimistic insert with conflict-safe slug retry via TenantRepositoryPort.
         for attempt in range(_MAX_SLUG_ATTEMPTS):
             slug = base_slug if attempt == 0 else f"{base_slug}-{attempt + 1}"
 
-            try:
-                async with self.uow:
-                    tenant = Tenant.create(
-                        id=local_id,
-                        name=command.name,
-                        slug=slug,
-                        idp_tenant_id=None,
-                        subscriptions=[],
-                    )
-
-                    await self.uow.tenant_repo.save(tenant, idempotency_key)
-
-                    await self.uow.commit()
-
-                logger.info(
-                    "provision_tenant.completed",
-                    tenant_id=tenant.id,
+            async with self.uow:
+                create_res = Tenant.create(
+                    id=local_id,
+                    name=command.name,
                     slug=slug,
-                    attempt=attempt,
+                    idp_tenant_id=None,
+                    subscriptions=[],
                 )
-                return tenant
+                if create_res.is_err:
+                    err = create_res.unwrap_err()
+                    logger.error(
+                        "provision_tenant.validation_failed",
+                        tenant_id=local_id,
+                        code=err.code.value,
+                        reason=err.message,
+                    )
+                    return create_res
 
-            except DuplicateEntityError as exc:
-                # Only retry on the slug uniqueness constraint violation.
-                # All other DuplicateEntityError constraints (e.g. name conflict) are re-raised.
-                if exc.constraint_name == "tenants_slug_key":
+                tenant = create_res.unwrap()
+                inserted = await self.uow.tenant_repo.insert_if_slug_available(
+                    tenant, idempotency_key
+                )
+                if not inserted:
                     logger.warning(
                         "provision_tenant.slug_conflict",
                         slug=slug,
@@ -86,13 +88,15 @@ class ProvisionTenantUseCase:
                     )
                     continue
 
-                logger.exception(
-                    "provision_tenant.integrity_error",
-                    tenant_id=local_id,
-                    constraint_name=exc.constraint_name,
-                    reason=str(exc),
-                )
-                raise
+                await self.uow.commit()
+
+            logger.info(
+                "provision_tenant.completed",
+                tenant_id=tenant.id,
+                slug=slug,
+                attempt=attempt,
+            )
+            return Result.ok(tenant)
 
         logger.error(
             "provision_tenant.slug_exhausted",
@@ -100,7 +104,4 @@ class ProvisionTenantUseCase:
             base_slug=base_slug,
             max_attempts=_MAX_SLUG_ATTEMPTS,
         )
-        raise SlugExhaustedException(
-            f"Could not allocate a unique slug for tenant name {command.name!r} "
-            f"after {_MAX_SLUG_ATTEMPTS} attempts."
-        )
+        return Result.fail(SlugExhaustedError.for_name(command.name, _MAX_SLUG_ATTEMPTS))

@@ -1,15 +1,16 @@
 from database.models.common import OutboxMixin
 from database.models.core import UcpBase
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import text
 
+from ucp_models.constants import UcpModelIdPrefix
+
 
 class UcpOutbox(UcpBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = DomainIdPrefix.UCP_OUTBOX.value
+    ID_PREFIX = UcpModelIdPrefix.OUTBOX.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)

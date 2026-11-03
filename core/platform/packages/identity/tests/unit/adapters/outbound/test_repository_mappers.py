@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+import pytest
 from database.models.identity import ApiToken as ApiTokenORM
 from database.models.identity import Role as OrmRole
 from database.models.identity import User as DbUser
+from database.provider import DatabaseProvider
 from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from sqlalchemy import text
 
 from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
@@ -155,3 +158,72 @@ def test_jwks_token_verifier_explicit_token_claims_mapper() -> None:
     assert claims.roles == ["TenantAdmin"]
     assert claims.tenant_roles == {tenant_id: ["TenantAdmin"]}
     assert claims.raw_claims["unexpected_vendor_claim"] == "ignored_cleanly"
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_api_token_repository_get_by_client_id_excludes_expired_and_inactive() -> (
+    None
+):
+    provider = DatabaseProvider.from_url("sqlite+aiosqlite:///:memory:")
+    async with provider.session_factory() as setup_session:
+        await setup_session.execute(text("ATTACH DATABASE ':memory:' AS identity"))
+        await setup_session.execute(
+            text(
+                """
+                CREATE TABLE identity.api_tokens (
+                    id VARCHAR(128) PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    name VARCHAR(255) NOT NULL,
+                    client_id VARCHAR(64) NOT NULL UNIQUE,
+                    secret_hash VARCHAR(64) NOT NULL,
+                    last_used_at TIMESTAMP NULL,
+                    expires_at TIMESTAMP NULL,
+                    active BOOLEAN NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    deleted_at TIMESTAMP NULL,
+                    deleted_by VARCHAR(128) NULL
+                )
+                """
+            )
+        )
+        now = datetime.now(UTC)
+        tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+
+        expired = ApiToken.create(
+            tenant_id=tenant_id,
+            name="Expired",
+            client_id="cli_expired_db",
+            secret_hash="hash_1",
+            expires_at=now - timedelta(minutes=1),
+        ).unwrap()
+        valid = ApiToken.create(
+            tenant_id=tenant_id,
+            name="Valid",
+            client_id="cli_valid_db",
+            secret_hash="hash_2",
+            expires_at=now + timedelta(minutes=10),
+        ).unwrap()
+        unbounded = ApiToken.create(
+            tenant_id=tenant_id,
+            name="Unbounded",
+            client_id="cli_unbounded_db",
+            secret_hash="hash_3",
+            expires_at=None,
+        ).unwrap()
+
+        repo = SqlAlchemyApiTokenRepository(setup_session)
+        await repo.save(expired)
+        await repo.save(valid)
+        await repo.save(unbounded)
+        await setup_session.commit()
+
+        assert await repo.get_by_client_id("cli_expired_db") is None
+        fetched_valid = await repo.get_by_client_id("cli_valid_db")
+        assert fetched_valid is not None
+        assert fetched_valid.id == valid.id
+        fetched_unbounded = await repo.get_by_client_id("cli_unbounded_db")
+        assert fetched_unbounded is not None
+        assert fetched_unbounded.id == unbounded.id
+
+    await provider.engine.dispose()

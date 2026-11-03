@@ -49,12 +49,23 @@ async def test_session(db_connection: AsyncConnection) -> AsyncGenerator[AsyncSe
 @pytest.mark.integration
 async def test_claim_next_jobs(test_session: AsyncSession) -> None:
     now = datetime.now(UTC) - timedelta(seconds=10)
+    null_job_id = generate_id(SystemIdPrefix.JOB.value)
     job_1_id = generate_id(SystemIdPrefix.JOB.value)
     job_2_id = generate_id(SystemIdPrefix.JOB.value)
     future_job_id = generate_id(SystemIdPrefix.JOB.value)
 
     test_session.add_all(
         [
+            OrmScheduledJob(
+                id=null_job_id,
+                name=f"null_job_{null_job_id}",
+                status=JobStatus.PENDING.value,
+                next_run_at=None,
+                target_queue="https://sqs.us-east-1.amazonaws.com/000000000000/q1",
+                payload={"batch": 0},
+                max_retries=3,
+                retry_count=0,
+            ),
             OrmScheduledJob(
                 id=job_1_id,
                 name=f"job1_{job_1_id}",
@@ -92,9 +103,10 @@ async def test_claim_next_jobs(test_session: AsyncSession) -> None:
     repo = SqlAlchemyJobRepository(test_session)
     jobs = await repo.claim_next_jobs(worker_id="worker-1", limit=10, lock_lease_ms=5000)
 
-    assert len(jobs) == 2
+    assert len(jobs) == 3
+    assert jobs[0].id == null_job_id
     claimed_ids = {job.id for job in jobs}
-    assert claimed_ids == {job_1_id, job_2_id}
+    assert claimed_ids == {null_job_id, job_1_id, job_2_id}
 
     persisted = (
         await test_session.execute(select(OrmScheduledJob).where(OrmScheduledJob.id == job_1_id))

@@ -1,16 +1,19 @@
-from collections.abc import Sequence
-from typing import Any, Self
+from collections.abc import Mapping, Sequence
+from types import TracebackType
+from typing import Self
 
+from identity.domain.api_token import ApiToken
+from identity.domain.authorization import Role
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from identity.domain.models.api_token import ApiTokenDomainModel
-from identity.domain.models.authorization import Role
-from identity.domain.models.user import User
+from identity.domain.user import User
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
+from seedwork.domain.types import JsonDict
 
-from ucp.domain.models.app import App
-from ucp.domain.models.tenant import Tenant
+from ucp.domain.app import App
+from ucp.domain.tenant import Tenant
+from ucp.domain.webhook import Webhook
 from ucp.ports.outbound.app_repository_port import AppRepositoryPort
 from ucp.ports.outbound.idempotency_repository_port import IdempotencyRepositoryPort
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
@@ -22,11 +25,22 @@ class FakeTenantRepository(TenantRepositoryPort):
     def __init__(self) -> None:
         self.tenants: list[Tenant] = []
         self.saved_tenants: list[Tenant] = []
+        self.allocations: list[tuple[str, str, str]] = []
+        self.subscriptions: dict[tuple[str, str], str] = {}
+        self.shard_statuses: dict[tuple[str, str], str] = {}
 
     async def save(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         self.saved_tenants.append(tenant)
         self.tenants = [t for t in self.tenants if t.id != tenant.id]
         self.tenants.append(tenant)
+
+    async def insert_if_slug_available(
+        self, tenant: Tenant, idempotency_key: str | None = None
+    ) -> bool:
+        if any(t.slug == tenant.slug for t in self.tenants):
+            return False
+        await self.save(tenant, idempotency_key)
+        return True
 
     async def find_by_id(self, id: str) -> Tenant | None:
         return next((t for t in self.tenants if t.id == id), None)
@@ -44,18 +58,12 @@ class FakeTenantRepository(TenantRepositoryPort):
         pass
 
     async def allocate_shard(self, tenant_id: str, app_id: str, shard_id: str) -> None:
-        if not hasattr(self, "allocations"):
-            self.allocations = []
         self.allocations.append((tenant_id, app_id, shard_id))
 
     async def upsert_app_subscription(self, tenant_id: str, app_id: str, status: str) -> None:
-        if not hasattr(self, "subscriptions"):
-            self.subscriptions = {}
         self.subscriptions[(tenant_id, app_id)] = status
 
     async def update_shard_status(self, tenant_id: str, app_id: str, status: str) -> None:
-        if not hasattr(self, "shard_statuses"):
-            self.shard_statuses = {}
         self.shard_statuses[(tenant_id, app_id)] = status
 
 
@@ -138,25 +146,38 @@ class FakeRoleRepository(RoleRepositoryPort):
 
 
 class DummyApiTokenRepository(ApiTokenRepositoryPort):
-    async def get_all_by_tenant(self, tenant_id: str) -> list[ApiTokenDomainModel]:
-        return []
+    def __init__(self) -> None:
+        self.tokens: list[ApiToken] = []
 
-    async def get_by_id(self, token_id: str, tenant_id: str) -> ApiTokenDomainModel | None:
-        return None
+    async def get_all_by_tenant(self, tenant_id: str) -> list[ApiToken]:
+        return [t for t in self.tokens if t.tenant_id == tenant_id]
 
-    async def create(self, token: ApiTokenDomainModel) -> ApiTokenDomainModel:
+    async def get_by_id(self, token_id: str, tenant_id: str) -> ApiToken | None:
+        return next((t for t in self.tokens if t.id == token_id and t.tenant_id == tenant_id), None)
+
+    async def save(self, token: ApiToken) -> ApiToken:
+        existing = await self.get_by_id(token.id, token.tenant_id)
+        if existing is not None:
+            self.tokens.remove(existing)
+        self.tokens.append(token)
         return token
 
-    async def update(
-        self, token_id: str, tenant_id: str, **kwargs: Any
-    ) -> ApiTokenDomainModel | None:
-        return None
-
     async def delete(self, token_id: str, tenant_id: str) -> bool:
-        return True
+        token = await self.get_by_id(token_id, tenant_id)
+        if token is not None:
+            self.tokens.remove(token)
+            return True
+        return False
 
-    async def get_by_client_id(self, client_id: str) -> ApiTokenDomainModel | None:
-        return None
+    async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+        return next(
+            (
+                t
+                for t in self.tokens
+                if t.client_id == client_id and t.active and not t.is_expired()
+            ),
+            None,
+        )
 
 
 class DummyAppRepository(AppRepositoryPort):
@@ -171,20 +192,20 @@ class DummyAppRepository(AppRepositoryPort):
 
 
 class DummyWebhookRepository(WebhookRepositoryPort):
-    async def list_webhooks(self, tenant_id: str) -> Sequence[Any]:
+    async def list_webhooks(self, tenant_id: str) -> Sequence[Webhook]:
         return []
 
-    async def get_webhooks_by_ids(self, tenant_id: str, ids: list[str]) -> dict[str, str]:
+    async def get_webhooks_by_ids(self, tenant_id: str, ids: Sequence[str]) -> Mapping[str, str]:
         return {}
 
-    async def find_by_id(self, tenant_id: str, webhook_id: str) -> Any | None:
+    async def find_by_id(self, tenant_id: str, webhook_id: str) -> Webhook | None:
         return None
 
-    async def save(self, webhook: Any, idempotency_key: str | None = None) -> None:
+    async def save(self, webhook: Webhook, idempotency_key: str | None = None) -> None:
         pass
 
     async def delete_webhook(
-        self, webhook: Any, deleted_by: str, idempotency_key: str | None = None
+        self, webhook: Webhook, deleted_by: str, idempotency_key: str | None = None
     ) -> None:
         pass
 
@@ -192,14 +213,14 @@ class DummyWebhookRepository(WebhookRepositoryPort):
 class DummyIdempotencyRepository(IdempotencyRepositoryPort):
     async def get_result(
         self, tenant_id: str, idempotency_key: str
-    ) -> tuple[bool, dict[str, Any] | None, int | None]:
+    ) -> tuple[bool, JsonDict | None, int | None]:
         return False, None, None
 
     async def save_result(
         self,
         tenant_id: str,
         idempotency_key: str,
-        response_body: dict[str, Any],
+        response_body: JsonDict,
         response_status_code: int,
     ) -> None:
         pass
@@ -220,7 +241,12 @@ class FakeUcpUnitOfWork(UcpUnitOfWorkPort):
     async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if exc_type is not None:
             self.rolled_back = True
 

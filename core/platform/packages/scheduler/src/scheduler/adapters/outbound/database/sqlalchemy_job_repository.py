@@ -1,12 +1,20 @@
 from datetime import UTC, datetime, timedelta
 
 from database.models.scheduling import ScheduledJob as OrmScheduledJob
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import ScalarSelect, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scheduler.domain.constants import JobStatus
 from scheduler.domain.scheduled_job import ScheduledJob
 from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
+
+_MIN_UTC = datetime.min.replace(tzinfo=UTC)
+
+
+def _normalize_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class SqlAlchemyJobRepository(JobRepositoryPort):
@@ -61,11 +69,9 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
         result = await self.session.execute(stmt)
         return len(result.scalars().all())
 
-    async def claim_next_jobs(
-        self, worker_id: str, limit: int, lock_lease_ms: int
-    ) -> list[ScheduledJob]:
-        now_naive_utc = datetime.now(UTC).replace(tzinfo=None)
-        claimable_ids_subq = (
+    @staticmethod
+    def _build_claimable_ids_subquery(limit: int) -> ScalarSelect[str]:
+        return (
             select(OrmScheduledJob.id)
             .where(
                 or_(
@@ -75,13 +81,33 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
                         OrmScheduledJob.lease_expires_at < func.now(),
                     ),
                 ),
-                OrmScheduledJob.next_run_at <= func.now(),
+                or_(
+                    OrmScheduledJob.next_run_at.is_(None),
+                    OrmScheduledJob.next_run_at <= func.now(),
+                ),
             )
-            .order_by(OrmScheduledJob.next_run_at.asc(), OrmScheduledJob.id.asc())
+            .order_by(OrmScheduledJob.next_run_at.asc().nulls_first(), OrmScheduledJob.id.asc())
             .limit(limit)
             .with_for_update(skip_locked=True)
             .scalar_subquery()
         )
+
+    @staticmethod
+    def _sort_claimed_jobs(jobs: list[ScheduledJob]) -> list[ScheduledJob]:
+        return sorted(
+            jobs,
+            key=lambda job: (
+                job.next_run_at is not None,
+                _normalize_utc(job.next_run_at) if job.next_run_at is not None else _MIN_UTC,
+                job.id,
+            ),
+        )
+
+    async def claim_next_jobs(
+        self, worker_id: str, limit: int, lock_lease_ms: int
+    ) -> list[ScheduledJob]:
+        now_naive_utc = datetime.now(UTC).replace(tzinfo=None)
+        claimable_ids_subq = self._build_claimable_ids_subquery(limit)
         stmt = (
             update(OrmScheduledJob)
             .where(OrmScheduledJob.id.in_(claimable_ids_subq))
@@ -94,7 +120,7 @@ class SqlAlchemyJobRepository(JobRepositoryPort):
             .returning(OrmScheduledJob)
         )
         records = (await self.session.execute(stmt)).scalars().all()
-        return [self._to_domain_model(record) for record in records]
+        return self._sort_claimed_jobs([self._to_domain_model(record) for record in records])
 
     async def reschedule(self, job_id: str, worker_id: str, next_run_at: datetime) -> None:
         stmt = (

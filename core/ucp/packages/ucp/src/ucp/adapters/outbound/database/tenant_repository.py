@@ -1,33 +1,33 @@
-import structlog
-from database.outbox_serializer import serialize_domain_event
-from seedwork.utils import generate_id
-from sqlalchemy.dialects.postgresql import insert
-
-from ucp.domain.constants import SubscriptionTier
-
-logger = structlog.get_logger(__name__)
 from datetime import UTC, datetime
 
+import structlog
+from database.interceptors import intercept_db_errors
 from database.models.identity import ApiKey, ApiToken, Role, UserRole
 from database.models.identity import Tenant as DbTenant
 from database.models.webhooks import Webhook
+from database.outbox_serializer import serialize_domain_event
+from seedwork.utils import generate_id
 from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp_models.events import UcpOutbox
 from ucp_models.sharding import ShardRegistry
 from ucp_models.subscriptions import AppSubscription
 
-from ucp.domain.constants import LifecycleStatus
-from ucp.domain.models.tenant import Tenant, TenantSubscription
+from ucp.domain.constants import LifecycleStatus, SubscriptionTier
+from ucp.domain.tenant import Tenant, TenantSubscription
 from ucp.ports.outbound.tenant_repository_port import TenantRepositoryPort
 
+logger = structlog.get_logger(__name__)
 
-class TenantRepository(TenantRepositoryPort):
+
+class SqlAlchemyTenantRepository(TenantRepositoryPort):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    def _map_to_domain(
-        self, row: DbTenant, subscriptions: list[TenantSubscription] | None = None
+    @staticmethod
+    def _to_domain_model(
+        row: DbTenant, subscriptions: list[TenantSubscription] | None = None
     ) -> Tenant:
         return Tenant(
             id=row.id,
@@ -40,6 +40,26 @@ class TenantRepository(TenantRepositoryPort):
             subscriptions=subscriptions or [],
         )
 
+    @staticmethod
+    def _to_orm_record(tenant: Tenant) -> DbTenant:
+        return DbTenant(
+            id=tenant.id,
+            name=tenant.name,
+            slug=tenant.slug,
+            idp_tenant_id=tenant.idp_tenant_id,
+            status=tenant.status.value,
+            created_at=tenant.created_at.replace(tzinfo=None),
+            updated_at=tenant.updated_at.replace(tzinfo=None),
+        )
+
+    @staticmethod
+    def _update_record_from_domain(db_tenant: DbTenant, tenant: Tenant) -> None:
+        db_tenant.name = tenant.name
+        db_tenant.idp_tenant_id = tenant.idp_tenant_id
+        db_tenant.status = tenant.status.value
+        # Slug is intentionally immutable — not updated on rename.
+        # See TECHNICAL_DEBT.md: "Slug Redirect Trail for Self-Service Tenant Portals".
+
     async def find_by_id(self, id: str) -> Tenant | None:
         stmt = select(DbTenant).where(DbTenant.id == id, DbTenant.deleted_at.is_(None))
         result = await self.session.execute(stmt)
@@ -48,7 +68,7 @@ class TenantRepository(TenantRepositoryPort):
             return None
 
         subs = await self._load_subscription_ids(row.id)
-        return self._map_to_domain(row, subs)
+        return self._to_domain_model(row, subs)
 
     async def find_by_idp_tenant_id(self, idp_tenant_id: str) -> Tenant | None:
         stmt = select(DbTenant).where(
@@ -60,7 +80,7 @@ class TenantRepository(TenantRepositoryPort):
             return None
 
         subs = await self._load_subscription_ids(row.id)
-        return self._map_to_domain(row, subs)
+        return self._to_domain_model(row, subs)
 
     async def find_all(self) -> list[Tenant]:
         stmt = select(DbTenant).where(DbTenant.deleted_at.is_(None))
@@ -87,7 +107,7 @@ class TenantRepository(TenantRepositoryPort):
         tenants = []
         for row in rows:
             subs = subs_by_tenant.get(row.id, [])
-            tenants.append(self._map_to_domain(row, subs))
+            tenants.append(self._to_domain_model(row, subs))
         return tenants
 
     async def save(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
@@ -97,21 +117,9 @@ class TenantRepository(TenantRepositoryPort):
         db_tenant = result.scalar_one_or_none()
 
         if db_tenant:
-            db_tenant.name = tenant.name
-            db_tenant.idp_tenant_id = tenant.idp_tenant_id
-            db_tenant.status = tenant.status.value
-            # Slug is intentionally immutable — not updated on rename.
-            # See TECHNICAL_DEBT.md: "Slug Redirect Trail for Self-Service Tenant Portals".
+            self._update_record_from_domain(db_tenant, tenant)
         else:
-            db_tenant = DbTenant(
-                id=tenant.id,
-                name=tenant.name,
-                slug=tenant.slug,
-                idp_tenant_id=tenant.idp_tenant_id,
-                status=tenant.status.value,
-                created_at=tenant.created_at.replace(tzinfo=None),
-                updated_at=tenant.updated_at.replace(tzinfo=None),
-            )
+            db_tenant = self._to_orm_record(tenant)
             self.session.add(db_tenant)
 
         # 2. Save Subscriptions (Child Entities)
@@ -120,6 +128,34 @@ class TenantRepository(TenantRepositoryPort):
 
         # 3. Process Outbox Events (Domain Events)
         self._flush_events(tenant, idempotency_key)
+
+    async def insert_if_slug_available(
+        self, tenant: Tenant, idempotency_key: str | None = None
+    ) -> bool:
+        stmt = (
+            insert(DbTenant)
+            .values(
+                id=tenant.id,
+                name=tenant.name,
+                slug=tenant.slug,
+                idp_tenant_id=tenant.idp_tenant_id,
+                status=tenant.status.value,
+                created_at=tenant.created_at.replace(tzinfo=None),
+                updated_at=tenant.updated_at.replace(tzinfo=None),
+            )
+            .on_conflict_do_nothing(index_elements=[DbTenant.slug])
+            .returning(DbTenant.id)
+        )
+        async with intercept_db_errors():
+            result = await self.session.execute(stmt)
+        inserted_id = result.scalar_one_or_none()
+        if inserted_id is None:
+            return False
+
+        for sub in tenant.subscriptions:
+            await self.upsert_app_subscription(tenant.id, sub.app_id, sub.status.value)
+        self._flush_events(tenant, idempotency_key)
+        return True
 
     def _flush_events(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         for index, event in enumerate(tenant.domain_events):
@@ -255,6 +291,3 @@ class TenantRepository(TenantRepositoryPort):
             TenantSubscription(app_id=app_id, status=LifecycleStatus(status))
             for app_id, status in result.all()
         ]
-
-
-logger = structlog.get_logger(__name__)

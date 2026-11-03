@@ -6,9 +6,9 @@ from database.provider import DatabaseProvider
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from ucp.adapters.inbound.workers.ucp_event_dispatcher import UcpEventDispatcher
-from ucp.adapters.outbound.database.uow import SqlAlchemyUcpUnitOfWork
 from ucp.application.use_cases.app_subscription_manager import AppSubscriptionManager
 from ucp.application.use_cases.tenants.tenant_deleted_handler import TenantDeletedEventHandler
+from ucp.bootstrap.container import create_ucp_uow
 from ucp.config.settings import AppSettings
 from ucp.domain.constants import UcpEventType
 from ucp.ports.outbound.ucp_event_consumer_port import UcpEventMessage
@@ -51,7 +51,7 @@ class WorkerContainer:
         @asynccontextmanager
         async def uow_factory() -> AsyncGenerator[UcpUnitOfWorkPort, None]:
             async with self.session_factory() as session:
-                yield SqlAlchemyUcpUnitOfWork(session)
+                yield create_ucp_uow(session)
 
         provisioner = AppSubscriptionManager(uow_factory)
         tenant_deleted_handler = TenantDeletedEventHandler(uow_factory)

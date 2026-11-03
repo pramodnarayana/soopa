@@ -2,28 +2,35 @@ from datetime import UTC, datetime
 
 import pytest
 from identity.domain.constants import UserStatus
-from identity.domain.models.user import User
+from identity.domain.user import User
+from seedwork.utils import generate_id
 
 from ucp.application.use_cases.delete_user_use_case import DeleteUserCommand, DeleteUserUseCase
-from ucp.domain.exceptions import ResourceNotFoundError
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
+from ucp.domain.exceptions import UcpErrorCode
 from ucp.testing.fakes import FakeUcpUnitOfWork
 
 
 @pytest.fixture
-def fake_uow():
+def fake_uow() -> FakeUcpUnitOfWork:
     return FakeUcpUnitOfWork()
 
 
 @pytest.fixture
-def delete_user_use_case(fake_uow):
+def delete_user_use_case(fake_uow: FakeUcpUnitOfWork) -> DeleteUserUseCase:
     return DeleteUserUseCase(uow=fake_uow)
 
 
 @pytest.mark.asyncio
-async def test_delete_user_success(fake_uow, delete_user_use_case):
-    # Setup User
+async def test_delete_user_success(
+    fake_uow: FakeUcpUnitOfWork, delete_user_use_case: DeleteUserUseCase
+) -> None:
+    tenant_id = generate_id(DomainIdPrefix.TENANT)
+    user_id = generate_id(DomainIdPrefix.USER)
+    role_id = generate_id(DomainIdPrefix.ROLE)
+
     user = User(
-        id="iam_usr_123",
+        id=user_id,
         email="test@example.com",
         name="Test User",
         idp_user_id="idp_usr_123",
@@ -33,33 +40,33 @@ async def test_delete_user_success(fake_uow, delete_user_use_case):
     )
     await fake_uow.user_repo.save(user)
 
-    # Establish fake membership so find_by_id_and_tenant works
-    fake_uow.user_repo.tenant_memberships.add(("iam_ten_123", "iam_usr_123"))
-    # Also add it to role repo so has_any_tenant_memberships works
-    fake_uow.role_repo.user_roles.append(("iam_ten_123", "iam_usr_123", "iam_rol_abc"))
+    fake_uow.user_repo.tenant_memberships.add((tenant_id, user_id))
+    fake_uow.role_repo.user_roles.append((tenant_id, user_id, role_id))
 
     command = DeleteUserCommand(
-        tenant_id="iam_ten_123",
-        user_id="iam_usr_123",
+        tenant_id=tenant_id,
+        user_id=user_id,
     )
 
-    await delete_user_use_case.execute(command)
+    res = await delete_user_use_case.execute(command)
+    assert res.is_ok
 
-    # Verify user was deleted from tenant
-    assert ("iam_ten_123", "iam_usr_123") not in fake_uow.role_repo.user_roles
+    assert (tenant_id, user_id) not in fake_uow.role_repo.user_roles
 
-    # Since it was their only membership, user should be deleted from DB completely
-    saved_user = await fake_uow.user_repo.find_by_id("iam_usr_123")
+    saved_user = await fake_uow.user_repo.find_by_id(user_id)
     assert saved_user is None
 
 
 @pytest.mark.asyncio
-async def test_delete_user_not_found(delete_user_use_case):
+async def test_delete_user_not_found(delete_user_use_case: DeleteUserUseCase) -> None:
+    missing_user_id = generate_id(DomainIdPrefix.USER)
     command = DeleteUserCommand(
-        tenant_id="iam_ten_unknown",
-        user_id="iam_usr_unknown",
+        tenant_id=generate_id(DomainIdPrefix.TENANT),
+        user_id=missing_user_id,
     )
 
-    with pytest.raises(ResourceNotFoundError) as exc:
-        await delete_user_use_case.execute(command)
-    assert "User iam_usr_unknown not found" in str(exc.value)
+    res = await delete_user_use_case.execute(command)
+    assert res.is_err
+    err = res.unwrap_err()
+    assert err.code == UcpErrorCode.USER_NOT_FOUND
+    assert missing_user_id in err.message

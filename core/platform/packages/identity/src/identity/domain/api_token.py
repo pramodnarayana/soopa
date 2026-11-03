@@ -12,6 +12,13 @@ from identity.domain.constants import IdentityIdPrefix
 from identity.domain.exceptions import IdentityError, IdentityErrorCode
 
 
+def _normalize_utc(value: datetime) -> datetime:
+    """Normalize naive timestamps as UTC while preserving timezone-aware instants."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
 @dataclass(kw_only=True, eq=False)
 class ApiToken(AggregateRoot):
     """Aggregate root representing an M2M API token owned by a tenant."""
@@ -96,6 +103,13 @@ class ApiToken(AggregateRoot):
             self.updated_at = datetime.now(UTC)
         return Result.ok(self)
 
+    def is_expired(self, *, at: datetime | None = None) -> bool:
+        """Return True when the token has an expiration timestamp at or before `at`."""
+        if self.expires_at is None:
+            return False
+        reference_time = _normalize_utc(at) if at is not None else datetime.now(UTC)
+        return reference_time >= _normalize_utc(self.expires_at)
+
     def record_usage(
         self,
         *,
@@ -109,7 +123,8 @@ class ApiToken(AggregateRoot):
                 )
             )
         effective_used_at = used_at or datetime.now(UTC)
-        if self.expires_at is not None and effective_used_at >= self.expires_at:
+        if self.is_expired(at=effective_used_at):
+            assert self.expires_at is not None
             return Result.fail(
                 IdentityError(
                     code=IdentityErrorCode.TOKEN_EXPIRED,

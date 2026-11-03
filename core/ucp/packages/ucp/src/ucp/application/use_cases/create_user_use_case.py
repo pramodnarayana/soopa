@@ -1,11 +1,19 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import structlog
-from identity.domain.events import UserCreatedEvent
-from identity.domain.models.user import User
+from identity.domain.user import User
+from seedwork.domain.exceptions import Result
 from seedwork.utils import generate_id
 
-from ucp.domain.exceptions import ResourceNotFoundError, StateConflictError
+from ucp.application.use_cases._identity_error_translator import translate_identity_error
+from ucp.domain.exceptions import (
+    MissingIdpOrganizationError,
+    TenantNotFoundError,
+    UcpError,
+    UcpRoleNotFoundError,
+)
 from ucp.ports.outbound.uow_port import UcpUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -21,13 +29,10 @@ class CreateUserCommand:
 
 
 class CreateUserUseCase:
-    def __init__(
-        self,
-        uow: UcpUnitOfWorkPort,
-    ):
+    def __init__(self, uow: UcpUnitOfWorkPort) -> None:
         self._uow = uow
 
-    async def execute(self, command: CreateUserCommand) -> str:
+    async def execute(self, command: CreateUserCommand) -> Result[str, UcpError]:
         logger.info(
             "create_user.started",
             tenant_id=command.tenant_id,
@@ -37,65 +42,64 @@ class CreateUserUseCase:
             tenant = await self._uow.tenant_repo.find_by_id(command.tenant_id)
             if not tenant:
                 logger.error("create_user.tenant_not_found", tenant_id=command.tenant_id)
-                raise ResourceNotFoundError(f"Tenant {command.tenant_id} not found")
+                return Result.fail(TenantNotFoundError.for_id(command.tenant_id))
 
             if not tenant.idp_tenant_id:
                 logger.error("create_user.missing_idp_tenant", tenant_id=command.tenant_id)
-                raise StateConflictError(
-                    f"Tenant {command.tenant_id} has no associated IDP organization"
+                return Result.fail(MissingIdpOrganizationError.for_tenant(command.tenant_id))
+
+            pbac_role = await self._uow.role_repo.get_platform_role_by_id(command.role)
+            if not pbac_role:
+                logger.error(
+                    "create_user.role_not_found",
+                    tenant_id=command.tenant_id,
+                    role_id=command.role,
+                )
+                return Result.fail(
+                    UcpRoleNotFoundError.for_id(
+                        command.role,
+                        message=f"Global PBAC Role '{command.role}' is not found in the database.",
+                    )
                 )
 
-            # 1. Create Local Domain User and Save
             local_user_id = generate_id(User.ID_PREFIX)
             name = f"{command.first_name} {command.last_name}".strip()
 
-            new_user = User.create(
+            user_res = User.create(
                 id=local_user_id,
                 idp_user_id=None,
                 email=command.email,
                 name=name,
             )
-            await self._uow.user_repo.save(new_user)
-
-            # 2. Assign PBAC Role
-            pbac_role = await self._uow.role_repo.get_platform_role_by_id(command.role)
-            if not pbac_role:
-                raise ResourceNotFoundError(
-                    f"Global PBAC Role '{command.role}' is not found in the database."
+            if user_res.is_err:
+                user_err = user_res.unwrap_err()
+                logger.error(
+                    "create_user.validation_failed",
+                    tenant_id=command.tenant_id,
+                    code=user_err.code.value,
+                    reason=user_err.message,
                 )
+                return Result.fail(translate_identity_error(user_err))
 
-            # Emit the domain event for external sync
-            # Note: We do NOT call `new_user.assign_role(...)` here because it emits
-            # a `UserRoleAssignedEvent` which races with the `UserCreatedEvent`.
-            # The role is already included in `UserCreatedEvent` and handled by the worker.
-
-            # Re-save the user to persist PBAC role event outbox flush
+            new_user = user_res.unwrap()
             await self._uow.user_repo.save(new_user)
 
-            # Persist local database role mapping
             await self._uow.role_repo.assign_user_role(
                 tenant_id=tenant.id, user_id=local_user_id, role_id=pbac_role.id
             )
 
-            # 3. Register Outbox Event to Create in IDP
-            new_user.add_domain_event(
-                UserCreatedEvent(
-                    user_id=local_user_id,
-                    tenant_id=tenant.id,
-                    email=command.email,
-                    first_name=command.first_name,
-                    last_name=command.last_name,
-                    role=pbac_role.name,
-                )
+            new_user.record_invitation(
+                tenant_id=tenant.id,
+                first_name=command.first_name,
+                last_name=command.last_name,
+                role=pbac_role.name,
             )
-            # Re-save the user to persist PBAC role and flush the event outbox
             await self._uow.user_repo.save(new_user)
-
             await self._uow.commit()
 
-            logger.info(
-                "create_user.completed",
-                tenant_id=tenant.id,
-                user_id=local_user_id,
-            )
-            return local_user_id
+        logger.info(
+            "create_user.completed",
+            tenant_id=tenant.id,
+            user_id=local_user_id,
+        )
+        return Result.ok(local_user_id)

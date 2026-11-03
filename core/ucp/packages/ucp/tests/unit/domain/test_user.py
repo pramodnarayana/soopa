@@ -1,11 +1,11 @@
 from datetime import datetime
 
-import pytest
-from identity.domain.models.user import User
-from seedwork.id_registry import DomainIdPrefix
+from identity.domain.exceptions import IdentityErrorCode
+from identity.domain.user import User
 from seedwork.utils import generate_id
 
 from ucp.domain.constants import UcpEventType
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
 
 
 def test_user_mark_deleted_success() -> None:
@@ -14,15 +14,15 @@ def test_user_mark_deleted_success() -> None:
         idp_user_id="zitadel-user-1",
         email="test@example.com",
         name="Test User",
-    )
+    ).unwrap()
     assert user.deleted_at is None
 
-    user.mark_deleted()
+    res = user.mark_deleted()
 
+    assert res.is_ok
     assert user.deleted_at is not None
     assert isinstance(user.deleted_at, datetime)
     assert len(user.domain_events) == 1
-    event = user.domain_events[0]
     event = user.domain_events[0]
     assert event.event_name == UcpEventType.USER_DELETED.value
 
@@ -33,8 +33,9 @@ def test_user_mark_deleted_already_deleted() -> None:
         idp_user_id="zitadel-user-1",
         email="test@example.com",
         name="Test User",
-    )
-    user.mark_deleted()
+    ).unwrap()
+    assert user.mark_deleted().is_ok
 
-    with pytest.raises(ValueError, match="already been deleted"):
-        user.mark_deleted()
+    second = user.mark_deleted()
+    assert second.is_err
+    assert second.unwrap_err().code == IdentityErrorCode.USER_ALREADY_DELETED

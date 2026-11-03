@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import cast
 
 from database.models.identity import ApiToken as ApiTokenORM
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -101,11 +101,13 @@ class SqlAlchemyApiTokenRepository(ApiTokenRepositoryPort):
         return cast(CursorResult[tuple[()]], result).rowcount > 0
 
     async def get_by_client_id(self, client_id: str) -> ApiToken | None:
+        now = datetime.now(UTC)
         result = await self.session.execute(
             select(ApiTokenORM).where(
                 ApiTokenORM.client_id == client_id,
-                ApiTokenORM.active,
+                ApiTokenORM.active.is_(True),
                 ApiTokenORM.deleted_at.is_(None),
+                or_(ApiTokenORM.expires_at.is_(None), ApiTokenORM.expires_at > now),
             )
         )
         orm_model = result.scalar_one_or_none()

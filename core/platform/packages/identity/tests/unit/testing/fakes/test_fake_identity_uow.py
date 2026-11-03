@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -84,3 +84,32 @@ async def test_fake_api_token_lookup_excludes_inactive_tokens() -> None:
     repo.tokens.append(inactive_token)
 
     assert await repo.get_by_client_id(inactive_token.client_id) is None
+
+    expired_token = ApiToken(
+        id="iam_tok_expired",
+        tenant_id="iam_ten_first",
+        name="Expired",
+        client_id="client_expired",
+        secret_hash="hash",
+        last_used_at=None,
+        expires_at=now - timedelta(seconds=1),
+        active=True,
+        created_at=now - timedelta(hours=1),
+        updated_at=now - timedelta(hours=1),
+    )
+    valid_token = ApiToken(
+        id="iam_tok_valid",
+        tenant_id="iam_ten_first",
+        name="Valid",
+        client_id="client_valid",
+        secret_hash="hash",
+        last_used_at=None,
+        expires_at=now + timedelta(hours=1),
+        active=True,
+        created_at=now,
+        updated_at=now,
+    )
+    repo.tokens.extend((expired_token, valid_token))
+
+    assert await repo.get_by_client_id(expired_token.client_id) is None
+    assert await repo.get_by_client_id(valid_token.client_id) is valid_token
