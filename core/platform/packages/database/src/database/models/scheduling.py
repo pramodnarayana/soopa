@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
-from typing import Any
 
+from seedwork.domain.types import JsonDict
 from sqlalchemy import DateTime, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -18,7 +18,7 @@ class ScheduledJob(SchedulingBase):
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    payload: Mapped[JsonDict] = mapped_column(JSONB, default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="PENDING", nullable=False)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     interval_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)

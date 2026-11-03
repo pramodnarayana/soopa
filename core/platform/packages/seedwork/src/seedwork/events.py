@@ -32,6 +32,20 @@ class EventEnvelope:
     correlation_id: str | None = None
     lane: EventProcessingLane = EventProcessingLane.REALTIME
 
+    def to_dict(self) -> JsonDict:
+        """Explicit reflection-free dictionary representation of the EventEnvelope."""
+        return {
+            "id": self.id,
+            "source": self.source,
+            "event_type": self.event_type,
+            "tenant_id": self.tenant_id,
+            "idempotency_key": self.idempotency_key,
+            "payload": dict(self.payload),
+            "trace_id": self.trace_id,
+            "correlation_id": self.correlation_id,
+            "lane": self.lane.value,
+        }
+
 
 @dataclass(frozen=True)
 class DomainEvent(ABC):

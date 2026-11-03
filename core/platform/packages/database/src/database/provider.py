@@ -1,13 +1,15 @@
 """
 Enterprise Database Provider
 
-Centralized capability for provisioning SQLAlchemy AsyncEngines across the monorepo.
-Guarantees identical infrastructure tuning, connection pool strategies, and URL normalization.
+Centralized capability for provisioning SQLAlchemy AsyncEngines and LISTEN/NOTIFY
+connections across the monorepo. Guarantees identical infrastructure tuning,
+connection pool strategies, and URL normalization.
 """
+
+from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncIterator
-from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import (
@@ -17,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from database.listener import NotifyListenerConnectionPort, connect_notify_listener
 from database.utils import normalize_to_asyncpg
 
 logger = structlog.get_logger(__name__)
@@ -41,19 +44,38 @@ def get_async_engine(
                          Example: {"search_path": "public"}
     """
     url = normalize_to_asyncpg(url)
+    connect_args: dict[str, dict[str, str]] = (
+        {"server_settings": server_settings} if server_settings else {}
+    )
 
-    kwargs: dict[str, Any] = {
-        "echo": echo,
-        "pool_pre_ping": pool_pre_ping,
-    }
-    if not url.startswith("sqlite"):
-        kwargs["pool_size"] = pool_size
-        kwargs["max_overflow"] = max_overflow
-
-    if server_settings:
-        kwargs["connect_args"] = {"server_settings": server_settings}
-
-    engine = create_async_engine(url, **kwargs)
+    if url.startswith("sqlite"):
+        engine = (
+            create_async_engine(
+                url,
+                echo=echo,
+                pool_pre_ping=pool_pre_ping,
+                connect_args=connect_args,
+            )
+            if connect_args
+            else create_async_engine(url, echo=echo, pool_pre_ping=pool_pre_ping)
+        )
+    elif connect_args:
+        engine = create_async_engine(
+            url,
+            echo=echo,
+            pool_pre_ping=pool_pre_ping,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+            connect_args=connect_args,
+        )
+    else:
+        engine = create_async_engine(
+            url,
+            echo=echo,
+            pool_pre_ping=pool_pre_ping,
+            pool_size=pool_size,
+            max_overflow=max_overflow,
+        )
 
     logger.info(
         "database_engine_created",
@@ -69,9 +91,8 @@ class DatabaseProvider:
     """
     Enterprise Database Provider.
 
-    Provides a centralized connection pool (AsyncEngine) and session factory
-    for the entire application lifecycle. Ensures that only one engine is created
-    per provider instance.
+    Provides a centralized connection pool (AsyncEngine), session factory, and
+    LISTEN/NOTIFY connection factory for the entire application lifecycle.
     """
 
     def __init__(self, engine: AsyncEngine) -> None:
@@ -90,7 +111,8 @@ class DatabaseProvider:
         max_overflow: int = 20,
         pool_pre_ping: bool = True,
         echo: bool = False,
-    ) -> "DatabaseProvider":
+        server_settings: dict[str, str] | None = None,
+    ) -> DatabaseProvider:
         """
         Creates a DatabaseProvider by automatically instantiating the engine from a URL.
         """
@@ -100,8 +122,14 @@ class DatabaseProvider:
             max_overflow=max_overflow,
             pool_pre_ping=pool_pre_ping,
             echo=echo,
+            server_settings=server_settings,
         )
         return cls(engine=engine)
+
+    @staticmethod
+    async def connect_listener(url: str) -> NotifyListenerConnectionPort:
+        """Opens a dedicated PostgreSQL LISTEN/NOTIFY connection."""
+        return await connect_notify_listener(url)
 
     @contextlib.asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:

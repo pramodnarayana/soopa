@@ -1,4 +1,5 @@
 import os
+import uuid
 from enum import Enum
 
 
@@ -7,7 +8,7 @@ def generate_id(prefix: Enum | str, entropy_bytes: int = 16) -> str:
     Generate an enterprise-grade Stripe-style prefixed ID.
 
     Args:
-        prefix: A DomainIdPrefix or SystemIdPrefix Enum member (or str fallback)
+        prefix: An Enum member (e.g. SystemIdPrefix or domain-specific prefix) or str fallback
         entropy_bytes: The number of random bytes to generate (default 16 bytes = 32 hex chars)
 
     Returns:
@@ -27,15 +28,12 @@ def generate_random_hex(entropy_bytes: int = 16) -> str:
     return os.urandom(entropy_bytes).hex()
 
 
-import uuid
-
-
 def generate_deterministic_id(prefix: Enum | str, namespace: str, name: str) -> str:
     """
     Generate an enterprise-grade Stripe-style prefixed deterministic ID using UUIDv5.
 
     Args:
-        prefix: A DomainIdPrefix or SystemIdPrefix Enum member (or str fallback)
+        prefix: An Enum member (e.g. SystemIdPrefix or domain-specific prefix) or str fallback
         namespace: The namespace string (e.g. trace_id)
         name: The specific name within the namespace (e.g. "TRANSFORM_COMPLETED")
 

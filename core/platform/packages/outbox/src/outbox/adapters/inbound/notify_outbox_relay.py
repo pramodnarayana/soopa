@@ -1,19 +1,26 @@
+"""Inbound LISTEN/NOTIFY Outbox Relay Adapter."""
+
+from __future__ import annotations
+
 import asyncio
 import contextlib
-from typing import Any
+from collections.abc import Awaitable, Callable
 
-import asyncpg
 import structlog
-from database.utils import normalize_to_standard_postgres
+from database.listener import NotifyListenerConnectionPort
+from database.provider import DatabaseProvider
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
+from outbox.ports.outbox_relay_port import OutboxRelayPort
 
 logger = structlog.get_logger(__name__)
 
+ListenerConnector = Callable[[str], Awaitable[NotifyListenerConnectionPort]]
 
-class PostgresOutboxRelay:
+
+class NotifyOutboxRelay(OutboxRelayPort):
     """
-    Inbound adapter that listens to Postgres NOTIFY events and triggers
-    the application service (OutboxProcessorUseCase).
+    Inbound adapter that listens to database NOTIFY wakeup events via
+    `DatabaseProvider.connect_listener` and triggers `OutboxProcessorUseCase`.
     """
 
     def __init__(
@@ -22,24 +29,26 @@ class PostgresOutboxRelay:
         database_url: str,
         listen_channel: str,
         fallback_poll_interval: int = 60,
-    ):
+        listener_connector: ListenerConnector = DatabaseProvider.connect_listener,
+    ) -> None:
         self.processor = processor
         self.database_url = database_url
         self.listen_channel = listen_channel
         self.fallback_poll_interval = fallback_poll_interval
+        self._listener_connector = listener_connector
         self.is_running = False
-        self._task: asyncio.Task[Any] | None = None
+        self._task: asyncio.Task[object] | None = None
         self._notify_event = asyncio.Event()
-        self._connection: asyncpg.Connection | None = None
+        self._connection: NotifyListenerConnectionPort | None = None
 
-    def background_tasks(self) -> list[asyncio.Task[Any]]:
+    def background_tasks(self) -> list[asyncio.Task[object]]:
         return [self._task] if self._task else []
 
     def start(self) -> None:
         if not self.is_running:
             self.is_running = True
             self._task = asyncio.create_task(self._run_loop())
-            logger.info("postgres_outbox_listener_started", channel=self.listen_channel)
+            logger.info("notify_outbox_listener_started", channel=self.listen_channel)
 
     async def stop(self) -> None:
         self.is_running = False
@@ -50,18 +59,19 @@ class PostgresOutboxRelay:
             try:
                 await self._connection.remove_listener(self.listen_channel, self._on_notify)
                 await self._connection.close()
-            except (asyncpg.PostgresError, OSError, ConnectionError) as e:
-                logger.warning("outbox_listener_connection_close_error", error=str(e))
+            except Exception:
+                logger.exception("outbox_listener_connection_close_failed")
+            finally:
+                self._connection = None
 
         if self._task:
             self._task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            logger.info("postgres_outbox_listener_stopped", channel=self.listen_channel)
+            logger.info("notify_outbox_listener_stopped", channel=self.listen_channel)
 
-    def _on_notify(
-        self, connection: asyncpg.Connection, pid: int, channel: str, payload: str
-    ) -> None:
+    def _on_notify(self, connection: object, pid: int, channel: str, payload: str) -> None:
+        del connection, payload
         logger.debug("instant_wakeup_received", channel=channel, pid=pid)
         self._notify_event.set()
 
@@ -69,19 +79,19 @@ class PostgresOutboxRelay:
         if not self.database_url:
             return
         try:
-            self.database_url = normalize_to_standard_postgres(self.database_url)
-            self._connection = await asyncpg.connect(self.database_url)
+            self._connection = await self._listener_connector(self.database_url)
             await self._connection.add_listener(self.listen_channel, self._on_notify)
             logger.info("outbox_listener_listening", channel=self.listen_channel)
         except Exception:
             if self._connection:
-                await self._connection.close()
+                with contextlib.suppress(Exception):
+                    await self._connection.close()
                 self._connection = None
             logger.exception("outbox_listener_connection_failed")
 
     async def _process_loop_iteration(self) -> None:
         if self._connection and self._connection.is_closed():
-            logger.warning("asyncpg_connection_lost", action="reconnecting")
+            logger.warning("notify_listener_connection_lost", action="reconnecting")
             self._connection = None
 
         if not self._connection:
@@ -90,17 +100,15 @@ class PostgresOutboxRelay:
                 await asyncio.sleep(5.0)
                 return
 
-        # Clear event before processing to capture notifications during drain
         if self.is_running:
             self._notify_event.clear()
 
-        # Process pending until empty
         more_events = True
         while more_events and self.is_running:
             more_events = await self.processor.process_pending()
 
         if self.is_running:
-            with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
+            with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(
                     self._notify_event.wait(), timeout=self.fallback_poll_interval
                 )
@@ -115,8 +123,11 @@ class PostgresOutboxRelay:
                 except asyncio.CancelledError:
                     raise
                 except Exception:
-                    logger.exception("postgres_outbox_relay_error")
+                    logger.exception("notify_outbox_relay_error")
                     await asyncio.sleep(5.0)
 
         with contextlib.suppress(asyncio.CancelledError):
             await _listen()
+
+
+__all__ = ["ListenerConnector", "NotifyOutboxRelay"]
