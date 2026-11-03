@@ -5,11 +5,11 @@ pytestmark = pytest.mark.integration
 import pytest
 from database.models.identity import Role, Tenant, User, UserRole
 from database.models.notifications import NotificationRecord
+from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id, generate_random_hex
-from seedwork.id_registry import DomainIdPrefix
 from ucp.domain.constants import LifecycleStatus
 
-from notification.adapters.outbound.database.postgres_notification_query_repository import (
+from notification.adapters.outbound.database.sqlalchemy_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
 )
 
@@ -18,7 +18,7 @@ from notification.adapters.outbound.database.postgres_notification_query_reposit
 async def test_notification_query_and_mark_read(db_session_factory):
     tenant_id = f"test-query-tenant-{generate_random_hex(6)}"
 
-    user_id = generate_id(DomainIdPrefix.USER)
+    user_id = generate_id(IdentityIdPrefix.USER)
     notif_id = f"notif_inapp_{generate_random_hex(6)}"
 
     # Setup Data
@@ -37,7 +37,7 @@ async def test_notification_query_and_mark_read(db_session_factory):
         await session.flush()
 
         role = Role(
-            id=generate_id(DomainIdPrefix.ROLE),
+            id=generate_id(IdentityIdPrefix.ROLE),
             tenant_id=tenant_id,
             name="TenantAdmin",
             description="Admin role",

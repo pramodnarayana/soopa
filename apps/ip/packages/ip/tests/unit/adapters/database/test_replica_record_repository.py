@@ -8,7 +8,7 @@ from ip.engine.adapters.outbound.database.data_plane.replica_record_repository i
     SqlAlchemyReplicaRecordRepository,
 )
 from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRecordModel
-from ip.engine.domain.models.replica_record import ReplicaRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord
 
 
 def test_replica_record_mapper_and_update_record_from_domain() -> None:

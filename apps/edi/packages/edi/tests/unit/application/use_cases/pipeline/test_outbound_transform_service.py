@@ -14,9 +14,10 @@ import pytest
 from edi.application.use_cases.pipeline.dispatch_outbound_transform_use_case import (
     DispatchOutboundTransformUseCase,
 )
-from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
-from edi.domain.exceptions import OutboundRouteNotFoundError, TransactionNotFoundError
-from edi.ports.outbound.transaction_repository import CreateEdiJsonCommand
+from edi.domain.exceptions import OutboundRouteNotFoundError, TraceNotFoundError
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.enums import MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import (
     FakeDataPlaneUnitOfWork,
     FakeTransformerAdapter,
@@ -124,18 +125,19 @@ async def test_outbound_transform_rejects_list_with_non_ast_node() -> None:
         "transaction_type": "850",
     }
 
-    with pytest.raises(TransactionNotFoundError):
+    with pytest.raises(TraceNotFoundError):
         await make_use_case(uow=uow, transformer=transformer).execute(trace_id)
 
     assert transformer.transform_json_calls == []
 
 
 async def test_pipeline_fake_preserves_saved_edi_json_payload() -> None:
-    repository = FakeDataPlaneUnitOfWork().repository
+    uow = FakeDataPlaneUnitOfWork()
     payload = {"data": "saved"}
 
-    await repository.create_edi_json(
-        command=CreateEdiJsonCommand(
+    await uow.edi_jsons.save(
+        EdiJson(
+            id="edi_json_1",
             trace_id="trace-saved",
             tenant_id="test-tenant",
             direction=EdiDirection.OUTBOUND,
@@ -148,7 +150,7 @@ async def test_pipeline_fake_preserves_saved_edi_json_payload() -> None:
         )
     )
 
-    saved = await repository.get_edi_json("trace-saved")
+    saved = await uow.edi_jsons.get_edi_json("trace-saved")
 
     assert saved is not None
     assert saved.payload == payload
@@ -204,7 +206,7 @@ async def test_outbound_transform_missing_json_raises() -> None:
     uow = FakeDataPlaneUnitOfWork()
     use_case = make_use_case(uow=uow)
 
-    with pytest.raises(TransactionNotFoundError):
+    with pytest.raises(TraceNotFoundError):
         await use_case.execute("missing-trace")
 
 

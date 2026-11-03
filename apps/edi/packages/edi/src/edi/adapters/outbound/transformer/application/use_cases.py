@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from edi.adapters.outbound.transformer.application.ports import EDITransformerPort
-from edi.adapters.outbound.transformer.domain.models import ParsedEdiPayload
+from edi.adapters.outbound.transformer.domain.parsed_payload import ParsedEdiPayload
 
 
 class StoragePort(Protocol):

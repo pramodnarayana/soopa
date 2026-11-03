@@ -14,10 +14,10 @@ import contextlib
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from identity.adapters.outbound.database.api_token_repository import PostgresApiTokenRepository
-from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
-from identity.adapters.outbound.database.user_repository import PostgresUserRepository
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.application.use_cases.authenticators.api_key_strategy import ApiKeyStrategy
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.bootstrap.container import Container as UcpContainer
@@ -67,6 +67,11 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
         lifespan=shell_lifespan,
     )
     shell.state.settings = settings
+    shell.state.db_provider = None
+    shell.state.db_router = None
+    shell.state.ucp_container = None
+    shell.state.api_modules = []
+    shell.state.edi_app = None
     setup_observability(shell)
 
     # Layer 3 — Tenant Context Resolution
@@ -78,24 +83,26 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
 
     # Layer 2 — Perimeter Authentication
     @contextlib.asynccontextmanager
-    async def api_token_repo_factory() -> collections.abc.AsyncIterator[PostgresApiTokenRepository]:
+    async def api_token_repo_factory() -> collections.abc.AsyncIterator[
+        SqlAlchemyApiTokenRepository
+    ]:
         async with shell.state.db_provider.session() as session:
-            yield PostgresApiTokenRepository(session)
+            yield SqlAlchemyApiTokenRepository(session)
 
     @contextlib.asynccontextmanager
-    async def tenant_repo_factory() -> collections.abc.AsyncIterator[TenantRepository]:
+    async def tenant_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyTenantRepository]:
         async with shell.state.db_provider.session() as session:
-            yield TenantRepository(session)
+            yield SqlAlchemyTenantRepository(session)
 
     @contextlib.asynccontextmanager
-    async def user_repo_factory() -> collections.abc.AsyncIterator[PostgresUserRepository]:
+    async def user_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyUserRepository]:
         async with shell.state.db_provider.session() as session:
-            yield PostgresUserRepository(session)
+            yield SqlAlchemyUserRepository(session)
 
     @contextlib.asynccontextmanager
-    async def role_repo_factory() -> collections.abc.AsyncIterator[PostgresRoleRepository]:
+    async def role_repo_factory() -> collections.abc.AsyncIterator[SqlAlchemyRoleRepository]:
         async with shell.state.db_provider.session() as session:
-            yield PostgresRoleRepository(session)
+            yield SqlAlchemyRoleRepository(session)
 
     shell.add_middleware(
         AuthenticationMiddleware,
@@ -157,4 +164,4 @@ def create_app(enabled_apps: str | None = None) -> FastAPI:
 
 
 app = create_app()
-edi_app: FastAPI | None = app.state.edi_app if "edi_app" in app.state._state else None
+edi_app: FastAPI | None = app.state.edi_app

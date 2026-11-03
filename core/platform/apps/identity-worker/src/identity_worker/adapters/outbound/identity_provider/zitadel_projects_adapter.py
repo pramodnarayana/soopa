@@ -1,31 +1,28 @@
-from typing import Any
-
 import structlog
-from identity.adapters.outbound.zitadel.client import ZitadelClient
+from seedwork.domain.types import JsonDict, JsonValue
+from shttp import HttpClient
 
 from identity_worker.adapters.outbound.identity_provider.zitadel_dtos import (
     ZitadelProjectGrantsResponse,
     ZitadelRawUserSearchResponse,
     ZitadelRolesResponse,
 )
-from identity_worker.application.dto import IdpRole, IdpUser
 from identity_worker.config.settings import AppSettings
 from identity_worker.domain.exceptions import IdentityProviderPortError
-from identity_worker.ports.outbound.project_provider_port import ProjectProviderPort
+from identity_worker.ports.outbound.project_provider_port import (
+    IdpRole,
+    IdpUser,
+    ProjectProviderPort,
+)
 
 logger = structlog.get_logger(__name__)
 
 
-class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
-    def __init__(self, settings: AppSettings) -> None:
+class ZitadelProjectsAdapter(ProjectProviderPort):
+    def __init__(self, http_client: HttpClient, settings: AppSettings) -> None:
+        self._http_client = http_client
         self.settings = settings
-        super().__init__(
-            api_url=settings.zitadel_api_url,
-            machine_key=settings.zitadel_machine_key,
-            ucp_project_id=settings.zitadel_ucp_project_id,
-            default_user_password=settings.zitadel_default_user_password,
-            platform_org_id=settings.zitadel_platform_org_id,
-        )
+        self.ucp_project_id = settings.zitadel_ucp_project_id
 
     def _platform_headers(self) -> dict[str, str]:
         return {"x-zitadel-orgid": self.settings.zitadel_platform_org_id}
@@ -37,12 +34,13 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
         endpoint: str,
         *,
         headers: dict[str, str] | None = None,
-        queries: list[dict[str, Any]] | None = None,
-    ) -> list[Any]:
+        queries: list[JsonDict] | None = None,
+    ) -> list[JsonValue]:
         offset = 0
         limit = 100
         page_count = 0
-        results: list[Any] = []
+        results: list[JsonValue] = []
+        serialized_queries: list[JsonValue] = list(queries) if queries is not None else []
 
         while True:
             if page_count >= self._MAX_SEARCH_PAGES:
@@ -51,13 +49,12 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
                 )
             page_count += 1
 
-            response = await self.fetch_with_auth(
-                endpoint=endpoint,
-                method="POST",
+            response = await self._http_client.post(
+                endpoint,
                 headers=headers,
                 json={
                     "query": {"offset": offset, "limit": limit},
-                    "queries": queries or [],
+                    "queries": serialized_queries,
                 },
             )
             if response.is_error:
@@ -101,13 +98,13 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
         )
         headers = self._platform_headers()
 
-        response = await self.fetch_with_auth(
-            endpoint=f"/management/v1/projects/{project_id}/grants",
-            method="POST",
+        serialized_role_keys: list[JsonValue] = list(role_keys)
+        response = await self._http_client.post(
+            f"/management/v1/projects/{project_id}/grants",
             headers=headers,
             json={
                 "grantedOrgId": org_id,
-                "roleKeys": role_keys,
+                "roleKeys": serialized_role_keys,
             },
         )
 
@@ -162,9 +159,8 @@ class ZitadelProjectsAdapter(ZitadelClient, ProjectProviderPort):
         grant_id = grant.grant_id or grant.id
 
         # Delete the grant
-        response = await self.fetch_with_auth(
-            endpoint=f"/management/v1/projects/{project_id}/grants/{grant_id}",
-            method="DELETE",
+        response = await self._http_client.delete(
+            f"/management/v1/projects/{project_id}/grants/{grant_id}",
             headers=headers,
         )
 

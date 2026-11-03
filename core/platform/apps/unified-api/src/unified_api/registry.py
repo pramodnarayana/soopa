@@ -12,7 +12,7 @@ logger = structlog.get_logger(__name__)
 
 # Ordered so inline router modules ("ip") are registered before catch-all sub-app mounts ("edi").
 API_MODULE_REGISTRY: dict[str, str] = {
-    "ip": "ip.engine.adapters.inbound.api.module.IpApiModule",
+    "ip": "ip.engine.module.IpApiModule",
     "edi": "edi.module.EdiApiModule",
 }
 

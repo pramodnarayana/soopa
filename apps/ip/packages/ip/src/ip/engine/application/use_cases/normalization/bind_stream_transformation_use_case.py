@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
 
-from ip.engine.domain.enums import TransformationMode
-from ip.engine.domain.events import TransformationChangedEvent
 from ip.engine.domain.exceptions import IpError, NormalizationFailedError, Result
-from ip.engine.domain.normalization import Transformation
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.ports.outbound.transformer_port import TransformerRegistryPort
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
@@ -108,7 +106,7 @@ class BindStreamTransformationUseCase:
         )
 
         if existing is None:
-            transformation = Transformation.create(
+            transformation = Transformation.bind(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream,
@@ -118,31 +116,12 @@ class BindStreamTransformationUseCase:
                 shadow_transformation_version=command.shadow_transformation_version,
             )
         else:
-            transformation = Transformation(
-                id=existing.id,
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                stream=command.stream,
+            transformation = existing.rebind(
                 transformation_id=command.transformation_id,
                 transformation_version=command.transformation_version,
                 mode=command.mode,
                 shadow_transformation_version=command.shadow_transformation_version,
-                created_at=existing.created_at,
-                updated_at=datetime.now(UTC),
             )
-
-        transformation.add_domain_event(
-            TransformationChangedEvent(
-                id=transformation.id,
-                tenant_id=transformation.tenant_id,
-                connection_id=transformation.connection_id,
-                stream=transformation.stream,
-                transformation_id=transformation.transformation_id,
-                transformation_version=transformation.transformation_version,
-                mode=transformation.mode.value,
-                shadow_transformation_version=transformation.shadow_transformation_version,
-            )
-        )
 
         await self._uow.transformations.save(transformation)
         await self._uow.commit()

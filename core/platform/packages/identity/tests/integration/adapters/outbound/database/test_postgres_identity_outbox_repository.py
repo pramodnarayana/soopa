@@ -2,22 +2,27 @@ import datetime
 
 import pytest
 from database.models.identity import IdentityOutbox as OrmIdentityOutbox
+from outbox.adapters.outbound.sqlalchemy_global_outbox_repository import (
+    SqlAlchemyGlobalOutboxRepository,
+)
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from identity.adapters.outbound.database.postgres_identity_outbox_repository import (
-    PostgresIdentityOutboxRepository,
-)
+from identity.domain.constants import IdentityIdPrefix as DomainIdPrefix
+from identity.domain.constants import IdentityOutboxSource
 
 pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
 async def outbox_repo(db_session_factory):
-    yield PostgresIdentityOutboxRepository(db_session_factory)
+    yield SqlAlchemyGlobalOutboxRepository(
+        session_factory=db_session_factory,
+        model_cls=OrmIdentityOutbox,
+        source=IdentityOutboxSource.IDENTITY.value,
+    )
 
 
 @pytest.fixture

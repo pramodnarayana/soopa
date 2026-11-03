@@ -5,8 +5,8 @@ Connection Type Resolver
 Domain Service: resolves the EDI connection type from a route configuration.
 """
 
-from edi.domain.enums import EdiConnectionType
 from edi.domain.exceptions import UnresolvableConnectionTypeError
+from edi.domain.routing.enums import EdiConnectionType
 from edi.domain.types import JsonDict
 
 

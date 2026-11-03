@@ -5,18 +5,18 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from ip.engine.domain.constants import REDACTED_SECRET_VALUE
-from ip.engine.domain.enums import (
+from ip.engine.domain.dispatch.classifier import (
+    classify_outbound_http_outcome,
+    parse_retry_after_seconds,
+    redact_sensitive_headers,
+)
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
     OutboundConflictStrategy,
     OutboundDispatchStatus,
     OutboundFailureCategory,
 )
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.services.outbound_error_classifier import (
-    classify_outbound_http_outcome,
-    parse_retry_after_seconds,
-    redact_sensitive_headers,
-)
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 
 
 def test_redact_sensitive_headers_masks_auth_and_cookies_case_insensitively() -> None:

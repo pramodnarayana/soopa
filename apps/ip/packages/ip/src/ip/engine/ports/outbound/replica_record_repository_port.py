@@ -9,8 +9,8 @@ from typing import Protocol
 
 from seedwork.domain.types import JsonDict, JsonPrimitive
 
-from ip.engine.domain.enums import MergeOutcome
-from ip.engine.domain.models.replica_record import ReplicaRecord
+from ip.engine.domain.replication.enums import MergeOutcome
+from ip.engine.domain.replication.replica_record import ReplicaRecord
 
 
 @dataclass(frozen=True)

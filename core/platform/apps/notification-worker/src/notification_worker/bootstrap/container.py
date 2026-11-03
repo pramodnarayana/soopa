@@ -33,16 +33,16 @@ class WorkerContainer(containers.DeclarativeContainer):
         notification_compiler=notification_package.notification_compiler,
     )
 
-    priority_queue_consumer = providers.Singleton(
+    notification_queue_consumer = providers.Singleton(
         AwsSqsConsumer,
-        queue_url=config.sqs_priority_notifications_queue_url,
+        queue_url=config.sqs_notification_queue_url,
         region_name=config.aws_region,
         endpoint_url=config.aws_endpoint_url,
     )
 
     consumer_worker = providers.Singleton(
         SqsConsumerManager,
-        consumer=priority_queue_consumer,
-        queue_name="edi-priority-notifications.fifo",
+        consumer=notification_queue_consumer,
+        queue_name="notifications.fifo",
         handler=notification_dispatcher.provided.dispatch_raw,
     )

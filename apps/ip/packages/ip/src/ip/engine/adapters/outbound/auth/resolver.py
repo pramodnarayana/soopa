@@ -12,9 +12,10 @@ from ip.engine.adapters.outbound.auth.basic_auth_strategy import BasicAuthStrate
 from ip.engine.adapters.outbound.auth.bearer_auth_strategy import BearerAuthStrategy
 from ip.engine.adapters.outbound.auth.no_auth_strategy import NoAuthStrategy
 from ip.engine.adapters.outbound.auth.oauth2_strategy import OAuth2Strategy
-from ip.engine.domain.enums import AuthType
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
 from seedwork.domain.types import JsonDict
+from shttp import HttpRequestAuthenticator
 
 
 def _parse_credentials_dict(credentials: JsonDict | bytes | str | None) -> JsonDict:
@@ -52,17 +53,16 @@ _AUTH_TYPE_ALIASES: dict[str, AuthType] = {
 }
 
 
-class AuthStrategyResolver:
-    """Resolves and instantiates the appropriate AuthenticatorPort strategy for a connection."""
+class AuthStrategyResolver(AuthStrategyResolverPort[HttpRequestAuthenticator]):
+    """Resolves and instantiates the appropriate HttpRequestAuthenticator strategy for a connection."""
 
-    @classmethod
+    @staticmethod
     def resolve(
-        cls,
         auth_type: AuthType | str,
         credentials: JsonDict | bytes | str | None = None,
         *,
         allow_private_ips: bool = False,
-    ) -> AuthenticatorPort:
+    ) -> HttpRequestAuthenticator:
         creds_dict = _parse_credentials_dict(credentials)
         resolved_type = (
             auth_type

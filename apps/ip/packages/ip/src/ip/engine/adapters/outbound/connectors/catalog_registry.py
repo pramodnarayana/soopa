@@ -8,17 +8,27 @@ from ip.engine.adapters.outbound.connectors.declarative_http_connector import (
     DeclarativeHttpConnector,
 )
 from ip.engine.adapters.outbound.connectors.spec_mapper import schema_to_app_spec_dto
-from ip.engine.application.responses import AppSpecDTO, CatalogAppSummaryDTO
+from ip.engine.domain.connection.http_spec import DeclarativeManifest
 from ip.engine.domain.exceptions import ConnectorNotFoundError, Result
-from ip.engine.domain.models.connector_spec import DeclarativeManifest
-from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
-from ip.engine.ports.outbound.connector_port import ConnectorPort
+from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
+from ip.engine.ports.outbound.catalog_registry_port import (
+    CatalogAppSummaryDTO,
+    CatalogRegistryPort,
+)
+from ip.engine.ports.outbound.connector_port import AppSpecDTO, ConnectorPort
+from shttp import HttpRequestAuthenticator
 
 
 class ConnectorCatalogRegistry(CatalogRegistryPort):
     """Generic registry of declarative manifests and native/custom connectors."""
 
-    def __init__(self, allow_private_ips: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        auth_resolver: AuthStrategyResolverPort[HttpRequestAuthenticator],
+        allow_private_ips: bool = False,
+    ) -> None:
+        self._auth_resolver = auth_resolver
         self._allow_private_ips = allow_private_ips
         self._manifests: dict[str, DeclarativeManifest] = {}
         self._connectors: dict[str, ConnectorPort] = {}
@@ -65,6 +75,7 @@ class ConnectorCatalogRegistry(CatalogRegistryPort):
             if app_id not in self._cached_declarative_connectors:
                 self._cached_declarative_connectors[app_id] = DeclarativeHttpConnector(
                     self._manifests[app_id],
+                    auth_resolver=self._auth_resolver,
                     allow_private_ips=self._allow_private_ips,
                 )
             return Result.ok(self._cached_declarative_connectors[app_id])

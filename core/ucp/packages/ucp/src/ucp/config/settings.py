@@ -1,13 +1,13 @@
 import typing
 from functools import lru_cache
 
+from identity import PlatformIdentitySettings
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import (
     PlatformAwsSettings,
     PlatformDatabaseSettings,
-    PlatformIdentitySettings,
 )
 
 

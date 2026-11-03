@@ -6,9 +6,8 @@ import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-import httpx
 import jwt
-from shttp import HttpClient, HttpError
+from shttp import BearerTokenProvider, HttpClient, HttpError
 
 
 class ZitadelMachineAuthenticationError(RuntimeError):
@@ -52,7 +51,7 @@ def _required_string(details: Mapping[object, object], field: str) -> str:
     return value
 
 
-class ZitadelMachineTokenProvider:
+class ZitadelMachineTokenProvider(BearerTokenProvider):
     """Exchange a machine key for short-lived Zitadel API access tokens."""
 
     _ASSERTION_LIFETIME_SECONDS = 300
@@ -60,16 +59,31 @@ class ZitadelMachineTokenProvider:
     _API_SCOPE = "openid urn:zitadel:iam:org:project:id:zitadel:aud"
     _JWT_BEARER_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
-    def __init__(self, api_url: str, machine_key: str) -> None:
+    def __init__(
+        self,
+        api_url: str,
+        machine_key: str,
+        *,
+        allow_private_ips: bool | None = None,
+    ) -> None:
         self._api_url = api_url.rstrip("/")
-        if not self._api_url:
-            raise ZitadelMachineAuthenticationError("IDENTITY_API_URL is required")
-        self._machine_key = ZitadelMachineKey.from_json(machine_key)
+        self._raw_machine_key = machine_key
+        self._allow_private_ips = allow_private_ips
+        self._machine_key: ZitadelMachineKey | None = None
         self._cached_token: str | None = None
         self._refresh_at = 0.0
         self._lock = asyncio.Lock()
 
-    async def get_access_token(self, client: HttpClient | httpx.AsyncClient) -> str:
+    def _resolve_machine_key(self) -> ZitadelMachineKey:
+        if not self._api_url:
+            raise ZitadelMachineAuthenticationError("IDENTITY_API_URL is required")
+        if not self._raw_machine_key:
+            raise ValueError("IDENTITY_MACHINE_KEY is not configured")
+        if self._machine_key is None:
+            self._machine_key = ZitadelMachineKey.from_json(self._raw_machine_key)
+        return self._machine_key
+
+    async def get_access_token(self, client: HttpClient) -> str:
         if self._cached_token is not None and time.monotonic() < self._refresh_at:
             return self._cached_token
 
@@ -85,20 +99,21 @@ class ZitadelMachineTokenProvider:
             )
             return token
 
-    async def _exchange(self, client: HttpClient | httpx.AsyncClient) -> tuple[str, int]:
+    async def _exchange(self, client: HttpClient) -> tuple[str, int]:
+        machine_key = self._resolve_machine_key()
         issued_at = int(time.time())
         try:
             assertion = jwt.encode(
                 {
-                    "iss": self._machine_key.user_id,
-                    "sub": self._machine_key.user_id,
+                    "iss": machine_key.user_id,
+                    "sub": machine_key.user_id,
                     "aud": self._api_url,
                     "iat": issued_at,
                     "exp": issued_at + self._ASSERTION_LIFETIME_SECONDS,
                 },
-                self._machine_key.private_key,
+                machine_key.private_key,
                 algorithm="RS256",
-                headers={"kid": self._machine_key.key_id},
+                headers={"kid": machine_key.key_id},
             )
         except (jwt.PyJWTError, TypeError, ValueError) as exc:
             raise ZitadelMachineAuthenticationError(
@@ -112,18 +127,12 @@ class ZitadelMachineTokenProvider:
             "assertion": assertion,
         }
         try:
-            if isinstance(client, HttpClient):
-                response = await client.post(
-                    token_url,
-                    data=request_payload,
-                    allow_private_ips=True,
-                )
-            else:
-                response = await client.post(
-                    token_url,
-                    data=request_payload,
-                )
-        except (httpx.HTTPError, HttpError) as exc:
+            response = await client.post(
+                token_url,
+                data=request_payload,
+                allow_private_ips=self._allow_private_ips,
+            )
+        except HttpError as exc:
             raise ZitadelMachineAuthenticationError(
                 "Zitadel machine authentication request failed"
             ) from exc

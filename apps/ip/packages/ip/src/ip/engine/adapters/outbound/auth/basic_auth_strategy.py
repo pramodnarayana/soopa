@@ -3,10 +3,10 @@ from collections.abc import Sequence
 
 import httpx
 from ip.engine.domain.exceptions import InvalidCredentialsError
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
+from shttp import HttpRequestAuthenticator
 
 
-class BasicAuthStrategy(AuthenticatorPort):
+class BasicAuthStrategy(HttpRequestAuthenticator):
     """Encodes username:password into an Authorization: Basic <encoded> header."""
 
     def __init__(self, username: str, password: str) -> None:

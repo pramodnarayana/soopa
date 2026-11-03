@@ -10,9 +10,10 @@ from ip.engine.adapters.outbound.database.control_plane.connection_repository im
 from ip.engine.adapters.outbound.database.control_plane.transformation_repository import (
     SqlAlchemyTransformationRepository,
 )
-from ip.engine.domain.enums import AuthType, TransformationMode
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.normalization import Transformation
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.transformation import Transformation
 
 pytestmark = pytest.mark.integration
 

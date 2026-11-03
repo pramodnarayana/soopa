@@ -13,8 +13,8 @@ import contextlib
 import pytest
 
 from edi.application.use_cases.pipeline.pipeline_lifecycle_use_case import PipelineLifecycleUseCase
-from edi.domain.enums import EdiDirection as MessageDirection
-from edi.domain.enums import MessageStatus, PipelineEventType
+from edi.domain.routing.enums import EdiDirection as MessageDirection
+from edi.domain.transaction.enums import MessageStatus, PipelineEventType
 from edi.testing.fakes.pipeline_fakes import FakeDataPlaneUnitOfWork
 
 pytestmark = pytest.mark.asyncio
@@ -108,7 +108,7 @@ async def test_handle_delivery_successful_inbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-inbound-dlv"
 
-    uow.api_gateway_transactions.api_gateway[trace_id] = {
+    uow.api_gateway_receipts.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "status": MessageStatus.PENDING_DELIVERY,
     }
@@ -122,7 +122,7 @@ async def test_handle_delivery_successful_inbound() -> None:
     use_case = make_use_case(uow=uow)
     await use_case.handle_delivery_successful("tenant1", "key1", payload)
 
-    saved_api = uow.api_gateway_transactions.api_gateway.get(trace_id)
+    saved_api = uow.api_gateway_receipts.api_gateway.get(trace_id)
     assert saved_api is not None
     assert saved_api["status"] == str(MessageStatus.DELIVERED)
 
@@ -130,7 +130,7 @@ async def test_handle_delivery_successful_inbound() -> None:
 async def test_handle_delivery_successful_null_direction_defaults_to_inbound() -> None:
     uow = FakeDataPlaneUnitOfWork()
     trace_id = "trace-null-direction-dlv"
-    uow.api_gateway_transactions.api_gateway[trace_id] = {
+    uow.api_gateway_receipts.api_gateway[trace_id] = {
         "trace_id": trace_id,
         "status": MessageStatus.PENDING_DELIVERY,
     }
@@ -145,9 +145,7 @@ async def test_handle_delivery_successful_null_direction_defaults_to_inbound() -
         },
     )
 
-    assert uow.api_gateway_transactions.api_gateway[trace_id]["status"] == str(
-        MessageStatus.DELIVERED
-    )
+    assert uow.api_gateway_receipts.api_gateway[trace_id]["status"] == str(MessageStatus.DELIVERED)
 
 
 async def test_handle_delivery_successful_outbound() -> None:

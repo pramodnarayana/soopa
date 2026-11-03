@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 
 from seedwork import generate_id
 from seedwork.domain.types import JsonValue
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy import (
     Boolean,
     DateTime,
@@ -13,6 +12,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 from sqlalchemy.sql import text
+
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 
 
 class TimestampMixin:

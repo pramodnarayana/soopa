@@ -2,20 +2,20 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import pytest
-from identity.adapters.outbound.database.role_repository import PostgresRoleRepository
-from identity.adapters.outbound.database.user_repository import PostgresUserRepository
+from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
+from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
 from identity.application.authenticate_use_case import TenantNotProvisionedError
 from identity.domain.constants import UserStatus
 from identity.domain.identity_context import TokenClaims
-from identity.domain.models.user import User
+from identity.domain.user import User
 from identity.ports.outbound.token_verifier_port import TokenVerifierPort
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.application.use_cases.authenticators.jwt_strategy import JwtStrategy
 from ucp.domain.constants import LifecycleStatus
-from ucp.domain.models.tenant import Tenant
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
+from ucp.domain.tenant import Tenant
 
 pytestmark = pytest.mark.integration
 
@@ -32,15 +32,15 @@ class FakeTokenVerifier(TokenVerifierPort):
 def jwt_strategy(db_session):
     @asynccontextmanager
     async def tenant_repo_factory():
-        yield TenantRepository(db_session)
+        yield SqlAlchemyTenantRepository(db_session)
 
     @asynccontextmanager
     async def user_repo_factory():
-        yield PostgresUserRepository(db_session)
+        yield SqlAlchemyUserRepository(db_session)
 
     @asynccontextmanager
     async def role_repo_factory():
-        yield PostgresRoleRepository(db_session)
+        yield SqlAlchemyRoleRepository(db_session)
 
     def _create_strategy(claims: TokenClaims) -> JwtStrategy:
         return JwtStrategy(
@@ -62,7 +62,7 @@ async def test_jwt_strategy_resolves_idp_ids(jwt_strategy, db_session):
     idp_org_id = "idp_org_456"
     idp_user_id = "idp_usr_456"
 
-    tenant_repo = TenantRepository(db_session)
+    tenant_repo = SqlAlchemyTenantRepository(db_session)
     tenant = Tenant(
         id=canonical_tenant_id,
         name="Test",
@@ -74,7 +74,7 @@ async def test_jwt_strategy_resolves_idp_ids(jwt_strategy, db_session):
     )
     await tenant_repo.save(tenant)
 
-    user_repo = PostgresUserRepository(db_session)
+    user_repo = SqlAlchemyUserRepository(db_session)
     user = User(
         id=canonical_user_id,
         email="test@test.com",
@@ -149,7 +149,7 @@ async def test_jwt_strategy_passes_unmapped_claims(jwt_strategy, db_session):
     # If the user has a claim but it's not a platform organization, it should map properly.
     idp_user_id = "idp_usr_789"
 
-    user_repo = PostgresUserRepository(db_session)
+    user_repo = SqlAlchemyUserRepository(db_session)
     user = User(
         id=generate_id(DomainIdPrefix.USER),
         email="test2@test.com",

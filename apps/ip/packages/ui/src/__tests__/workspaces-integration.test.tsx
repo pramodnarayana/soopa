@@ -27,6 +27,7 @@ import { TraceWaterfallStageContent } from '../presentation/traces/TraceWaterfal
 import { TransformationWorkbenchPanel } from '../presentation/transformations/TransformationWorkbenchPanel';
 import {
   createInMemoryIpWorkspaceSeed,
+  SEED_CATALOG_APPS,
   SEED_CONNECTION,
   SEED_CONNECTION_ID,
   SEED_DISCOVERED_CATALOG,
@@ -50,6 +51,7 @@ function createHydratedQueryClient(): QueryClient {
     defaultOptions: { queries: { retry: false } },
   });
 
+  qc.setQueryData(ipQueryKeys.catalog.apps(SEED_TENANT_ID, undefined), ok(SEED_CATALOG_APPS));
   qc.setQueryData(ipQueryKeys.connections.list(SEED_TENANT_ID, undefined), ok([SEED_CONNECTION]));
   qc.setQueryData(
     ipQueryKeys.connections.detail(SEED_TENANT_ID, SEED_CONNECTION_ID),
@@ -327,6 +329,54 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     );
     expect(workbenchHtml).toContain('Dry-Run &amp; Shadow Diff Workbench');
     expect(workbenchHtml).toContain('Run Dry-Run Preview');
+  });
+
+  it('excludes DEACTIVATED connections from catalog Connected badges and Active Connections pills', () => {
+    const qc = createHydratedQueryClient();
+    const deactivatedOnlyApp = SEED_CATALOG_APPS[1];
+    expect(deactivatedOnlyApp).toBeDefined();
+    if (!deactivatedOnlyApp) {
+      return;
+    }
+
+    qc.setQueryData(
+      ipQueryKeys.connections.list(SEED_TENANT_ID, undefined),
+      ok([
+        SEED_CONNECTION,
+        {
+          ...SEED_CONNECTION,
+          id: 'conn_primary_deactivated',
+          name: 'Deactivated Legacy Meter Vault',
+          status: ConnectionStatus.DEACTIVATED,
+          deactivatedAt: '2026-10-30T10:00:00Z',
+        },
+        {
+          ...SEED_CONNECTION,
+          id: 'conn_primary_expired',
+          name: 'Expired Backup Meter Vault',
+          status: ConnectionStatus.AUTH_EXPIRED,
+        },
+        {
+          ...SEED_CONNECTION,
+          id: 'conn_second_app_deactivated',
+          appId: deactivatedOnlyApp.appId,
+          name: 'Deactivated Secondary Connector',
+          status: ConnectionStatus.DEACTIVATED,
+          deactivatedAt: '2026-10-30T11:00:00Z',
+        },
+      ]),
+    );
+
+    const connectionsHtml = renderInIpWorkspace(<IpConnectionsPage />, qc);
+    expect(connectionsHtml).toContain('2 Connected');
+    expect(connectionsHtml).not.toContain('3 Connected');
+    expect(connectionsHtml).not.toContain('1 Connected');
+    expect(connectionsHtml).toContain(SEED_CONNECTION.name);
+    expect(connectionsHtml).toContain('Expired Backup Meter Vault');
+    expect(connectionsHtml).toContain('bg-emerald-500');
+    expect(connectionsHtml).toContain('bg-amber-500');
+    expect(connectionsHtml).not.toContain('Deactivated Legacy Meter Vault');
+    expect(connectionsHtml).not.toContain('Deactivated Secondary Connector');
   });
 });
 

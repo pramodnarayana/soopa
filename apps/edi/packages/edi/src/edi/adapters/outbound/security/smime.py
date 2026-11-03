@@ -17,18 +17,18 @@ from cryptography import x509
 from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, CipherAlgorithm, algorithms, modes
 from cryptography.hazmat.primitives.serialization import pkcs7
 from cryptography.utils import CryptographyDeprecationWarning
 
 import edi.core.patches.cryptography  # noqa: F401 - applies legacy 3DES patch
-from edi.domain.enums import As2EncryptionAlgorithm, As2SignatureAlgorithm
+from edi.domain.partner.as2.enums import As2EncryptionAlgorithm, As2SignatureAlgorithm
 
 
 class BlockCipherFactory(Protocol):
     block_size: int
 
-    def __call__(self, key: bytes) -> algorithms.CipherAlgorithm: ...
+    def __call__(self, key: bytes) -> CipherAlgorithm: ...
 
 
 # Supported ciphers registry for S/MIME encryption

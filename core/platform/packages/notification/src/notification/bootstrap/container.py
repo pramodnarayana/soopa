@@ -6,13 +6,12 @@ inside class bodies. The Container is the single source of truth for all
 dependency wiring in this bounded context.
 """
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 import structlog
-from database.provider import get_async_engine
-from database.utils import normalize_to_asyncpg
+from database.provider import DatabaseProvider
 from dependency_injector import containers, providers
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from notification.adapters.outbound.channel_dispatcher import NotificationChannelDispatcher
 from notification.adapters.outbound.channels import (
@@ -21,14 +20,23 @@ from notification.adapters.outbound.channels import (
     SlackChannelStrategy,
 )
 from notification.adapters.outbound.channels.dummy_email_provider import DummyEmailProvider
-from notification.adapters.outbound.database.postgres_notification_query_repository import (
+from notification.adapters.outbound.database.sqlalchemy_notification_query_repository import (
     SqlAlchemyNotificationQueryRepository,
 )
-from notification.adapters.outbound.database.postgres_route_repository import (
+from notification.adapters.outbound.database.sqlalchemy_notification_record_repository import (
+    SqlAlchemyNotificationRecordRepository,
+)
+from notification.adapters.outbound.database.sqlalchemy_outbox_repository import (
+    SqlAlchemyNotificationOutboxRepository,
+)
+from notification.adapters.outbound.database.sqlalchemy_route_repository import (
     SqlAlchemyNotificationRouteRepository,
 )
-from notification.adapters.outbound.database.postgres_template_repository import (
+from notification.adapters.outbound.database.sqlalchemy_template_repository import (
     SqlAlchemyTemplateRepository,
+)
+from notification.adapters.outbound.database.sqlalchemy_user_preference_repository import (
+    SqlAlchemyUserNotificationPreferenceRepository,
 )
 from notification.adapters.outbound.database.uow import SqlAlchemyNotificationUnitOfWork
 from notification.adapters.outbound.template_renderer import Jinja2TemplateRenderer
@@ -42,19 +50,30 @@ from notification.config import NotificationEngineSettings
 logger = structlog.get_logger(__name__)
 
 
-async def _init_async_engine(database_url: str) -> AsyncGenerator[AsyncEngine]:
-    """Resource lifecycle hook: creates and disposes the SQLAlchemy async engine."""
-    database_url = normalize_to_asyncpg(database_url)
-    engine = get_async_engine(database_url)
+async def _init_db_provider(database_url: str) -> AsyncGenerator[DatabaseProvider]:
+    """Resource lifecycle hook: creates and disposes the centralized DatabaseProvider."""
+    provider = DatabaseProvider.from_url(database_url)
     try:
-        yield engine
+        yield provider
     finally:
-        await engine.dispose()
-        logger.info("Database engine disposed by DI container.")
+        await provider.close()
+        logger.info("database_provider_disposed")
 
 
-def _init_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
-    return async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+def _extract_session_factory(provider: DatabaseProvider) -> Callable[[], AsyncSession]:
+    return provider.session_factory
+
+
+def create_notification_uow(session: AsyncSession) -> SqlAlchemyNotificationUnitOfWork:
+    """Composition Root factory assembling concrete Notification repositories into SqlAlchemyNotificationUnitOfWork."""
+    return SqlAlchemyNotificationUnitOfWork(
+        session=session,
+        user_preference_repo=SqlAlchemyUserNotificationPreferenceRepository(session=session),
+        template_repo=SqlAlchemyTemplateRepository(session=session),
+        record_repo=SqlAlchemyNotificationRecordRepository(session=session),
+        route_repo=SqlAlchemyNotificationRouteRepository(session=session),
+        outbox_repo=SqlAlchemyNotificationOutboxRepository(session=session),
+    )
 
 
 class Container(containers.DeclarativeContainer):
@@ -74,14 +93,14 @@ class Container(containers.DeclarativeContainer):
     # Infrastructure — one per process
     # -----------------------------------------------------------------------
 
-    engine = providers.Resource(
-        _init_async_engine,
+    db_provider = providers.Resource(
+        _init_db_provider,
         database_url=config.database_url,
     )
 
-    session_factory = providers.Singleton(
-        _init_session_factory,
-        engine=engine,
+    session_factory = providers.Callable(
+        _extract_session_factory,
+        provider=db_provider,
     )
 
     # -----------------------------------------------------------------------
@@ -111,7 +130,7 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
 
     uow = providers.Factory(
-        SqlAlchemyNotificationUnitOfWork,
+        create_notification_uow,
         session=session_factory.provided.call(),
     )
 

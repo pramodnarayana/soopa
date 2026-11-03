@@ -4,12 +4,13 @@ from datetime import UTC, datetime, timedelta
 
 from outbox.domain.constants import OutboxStatus
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.models.control_plane import ControlPlaneOutbox
 from edi.adapters.outbound.database.models.data_plane import DataPlaneOutbox
-from edi.domain.enums import EdiJobName, PipelineEventType
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.enums import EdiJobName
+from edi.domain.transaction.enums import PipelineEventType
 
 
 @dataclass

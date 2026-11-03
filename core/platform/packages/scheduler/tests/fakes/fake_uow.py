@@ -1,9 +1,17 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 from scheduler.domain.constants import JobStatus
-from scheduler.domain.models import ScheduledJob
+from scheduler.domain.scheduled_job import ScheduledJob
 from scheduler.ports.outbound.job_repository_port import JobRepositoryPort
 from scheduler.ports.outbound.uow_port import SchedulerUnitOfWorkPort
+
+_MAX_UTC = datetime.max.replace(tzinfo=UTC)
+
+
+def _normalize_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 class FakeJobRepository(JobRepositoryPort):
@@ -19,25 +27,36 @@ class FakeJobRepository(JobRepositoryPort):
     async def claim_next_jobs(
         self, worker_id: str, limit: int, lock_lease_ms: int
     ) -> list[ScheduledJob]:
-        claimed = []
-        for job in self.jobs.values():
-            if job.status == JobStatus.PENDING:
-                job_copy = ScheduledJob(
-                    id=job.id,
-                    name=job.name,
-                    target_queue=job.target_queue,
-                    payload=job.payload,
-                    status=JobStatus.RUNNING,
-                    cron_expression=job.cron_expression,
-                    interval_seconds=job.interval_seconds,
-                    retry_count=job.retry_count,
-                    max_retries=job.max_retries,
-                    next_run_at=job.next_run_at,
-                )
-                self.jobs[job.id] = job_copy
-                claimed.append(job_copy)
-            if len(claimed) >= limit:
-                break
+        now = datetime.now(UTC)
+        eligible = sorted(
+            (
+                job
+                for job in self.jobs.values()
+                if job.status == JobStatus.PENDING
+                and (job.next_run_at is None or _normalize_utc(job.next_run_at) <= now)
+            ),
+            key=lambda job: (
+                job.next_run_at is None,
+                _normalize_utc(job.next_run_at) if job.next_run_at is not None else _MAX_UTC,
+                job.id,
+            ),
+        )
+        claimed: list[ScheduledJob] = []
+        for job in eligible[:limit]:
+            job_copy = ScheduledJob(
+                id=job.id,
+                name=job.name,
+                target_queue=job.target_queue,
+                payload=job.payload,
+                status=JobStatus.RUNNING,
+                cron_expression=job.cron_expression,
+                interval_seconds=job.interval_seconds,
+                retry_count=job.retry_count,
+                max_retries=job.max_retries,
+                next_run_at=job.next_run_at,
+            )
+            self.jobs[job.id] = job_copy
+            claimed.append(job_copy)
         return claimed
 
     async def reschedule(self, job_id: str, worker_id: str, next_run_at: datetime) -> None:

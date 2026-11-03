@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from ip.application.domains.energy.canonical import EnergyEntityType
-from ip.application.transformers.energy.itron_mdm import ItronMdmTransformer
-from ip.application.transformers.tms.mercury_gate import MercuryGateTransformer
 from ip.engine.adapters.outbound.transformers.transformer_broker_adapter import (
     TransformerBrokerAdapter,
 )
 from ip.engine.adapters.outbound.transformers.transformer_registry import TransformerRegistry
 from ip.engine.ports.outbound.transformer_hook_port import ReplicaSnapshotDTO
+from ip.solutions.domains.energy.canonical import EnergyEntityType
+from ip.solutions.transformers.energy.itron_mdm import ItronMdmTransformer
+from ip.solutions.transformers.tms.mercury_gate import MercuryGateTransformer
 
 
 def test_transformer_broker_routes_to_registered_transformers() -> None:

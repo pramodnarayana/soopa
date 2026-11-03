@@ -16,10 +16,7 @@ import pytest
 from ip.engine.adapters.inbound.workers import (
     IpBackfillStreamNormalizationExecutorPort,
     IpCanonicalRecordChunkPayloadDTO,
-    IpCpJobsWorkerModule,
     IpDeliveryRouteRegistry,
-    IpDeliveryWorkerModule,
-    IpDpJobsWorkerModule,
     IpFetchRecordChunkPayloadDTO,
     IpFetchRecordExecutorPort,
     IpGenerationCompletedPayloadDTO,
@@ -28,7 +25,6 @@ from ip.engine.adapters.inbound.workers import (
     IpNormalizedRecordChunkPayloadDTO,
     IpNormalizeReplicaExecutorPort,
     IpOrchestratorRouteRegistry,
-    IpOrchestratorWorkerModule,
     IpOutboundDeliveryExecutorPort,
     IpOutboundRecordChunkPayloadDTO,
     IpReplicaRecordChunkPayloadDTO,
@@ -38,10 +34,6 @@ from ip.engine.adapters.inbound.workers import (
     IpStreamBackfillPayloadDTO,
     IpSyncRunRequestedPayloadDTO,
     IpWorkerResultDispositionHandler,
-)
-from ip.engine.adapters.outbound.pubsub.publisher_factory import (
-    build_ip_cp_outbox_router,
-    build_ip_dp_outbox_router,
 )
 from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case import (
     DeliverOutboundRecordCommand,
@@ -71,19 +63,25 @@ from ip.engine.application.use_cases.stitch.execute_stitch_worker_tick_use_case 
     ExecuteStitchWorkerTickCommand,
     StitchWorkerTickResultDTO,
 )
-from ip.engine.domain.enums import (
-    CursorKind,
+from ip.engine.bootstrap.publisher_factory import (
+    build_ip_cp_outbox_router,
+    build_ip_dp_outbox_router,
+)
+from ip.engine.bootstrap.workers import (
+    IpCpJobsWorkerModule,
+    IpDeliveryWorkerModule,
+    IpDpJobsWorkerModule,
+    IpOrchestratorWorkerModule,
+)
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
     HttpWriteOperation,
-    IngestionMode,
+    OutboundDispatchStatus,
+)
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.enums import (
     IpEventType,
     IpJobName,
-    MergeOutcome,
-    NormalizationOutcome,
-    OutboundDispatchStatus,
-    SyncMode,
-    SyncRunKind,
-    SyncRunStatus,
 )
 from ip.engine.domain.exceptions import (
     IpError,
@@ -92,11 +90,19 @@ from ip.engine.domain.exceptions import (
     Result,
     TenantShardNotFoundError,
 )
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.models.stream_definition import StreamDefinition
+from ip.engine.domain.normalization.enums import NormalizationOutcome
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    IngestionMode,
+    MergeOutcome,
+    SyncMode,
+    SyncRunKind,
+    SyncRunStatus,
+)
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import (
     InboundRecordRepositoryPort,

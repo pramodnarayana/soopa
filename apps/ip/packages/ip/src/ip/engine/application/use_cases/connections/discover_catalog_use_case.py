@@ -7,24 +7,26 @@ from collections.abc import Mapping
 import structlog
 from security.ports.cipher_port import CipherPort
 
-from ip.engine.application.responses import (
-    DiscoveredCatalogDTO,
-    StreamFieldDTO,
-    StreamSchemaDTO,
-)
 from ip.engine.application.use_cases.connections.token_manager_service import (
     GetValidCredentialsCommand,
     ResolvedConnectionCredentialsDTO,
     TokenManagerService,
 )
+from ip.engine.domain.connection.catalog import ConnectionCatalog
+from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
     ConnectorNotFoundError,
     InvalidConnectionConfigError,
     Result,
 )
-from ip.engine.domain.models.catalog import ConnectionCatalog, StreamField, StreamSchema, SyncMode
-from ip.engine.ports.outbound.connector_port import ConnectorMetadataPort
+from ip.engine.domain.replication.enums import SyncMode
+from ip.engine.ports.outbound.connector_port import (
+    ConnectorMetadataPort,
+    DiscoveredCatalogDTO,
+    StreamFieldDTO,
+    StreamSchemaDTO,
+)
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)

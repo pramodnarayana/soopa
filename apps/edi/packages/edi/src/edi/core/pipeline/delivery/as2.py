@@ -7,17 +7,18 @@ import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.domain.exceptions import ErrorCode
 
-from edi.application.dtos.partners import AS2PartnershipDTO, LocalAS2PartnerDTO, RemoteAS2PartnerDTO
 from edi.core.pipeline.as2_orchestrator import AS2MessageOrchestrator
 from edi.core.pipeline.delivery.base import (
     BaseDeliveryStrategy,
     TerminalDeliveryError,
     TransientDeliveryError,
 )
-from edi.domain.enums import EdiDirection
-from edi.domain.models.as2 import OutboundAS2Message
-from edi.domain.models.transactions import EdiMessageDomainModel
-from edi.domain.services.as2_protocol import parse_mdn
+from edi.domain.partner.as2.messages import OutboundAS2Message
+from edi.domain.partner.as2.partner import AS2Partner
+from edi.domain.partner.as2.partnership import AS2Partnership
+from edi.domain.partner.as2.protocol import parse_mdn
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.edi_message import EdiMessage
 from edi.ports.outbound.as2_delivery_port import AS2DeliveryPort
 from edi.ports.outbound.crypto_service_port import CryptoServicePort
 from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
@@ -49,7 +50,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
         response_headers: dict[str, str],
         response_body: bytes,
         idempotency_key: str | None = None,
-        edi_msg: EdiMessageDomainModel | None = None,
+        edi_msg: EdiMessage | None = None,
     ) -> None:
         if not (200 <= status_code < 300):
             logger.error(
@@ -107,7 +108,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                         or as2_msg.mic.replace(" ", "") != received_mic.replace(" ", "")
                     ):
                         is_success = False
-                        logger.warning(
+                        logger.error(
                             "as2_mdn_mic_mismatch",
                             trace_id=trace_id,
                             expected_mic=as2_msg.mic,
@@ -138,7 +139,7 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
 
     async def _fetch_and_map_partners(
         self, tenant_id: str, partner_id: str
-    ) -> tuple[str, RemoteAS2PartnerDTO, AS2PartnershipDTO, LocalAS2PartnerDTO | None]:
+    ) -> tuple[str, AS2Partner, AS2Partnership, AS2Partner | None]:
         async with self.uow_factory() as uow, uow:
             partnerships = await uow.as2_partnerships.get_as2_partnerships_by_remote_partner_id(
                 tenant_id, partner_id, active=True
@@ -162,17 +163,17 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                     details={"partner_id": partner_id, "found": len(partnerships)},
                 )
 
-            partnership_dto = partnerships[0]
+            partnership = partnerships[0]
 
-            remote_partner_dto = await uow.as2_partners.get_as2_partner(
-                tenant_id, partnership_dto.remote_partner_id
+            remote_partner = await uow.as2_partners.get_as2_partner(
+                tenant_id, partnership.remote_partner_id
             )
-            if not remote_partner_dto:
+            if not remote_partner:
                 raise TerminalDeliveryError(
                     message="AS2 remote partner not found.", code=ErrorCode.NOT_FOUND
                 )
 
-            remote_url: str | None = remote_partner_dto.url
+            remote_url: str | None = remote_partner.url
             if not remote_url:
                 raise TerminalDeliveryError(
                     message=f"AS2 partner {partner_id} has no remote_url configured.",
@@ -180,56 +181,20 @@ class As2DeliveryStrategy(BaseDeliveryStrategy):
                     details={"partner_id": partner_id},
                 )
 
-            local_partner_id: str | None = partnership_dto.local_partner_id
-            local_partner_dto = (
+            local_partner_id: str | None = partnership.local_partner_id
+            local_partner = (
                 await uow.as2_partners.get_as2_partner(tenant_id, local_partner_id)
                 if local_partner_id
                 else None
             )
 
-        # Map DomainModels to DTOs for the Orchestrator
-        remote_dto = RemoteAS2PartnerDTO(
-            id=remote_partner_dto.id,
-            as2_id=remote_partner_dto.as2_id,
-            name=remote_partner_dto.name,
-            public_cert_pem=remote_partner_dto.public_cert_pem,
-            public_cert_vault_ref=remote_partner_dto.public_cert_vault_ref,
-            prev_public_cert_pem=remote_partner_dto.prev_public_cert_pem,
-            prev_public_cert_vault_ref=remote_partner_dto.prev_public_cert_vault_ref,
-            url=remote_partner_dto.url,
-        )
-        partnership_dto_mapped = AS2PartnershipDTO(
-            id=partnership_dto.id,
-            name=partnership_dto.name,
-            local_partner_id=partnership_dto.local_partner_id,
-            remote_partner_id=partnership_dto.remote_partner_id,
-            credentials_vault_ref=partnership_dto.credentials_vault_ref,
-            mdn_url=partnership_dto.mdn_url,
-            mdn_type=partnership_dto.mdn_type,
-            encryption_algorithm=partnership_dto.encryption_algorithm,
-            signature_algorithm=partnership_dto.signature_algorithm,
-            advanced_flags=partnership_dto.advanced_flags,
-        )
-        local_dto = None
-        if local_partner_dto:
-            local_dto = LocalAS2PartnerDTO(
-                id=local_partner_dto.id,
-                as2_id=local_partner_dto.as2_id,
-                name=local_partner_dto.name,
-                public_cert_pem=local_partner_dto.public_cert_pem,
-                public_cert_vault_ref=local_partner_dto.public_cert_vault_ref,
-                private_key_vault_ref=local_partner_dto.private_key_vault_ref,
-                prev_public_cert_vault_ref=local_partner_dto.prev_public_cert_vault_ref,
-                prev_private_key_vault_ref=local_partner_dto.prev_private_key_vault_ref,
-            )
-
-        return remote_url, remote_dto, partnership_dto_mapped, local_dto
+        return remote_url, remote_partner, partnership, local_partner
 
     async def deliver(
         self,
         trace_id: str,
         partner_id: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         idempotency_key: str | None = None,
     ) -> None:
         direction = str(edi_msg.direction) if edi_msg.direction else EdiDirection.OUTBOUND.value

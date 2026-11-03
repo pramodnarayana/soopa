@@ -64,21 +64,3 @@ class PlatformOtelSettings(BaseSettings):
         default="",
     )
     enabled: bool = Field(validation_alias="OTEL_ENABLED", default=True)
-
-
-class PlatformIdentitySettings(BaseSettings):
-    """
-    Centralized model for Identity Provider Configuration (Auth verification).
-    """
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    ucp_project_id: str = Field(
-        validation_alias="IDENTITY_UCP_PROJECT_ID",
-        default="",
-        description="The Project ID representing the UCP.",
-    )
-    tenant_role_group: str = Field(validation_alias="IDENTITY_TENANT_ROLE_GROUP", default="Tenant")
-    platform_org_id: str = Field(validation_alias="IDENTITY_PLATFORM_ORG_ID", default="")
-    issuer: str = Field(validation_alias="IDENTITY_ISSUER", default="")
-    oauth_client_id: str = Field(validation_alias="IDENTITY_OAUTH_CLIENT_ID", default="")

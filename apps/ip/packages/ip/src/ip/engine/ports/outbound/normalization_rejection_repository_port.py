@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.ledger import (
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
 )

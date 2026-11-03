@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import replica_rejection_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRejectionModel
-from ip.engine.domain.models.replica_record import ReplicaRejection
+from ip.engine.domain.replication.replica_record import ReplicaRejection
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
@@ -23,22 +23,29 @@ class SqlAlchemyReplicaRejectionRepository(
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
+    @staticmethod
+    def _to_domain_model(record: ReplicaRejectionModel) -> ReplicaRejection:
+        return replica_rejection_to_domain(record)
+
+    @staticmethod
+    def _to_orm_model(rejection: ReplicaRejection) -> ReplicaRejectionModel:
+        return ReplicaRejectionModel(
+            id=rejection.id,
+            tenant_id=rejection.tenant_id,
+            connection_id=rejection.connection_id,
+            stream=rejection.stream,
+            inbound_record_id=rejection.inbound_record_id,
+            record_index=rejection.record_index,
+            reason=rejection.reason,
+            detail=rejection.detail,
+            trace_id=rejection.trace_id,
+            created_at=rejection.created_at,
+        )
+
     async def save_batch(self, rejections: Sequence[ReplicaRejection]) -> None:
         """Persists a batch of rejected records."""
         for r in rejections:
-            orm = ReplicaRejectionModel(
-                id=r.id,
-                tenant_id=r.tenant_id,
-                connection_id=r.connection_id,
-                stream=r.stream,
-                inbound_record_id=r.inbound_record_id,
-                record_index=r.record_index,
-                reason=r.reason,
-                detail=r.detail,
-                trace_id=r.trace_id,
-                created_at=r.created_at,
-            )
-            self._session.add(orm)
+            self._session.add(self._to_orm_model(r))
         await self._session.flush()
 
     async def get_by_trace_id(
@@ -55,4 +62,4 @@ class SqlAlchemyReplicaRejectionRepository(
             .order_by(ReplicaRejectionModel.created_at.asc())
         )
         res = await self._session.execute(stmt)
-        return [replica_rejection_to_domain(r) for r in res.scalars().all()]
+        return [self._to_domain_model(r) for r in res.scalars().all()]

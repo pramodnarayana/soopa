@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import entity_map_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import GlobalEntityMapModel
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,6 +24,25 @@ class SqlAlchemyGlobalEntityMapRepository(
     @staticmethod
     def _to_domain_model(orm: GlobalEntityMapModel) -> GlobalEntityMap:
         return entity_map_to_domain(orm)
+
+    @staticmethod
+    def _to_orm_model(entity_map: GlobalEntityMap) -> GlobalEntityMapModel:
+        return GlobalEntityMapModel(
+            id=entity_map.id,
+            tenant_id=entity_map.tenant_id,
+            trace_id=entity_map.trace_id,
+            correlation_id=entity_map.correlation_id,
+            parent_trace_id=entity_map.parent_trace_id,
+            original_trace_id=entity_map.original_trace_id,
+            replay_count=entity_map.replay_count,
+            entity_domain=str(entity_map.entity_domain),
+            canonical_id=entity_map.canonical_id,
+            source_connection_id=entity_map.source_connection_id,
+            source_entity_id=entity_map.source_entity_id,
+            dest_connection_id=entity_map.dest_connection_id,
+            dest_entity_id=entity_map.dest_entity_id,
+            created_at=entity_map.created_at,
+        )
 
     @staticmethod
     def _update_record_from_domain(orm: GlobalEntityMapModel, domain: GlobalEntityMap) -> None:
@@ -55,23 +74,7 @@ class SqlAlchemyGlobalEntityMapRepository(
             existing = fallback_res.scalar_one_or_none()
 
         if existing is None:
-            orm = GlobalEntityMapModel(
-                id=entity_map.id,
-                tenant_id=entity_map.tenant_id,
-                trace_id=entity_map.trace_id,
-                correlation_id=entity_map.correlation_id,
-                parent_trace_id=entity_map.parent_trace_id,
-                original_trace_id=entity_map.original_trace_id,
-                replay_count=entity_map.replay_count,
-                entity_domain=str(entity_map.entity_domain),
-                canonical_id=entity_map.canonical_id,
-                source_connection_id=entity_map.source_connection_id,
-                source_entity_id=entity_map.source_entity_id,
-                dest_connection_id=entity_map.dest_connection_id,
-                dest_entity_id=entity_map.dest_entity_id,
-                created_at=entity_map.created_at,
-            )
-            self._session.add(orm)
+            self._session.add(self._to_orm_model(entity_map))
         else:
             self._update_record_from_domain(existing, entity_map)
 

@@ -6,11 +6,11 @@ from datetime import UTC, datetime
 
 import pytest
 from database.types import TenantSession
-from ip.application.domains.energy.canonical import (
+from ip.solutions.domains.energy.canonical import (
     CanonicalMeterReadingDTO,
     CanonicalServicePointDTO,
 )
-from ip.application.domains.energy.repository import SqlAlchemyEnergyDomainRepository
+from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
 
 pytestmark = pytest.mark.integration
 
@@ -58,6 +58,35 @@ async def test_canonical_energy_domain_repository(
         )
     )
 
+    service_point = await energy_repo.get_service_point_by_external_id(tenant_id, "SP-EXT-001")
+    assert service_point is not None
+    assert service_point.id == "ip_mdms_001"
+    assert service_point.tenant_id == tenant_id
+    assert service_point.trace_id == "ip_trc_dom_1"
+    assert service_point.source_connection_id == "ip_conn_itron"
+    assert service_point.source_replica_id == "ip_rep_001"
+    assert service_point.service_point_external_id == "SP-EXT-001"
+    assert service_point.meter_serial_number == "MTR-500"
+    assert service_point.customer_external_id == "CUST-500"
+    assert service_point.service_address == "500 Energy Plaza"
+    assert service_point.grid_region == "ERCOT"
+    assert service_point.status == "ACTIVE"
+    assert service_point.updated_at == now
+
     readings = await energy_repo.list_readings_by_meter(tenant_id, "MTR-500")
     assert len(readings) == 1
-    assert readings[0].kwh_delivered == 18.4
+    reading = readings[0]
+    assert reading.id == "ip_mdmr_001"
+    assert reading.tenant_id == tenant_id
+    assert reading.trace_id == "ip_trc_dom_1"
+    assert reading.source_connection_id == "ip_conn_itron"
+    assert reading.source_replica_id == "ip_rep_001"
+    assert reading.meter_serial_number == "MTR-500"
+    assert reading.service_point_id == "SP-EXT-001"
+    assert reading.reading_timestamp == now
+    assert reading.interval_minutes == 15
+    assert reading.kwh_delivered == 18.4
+    assert reading.kwh_received == 0.5
+    assert reading.voltage_avg == 241.0
+    assert reading.quality_flag == "VALIDATED"
+    assert reading.recorded_at == now

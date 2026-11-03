@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+from database.provider import DatabaseProvider, get_async_engine
+from ip.engine.adapters.outbound.database.data_plane import uow as dp_uow_module
 from ip.engine.adapters.outbound.database.data_plane.mappers import (
     entity_map_to_domain,
     inbound_record_to_domain,
@@ -14,9 +17,18 @@ from ip.engine.adapters.outbound.database.data_plane.mappers import (
     replica_rejection_to_domain,
     trace_event_to_domain,
 )
+from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
+    IP_TRACE_EVENT_SPEC,
+    IP_TRACE_STAGE_SPECS,
+)
+from ip.engine.adapters.outbound.database.data_plane.uow import (
+    build_ip_outbox_record_from_envelope,
+)
+from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 from ip.engine.adapters.outbound.database.models.data_plane import (
     GlobalEntityMapModel,
     InboundRecordModel,
+    IpDataPlaneOutboxRecord,
     IpTraceEventModel,
     NormalizationRejectionModel,
     NormalizedRecordModel,
@@ -24,16 +36,46 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     ReplicaRecordModel,
     ReplicaRejectionModel,
 )
-from ip.engine.application.use_cases.transactions.get_ip_trace_use_case import (
+from ip.engine.application.use_cases.trace.get_ip_trace_use_case import (
     GetIpTraceUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_data_plane_uow
 from ip.engine.domain.constants import REDACTED_SECRET_VALUE
-from ip.engine.domain.enums import PipelineLayer
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
+from ip.engine.domain.enums import PipelineStage
+from ip.engine.domain.exceptions import PayloadNotFoundError, Result
+from ip.engine.domain.trace import IpTraceStatus as TraceStatus
+from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort, TieredStorageResultDTO
+from seedwork.domain.types import JsonValue
+from seedwork.events import EventEnvelope, EventProcessingLane
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+from strace.adapters.sqlalchemy_trace_repository import SqlAlchemyTraceRepository
 from strace.domain import (
     TraceStageAttemptRow,
-    TraceStatus,
     aggregate_trace_lineage_attempts,
 )
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_for_sqlite(_type: JSONB, _compiler: object, **_kw: object) -> str:
+    return "JSON"
+
+
+class _StubTieredStorage(TieredStoragePort):
+    async def store(
+        self,
+        tenant_id: str,
+        trace_id: str,
+        payload_bytes: bytes,
+        parsed_payload: JsonValue | None = None,
+    ) -> TieredStorageResultDTO:
+        _ = (tenant_id, trace_id, payload_bytes, parsed_payload)
+        raise AssertionError("Unexpected store call")
+
+    async def retrieve(self, result: TieredStorageResultDTO) -> Result[bytes, PayloadNotFoundError]:
+        return Result.err(PayloadNotFoundError(s3_key=result.s3_key, message="Not used"))
 
 
 def test_data_plane_mappers_and_secret_header_redaction() -> None:
@@ -241,7 +283,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
         trace_id="ip_trc_root",
         correlation_id="MTR-777",
         status=TraceStatus.INGESTED,
-        primary_layer=PipelineLayer.L1_INGEST,
+        primary_layer=PipelineStage.INGEST,
         created_at=t0,
         replay_count=0,
         parent_trace_id=None,
@@ -251,7 +293,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
         trace_id="ip_trc_root",
         correlation_id="MTR-777",
         status=TraceStatus.FAILED,
-        primary_layer=PipelineLayer.L5_DELIVER,
+        primary_layer=PipelineStage.DELIVER,
         created_at=t0,
         replay_count=0,
         parent_trace_id=None,
@@ -261,7 +303,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
         trace_id="ip_trc_child_1",
         correlation_id="MTR-777",
         status=TraceStatus.DELIVERED,
-        primary_layer=PipelineLayer.L5_DELIVER,
+        primary_layer=PipelineStage.DELIVER,
         created_at=t1,
         replay_count=1,
         parent_trace_id="ip_trc_root",
@@ -275,7 +317,123 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
     assert len(items) == 2
     assert items[0].trace_id == "ip_trc_root"
     assert items[0].status == TraceStatus.FAILED
-    assert items[0].primary_layer == PipelineLayer.L5_DELIVER.value
+    assert items[0].primary_layer == PipelineStage.DELIVER.value
     assert items[1].trace_id == "ip_trc_child_1"
     assert items[1].status == TraceStatus.DELIVERED
     assert items[1].replay_count == 1
+
+
+@pytest.mark.asyncio
+async def test_trace_stage_specs_maps_in_flight_outbound_status_in_sql_and_uow_deduplicates_outbox() -> (
+    None
+):
+    assert hasattr(dp_uow_module, "build_ip_outbox_record_from_envelope")
+
+    provider = DatabaseProvider(get_async_engine("sqlite+aiosqlite:///:memory:"))
+    try:
+        async with provider.engine.begin() as conn:
+            await conn.run_sync(
+                lambda sync_conn: IpTenantBase.metadata.create_all(
+                    sync_conn,
+                    tables=[
+                        InboundRecordModel.__table__,
+                        NormalizedRecordModel.__table__,
+                        OutboundRecordModel.__table__,
+                        IpTraceEventModel.__table__,
+                        IpDataPlaneOutboxRecord.__table__,
+                    ],
+                )
+            )
+
+        async with provider.session() as session:
+            now = datetime.now(UTC)
+            session.add(
+                OutboundRecordModel(
+                    id="ip_out_inflight_01",
+                    tenant_id="ten_01",
+                    connection_id="conn_dest_01",
+                    app_id="salesforce",
+                    stream_name="orders",
+                    trace_id="ip_trc_inflight_01",
+                    correlation_id="MTR-INFLIGHT-99",
+                    parent_trace_id=None,
+                    original_trace_id="ip_trc_inflight_01",
+                    replay_count=0,
+                    target_url="https://api.partner.example/v1/orders",
+                    http_method="POST",
+                    operation="CREATE",
+                    idempotency_key="idem_inflight_01",
+                    request_headers={},
+                    request_body={"order_id": "99"},
+                    request_size_bytes=18,
+                    request_sha256="sha256_99",
+                    status=OutboundDispatchStatus.IN_FLIGHT.value,
+                    attempt_number=1,
+                    sent_at=now,
+                )
+            )
+            await session.flush()
+
+            repo = SqlAlchemyTraceRepository(
+                session,
+                event_spec=IP_TRACE_EVENT_SPEC,
+                stage_specs=IP_TRACE_STAGE_SPECS,
+            )
+            pending_items = await repo.list_recent_traces(
+                "ten_01",
+                status=TraceStatus.PENDING,
+                limit=10,
+            )
+            assert len(pending_items) == 1
+            assert pending_items[0].trace_id == "ip_trc_inflight_01"
+            assert pending_items[0].status == TraceStatus.PENDING
+
+            correlated = await repo.find_traces_by_correlation_id("ten_01", "MTR-INFLIGHT-99")
+            assert len(correlated) == 1
+            assert correlated[0].status == TraceStatus.PENDING
+
+            uow = create_ip_data_plane_uow(session, storage=_StubTieredStorage())
+            envelope = EventEnvelope(
+                id="evt_01",
+                event_type="notification.requested",
+                source="soopa.ip",
+                tenant_id="ten_01",
+                trace_id="ip_trc_inflight_01",
+                correlation_id="MTR-INFLIGHT-99",
+                idempotency_key="idem_notify_01",
+                lane=EventProcessingLane.REALTIME,
+                payload={"subject": "Alert"},
+            )
+            expected = build_ip_outbox_record_from_envelope(envelope)
+            await uow.stage_outbox_envelope(envelope)
+            retry_envelope = EventEnvelope(
+                id="evt_02_retry",
+                event_type="notification.requested",
+                source="soopa.ip",
+                tenant_id="ten_01",
+                trace_id="ip_trc_inflight_01",
+                correlation_id="MTR-INFLIGHT-99",
+                idempotency_key="idem_notify_01",
+                lane=EventProcessingLane.REALTIME,
+                payload={"subject": "Alert Retry"},
+            )
+            await uow.stage_outbox_envelope(envelope)
+            await uow.stage_outbox_envelope(retry_envelope)
+
+            rows = (
+                (
+                    await session.execute(
+                        select(IpDataPlaneOutboxRecord).where(
+                            IpDataPlaneOutboxRecord.idempotency_key == "idem_notify_01"
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert len(rows) == 1
+            assert rows[0].event_type == expected.event_type
+            assert rows[0].lane == expected.lane
+            assert rows[0].payload == expected.payload
+    finally:
+        await provider.close()

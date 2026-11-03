@@ -1,20 +1,42 @@
+from collections.abc import Callable
 from functools import lru_cache
-from typing import Annotated
+from typing import Annotated, Protocol
 
-from edi.adapters.outbound.database.control_plane.uow import SqlAlchemyControlPlaneUnitOfWork
-from edi.adapters.outbound.database.session import get_global_session, get_session
-from edi.adapters.outbound.database.uow_factory import SqlAlchemyDataPlaneUnitOfWorkFactory
+from database.router import DatabaseRouterPort
 from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2MessageUseCase,
 )
+from edi.bootstrap.session import get_global_session, get_session
+from edi.ports.outbound.crypto_service_port import CryptoServicePort
+from edi.ports.outbound.tenant_port import TenantPort
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
+from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
 from fastapi import Depends, HTTPException, Request
-from secret_store import SecretStorePort, SecretStoreProvider
+from outbox.ports.outbox_publisher_port import OutboxPublisherPort
+from secret_store.ports.secret_store_port import SecretStorePort
+from secret_store.provider import SecretStoreProvider
 from sqlalchemy.ext.asyncio import AsyncSession
+from storage.ports.payload_storage_port import PayloadStoragePort
+
+from as2_server.settings import get_settings
 
 
-@lru_cache(maxsize=1)
+class DataPlaneUoWFactoryBuilderProtocol(Protocol):
+    def __call__(
+        self,
+        *,
+        storage: PayloadStoragePort,
+        resolver: TenantPort,
+        db_router: DatabaseRouterPort,
+    ) -> DataPlaneUnitOfWorkFactoryPort: ...
+
+
+@lru_cache
 def get_vault_service() -> SecretStorePort:
-    return SecretStoreProvider.get_secret_store()
+    settings = get_settings()
+    return SecretStoreProvider.get_secret_store(
+        secrets_mount_path=settings.secrets.mount_path,
+    )
 
 
 VaultDep = Annotated[SecretStorePort, Depends(get_vault_service)]
@@ -31,25 +53,36 @@ def get_receive_as2_use_case(
     """
     Dependency injection for the central Enterprise AS2 Use Case.
     """
-    if not hasattr(request.app.state, "s3_storage") or not request.app.state.s3_storage:
+    s3_storage: PayloadStoragePort | None = request.app.state.s3_storage
+    if s3_storage is None:
         raise HTTPException(status_code=503, detail="S3 Storage not initialized")
-    s3_storage = request.app.state.s3_storage
 
-    if not hasattr(request.app.state, "db_router") or not request.app.state.db_router:
+    db_router: DatabaseRouterPort | None = request.app.state.db_router
+    if db_router is None:
         raise HTTPException(status_code=503, detail="Database router not initialized")
-    db_router = request.app.state.db_router
 
-    if not hasattr(request.app.state, "publisher") or not request.app.state.publisher:
+    tenant_resolver: TenantPort | None = request.app.state.tenant_resolver
+    if tenant_resolver is None:
+        raise HTTPException(status_code=503, detail="Tenant resolver not initialized")
+
+    publisher: OutboxPublisherPort | None = request.app.state.publisher
+    if publisher is None:
         raise HTTPException(status_code=503, detail="Publisher not initialized")
-    publisher = request.app.state.publisher
 
-    if not hasattr(request.app.state, "crypto_service") or not request.app.state.crypto_service:
+    crypto_service: CryptoServicePort | None = request.app.state.crypto_service
+    if crypto_service is None:
         raise HTTPException(status_code=503, detail="Crypto service not initialized")
-    crypto_service = request.app.state.crypto_service
 
-    control_plane_uow = SqlAlchemyControlPlaneUnitOfWork(global_session)
-    dp_factory = SqlAlchemyDataPlaneUnitOfWorkFactory(
-        storage=s3_storage, resolver=request.app.state.tenant_resolver, db_router=db_router
+    cp_uow_factory: Callable[[AsyncSession], ControlPlaneUnitOfWorkPort] = (
+        request.app.state.cp_uow_factory
+    )
+    dp_uow_factory_cls: DataPlaneUoWFactoryBuilderProtocol = request.app.state.dp_uow_factory_cls
+
+    control_plane_uow = cp_uow_factory(global_session)
+    dp_factory = dp_uow_factory_cls(
+        storage=s3_storage,
+        resolver=tenant_resolver,
+        db_router=db_router,
     )
 
     return ProcessInboundAs2MessageUseCase(

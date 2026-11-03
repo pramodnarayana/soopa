@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from notification.domain.models import NotificationDispatch
+from notification.domain.dispatch import NotificationDispatch
 
 
 class NotificationRecordRepositoryPort(Protocol):

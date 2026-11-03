@@ -1,5 +1,5 @@
 exact = false
-forbid_circular_dependencies = false
+forbid_circular_dependencies = true
 ignore_type_checking_imports = true
 source_roots = [
     "core/ucp/packages/ucp/src",
@@ -37,11 +37,19 @@ depends_on = [
 ]
 
 [[modules]]
+path = "strace.orm"
+depends_on = [
+    "strace.domain",
+    "database.models"
+]
+
+[[modules]]
 path = "strace.adapters"
 depends_on = [
     "strace.domain",
     "strace.ports",
     "strace.application",
+    "strace.orm",
     "database.models"
 ]
 
@@ -76,6 +84,14 @@ depends_on = [
     "orchestration.ports",
     "orchestration.application",
     "database.models"
+]
+
+[[modules]]
+path = "orchestration.bootstrap"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.adapters"
 ]
 
 [[modules]]
@@ -122,7 +138,6 @@ depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
     "ip.engine.application",
-    "ip.engine.container",
     "ip.engine.settings",
     "security",
     "database.models",
@@ -131,11 +146,10 @@ depends_on = [
     "orchestration.domain",
     "orchestration.ports",
     "orchestration.application",
-    "orchestration.adapters",
     "strace.domain",
     "strace.ports",
     "strace.application",
-    "strace.adapters"
+    "strace.orm"
 ]
 
 [[modules]]
@@ -145,18 +159,12 @@ depends_on = [
     "ip.engine.ports",
     "ip.engine.application",
     "ip.engine.adapters",
-    "ip.engine.lifespan",
     "ip.engine.settings",
-    "ip.application.connectors",
-    "ip.application.stitches",
-    "ip.application.transformers",
     "identity",
     "security",
-    "database.models",
     "orchestration.domain",
     "orchestration.ports",
     "orchestration.application",
-    "orchestration.adapters",
     "strace.domain"
 ]
 
@@ -168,7 +176,7 @@ depends_on = [
 ]
 
 [[modules]]
-path = "ip.application.domains"
+path = "ip.solutions.domains"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
@@ -177,7 +185,7 @@ depends_on = [
 ]
 
 [[modules]]
-path = "ip.application.connectors"
+path = "ip.solutions.connectors"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
@@ -188,47 +196,55 @@ depends_on = [
 ]
 
 [[modules]]
-path = "ip.application.transformers"
+path = "ip.solutions.transformers"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
-    "ip.application.domains"
+    "ip.solutions.domains"
 ]
 
 [[modules]]
-path = "ip.application.stitches"
+path = "ip.solutions.stitches"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
-    "ip.application.domains",
+    "ip.solutions.domains",
     "orchestration.domain",
     "orchestration.ports",
     "orchestration.application"
 ]
 
 [[modules]]
-path = "ip.engine.container"
+path = "ip.engine.bootstrap"
 depends_on = [
     "ip.engine.domain",
     "ip.engine.ports",
     "ip.engine.application",
     "ip.engine.adapters",
-    "ip.application.domains",
-    "ip.application.stitches",
-    "ip.application.transformers",
+    "ip.engine.settings",
+    "ip.solutions.connectors",
+    "ip.solutions.domains",
+    "ip.solutions.stitches",
+    "ip.solutions.transformers",
+    "database.models",
     "security",
     "storage",
     "orchestration.domain",
     "orchestration.ports",
     "orchestration.application",
-    "orchestration.adapters"
+    "orchestration.bootstrap",
+    "strace.domain",
+    "strace.ports",
+    "strace.application",
+    "strace.adapters"
 ]
 
 [[modules]]
-path = "ip.engine.lifespan"
+path = "ip.engine.module"
 depends_on = [
-    "ip.engine.container",
-    "ip.engine.adapters"
+    "ip.engine.bootstrap",
+    "ip.engine.adapters.inbound.api",
+    "ip.engine.settings"
 ]
 
 [[modules]]
@@ -274,7 +290,7 @@ depends_on = [
     "shttp",
     "strace.domain",
     "strace.ports",
-    "strace.adapters"
+    "strace.orm"
 ]
 
 [[modules]]
@@ -287,6 +303,5 @@ depends_on = [
     "ucp.domain",
     "ucp.ports",
     "identity",
-    "database.models",
     "schemas"
 ]

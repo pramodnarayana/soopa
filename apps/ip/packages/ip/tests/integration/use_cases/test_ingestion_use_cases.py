@@ -8,12 +8,6 @@ from collections.abc import AsyncIterator, Sequence
 
 import pytest
 from database.types import GlobalSession, TenantSession
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
-)
-from ip.engine.adapters.outbound.database.data_plane.uow import (
-    SqlAlchemyIpDataPlaneUnitOfWork,
-)
 from ip.engine.adapters.outbound.database.models.data_plane import IpDataPlaneOutboxRecord
 from ip.engine.adapters.outbound.inbound.ack import JsonInboundAck
 from ip.engine.adapters.outbound.inbound.decoders import StandardInboundPayloadDecoder
@@ -35,26 +29,30 @@ from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
     RunSyncCommand,
     RunSyncUseCase,
 )
-from ip.engine.domain.enums import (
-    AckVerdict,
-    AuthType,
+from ip.engine.bootstrap.container import (
+    create_ip_control_plane_uow,
+    create_ip_data_plane_uow,
+)
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.dispatch.enums import AckVerdict
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.exceptions import IpError, UpstreamHttpError
+from ip.engine.domain.replication.enums import (
     IngestionMode,
-    IpEventType,
     SyncRunKind,
     SyncRunStatus,
 )
-from ip.engine.domain.exceptions import IpError, UpstreamHttpError
-from ip.engine.domain.models.connection import Connection
-from ip.engine.ports.outbound.connector_port import SourceConnectorPort
-from ip.engine.ports.outbound.subscribe_transport_port import (
-    RawMessageBatchDTO,
-    RawMessageDTO,
-)
-from ip.engine.ports.types import (
+from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
     ConnectionCheckResultDTO,
     DiscoveredCatalogDTO,
     RecordEnvelopeDTO,
+    SourceConnectorPort,
+)
+from ip.engine.ports.outbound.subscribe_transport_port import (
+    RawMessageBatchDTO,
+    RawMessageDTO,
 )
 from security.provider import SecurityProvider
 from seedwork.domain.types import JsonDict
@@ -154,8 +152,8 @@ async def test_run_sync_use_case_initial_and_incremental_on_postgres(
     tenant_session: TenantSession,
     seeded_ip_tenant: str,
 ) -> None:
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    dp_uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    cp_uow = create_ip_control_plane_uow(global_session)
+    dp_uow = create_ip_data_plane_uow(tenant_session)
     cipher = SecurityProvider.get_cipher()
     storage = TieredStorageAdapter()
 
@@ -221,8 +219,8 @@ async def test_run_sync_use_case_marks_failed_when_connector_sets_last_error(
     tenant_session: TenantSession,
     seeded_ip_tenant: str,
 ) -> None:
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    dp_uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    cp_uow = create_ip_control_plane_uow(global_session)
+    dp_uow = create_ip_data_plane_uow(tenant_session)
     cipher = SecurityProvider.get_cipher()
     storage = TieredStorageAdapter()
 
@@ -269,8 +267,8 @@ async def test_receive_push_and_fetch_record_on_postgres(
     tenant_session: TenantSession,
     seeded_ip_tenant: str,
 ) -> None:
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    dp_uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    cp_uow = create_ip_control_plane_uow(global_session)
+    dp_uow = create_ip_data_plane_uow(tenant_session)
     cipher = SecurityProvider.get_cipher()
     storage = TieredStorageAdapter()
 
@@ -375,7 +373,7 @@ async def test_ingest_stream_batch_use_case_on_postgres(
     tenant_session: TenantSession,
     seeded_ip_tenant: str,
 ) -> None:
-    dp_uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    dp_uow = create_ip_data_plane_uow(tenant_session)
     storage = TieredStorageAdapter()
     decoder = StandardInboundPayloadDecoder()
 

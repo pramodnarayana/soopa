@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import pytest
 from database.types import GlobalSession
+from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
-)
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
 )
 from ip.engine.application.use_cases.connections.create_connection_use_case import (
     CreateConnectionCommand,
@@ -22,9 +20,9 @@ from ip.engine.application.use_cases.connections.relink_connection_use_case impo
     RelinkConnectionCommand,
     RelinkConnectionUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_control_plane_uow
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -40,12 +38,12 @@ async def test_relink_connection_use_case(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    uow = create_ip_control_plane_uow(global_session)
     conn_repo = SqlAlchemyConnectionRepository(global_session)
     create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
     deact_uc = DeactivateConnectionUseCase(uow=uow)
     relink_uc = RelinkConnectionUseCase(uow=uow, cipher=cipher)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     create_res = await create_uc.execute(
         CreateConnectionCommand(
@@ -91,7 +89,7 @@ async def test_relink_connection_not_found_returns_failure(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    uow = create_ip_control_plane_uow(global_session)
     relink_uc = RelinkConnectionUseCase(uow=uow, cipher=cipher)
     result = await relink_uc.execute(
         RelinkConnectionCommand(connection_id="missing_id", tenant_id="ten_1")

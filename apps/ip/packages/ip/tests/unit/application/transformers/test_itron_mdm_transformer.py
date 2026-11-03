@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ip.application.domains.energy.canonical import EnergyEntityType
-from ip.application.transformers.energy.itron_mdm import ItronMdmTransformer
 from ip.engine.ports.outbound.transformer_hook_port import ReplicaSnapshotDTO
+from ip.solutions.domains.energy.canonical import EnergyEntityType
+from ip.solutions.transformers.energy.itron_mdm import ItronMdmTransformer
 
 
 def test_itron_mdm_transformer_normalizes_interval_reads() -> None:

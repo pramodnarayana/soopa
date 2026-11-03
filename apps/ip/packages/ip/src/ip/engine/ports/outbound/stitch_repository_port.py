@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.stitch.stitch import Stitch
 
 
 class StitchRepositoryPort(Protocol):

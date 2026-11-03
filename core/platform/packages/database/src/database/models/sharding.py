@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import UcpIdPrefix
 
 from database.constants import DatabaseShardStatus
 from database.models.core import UcpBase
@@ -9,7 +10,7 @@ from database.models.core import UcpBase
 
 class DatabaseShard(UcpBase):
     __tablename__ = "database_shards"
-    ID_PREFIX = "ucp_shard"
+    ID_PREFIX = UcpIdPrefix.SHARD.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)

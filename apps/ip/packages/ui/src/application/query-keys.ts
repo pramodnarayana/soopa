@@ -5,10 +5,19 @@ import type { ListRecentTracesFilter } from '../domain/trace';
 export const ipQueryKeys = {
   all: ['ip'] as const,
   catalog: {
-    all: () => ['ip', 'catalog'] as const,
-    apps: (filter?: CatalogAppsFilter) =>
-      ['ip', 'catalog', 'apps', filter?.category ?? '', filter?.search ?? ''] as const,
-    spec: (appId: string) => ['ip', 'catalog', 'spec', appId] as const,
+    all: (tenantId: string) => ['ip', 'tenant', tenantId, 'catalog'] as const,
+    apps: (tenantId: string, filter?: CatalogAppsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'catalog',
+        'apps',
+        filter?.category ?? '',
+        filter?.search ?? '',
+      ] as const,
+    spec: (tenantId: string, appId: string) =>
+      ['ip', 'tenant', tenantId, 'catalog', 'spec', appId] as const,
   },
   tenant: (tenantId: string) => ['ip', 'tenant', tenantId] as const,
   connections: {

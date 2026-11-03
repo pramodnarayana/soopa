@@ -12,7 +12,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     NormalizationRejectionModel,
     NormalizationShadowDiffModel,
 )
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.ledger import (
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
 )

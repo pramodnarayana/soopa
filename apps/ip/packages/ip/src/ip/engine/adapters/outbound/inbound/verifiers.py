@@ -9,7 +9,7 @@ from collections.abc import Mapping
 import structlog
 from ip.engine.domain.exceptions import InboundVerificationFailedError, IpError, Result
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
-from security.adapters.signatures.hmac_signer import HmacSigner
+from security.provider import SecurityProvider
 
 logger = structlog.get_logger(__name__)
 
@@ -153,7 +153,7 @@ class HmacSignatureVerifier(InboundVerifierPort):
         payload_to_verify = (
             f"{ts_str}.".encode() + raw_body if (self._timestamp_header and ts_str) else raw_body
         )
-        signer = HmacSigner(secret)
+        signer = SecurityProvider.get_hmac_signer(secret)
         if not signer.verify(payload_to_verify, raw_signature):
             logger.error(
                 "inbound_hmac_signature_mismatch",

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
 from edi.domain.types import AstNode
 
 

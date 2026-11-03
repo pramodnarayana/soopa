@@ -12,25 +12,33 @@ from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
     RunSyncUseCase,
     calculate_lookback_cursor,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
-    IngestionMode,
-    SyncRunKind,
-    SyncRunStatus,
 )
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
     PayloadNotFoundError,
     Result,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.stream_state import ConnectionStreamState
-from ip.engine.domain.models.sync_run import SyncRun
+from ip.engine.domain.replication.enums import (
+    IngestionMode,
+    SyncRunKind,
+    SyncRunStatus,
+)
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
-from ip.engine.ports.outbound.connector_port import SourceConnectorPort
+from ip.engine.ports.outbound.connector_port import (
+    AppSpecDTO,
+    ConnectionCheckResultDTO,
+    DiscoveredCatalogDTO,
+    RecordEnvelopeDTO,
+    SourceConnectorPort,
+)
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalized_record_repository_port import (
@@ -50,12 +58,6 @@ from ip.engine.ports.outbound.tiered_storage_port import (
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
-)
-from ip.engine.ports.types import (
-    AppSpecDTO,
-    ConnectionCheckResultDTO,
-    DiscoveredCatalogDTO,
-    RecordEnvelopeDTO,
 )
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict
@@ -479,7 +481,7 @@ async def test_run_sync_single_active_run_enforced() -> None:
         kind=SyncRunKind.INITIAL,
         generation_id=1,
     )
-    existing_run.start()
+    assert existing_run.start().is_ok
     await cp_uow.sync_runs.save(existing_run)
 
     use_case = RunSyncUseCase(
@@ -652,3 +654,33 @@ def test_run_sync_use_case_requires_data_plane_dependency() -> None:
             cipher=cipher,
             connectors={"itron_mdm": connector},
         )
+
+
+@pytest.mark.asyncio
+async def test_run_sync_does_not_save_when_sync_run_transition_fails() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    dp_uow = FakeDataPlaneUnitOfWork()
+    storage = FakeTieredStorageAdapter()
+    cipher = FakeCipher()
+    use_case = RunSyncUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=storage,
+        cipher=cipher,
+        connectors={},
+    )
+
+    terminal_run = SyncRun.create(
+        tenant_id="tenant_a",
+        connection_id="conn_1",
+        stream="meters",
+        kind=SyncRunKind.INITIAL,
+        generation_id=1,
+    )
+    assert terminal_run.start().is_ok
+    assert terminal_run.succeed(end_checkpoint="c_done").is_ok
+
+    dto = await use_case._fail_run(terminal_run, "SOME_ERR", "Should not overwrite succeeded run")
+    assert dto.status == SyncRunStatus.SUCCEEDED.value
+    assert dto.error_code == "INVALID_SYNC_RUN_STATE"
+    assert terminal_run.id not in cp_uow.sync_runs.runs

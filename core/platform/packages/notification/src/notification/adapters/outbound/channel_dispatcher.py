@@ -1,7 +1,8 @@
 import structlog
 from seedwork.domain.types import JsonDict
 
-from ...domain.models import Channel
+from notification.domain.enums import Channel
+
 from ...ports.outbound.notification_channel_strategy_port import DeliveryStrategyPort
 
 logger = structlog.get_logger(__name__)

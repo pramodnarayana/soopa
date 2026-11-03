@@ -49,7 +49,8 @@ from ip.engine.application.worker_ports import (
     IpStitchWorkerTickExecutorPort,
     IpStreamDefinitionResolver,
 )
-from ip.engine.domain.enums import FailureDisposition, IpEventType
+from ip.engine.domain.dispatch.enums import FailureDisposition
+from ip.engine.domain.enums import IpEventType
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort

@@ -197,21 +197,21 @@ class StructlogLogger(LoggerPort):
             _configure_structlog(log_level)
         self._logger = _bound_logger or structlog.get_logger(logger_name=name)
 
-    def debug(self, event: str, **kwargs: Any) -> None:
+    def debug(self, event: str, **kwargs: object) -> None:
         self._logger.debug(event, **kwargs)
 
-    def info(self, event: str, **kwargs: Any) -> None:
+    def info(self, event: str, **kwargs: object) -> None:
         self._logger.info(event, **kwargs)
 
-    def warning(self, event: str, **kwargs: Any) -> None:
+    def warning(self, event: str, **kwargs: object) -> None:
         self._logger.warning(event, **kwargs)
 
-    def error(self, event: str, **kwargs: Any) -> None:
+    def error(self, event: str, **kwargs: object) -> None:
         self._logger.error(event, **kwargs)
 
-    def exception(self, event: str, **kwargs: Any) -> None:
+    def exception(self, event: str, **kwargs: object) -> None:
         self._logger.exception(event, **kwargs)
 
-    def bind(self, **kwargs: Any) -> "StructlogLogger":
+    def bind(self, **kwargs: object) -> "StructlogLogger":
         bound = self._logger.bind(**kwargs)
         return StructlogLogger(name="", _bound_logger=bound)

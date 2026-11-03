@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
 from ip.engine.adapters.outbound.connectors.manifest_loader import (
     load_manifest_from_dict,
@@ -13,8 +14,11 @@ from ip.engine.adapters.outbound.connectors.manifest_loader import (
     load_manifest_from_yaml,
     load_manifests_from_directory,
 )
+from ip.engine.domain.connection.enums import (
+    PaginationType,
+    PropertyType,
+)
 from ip.engine.domain.exceptions import ConnectorNotFoundError, ManifestParseFailureError
-from ip.engine.domain.models.connector_spec import PaginationType, PropertyType
 
 
 def test_load_manifest_from_dict_success() -> None:
@@ -208,7 +212,7 @@ def test_load_manifest_from_file(tmp_path: Path) -> None:
 
 
 def test_load_manifests_from_directory(tmp_path: Path) -> None:
-    registry = ConnectorCatalogRegistry()
+    registry = ConnectorCatalogRegistry(auth_resolver=AuthStrategyResolver())
 
     # Create 2 valid manifests, 1 invalid manifest, and 1 non-manifest file
     (tmp_path / "connector_a.json").write_text(

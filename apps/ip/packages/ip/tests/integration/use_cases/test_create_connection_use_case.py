@@ -4,20 +4,18 @@ from __future__ import annotations
 
 import pytest
 from database.types import GlobalSession
+from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
-)
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
 )
 from ip.engine.application.use_cases.connections.create_connection_use_case import (
     CreateConnectionCommand,
     CreateConnectionUseCase,
 )
+from ip.engine.bootstrap.container import create_ip_control_plane_uow
 from ip.engine.domain.exceptions import DuplicateConnectionFingerprintError
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 
 pytestmark = pytest.mark.integration
 
@@ -33,10 +31,10 @@ async def test_create_connection_use_case(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    uow = create_ip_control_plane_uow(global_session)
     repo = SqlAlchemyConnectionRepository(global_session)
     use_case = CreateConnectionUseCase(uow=uow, cipher=cipher)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     cmd = CreateConnectionCommand(
         tenant_id=tenant_id,
@@ -69,10 +67,10 @@ async def test_create_duplicate_active_connection_rejected(
     global_session: GlobalSession,
     cipher: AesGcmCipher,
 ) -> None:
-    uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
+    uow = create_ip_control_plane_uow(global_session)
     repo = SqlAlchemyConnectionRepository(global_session)
     use_case = CreateConnectionUseCase(uow=uow, cipher=cipher)
-    tenant_id = generate_id(DomainIdPrefix.TENANT.value)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
 
     cmd = CreateConnectionCommand(
         tenant_id=tenant_id,

@@ -9,12 +9,39 @@ export const IP_PRODUCT_THEME_TOKEN = 'ip' as const;
 
 export const AuthType = {
   OAUTH2: 'OAUTH2',
-  BEARER: 'BEARER',
+  OAUTH2_CLIENT_CREDENTIALS: 'OAUTH2_CLIENT_CREDENTIALS',
+  BEARER: 'BEARER_TOKEN',
+  BEARER_TOKEN: 'BEARER_TOKEN',
   API_KEY: 'API_KEY',
-  BASIC: 'BASIC',
+  BASIC: 'BASIC_AUTH',
+  BASIC_AUTH: 'BASIC_AUTH',
   NO_AUTH: 'NO_AUTH',
 } as const;
 export type AuthTypeValue = (typeof AuthType)[keyof typeof AuthType];
+
+export const ApiKeyPlacement = {
+  HEADER: 'HEADER',
+  QUERY_PARAM: 'QUERY_PARAM',
+} as const;
+export type ApiKeyPlacementValue = (typeof ApiKeyPlacement)[keyof typeof ApiKeyPlacement];
+
+export const ConnectorPropertyKey = {
+  BASE_URL: 'base_url',
+  AUTH_TYPE: 'auth_type',
+  CHECK_PATH: 'check_path',
+  TOKEN: 'token',
+  PARAM_NAME: 'param_name',
+  PLACEMENT: 'placement',
+  USERNAME: 'username',
+  PASSWORD: 'password',
+  TOKEN_URL: 'token_url',
+  CLIENT_ID: 'client_id',
+  CLIENT_SECRET: 'client_secret',
+  SCOPES: 'scopes',
+  TIMEOUT_SECONDS: 'timeout_seconds',
+} as const;
+export type ConnectorPropertyKeyValue =
+  (typeof ConnectorPropertyKey)[keyof typeof ConnectorPropertyKey];
 
 export const ConnectorDirection = {
   SOURCE: 'SOURCE',

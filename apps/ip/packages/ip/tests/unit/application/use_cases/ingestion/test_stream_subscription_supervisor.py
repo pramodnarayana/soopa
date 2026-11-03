@@ -14,9 +14,9 @@ from ip.engine.application.use_cases.ingestion.ingest_stream_batch_use_case impo
 from ip.engine.application.use_cases.ingestion.stream_subscription_supervisor import (
     StreamSubscriptionSupervisor,
 )
-from ip.engine.domain.enums import AckVerdict
+from ip.engine.domain.dispatch.enums import AckVerdict
 from ip.engine.domain.exceptions import ConnectionCheckError, Result
-from ip.engine.domain.models.stream_definition import StreamDefinition
+from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.ports.outbound.subscribe_transport_port import (
     RawMessageBatchDTO,
     RawMessageDTO,

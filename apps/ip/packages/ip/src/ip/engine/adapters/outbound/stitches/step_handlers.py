@@ -9,23 +9,23 @@ from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case i
     DeliverOutboundRecordCommand,
     DeliverOutboundRecordResponse,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
     OutboundDispatchStatus,
     OutboundFailureCategory,
 )
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import IpError
 from ip.engine.domain.exceptions import Result as IpResult
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.stitch import (
+from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.domain.stitch.enums import StitchStepType
+from ip.engine.domain.stitch.stitch import (
     EmitNotificationStepInput,
     EmitNotificationStepOutput,
     ExecuteHttpActionStepInput,
     ExecuteHttpActionStepOutput,
     QueryReplicaStepInput,
     QueryReplicaStepOutput,
-    StitchStepType,
 )
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 from notification.facade import notify
@@ -242,6 +242,7 @@ class EmitNotificationStepHandler(StepHandlerPort[JsonDict, JsonDict]):
             source=StitchStepType.EMIT_NOTIFICATION.value,
             notification_type=req.template_id,
             notification_data={
+                "event_id": context.idempotency_key,
                 "channel": req.channel,
                 "template_id": req.template_id,
                 "recipient": req.recipient,

@@ -6,9 +6,9 @@ hierarchy, and attribute storage.
 """
 
 import pytest
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
 from edi.domain.exceptions import (
     DomainError,
     IdempotencyConflictError,
@@ -19,7 +19,7 @@ from edi.domain.exceptions import (
     PartnerInUseError,
     PartnerNotFoundError,
     ResourceNotFoundError,
-    TransactionNotFoundError,
+    TraceNotFoundError,
     VaultError,
 )
 
@@ -43,8 +43,8 @@ class TestExceptionHierarchy:
     def test_missing_certificate_is_domain_error(self):
         assert issubclass(MissingCertificateError, DomainError)
 
-    def test_transaction_not_found_is_domain_error(self):
-        assert issubclass(TransactionNotFoundError, DomainError)
+    def test_trace_not_found_is_domain_error(self):
+        assert issubclass(TraceNotFoundError, DomainError)
 
     def test_idempotency_conflict_is_base_exception(self):
         assert issubclass(IdempotencyConflictError, Exception)
@@ -127,21 +127,21 @@ class TestInvalidCertificateActionError:
         assert "upload" in str(err)
 
 
-class TestTransactionNotFoundError:
+class TestTraceNotFoundError:
     def test_stores_trace_id(self):
         t_id = generate_id("sys_trc")
-        err = TransactionNotFoundError(trace_id=t_id)
+        err = TraceNotFoundError(trace_id=t_id)
         assert err.trace_id == t_id
 
     def test_message_contains_trace_id(self):
         t_id = generate_id("sys_trc")
-        err = TransactionNotFoundError(trace_id=t_id)
+        err = TraceNotFoundError(trace_id=t_id)
         assert t_id in str(err)
 
     def test_can_be_raised_and_caught(self):
         t_id = generate_id("sys_trc")
-        with pytest.raises(TransactionNotFoundError) as exc_info:
-            raise TransactionNotFoundError(trace_id=t_id)
+        with pytest.raises(TraceNotFoundError) as exc_info:
+            raise TraceNotFoundError(trace_id=t_id)
         assert exc_info.value.trace_id == t_id
 
 

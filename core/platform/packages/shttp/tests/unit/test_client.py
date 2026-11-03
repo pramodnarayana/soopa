@@ -60,3 +60,43 @@ async def test_http_client_maps_timeout_error() -> None:
     with pytest.raises(HttpTimeoutError):
         await client.get("http://127.0.0.1")
     await test_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_http_client_normalizes_authorization_headers_case_insensitively() -> None:
+    captured_raw_headers: list[tuple[bytes, bytes]] = []
+
+    class _StaticBearerProvider:
+        async def get_access_token(self, client: HttpClient) -> str:
+            del client
+            return "fresh_bearer_token"
+
+    def inspect_headers_handler(request: httpx.Request) -> httpx.Response:
+        captured_raw_headers.clear()
+        captured_raw_headers.extend(request.headers.raw)
+        return httpx.Response(200)
+
+    test_client = httpx.AsyncClient(transport=httpx.MockTransport(inspect_headers_handler))
+    client = HttpClient(
+        client=test_client,
+        default_headers={"authorization": "Basic stale_default", "X-Tenant": "t1"},
+        token_provider=_StaticBearerProvider(),
+        allow_private_ips=True,
+    )
+
+    await client.get("http://127.0.0.1", headers={"X-Trace": "trc_1"})
+    auth_headers = [
+        val.decode() for key, val in captured_raw_headers if key.lower() == b"authorization"
+    ]
+    assert auth_headers == ["Bearer fresh_bearer_token"]
+    assert (b"x-tenant", b"t1") in [(k.lower(), v) for k, v in captured_raw_headers]
+    assert (b"x-trace", b"trc_1") in [(k.lower(), v) for k, v in captured_raw_headers]
+
+    # Per-request lowercase authorization header must also replace without duplicating
+    await client.get("http://127.0.0.1", headers={"authorization": "Bearer explicit_override"})
+    override_auth_headers = [
+        val.decode() for key, val in captured_raw_headers if key.lower() == b"authorization"
+    ]
+    assert override_auth_headers == ["Bearer explicit_override"]
+
+    await test_client.aclose()

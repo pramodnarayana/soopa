@@ -11,17 +11,27 @@ from ip.engine.application.use_cases.ingestion.fetch_record_use_case import (
     FetchRecordCommand,
     FetchRecordUseCase,
 )
-from ip.engine.domain.enums import AuthType, ConnectionStatus, IngestionMode
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    ConnectionStatus,
+)
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
     PayloadNotFoundError,
     Result,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
-from ip.engine.ports.outbound.connector_port import SourceConnectorPort
+from ip.engine.ports.outbound.connector_port import (
+    AppSpecDTO,
+    ConnectionCheckResultDTO,
+    DiscoveredCatalogDTO,
+    RecordEnvelopeDTO,
+    SourceConnectorPort,
+)
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalized_record_repository_port import (
@@ -41,12 +51,6 @@ from ip.engine.ports.outbound.tiered_storage_port import (
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
-)
-from ip.engine.ports.types import (
-    AppSpecDTO,
-    ConnectionCheckResultDTO,
-    DiscoveredCatalogDTO,
-    RecordEnvelopeDTO,
 )
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict

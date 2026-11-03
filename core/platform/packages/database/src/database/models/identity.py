@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
-from typing import Any
 
-from seedwork.id_registry import DomainIdPrefix
+from identity.domain.constants import IdentityIdPrefix
+from seedwork.domain.types import JsonDict
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
@@ -12,7 +12,7 @@ from database.models.core import IdentityBase
 
 class Tenant(IdentityBase, SoftDeleteMixin):
     __tablename__ = "tenants"
-    ID_PREFIX = DomainIdPrefix.TENANT.value
+    ID_PREFIX = IdentityIdPrefix.TENANT.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
@@ -35,7 +35,7 @@ class Tenant(IdentityBase, SoftDeleteMixin):
 
 class User(IdentityBase, SoftDeleteMixin):
     __tablename__ = "users"
-    ID_PREFIX = DomainIdPrefix.USER.value
+    ID_PREFIX = IdentityIdPrefix.USER.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     idp_user_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
@@ -87,7 +87,7 @@ class ApiToken(IdentityBase, SoftDeleteMixin):
     """
 
     __tablename__ = "api_tokens"
-    ID_PREFIX = DomainIdPrefix.TOKEN.value
+    ID_PREFIX = IdentityIdPrefix.TOKEN.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -120,7 +120,7 @@ class ApiKey(IdentityBase, SoftDeleteMixin):
     """
 
     __tablename__ = "api_keys"
-    ID_PREFIX = DomainIdPrefix.KEY.value
+    ID_PREFIX = IdentityIdPrefix.KEY.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -147,7 +147,7 @@ class ApiKey(IdentityBase, SoftDeleteMixin):
 
 class Role(IdentityBase, SoftDeleteMixin):
     __tablename__ = "roles"
-    ID_PREFIX = DomainIdPrefix.ROLE.value
+    ID_PREFIX = IdentityIdPrefix.ROLE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -183,7 +183,7 @@ class Role(IdentityBase, SoftDeleteMixin):
 class UserRole(IdentityBase):
     __tablename__ = "user_roles"
 
-    ID_PREFIX = DomainIdPrefix.USER_ROLE.value
+    ID_PREFIX = IdentityIdPrefix.USER_ROLE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -214,7 +214,7 @@ class UserRole(IdentityBase):
 
 class IdentityOutbox(IdentityBase, OutboxMixin):
     __tablename__ = "outbox"
-    ID_PREFIX = DomainIdPrefix.IDENTITY_OUTBOX.value
+    ID_PREFIX = IdentityIdPrefix.IDENTITY_OUTBOX.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -230,6 +230,6 @@ class IdentityOutbox(IdentityBase, OutboxMixin):
     )
 
     @property
-    def body(self) -> dict[str, Any]:
+    def body(self) -> JsonDict:
         """Alias for payload to satisfy OutboxEvent protocol."""
         return self.payload

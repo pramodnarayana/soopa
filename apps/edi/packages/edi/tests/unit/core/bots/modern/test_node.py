@@ -1,4 +1,4 @@
-from edi.core.bots.domain.models import StructureNode
+from edi.core.bots.domain.structure import StructureNode
 
 """
 test_node_business_logic.py

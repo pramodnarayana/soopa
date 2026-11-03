@@ -5,16 +5,17 @@ from pytest_httpserver import HTTPServer
 from shttp import HttpClient
 
 from edi.adapters.outbound.http.httpx_as2_tester_adapter import HttpxAS2TesterAdapter
+from edi.adapters.outbound.security.smime_crypto_service import SmimeCryptoService
 
 
 @pytest.fixture
 def adapter():
-    return HttpxAS2TesterAdapter()
+    return HttpxAS2TesterAdapter(crypto_service=SmimeCryptoService())
 
 
 @pytest.fixture
 def local_adapter():
-    return HttpxAS2TesterAdapter(allow_private_ips=True)
+    return HttpxAS2TesterAdapter(allow_private_ips=True, crypto_service=SmimeCryptoService())
 
 
 VALID_MDN = b"""\

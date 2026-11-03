@@ -18,15 +18,18 @@ from ip.engine.application.use_cases.stitch import (
     ExecuteStitchWorkerTickCommand,
     ExecuteStitchWorkerTickUseCase,
 )
-from ip.engine.domain.enums import HttpWriteOperation, OutboundConflictStrategy
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.stitch import (
+from ip.engine.domain.dispatch.enums import (
+    HttpWriteOperation,
+    OutboundConflictStrategy,
+)
+from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.domain.stitch.enums import StitchStepType
+from ip.engine.domain.stitch.stitch import (
     EmitNotificationStepInput,
     ExecuteHttpActionStepInput,
     ExecuteHttpActionStepOutput,
     QueryReplicaStepInput,
     Stitch,
-    StitchStepType,
 )
 from notification.domain.constants import NotificationEventType
 from orchestration.application.default_error_policy import DefaultStepErrorPolicy
@@ -408,6 +411,9 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     assert len(outbox.envelopes) == 1
     assert outbox.envelopes[0].event_type == NotificationEventType.NOTIFICATION_TRIGGERED.value
     assert outbox.envelopes[0].idempotency_key == f"{run_id}:notify_ops:0"
+    notif_data = outbox.envelopes[0].payload.get("notification_data")
+    assert isinstance(notif_data, dict)
+    assert notif_data.get("event_id") == f"{run_id}:notify_ops:0"
 
 
 async def test_query_replica_step_handler_and_worker_error_paths() -> None:

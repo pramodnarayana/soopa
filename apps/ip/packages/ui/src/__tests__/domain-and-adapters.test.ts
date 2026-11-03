@@ -6,6 +6,7 @@ import { HttpStitchRepository } from '../adapters/http/repositories/http-stitch.
 import { HttpTraceRepository } from '../adapters/http/repositories/http-trace.repository';
 import { HttpTransformationRepository } from '../adapters/http/repositories/http-transformation.repository';
 import { normalizeAuthType } from '../domain/catalog-auth';
+import { groupActiveConnectionsByApp, isDeactivatedConnection } from '../domain/connection';
 import { computeDagLayout } from '../domain/dag/compute-dag-layout';
 import {
   AuthType,
@@ -417,7 +418,7 @@ const FAKE_ROUTE_FIXTURES: ReadonlyArray<{
   readonly payload: unknown;
 }> = [
   {
-    matches: (url) => url.includes('/transactions/search'),
+    matches: (url) => url.includes('/traces/search'),
     payload: [
       {
         trace_id: 'ip_trc_700',
@@ -721,5 +722,45 @@ describe('IP Domain: Enum Type Guards, JSON Object Parser, Auth Normalization & 
     });
     expect(signalInput?.conditionEventKey).toBe('tariff_gate');
     expect(signalInput?.concurrencyKeyField).toBe('meter_id');
+  });
+
+  it('groups only non-deactivated connections per appId', () => {
+    const base = {
+      id: 'conn_1',
+      tenantId: 'ten_1',
+      appId: 'stripe',
+      name: 'Stripe Prod',
+      authType: AuthType.API_KEY,
+      publicConfig: {},
+      status: ConnectionStatus.ACTIVE,
+      connectionFingerprint: 'fp_1',
+      tokenExpiresAt: null,
+      lastRefreshedAt: null,
+      lastErrorCode: null,
+      lastErrorMessage: null,
+      createdAt: '2026-10-30T00:00:00Z',
+      updatedAt: '2026-10-30T00:00:00Z',
+      deactivatedAt: null,
+    } as const;
+
+    const deactivated = {
+      ...base,
+      id: 'conn_2',
+      status: ConnectionStatus.DEACTIVATED,
+      deactivatedAt: '2026-10-31T00:00:00Z',
+    };
+    const expired = {
+      ...base,
+      id: 'conn_3',
+      appId: 'hubspot',
+      status: ConnectionStatus.AUTH_EXPIRED,
+    };
+
+    expect(isDeactivatedConnection(base)).toBe(false);
+    expect(isDeactivatedConnection(deactivated)).toBe(true);
+
+    const grouped = groupActiveConnectionsByApp([base, deactivated, expired]);
+    expect(grouped.get('stripe')?.map((c) => c.id)).toEqual(['conn_1']);
+    expect(grouped.get('hubspot')?.map((c) => c.id)).toEqual(['conn_3']);
   });
 });

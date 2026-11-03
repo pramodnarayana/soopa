@@ -7,11 +7,11 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 
 import httpx
-from ip.engine.application.responses import (
-    DiscoveredCatalogDTO,
-    StreamSchemaDTO,
+from ip.engine.domain.dispatch.classifier import (
+    classify_outbound_http_outcome,
+    redact_sensitive_headers,
 )
-from ip.engine.domain.enums import FailureDisposition
+from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     InvalidConnectionConfigError,
@@ -22,12 +22,13 @@ from ip.engine.domain.exceptions import (
     UpstreamHttpError,
     UpstreamNetworkError,
 )
-from ip.engine.domain.services.outbound_error_classifier import (
-    classify_outbound_http_outcome,
-    redact_sensitive_headers,
+from ip.engine.ports.outbound.connector_port import (
+    ConnectorPort,
+    DiscoveredCatalogDTO,
+    RecordEnvelopeDTO,
+    StreamSchemaDTO,
+    WriteResultDTO,
 )
-from ip.engine.ports.outbound.connector_port import ConnectorPort
-from ip.engine.ports.types import RecordEnvelopeDTO, WriteResultDTO
 from seedwork.domain.types import JsonDict
 from shttp import HttpError, validate_target_url
 from shttp.exceptions import SsrfSecurityError

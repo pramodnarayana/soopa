@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.models.stream_state import ConnectionStreamState
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
 
 
 class StreamStateRepositoryPort(Protocol):

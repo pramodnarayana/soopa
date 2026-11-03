@@ -32,9 +32,9 @@ class IpMultiShardStitchTickLoop:
         self._interval_seconds = max(0.05, interval_seconds)
         self.is_running: bool = False
         self._stop_event = asyncio.Event()
-        self._task: asyncio.Task[None] | None = None
+        self._task: asyncio.Task[object] | None = None
 
-    def background_tasks(self) -> list[asyncio.Task[None]]:
+    def background_tasks(self) -> list[asyncio.Task[object]]:
         """Returns active background tasks for supervisor monitoring."""
         return [self._task] if self._task is not None else []
 
@@ -79,7 +79,7 @@ class IpMultiShardStitchTickLoop:
             return None
         return res.unwrap()
 
-    async def _run_loop(self) -> None:
+    async def _run_loop(self) -> object:
         while self.is_running:
             try:
                 dto = await self.run_single_tick()
@@ -103,6 +103,7 @@ class IpMultiShardStitchTickLoop:
                         self._stop_event.wait(),
                         timeout=self._interval_seconds,
                     )
+        return None
 
 
 __all__ = ["IpMultiShardStitchTickLoop"]

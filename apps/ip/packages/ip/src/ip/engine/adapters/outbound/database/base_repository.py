@@ -10,7 +10,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
 from outbox.domain.constants import OutboxStatus
 from seedwork.utils import generate_id
 from sqlalchemy.ext.asyncio import AsyncSession
-from strace.adapters import HasTraceEvents, drain_trace_events
+from strace.orm import HasTraceEvents, drain_trace_events
 
 from database.outbox_serializer import serialize_domain_event
 from database.repository import BaseSqlAlchemyRepository as PlatformBaseSqlAlchemyRepository

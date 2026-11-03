@@ -1,14 +1,17 @@
 import dataclasses
 
 import structlog
+from security.ports.cipher_port import CipherPort
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import UNSET, UnsetType
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
 
-from edi.domain.enums import EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.sftp import SFTPPartnerDomainModel
-from edi.ports.outbound.field_encryption import FieldEncryptionPort
+from edi.domain.exceptions import (
+    EdiError,
+    EdiValidationError,
+    PartnerNotFoundEdiError,
+    SftpPartnerAlreadyExistsError,
+)
+from edi.domain.partner.sftp.partner import SFTPPartner
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -20,7 +23,7 @@ class UpdateSFTPPartnerCmd:
     host: str | UnsetType = UNSET
     username: str | UnsetType = UNSET
     password: str | UnsetType | None = UNSET
-    credentials_vault_ref: str | UnsetType = UNSET
+    credentials_vault_ref: str | UnsetType | None = UNSET
     port: int | UnsetType = UNSET
     inbound_remote_path: str | UnsetType | None = UNSET
     outbound_remote_path: str | UnsetType | None = UNSET
@@ -28,19 +31,17 @@ class UpdateSFTPPartnerCmd:
 
 
 class UpdateSFTPPartnerUseCase:
-    def __init__(
-        self, uow: ControlPlaneUnitOfWorkPort, field_encryption: FieldEncryptionPort
-    ) -> None:
+    def __init__(self, uow: ControlPlaneUnitOfWorkPort, field_encryption: CipherPort) -> None:
         self.uow = uow
         self.field_encryption = field_encryption
 
-    async def update_sftp_partner(  # noqa: C901
+    async def update_sftp_partner(
         self,
         tenant_id: str,
         partner_id: str,
         cmd: UpdateSFTPPartnerCmd,
         idempotency_key: str | None = None,
-    ) -> SFTPPartnerDomainModel:
+    ) -> Result[SFTPPartner, EdiError]:
         logger.info(
             "sftp_partner_update_started",
             partner_id=partner_id,
@@ -48,58 +49,59 @@ class UpdateSFTPPartnerUseCase:
         )
         existing = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
         if not existing:
-            raise ValueError(f"SFTP partner {partner_id} not found")
-
-        has_password = (
-            bool(cmd.password) if cmd.password is not UNSET else bool(existing.password_encrypted)
-        )
-        has_vault = (
-            bool(cmd.credentials_vault_ref)
-            if cmd.credentials_vault_ref is not UNSET
-            else bool(existing.credentials_vault_ref)
-        )
-
-        if not has_password and not has_vault:
-            raise ValueError("SFTP partner must have either a password or a credentials_vault_ref")
-
-        if has_password and has_vault:
-            raise ValueError("SFTP partner cannot have both a password and a credentials_vault_ref")
-
-        if not isinstance(cmd.name, UnsetType):
-            existing.name = cmd.name
-        if not isinstance(cmd.host, UnsetType):
-            existing.host = cmd.host
-        if not isinstance(cmd.username, UnsetType):
-            existing.username = cmd.username
-        if not isinstance(cmd.password, UnsetType):
-            existing.password_encrypted = (
-                self.field_encryption.encrypt(cmd.password) if cmd.password else None
-            )
-        if not isinstance(cmd.credentials_vault_ref, UnsetType):
-            existing.credentials_vault_ref = cmd.credentials_vault_ref
-        if not isinstance(cmd.port, UnsetType):
-            existing.port = cmd.port
-        if not isinstance(cmd.inbound_remote_path, UnsetType):
-            existing.inbound_remote_path = cmd.inbound_remote_path
-        if not isinstance(cmd.outbound_remote_path, UnsetType):
-            existing.outbound_remote_path = cmd.outbound_remote_path
-        if not isinstance(cmd.active, UnsetType):
-            existing.active = cmd.active
-
-        existing.add_domain_event(
-            ProvisioningEvent(
+            not_found = PartnerNotFoundEdiError.for_id(partner_id, tenant_id, protocol="SFTP")
+            logger.error(
+                "sftp_partner_not_found",
+                partner_id=partner_id,
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_sftp_partner_updated,
-                resource_id=partner_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                error_code=not_found.code,
             )
-        )
+            return Result.fail(not_found)
 
-        await self.uow.sftp_partners.save(existing)
+        encrypted_password: str | UnsetType | None = UNSET
+        if not isinstance(cmd.password, UnsetType):
+            encrypted_password = (
+                self.field_encryption.encrypt_str(cmd.password) if cmd.password else None
+            )
+
+        upd_res = existing.update(
+            name=cmd.name,
+            host=cmd.host,
+            username=cmd.username,
+            port=cmd.port,
+            inbound_remote_path=cmd.inbound_remote_path,
+            outbound_remote_path=cmd.outbound_remote_path,
+            password_encrypted=encrypted_password,
+            credentials_vault_ref=cmd.credentials_vault_ref,
+            active=cmd.active,
+            idempotency_key=idempotency_key,
+        )
+        if upd_res.is_err:
+            domain_err = upd_res.unwrap_err()
+            logger.error(
+                "sftp_partner_update_validation_failed",
+                partner_id=partner_id,
+                tenant_id=tenant_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
+            )
+            return Result.fail(domain_err)
+
+        try:
+            await self.uow.sftp_partners.save(existing)
+        except SftpPartnerAlreadyExistsError:
+            conflict_err = EdiValidationError.with_message("Database integrity error.")
+            logger.error(
+                "sftp_partner_update_conflict",
+                partner_id=partner_id,
+                tenant_id=tenant_id,
+                error_code=conflict_err.code,
+            )
+            return Result.fail(conflict_err)
 
         logger.info(
             "sftp_partner_updated",
             partner_id=partner_id,
             tenant_id=tenant_id,
         )
-        return existing
+        return Result.ok(existing)

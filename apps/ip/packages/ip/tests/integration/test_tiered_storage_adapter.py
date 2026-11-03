@@ -8,6 +8,7 @@ from collections.abc import AsyncGenerator
 import aioboto3
 import pytest
 import pytest_asyncio
+from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     DEFAULT_IP_PAYLOAD_BUCKET,
     TieredStorageAdapter,
@@ -15,7 +16,6 @@ from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
 from ip.engine.domain.exceptions import PayloadNotFoundError
 from ip.engine.ports.outbound.tiered_storage_port import TieredStorageResultDTO
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from storage.adapters.s3_storage_adapter import Aioboto3PayloadStorage
 
 pytestmark = pytest.mark.integration
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.integration
 
 @pytest_asyncio.fixture
 async def s3_bucket() -> AsyncGenerator[str, None]:
-    bucket_name = f"ip-test-{generate_id(DomainIdPrefix.TENANT.value).replace('_', '-')}"
+    bucket_name = f"ip-test-{generate_id(IdentityIdPrefix.TENANT.value).replace('_', '-')}"
     endpoint_url = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
     session = aioboto3.Session()
     async with session.client(

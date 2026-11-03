@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ip.engine.application.dto import ConnectionDTO
-from ip.engine.domain.enums import ConnectionStatus
+from ip.engine.application.responses import ConnectionDTO
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 

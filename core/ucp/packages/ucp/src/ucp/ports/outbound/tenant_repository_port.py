@@ -1,11 +1,17 @@
 from typing import Protocol
 
-from ucp.domain.models.tenant import Tenant
+from ucp.domain.tenant import Tenant
 
 
 class TenantRepositoryPort(Protocol):
     async def save(self, tenant: Tenant, idempotency_key: str | None = None) -> None:
         """Saves a tenant and its domain events to the database within a transaction"""
+        ...
+
+    async def insert_if_slug_available(
+        self, tenant: Tenant, idempotency_key: str | None = None
+    ) -> bool:
+        """Atomically inserts a new tenant if its slug is available; returns False on slug collision."""
         ...
 
     async def find_by_id(self, id: str) -> Tenant | None:

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import TransformationRecord
-from ip.engine.domain.enums import TransformationMode
-from ip.engine.domain.normalization import Transformation
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
 )

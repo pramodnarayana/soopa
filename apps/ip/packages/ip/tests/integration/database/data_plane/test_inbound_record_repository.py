@@ -11,8 +11,9 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
     IpTraceEventModel,
 )
-from ip.engine.domain.enums import IpEventType, IpTraceEventType
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.trace.enums import IpTraceEventType
 from sqlalchemy import select
 
 pytestmark = pytest.mark.integration
@@ -63,7 +64,7 @@ async def test_l1_inbound_record_repository_persists_record_trace_and_outbox(
         .all()
     )
     assert len(trace_rows) == 1
-    assert trace_rows[0].event_type == IpTraceEventType.L1_INGEST_RECEIVED.value
+    assert trace_rows[0].event_type == IpTraceEventType.INGEST_RECEIVED.value
 
     outbox_rows = (
         (

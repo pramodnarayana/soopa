@@ -1,14 +1,11 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
+from seedwork.domain.exceptions import Result
 
-from edi.domain.enums import EdiConnectionType, EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.base import ProcessingMode
-from edi.domain.models.inbound_routes import InboundRouteDomainModel
+from edi.domain.exceptions import EdiError, EdiValidationError
+from edi.domain.routing.enums import EdiConnectionType, ProcessingMode
+from edi.domain.routing.inbound_route import InboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -36,23 +33,35 @@ class CreateInboundRouteUseCase:
 
     async def create_inbound_route(
         self, tenant_id: str, cmd: CreateInboundRouteCmd, idempotency_key: str | None = None
-    ) -> InboundRouteDomainModel:
+    ) -> Result[InboundRoute, EdiError]:
         logger.info(
             "creating_inbound_route",
             isa_sender_id=cmd.isa_sender_id,
             tenant_id=tenant_id,
         )
-        route_id = InboundRouteDomainModel.new_id()
 
-        aggregate = InboundRouteDomainModel(
-            id=route_id,
+        mode: ProcessingMode | None = None
+        if cmd.processing_mode:
+            try:
+                mode = ProcessingMode(cmd.processing_mode)
+            except ValueError:
+                bad_mode = EdiValidationError.with_message(
+                    f"Invalid processing_mode '{cmd.processing_mode}'.",
+                    details={"processing_mode": cmd.processing_mode},
+                )
+                logger.error(
+                    "inbound_route_invalid_processing_mode",
+                    processing_mode=cmd.processing_mode,
+                    tenant_id=tenant_id,
+                    error_code=bad_mode.code,
+                )
+                return Result.fail(bad_mode)
+
+        create_res = InboundRoute.create(
             tenant_id=tenant_id,
             name=cmd.name,
             isa_sender_id=cmd.isa_sender_id,
             isa_receiver_id=cmd.isa_receiver_id,
-            active=False,
-            created_at=datetime.now(UTC).replace(tzinfo=None),
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
             trading_partner_id=cmd.trading_partner_id,
             gs_sender_id=cmd.gs_sender_id,
             gs_receiver_id=cmd.gs_receiver_id,
@@ -60,24 +69,26 @@ class CreateInboundRouteUseCase:
             webhook_id=str(cmd.webhook_id) if cmd.webhook_id else None,
             as2_partner_id=str(cmd.as2_partner_id) if cmd.as2_partner_id else None,
             sftp_partner_id=str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None,
-            connection_type=EdiConnectionType.WEBHOOK,
-            processing_mode=ProcessingMode(cmd.processing_mode) if cmd.processing_mode else None,
+            connection_type=cmd.connection_type,
+            processing_mode=mode,
+            idempotency_key=idempotency_key,
         )
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
+        if create_res.is_err:
+            domain_err = create_res.unwrap_err()
+            logger.error(
+                "inbound_route_create_validation_failed",
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_inbound_route_created,
-                resource_id=route_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+                error_code=domain_err.code,
+                reason=domain_err.message,
             )
-        )
+            return Result.fail(domain_err)
 
+        aggregate = create_res.unwrap()
         await self.uow.inbound_routes.save(aggregate)
 
         logger.info(
             "inbound_route_created",
-            route_id=route_id,
+            route_id=aggregate.id,
             tenant_id=tenant_id,
         )
-        return aggregate
+        return Result.ok(aggregate)

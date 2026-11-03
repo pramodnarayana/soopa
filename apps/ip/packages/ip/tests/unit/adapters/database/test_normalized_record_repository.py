@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from ip.application.domains.energy.canonical import EnergyEntityType
 from ip.engine.adapters.outbound.database.data_plane.normalized_record_repository import (
     SqlAlchemyNormalizedRecordRepository,
 )
-from ip.engine.domain.models.normalized_record import NormalizedRecord
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.solutions.domains.energy.canonical import EnergyEntityType
 
 
 def test_normalized_record_mapper_roundtrip() -> None:

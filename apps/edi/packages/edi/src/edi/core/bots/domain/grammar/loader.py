@@ -8,11 +8,7 @@ from edi.core.bots.config.botsconfig import (
 )
 from edi.core.bots.domain.exceptions import BotsImportError, GrammarError, GrammarPartMissing
 from edi.core.bots.domain.grammar import formats
-from edi.core.bots.domain.models import (
-    FieldDefinition,
-    StructureNode,
-    create_field_definition,
-)
+from edi.core.bots.domain.structure import FieldDefinition, StructureNode, create_field_definition
 from edi.core.bots.utils.botslib import gettext as _
 
 from . import validator

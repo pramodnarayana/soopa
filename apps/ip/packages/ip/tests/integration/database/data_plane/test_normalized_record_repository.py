@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 from database.types import TenantSession
-from ip.application.domains.energy.canonical import EnergyEntityType
 from ip.engine.adapters.outbound.database.data_plane.normalized_record_repository import (
     SqlAlchemyNormalizedRecordRepository,
 )
-from ip.engine.domain.models.normalized_record import NormalizedRecord
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.solutions.domains.energy.canonical import EnergyEntityType
 
 pytestmark = pytest.mark.integration
 

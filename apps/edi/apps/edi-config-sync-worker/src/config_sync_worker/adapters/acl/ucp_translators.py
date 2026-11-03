@@ -1,4 +1,4 @@
-from typing import Any
+from seedwork.domain.types import JsonDict
 
 from config_sync_worker.adapters.acl.base import EventTranslator
 
@@ -8,10 +8,10 @@ class WebhookEventTranslator(EventTranslator):
     Translates a UCP Webhook event to an EDI provisioning event.
     """
 
-    def __init__(self, event_type: str):
+    def __init__(self, event_type: str) -> None:
         self.event_type = event_type
 
-    def translate(self, external_payload: dict[str, Any]) -> dict[str, Any]:
+    def translate(self, external_payload: JsonDict) -> JsonDict:
         if not isinstance(external_payload, dict):
             raise TypeError("Malformed webhook event: payload must be a mapping")
 

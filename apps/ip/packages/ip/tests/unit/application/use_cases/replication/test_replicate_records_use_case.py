@@ -14,25 +14,21 @@ from ip.engine.application.use_cases.replication.sweep_stale_replicas_use_case i
     SweepStaleReplicasCommand,
     SweepStaleReplicasUseCase,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.exceptions import PayloadNotFoundError
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.replication.enums import (
     CursorKind,
     MergeOutcome,
 )
-from ip.engine.domain.exceptions import PayloadNotFoundError
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import (
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.replica_record import (
     ReplicaMergePolicy,
     ReplicaRecord,
     ReplicaRejection,
     compute_record_key,
 )
-from ip.engine.domain.models.stream_definition import (
-    DeletionMarker,
-    StreamDefinition,
-)
+from ip.engine.domain.replication.stream_definition import DeletionMarker, StreamDefinition
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalized_record_repository_port import (

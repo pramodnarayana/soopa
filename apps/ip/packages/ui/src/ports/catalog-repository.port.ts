@@ -3,9 +3,14 @@ import type { AppSpec, CatalogAppSummary, CatalogAppsFilter } from '../domain/ca
 
 export interface CatalogRepositoryPort {
   listApps(
+    tenantId: string,
     filter?: CatalogAppsFilter,
     signal?: AbortSignal,
   ): Promise<Result<readonly CatalogAppSummary[], ApiProblem>>;
 
-  getAppSpec(appId: string, signal?: AbortSignal): Promise<Result<AppSpec, ApiProblem>>;
+  getAppSpec(
+    tenantId: string,
+    appId: string,
+    signal?: AbortSignal,
+  ): Promise<Result<AppSpec, ApiProblem>>;
 }

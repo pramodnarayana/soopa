@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ip.engine.application.dto import ConnectionDTO, ConnectionOperationResultDTO
+from ip.engine.application.responses import ConnectionDTO, ConnectionOperationResultDTO
 from ip.engine.domain.exceptions import ConnectionNotFoundError
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 

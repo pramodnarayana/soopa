@@ -1,6 +1,6 @@
 import structlog
-from identity.adapters.outbound.zitadel.client import ZitadelClient
 from pydantic import BaseModel, Field
+from shttp import HttpClient
 
 from identity_worker.config.settings import AppSettings
 from identity_worker.domain.exceptions import IdentityProviderPortError
@@ -16,17 +16,17 @@ class CreateOrgResponse(BaseModel):
     org_id: str | None = Field(None, alias="orgId")
 
 
-class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
-    def __init__(self, project_provider: ProjectProviderPort, settings: AppSettings) -> None:
-        super().__init__(
-            api_url=settings.zitadel_api_url,
-            machine_key=settings.zitadel_machine_key,
-            ucp_project_id=settings.zitadel_ucp_project_id,
-            default_user_password=settings.zitadel_default_user_password,
-            platform_org_id=settings.zitadel_platform_org_id,
-        )
+class ZitadelOrganizationsAdapter(OrganizationProviderPort):
+    def __init__(
+        self,
+        http_client: HttpClient,
+        project_provider: ProjectProviderPort,
+        settings: AppSettings,
+    ) -> None:
+        self._http_client = http_client
         self.project_provider = project_provider
         self.settings = settings
+        self.ucp_project_id = settings.zitadel_ucp_project_id
 
     async def create_organization(self, tenant_id: str, name: str) -> tuple[str, bool]:
         logger.info("provisioning_organization_in_zitadel", org_name=name, tenant_id=tenant_id)
@@ -39,9 +39,8 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
         return org_id, grant_succeeded
 
     async def _create_or_recover_organization(self, tenant_id: str, name: str) -> str:
-        response = await self.fetch_with_auth(
-            endpoint="/v2/organizations",
-            method="POST",
+        response = await self._http_client.post(
+            "/v2/organizations",
             json={"organizationId": tenant_id, "name": name},
         )
 
@@ -75,9 +74,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
             org_id=tenant_id,
             org_name=name,
         )
-        org_response = await self.fetch_with_auth(
-            endpoint=f"/admin/v1/orgs/{tenant_id}", method="GET"
-        )
+        org_response = await self._http_client.get(f"/admin/v1/orgs/{tenant_id}")
         if org_response.status_code == 200:
             org_data = org_response.json()
             recovered_id = org_data.get("org", {}).get("id") or tenant_id
@@ -140,7 +137,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
     async def delete_organization(self, org_id: str) -> None:
         logger.info("deleting_organization_in_zitadel", org_id=org_id)
 
-        admin_res = await self.fetch_with_auth(endpoint=f"/admin/v1/orgs/{org_id}", method="DELETE")
+        admin_res = await self._http_client.delete(f"/admin/v1/orgs/{org_id}")
         if admin_res.status_code in (200, 204):
             logger.info("successfully_deleted_organization_from_zitadel", org_id=org_id)
             return
@@ -148,9 +145,7 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
             logger.info("organization_already_deleted", org_id=org_id)
             return
 
-        mgmt_res = await self.fetch_with_auth(
-            endpoint=f"/management/v1/orgs/{org_id}", method="DELETE"
-        )
+        mgmt_res = await self._http_client.delete(f"/management/v1/orgs/{org_id}")
         if mgmt_res.status_code in (200, 204, 404):
             logger.info("successfully_deleted_organization_from_zitadel", org_id=org_id)
             return
@@ -166,9 +161,8 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
     async def update_organization_name(self, org_id: str, name: str) -> None:
         logger.info("updating_organization_name_in_zitadel", org_id=org_id, org_name=name)
 
-        res = await self.fetch_with_auth(
-            endpoint="/management/v1/orgs/me",
-            method="PUT",
+        res = await self._http_client.put(
+            "/management/v1/orgs/me",
             headers={"x-zitadel-orgid": org_id},
             json={"name": name},
         )
@@ -188,9 +182,8 @@ class ZitadelOrganizationsAdapter(ZitadelClient, OrganizationProviderPort):
         logger.info("toggling_organization_status_in_zitadel", org_id=org_id, active=active)
 
         endpoint = f"/management/v1/orgs/me/_{'reactivate' if active else 'deactivate'}"
-        res = await self.fetch_with_auth(
-            endpoint=endpoint,
-            method="POST",
+        res = await self._http_client.post(
+            endpoint,
             headers={"x-zitadel-orgid": org_id},
             json={},
         )

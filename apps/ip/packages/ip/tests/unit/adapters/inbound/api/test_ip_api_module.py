@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from database.router import DatabaseRouter
 from fastapi import FastAPI, HTTPException
+from fastapi.routing import APIRoute
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_catalog_registry,
@@ -26,8 +27,8 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     from_ip_error,
     to_error_response,
 )
-from ip.engine.adapters.inbound.api.module import IpApiModule
 from ip.engine.domain.exceptions import ConnectorNotFoundError
+from ip.engine.module import IpApiModule
 from seedwork.infra.api import LaunchableApiModule
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
@@ -57,11 +58,26 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
     module.register_routes(app)
 
     route_paths = {getattr(r, "path", "") for r in app.routes}
-    assert "/api/v1/ip/catalog/apps" in route_paths
-    assert "/api/v1/ip/catalog/apps/{app_id}/spec" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps/{app_id}/spec" in route_paths
+
+    catalog_routes = [
+        route
+        for route in app.routes
+        if isinstance(route, APIRoute)
+        and route.path
+        in {
+            "/api/v1/tenants/{tenant_id}/ip/catalog/apps",
+            "/api/v1/tenants/{tenant_id}/ip/catalog/apps/{app_id}/spec",
+        }
+    ]
+    assert len(catalog_routes) == 2
+    for catalog_route in catalog_routes:
+        dep_calls = {dep.call for dep in catalog_route.dependant.dependencies}
+        assert require_tenant_member in dep_calls
     assert "/api/v1/tenants/{tenant_id}/ip/connections" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}" in route_paths
-    assert "/api/v1/tenants/{tenant_id}/ip/transactions/{trace_id}" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/traces/{trace_id}" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/transformations/transformers" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/transformations/preview" in route_paths
     assert (
@@ -89,6 +105,7 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
 @pytest.mark.asyncio
 async def test_require_tenant_member_enforces_authentication_and_tenant_scope() -> None:
     app = FastAPI()
+    IpApiModule().register_routes(app)
     session = AsyncSession()
     unauth_req = _make_request(app, identity=None)
 
@@ -130,9 +147,10 @@ async def test_require_tenant_member_enforces_authentication_and_tenant_scope() 
 
 def test_ip_api_dependencies_and_error_dtos() -> None:
     app = FastAPI()
+    IpApiModule().register_routes(app)
     req = _make_request(app)
 
-    registry = get_catalog_registry()
+    registry = get_catalog_registry(req)
     connectors = get_connectors(registry)
     assert len(connectors) >= 6
     assert "http" in list(connectors)
@@ -140,11 +158,11 @@ def test_ip_api_dependencies_and_error_dtos() -> None:
     with pytest.raises(KeyError):
         _ = connectors["non_existent_connector"]
 
-    assert get_cipher() is not None
-    assert get_tiered_storage() is not None
-    assert get_inbound_verifier() is not None
-    assert get_inbound_decoder() is not None
-    assert get_inbound_ack() is not None
+    assert get_cipher(req) is not None
+    assert get_tiered_storage(req) is not None
+    assert get_inbound_verifier(req) is not None
+    assert get_inbound_decoder(req) is not None
+    assert get_inbound_ack(req) is not None
     assert get_token_refresh_lock(req) is get_token_refresh_lock(req)
     assert get_token_refresher(req) is get_token_refresher(req)
 

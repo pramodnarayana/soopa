@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
 from strace.domain import TracedAggregateRoot
 
 

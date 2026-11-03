@@ -9,39 +9,35 @@ without raising exceptions.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol
 
 import structlog
 from seedwork.domain.types import JsonDict
 from structlog.typing import FilteringBoundLogger
 
-from ip.engine.domain.enums import (
-    CanonicalAction,
-    FailureDisposition,
-    IpTraceEventType,
-    NormalizationOutcome,
-    NormalizationRejectionReason,
-    PipelineLayer,
-    RuleSeverity,
-    TimelineStatus,
-    TransformationMode,
-)
-from ip.engine.domain.events import CanonicalRecordChangedEvent
+from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.exceptions import (
     IpError,
     NormalizationFailedError,
     ReplicaRecordNotFoundError,
     Result,
 )
-from ip.engine.domain.models.replica_record import ReplicaRecord
-from ip.engine.domain.models.timeline_entry import IpTraceEvent, TraceErrorDetails
-from ip.engine.domain.normalization import (
-    CanonicalDraft,
+from ip.engine.domain.normalization.enums import (
+    NormalizationOutcome,
+    NormalizationRejectionReason,
+    RuleSeverity,
+    TransformationMode,
+)
+from ip.engine.domain.normalization.ledger import (
     EntityShadowDiff,
     FieldShadowDiff,
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
+)
+from ip.engine.domain.normalization.transformation import (
+    CanonicalDraft,
     ReplicaSnapshot,
     Transformation,
     TransformationContext,
@@ -93,6 +89,76 @@ class NormalizeReplicaRecordResultDTO:
     shadow_diff_count: int = 0
     resolved_references_count: int = 0
     error_detail: str | None = None
+
+
+class _RejectionPersistenceStrategy(Protocol):
+    """Strategy governing how terminal transformer rejections are persisted per execution mode."""
+
+    async def record_terminal_rejection(
+        self,
+        *,
+        uow: IpDataPlaneUnitOfWorkPort,
+        command: NormalizeReplicaRecordCommand,
+        transformation: Transformation,
+        rejection: NormalizationRejectionEntry,
+        detail: str,
+        summary_message: str,
+    ) -> None: ...
+
+
+class _ActiveLedgerRejectionStrategy:
+    """Persists both the rejection entry and a terminal NormalizationLedgerEntry."""
+
+    async def record_terminal_rejection(
+        self,
+        *,
+        uow: IpDataPlaneUnitOfWorkPort,
+        command: NormalizeReplicaRecordCommand,
+        transformation: Transformation,
+        rejection: NormalizationRejectionEntry,
+        detail: str,
+        summary_message: str,
+    ) -> None:
+        await uow.normalization_rejections.record_rejection(rejection)
+        rejected_ledger = NormalizationLedgerEntry.reject_execution(
+            tenant_id=command.tenant_id,
+            replica_record_id=command.replica_record_id,
+            replica_version=command.replica_version,
+            transformation_id=transformation.transformation_id,
+            transformation_version=transformation.transformation_version,
+            reason_code=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
+            detail=detail,
+            summary_message=summary_message,
+            trace_id=command.trace_id,
+            correlation_id=command.correlation_id,
+            parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
+            replay_count=command.replay_count,
+        )
+        await uow.normalization_ledger.record_entry(rejected_ledger)
+
+
+class _ShadowTraceRejectionStrategy:
+    """Persists the rejection entry and trace event without mutating the active ledger."""
+
+    async def record_terminal_rejection(
+        self,
+        *,
+        uow: IpDataPlaneUnitOfWorkPort,
+        command: NormalizeReplicaRecordCommand,
+        transformation: Transformation,
+        rejection: NormalizationRejectionEntry,
+        detail: str,
+        summary_message: str,
+    ) -> None:
+        await uow.normalization_rejections.record_rejection(rejection)
+        await uow.traces.save_trace_event(
+            rejection.build_rejection_trace(summary_message=summary_message)
+        )
+
+
+_ACTIVE_REJECTION_STRATEGY = _ActiveLedgerRejectionStrategy()
+_SHADOW_REJECTION_STRATEGY = _ShadowTraceRejectionStrategy()
 
 
 class NormalizeReplicaRecordUseCase:
@@ -167,24 +233,14 @@ class NormalizeReplicaRecordUseCase:
             if transformation.mode == TransformationMode.ACTIVE and await self._is_version_stale(
                 uow, command, transformation
             ):
-                stale_replica = await uow.replica_records.get_by_id(
-                    tenant_id=command.tenant_id,
-                    record_id=command.replica_record_id,
-                )
-                if stale_replica is not None:
-                    self._append_trace_event(
-                        replica=stale_replica,
-                        command=command,
-                        transformation=transformation,
-                        event_type=IpTraceEventType.L3_SKIPPED_STALE,
-                        status=TimelineStatus.SUCCESS,
-                        summary_message=(
-                            f"Skipped stale replica version {command.replica_version} "
-                            f"for transformer '{transformation.transformation_id}' v{transformation.transformation_version}."
-                        ),
+                await uow.traces.save_trace_event(
+                    transformation.build_skipped_stale_trace(
+                        replica_version=command.replica_version,
+                        trace_id=command.trace_id,
+                        correlation_id=command.correlation_id,
                     )
-                    await uow.replica_records.save(stale_replica)
-                    await uow.commit()
+                )
+                await uow.commit()
                 bound_logger.info("l3_normalization_skipped_stale")
                 return Result.ok(
                     NormalizeReplicaRecordResultDTO(outcome=NormalizationOutcome.SKIPPED_STALE)
@@ -199,7 +255,7 @@ class NormalizeReplicaRecordUseCase:
                 bound_logger.error("replica_record_not_found")
                 return Result.err(ReplicaRecordNotFoundError.for_id(command.replica_record_id))
 
-            # 6. Construct ReplicaSnapshot & TransformationContext
+            # 6. Construct immutable ReplicaSnapshot & TransformationContext
             snapshot = ReplicaSnapshot(
                 id=replica.id,
                 connection_id=replica.connection_id,
@@ -221,7 +277,6 @@ class NormalizeReplicaRecordUseCase:
             if transformation.mode == TransformationMode.SHADOW:
                 return await self._execute_shadow_only_mode(
                     uow=uow,
-                    replica=replica,
                     snapshot=snapshot,
                     context=context,
                     command=command,
@@ -236,34 +291,49 @@ class NormalizeReplicaRecordUseCase:
             if transformer is None:
                 return await self._handle_unregistered_transformer(
                     uow=uow,
-                    replica=replica,
                     command=command,
                     transformation=transformation,
                     target_version=transformation.transformation_version,
                     bound_logger=bound_logger,
+                    rejection_strategy=_ACTIVE_REJECTION_STRATEGY,
                 )
 
             # 9. Handle Tombstone: Cascade soft-delete to canonical domain entities
             if snapshot.is_deleted:
                 return await self._handle_tombstone(
-                    uow, replica, command, transformation, bound_logger
+                    uow=uow,
+                    command=command,
+                    transformation=transformation,
+                    bound_logger=bound_logger,
                 )
 
             # 10. Execute Transformer with strategy error handling
             transformation_result, early_result = await self._execute_transformer(
                 transformer=transformer,
-                replica=replica,
                 snapshot=snapshot,
                 context=context,
                 command=command,
                 transformation=transformation,
                 uow=uow,
                 bound_logger=bound_logger,
-                record_ledger=True,
+                rejection_strategy=_ACTIVE_REJECTION_STRATEGY,
             )
             if early_result is not None or transformation_result is None:
                 assert early_result is not None
                 return early_result
+
+            ledger_entry = NormalizationLedgerEntry.begin(
+                tenant_id=command.tenant_id,
+                replica_record_id=command.replica_record_id,
+                replica_version=command.replica_version,
+                transformation_id=transformation.transformation_id,
+                transformation_version=transformation.transformation_version,
+                trace_id=command.trace_id,
+                correlation_id=command.correlation_id,
+                parent_trace_id=command.parent_trace_id,
+                original_trace_id=command.original_trace_id,
+                replay_count=command.replay_count,
+            )
 
             # 11. Record explicit transformer rejections
             rejections_count = await self._record_transformer_rejections(
@@ -273,7 +343,7 @@ class NormalizeReplicaRecordUseCase:
             # 12. Evaluate Quality Rules, Resolve References & Upsert Canonical Drafts
             current_produced_refs, qr_rej_count = await self._apply_drafts_and_references(
                 uow=uow,
-                replica=replica,
+                ledger_entry=ledger_entry,
                 command=command,
                 transformation=transformation,
                 drafts=transformation_result.drafts,
@@ -282,12 +352,19 @@ class NormalizeReplicaRecordUseCase:
 
             # 13. Tombstone Unseen Previous Drafts (Diffing)
             await self._tombstone_unseen_drafts(
-                uow, replica, command, transformation, current_produced_refs
+                uow=uow,
+                ledger_entry=ledger_entry,
+                command=command,
+                transformation=transformation,
+                current_produced_refs=current_produced_refs,
             )
 
             # 14. Late-Arriving Reference Resolution & Back-Patching
             resolved_count = await self._resolve_late_arriving_references(
-                uow, replica, command, transformation, current_produced_refs
+                uow=uow,
+                ledger_entry=ledger_entry,
+                command=command,
+                current_produced_refs=current_produced_refs,
             )
 
             # 15. Active + Shadow Candidate Diff Calculation
@@ -300,44 +377,9 @@ class NormalizeReplicaRecordUseCase:
                 active_drafts=transformation_result.drafts,
             )
 
-            # 16. Record Normalization Ledger Entry, Trace Event, Save Replica Events & Commit
-            outcome = (
-                NormalizationOutcome.NORMALIZED
-                if current_produced_refs
-                else (
-                    NormalizationOutcome.REJECTED
-                    if rejections_count > 0
-                    else NormalizationOutcome.NORMALIZED
-                )
-            )
-            self._append_trace_event(
-                replica=replica,
-                command=command,
-                transformation=transformation,
-                event_type=(
-                    IpTraceEventType.L3_NORMALIZED
-                    if outcome == NormalizationOutcome.NORMALIZED
-                    else IpTraceEventType.L3_REJECTED
-                ),
-                status=(
-                    TimelineStatus.SUCCESS
-                    if outcome == NormalizationOutcome.NORMALIZED
-                    else TimelineStatus.FAILED
-                ),
-                summary_message=(
-                    f"Normalized replica '{replica.id}' v{command.replica_version} via "
-                    f"'{transformation.transformation_id}' v{transformation.transformation_version}: "
-                    f"{len(current_produced_refs)} canonical record(s), {rejections_count} rejection(s)."
-                ),
-            )
-            await self._record_ledger_entry(
-                uow,
-                command,
-                transformation,
-                tuple(current_produced_refs),
-                outcome,
-            )
-            await uow.replica_records.save(replica)
+            # 16. Complete L3 Normalization Ledger Aggregate (drains domain & trace events) & Commit
+            outcome = ledger_entry.complete_normalization(rejections_count=rejections_count)
+            await uow.normalization_ledger.record_entry(ledger_entry)
             await uow.commit()
 
             bound_logger.info(
@@ -351,7 +393,7 @@ class NormalizeReplicaRecordUseCase:
             return Result.ok(
                 NormalizeReplicaRecordResultDTO(
                     outcome=outcome,
-                    canonical_refs_produced=tuple(current_produced_refs),
+                    canonical_refs_produced=ledger_entry.produced_canonical_refs,
                     rejections_count=rejections_count,
                     shadow_diff_count=shadow_diff_count,
                     resolved_references_count=resolved_count,
@@ -362,7 +404,6 @@ class NormalizeReplicaRecordUseCase:
         self,
         *,
         uow: IpDataPlaneUnitOfWorkPort,
-        replica: ReplicaRecord,
         snapshot: ReplicaSnapshot,
         context: TransformationContext,
         command: NormalizeReplicaRecordCommand,
@@ -387,24 +428,22 @@ class NormalizeReplicaRecordUseCase:
         if candidate_transformer is None:
             return await self._handle_unregistered_transformer(
                 uow=uow,
-                replica=replica,
                 command=command,
                 transformation=transformation,
                 target_version=candidate_version,
                 bound_logger=bound_logger,
-                record_ledger=False,
+                rejection_strategy=_SHADOW_REJECTION_STRATEGY,
             )
 
         candidate_result, early_result = await self._execute_transformer(
             transformer=candidate_transformer,
-            replica=replica,
             snapshot=snapshot,
             context=context,
             command=command,
             transformation=transformation,
             uow=uow,
             bound_logger=bound_logger,
-            record_ledger=False,
+            rejection_strategy=_SHADOW_REJECTION_STRATEGY,
         )
         if early_result is not None or candidate_result is None:
             assert early_result is not None
@@ -457,27 +496,17 @@ class NormalizeReplicaRecordUseCase:
             if rejections_count > 0 and not candidate_result.drafts
             else NormalizationOutcome.NORMALIZED
         )
-        self._append_trace_event(
-            replica=replica,
-            command=command,
-            transformation=transformation,
-            event_type=(
-                IpTraceEventType.L3_NORMALIZED
-                if outcome == NormalizationOutcome.NORMALIZED
-                else IpTraceEventType.L3_REJECTED
-            ),
-            status=(
-                TimelineStatus.SUCCESS
-                if outcome == NormalizationOutcome.NORMALIZED
-                else TimelineStatus.FAILED
-            ),
-            summary_message=(
-                f"Shadow-evaluated replica '{replica.id}' via "
-                f"'{transformation.transformation_id}' v{candidate_version}: "
-                f"{len(candidate_result.drafts)} draft(s), {shadow_diff_count} diff(s)."
-            ),
+        await uow.traces.save_trace_event(
+            transformation.build_shadow_evaluation_trace(
+                replica_record_id=snapshot.id,
+                candidate_version=candidate_version,
+                drafts_count=len(candidate_result.drafts),
+                shadow_diff_count=shadow_diff_count,
+                outcome=outcome,
+                trace_id=command.trace_id,
+                correlation_id=command.correlation_id,
+            )
         )
-        await uow.replica_records.save(replica)
         await uow.commit()
 
         bound_logger.info(
@@ -514,12 +543,11 @@ class NormalizeReplicaRecordUseCase:
         self,
         *,
         uow: IpDataPlaneUnitOfWorkPort,
-        replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
         transformation: Transformation,
         target_version: int,
         bound_logger: FilteringBoundLogger,
-        record_ledger: bool = True,
+        rejection_strategy: _RejectionPersistenceStrategy,
     ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
         bound_logger.error(
             "transformer_version_not_registered",
@@ -538,24 +566,14 @@ class NormalizeReplicaRecordUseCase:
             trace_id=command.trace_id,
             correlation_id=command.correlation_id,
         )
-        await uow.normalization_rejections.record_rejection(rejection)
-        if record_ledger:
-            await self._record_ledger_entry(
-                uow, command, transformation, (), NormalizationOutcome.REJECTED
-            )
-        self._append_trace_event(
-            replica=replica,
+        await rejection_strategy.record_terminal_rejection(
+            uow=uow,
             command=command,
             transformation=transformation,
-            event_type=IpTraceEventType.L3_REJECTED,
-            status=TimelineStatus.FAILED,
+            rejection=rejection,
+            detail=detail,
             summary_message=detail,
-            error_details=TraceErrorDetails(
-                reason=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
-                detail=detail,
-            ),
         )
-        await uow.replica_records.save(replica)
         await uow.commit()
         return Result.ok(
             NormalizeReplicaRecordResultDTO(
@@ -567,8 +585,8 @@ class NormalizeReplicaRecordUseCase:
 
     async def _handle_tombstone(
         self,
+        *,
         uow: IpDataPlaneUnitOfWorkPort,
-        replica: ReplicaRecord,
         command: NormalizeReplicaRecordCommand,
         transformation: Transformation,
         bound_logger: FilteringBoundLogger,
@@ -577,6 +595,18 @@ class NormalizeReplicaRecordUseCase:
             tenant_id=command.tenant_id,
             replica_record_id=command.replica_record_id,
             transformation_id=transformation.transformation_id,
+        )
+        ledger_entry = NormalizationLedgerEntry.begin(
+            tenant_id=command.tenant_id,
+            replica_record_id=command.replica_record_id,
+            replica_version=command.replica_version,
+            transformation_id=transformation.transformation_id,
+            transformation_version=transformation.transformation_version,
+            trace_id=command.trace_id,
+            correlation_id=command.correlation_id,
+            parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
+            replay_count=command.replay_count,
         )
         for canonical_type, source_id in previous_refs:
             writer = self._writer_registry.get(canonical_type)
@@ -589,58 +619,32 @@ class NormalizeReplicaRecordUseCase:
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
                 )
-            replica.add_domain_event(
-                CanonicalRecordChangedEvent(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    canonical_type=canonical_type,
-                    source_id=source_id,
-                    action=CanonicalAction.TOMBSTONE.value,
-                    trace_id=command.trace_id,
-                    correlation_id=command.correlation_id,
-                    transformation_id=transformation.transformation_id,
-                    transformation_version=transformation.transformation_version,
-                    replica_id=command.replica_record_id,
-                    replica_version=command.replica_version,
-                    parent_trace_id=command.parent_trace_id,
-                    original_trace_id=command.original_trace_id,
-                    replay_count=command.replay_count,
-                )
+            ledger_entry.record_canonical_tombstone(
+                connection_id=command.connection_id,
+                canonical_type=canonical_type,
+                source_id=source_id,
             )
 
-        self._append_trace_event(
-            replica=replica,
-            command=command,
-            transformation=transformation,
-            event_type=IpTraceEventType.L3_TOMBSTONED,
-            status=TimelineStatus.SUCCESS,
-            summary_message=(
-                f"Tombstoned {len(previous_refs)} canonical record(s) from replica '{replica.id}'."
-            ),
-        )
-        await self._record_ledger_entry(
-            uow, command, transformation, (), NormalizationOutcome.TOMBSTONED
-        )
-        await uow.replica_records.save(replica)
+        outcome = ledger_entry.complete_tombstone(tombstoned_count=len(previous_refs))
+        await uow.normalization_ledger.record_entry(ledger_entry)
         await uow.commit()
         bound_logger.info(
             "l3_normalization_tombstoned",
             previous_refs_count=len(previous_refs),
         )
-        return Result.ok(NormalizeReplicaRecordResultDTO(outcome=NormalizationOutcome.TOMBSTONED))
+        return Result.ok(NormalizeReplicaRecordResultDTO(outcome=outcome))
 
     async def _execute_transformer(
         self,
         *,
         transformer: TransformerPort,
-        replica: ReplicaRecord,
         snapshot: ReplicaSnapshot,
         context: TransformationContext,
         command: NormalizeReplicaRecordCommand,
         transformation: Transformation,
         uow: IpDataPlaneUnitOfWorkPort,
         bound_logger: FilteringBoundLogger,
-        record_ledger: bool,
+        rejection_strategy: _RejectionPersistenceStrategy,
     ) -> tuple[
         TransformationResult | None, Result[NormalizeReplicaRecordResultDTO, IpError] | None
     ]:
@@ -649,6 +653,8 @@ class NormalizeReplicaRecordUseCase:
         except Exception as exc:
             if self._error_policy.is_terminal_failure(exc):
                 bound_logger.error("transformer_execution_terminal_failure", exc_info=exc)
+                detail = str(exc)
+                summary = f"Transformer execution failed: {exc}"
                 rejection = NormalizationRejectionEntry.create(
                     tenant_id=command.tenant_id,
                     replica_record_id=command.replica_record_id,
@@ -656,34 +662,24 @@ class NormalizeReplicaRecordUseCase:
                     transformation_id=transformer.transformation_id,
                     transformation_version=transformer.transformation_version,
                     reason_code=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
-                    detail=str(exc),
+                    detail=detail,
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
                 )
-                await uow.normalization_rejections.record_rejection(rejection)
-                if record_ledger:
-                    await self._record_ledger_entry(
-                        uow, command, transformation, (), NormalizationOutcome.REJECTED
-                    )
-                self._append_trace_event(
-                    replica=replica,
+                await rejection_strategy.record_terminal_rejection(
+                    uow=uow,
                     command=command,
                     transformation=transformation,
-                    event_type=IpTraceEventType.L3_REJECTED,
-                    status=TimelineStatus.FAILED,
-                    summary_message=f"Transformer execution failed: {exc}",
-                    error_details=TraceErrorDetails(
-                        reason=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
-                        detail=str(exc),
-                    ),
+                    rejection=rejection,
+                    detail=detail,
+                    summary_message=summary,
                 )
-                await uow.replica_records.save(replica)
                 await uow.commit()
                 return None, Result.ok(
                     NormalizeReplicaRecordResultDTO(
                         outcome=NormalizationOutcome.REJECTED,
                         rejections_count=1,
-                        error_detail=str(exc),
+                        error_detail=detail,
                     )
                 )
             bound_logger.error("transformer_execution_transient_failure", exc_info=exc)
@@ -723,8 +719,9 @@ class NormalizeReplicaRecordUseCase:
 
     async def _apply_drafts_and_references(
         self,
+        *,
         uow: IpDataPlaneUnitOfWorkPort,
-        replica: ReplicaRecord,
+        ledger_entry: NormalizationLedgerEntry,
         command: NormalizeReplicaRecordCommand,
         transformation: Transformation,
         drafts: tuple[CanonicalDraft, ...],
@@ -767,16 +764,10 @@ class NormalizeReplicaRecordUseCase:
                         trace_id=command.trace_id,
                     )
                     await uow.pending_references.record_pending(pending_ref)
-                    self._append_trace_event(
-                        replica=replica,
-                        command=command,
-                        transformation=transformation,
-                        event_type=IpTraceEventType.L3_REFERENCE_PENDING,
-                        status=TimelineStatus.SUCCESS,
-                        summary_message=(
-                            f"Recorded pending reference '{ref.field_name}' -> "
-                            f"({ref.target_canonical_type}, {ref.target_source_id})."
-                        ),
+                    ledger_entry.record_pending_reference(
+                        field_name=ref.field_name,
+                        target_canonical_type=ref.target_canonical_type,
+                        target_source_id=ref.target_source_id,
                     )
 
             writer = self._writer_registry.get(draft.canonical_type)
@@ -797,24 +788,11 @@ class NormalizeReplicaRecordUseCase:
                 )
 
             produced_refs.append((draft.canonical_type, draft.source_id))
-            replica.add_domain_event(
-                CanonicalRecordChangedEvent(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    canonical_type=draft.canonical_type,
-                    source_id=draft.source_id,
-                    action=CanonicalAction.UPSERT.value,
-                    trace_id=command.trace_id,
-                    correlation_id=command.correlation_id,
-                    transformation_id=transformation.transformation_id,
-                    transformation_version=transformation.transformation_version,
-                    replica_id=command.replica_record_id,
-                    replica_version=command.replica_version,
-                    changed_fields=tuple(fields_dict.keys()),
-                    parent_trace_id=command.parent_trace_id,
-                    original_trace_id=command.original_trace_id,
-                    replay_count=command.replay_count,
-                )
+            ledger_entry.record_canonical_upsert(
+                connection_id=command.connection_id,
+                canonical_type=draft.canonical_type,
+                source_id=draft.source_id,
+                changed_fields=tuple(fields_dict.keys()),
             )
 
         return produced_refs, rejected_count
@@ -854,8 +832,9 @@ class NormalizeReplicaRecordUseCase:
 
     async def _tombstone_unseen_drafts(
         self,
+        *,
         uow: IpDataPlaneUnitOfWorkPort,
-        replica: ReplicaRecord,
+        ledger_entry: NormalizationLedgerEntry,
         command: NormalizeReplicaRecordCommand,
         transformation: Transformation,
         current_produced_refs: list[tuple[str, str]],
@@ -877,41 +856,18 @@ class NormalizeReplicaRecordUseCase:
                     trace_id=command.trace_id,
                     correlation_id=command.correlation_id,
                 )
-            replica.add_domain_event(
-                CanonicalRecordChangedEvent(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    canonical_type=canonical_type,
-                    source_id=source_id,
-                    action=CanonicalAction.TOMBSTONE.value,
-                    trace_id=command.trace_id,
-                    correlation_id=command.correlation_id,
-                    transformation_id=transformation.transformation_id,
-                    transformation_version=transformation.transformation_version,
-                    replica_id=command.replica_record_id,
-                    replica_version=command.replica_version,
-                    parent_trace_id=command.parent_trace_id,
-                    original_trace_id=command.original_trace_id,
-                    replay_count=command.replay_count,
-                )
-            )
-            self._append_trace_event(
-                replica=replica,
-                command=command,
-                transformation=transformation,
-                event_type=IpTraceEventType.L3_TOMBSTONED,
-                status=TimelineStatus.SUCCESS,
-                summary_message=(
-                    f"Tombstoned unseen canonical draft ({canonical_type}, {source_id})."
-                ),
+            ledger_entry.record_unseen_draft_tombstone(
+                connection_id=command.connection_id,
+                canonical_type=canonical_type,
+                source_id=source_id,
             )
 
     async def _resolve_late_arriving_references(
         self,
+        *,
         uow: IpDataPlaneUnitOfWorkPort,
-        replica: ReplicaRecord,
+        ledger_entry: NormalizationLedgerEntry,
         command: NormalizeReplicaRecordCommand,
-        transformation: Transformation,
         current_produced_refs: list[tuple[str, str]],
     ) -> int:
         resolved_count = 0
@@ -950,17 +906,11 @@ class NormalizeReplicaRecordUseCase:
                         target_id=effective_target_id,
                         trace_id=command.trace_id,
                     )
-                self._append_trace_event(
-                    replica=replica,
-                    command=command,
-                    transformation=transformation,
-                    event_type=IpTraceEventType.L3_REFERENCE_RESOLVED,
-                    status=TimelineStatus.SUCCESS,
-                    summary_message=(
-                        f"Resolved pending reference '{entry.referencing_field}' on "
-                        f"({entry.referencing_canonical_type}, {entry.referencing_source_id}) -> "
-                        f"{effective_target_id}."
-                    ),
+                ledger_entry.record_resolved_reference(
+                    field_name=entry.referencing_field,
+                    referencing_canonical_type=entry.referencing_canonical_type,
+                    referencing_source_id=entry.referencing_source_id,
+                    target_id=effective_target_id,
                 )
             resolved_count += len(resolved_entries)
         return resolved_count
@@ -1002,55 +952,6 @@ class NormalizeReplicaRecordUseCase:
             await uow.normalization_rejections.record_shadow_diff(diff_entry)
             return 1
         return 0
-
-    async def _record_ledger_entry(
-        self,
-        uow: IpDataPlaneUnitOfWorkPort,
-        command: NormalizeReplicaRecordCommand,
-        transformation: Transformation,
-        produced_refs: tuple[tuple[str, str], ...],
-        outcome: NormalizationOutcome,
-    ) -> None:
-        ledger_entry = NormalizationLedgerEntry.create(
-            tenant_id=command.tenant_id,
-            replica_record_id=command.replica_record_id,
-            replica_version=command.replica_version,
-            transformation_id=transformation.transformation_id,
-            transformation_version=transformation.transformation_version,
-            produced_canonical_refs=produced_refs,
-            outcome=outcome,
-            trace_id=command.trace_id,
-            correlation_id=command.correlation_id,
-        )
-        await uow.normalization_ledger.record_entry(ledger_entry)
-
-    @staticmethod
-    def _append_trace_event(
-        *,
-        replica: ReplicaRecord,
-        command: NormalizeReplicaRecordCommand,
-        transformation: Transformation,
-        event_type: IpTraceEventType,
-        status: TimelineStatus,
-        summary_message: str,
-        error_details: TraceErrorDetails | None = None,
-    ) -> None:
-        replica.add_trace_event(
-            IpTraceEvent.create(
-                tenant_id=command.tenant_id,
-                trace_id=command.trace_id,
-                correlation_id=command.correlation_id,
-                event_type=event_type.value,
-                layer=PipelineLayer.L3_NORMALIZE,
-                status=status,
-                summary_message=summary_message,
-                error_details=error_details,
-                extra_metadata={
-                    "transformation_id": transformation.transformation_id,
-                    "transformation_version": transformation.transformation_version,
-                },
-            )
-        )
 
     @staticmethod
     def _compute_shadow_diff(

@@ -30,7 +30,7 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     from_ip_error,
     to_error_response,
 )
-from ip.engine.application.dto import ConnectionDTO, DiscoveredCatalogDTO
+from ip.engine.application.responses import ConnectionDTO
 from ip.engine.application.use_cases.connections.check_connection_use_case import (
     CheckConnectionCommand,
     CheckConnectionUseCase,
@@ -61,9 +61,9 @@ from ip.engine.application.use_cases.connections.relink_connection_use_case impo
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
-from ip.engine.domain.enums import ConnectionStatus
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import ConnectionNotFoundError, IpErrorCode
-from ip.engine.ports.outbound.connector_port import ConnectorPort
+from ip.engine.ports.outbound.connector_port import ConnectorPort, DiscoveredCatalogDTO
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 from security.ports.cipher_port import CipherPort
 

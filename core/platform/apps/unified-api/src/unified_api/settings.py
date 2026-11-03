@@ -1,12 +1,12 @@
 from functools import lru_cache
 from typing import Literal, cast
 
+from identity import PlatformIdentitySettings
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from seedwork.infra.config import load_settings_safely
 from seedwork.infra.config_models import (
     PlatformDatabaseSettings,
-    PlatformIdentitySettings,
     PlatformOtelSettings,
 )
 

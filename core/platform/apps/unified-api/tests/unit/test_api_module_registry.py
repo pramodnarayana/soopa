@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from starlette.routing import Mount
+from starlette.routing import Mount, Route
 
 from unified_api.main import create_app
 from unified_api.registry import (
@@ -32,16 +32,16 @@ def test_create_app_ip_only_mode_excludes_edi_sub_app() -> None:
     ip_only_app = create_app(enabled_apps="ip")
     module_names = [m.name for m in ip_only_app.state.api_modules]
     assert module_names == ["ip"]
-    assert not hasattr(ip_only_app.state, "edi_app")
+    assert ip_only_app.state.edi_app is None
 
     # Verify no root Mount("/") from EDI exists
     mounts = [r for r in ip_only_app.routes if isinstance(r, Mount) and r.path == ""]
     assert mounts == []
 
     # Verify IP routes and Core Platform routes are registered
-    route_paths = {getattr(r, "path", "") for r in ip_only_app.routes}
+    route_paths = {r.path for r in ip_only_app.routes if isinstance(r, Route)}
     assert "/health" in route_paths
-    assert "/api/v1/ip/catalog/apps" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/connections" in route_paths
     assert "/api/v1/tenants" in route_paths
 
@@ -52,9 +52,9 @@ def test_create_app_edi_only_mode_excludes_ip_routes() -> None:
     assert module_names == ["edi"]
     assert edi_only_app.state.edi_app is not None
 
-    route_paths = {getattr(r, "path", "") for r in edi_only_app.routes}
+    route_paths = {r.path for r in edi_only_app.routes if isinstance(r, Route)}
     assert "/health" in route_paths
-    assert "/api/v1/ip/catalog/apps" not in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps" not in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/connections" not in route_paths
 
 
@@ -64,7 +64,7 @@ def test_create_app_multi_app_mode_mounts_both_ip_and_edi() -> None:
     assert module_names == ["ip", "edi"]
     assert both_app.state.edi_app is not None
 
-    route_paths = {getattr(r, "path", "") for r in both_app.routes}
+    route_paths = {r.path for r in both_app.routes if isinstance(r, Route)}
     assert "/health" in route_paths
-    assert "/api/v1/ip/catalog/apps" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/connections" in route_paths

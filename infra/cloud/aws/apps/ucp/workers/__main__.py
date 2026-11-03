@@ -234,7 +234,7 @@ extra_task_policy_statements = [
             edi.require_output("sqs_edi_data_plane_jobs_arn"),
             edi.require_output("sqs_edi_deliver_arn"),
             edi.require_output("sqs_edi_orchestrator_arn"),
-            edi.require_output("sqs_edi_priority_notifications_arn"),
+            notification.require_output("notification_queue_arn"),
             notification.require_output("email_channel_queue_arn"),
             notification.require_output("notification_jobs_queue_arn"),
         ],

@@ -1,20 +1,19 @@
 import contextlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
-from strace.domain import TraceEventType
+from seedwork.events import EventEnvelope
 
 from edi.core.pipeline.delivery.base import (
     BaseDeliveryStrategy,
     TerminalDeliveryError,
     TransientDeliveryError,
 )
-from edi.domain.enums import EdiDirection
-from edi.domain.events import DeliveryFailed, DeliverySuccessful, DomainEvent
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.enums import EdiTraceEventType
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.edi_message import EdiMessage
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -47,7 +46,7 @@ class ExecuteDeliveryUseCase:
 
     async def execute(
         self, command: ExecuteDeliveryCommand, idempotency_key: str | None = None
-    ) -> TraceEventType:
+    ) -> EdiTraceEventType:
         logger.info(
             "delivery_worker.executing_delivery",
             trace_id=command.trace_id,
@@ -70,37 +69,19 @@ class ExecuteDeliveryUseCase:
                         trace_id=command.trace_id,
                         idempotency_key=idempotency_key,
                     )
-                    return TraceEventType.DELIVERY_SUCCESSFUL
+                    return EdiTraceEventType.DELIVERY_SUCCESSFUL
 
             edi_msg = await self._resolve_edi_message(uow, command.trace_id)
             if not edi_msg:
                 raise ValueError(f"No EDI Message found for trace_id={command.trace_id}")
 
         # 2. Execute delivery outside the UOW to prevent holding DB connections during network I/O
-        domain_event: DomainEvent | None = None
+        failure_error: TerminalDeliveryError | None = None
         try:
             await strategy.deliver(command.trace_id, command.partner_id, edi_msg, idempotency_key)
-            if edi_msg.trace_id == command.trace_id:
-                edi_msg.mark_delivered()
-            domain_event = DeliverySuccessful(
-                trace_id=command.trace_id,
-                tenant_id=command.tenant_id,
-                direction=edi_msg.direction,
-            )
             logger.info("delivery_worker.delivery_successful", trace_id=command.trace_id)
         except TerminalDeliveryError as e:
-            if edi_msg.trace_id == command.trace_id:
-                edi_msg.mark_delivery_failed(
-                    reason=e.message, error_code=e.code, error_details=e.details
-                )
-            domain_event = DeliveryFailed(
-                trace_id=command.trace_id,
-                tenant_id=command.tenant_id,
-                direction=edi_msg.direction,
-                failure_reason=str(e),
-                error_code=e.code,
-                error_details=e.details,
-            )
+            failure_error = e
             logger.error(
                 "delivery_worker.delivery_failed",
                 trace_id=command.trace_id,
@@ -119,23 +100,23 @@ class ExecuteDeliveryUseCase:
                 error=str(e),
             )
             await self._record_transient_failure_attempt(command.trace_id, e)
-            return TraceEventType.DELIVERY_ATTEMPT_FAILED
+            return EdiTraceEventType.DELIVERY_ATTEMPT_FAILED
 
         # 3. Record final outcome and lock idempotency in a single transaction
-        await self._record_delivery_outcome(command, idempotency_key, edi_msg, domain_event)
+        await self._record_delivery_outcome(command, idempotency_key, edi_msg, failure_error)
 
         return (
-            TraceEventType.DELIVERY_FAILED
-            if isinstance(domain_event, DeliveryFailed)
-            else TraceEventType.DELIVERY_SUCCESSFUL
+            EdiTraceEventType.DELIVERY_FAILED
+            if failure_error is not None
+            else EdiTraceEventType.DELIVERY_SUCCESSFUL
         )
 
     async def _record_delivery_outcome(
         self,
         command: ExecuteDeliveryCommand,
         idempotency_key: str | None,
-        edi_msg: EdiMessageDomainModel,
-        domain_event: DomainEvent | None,
+        edi_msg: EdiMessage,
+        failure_error: TerminalDeliveryError | None,
     ) -> None:
         async with self.uow_factory() as uow, uow:
             if idempotency_key:
@@ -148,11 +129,10 @@ class ExecuteDeliveryUseCase:
                     )
                     return
 
+            envelopes = await self._flush_delivery_events(uow, command, edi_msg, failure_error)
             if edi_msg.direction == EdiDirection.OUTBOUND:
                 edi_msg.connection_type = command.connection_type
-                await uow.transactions.update_outbound_delivery_metadata(edi_msg)
-
-            envelopes = await self._flush_delivery_events(uow, command, edi_msg, domain_event)
+                await uow.edi_messages.update_outbound_delivery_metadata(edi_msg)
             await uow.commit()
 
         try:
@@ -173,62 +153,96 @@ class ExecuteDeliveryUseCase:
 
     async def _resolve_edi_message(
         self, uow: DataPlaneUnitOfWorkPort, trace_id: str
-    ) -> EdiMessageDomainModel | None:
-        edi_msg = await uow.transactions.get_edi_message(trace_id)
+    ) -> EdiMessage | None:
+        edi_msg = await uow.edi_messages.get_edi_message(trace_id)
         if not edi_msg:
-            edi_json = await uow.transactions.get_edi_json(trace_id)
+            edi_json = await uow.edi_jsons.get_edi_json(trace_id)
             if edi_json and edi_json.parent_trace_id:
-                edi_msg = await uow.transactions.get_edi_message(edi_json.parent_trace_id)
+                edi_msg = await uow.edi_messages.get_edi_message(edi_json.parent_trace_id)
         return edi_msg
 
     async def _record_transient_failure_attempt(
         self, trace_id: str, e: TransientDeliveryError
     ) -> None:
         async with self.uow_factory() as failure_uow, failure_uow:
-            edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
+            edi_msg_fallback = await failure_uow.edi_messages.get_edi_message(trace_id)
             if edi_msg_fallback:
                 edi_msg_fallback.mark_delivery_attempt_failed(
                     reason=e.message, error_code=e.code, error_details=e.details
                 )
-                await failure_uow.transactions.update_outbound_delivery_metadata(edi_msg_fallback)
-                await failure_uow.transactions.flush_events(edi_msg_fallback)
+                await failure_uow.edi_messages.update_outbound_delivery_metadata(edi_msg_fallback)
+                await failure_uow.edi_messages.flush_events(edi_msg_fallback)
                 await failure_uow.commit()
                 return
 
-            edi_json_fallback = await failure_uow.transactions.get_edi_json(trace_id)
+            edi_json_fallback = await failure_uow.edi_jsons.get_edi_json(trace_id)
             if edi_json_fallback:
                 edi_json_fallback.mark_delivery_attempt_failed(
                     reason=e.message, error_code=e.code, error_details=e.details
                 )
-                await failure_uow.transactions.save_json(edi_json_fallback)
+                await failure_uow.edi_jsons.save(edi_json_fallback)
                 await failure_uow.commit()
 
     async def _flush_delivery_events(
         self,
         uow: DataPlaneUnitOfWorkPort,
         command: ExecuteDeliveryCommand,
-        edi_msg: EdiMessageDomainModel,
-        domain_event: DomainEvent | None,
-    ) -> list[Any]:
+        edi_msg: EdiMessage,
+        failure_error: TerminalDeliveryError | None,
+    ) -> list[EventEnvelope]:
+        direction_val = str(edi_msg.direction.value) if edi_msg.direction else "OUTBOUND"
         if edi_msg.trace_id == command.trace_id:
-            if domain_event:
-                edi_msg.add_domain_event(domain_event)
-            return list(await uow.transactions.flush_events(edi_msg))
-
-        local_json = await uow.transactions.get_edi_json(command.trace_id)
-        if local_json:
-            if isinstance(domain_event, DeliverySuccessful):
-                local_json.mark_delivered()
-            elif isinstance(domain_event, DeliveryFailed):
-                local_json.mark_delivery_failed(
-                    reason=domain_event.failure_reason,
-                    error_code=domain_event.error_code,
-                    error_details=domain_event.error_details,
+            if failure_error is None:
+                edi_msg.complete_delivery(
+                    trace_id=command.trace_id,
+                    tenant_id=command.tenant_id,
+                    direction=direction_val,
                 )
-            if domain_event:
-                local_json.add_domain_event(domain_event)
-            return list(await uow.transactions.save_json(local_json))
+            else:
+                edi_msg.fail_delivery(
+                    reason=failure_error.message,
+                    failure_reason=str(failure_error),
+                    error_code=failure_error.code,
+                    error_details=failure_error.details,
+                    trace_id=command.trace_id,
+                    tenant_id=command.tenant_id,
+                    direction=direction_val,
+                )
+            return list(await uow.edi_messages.flush_events(edi_msg))
 
-        if domain_event:
-            edi_msg.add_domain_event(domain_event)
-        return list(await uow.transactions.flush_events(edi_msg))
+        local_json = await uow.edi_jsons.get_edi_json(command.trace_id)
+        if local_json:
+            if failure_error is None:
+                local_json.complete_delivery(
+                    trace_id=command.trace_id,
+                    tenant_id=command.tenant_id,
+                    direction=direction_val,
+                )
+            else:
+                local_json.fail_delivery(
+                    reason=str(failure_error),
+                    failure_reason=str(failure_error),
+                    error_code=failure_error.code,
+                    error_details=failure_error.details,
+                    trace_id=command.trace_id,
+                    tenant_id=command.tenant_id,
+                    direction=direction_val,
+                )
+            return list(await uow.edi_jsons.save(local_json))
+
+        if failure_error is None:
+            edi_msg.record_delivery_succeeded_event(
+                trace_id=command.trace_id,
+                tenant_id=command.tenant_id,
+                direction=direction_val,
+            )
+        else:
+            edi_msg.record_delivery_failed_event(
+                failure_reason=str(failure_error),
+                error_code=failure_error.code,
+                error_details=failure_error.details,
+                trace_id=command.trace_id,
+                tenant_id=command.tenant_id,
+                direction=direction_val,
+            )
+        return list(await uow.edi_messages.flush_events(edi_msg))

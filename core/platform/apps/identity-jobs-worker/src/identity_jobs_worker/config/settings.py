@@ -29,27 +29,27 @@ class AppSettings(BaseSettings):
     aws: IdentityOutboxAwsSettings = Field(default_factory=lambda: IdentityOutboxAwsSettings())
     sqs: SqsSettings = Field(default_factory=lambda: SqsSettings())
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def database_url(self) -> str:
         return self.database.global_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def sns_identity_events_topic_arn(self) -> str:
         return self.aws.sns_identity_events_topic_arn
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def sqs_identity_jobs_queue_url(self) -> str:
         return self.sqs.identity_jobs_queue_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def aws_endpoint_url(self) -> str | None:
         return self.aws.endpoint_url
 
-    @computed_field  # type: ignore[prop-decorator]
+    @computed_field
     @property
     def aws_region(self) -> str:
         return self.aws.resolved_region

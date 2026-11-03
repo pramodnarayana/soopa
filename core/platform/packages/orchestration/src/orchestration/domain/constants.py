@@ -228,6 +228,16 @@ class TimerEventPrefix(StrEnum):
         return f"{self.value}.{step_run_id}"
 
 
+class WorkflowIdPrefix(StrEnum):
+    """Canonical entity ID prefixes for the durable workflow orchestration engine."""
+
+    RUN = "wf_run"
+    STEP = "wf_step"
+    ATTEMPT = "wf_att"
+    MATCH = "wf_mtch"
+    CONDITION = "wf_cond"
+
+
 __all__ = [
     "MATCH_ACTION_PRECEDENCE",
     "AttemptStatus",
@@ -251,4 +261,5 @@ __all__ = [
     "StepStatus",
     "TimerEventPrefix",
     "WorkflowErrorCode",
+    "WorkflowIdPrefix",
 ]

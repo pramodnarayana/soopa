@@ -1,8 +1,9 @@
-import type {
-  AuthTypeValue,
-  ConnectionHandshakeStatusValue,
-  ConnectionStatusValue,
-  JsonRecord,
+import {
+  type AuthTypeValue,
+  type ConnectionHandshakeStatusValue,
+  ConnectionStatus,
+  type ConnectionStatusValue,
+  type JsonRecord,
 } from './enums';
 
 export interface Connection {
@@ -72,4 +73,26 @@ export interface CheckConnectionInput {
 export interface RelinkConnectionInput {
   readonly newName?: string | null;
   readonly updatedRawCredentials?: JsonRecord | null;
+}
+
+export function isDeactivatedConnection(connection: Pick<Connection, 'status'>): boolean {
+  return connection.status === ConnectionStatus.DEACTIVATED;
+}
+
+export function groupActiveConnectionsByApp(
+  connections: readonly Connection[],
+): ReadonlyMap<string, readonly Connection[]> {
+  const map = new Map<string, Connection[]>();
+  for (const conn of connections) {
+    if (isDeactivatedConnection(conn)) {
+      continue;
+    }
+    const existing = map.get(conn.appId);
+    if (existing) {
+      existing.push(conn);
+    } else {
+      map.set(conn.appId, [conn]);
+    }
+  }
+  return map;
 }

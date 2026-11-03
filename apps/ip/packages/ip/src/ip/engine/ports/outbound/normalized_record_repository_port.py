@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.models.normalized_record import NormalizedRecord
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 
 
 class NormalizedRecordRepositoryPort(Protocol):

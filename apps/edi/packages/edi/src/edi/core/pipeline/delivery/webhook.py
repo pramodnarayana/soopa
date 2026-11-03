@@ -5,17 +5,20 @@ from collections.abc import Callable
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork.domain.exceptions import ErrorCode
+from seedwork.utils import generate_id
 
 from edi.core.pipeline.delivery.base import (
     BaseDeliveryStrategy,
     TerminalDeliveryError,
     TransientDeliveryError,
 )
-from edi.core.pipeline.models import EdiWebhookPayload
-from edi.domain.enums import EdiDirection, MessageStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.core.pipeline.webhook_payload import EdiWebhookPayload
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import MessageStatus
+from edi.domain.transaction.gateway_receipt import ApiGatewayReceipt
 from edi.domain.types import JsonDict
-from edi.ports.outbound.api_gateway_repository import CreateApiGatewayCommand
 from edi.ports.outbound.exceptions import PortConnectionError, PortTimeoutError
 from edi.ports.outbound.http_delivery_port import HttpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -37,7 +40,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         self,
         trace_id: str,
         partner_id: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         uow: DataPlaneUnitOfWorkPort,
     ) -> tuple[str, EdiWebhookPayload, str | None, str]:
         partner = await uow.webhooks.get_webhook(edi_msg.tenant_id, partner_id)
@@ -48,7 +51,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                 details={"partner_id": partner_id},
             )
 
-        edi_jsons = await uow.transactions.get_edi_jsons_by_trace_id(trace_id, edi_msg.tenant_id)
+        edi_jsons = await uow.edi_jsons.get_edi_jsons_by_trace_id(trace_id, edi_msg.tenant_id)
         if not edi_jsons:
             raise TerminalDeliveryError(
                 message=f"No EDI JSONs found for webhook delivery of trace_id={trace_id}",
@@ -91,7 +94,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
     async def _record_api_gateway(
         self,
         trace_id: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         envelope: EdiWebhookPayload,
         partner_url: str,
         status_code: int | None,
@@ -106,8 +109,9 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
 
             direction = edi_msg.direction if edi_msg.direction else EdiDirection.INBOUND
 
-            await uow.api_gateway_transactions.create_api_gateway(
-                CreateApiGatewayCommand(
+            await uow.api_gateway_receipts.save(
+                ApiGatewayReceipt(
+                    id=generate_id(DomainIdPrefix.EDI_API_GATEWAY.value),
                     trace_id=trace_id,
                     tenant_id=edi_msg.tenant_id,
                     direction=direction,
@@ -117,6 +121,9 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
                     webhook_url=partner_url,
                     http_status_code=status_code,
                     response=response_text or error_msg,
+                    replay_count=edi_msg.replay_count,
+                    parent_trace_id=edi_msg.parent_trace_id,
+                    original_trace_id=edi_msg.original_trace_id or trace_id,
                 )
             )
             await uow.commit()
@@ -125,7 +132,7 @@ class WebhookDeliveryStrategy(BaseDeliveryStrategy):
         self,
         trace_id: str,
         partner_id: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         idempotency_key: str | None = None,
     ) -> None:
         async with self.uow_factory() as uow, uow:

@@ -19,8 +19,6 @@ from seedwork import generate_id
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from edi.adapters.inbound.as2.builder import build_outbound_message
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
@@ -38,10 +36,12 @@ from edi.adapters.outbound.database.models.data_plane import (
     Webhook as DataPlaneWebhook,
 )
 from edi.adapters.outbound.pipeline.storage import S3StorageClient
-from edi.adapters.outbound.pipeline.transformer import BotsTransformerAdapter
+from edi.adapters.outbound.transformer.bots_transformer_adapter import BotsTransformerAdapter
 from edi.application.use_cases.pipeline.compute_transform_use_case import ComputeTransformUseCase
 from edi.application.use_cases.pipeline.delivery_router_use_case import DeliveryRouterUseCase
 from edi.application.use_cases.pipeline.delivery_use_case import DeliveryUseCase
+from edi.bootstrap.container import create_edi_data_plane_uow
+from edi.domain.partner.as2.builder import build_outbound_message
 from edi.testing.fakes.pipeline_fakes import FakeTransformerAdapter
 
 logger = structlog.get_logger(__name__)
@@ -218,7 +218,7 @@ async def test_inbound_flow_e2e(
 
         # 1. Manually run ComputeTransformUseCase
 
-        uow = SqlAlchemyDataPlaneUnitOfWork(
+        uow = create_edi_data_plane_uow(
             tenant_session=session, storage=S3StorageClient("test", None)
         )
         translate_svc = ComputeTransformUseCase(

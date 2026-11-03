@@ -16,7 +16,7 @@ from orchestration.domain.constants import ConditionKind
 from orchestration.domain.exceptions import Result, WorkflowError
 from seedwork.domain.types import JsonDict
 
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
 )

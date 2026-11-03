@@ -16,19 +16,19 @@ from ip.engine.adapters.outbound.database.data_plane.normalization_rejection_rep
 from ip.engine.adapters.outbound.database.data_plane.pending_reference_repository import (
     SqlAlchemyPendingReferenceRepository,
 )
-from ip.engine.domain.enums import (
+from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
     TransformationMode,
 )
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
-    Transformation,
 )
+from ip.engine.domain.normalization.transformation import Transformation
 
 
 def test_transformation_data_mappers_roundtrip_and_update() -> None:

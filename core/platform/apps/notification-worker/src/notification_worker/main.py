@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import inspect
 from collections.abc import Awaitable
 from typing import cast
@@ -7,14 +6,12 @@ from typing import cast
 import structlog
 from observability import ObservabilityProvider
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
+from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 from notification_worker.bootstrap.container import WorkerContainer as Container
 from notification_worker.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
-
-
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
 
 
 class NotificationWorkerModule(LaunchableWorker):
@@ -28,8 +25,8 @@ class NotificationWorkerModule(LaunchableWorker):
 
         self.container.config.from_pydantic(settings)
         self.container.config.database_url.from_value(settings.database_url)
-        self.container.config.sqs_priority_notifications_queue_url.from_value(
-            settings.sqs_priority_notifications_queue_url
+        self.container.config.sqs_notification_queue_url.from_value(
+            settings.sqs_notification_queue_url
         )
         self.container.config.aws_region.from_value(settings.aws_region)
         self.container.config.aws_endpoint_url.from_value(settings.aws_endpoint_url)
@@ -45,15 +42,17 @@ class NotificationWorkerModule(LaunchableWorker):
         logger.info("notification_worker_consumer_started")
 
     def get_background_tasks(self) -> list[asyncio.Task[object]]:
-        if self.consumer and self.consumer.task:
-            return [self.consumer.task]
+        if self.consumer is not None:
+            return list(self.consumer.background_tasks())
         return []
 
     async def stop(self) -> None:
         logger.info("notification_worker_shutting_down")
         if self.consumer:
-            with contextlib.suppress(Exception):
+            try:
                 await self.consumer.stop()
+            except Exception:
+                logger.exception("notification_worker_consumer_stop_failed")
         await cast(Awaitable[None], self.container.shutdown_resources())
 
 

@@ -6,8 +6,11 @@ from collections.abc import Sequence
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import SyncRunRecord
-from ip.engine.domain.enums import SyncRunKind, SyncRunStatus
-from ip.engine.domain.models.sync_run import SyncRun
+from ip.engine.domain.replication.enums import (
+    SyncRunKind,
+    SyncRunStatus,
+)
+from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession

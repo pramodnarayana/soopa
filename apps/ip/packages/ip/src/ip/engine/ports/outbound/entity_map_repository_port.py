@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
 
 
 class GlobalEntityMapRepositoryPort(Protocol):

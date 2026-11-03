@@ -24,18 +24,14 @@ from ip.engine.adapters.inbound.workers import (
     IpRunSyncExecutorPort,
     IpStitchCanonicalDispatcherPort,
 )
-from ip.engine.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyIpControlPlaneUnitOfWork,
-)
 from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
     IpProcessedEventModel,
     IpTraceEventModel,
 )
-from ip.engine.adapters.outbound.database.tenant_resolver import IpTenantResolver
-from ip.engine.adapters.outbound.database.tenant_uow_provider import IpTenantUoWProvider
-from ip.engine.adapters.outbound.pubsub.publisher_factory import (
-    build_ip_dp_outbox_router,
+from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
+from ip.engine.adapters.outbound.database.tenant_uow_provider import (
+    SqlAlchemyIpTenantUoWProvider,
 )
 from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case import (
     DeliverOutboundRecordCommand,
@@ -65,38 +61,48 @@ from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches
     DispatchCanonicalEventResultDTO,
     DispatchCanonicalEventToStitchesCommand,
 )
-from ip.engine.domain.enums import (
-    AuthType,
-    CursorKind,
-    HttpWriteOperation,
-    IngestionMode,
-    IpOutboxSource,
-    OutboundDispatchStatus,
-    SyncMode,
-    SyncRunKind,
-    SyncRunStatus,
-    TransformationMode,
+from ip.engine.bootstrap.container import (
+    create_ip_control_plane_uow,
+    create_ip_tenant_uow_provider,
 )
+from ip.engine.bootstrap.publisher_factory import (
+    build_ip_dp_outbox_router,
+)
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.dispatch.enums import (
+    HttpWriteOperation,
+    OutboundDispatchStatus,
+)
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.enums import IpOutboxSource
 from ip.engine.domain.exceptions import IpError, Result
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.stream_definition import StreamDefinition
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.policies import (
+    DefaultNormalizationErrorPolicy,
+)
+from ip.engine.domain.normalization.registries import (
+    CanonicalEntityRegistry,
+    CanonicalWriterRegistry,
+    TransformerRegistry,
+)
+from ip.engine.domain.normalization.transformation import (
     CanonicalDraft,
     CanonicalEntityDefinition,
     ReplicaSnapshot,
     TransformationContext,
     TransformationResult,
 )
-from ip.engine.domain.services.canonical_entity_registry import CanonicalEntityRegistry
-from ip.engine.domain.services.canonical_writer_registry import (
-    InMemoryCanonicalWriterRegistry,
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    IngestionMode,
+    SyncMode,
+    SyncRunKind,
+    SyncRunStatus,
 )
-from ip.engine.domain.services.default_normalization_error_policy import (
-    DefaultNormalizationErrorPolicy,
-)
-from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
+from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.stream_definition import StreamDefinition
+from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
 from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
@@ -255,7 +261,7 @@ class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
 
     def __init__(
         self,
-        dp_uow_provider: IpTenantUoWProvider,
+        dp_uow_provider: SqlAlchemyIpTenantUoWProvider,
         connection_id: str,
     ) -> None:
         self._dp_uow_provider = dp_uow_provider
@@ -303,7 +309,7 @@ class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
 class _PipelineOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
     """L5 Outbound Delivery executor that marks staged OutboundRecords as DELIVERED in the DB."""
 
-    def __init__(self, dp_uow_provider: IpTenantUoWProvider) -> None:
+    def __init__(self, dp_uow_provider: SqlAlchemyIpTenantUoWProvider) -> None:
         self._dp_uow_provider = dp_uow_provider
         self.delivered_commands: list[DeliverOutboundRecordCommand] = []
 
@@ -376,9 +382,9 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
     transactional_router: TransactionalTestRouter,
 ) -> None:
     """Verify both Realtime (N=1) and Bulk (N=4) flow L1 -> L2 -> L3 -> L4 -> L5 via Outbox Drain."""
-    cp_uow = SqlAlchemyIpControlPlaneUnitOfWork(global_session)
-    tenant_resolver = IpTenantResolver(db_router=transactional_router)
-    dp_uow_provider = IpTenantUoWProvider(
+    cp_uow = create_ip_control_plane_uow(global_session)
+    tenant_resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
+    dp_uow_provider = create_ip_tenant_uow_provider(
         resolver=tenant_resolver,
         db_router=transactional_router,
     )
@@ -404,12 +410,10 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
             schema_version=1,
         )
     )
-    transformer_registry = InMemoryTransformerRegistry()
+    transformer_registry = TransformerRegistry()
     transformer_registry.register(_PipelineMeterTransformer())
     canonical_writer = _PipelineCanonicalWriter()
-    writer_registry: InMemoryCanonicalWriterRegistry[CanonicalWriterPort] = (
-        InMemoryCanonicalWriterRegistry()
-    )
+    writer_registry: CanonicalWriterRegistry[CanonicalWriterPort] = CanonicalWriterRegistry()
     writer_registry.register(canonical_writer)
 
     bind_uc = BindStreamTransformationUseCase(
@@ -620,10 +624,10 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
             .all()
         )
         event_types_seen = {r.event_type for r in trace_rows}
-        assert any(et.startswith("L1_") for et in event_types_seen)
-        assert any(et.startswith("L2_") for et in event_types_seen)
-        assert any(et.startswith("L3_") for et in event_types_seen)
-        assert any(et.startswith("L5_") for et in event_types_seen)
+        assert IpTraceEventType.INGEST_RECEIVED.value in event_types_seen
+        assert IpTraceEventType.REPLICA_CREATED.value in event_types_seen
+        assert IpTraceEventType.NORMALIZED.value in event_types_seen
+        assert IpTraceEventType.DISPATCH_DELIVERED.value in event_types_seen
 
         processed_rows = (
             (

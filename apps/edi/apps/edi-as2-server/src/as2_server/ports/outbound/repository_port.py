@@ -2,7 +2,7 @@ import typing
 from typing import Protocol
 
 if typing.TYPE_CHECKING:
-    from edi.domain.models.transactions import EdiMessageDomainModel
+    from edi.domain.transaction.edi_message import EdiMessage
     from seedwork.events import EventEnvelope
 
 
@@ -25,7 +25,7 @@ class TradingPartnerRepositoryPort(Protocol):
 
 
 class EdiMessageRepositoryPort(Protocol):
-    async def save_message(self, aggregate: "EdiMessageDomainModel") -> list["EventEnvelope"]: ...
+    async def save_message(self, aggregate: "EdiMessage") -> list["EventEnvelope"]: ...
 
 
 class AS2TenantRepositoryPort(Protocol):

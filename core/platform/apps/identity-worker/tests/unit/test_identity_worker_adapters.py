@@ -1,5 +1,8 @@
 import pytest
-from identity_worker.bootstrap.container import UserRoleAssignedPayload, WorkerContainer
+from identity_worker.adapters.inbound.workers.identity_event_handlers import (
+    UserRoleAssignedPayload,
+)
+from identity_worker.bootstrap.container import WorkerContainer
 from identity_worker.config.settings import AppSettings, get_settings
 from pydantic import ValidationError
 

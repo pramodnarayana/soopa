@@ -1,6 +1,5 @@
-from typing import Any
-
-from seedwork.id_registry import DomainIdPrefix
+from notification.domain.constants import NotificationIdPrefix
+from seedwork.domain.types import JsonDict
 from sqlalchemy import Boolean, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -12,7 +11,7 @@ from database.models.core import NotificationBase
 
 class NotificationTemplate(NotificationBase, TimestampMixin):
     __tablename__ = "notification_templates"
-    ID_PREFIX = DomainIdPrefix.NOTIFICATION_TEMPLATE.value
+    ID_PREFIX = NotificationIdPrefix.NOTIFICATION_TEMPLATE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True, autoincrement=False)
     tenant_id: Mapped[str] = mapped_column(
@@ -25,7 +24,7 @@ class NotificationTemplate(NotificationBase, TimestampMixin):
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    __table_args__: Any = (
+    __table_args__ = (
         UniqueConstraint("tenant_id", "event_type", "channel", name="notification_template_idx"),
         {"schema": "notifications"},
     )
@@ -33,7 +32,7 @@ class NotificationTemplate(NotificationBase, TimestampMixin):
 
 class NotificationOutbox(NotificationBase, OutboxMixin):
     __tablename__ = "notification_outbox"
-    ID_PREFIX = DomainIdPrefix.NOTIFICATION_OUTBOX.value
+    ID_PREFIX = NotificationIdPrefix.NOTIFICATION_OUTBOX.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
@@ -49,14 +48,14 @@ class NotificationOutbox(NotificationBase, OutboxMixin):
     )
 
     @property
-    def body(self) -> dict[str, Any]:
+    def body(self) -> JsonDict:
         """Alias for payload to satisfy OutboxEvent protocol."""
         return self.payload
 
 
 class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
     __tablename__ = "notification_route_configurations"
-    ID_PREFIX = DomainIdPrefix.NOTIFICATION_ROUTE.value
+    ID_PREFIX = NotificationIdPrefix.NOTIFICATION_ROUTE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -64,9 +63,9 @@ class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
     )
     event_type: Mapped[str] = mapped_column(String(255), nullable=False)
     channels: Mapped[list[str]] = mapped_column(JSONB, nullable=False, server_default="[]")
-    destination_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    destination_config: Mapped[JsonDict | None] = mapped_column(JSONB, nullable=True)
 
-    __table_args__: Any = (
+    __table_args__ = (
         UniqueConstraint("tenant_id", "event_type", name="notification_route_idx"),
         {"schema": "notifications"},
     )
@@ -74,7 +73,7 @@ class NotificationRouteConfiguration(NotificationBase, TimestampMixin):
 
 class NotificationRecord(NotificationBase, TimestampMixin):
     __tablename__ = "notification_records"
-    ID_PREFIX = DomainIdPrefix.NOTIFICATION_RECORD.value
+    ID_PREFIX = NotificationIdPrefix.NOTIFICATION_RECORD.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -88,7 +87,7 @@ class NotificationRecord(NotificationBase, TimestampMixin):
     severity: Mapped[str] = mapped_column(String(50), nullable=False, server_default="info")
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    __table_args__: Any = (
+    __table_args__ = (
         Index("ix_notif_record_tenant_user_read", "tenant_id", "user_id", "is_read", "created_at"),
         {"schema": "notifications"},
     )
@@ -96,7 +95,7 @@ class NotificationRecord(NotificationBase, TimestampMixin):
 
 class UserNotificationPreference(NotificationBase, TimestampMixin):
     __tablename__ = "user_notification_preferences"
-    ID_PREFIX = DomainIdPrefix.NOTIFICATION_PREFERENCE.value
+    ID_PREFIX = NotificationIdPrefix.NOTIFICATION_PREFERENCE.value
 
     id: Mapped[str] = mapped_column(String(128), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -109,7 +108,7 @@ class UserNotificationPreference(NotificationBase, TimestampMixin):
     channel: Mapped[str] = mapped_column(String(50), nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    __table_args__: Any = (
+    __table_args__ = (
         UniqueConstraint(
             "tenant_id", "user_id", "event_type", "channel", name="user_notif_pref_idx"
         ),

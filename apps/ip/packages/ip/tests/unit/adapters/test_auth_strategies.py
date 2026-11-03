@@ -16,7 +16,7 @@ from ip.engine.adapters.outbound.auth.oauth2_strategy import (
     OAuth2Strategy,
     OAuth2StrategyTokenRefresher,
 )
-from ip.engine.domain.enums import FailureDisposition
+from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     InvalidCredentialsError,

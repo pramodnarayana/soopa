@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ip.engine.domain.normalization import NormalizationLedgerEntry
+from ip.engine.domain.normalization.ledger import NormalizationLedgerEntry
 
 
 class NormalizationLedgerRepositoryPort(Protocol):

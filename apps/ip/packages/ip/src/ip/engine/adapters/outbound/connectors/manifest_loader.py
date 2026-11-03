@@ -10,18 +10,22 @@ from typing import Literal
 import structlog
 import yaml
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
-from ip.engine.domain.exceptions import ManifestParseFailureError, Result
-from ip.engine.domain.models.connector_spec import (
+from ip.engine.domain.connection.catalog import (
     ConnectorProperty,
     ConnectorPropertySchema,
-    DeclarativeManifest,
     DropdownOption,
-    HttpActionSpec,
     OAuthConfig,
-    PaginationConfig,
+)
+from ip.engine.domain.connection.enums import (
     PaginationType,
     PropertyType,
 )
+from ip.engine.domain.connection.http_spec import (
+    DeclarativeManifest,
+    HttpActionSpec,
+    PaginationConfig,
+)
+from ip.engine.domain.exceptions import ManifestParseFailureError, Result
 
 logger = structlog.get_logger(__name__)
 

@@ -10,7 +10,7 @@ from ip.engine.adapters.outbound.database.data_plane.payload_hydration import (
     hydrate_s3_json_payload,
 )
 from ip.engine.adapters.outbound.database.models.data_plane import OutboundRecordModel
-from ip.engine.domain.models.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from sqlalchemy import select

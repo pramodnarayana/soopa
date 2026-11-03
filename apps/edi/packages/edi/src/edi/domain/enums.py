@@ -1,215 +1,50 @@
-"""
-EDI Domain Enumerations
-=======================
-
-Single source of truth for all business-level enumeration types in the EDI
-bounded context. Every status, direction, connection type, and event category
-that carries semantic meaning MUST be defined here as a StrEnum.
-
-Rules:
-- No raw string literals in application or domain code — always use these enums.
-- Do NOT add enums that belong to infrastructure (e.g. SQLAlchemy column choices
-  that have no business meaning). Those stay in the adapter layer.
-"""
+"""EDI Domain Enumerations."""
 
 from enum import StrEnum
 
 
-class EdiDirection(StrEnum):
-    """The flow direction of an EDI transmission relative to this system."""
-
-    INBOUND = "INBOUND"
-    OUTBOUND = "OUTBOUND"
-
-
-class MessageStatus(StrEnum):
-    """Lifecycle status of an EDI message or JSON record."""
-
-    RECEIVED = "RECEIVED"
-    ACCEPTED = "ACCEPTED"
-    PENDING = "PENDING"
-    PARSED = "PARSED"
-    TRANSFORMED = "TRANSFORMED"
-    PENDING_DELIVERY = "PENDING_DELIVERY"
-    DELIVERED = "DELIVERED"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
-    ERROR = "ERROR"
-
-
-class AuditLogStatus(StrEnum):
-    """Status values for the AuditLog step-level tracing model."""
-
-    SUCCESS = "SUCCESS"
-    FAILURE = "FAILURE"
-    SKIPPED = "SKIPPED"
-
-
-class EdiConnectionType(StrEnum):
-    """The transport protocol used to exchange an EDI message."""
-
-    AS2 = "AS2"
-    API = "API"
-    SFTP = "SFTP"
-    UNKNOWN = "UNKNOWN"
-    WEBHOOK = "WEBHOOK"
-
-
-class EdiStandard(StrEnum):
-    """The EDI format standard of the message payload."""
-
-    X12 = "x12"
-    EDIFACT = "edifact"
-
-
-class As2SignatureAlgorithm(StrEnum):
-    """Cryptographic hashing algorithms used for S/MIME signatures."""
-
-    SHA1 = "sha1"
-    SHA256 = "sha256"
-    SHA384 = "sha384"
-    SHA512 = "sha512"
-
-
-class As2EncryptionAlgorithm(StrEnum):
-    """Cryptographic ciphers used for S/MIME payload encryption."""
-
-    AES128 = "aes128"
-    AES256 = "aes256"
-    DES3 = "3des"
-
-
-class EdiTransactionType(StrEnum):
-    """Well-known X12 transaction set identifiers plus the generic envelope type."""
-
-    ENVELOPE = "envelope"
-    X12_204 = "204"
-    X12_210 = "210"
-    X12_214 = "214"
-    X12_810 = "810"
-    X12_850 = "850"
-    X12_990 = "990"
-    X12_997 = "997"
-
-
-class PartnerStatus(StrEnum):
-    """Provisioning lifecycle of a trading partner (AS2 or SFTP)."""
-
-    PROVISIONING = "PROVISIONING"
-    ACTIVE = "ACTIVE"
-    INACTIVE = "INACTIVE"
-
-
-class ConnectionType(StrEnum):
-    """Logical connection type for domain routing and provisioning records."""
-
-    AS2 = "AS2"
-    SFTP = "SFTP"
-    WEBHOOK = "WEBHOOK"
-    API = "API"
-
-
-class ProcessingMode(StrEnum):
-    """How an inbound route should handle EDI payload transformation."""
-
-    TRANSFORM = "TRANSFORM"
-    PASSTHROUGH = "PASSTHROUGH"
-
-
 class EdiEventType(StrEnum):
-    """Domain events emitted during EDI provisioning lifecycle operations."""
+    """Event types for EDI provisioning and lifecycle events across all subdomains."""
 
+    # AS2 Trading Partner
     edi_as2_partner_created = "edi.as2_partner.created"
     edi_as2_partner_updated = "edi.as2_partner.updated"
     edi_as2_partner_deleted = "edi.as2_partner.deleted"
+
+    # AS2 Partnership
     edi_as2_partnership_created = "edi.as2_partnership.created"
     edi_as2_partnership_updated = "edi.as2_partnership.updated"
     edi_as2_partnership_deleted = "edi.as2_partnership.deleted"
+
+    # SFTP Partner
     edi_sftp_partner_created = "edi.sftp_partner.created"
     edi_sftp_partner_updated = "edi.sftp_partner.updated"
     edi_sftp_partner_deleted = "edi.sftp_partner.deleted"
+
+    # Inbound Route
     edi_inbound_route_created = "edi.inbound_route.created"
     edi_inbound_route_updated = "edi.inbound_route.updated"
     edi_inbound_route_deleted = "edi.inbound_route.deleted"
+
+    # Outbound Route
     edi_outbound_route_created = "edi.outbound_route.created"
     edi_outbound_route_updated = "edi.outbound_route.updated"
     edi_outbound_route_deleted = "edi.outbound_route.deleted"
+
+    # Outbound EDI Header
     edi_header_created = "edi.header.created"
     edi_header_updated = "edi.header.updated"
     edi_header_deleted = "edi.header.deleted"
 
 
-class UcpEventType(StrEnum):
-    """Domain events for UCP app subscription lifecycle."""
-
-    app_subscribed = "app.subscribed"
-    app_unsubscribed = "app.unsubscribed"
-    api_key_created = "api_key.created"
-
-
-class WebhookEventType(StrEnum):
-    """Domain events for webhook configuration lifecycle."""
-
-    webhook_created = "webhook.created"
-    webhook_updated = "webhook.updated"
-    webhook_deleted = "webhook.deleted"
-
-
-class PipelineEventType(StrEnum):
-    """Internal pipeline orchestration event types (SQS message type discriminators)."""
-
-    TRANSFORMATION_REQUESTED = "TRANSFORMATION_REQUESTED"
-    COMPUTE_TRANSFORMATION_COMMAND = "COMPUTE_TRANSFORMATION_COMMAND"
-    TRANSFORMATION_SUCCESSFUL = "TRANSFORMATION_SUCCESSFUL"
-    TRANSFORMATION_FAILED = "TRANSFORMATION_FAILED"
-    DELIVERY_REQUESTED = "DELIVERY_REQUESTED"
-    EXECUTE_DELIVERY_COMMAND = "EXECUTE_DELIVERY_COMMAND"
-    DELIVERY_COMPLETED = "DELIVERY_COMPLETED"
-    DELIVERY_SUCCESSFUL = "DELIVERY_SUCCESSFUL"
-    DELIVERY_FAILED = "DELIVERY_FAILED"
-
-
-class NotificationEventType(StrEnum):
-    """Cross-bounded-context notification trigger event type."""
-
-    NOTIFICATION_TRIGGERED = "notification.triggered"
-
-
 class EdiJobName(StrEnum):
-    """
-    Canonical event type names for EDI scheduled jobs.
-    These must match the event_type values dispatched by the scheduler.
-    """
+    """Canonical event type names for EDI scheduled jobs."""
 
     EDI_CONTROL_PLANE_OUTBOX_SWEEPER = "EDI_CONTROL_PLANE_OUTBOX_SWEEPER"
     EDI_DATA_PLANE_OUTBOX_SWEEPER = "EDI_DATA_PLANE_OUTBOX_SWEEPER"
     EDI_CONTROL_PLANE_OUTBOX_CLEANUP = "EDI_CONTROL_PLANE_OUTBOX_CLEANUP"
     EDI_DATA_PLANE_OUTBOX_CLEANUP = "EDI_DATA_PLANE_OUTBOX_CLEANUP"
     EDI_DATA_RETENTION_CLEANUP = "EDI_DATA_RETENTION_CLEANUP"
-
-
-class EdiConstants(StrEnum):
-    OUTBOX_CHANNEL = "edi_outbox_channel"
-    EDI_APP_SLUG = "edi"
-
-
-class ReplayCheckpoint(StrEnum):
-    """
-    The pipeline stage from which to resume processing during a replay.
-
-    TRANSFORM — restart from the raw EDI payload (re-run transform + deliver).
-    DELIVERY  — restart from the translated JSON (re-run deliver only, skip transform).
-    """
-
-    TRANSFORM = "TRANSFORM"
-    DELIVERY = "DELIVERY"
-
-
-class TransactionEntityType(StrEnum):
-    """Discriminator for which read model to target during a replay operation."""
-
-    EDI_MESSAGE = "edi_message"
-    EDI_JSON = "edi_json"
 
 
 class EdiOutboxSource(StrEnum):
@@ -219,27 +54,27 @@ class EdiOutboxSource(StrEnum):
     EDI_CONTROL_PLANE = "edi_control_plane"
 
 
-class EncryptionAlgorithm(StrEnum):
-    """Symmetric encryption algorithm used for AS2 message encryption."""
+class EdiTraceEventType(StrEnum):
+    """Canonical event types for EDI immutable audit ledger trace events."""
 
-    AES128 = "AES128"
-    AES256 = "AES256"
-    RC2 = "RC2"
-    DES3 = "3DES"
+    RECEIVED = "RECEIVED"
+    TRANSFORMATION_SUCCESSFUL = "TRANSFORMATION_SUCCESSFUL"
+    TRANSFORMATION_FAILED = "TRANSFORMATION_FAILED"
+    DELIVERY_SUCCESSFUL = "DELIVERY_SUCCESSFUL"
+    DELIVERY_ATTEMPT_FAILED = "DELIVERY_ATTEMPT_FAILED"
+    DELIVERY_FAILED = "DELIVERY_FAILED"
+    REPLAY_TRIGGERED = "REPLAY_TRIGGERED"
+    REPLAY_TRANSFORM = "REPLAY_TRANSFORM"
+    REPLAY_DELIVER = "REPLAY_DELIVER"
+    MODIFY_AND_REPLAY_TRANSFORM = "MODIFY_AND_REPLAY_TRANSFORM"
+    MODIFY_AND_REPLAY_DELIVER = "MODIFY_AND_REPLAY_DELIVER"
+    CREATED_FROM_MODIFICATION = "CREATED_FROM_MODIFICATION"
+    MODIFIED_AND_REPLAYED = "MODIFIED_AND_REPLAYED"
 
 
-class SignatureAlgorithm(StrEnum):
-    """Digest/hash algorithm used for AS2 message signing."""
-
-    SHA1 = "SHA1"
-    SHA256 = "SHA256"
-    SHA384 = "SHA384"
-    SHA512 = "SHA512"
-    MD5 = "MD5"
-
-
-class MDNType(StrEnum):
-    """AS2 MDN (Message Disposition Notification) delivery mode."""
-
-    SYNC = "SYNC"
-    ASYNC = "ASYNC"
+__all__ = [
+    "EdiEventType",
+    "EdiJobName",
+    "EdiOutboxSource",
+    "EdiTraceEventType",
+]

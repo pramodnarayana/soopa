@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from notification.domain.models import Template
+from notification.domain.template import Template
 
 
 class NotificationTemplatesRepositoryPort(Protocol):

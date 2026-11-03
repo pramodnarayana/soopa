@@ -6,9 +6,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
+from seedwork.domain.aggregate import AggregateRoot
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.models import AggregateRoot
 from seedwork.utils import generate_id
 
 from orchestration.domain.constants import (
@@ -21,6 +20,7 @@ from orchestration.domain.constants import (
     RunStatus,
     StepFailureCode,
     StepStatus,
+    WorkflowIdPrefix,
 )
 from orchestration.domain.definition import WorkflowDefinition
 from orchestration.domain.events import (
@@ -196,7 +196,7 @@ class StepRun:
 class WorkflowRun(AggregateRoot):
     """Aggregate root governing the state machine of a durable workflow execution."""
 
-    ID_PREFIX: ClassVar[str] = SystemIdPrefix.WORKFLOW_RUN.value
+    ID_PREFIX: ClassVar[str] = WorkflowIdPrefix.RUN.value
 
     id: str
     tenant_id: str
@@ -245,7 +245,7 @@ class WorkflowRun(AggregateRoot):
             else:
                 initial_status = StepStatus.PENDING
 
-            step_id = generate_id(SystemIdPrefix.WORKFLOW_STEP.value)
+            step_id = generate_id(WorkflowIdPrefix.STEP.value)
             steps[node.node_key] = StepRun(
                 id=step_id,
                 run_id=run_id,
@@ -417,7 +417,7 @@ class WorkflowRun(AggregateRoot):
                 self.started_at = timestamp
 
         attempt = StepAttempt(
-            id=generate_id(SystemIdPrefix.WORKFLOW_ATTEMPT.value),
+            id=generate_id(WorkflowIdPrefix.ATTEMPT.value),
             step_run_id=step.id,
             tenant_id=self.tenant_id,
             retry_count=step.retry_count,

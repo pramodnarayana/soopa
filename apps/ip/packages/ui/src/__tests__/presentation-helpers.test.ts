@@ -4,8 +4,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { ConnectorPropertySpec } from '../domain/catalog';
 import {
+  AuthType,
   ConnectionHandshakeStatus,
   ConnectionStatus,
+  ConnectorPropertyKey,
   ConnectorPropertyType,
   PipelineLayer,
   ReplayStage,
@@ -20,7 +22,9 @@ import {
   isConnectionSnapshotVerified,
 } from '../presentation/connections/connection-preflight';
 import {
+  isPropertyVisible,
   isSecretConnectorProperty,
+  resolvePropertyLabel,
   SpecFormRenderer,
   splitSpecFormValues,
 } from '../presentation/connections/SpecFormRenderer';
@@ -47,7 +51,7 @@ import {
 import { InMemoryNavigationFake } from '../testing';
 
 const SPEC_URL: ConnectorPropertySpec = {
-  name: 'base_url',
+  name: ConnectorPropertyKey.BASE_URL,
   label: 'Base URL',
   type: ConnectorPropertyType.SHORT_TEXT,
   required: true,
@@ -88,12 +92,14 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     expect(isSecretConnectorProperty(SPEC_OAUTH)).toBe(true);
 
     const split = splitSpecFormValues(SAMPLE_SPECS, {
-      base_url: 'https://mdm.itron.local',
+      [ConnectorPropertyKey.BASE_URL]: 'https://mdm.itron.local',
       api_secret: 'sec_live_99',
       oauth_token: '',
     });
 
-    expect(split.publicConfig).toEqual({ base_url: 'https://mdm.itron.local' });
+    expect(split.publicConfig).toEqual({
+      [ConnectorPropertyKey.BASE_URL]: 'https://mdm.itron.local',
+    });
     expect(split.rawCredentials).toEqual({ api_secret: 'sec_live_99' });
 
     const specWithDefaults: ConnectorPropertySpec[] = [
@@ -108,8 +114,213 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     ];
 
     const splitDefaults = splitSpecFormValues(specWithDefaults, {});
-    expect(splitDefaults.publicConfig).toEqual({ base_url: 'https://default.example.com' });
+    expect(splitDefaults.publicConfig).toEqual({
+      [ConnectorPropertyKey.BASE_URL]: 'https://default.example.com',
+    });
     expect(splitDefaults.rawCredentials).toEqual({ api_secret: 'default_secret_key' });
+  });
+
+  it('dynamically filters credential fields and customizes labels based on selected auth_type', () => {
+    const httpSpecs: readonly ConnectorPropertySpec[] = [
+      SPEC_URL,
+      {
+        name: ConnectorPropertyKey.AUTH_TYPE,
+        label: 'Authentication Type',
+        type: ConnectorPropertyType.DROPDOWN,
+        required: true,
+        defaultValue: AuthType.BEARER_TOKEN,
+        description: null,
+        options: [
+          { label: 'None', value: AuthType.NO_AUTH },
+          { label: 'Bearer Token', value: AuthType.BEARER_TOKEN },
+          { label: 'API Key', value: AuthType.API_KEY },
+          { label: 'Basic Auth', value: AuthType.BASIC_AUTH },
+          { label: 'OAuth2 Client Credentials', value: AuthType.OAUTH2_CLIENT_CREDENTIALS },
+        ],
+        oauthConfig: null,
+      },
+      {
+        name: ConnectorPropertyKey.TOKEN,
+        label: 'Bearer Token / API Key',
+        type: ConnectorPropertyType.SECRET_TEXT,
+        required: false,
+        defaultValue: null,
+        description: null,
+        options: [],
+        oauthConfig: null,
+      },
+      {
+        name: ConnectorPropertyKey.PARAM_NAME,
+        label: 'API Key Header / Query Name',
+        type: ConnectorPropertyType.SHORT_TEXT,
+        required: false,
+        defaultValue: 'X-API-Key',
+        description: null,
+        options: [],
+        oauthConfig: null,
+      },
+      {
+        name: ConnectorPropertyKey.USERNAME,
+        label: 'Basic Auth Username',
+        type: ConnectorPropertyType.SHORT_TEXT,
+        required: false,
+        defaultValue: null,
+        description: null,
+        options: [],
+        oauthConfig: null,
+      },
+      {
+        name: ConnectorPropertyKey.PASSWORD,
+        label: 'Basic Auth Password',
+        type: ConnectorPropertyType.SECRET_TEXT,
+        required: false,
+        defaultValue: null,
+        description: null,
+        options: [],
+        oauthConfig: null,
+      },
+      {
+        name: ConnectorPropertyKey.TOKEN_URL,
+        label: 'OAuth2 Token URL',
+        type: ConnectorPropertyType.SHORT_TEXT,
+        required: false,
+        defaultValue: null,
+        description: null,
+        options: [],
+        oauthConfig: null,
+      },
+    ];
+
+    const tokenProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.TOKEN)!;
+    const paramNameProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.PARAM_NAME)!;
+    const usernameProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.USERNAME)!;
+    const passwordProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.PASSWORD)!;
+    const tokenUrlProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.TOKEN_URL)!;
+
+    // Bearer Token auth
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        paramNameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenUrlProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(resolvePropertyLabel(tokenProp, AuthType.BEARER_TOKEN)).toBe('Bearer Token');
+
+    // API Key auth
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        paramNameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.API_KEY },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(resolvePropertyLabel(tokenProp, AuthType.API_KEY)).toBe('API Key Secret');
+
+    // Basic Auth
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(true);
+    expect(
+      isPropertyVisible(
+        passwordProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BASIC_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(true);
+
+    // OAuth2 Client Credentials
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.OAUTH2_CLIENT_CREDENTIALS },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        tokenUrlProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.OAUTH2_CLIENT_CREDENTIALS },
+        httpSpecs,
+      ),
+    ).toBe(true);
+
+    // No Auth
+    expect(
+      isPropertyVisible(
+        tokenProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.NO_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(false);
+    expect(
+      isPropertyVisible(
+        usernameProp,
+        { [ConnectorPropertyKey.AUTH_TYPE]: AuthType.NO_AUTH },
+        httpSpecs,
+      ),
+    ).toBe(false);
+
+    // Splitting values omits hidden fields with defaults (e.g. param_name with default X-API-Key is omitted in BEARER_TOKEN)
+    const bearerSplit = splitSpecFormValues(httpSpecs, {
+      [ConnectorPropertyKey.BASE_URL]: 'https://api.github.com',
+      [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN,
+      [ConnectorPropertyKey.TOKEN]: 'ghp_secret123',
+      [ConnectorPropertyKey.USERNAME]: 'should_be_ignored',
+    });
+    expect(bearerSplit.publicConfig).toEqual({
+      [ConnectorPropertyKey.BASE_URL]: 'https://api.github.com',
+      [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN,
+    });
+    expect(bearerSplit.rawCredentials).toEqual({
+      [ConnectorPropertyKey.TOKEN]: 'ghp_secret123',
+    });
   });
 
   it('maps operational statuses to WCAG-compliant non-brand status tones and formats units', () => {

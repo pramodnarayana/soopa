@@ -58,9 +58,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = structlog.get_logger(__name__)
 
 
-class IpStitchCanonicalDispatcherAdapter(
-    IpStitchCanonicalDispatcherPort, StitchShardGatewayPort
-):
+class IpStitchCanonicalDispatcherAdapter(IpStitchCanonicalDispatcherPort, StitchShardGatewayPort):
     """Routes `DispatchCanonicalEventToStitchesCommand` and run queries to the tenant's IP data plane."""
 
     def __init__(
@@ -212,9 +210,7 @@ class IpStitchCanonicalDispatcherAdapter(
         shard_id, shard_dsn = shard_res.unwrap()
 
         async with contextlib.aclosing(
-            self._db_router.get_tenant_session(
-                command.tenant_id, shard_id, shard_dsn
-            )
+            self._db_router.get_tenant_session(command.tenant_id, shard_id, shard_dsn)
         ) as tenant_gen:
             async for session in tenant_gen:
 

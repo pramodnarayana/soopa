@@ -4,14 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ip.engine.domain.enums import (
-    CanonicalAction,
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
-    IngestionMode,
     OutboundDispatchStatus,
-    SyncRunKind,
 )
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
+from ip.engine.domain.normalization.enums import CanonicalAction
+from ip.engine.domain.replication.enums import (
+    IngestionMode,
+    SyncRunKind,
+)
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
 

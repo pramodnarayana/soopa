@@ -7,8 +7,8 @@ from seedwork.domain.types import JsonDict
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id
 
-from edi.domain.enums import EdiDirection, MessageStatus, PipelineEventType
-from edi.ports.outbound.transaction_repository import UpdateEdiJsonCommand
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.enums import MessageStatus, PipelineEventType
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
@@ -62,14 +62,14 @@ class PipelineLifecycleUseCase:
                 transaction_type = str(txn_val) if txn_val else None
 
                 if gs_sender_id and gs_receiver_id:
-                    await uow.transactions.update_edi_message_metadata(
+                    await uow.edi_messages.update_edi_message_metadata(
                         trace_id=trace_id,
                         gs_sender_id=gs_sender_id,
                         gs_receiver_id=gs_receiver_id,
                         transaction_type=transaction_type,
                     )
-                await uow.transactions.update_edi_message_status(
-                    trace_id, str(MessageStatus.TRANSFORMED)
+                await uow.edi_messages.update_edi_message_status(
+                    trace_id, MessageStatus.TRANSFORMED
                 )
             else:
                 trading_partner_id = (
@@ -77,29 +77,21 @@ class PipelineLifecycleUseCase:
                     if payload.get("trading_partner_id")
                     else None
                 )
-
-                update_kwargs: dict[str, str] = {}
-                if trading_partner_id:
-                    update_kwargs["trading_partner_id"] = trading_partner_id
-                if "standard" in payload and payload["standard"] is not None:
-                    update_kwargs["standard"] = str(payload["standard"])
-
-                if update_kwargs:
-                    await uow.transactions.update_edi_json(
-                        command=UpdateEdiJsonCommand(
-                            trace_id=trace_id,
-                            trading_partner_id=update_kwargs.get("trading_partner_id"),
-                            standard=update_kwargs.get("standard"),
-                        )
-                    )
-
-                await uow.transactions.update_edi_json_status(
-                    trace_id, str(MessageStatus.TRANSFORMED)
+                standard_val = (
+                    str(payload["standard"])
+                    if "standard" in payload and payload["standard"] is not None
+                    else None
                 )
 
-            # Seed from the incoming event's idempotency_key parameter (not payload).
-            # Using the parameter guarantees we always have the correct per-event key,
-            # while payload.get() could silently fall back to trace_id if the key is absent.
+                if trading_partner_id is not None or standard_val is not None:
+                    await uow.edi_jsons.update_edi_json_routing_metadata(
+                        trace_id,
+                        trading_partner_id=trading_partner_id,
+                        standard=standard_val,
+                    )
+
+                await uow.edi_jsons.update_edi_json_status(trace_id, MessageStatus.TRANSFORMED)
+
             deliver_key_seed = idempotency_key if idempotency_key else trace_id
             deliver_idempotency_key = generate_deterministic_id(
                 SystemIdPrefix.IDEMPOTENCY, deliver_key_seed, "DELIVER"
@@ -149,11 +141,9 @@ class PipelineLifecycleUseCase:
                     return
 
             if direction == EdiDirection.INBOUND.value:
-                await uow.transactions.update_edi_message_status(
-                    trace_id, str(MessageStatus.FAILED)
-                )
+                await uow.edi_messages.update_edi_message_status(trace_id, MessageStatus.FAILED)
             else:
-                await uow.transactions.update_edi_json_status(trace_id, str(MessageStatus.FAILED))
+                await uow.edi_jsons.update_edi_json_status(trace_id, MessageStatus.FAILED)
             await uow.commit()
 
     async def handle_delivery_successful(
@@ -179,16 +169,12 @@ class PipelineLifecycleUseCase:
                     return
 
             if direction == EdiDirection.INBOUND.value:
-                await uow.api_gateway_transactions.update_api_payload_status(
-                    trace_id, str(MessageStatus.DELIVERED)
+                await uow.api_gateway_receipts.update_api_payload_status(
+                    trace_id, MessageStatus.DELIVERED
                 )
-                await uow.transactions.update_edi_json_status(
-                    trace_id, str(MessageStatus.DELIVERED)
-                )
+                await uow.edi_jsons.update_edi_json_status(trace_id, MessageStatus.DELIVERED)
             else:
-                await uow.transactions.update_edi_message_status(
-                    trace_id, str(MessageStatus.DELIVERED)
-                )
+                await uow.edi_messages.update_edi_message_status(trace_id, MessageStatus.DELIVERED)
             await uow.commit()
 
     async def handle_delivery_failed(
@@ -216,12 +202,10 @@ class PipelineLifecycleUseCase:
                     return
 
             if direction == EdiDirection.INBOUND.value:
-                await uow.api_gateway_transactions.update_api_payload_status(
-                    trace_id, str(MessageStatus.FAILED)
+                await uow.api_gateway_receipts.update_api_payload_status(
+                    trace_id, MessageStatus.FAILED
                 )
-                await uow.transactions.update_edi_json_status(trace_id, str(MessageStatus.FAILED))
+                await uow.edi_jsons.update_edi_json_status(trace_id, MessageStatus.FAILED)
             else:
-                await uow.transactions.update_edi_message_status(
-                    trace_id, str(MessageStatus.FAILED)
-                )
+                await uow.edi_messages.update_edi_message_status(trace_id, MessageStatus.FAILED)
             await uow.commit()

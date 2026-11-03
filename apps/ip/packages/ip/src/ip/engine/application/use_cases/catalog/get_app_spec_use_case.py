@@ -11,8 +11,9 @@ from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
 
 @dataclass(frozen=True)
 class GetAppSpecQuery:
-    """Query to fetch the dynamic configuration specification of an application."""
+    """Query to fetch the dynamic configuration specification of an application for a tenant."""
 
+    tenant_id: str
     app_id: str
 
 

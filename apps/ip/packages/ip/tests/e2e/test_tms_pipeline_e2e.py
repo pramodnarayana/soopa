@@ -12,12 +12,6 @@ from decimal import Decimal
 
 import pytest
 from database.types import GlobalSession, TenantSession
-from ip.application.domains.tms.canonical import (
-    CanonicalLoadDTO,
-    TmsEntityType,
-)
-from ip.application.domains.tms.repository import SqlAlchemyTmsDomainRepository
-from ip.application.transformers.tms.mercury_gate import MercuryGateTransformer
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
 )
@@ -33,9 +27,6 @@ from ip.engine.adapters.outbound.database.data_plane.outbound_record_repository 
 from ip.engine.adapters.outbound.database.data_plane.replica_record_repository import (
     SqlAlchemyReplicaRecordRepository,
 )
-from ip.engine.adapters.outbound.database.data_plane.uow import (
-    SqlAlchemyIpDataPlaneUnitOfWork,
-)
 from ip.engine.adapters.outbound.database.models.data_plane import IpTraceEventModel
 from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
     TieredStorageAdapter,
@@ -48,17 +39,21 @@ from ip.engine.application.use_cases.replication.replicate_records_use_case impo
     ReplicateRecordsCommand,
     ReplicateRecordsUseCase,
 )
-from ip.engine.domain.enums import (
-    AuthType,
-    IpTraceEventType,
-)
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.global_entity_map import GlobalEntityMap
-from ip.engine.domain.models.normalized_record import NormalizedRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
-from ip.engine.domain.models.replica_record import compute_record_key
-from ip.engine.domain.models.stream_definition import StreamDefinition
+from ip.engine.bootstrap.container import create_ip_data_plane_uow
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
+from ip.engine.domain.replication.replica_record import compute_record_key
+from ip.engine.domain.replication.stream_definition import StreamDefinition
+from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.ports.outbound.transformer_hook_port import ReplicaSnapshotDTO
+from ip.solutions.domains.tms.canonical import (
+    CanonicalLoadDTO,
+    TmsEntityType,
+)
+from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
+from ip.solutions.transformers.tms.mercury_gate import MercuryGateTransformer
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
 
@@ -84,7 +79,7 @@ async def test_full_l1_to_l5_tms_pipeline_vertical_slice_on_postgres(
     )
     await conn_repo.save(conn)
 
-    uow = SqlAlchemyIpDataPlaneUnitOfWork(tenant_session)
+    uow = create_ip_data_plane_uow(tenant_session)
     storage = TieredStorageAdapter()
     ingest_uc = IngestRecordUseCase(uow=uow, tiered_storage=storage)
 
@@ -235,8 +230,8 @@ async def test_full_l1_to_l5_tms_pipeline_vertical_slice_on_postgres(
     trace_events = (await tenant_session.execute(trace_stmt)).scalars().all()
     event_types = [t.event_type for t in trace_events]
 
-    assert IpTraceEventType.L1_INGEST_RECEIVED.value in event_types
-    assert IpTraceEventType.L2_REPLICA_CREATED.value in event_types
-    assert IpTraceEventType.L3_NORMALIZED.value in event_types
-    assert IpTraceEventType.L5_DISPATCH_PENDING.value in event_types
-    assert IpTraceEventType.L5_DISPATCH_DELIVERED.value in event_types
+    assert IpTraceEventType.INGEST_RECEIVED.value in event_types
+    assert IpTraceEventType.REPLICA_CREATED.value in event_types
+    assert IpTraceEventType.NORMALIZED.value in event_types
+    assert IpTraceEventType.DISPATCH_PENDING.value in event_types
+    assert IpTraceEventType.DISPATCH_DELIVERED.value in event_types

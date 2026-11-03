@@ -1,7 +1,7 @@
 import structlog
 
-from edi.domain.enums import EdiConnectionType, EdiDirection
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.domain.routing.enums import EdiConnectionType, EdiDirection
+from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -13,7 +13,7 @@ class ListOutboundRoutesUseCase:
 
     async def execute(
         self, tenant_id: str, limit: int = 100, offset: int = 0
-    ) -> list[OutboundRouteDomainModel]:
+    ) -> list[OutboundRoute]:
         outbound = await self.uow.outbound_routes.list_outbound_routes(tenant_id, limit, offset)
 
         as2_ids: set[str] = set()
@@ -39,10 +39,10 @@ class ListOutboundRoutesUseCase:
         )
         sftp_names = {p.id: p.name for p in sftp_partners}
 
-        results: list[OutboundRouteDomainModel] = []
+        results: list[OutboundRoute] = []
 
         def _resolve_destination(
-            r: OutboundRouteDomainModel,
+            r: OutboundRoute,
         ) -> tuple[EdiConnectionType | None, str]:
             if r.as2_partner_id:
                 return EdiConnectionType.AS2, as2_names.get(r.as2_partner_id, str(r.as2_partner_id))
@@ -56,7 +56,7 @@ class ListOutboundRoutesUseCase:
             _dest_type, _dest_name = _resolve_destination(out_r)
 
             results.append(
-                OutboundRouteDomainModel(
+                OutboundRoute(
                     id=out_r.id,
                     tenant_id=tenant_id,
                     trading_partner_id=out_r.trading_partner_id,

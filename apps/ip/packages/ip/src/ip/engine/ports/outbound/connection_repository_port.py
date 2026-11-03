@@ -4,8 +4,9 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import DuplicateConnectionFingerprintError, Result
-from ip.engine.domain.models.connection import Connection, ConnectionStatus
 
 
 class ConnectionRepositoryPort(Protocol):

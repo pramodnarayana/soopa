@@ -15,7 +15,7 @@ from enum import StrEnum
 from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonDict
 
-from ip.engine.domain.enums import FailureDisposition
+from ip.engine.domain.dispatch.enums import FailureDisposition
 
 
 class IpErrorCode(StrEnum):
@@ -45,6 +45,7 @@ class IpErrorCode(StrEnum):
     TENANT_SHARD_NOT_FOUND = "TENANT_SHARD_NOT_FOUND"
     ACTIVE_SYNC_RUN_EXISTS = "ACTIVE_SYNC_RUN_EXISTS"
     SYNC_RUN_NOT_FOUND = "SYNC_RUN_NOT_FOUND"
+    INVALID_SYNC_RUN_STATE = "INVALID_SYNC_RUN_STATE"
     INBOUND_VERIFICATION_FAILED = "INBOUND_VERIFICATION_FAILED"
     INBOUND_PAYLOAD_DECODE_FAILED = "INBOUND_PAYLOAD_DECODE_FAILED"
     DUPLICATE_EXTERNAL_EVENT = "DUPLICATE_EXTERNAL_EVENT"
@@ -219,7 +220,9 @@ class ConnectorNotFoundError(IpError):
     code: IpErrorCode = IpErrorCode.CONNECTOR_NOT_FOUND
     disposition: FailureDisposition = FailureDisposition.FAIL
     http_status: int = 404
-    remediation: str | None = "Verify the app_id against /api/v1/ip/catalog/apps."
+    remediation: str | None = (
+        "Verify the app_id against /api/v1/tenants/{tenant_id}/ip/catalog/apps."
+    )
 
     @classmethod
     def for_app(cls, app_id: str) -> ConnectorNotFoundError:
@@ -533,7 +536,7 @@ class TraceNotFoundError(IpError):
     def for_trace(cls, trace_id: str) -> TraceNotFoundError:
         return cls(
             trace_id=trace_id,
-            message=f"Transaction trace '{trace_id}' was not found.",
+            message=f"Trace '{trace_id}' was not found.",
             details={"trace_id": trace_id},
         )
 
@@ -578,6 +581,21 @@ class SyncRunNotFoundError(IpError):
             message=f"Sync run '{run_id}' was not found.",
             details={"run_id": run_id},
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class InvalidSyncRunStateError(IpError):
+    """Returned when a lifecycle transition violates the SyncRun state machine."""
+
+    run_id: str = ""
+    current_status: str = ""
+    attempted_action: str = ""
+    code: IpErrorCode = IpErrorCode.INVALID_SYNC_RUN_STATE
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = (
+        "Ensure the sync run is in a valid lifecycle state for the requested transition."
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -693,6 +711,7 @@ __all__ = [
     "InvalidCredentialsError",
     "InvalidEndpointError",
     "InvalidReplayPayloadError",
+    "InvalidSyncRunStateError",
     "IpError",
     "IpErrorCode",
     "ManifestParseFailureError",

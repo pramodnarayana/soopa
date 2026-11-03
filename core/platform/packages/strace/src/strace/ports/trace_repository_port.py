@@ -7,7 +7,8 @@ from collections.abc import Sequence
 from typing import Protocol
 
 from strace.domain.enums import TraceStatus
-from strace.domain.models import TraceEvent, TraceLineageItemDTO
+from strace.domain.lineage import TraceLineageItemDTO
+from strace.domain.trace_event import TraceEvent
 
 
 class TraceRepositoryPort(Protocol):
@@ -72,7 +73,7 @@ class TraceRepositoryPort(Protocol):
         self,
         tenant_id: str,
         *,
-        status: TraceStatus | None = None,
+        status: TraceStatus | str | None = None,
         min_replay_count: int | None = None,
         limit: int = 50,
     ) -> list[TraceLineageItemDTO]:

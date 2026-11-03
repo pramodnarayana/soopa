@@ -1,23 +1,22 @@
 import contextlib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import cast
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.events import EventEnvelope
-from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
+from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_deterministic_id, generate_id
-from strace.domain import TraceEventType
 
-from edi.domain.enums import (
-    EdiDirection,
-    EdiStandard,
-    PipelineEventType,
-)
-from edi.domain.exceptions import TransactionNotFoundError
-from edi.domain.models.headers import EdiEnvelopeHeaders
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.enums import EdiTraceEventType
+from edi.domain.exceptions import TraceNotFoundError
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import EdiStandard, PipelineEventType
 from edi.domain.types import AstNode
 from edi.ports.outbound.transformer_port import TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
@@ -61,7 +60,7 @@ class ComputeOutboundTransformUseCase:
     async def _save_edi_message(
         self,
         uow: DataPlaneUnitOfWorkPort,
-        edi_json: Any,
+        edi_json: EdiJson,
         trace_id: str,
         edi_str: str,
         standard: str,
@@ -76,7 +75,7 @@ class ComputeOutboundTransformUseCase:
                 tp_id = routing_meta.get("trading_partner_id")
                 trading_partner_id = str(tp_id) if tp_id else None
 
-        existing_msg = await uow.transactions.get_edi_message(trace_id)
+        existing_msg = await uow.edi_messages.get_edi_message(trace_id)
         if existing_msg:
             edi_msg = existing_msg
             edi_msg.mark_outbound_pending_delivery(
@@ -90,7 +89,7 @@ class ComputeOutboundTransformUseCase:
                 trading_partner_id=trading_partner_id,
             )
         else:
-            edi_msg = EdiMessageDomainModel.create_outbound(
+            edi_msg = EdiMessage.create_outbound(
                 id=generate_id(DomainIdPrefix.EDI_MESSAGE.value),
                 trace_id=trace_id,
                 tenant_id=edi_json.tenant_id or "",
@@ -107,9 +106,9 @@ class ComputeOutboundTransformUseCase:
                 trading_partner_id=trading_partner_id,
             )
 
-        edi_msg._append_trace(TraceEventType.TRANSFORMATION_SUCCESSFUL)
+        edi_msg._append_trace(EdiTraceEventType.TRANSFORMATION_SUCCESSFUL)
 
-        return await uow.transactions.save(edi_msg)
+        return await uow.edi_messages.save(edi_msg)
 
     async def execute(self, command: ComputeOutboundTransformCommand) -> None:
         """Transforms an outbound JSON payload to X12 EDI."""
@@ -133,12 +132,10 @@ class ComputeOutboundTransformUseCase:
                     logger.info("compute_outbound_transform.duplicate_skipped", trace_id=trace_id)
                     return
 
-                edi_json = await uow.transactions.get_edi_json(trace_id)
+                edi_json = await uow.edi_jsons.get_edi_json(trace_id)
                 if not edi_json:
-                    logger.warning(
-                        "compute_outbound_transform.edi_json_not_found", trace_id=trace_id
-                    )
-                    raise TransactionNotFoundError(trace_id)
+                    logger.error("compute_outbound_transform.edi_json_not_found", trace_id=trace_id)
+                    raise TraceNotFoundError(trace_id)
 
                 json_payload = edi_json.payload
                 if not json_payload or not (
@@ -148,7 +145,7 @@ class ComputeOutboundTransformUseCase:
                         and all(isinstance(node, dict) for node in json_payload)
                     )
                 ):
-                    raise TransactionNotFoundError(trace_id)
+                    raise TraceNotFoundError(trace_id)
 
                 logger.info(
                     "compute_outbound_transform.resolved",
@@ -224,10 +221,10 @@ class ComputeOutboundTransformUseCase:
         except Exception as e:
             logger.exception("compute_outbound_transform.failed", trace_id=trace_id, error=str(e))
             async with self.uow_factory() as failure_uow, failure_uow:
-                edi_json_fallback = await failure_uow.transactions.get_edi_json(trace_id)
+                edi_json_fallback = await failure_uow.edi_jsons.get_edi_json(trace_id)
                 if edi_json_fallback:
                     edi_json_fallback.mark_transform_failed(reason=str(e))
-                    await failure_uow.transactions.save_json(edi_json_fallback)
+                    await failure_uow.edi_jsons.save(edi_json_fallback)
 
                     event_key = generate_deterministic_id(
                         SystemIdPrefix.IDEMPOTENCY, command.idempotency_key, "TRANSFORMATION_FAILED"

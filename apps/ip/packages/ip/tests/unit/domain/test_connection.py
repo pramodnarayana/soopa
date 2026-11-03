@@ -1,25 +1,24 @@
 """Unit tests for Connection aggregate root and related domain invariants."""
 
-from ip.engine.domain.events import (
+from ip.engine.domain.connection.connection import Connection, compute_connection_fingerprint
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    ConnectionStatus,
+)
+from ip.engine.domain.connection.events import (
     ConnectionActivatedEvent,
     ConnectionCreatedEvent,
     ConnectionDeactivatedEvent,
     ConnectionErrorRecordedEvent,
     ConnectionRelinkedEvent,
 )
+from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import (
     FailureDisposition,
     InvalidConnectionConfigError,
     InvalidConnectionStateError,
     IpErrorCode,
 )
-from ip.engine.domain.models.connection import (
-    AuthType,
-    Connection,
-    ConnectionStatus,
-    compute_connection_fingerprint,
-)
-from seedwork.id_registry import DomainIdPrefix
 
 
 def test_connection_creation_emits_created_event_and_sets_prefix_id() -> None:
@@ -37,7 +36,7 @@ def test_connection_creation_emits_created_event_and_sets_prefix_id() -> None:
         endpoint_for_fingerprint=endpoint,
     )
 
-    assert connection.id.startswith(f"{DomainIdPrefix.IP_CONNECTION.value}_")
+    assert connection.id.startswith(f"{IpIdPrefix.CONNECTION.value}_")
     assert connection.tenant_id == tenant_id
     assert connection.app_id == app_id
     assert connection.name == "Production Itron MDM"

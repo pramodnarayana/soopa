@@ -5,8 +5,12 @@ from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import ConnectionRecord
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    ConnectionStatus,
+)
 from ip.engine.domain.exceptions import DuplicateConnectionFingerprintError, Result
-from ip.engine.domain.models.connection import AuthType, Connection, ConnectionStatus
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from seedwork.domain.types import JsonDict
 from sqlalchemy import select
@@ -74,6 +78,28 @@ class SqlAlchemyConnectionRepository(GlobalSqlAlchemyRepository, ConnectionRepos
         record.updated_at = cls._parse_iso(domain.updated_at) or datetime.now(UTC)
         record.deactivated_at = cls._parse_iso(domain.deactivated_at)
 
+    @classmethod
+    def _to_orm_model(cls, connection: Connection) -> ConnectionRecord:
+        return ConnectionRecord(
+            id=connection.id,
+            tenant_id=connection.tenant_id,
+            app_id=connection.app_id,
+            name=connection.name,
+            auth_type=connection.auth_type.value,
+            public_config=dict(connection.public_config),
+            encrypted_credentials=connection.encrypted_credentials,
+            key_encryption_version=connection.key_encryption_version,
+            connection_fingerprint=connection.connection_fingerprint,
+            status=connection.status.value,
+            token_expires_at=cls._parse_iso(connection.token_expires_at),
+            last_refreshed_at=cls._parse_iso(connection.last_refreshed_at),
+            last_error_code=connection.last_error_code,
+            last_error_message=connection.last_error_message,
+            created_at=cls._parse_iso(connection.created_at) or datetime.now(UTC),
+            updated_at=cls._parse_iso(connection.updated_at) or datetime.now(UTC),
+            deactivated_at=cls._parse_iso(connection.deactivated_at),
+        )
+
     async def save(
         self, connection: Connection
     ) -> Result[Connection, DuplicateConnectionFingerprintError]:
@@ -83,26 +109,7 @@ class SqlAlchemyConnectionRepository(GlobalSqlAlchemyRepository, ConnectionRepos
         record = result.scalar_one_or_none()
 
         if record is None:
-            record = ConnectionRecord(
-                id=connection.id,
-                tenant_id=connection.tenant_id,
-                app_id=connection.app_id,
-                name=connection.name,
-                auth_type=connection.auth_type.value,
-                public_config=dict(connection.public_config),
-                encrypted_credentials=connection.encrypted_credentials,
-                key_encryption_version=connection.key_encryption_version,
-                connection_fingerprint=connection.connection_fingerprint,
-                status=connection.status.value,
-                token_expires_at=self._parse_iso(connection.token_expires_at),
-                last_refreshed_at=self._parse_iso(connection.last_refreshed_at),
-                last_error_code=connection.last_error_code,
-                last_error_message=connection.last_error_message,
-                created_at=self._parse_iso(connection.created_at) or datetime.now(UTC),
-                updated_at=self._parse_iso(connection.updated_at) or datetime.now(UTC),
-                deactivated_at=self._parse_iso(connection.deactivated_at),
-            )
-            self._session.add(record)
+            self._session.add(self._to_orm_model(connection))
         else:
             self._update_record_from_domain(record, connection)
 

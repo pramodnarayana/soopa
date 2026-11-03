@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from typing import Protocol
 
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.replication.inbound_record import InboundRecord
 
 
 class InboundRecordRepositoryPort(Protocol):

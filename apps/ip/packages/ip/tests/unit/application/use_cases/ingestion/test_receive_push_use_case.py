@@ -17,10 +17,13 @@ from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushCommand,
     ReceivePushUseCase,
 )
-from ip.engine.domain.enums import IngestionMode
-from ip.engine.domain.events import FetchRecordRequestedEvent, InboundRecordCreatedEvent
 from ip.engine.domain.exceptions import PayloadNotFoundError, Result
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.events import (
+    FetchRecordRequestedEvent,
+    InboundRecordCreatedEvent,
+)
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalized_record_repository_port import (

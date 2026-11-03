@@ -1,12 +1,13 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
+from seedwork.domain.exceptions import Result
 
-from edi.domain.enums import EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.headers import OutboundEdiHeaderDomainModel
+from edi.domain.exceptions import EdiError
+from edi.domain.routing.outbound_header import OutboundEdiHeader
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -30,26 +31,20 @@ class CreateOutboundEdiHeaderCmd:
     subelement_separator: str | None = None
 
 
-logger = structlog.get_logger(__name__)
-
-
 class CreateOutboundEdiHeaderUseCase:
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
     async def create_outbound_edi_header(
         self, tenant_id: str, cmd: CreateOutboundEdiHeaderCmd
-    ) -> str:
+    ) -> Result[str, EdiError]:
         logger.info(
-            "Creating Outbound EDI Header for trading partner {cmd_trading_partner_id} in tenant {tenant_id}",
-            cmd_trading_partner_id=cmd.trading_partner_id,
+            "outbound_edi_header_create_started",
+            trading_partner_id=cmd.trading_partner_id,
             tenant_id=tenant_id,
         )
 
-        header_id = OutboundEdiHeaderDomainModel.new_id()
-
-        aggregate = OutboundEdiHeaderDomainModel(
-            id=header_id,
+        create_res = OutboundEdiHeader.create(
             tenant_id=tenant_id,
             name=cmd.name,
             trading_partner_id=cmd.trading_partner_id,
@@ -68,23 +63,24 @@ class CreateOutboundEdiHeaderUseCase:
             segment_terminator=cmd.segment_terminator,
             element_separator=cmd.element_separator,
             subelement_separator=cmd.subelement_separator,
-            created_at=datetime.now(UTC).replace(tzinfo=None),
-            updated_at=datetime.now(UTC).replace(tzinfo=None),
         )
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
+        if create_res.is_err:
+            domain_err = create_res.unwrap_err()
+            logger.error(
+                "outbound_edi_header_create_validation_failed",
+                trading_partner_id=cmd.trading_partner_id,
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_header_created,
-                resource_id=header_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
             )
-        )
+            return Result.fail(domain_err)
 
+        aggregate = create_res.unwrap()
         await self.uow.edi_headers.save(aggregate)
 
         logger.info(
             "outbound_edi_header_created",
-            header_id=header_id,
+            header_id=aggregate.id,
             tenant_id=tenant_id,
         )
-        return header_id
+        return Result.ok(aggregate.id)

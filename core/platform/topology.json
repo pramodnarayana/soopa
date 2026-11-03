@@ -33,6 +33,12 @@
       "fifo": true,
       "dlq": true,
       "env_var": "SQS_EMAIL_CHANNEL_QUEUE_URL"
+    },
+    {
+      "name": "notifications",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_NOTIFICATION_QUEUE_URL"
     }
   ],
   "subscriptions": [

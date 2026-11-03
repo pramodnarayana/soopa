@@ -39,7 +39,7 @@ from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushCommand,
     ReceivePushUseCase,
 )
-from ip.engine.domain.enums import ConnectionStatus
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import ConnectionDeactivatedError, ConnectionNotFoundError
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort

@@ -2,10 +2,10 @@ from collections.abc import Sequence
 
 import httpx
 from ip.engine.domain.exceptions import InvalidCredentialsError
-from ip.engine.ports.outbound.auth_strategy_port import AuthenticatorPort
+from shttp import HttpRequestAuthenticator
 
 
-class BearerAuthStrategy(AuthenticatorPort):
+class BearerAuthStrategy(HttpRequestAuthenticator):
     """Injects token into an Authorization: Bearer <token> header."""
 
     def __init__(self, token: str) -> None:

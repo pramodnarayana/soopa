@@ -1,5 +1,3 @@
-from typing import Any
-
 from edi.application.use_cases.outbound_routes import (
     CreateOutboundRouteCmd,
     CreateOutboundRouteUseCase,
@@ -8,9 +6,11 @@ from edi.application.use_cases.outbound_routes import (
     UpdateOutboundRouteCmd,
     UpdateOutboundRouteUseCase,
 )
-from edi.domain.models.outbound_routes import OutboundRouteDomainModel
+from edi.domain.routing.constants import WILDCARD_TRANSACTION_TYPE
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.types import UNSET
 
@@ -24,6 +24,7 @@ from unified_api.adapters.inbound.http.edi.dtos.dtos import (
     RouteResponse,
     UpdateRouteRequest,
 )
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/edi/outbound-routes",
@@ -39,24 +40,23 @@ _PROTOCOL_DESTINATION_MAP = {
 }
 
 
-def _to_dto(domain: OutboundRouteDomainModel) -> dict[str, Any]:
+def _to_item(domain: OutboundRoute) -> OutboundRouteItem:
     dest_type = "Unknown"
     if domain.connection_type:
         dest_type = _PROTOCOL_DESTINATION_MAP.get(
             domain.connection_type.value, domain.connection_type.value
         )
 
-    return {
-        "route_id": domain.id,
-        "tenant_id": domain.tenant_id,
-        "name": domain.name or "",
-        "destination_type": dest_type,
-        "destination_name": "",
-        "trading_partner_id": domain.trading_partner_id,
-        "as2_partner_id": domain.as2_partner_id,
-        "sftp_partner_id": domain.sftp_partner_id,
-        "active": domain.active,
-    }
+    return OutboundRouteItem(
+        route_id=domain.id,
+        name=domain.name or "",
+        destination_type=dest_type,
+        destination_name="",
+        trading_partner_id=domain.trading_partner_id,
+        as2_partner_id=domain.as2_partner_id,
+        sftp_partner_id=domain.sftp_partner_id,
+        active=domain.active,
+    )
 
 
 @router.get("", response_model=list[OutboundRouteItem], status_code=status.HTTP_200_OK)
@@ -67,13 +67,11 @@ async def list_outbound_routes(
     publisher: OutboxPublisherPort = Depends(get_outbox_publisher),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> list[OutboundRouteItem]:
-    """
-    List all Outbound Routes for the current Tenant.
-    """
+    """List all Outbound Routes for the current Tenant."""
     async with uow:
         use_case = ListOutboundRoutesUseCase(uow=uow)
         routes = await use_case.execute(tenant_id, limit, offset)
-        return [OutboundRouteItem.model_validate(_to_dto(r)) for r in routes]
+        return [_to_item(r) for r in routes]
 
 
 @router.post("", response_model=RouteResponse, status_code=status.HTTP_201_CREATED)
@@ -84,26 +82,31 @@ async def create_outbound_route(
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> RouteResponse:
-    """
-    Creates a new Outbound Route for the current Tenant.
-    """
+    """Creates a new Outbound Route for the current Tenant."""
     async with uow:
         use_case = CreateOutboundRouteUseCase(uow=uow)
 
         cmd = CreateOutboundRouteCmd(
             isa_sender_id="",
             isa_receiver_id="",
-            transaction_type="*",
+            transaction_type=WILDCARD_TRANSACTION_TYPE,
             name=request.name,
             trading_partner_id=request.trading_partner_id,
             as2_partner_id=request.as2_partner_id if request.as2_partner_id else None,
             sftp_partner_id=request.sftp_partner_id if request.sftp_partner_id else None,
         )
 
-        entity = await use_case.execute(tenant_id, cmd, idempotency_key=idempotency_key)
+        create_res = await use_case.execute(tenant_id, cmd, idempotency_key=idempotency_key)
+        if create_res.is_err:
+            raise_http_for_edi_error(create_res.unwrap_err())
+        entity = create_res.unwrap()
         await uow.commit()
 
-        return RouteResponse(route_id=entity.id, tenant_id=entity.tenant_id, direction="OUTBOUND")
+        return RouteResponse(
+            route_id=entity.id,
+            tenant_id=entity.tenant_id,
+            direction=EdiDirection.OUTBOUND.value,
+        )
 
 
 @router.patch("/{route_id}", status_code=status.HTTP_200_OK)
@@ -115,9 +118,7 @@ async def update_outbound_route(
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> dict[str, str]:
-    """
-    Updates an Outbound Route for the current Tenant.
-    """
+    """Updates an Outbound Route for the current Tenant."""
     async with uow:
         use_case = UpdateOutboundRouteUseCase(uow=uow)
 
@@ -130,9 +131,9 @@ async def update_outbound_route(
             active=dump.get("active", UNSET),
         )
 
-        success = await use_case.execute(tenant_id, route_id, cmd, idempotency_key=idempotency_key)
-        if not success:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        upd_res = await use_case.execute(tenant_id, route_id, cmd, idempotency_key=idempotency_key)
+        if upd_res.is_err:
+            raise_http_for_edi_error(upd_res.unwrap_err())
         await uow.commit()
     return {"status": "ok"}
 
@@ -145,12 +146,10 @@ async def delete_outbound_route(
     idempotency_key: str | None = Depends(get_idempotency_key),
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
-    """
-    Deletes an Outbound Route for the current Tenant.
-    """
+    """Deletes an Outbound Route for the current Tenant."""
     async with uow:
         use_case = DeleteOutboundRouteUseCase(uow=uow)
-        success = await use_case.execute(tenant_id, route_id, idempotency_key=idempotency_key)
-        if not success:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Route not found")
+        del_res = await use_case.execute(tenant_id, route_id, idempotency_key=idempotency_key)
+        if del_res.is_err:
+            raise_http_for_edi_error(del_res.unwrap_err())
         await uow.commit()

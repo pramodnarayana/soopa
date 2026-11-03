@@ -11,11 +11,6 @@ from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork import generate_id
 from sqlalchemy import select
 
-from edi.adapters.inbound.as2.builder import build_outbound_message
-from edi.adapters.outbound.database.control_plane.uow import (
-    SqlAlchemyControlPlaneUnitOfWork,
-)
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
 from edi.adapters.outbound.database.models.control_plane import (
     AS2Partner,
     AS2Partnership,
@@ -34,6 +29,8 @@ from edi.application.use_cases.process_inbound_as2_message_use_case import (
     ProcessInboundAs2Command,
     ProcessInboundAs2MessageUseCase,
 )
+from edi.bootstrap.container import create_edi_control_plane_uow, create_edi_data_plane_uow
+from edi.domain.partner.as2.builder import build_outbound_message
 from edi.testing.fakes.pipeline_fakes import FakeOutboxPublisher, InMemoryStorageAdapter
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -175,12 +172,12 @@ async def test_inbound_as2_crypto_integration(
     )
 
     # Create UOWs and Services
-    cp_uow = SqlAlchemyControlPlaneUnitOfWork(db_session)
+    cp_uow = create_edi_control_plane_uow(db_session)
 
     class FakeDpFactory:
         @asynccontextmanager
         async def get_data_plane_uow(self, tid: str, app_slug: str):
-            yield SqlAlchemyDataPlaneUnitOfWork(
+            yield create_edi_data_plane_uow(
                 tenant_session=tenant_db_session, storage=InMemoryStorageAdapter()
             )
 

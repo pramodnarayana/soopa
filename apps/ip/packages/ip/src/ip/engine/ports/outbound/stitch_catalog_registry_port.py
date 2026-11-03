@@ -10,7 +10,7 @@ from orchestration.domain.run import WorkflowRun
 from seedwork.domain.types import JsonDict
 
 from ip.engine.domain.exceptions import IpError, Result
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.stitch.stitch import Stitch
 
 
 class StitchCatalogRegistryPort(Protocol):

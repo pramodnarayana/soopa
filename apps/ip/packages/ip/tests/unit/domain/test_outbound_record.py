@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import json
 
-from ip.engine.domain.enums import OutboundDispatchStatus
-from ip.engine.domain.events import OutboundRecordCreatedEvent
-from ip.engine.domain.models.outbound_record import (
-    OutboundRecord,
-    compute_request_sha256,
-)
+from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
+from ip.engine.domain.dispatch.events import OutboundRecordCreatedEvent
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord, compute_request_sha256
 from seedwork.domain.types import JsonDict
 from strace.domain import TracedAggregateRoot
 

@@ -1,21 +1,20 @@
 import contextlib
-from collections.abc import AsyncGenerator
-from typing import Annotated, Any, cast
+from collections.abc import AsyncGenerator, Callable
+from typing import Annotated
 
 import structlog
-from dependency_injector.wiring import Provide, inject
-from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort, DataPlaneUnitOfWorkPort
-
-logger = structlog.get_logger(__name__)
-
 from database.types import GlobalSession
-from edi.adapters.outbound.database.session import get_global_session
+from dependency_injector.wiring import Provide, inject
 from edi.bootstrap.container import Container
+from edi.bootstrap.session import get_global_session
 from edi.exceptions import TenantNotSubscribedException
+from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort, DataPlaneUnitOfWorkPort
 from fastapi import Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
+
+logger = structlog.get_logger(__name__)
 
 __all__ = [
     "get_control_plane_uow",
@@ -71,14 +70,18 @@ async def get_tenant_session(
 @inject
 async def get_control_plane_uow(
     global_session: Annotated[GlobalSession, Depends(get_global_session)],
-    cp_uow_factory: Any = Depends(Provide[Container.cp_uow.provider]),
+    cp_uow_factory: Callable[..., ControlPlaneUnitOfWorkPort] = Depends(
+        Provide[Container.cp_uow.provider]
+    ),
 ) -> ControlPlaneUnitOfWorkPort:
-    return cast(ControlPlaneUnitOfWorkPort, cp_uow_factory(global_session=global_session))
+    return cp_uow_factory(global_session=global_session)
 
 
 @inject
 async def get_data_plane_uow(
     tenant_session: AsyncSession = Depends(get_tenant_session),
-    dp_uow_factory: Any = Depends(Provide[Container.dp_uow.provider]),
+    dp_uow_factory: Callable[..., DataPlaneUnitOfWorkPort] = Depends(
+        Provide[Container.dp_uow.provider]
+    ),
 ) -> DataPlaneUnitOfWorkPort:
-    return cast(DataPlaneUnitOfWorkPort, dp_uow_factory(tenant_session=tenant_session))
+    return dp_uow_factory(tenant_session=tenant_session)

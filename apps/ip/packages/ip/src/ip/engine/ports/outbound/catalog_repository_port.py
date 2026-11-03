@@ -3,7 +3,7 @@
 from abc import abstractmethod
 from typing import Protocol
 
-from ip.engine.domain.models.catalog import ConnectionCatalog
+from ip.engine.domain.connection.catalog import ConnectionCatalog
 
 
 class CatalogRepositoryPort(Protocol):

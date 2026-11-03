@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from ip.application.domains.registry import (
+from ip.engine.adapters.outbound.database.models.base import IpTenantBase
+from ip.solutions.domains.registry import (
     DOMAIN_MIGRATION_MODULES,
 )
-from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 

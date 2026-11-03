@@ -6,7 +6,7 @@ import re
 from typing import Protocol
 from urllib.parse import parse_qs, urlparse
 
-from ip.engine.domain.enums import PaginationType
+from ip.engine.domain.connection.enums import PaginationType
 from seedwork.domain.types import JsonDict, JsonValue
 
 

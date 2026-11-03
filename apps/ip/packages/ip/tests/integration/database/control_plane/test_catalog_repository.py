@@ -10,13 +10,11 @@ from ip.engine.adapters.outbound.database.control_plane.catalog_repository impor
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
 )
-from ip.engine.domain.enums import AuthType, SyncMode
-from ip.engine.domain.models.catalog import (
-    ConnectionCatalog,
-    StreamField,
-    StreamSchema,
-)
-from ip.engine.domain.models.connection import Connection
+from ip.engine.domain.connection.catalog import ConnectionCatalog
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
+from ip.engine.domain.replication.enums import SyncMode
 
 pytestmark = pytest.mark.integration
 

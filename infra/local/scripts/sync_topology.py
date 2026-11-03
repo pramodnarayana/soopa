@@ -99,6 +99,12 @@ def build_env_mappings(topology: dict[str, list[dict[str, object]]]) -> dict[str
         env_var_name = str(queue.get("env_var") or default_env_var)
         mappings[env_var_name] = f"{LOCALSTACK_SQS_URL}{physical_name}"
 
+        aliases = queue.get("aliases")
+        if isinstance(aliases, list):
+            for alias in aliases:
+                if isinstance(alias, str) and alias:
+                    mappings[alias] = f"{LOCALSTACK_SQS_URL}{physical_name}"
+
         dlq_env_var = queue.get("dlq_env_var")
         if isinstance(dlq_env_var, str) and dlq_env_var:
             dlq_physical_name = f"{name}-dlq.fifo" if is_fifo else f"{name}-dlq"

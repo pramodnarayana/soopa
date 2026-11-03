@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
 )

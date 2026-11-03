@@ -1,5 +1,6 @@
 """Fernet symmetric cipher for backward compatibility with DB_ENCRYPTION_KEY."""
 
+import base64
 import json
 
 from cryptography.fernet import Fernet
@@ -8,12 +9,27 @@ from security.ports.cipher_port import CipherPort
 from security.types import JsonDict
 
 
+def _normalize_fernet_key(key: str | bytes) -> bytes:
+    """Normalizes a 44-char URL-safe base64 Fernet key or 64-char hex key into Fernet key bytes."""
+    if isinstance(key, str):
+        stripped = key.strip()
+        if len(stripped) == 64:
+            try:
+                raw_32 = bytes.fromhex(stripped)
+            except ValueError as exc:
+                raise ValueError(f"Malformed 64-character hex Fernet key: {exc}") from exc
+            return base64.urlsafe_b64encode(raw_32)
+        return stripped.encode("utf-8")
+    if len(key) == 32:
+        return base64.urlsafe_b64encode(key)
+    return key
+
+
 class FernetCipher(CipherPort):
     """Fernet symmetric cipher adapter (AES-128-CBC + HMAC-SHA256)."""
 
     def __init__(self, key: str | bytes) -> None:
-        key_bytes = key.encode("utf-8") if isinstance(key, str) else key
-        self._fernet = Fernet(key_bytes)
+        self._fernet = Fernet(_normalize_fernet_key(key))
 
     @classmethod
     def generate_key(cls) -> str:

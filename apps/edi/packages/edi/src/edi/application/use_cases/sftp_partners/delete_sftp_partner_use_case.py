@@ -1,9 +1,7 @@
 import structlog
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
+from seedwork.domain.exceptions import Result
 
-from edi.domain.enums import EdiEventType
-from edi.domain.events import ProvisioningEvent
+from edi.domain.exceptions import EdiError, PartnerInUseEdiError, PartnerInUseError
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -15,7 +13,7 @@ class DeleteSFTPPartnerUseCase:
 
     async def delete_sftp_partner(
         self, tenant_id: str, partner_id: str, idempotency_key: str | None = None
-    ) -> None:
+    ) -> Result[None, EdiError]:
         logger.info(
             "sftp_partner_deletion_started",
             partner_id=partner_id,
@@ -23,15 +21,39 @@ class DeleteSFTPPartnerUseCase:
         )
         aggregate = await self.uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
         if not aggregate:
-            return
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
+            logger.info(
+                "sftp_partner_delete_noop_not_found",
+                partner_id=partner_id,
                 tenant_id=tenant_id,
-                event_type=EdiEventType.edi_sftp_partner_deleted,
-                resource_id=partner_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
             )
-        )
+            return Result.ok(None)
 
-        await self.uow.sftp_partners.delete(aggregate)
+        del_res = aggregate.mark_deleted(idempotency_key=idempotency_key)
+        if del_res.is_err:
+            domain_err = del_res.unwrap_err()
+            logger.error(
+                "sftp_partner_delete_rejected",
+                partner_id=partner_id,
+                tenant_id=tenant_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
+            )
+            return Result.fail(domain_err)
+
+        try:
+            await self.uow.sftp_partners.delete(aggregate)
+        except PartnerInUseError:
+            in_use_err = PartnerInUseEdiError.for_id(partner_id, tenant_id)
+            logger.error(
+                "sftp_partner_delete_in_use",
+                partner_id=partner_id,
+                tenant_id=tenant_id,
+                error_code=in_use_err.code,
+            )
+            return Result.fail(in_use_err)
+        logger.info(
+            "sftp_partner_deleted",
+            partner_id=partner_id,
+            tenant_id=tenant_id,
+        )
+        return Result.ok(None)

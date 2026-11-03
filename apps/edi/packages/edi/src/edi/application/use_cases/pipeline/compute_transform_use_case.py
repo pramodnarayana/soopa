@@ -8,13 +8,15 @@ import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from seedwork.domain.exceptions import ErrorCode, TerminalDomainError
 from seedwork.domain.types import JsonValue
+from seedwork.utils import generate_id
 
-from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
 from edi.core.pipeline.metadata_extractor import MetadataExtractorService
-from edi.domain.enums import EdiDirection, EdiStandard, MessageStatus, PipelineEventType
-from edi.domain.events import TransformFailed, TransformSuccessful
-from edi.domain.models.transactions import EdiMessageDomainModel
-from edi.ports.outbound.transaction_repository import CreateEdiJsonCommand
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.exceptions import EdiTransformationError
+from edi.domain.routing.enums import EdiDirection
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import EdiStandard, MessageStatus, PipelineEventType
 from edi.ports.outbound.transformer_port import ParsedEdiMessage, TransformerPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -77,16 +79,16 @@ class ComputeTransformUseCase:
                     logger.info("compute_transform.duplicate_skipped", trace_id=trace_id)
                     return
 
-                edi_msg = await uow.transactions.get_edi_message(trace_id)
+                edi_msg = await uow.edi_messages.get_edi_message(trace_id)
                 if not edi_msg:
-                    logger.warning("compute_transform.edi_message_not_found", trace_id=trace_id)
+                    logger.error("compute_transform.edi_message_not_found", trace_id=trace_id)
                     raise TerminalDomainError(
                         message=f"No EDI message found for trace_id={trace_id}",
                         code=ErrorCode.NOT_FOUND,
                     )
 
                 if not edi_msg.edi_data:
-                    logger.warning("compute_transform.edi_data_missing", trace_id=trace_id)
+                    logger.error("compute_transform.edi_data_missing", trace_id=trace_id)
                     raise TerminalDomainError(
                         message=f"No EDI data found for trace_id={trace_id}",
                         code=ErrorCode.INVALID_PAYLOAD,
@@ -108,7 +110,7 @@ class ComputeTransformUseCase:
                     ) from e
 
                 if not transformed_txns:
-                    logger.warning(
+                    logger.error(
                         "compute_transform.transform_failed",
                         trace_id=trace_id,
                         transaction_type=transaction_type,
@@ -129,7 +131,7 @@ class ComputeTransformUseCase:
                 )
 
             logger.info("compute_transform.completed", trace_id=trace_id)
-        except (TerminalDomainError, TransformationError) as e:
+        except (TerminalDomainError, EdiTransformationError) as e:
             terminal_err = (
                 e
                 if isinstance(e, TerminalDomainError)
@@ -151,25 +153,17 @@ class ComputeTransformUseCase:
         )
         # Emit failure domain event in a separate transaction
         async with self.uow_factory() as failure_uow, failure_uow:
-            edi_msg_fallback = await failure_uow.transactions.get_edi_message(trace_id)
+            edi_msg_fallback = await failure_uow.edi_messages.get_edi_message(trace_id)
             if edi_msg_fallback:
-                edi_msg_fallback.mark_transform_failed(
+                edi_msg_fallback.fail_transformation(
                     reason=error.message,
                     error_code=error.code,
                     error_details=error.details,
+                    direction=EdiDirection.INBOUND.value,
+                    tenant_id=edi_msg_fallback.tenant_id or tenant_id,
                 )
-                edi_msg_fallback.add_domain_event(
-                    TransformFailed(
-                        trace_id=trace_id,
-                        tenant_id=edi_msg_fallback.tenant_id or tenant_id,
-                        direction=EdiDirection.INBOUND.value,
-                        failure_reason=error.message,
-                        error_code=error.code,
-                        error_details=error.details,
-                    )
-                )
-                await failure_uow.transactions.update_outbound_delivery_metadata(edi_msg_fallback)
-                failure_envelopes = await failure_uow.transactions.flush_events(edi_msg_fallback)
+                await failure_uow.edi_messages.update_outbound_delivery_metadata(edi_msg_fallback)
+                failure_envelopes = await failure_uow.edi_messages.flush_events(edi_msg_fallback)
                 await failure_uow.commit()
 
                 try:
@@ -188,7 +182,7 @@ class ComputeTransformUseCase:
         self,
         trace_id: str,
         standard: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         transformed_txns: Sequence[ParsedEdiMessage],
         uow: DataPlaneUnitOfWorkPort,
     ) -> None:
@@ -235,8 +229,9 @@ class ComputeTransformUseCase:
                 txn_type, json_dict if isinstance(json_dict, dict) else {}
             )
 
-            await uow.transactions.create_edi_json(
-                command=CreateEdiJsonCommand(
+            await uow.edi_jsons.save(
+                EdiJson(
+                    id=generate_id(DomainIdPrefix.EDI_JSON.value),
                     trace_id=trace_id,
                     tenant_id=edi_msg.tenant_id,
                     direction=EdiDirection.INBOUND,
@@ -262,21 +257,16 @@ class ComputeTransformUseCase:
         txn_type_for_parent = transformed_txns[0].transaction_type if transformed_txns else None
 
         # 4. Record TRANSFORMATION_SUCCESSFUL on the aggregate — repository drains to outbox.
-        edi_msg.mark_transformed()
-        edi_msg.add_domain_event(
-            TransformSuccessful(
-                trace_id=trace_id,
-                tenant_id=edi_msg.tenant_id or "",
-                direction=EdiDirection.INBOUND.value,
-                isa_sender_id=edi_msg.sender_id,
-                isa_receiver_id=edi_msg.receiver_id,
-                gs_sender_id=gs_sender_global,
-                gs_receiver_id=gs_receiver_global,
-                transaction_type=txn_type_for_parent,
-            )
+        edi_msg.complete_transformation(
+            direction=EdiDirection.INBOUND.value,
+            isa_sender_id=edi_msg.sender_id,
+            isa_receiver_id=edi_msg.receiver_id,
+            gs_sender_id=gs_sender_global,
+            gs_receiver_id=gs_receiver_global,
+            transaction_type=txn_type_for_parent,
         )
-        await uow.transactions.update_outbound_delivery_metadata(edi_msg)
-        envelopes = await uow.transactions.flush_events(edi_msg)
+        await uow.edi_messages.update_outbound_delivery_metadata(edi_msg)
+        envelopes = await uow.edi_messages.flush_events(edi_msg)
         logger.info(
             "compute_transform.outbox_event_dispatched",
             trace_id=trace_id,

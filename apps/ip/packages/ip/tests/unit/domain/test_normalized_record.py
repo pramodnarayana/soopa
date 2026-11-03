@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import IpTraceEventType
-from ip.engine.domain.events import NormalizedRecordCreatedEvent
-from ip.engine.domain.models.normalized_record import NormalizedRecord
+from ip.engine.domain.normalization.events import NormalizedRecordCreatedEvent
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.domain.trace.enums import IpTraceEventType
 from strace.domain import TracedAggregateRoot
 
 
@@ -24,6 +24,6 @@ def test_normalized_record_create_emits_trace_and_domain_event() -> None:
     assert norm.canonical_type == "MDM_METER_READING"
     assert norm.canonical_data["kwh_delivered"] == 19.75
     assert len(norm.trace_events) == 1
-    assert norm.trace_events[0].event_type == IpTraceEventType.L3_NORMALIZED.value
+    assert norm.trace_events[0].event_type == IpTraceEventType.NORMALIZED.value
     assert len(norm.domain_events) == 1
     assert isinstance(norm.domain_events[0], NormalizedRecordCreatedEvent)

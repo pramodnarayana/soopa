@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.control_plane import StitchRecord
-from ip.engine.domain.stitch import Stitch
+from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession

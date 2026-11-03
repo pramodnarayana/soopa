@@ -10,19 +10,100 @@ import {
   Switch,
 } from '@soopa/ui';
 import { Eye, EyeOff, KeyRound } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { ConnectorPropertySpec } from '../../domain/catalog';
-import { ConnectorPropertyType, type JsonRecord } from '../../domain/enums';
+import { normalizeAuthType } from '../../domain/catalog-auth';
+import {
+  AuthType,
+  ConnectorPropertyKey,
+  ConnectorPropertyType,
+  type JsonRecord,
+} from '../../domain/enums';
 
 export interface SplitConnectorFormValues {
   readonly publicConfig: JsonRecord;
   readonly rawCredentials: JsonRecord;
 }
 
+const AUTH_PROPERTY_VISIBILITY_RULE: Readonly<Record<string, ReadonlySet<string>>> = {
+  [ConnectorPropertyKey.TOKEN]: new Set([AuthType.BEARER_TOKEN, AuthType.API_KEY]),
+  [ConnectorPropertyKey.PARAM_NAME]: new Set([AuthType.API_KEY]),
+  [ConnectorPropertyKey.PLACEMENT]: new Set([AuthType.API_KEY]),
+  [ConnectorPropertyKey.USERNAME]: new Set([AuthType.BASIC_AUTH]),
+  [ConnectorPropertyKey.PASSWORD]: new Set([AuthType.BASIC_AUTH]),
+  [ConnectorPropertyKey.TOKEN_URL]: new Set([AuthType.OAUTH2_CLIENT_CREDENTIALS, AuthType.OAUTH2]),
+  [ConnectorPropertyKey.CLIENT_ID]: new Set([AuthType.OAUTH2_CLIENT_CREDENTIALS, AuthType.OAUTH2]),
+  [ConnectorPropertyKey.CLIENT_SECRET]: new Set([
+    AuthType.OAUTH2_CLIENT_CREDENTIALS,
+    AuthType.OAUTH2,
+  ]),
+};
+
 export function isSecretConnectorProperty(prop: ConnectorPropertySpec): boolean {
   return (
     prop.type === ConnectorPropertyType.SECRET_TEXT || prop.type === ConnectorPropertyType.OAUTH
   );
+}
+
+export function isPropertyVisible(
+  prop: ConnectorPropertySpec,
+  values: Readonly<Record<string, unknown>>,
+  allProperties?: readonly ConnectorPropertySpec[],
+): boolean {
+  const hasAuthTypeProp =
+    allProperties?.some((p) => p.name === ConnectorPropertyKey.AUTH_TYPE) ?? false;
+  const rawAuthType =
+    values[ConnectorPropertyKey.AUTH_TYPE] ??
+    allProperties?.find((p) => p.name === ConnectorPropertyKey.AUTH_TYPE)?.defaultValue;
+  const currentAuthType = typeof rawAuthType === 'string' ? normalizeAuthType(rawAuthType) : null;
+
+  // Only apply dynamic auth-based filtering if an auth_type discriminator exists
+  if (!hasAuthTypeProp && values[ConnectorPropertyKey.AUTH_TYPE] === undefined) {
+    return true;
+  }
+
+  if (!currentAuthType) {
+    return true;
+  }
+
+  const allowedAuthTypes = AUTH_PROPERTY_VISIBILITY_RULE[prop.name];
+  if (allowedAuthTypes) {
+    return allowedAuthTypes.has(currentAuthType);
+  }
+
+  return true;
+}
+
+export function resolvePropertyLabel(
+  prop: ConnectorPropertySpec,
+  currentAuthType?: string | null,
+): string {
+  if (prop.name === ConnectorPropertyKey.TOKEN && currentAuthType) {
+    const normalized = normalizeAuthType(currentAuthType);
+    if (normalized === AuthType.BEARER_TOKEN) {
+      return 'Bearer Token';
+    }
+    if (normalized === AuthType.API_KEY) {
+      return 'API Key Secret';
+    }
+  }
+  return prop.label;
+}
+
+export function resolvePropertyDescription(
+  prop: ConnectorPropertySpec,
+  currentAuthType?: string | null,
+): string | null {
+  if (prop.name === ConnectorPropertyKey.TOKEN && currentAuthType) {
+    const normalized = normalizeAuthType(currentAuthType);
+    if (normalized === AuthType.BEARER_TOKEN) {
+      return 'Bearer token sent in the Authorization header (Authorization: Bearer <token>).';
+    }
+    if (normalized === AuthType.API_KEY) {
+      return 'API key secret passed via header or query parameter.';
+    }
+  }
+  return prop.description;
 }
 
 export function splitSpecFormValues(
@@ -33,6 +114,9 @@ export function splitSpecFormValues(
   const rawCredentials: Record<string, unknown> = {};
 
   for (const prop of properties) {
+    if (!isPropertyVisible(prop, values, properties)) {
+      continue;
+    }
     const rawVal = values[prop.name] !== undefined ? values[prop.name] : prop.defaultValue;
     if (rawVal === undefined || rawVal === null || rawVal === '') {
       continue;
@@ -61,16 +145,25 @@ function SecretPropertyInput({
   prop,
   value,
   onChange,
+  currentAuthType,
 }: {
   readonly prop: ConnectorPropertySpec;
   readonly value: string;
   readonly onChange: (val: string) => void;
+  readonly currentAuthType?: string | null;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const normalizedAuth = currentAuthType ? normalizeAuthType(currentAuthType) : null;
   const placeholder =
     prop.type === ConnectorPropertyType.OAUTH
       ? 'Paste OAuth2 refresh/access token or client secret...'
-      : 'Encrypted AES-256-GCM secret...';
+      : prop.name === ConnectorPropertyKey.TOKEN && normalizedAuth === AuthType.BEARER_TOKEN
+        ? 'Paste Bearer access token (e.g. eyJhbGci...)...'
+        : prop.name === ConnectorPropertyKey.TOKEN && normalizedAuth === AuthType.API_KEY
+          ? 'Paste API Key secret value...'
+          : prop.name === ConnectorPropertyKey.PASSWORD
+            ? 'Enter basic auth password...'
+            : 'Encrypted AES-256-GCM secret...';
 
   return (
     <div className="space-y-1.5">
@@ -179,10 +272,12 @@ function SingleSpecPropertyControl({
   prop,
   rawValue,
   onChange,
+  currentAuthType,
 }: {
   readonly prop: ConnectorPropertySpec;
   readonly rawValue: unknown;
   readonly onChange: (nextVal: unknown) => void;
+  readonly currentAuthType?: string | null;
 }) {
   if (prop.type === ConnectorPropertyType.BOOLEAN) {
     return <BooleanPropertyInput prop={prop} rawValue={rawValue} onChange={onChange} />;
@@ -192,7 +287,12 @@ function SingleSpecPropertyControl({
   }
   if (isSecretConnectorProperty(prop)) {
     return (
-      <SecretPropertyInput prop={prop} value={coerceScalarString(rawValue)} onChange={onChange} />
+      <SecretPropertyInput
+        prop={prop}
+        value={coerceScalarString(rawValue)}
+        onChange={onChange}
+        currentAuthType={currentAuthType}
+      />
     );
   }
   if (prop.type === ConnectorPropertyType.NUMBER) {
@@ -216,7 +316,17 @@ export interface SpecFormRendererProps {
 }
 
 export function SpecFormRenderer({ properties, values, onChangeValue }: SpecFormRendererProps) {
-  if (properties.length === 0) {
+  const rawAuthType =
+    values[ConnectorPropertyKey.AUTH_TYPE] ??
+    properties.find((p) => p.name === ConnectorPropertyKey.AUTH_TYPE)?.defaultValue;
+  const currentAuthType = typeof rawAuthType === 'string' ? normalizeAuthType(rawAuthType) : null;
+
+  const visibleProperties = useMemo(
+    () => properties.filter((prop) => isPropertyVisible(prop, values, properties)),
+    [properties, values],
+  );
+
+  if (visibleProperties.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">
         This connector requires no additional configuration properties.
@@ -226,25 +336,30 @@ export function SpecFormRenderer({ properties, values, onChangeValue }: SpecForm
 
   return (
     <div className="grid grid-cols-1 gap-4">
-      {properties.map((prop) => (
-        <div key={prop.name} className="space-y-1.5">
-          <Label htmlFor={`spec-${prop.name}`} className="flex items-center gap-1.5">
-            <span>{prop.label}</span>
-            {prop.required ? <span className="text-status-critical-fg">*</span> : null}
-            <span className="font-mono text-xs font-normal text-muted-foreground">
-              ({prop.name})
-            </span>
-          </Label>
-          <SingleSpecPropertyControl
-            prop={prop}
-            rawValue={values[prop.name]}
-            onChange={(nextVal) => onChangeValue(prop.name, nextVal)}
-          />
-          {prop.description ? (
-            <p className="text-xs text-muted-foreground">{prop.description}</p>
-          ) : null}
-        </div>
-      ))}
+      {visibleProperties.map((prop) => {
+        const displayLabel = resolvePropertyLabel(prop, currentAuthType);
+        const displayDescription = resolvePropertyDescription(prop, currentAuthType);
+        return (
+          <div key={prop.name} className="space-y-1.5">
+            <Label htmlFor={`spec-${prop.name}`} className="flex items-center gap-1.5">
+              <span>{displayLabel}</span>
+              {prop.required ? <span className="text-status-critical-fg">*</span> : null}
+              <span className="font-mono text-xs font-normal text-muted-foreground">
+                ({prop.name})
+              </span>
+            </Label>
+            <SingleSpecPropertyControl
+              prop={prop}
+              rawValue={values[prop.name]}
+              onChange={(nextVal) => onChangeValue(prop.name, nextVal)}
+              currentAuthType={currentAuthType}
+            />
+            {displayDescription ? (
+              <p className="text-xs text-muted-foreground">{displayDescription}</p>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }

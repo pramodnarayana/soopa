@@ -24,10 +24,10 @@ def get_worker_instance(worker_name: str) -> LaunchableWorker:
         "edi-config-sync-worker": "config_sync_worker.provision.main.EdiConfigSyncWorkerModule",
         "edi-cp-jobs-worker": "edi_cp_jobs_worker.main.EdiCpJobsWorkerModule",
         "edi-dp-jobs-worker": "edi_dp_jobs_worker.main.EdiDpJobsWorkerModule",
-        "ip-orchestrator-worker": "ip.engine.adapters.inbound.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule",
-        "ip-delivery-worker": "ip.engine.adapters.inbound.workers.ip_delivery_worker.IpDeliveryWorkerModule",
-        "ip-cp-jobs-worker": "ip.engine.adapters.inbound.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule",
-        "ip-dp-jobs-worker": "ip.engine.adapters.inbound.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule",
+        "ip-orchestrator-worker": "ip.engine.bootstrap.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule",
+        "ip-delivery-worker": "ip.engine.bootstrap.workers.ip_delivery_worker.IpDeliveryWorkerModule",
+        "ip-cp-jobs-worker": "ip.engine.bootstrap.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule",
+        "ip-dp-jobs-worker": "ip.engine.bootstrap.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule",
     }
 
     if worker_name not in registry:

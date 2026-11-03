@@ -2,26 +2,31 @@
 
 from dataclasses import dataclass
 
-from ip.engine.domain.enums import (
+from ip.engine.domain.normalization.enums import (
+    CanonicalAction,
     NormalizationOutcome,
     NormalizationRejectionReason,
     PendingReferenceStatus,
     RuleSeverity,
     TransformationMode,
 )
-from ip.engine.domain.normalization import (
-    CanonicalDraft,
-    CanonicalEntityDefinition,
+from ip.engine.domain.normalization.events import CanonicalRecordChangedEvent
+from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
     NormalizationRejectionEntry,
     NormalizationShadowDiffEntry,
     PendingReferenceEntry,
+)
+from ip.engine.domain.normalization.transformation import (
+    CanonicalDraft,
+    CanonicalEntityDefinition,
     ReplicaSnapshot,
     SourceReference,
     Transformation,
     TransformationContext,
     TransformationResult,
 )
+from ip.engine.domain.trace.enums import IpTraceEventType, TraceEventStatus
 from seedwork.domain.types import JsonDict
 
 
@@ -216,3 +221,138 @@ def test_pending_reference_entry_factory() -> None:
     assert pending.status == PendingReferenceStatus.PENDING
     assert pending.target_canonical_type == "energy.service_point"
     assert pending.resolved_at is None
+
+
+def test_normalization_ledger_entry_traced_aggregate_transitions() -> None:
+    ledger = NormalizationLedgerEntry.begin(
+        tenant_id="tenant_1",
+        replica_record_id="rep_10",
+        replica_version=3,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=2,
+        trace_id="trc_norm",
+        correlation_id="corr_norm",
+    )
+    ledger.record_pending_reference(
+        field_name="service_point_id",
+        target_canonical_type="energy.service_point",
+        target_source_id="sp_999",
+    )
+    ledger.record_canonical_upsert(
+        connection_id="conn_1",
+        canonical_type="energy.meter_reading",
+        source_id="mr_10",
+        changed_fields=("kwh", "meter_serial"),
+    )
+    ledger.record_unseen_draft_tombstone(
+        connection_id="conn_1",
+        canonical_type="energy.meter_reading",
+        source_id="mr_old",
+    )
+    ledger.record_resolved_reference(
+        field_name="service_point_id",
+        referencing_canonical_type="energy.meter_reading",
+        referencing_source_id="mr_early",
+        target_id="canon_sp_999",
+    )
+    outcome = ledger.complete_normalization(rejections_count=0)
+
+    assert outcome == NormalizationOutcome.NORMALIZED
+    assert ledger.outcome == NormalizationOutcome.NORMALIZED
+    assert ledger.produced_canonical_refs == (("energy.meter_reading", "mr_10"),)
+
+    domain_events = [e for e in ledger.domain_events if isinstance(e, CanonicalRecordChangedEvent)]
+    assert len(domain_events) == 2
+    assert domain_events[0].action == CanonicalAction.UPSERT.value
+    assert domain_events[0].source_id == "mr_10"
+    assert domain_events[1].action == CanonicalAction.TOMBSTONE.value
+    assert domain_events[1].source_id == "mr_old"
+
+    trace_types = [t.event_type for t in ledger.trace_events]
+    assert trace_types == [
+        IpTraceEventType.REFERENCE_PENDING.value,
+        IpTraceEventType.TOMBSTONED.value,
+        IpTraceEventType.REFERENCE_RESOLVED.value,
+        IpTraceEventType.NORMALIZED.value,
+    ]
+
+
+def test_normalization_ledger_entry_reject_and_tombstone_transitions() -> None:
+    rejected = NormalizationLedgerEntry.reject_execution(
+        tenant_id="tenant_1",
+        replica_record_id="rep_10",
+        replica_version=1,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
+        reason_code=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
+        detail="Invalid payload",
+        summary_message="Transformer execution failed: Invalid payload",
+        trace_id="trc_rej",
+    )
+    assert rejected.outcome == NormalizationOutcome.REJECTED
+    assert rejected.produced_canonical_refs == ()
+    assert len(rejected.trace_events) == 1
+    assert rejected.trace_events[0].event_type == IpTraceEventType.NORMALIZATION_REJECTED.value
+
+    tombstoned = NormalizationLedgerEntry.begin(
+        tenant_id="tenant_1",
+        replica_record_id="rep_11",
+        replica_version=2,
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
+        trace_id="trc_tomb",
+    )
+    tombstoned.record_canonical_tombstone(
+        connection_id="conn_1",
+        canonical_type="energy.meter_reading",
+        source_id="mr_11",
+    )
+    tombstoned.complete_tombstone(tombstoned_count=1)
+    assert tombstoned.outcome == NormalizationOutcome.TOMBSTONED
+    assert len(tombstoned.domain_events) == 1
+    assert len(tombstoned.trace_events) == 1
+    assert tombstoned.trace_events[0].event_type == IpTraceEventType.TOMBSTONED.value
+
+
+def test_non_ledger_normalization_trace_builders() -> None:
+    transformation = Transformation.create(
+        tenant_id="tenant_1",
+        connection_id="conn_1",
+        stream="readings",
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=1,
+        mode=TransformationMode.SHADOW,
+        shadow_transformation_version=2,
+    )
+    stale_trace = transformation.build_skipped_stale_trace(
+        replica_version=2,
+        trace_id="trc_stale",
+        correlation_id=None,
+    )
+    assert stale_trace.event_type == IpTraceEventType.SKIPPED_STALE.value
+    assert stale_trace.metadata is not None
+    assert stale_trace.metadata["status"] == TraceEventStatus.SUCCESS.value
+
+    shadow_trace = transformation.build_shadow_evaluation_trace(
+        replica_record_id="rep_1",
+        candidate_version=2,
+        drafts_count=1,
+        shadow_diff_count=1,
+        outcome=NormalizationOutcome.NORMALIZED,
+        trace_id="trc_shd",
+        correlation_id=None,
+    )
+    assert shadow_trace.event_type == IpTraceEventType.NORMALIZED.value
+
+    rej = NormalizationRejectionEntry.create(
+        tenant_id="tenant_1",
+        replica_record_id="rep_1",
+        stream="readings",
+        transformation_id="energy.ami_meter_reading",
+        transformation_version=2,
+        reason_code=NormalizationRejectionReason.TRANSFORMER_ERROR.value,
+        detail="Missing shadow transformer",
+        trace_id="trc_shd_rej",
+    )
+    rej_trace = rej.build_rejection_trace(summary_message="Missing shadow transformer")
+    assert rej_trace.event_type == IpTraceEventType.NORMALIZATION_REJECTED.value

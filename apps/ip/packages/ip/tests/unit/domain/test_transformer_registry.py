@@ -1,13 +1,13 @@
-"""Unit tests for InMemoryTransformerRegistry."""
+"""Unit tests for TransformerRegistry."""
 
 from dataclasses import dataclass
 
-from ip.engine.domain.normalization import (
+from ip.engine.domain.normalization.registries import TransformerRegistry
+from ip.engine.domain.normalization.transformation import (
     ReplicaSnapshot,
     TransformationContext,
     TransformationResult,
 )
-from ip.engine.domain.services.transformer_registry import InMemoryTransformerRegistry
 
 
 @dataclass(frozen=True)
@@ -35,7 +35,7 @@ class DummyTransformer:
 
 
 def test_transformer_registry_register_and_get() -> None:
-    registry = InMemoryTransformerRegistry()
+    registry = TransformerRegistry()
     m1 = DummyTransformer("energy.ami", 1)
     m2 = DummyTransformer("energy.ami", 2)
     m_other = DummyTransformer("tms.loads", 1)
@@ -51,7 +51,7 @@ def test_transformer_registry_register_and_get() -> None:
 
 
 def test_transformer_registry_get_latest() -> None:
-    registry = InMemoryTransformerRegistry()
+    registry = TransformerRegistry()
     m1 = DummyTransformer("energy.ami", 1)
     m2 = DummyTransformer("energy.ami", 2)
     m3 = DummyTransformer("energy.ami", 3)
@@ -68,7 +68,7 @@ def test_transformer_registry_get_latest() -> None:
 
 
 def test_transformer_registry_list_transformers() -> None:
-    registry = InMemoryTransformerRegistry()
+    registry = TransformerRegistry()
     m1 = DummyTransformer("energy.ami", 1)
     m2 = DummyTransformer("tms.loads", 1)
 

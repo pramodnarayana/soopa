@@ -6,13 +6,12 @@ import pytest
 from httpx import AsyncClient
 from seedwork import generate_id
 
-from edi.adapters.outbound.database.data_plane.uow import SqlAlchemyDataPlaneUnitOfWork
-from edi.domain.enums import ConnectionType, EdiDirection, MessageStatus
-from edi.ports.outbound.api_gateway_repository import CreateApiGatewayCommand
-from edi.ports.outbound.transaction_repository import (
-    CreateEdiJsonCommand,
-    CreateEdiMessageCommand,
-)
+from edi.bootstrap.container import create_edi_data_plane_uow
+from edi.domain.routing.enums import ConnectionType, EdiDirection
+from edi.domain.transaction.edi_json import EdiJson
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import MessageStatus
+from edi.domain.transaction.gateway_receipt import ApiGatewayReceipt
 from edi.testing.fakes.pipeline_fakes import InMemoryStorageAdapter
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -87,12 +86,13 @@ async def test_edi_message_explorer_and_detail(
     msg_id_val = f"MSG_{generate_id('id')[:6]}"
 
     # 1. Insert records using the fixture session (SAVEPOINT-safe — no physical commit).
-    uow = SqlAlchemyDataPlaneUnitOfWork(
+    uow = create_edi_data_plane_uow(
         tenant_session=tenant_db_session, storage=InMemoryStorageAdapter()
     )
     async with uow:
-        await uow.transactions.create_edi_message(
-            command=CreateEdiMessageCommand(
+        await uow.edi_messages.save(
+            EdiMessage(
+                id=generate_id("id"),
                 trace_id=trace_id,
                 tenant_id=tenant_id,
                 direction=EdiDirection.INBOUND,
@@ -106,8 +106,9 @@ async def test_edi_message_explorer_and_detail(
                 status=MessageStatus.RECEIVED,
             )
         )
-        await uow.transactions.create_edi_json(
-            command=CreateEdiJsonCommand(
+        await uow.edi_jsons.save(
+            EdiJson(
+                id=generate_id("id"),
                 trace_id=trace_id,
                 tenant_id=tenant_id,
                 direction=EdiDirection.INBOUND,
@@ -116,8 +117,9 @@ async def test_edi_message_explorer_and_detail(
                 status=MessageStatus.TRANSFORMED,
             )
         )
-        await uow.api_gateway_transactions.create_api_gateway(
-            command=CreateApiGatewayCommand(
+        await uow.api_gateway_receipts.save(
+            ApiGatewayReceipt(
+                id=generate_id("id"),
                 trace_id=trace_id,
                 tenant_id=tenant_id,
                 direction=EdiDirection.INBOUND,

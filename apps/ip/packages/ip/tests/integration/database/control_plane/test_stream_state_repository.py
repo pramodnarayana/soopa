@@ -11,9 +11,10 @@ from ip.engine.adapters.outbound.database.control_plane.stream_state_repository 
     SqlAlchemyStreamStateRepository,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
-from ip.engine.domain.enums import AuthType, IpEventType
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.stream_state import ConnectionStreamState
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import AuthType
+from ip.engine.domain.enums import IpEventType
+from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from sqlalchemy import select
 
 pytestmark = pytest.mark.integration

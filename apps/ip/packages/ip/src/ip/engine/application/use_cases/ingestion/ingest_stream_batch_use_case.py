@@ -8,11 +8,12 @@ from dataclasses import dataclass
 
 import structlog
 from seedwork.domain.types import JsonValue
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 
-from ip.engine.domain.enums import AckVerdict, IngestionMode
-from ip.engine.domain.models.inbound_record import InboundRecord
+from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.dispatch.enums import AckVerdict
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.subscribe_transport_port import (
     RawMessageBatchDTO,
@@ -77,7 +78,7 @@ class IngestStreamBatchUseCase:
         self._decoder = decoder
 
     async def execute(self, command: IngestStreamBatchCommand) -> IngestStreamBatchResultDTO:
-        trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
         record_ids: list[str] = []
         duplicates_skipped = 0
         seen_batch_ids: set[str] = set()

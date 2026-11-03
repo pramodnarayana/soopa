@@ -1,13 +1,12 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import UNSET, UnsetType
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
 
-from edi.domain.enums import EdiConnectionType, EdiEventType
-from edi.domain.events import ProvisioningEvent
+from edi.domain.exceptions import EdiError, RouteNotFoundEdiError
+from edi.domain.routing.enums import EdiConnectionType, EdiDirection
+from edi.domain.routing.outbound_route import OutboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -33,34 +32,50 @@ class UpdateOutboundRouteUseCase:
         route_id: str,
         cmd: UpdateOutboundRouteCmd,
         idempotency_key: str | None = None,
-    ) -> bool:
+    ) -> Result[OutboundRoute, EdiError]:
         aggregate = await self.uow.outbound_routes.get_outbound_route(tenant_id, route_id)
         if not aggregate:
-            return False
-
-        if not isinstance(cmd.as2_partner_id, UnsetType):
-            aggregate.as2_partner_id = cmd.as2_partner_id
-        if not isinstance(cmd.sftp_partner_id, UnsetType):
-            aggregate.sftp_partner_id = cmd.sftp_partner_id
-        if not isinstance(cmd.active, UnsetType):
-            aggregate.active = cmd.active
-        if not isinstance(cmd.name, UnsetType):
-            aggregate.name = cmd.name
-        if not isinstance(cmd.connection_type, UnsetType):
-            aggregate.connection_type = cmd.connection_type
-        if not isinstance(cmd.trading_partner_id, UnsetType):
-            aggregate.trading_partner_id = cmd.trading_partner_id
-
-        aggregate.updated_at = datetime.now(UTC)
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_outbound_route_updated,
-                resource_id=route_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
+            not_found = RouteNotFoundEdiError.for_id(
+                route_id, direction=EdiDirection.OUTBOUND.value
             )
+            logger.error(
+                "outbound_route_update_not_found",
+                route_id=route_id,
+                tenant_id=tenant_id,
+                error_code=not_found.code,
+            )
+            return Result.fail(not_found)
+
+        as2: str | UnsetType | None = (
+            (str(cmd.as2_partner_id) if cmd.as2_partner_id else None)
+            if not isinstance(cmd.as2_partner_id, UnsetType)
+            else UNSET
         )
+        sftp: str | UnsetType | None = (
+            (str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None)
+            if not isinstance(cmd.sftp_partner_id, UnsetType)
+            else UNSET
+        )
+
+        upd_res = aggregate.update(
+            name=cmd.name,
+            trading_partner_id=cmd.trading_partner_id,
+            as2_partner_id=as2,
+            sftp_partner_id=sftp,
+            connection_type=cmd.connection_type,
+            active=cmd.active,
+            idempotency_key=idempotency_key,
+        )
+        if upd_res.is_err:
+            domain_err = upd_res.unwrap_err()
+            logger.error(
+                "outbound_route_update_validation_failed",
+                route_id=route_id,
+                tenant_id=tenant_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
+            )
+            return Result.fail(domain_err)
 
         await self.uow.outbound_routes.save(aggregate)
 
@@ -70,4 +85,4 @@ class UpdateOutboundRouteUseCase:
             tenant_id=tenant_id,
         )
 
-        return True
+        return Result.ok(aggregate)

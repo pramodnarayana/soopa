@@ -14,7 +14,7 @@ class StorageProvider:
         """
         aws_settings = PlatformAwsSettings()
         # Fallback to S3_BUCKET if not provided
-        bucket_name = bucket or os.getenv("S3_BUCKET", "edi-as2-payloads")
+        bucket_name: str = bucket or os.getenv("S3_BUCKET") or "edi-as2-payloads"
 
         # Override endpoint url from S3_ENDPOINT_URL if present
         s3_endpoint = os.getenv("S3_ENDPOINT_URL")

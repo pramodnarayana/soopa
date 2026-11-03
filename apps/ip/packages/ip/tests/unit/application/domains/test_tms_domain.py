@@ -4,9 +4,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from ip.application.domains.tms.canonical import CanonicalCarrierDTO, CanonicalLoadDTO
-from ip.application.domains.tms.models import TmsCarrierRecord, TmsLoadRecord
-from ip.application.domains.tms.repository import SqlAlchemyTmsDomainRepository
+from ip.engine.domain.normalization.enums import NormalizationRejectionReason
+from ip.engine.domain.normalization.transformation import ReplicaSnapshot, TransformationContext
+from ip.solutions.domains.tms.canonical import CanonicalCarrierDTO, CanonicalLoadDTO
+from ip.solutions.domains.tms.models import TmsCarrierRecord, TmsLoadRecord
+from ip.solutions.domains.tms.repository import SqlAlchemyTmsDomainRepository
+from ip.solutions.domains.tms.transformers import (
+    MercuryGateLoadTransformerV1,
+    MercuryGateLoadTransformerV2,
+)
 
 
 def test_canonical_tms_dtos_are_immutable() -> None:
@@ -98,3 +104,38 @@ def test_tms_domain_repository_mappers() -> None:
     )
     carrier_dto: CanonicalCarrierDTO = SqlAlchemyTmsDomainRepository._to_carrier_dto(carrier_orm)
     assert carrier_dto.scac_code == "SCAC"
+
+
+def test_tms_load_transformer_rejects_non_finite_weight_and_charge() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="loads",
+        trace_id="ip_trc_02",
+    )
+    v1 = MercuryGateLoadTransformerV1()
+    v2 = MercuryGateLoadTransformerV2()
+
+    for transformer in (v1, v2):
+        for field_name, bad_val in (
+            ("total_weight_lbs", "nan"),
+            ("total_weight_lbs", float("inf")),
+            ("total_weight_lbs", 10**400),
+            ("freight_charge_usd", "-inf"),
+            ("freight_charge_usd", float("nan")),
+            ("freight_charge_usd", -(10**400)),
+        ):
+            res = transformer.transform(
+                ReplicaSnapshot(
+                    id="rep_tms_nan",
+                    connection_id="conn_01",
+                    stream="loads",
+                    record_key="LD-100",
+                    version=1,
+                    data={"load_id": "LD-100", field_name: bad_val},
+                ),
+                ctx,
+            )
+            assert not res.drafts
+            assert len(res.rejections) == 1
+            assert res.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Protocol
 
-from ...domain.models import ScheduledJob
+from scheduler.domain.scheduled_job import ScheduledJob
 
 
 class JobRepositoryPort(Protocol):

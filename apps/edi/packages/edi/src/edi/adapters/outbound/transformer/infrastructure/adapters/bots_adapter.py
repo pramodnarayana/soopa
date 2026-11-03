@@ -2,22 +2,23 @@ import asyncio
 import json
 
 import structlog
+from seedwork.domain.types import JsonDict
 
 from edi.adapters.outbound.transformer.application.ports import EDITransformerPort
 from edi.adapters.outbound.transformer.domain.exceptions import TransformationError
-from edi.adapters.outbound.transformer.domain.models import (
-    JsonDict,
+from edi.adapters.outbound.transformer.domain.parsed_payload import (
     ParsedEdiPayload,
     TransactionSet,
 )
 from edi.core.bots.facade import edi_to_json, json_to_edi
-from edi.domain.enums import EdiStandard, EdiTransactionType
 from edi.domain.exceptions import InvalidMessageFormatError
+from edi.domain.transaction.enums import EdiStandard, EdiTransactionType
+from edi.ports.outbound.edi_ast_codec_port import EdiAstCodecPort
 
 logger = structlog.get_logger(__name__)
 
 
-class BotsEDIAdapter(EDITransformerPort):
+class BotsEDIAdapter(EDITransformerPort, EdiAstCodecPort):
     """
     Adapter to run the vendored BOTS EDI translation engine natively in-memory.
     No sub-processes, no external cron jobs.
@@ -78,7 +79,7 @@ class BotsEDIAdapter(EDITransformerPort):
             raise TransformationError(f"AST generation failed: {e}", errors=[]) from e
 
     def serialize_to_edi(
-        self, ast_dict: JsonDict, standard: str = EdiStandard.X12
+        self, ast_dict: JsonDict | list[JsonDict], standard: str = EdiStandard.X12
     ) -> tuple[str, list[str]]:
         """
         Serializes a JSON AST back into raw EDI format using the Bots engine.

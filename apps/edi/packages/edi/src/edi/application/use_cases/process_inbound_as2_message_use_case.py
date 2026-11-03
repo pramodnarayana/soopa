@@ -1,10 +1,8 @@
-from email.message import EmailMessage
-
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 
-from edi.domain.events import TransformRequestedEvent
-from edi.domain.models.base import Direction, RecordStatus
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.routing.enums import Direction
+from edi.domain.transaction.edi_message import EdiMessage
+from edi.domain.transaction.enums import RecordStatus
 
 """
 As2ReceiverService — Application Use Case for inbound AS2 message processing.
@@ -26,20 +24,16 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from email import policy
-from typing import cast
 
 import structlog
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from secret_store.ports.secret_store_port import SecretStorePort
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix, SystemIdPrefix
-from strace.domain import TraceEventType
+from seedwork.id_registry import SystemIdPrefix
 
-from edi.domain.enums import (
-    EdiConnectionType,
-    EdiDirection,
-    MessageStatus,
-)
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.routing.enums import EdiConnectionType, EdiDirection
+from edi.domain.transaction.enums import MessageStatus
 
 
 @dataclass(frozen=True)
@@ -48,17 +42,10 @@ class ProcessInboundAs2Command:
     body_bytes: bytes
 
 
-from edi.domain.models.as2 import (
-    AS2Message,
-    AS2PartnerDomainModel,
-    AS2PartnershipDomainModel,
-    MDNResponse,
-)
-from edi.domain.services.as2_protocol import (
-    build_mdn,
-    calculate_mic,
-    parse_as2_request,
-)
+from edi.domain.partner.as2.messages import AS2Message, MDNResponse
+from edi.domain.partner.as2.partner import AS2Partner
+from edi.domain.partner.as2.partnership import AS2Partnership
+from edi.domain.partner.as2.protocol import build_mdn, calculate_mic, parse_as2_request
 from edi.ports.outbound.crypto_service_port import CryptoServicePort
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort
 from edi.ports.outbound.uow_factory import DataPlaneUnitOfWorkFactoryPort
@@ -163,7 +150,7 @@ class ProcessInboundAs2MessageUseCase:
         )
 
         # 7. Save to DB
-        await self._save_transaction(
+        await self._save_inbound_message(
             partnership=partnership,
             remote_partner=remote_partner,
             as2_msg=as2_msg,
@@ -186,7 +173,7 @@ class ProcessInboundAs2MessageUseCase:
 
     async def _lookup_partnership(
         self, as2_from: str, as2_to: str
-    ) -> tuple[AS2PartnershipDomainModel, AS2PartnerDomainModel, AS2PartnerDomainModel]:
+    ) -> tuple[AS2Partnership, AS2Partner, AS2Partner]:
         async with self.control_plane_uow:
             match = await self.control_plane_uow.as2_partnerships.get_partnership_by_as2_ids(
                 as2_from=as2_from, as2_to=as2_to
@@ -201,7 +188,7 @@ class ProcessInboundAs2MessageUseCase:
             return match
 
     async def _retrieve_keys(
-        self, local_partner: AS2PartnerDomainModel, remote_partner: AS2PartnerDomainModel
+        self, local_partner: AS2Partner, remote_partner: AS2Partner
     ) -> tuple[bytes | None, bytes | None, bytes | None]:
         local_priv_key = None
         local_cert = None
@@ -368,9 +355,11 @@ class ProcessInboundAs2MessageUseCase:
             logger.exception("as2_signature_verification_failed")
             raise ValueError(f"Signature verification failed: {e}") from e
 
-    def _extract_pure_edi(self, final_payload_bytes: bytes | object) -> bytes:
+    def _extract_pure_edi(
+        self, final_payload_bytes: bytes | str | email.message.Message | object
+    ) -> bytes:
         if not isinstance(final_payload_bytes, bytes):
-            if hasattr(final_payload_bytes, "as_bytes") and callable(final_payload_bytes.as_bytes):
+            if isinstance(final_payload_bytes, email.message.Message):
                 final_payload_bytes = final_payload_bytes.as_bytes()
             elif isinstance(final_payload_bytes, str):
                 final_payload_bytes = final_payload_bytes.encode("utf-8")
@@ -380,11 +369,10 @@ class ProcessInboundAs2MessageUseCase:
 
         parsed_msg = email.message_from_bytes(final_payload_bytes, policy=policy.HTTP)
         if "content-type" in parsed_msg:
-            email_msg = cast(EmailMessage, parsed_msg)
-            decoded_payload = email_msg.get_payload(decode=True)
+            decoded_payload = parsed_msg.get_payload(decode=True)
             if decoded_payload is not None and isinstance(decoded_payload, bytes):
                 return decoded_payload
-            return email_msg.as_bytes()
+            return parsed_msg.as_bytes()
         return final_payload_bytes
 
     def _extract_isa_headers(self, pure_edi_bytes: bytes) -> tuple[str, str, str | None]:
@@ -411,10 +399,10 @@ class ProcessInboundAs2MessageUseCase:
 
         return isa_sender, isa_receiver, transaction_type
 
-    async def _save_transaction(
+    async def _save_inbound_message(
         self,
-        partnership: AS2PartnershipDomainModel,
-        remote_partner: AS2PartnerDomainModel,
+        partnership: AS2Partnership,
+        remote_partner: AS2Partner,
         as2_msg: AS2Message,
         pure_edi_bytes: bytes,
         mdn_response: str | None = None,
@@ -490,7 +478,7 @@ class ProcessInboundAs2MessageUseCase:
         # 3. Save to the true Tenant's Data Plane Shard via factory
         async with self.dp_factory.get_data_plane_uow(true_tenant_id, "edi") as dp_uow:
             edi_message_id = generate_id(DomainIdPrefix.EDI_MESSAGE)
-            edi_message_aggregate = EdiMessageDomainModel(
+            edi_message_aggregate = EdiMessage(
                 id=edi_message_id,
                 tenant_id=true_tenant_id,
                 trace_id=str(edi_record["trace_id"]),
@@ -541,25 +529,19 @@ class ProcessInboundAs2MessageUseCase:
                 status=RecordStatus(str(edi_record["status"])),
             )
 
-            edi_message_aggregate._append_trace(
-                TraceEventType.RECEIVED,
+            edi_message_aggregate.record_received(
                 as2_sender=as2_msg.as2_from,
                 as2_receiver=as2_msg.as2_to,
             )
 
-            outbox_payload = TransformRequestedEvent(
-                trace_id=str(edi_record["trace_id"]),
-                tenant_id=true_tenant_id,
+            edi_message_aggregate.request_transformation(
                 edi_message_id=edi_message_id,
                 sender_id=isa_sender,
                 receiver_id=isa_receiver,
-                direction=EdiDirection.INBOUND.value,
                 idempotency_key=edi_message_id,
             )
 
-            edi_message_aggregate.add_domain_event(outbox_payload)
-
-            envelopes = await dp_uow.transactions.save(edi_message_aggregate)
+            envelopes = await dp_uow.edi_messages.save(edi_message_aggregate)
 
             await dp_uow.commit()
 

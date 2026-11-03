@@ -11,7 +11,6 @@ import asyncio
 from dataclasses import dataclass
 
 import structlog
-from seedwork.id_registry import DomainIdPrefix
 from seedwork.utils import generate_id
 from structlog.typing import FilteringBoundLogger
 
@@ -19,8 +18,9 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordUseCase,
 )
-from ip.engine.domain.enums import NormalizationOutcome
+from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import IpError, Result
+from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 
 logger = structlog.get_logger(__name__)
@@ -69,7 +69,7 @@ class BackfillStreamNormalizationUseCase:
         command: BackfillStreamNormalizationCommand,
     ) -> Result[BackfillStreamNormalizationResultDTO, IpError]:
         """Iterate over stream replica records in bounded chunks and normalize each record."""
-        trace_id = command.trace_id or generate_id(DomainIdPrefix.IP_TRACE.value)
+        trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
         bound_logger: FilteringBoundLogger = logger.bind(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,

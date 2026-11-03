@@ -12,7 +12,6 @@ from datetime import UTC, datetime
 from typing import Protocol
 
 from seedwork.domain.types import JsonDict
-from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
 from orchestration.domain.constants import (
@@ -24,6 +23,7 @@ from orchestration.domain.constants import (
     MatchKind,
     NodeKind,
     TimerEventPrefix,
+    WorkflowIdPrefix,
 )
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 
@@ -265,7 +265,7 @@ class DagMatchCompiler:
         positive_action: MatchAction,
         now: datetime,
     ) -> WorkflowMatch:
-        match_id = generate_id(SystemIdPrefix.WORKFLOW_MATCH.value)
+        match_id = generate_id(WorkflowIdPrefix.MATCH.value)
         conditions: list[MatchCondition] = []
 
         if node.edge_condition == EdgeCondition.ON_SUCCESS:
@@ -273,15 +273,15 @@ class DagMatchCompiler:
             # - Distinct or_group_id per parent for QUEUE/CREATE_MATCH on COMPLETED (AND across all parents)
             # - Shared cancel_group_id across all parents for CANCEL on FAILED/TIMED_OUT/CANCELLED (OR across parents)
             # - Shared skip_group_id across all parents for SKIP on SKIPPED (skips if ANY parent skipped)
-            shared_cancel_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
-            shared_skip_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
+            shared_cancel_group = generate_id(WorkflowIdPrefix.CONDITION.value)
+            shared_skip_group = generate_id(WorkflowIdPrefix.CONDITION.value)
             for parent_key in node.parents:
                 parent_step_id, _ = step_ids_by_node_key[parent_key]
-                queue_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
+                queue_group = generate_id(WorkflowIdPrefix.CONDITION.value)
 
                 conditions.append(
                     MatchCondition(
-                        id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                        id=generate_id(WorkflowIdPrefix.CONDITION.value),
                         match_id=match_id,
                         tenant_id=tenant_id,
                         or_group_id=queue_group,
@@ -296,7 +296,7 @@ class DagMatchCompiler:
                 )
                 conditions.append(
                     MatchCondition(
-                        id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                        id=generate_id(WorkflowIdPrefix.CONDITION.value),
                         match_id=match_id,
                         tenant_id=tenant_id,
                         or_group_id=shared_skip_group,
@@ -316,7 +316,7 @@ class DagMatchCompiler:
                 ):
                     conditions.append(
                         MatchCondition(
-                            id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                            id=generate_id(WorkflowIdPrefix.CONDITION.value),
                             match_id=match_id,
                             tenant_id=tenant_id,
                             or_group_id=shared_cancel_group,
@@ -333,17 +333,17 @@ class DagMatchCompiler:
             # Compensation / failure / timeout handler node (Hatchet JobKindONFAILURE):
             # - Shared or_group_id across parents for QUEUE/CREATE_MATCH when ANY parent matches the failure/timeout event
             # - Distinct or_group_id per parent for SKIP when ALL parents succeed/skip without triggering the failure edge
-            shared_trigger_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
+            shared_trigger_group = generate_id(WorkflowIdPrefix.CONDITION.value)
             trigger_events = DagMatchCompiler._trigger_events_for_edge(node.edge_condition)
 
             for parent_key in node.parents:
                 parent_step_id, _ = step_ids_by_node_key[parent_key]
-                skip_group = generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value)
+                skip_group = generate_id(WorkflowIdPrefix.CONDITION.value)
 
                 for trig_evt in trigger_events:
                     conditions.append(
                         MatchCondition(
-                            id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                            id=generate_id(WorkflowIdPrefix.CONDITION.value),
                             match_id=match_id,
                             tenant_id=tenant_id,
                             or_group_id=shared_trigger_group,
@@ -366,7 +366,7 @@ class DagMatchCompiler:
                     if non_trig_evt not in trigger_events:
                         conditions.append(
                             MatchCondition(
-                                id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                                id=generate_id(WorkflowIdPrefix.CONDITION.value),
                                 match_id=match_id,
                                 tenant_id=tenant_id,
                                 or_group_id=skip_group,
@@ -406,7 +406,7 @@ class DagMatchCompiler:
     ) -> WorkflowMatch:
         """Build stage-2 SIGNAL_WAIT match for a SLEEP or WAIT_FOR_EVENT node."""
         timestamp = now or datetime.now(UTC)
-        match_id = generate_id(SystemIdPrefix.WORKFLOW_MATCH.value)
+        match_id = generate_id(WorkflowIdPrefix.MATCH.value)
         conditions: list[MatchCondition] = []
 
         if node.kind == NodeKind.SLEEP:
@@ -414,10 +414,10 @@ class DagMatchCompiler:
             wake_at = timestamp + node.sleep_duration
             conditions.append(
                 MatchCondition(
-                    id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                    id=generate_id(WorkflowIdPrefix.CONDITION.value),
                     match_id=match_id,
                     tenant_id=tenant_id,
-                    or_group_id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                    or_group_id=generate_id(WorkflowIdPrefix.CONDITION.value),
                     condition_kind=ConditionKind.SLEEP,
                     event_key=TimerEventPrefix.SLEEP.format_key(step_run_id),
                     event_resource_hint=step_run_id,
@@ -433,10 +433,10 @@ class DagMatchCompiler:
             timeout_at = timestamp + node.wait_event.timeout
             conditions.append(
                 MatchCondition(
-                    id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                    id=generate_id(WorkflowIdPrefix.CONDITION.value),
                     match_id=match_id,
                     tenant_id=tenant_id,
-                    or_group_id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                    or_group_id=generate_id(WorkflowIdPrefix.CONDITION.value),
                     condition_kind=ConditionKind.CANONICAL_EVENT,
                     event_key=node.wait_event.event_key,
                     event_resource_hint=node.wait_event.resource_hint_template,
@@ -450,10 +450,10 @@ class DagMatchCompiler:
             # Timeout condition with CANCEL action so timeout resolves via CNF if event doesn't arrive
             conditions.append(
                 MatchCondition(
-                    id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                    id=generate_id(WorkflowIdPrefix.CONDITION.value),
                     match_id=match_id,
                     tenant_id=tenant_id,
-                    or_group_id=generate_id(SystemIdPrefix.WORKFLOW_CONDITION.value),
+                    or_group_id=generate_id(WorkflowIdPrefix.CONDITION.value),
                     condition_kind=ConditionKind.SLEEP,
                     event_key=TimerEventPrefix.WAIT_TIMEOUT.format_key(step_run_id),
                     event_resource_hint=step_run_id,

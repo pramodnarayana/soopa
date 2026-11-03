@@ -6,8 +6,8 @@ from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.models.data_plane import PendingReferenceModel
-from ip.engine.domain.enums import PendingReferenceStatus
-from ip.engine.domain.normalization import PendingReferenceEntry
+from ip.engine.domain.normalization.enums import PendingReferenceStatus
+from ip.engine.domain.normalization.ledger import PendingReferenceEntry
 from ip.engine.ports.outbound.pending_reference_repository_port import (
     PendingReferenceRepositoryPort,
 )

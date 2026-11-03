@@ -1,5 +1,4 @@
 import asyncio
-import dataclasses
 import json
 import os
 import uuid
@@ -10,12 +9,12 @@ import aioboto3
 import pytest
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
-from edi.domain.replication import PermanentProvisioningError, TransientProvisioningError
+from edi.domain.constants import EdiIdPrefix as DomainIdPrefix
+from edi.domain.replication.graph import PermanentProvisioningError, TransientProvisioningError
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from pubsub.aws.aws_sqs_consumer import AwsSqsConsumer
 from seedwork import generate_id
 from seedwork.events import EventEnvelope
-from seedwork.id_registry import DomainIdPrefix
 
 
 class SqsTestPublisher:
@@ -44,8 +43,9 @@ from database.router import DatabaseRouter
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.models import control_plane, data_plane
 from edi.adapters.outbound.database.replication_adapter import SqlAlchemyReplicationAdapter
-from edi.adapters.outbound.database.tenant_resolver import TenantResolver
-from edi.domain.enums import EdiConnectionType, EdiEventType
+from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
+from edi.domain.enums import EdiEventType
+from edi.domain.routing.enums import EdiConnectionType
 from sqlalchemy import delete, select
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
@@ -67,7 +67,7 @@ async def e2e_context(test_db_router: DatabaseRouter) -> "AsyncGenerator[dict[st
     """
     db_router = test_db_router
     base_url = os.environ["DATABASE_URL"]
-    tenant_adapter = TenantResolver(db_router)
+    tenant_adapter = SqlAlchemyTenantResolver(db_router)
     replication_adapter = SqlAlchemyReplicationAdapter(db_router, tenant_adapter)
 
     # We use localstack URL directly as per the local dev environment
@@ -229,7 +229,7 @@ async def test_provisioning_replication_e2e_flow(e2e_context: dict[str, Any]) ->
         payload={"resource_id": str(partner_id)},
     )
 
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope))
+    await message_publisher.publish(queue_name, envelope.to_dict())
 
     await asyncio.sleep(2)  # Give LocalStack SQS a moment to make the message visible
 
@@ -419,7 +419,7 @@ async def test_provisioning_negative_malformed_payload(e2e_context: dict[str, An
         payload={},  # missing resource_id
     )
 
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope))
+    await message_publisher.publish(queue_name, envelope.to_dict())
     await asyncio.sleep(2)
 
     # Worker processes the event. The SQS consumer swallows the exception and doesn't ack,
@@ -461,8 +461,8 @@ async def test_provisioning_idempotency(e2e_context: dict[str, Any]) -> None:
     )
 
     # Publish it twice
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_1))
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_2))
+    await message_publisher.publish(queue_name, envelope_1.to_dict())
+    await message_publisher.publish(queue_name, envelope_2.to_dict())
     await asyncio.sleep(2)
 
     # Process first event
@@ -504,7 +504,7 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
         idempotency_key=generate_id("idemp"),
         payload={"resource_id": str(partner_id)},
     )
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_create))
+    await message_publisher.publish(queue_name, envelope_create.to_dict())
     await asyncio.sleep(1)
     await wait_for_process(worker_service)
 
@@ -524,7 +524,7 @@ async def test_provisioning_delete_event(e2e_context: dict[str, Any]) -> None:
         idempotency_key=generate_id("idemp"),
         payload={"resource_id": str(partner_id)},
     )
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_delete))
+    await message_publisher.publish(queue_name, envelope_delete.to_dict())
     await asyncio.sleep(1)
     await wait_for_process(worker_service)
 
@@ -598,7 +598,7 @@ async def test_provisioning_broadcast_event(e2e_context: dict[str, Any]) -> None
     )
 
     # Send broadcast event
-    await message_publisher.publish(queue_name, dataclasses.asdict(envelope_broadcast))
+    await message_publisher.publish(queue_name, envelope_broadcast.to_dict())
     await asyncio.sleep(1)
 
     # We might expect this to fail inside the replication loop if the global entity isn't there,

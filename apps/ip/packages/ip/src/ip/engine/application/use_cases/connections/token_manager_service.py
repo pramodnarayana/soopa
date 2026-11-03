@@ -16,10 +16,13 @@ import structlog
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict
 
-from ip.engine.domain.constants import DEFAULT_TOKEN_REFRESH_BUFFER_SECONDS
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
+)
+from ip.engine.domain.constants import DEFAULT_TOKEN_REFRESH_BUFFER_SECONDS
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
     TokenRefreshPolicy,
 )
@@ -31,7 +34,6 @@ from ip.engine.domain.exceptions import (
     IpErrorCode,
     Result,
 )
-from ip.engine.domain.models.connection import Connection
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
     TokenRefreshLockPort,

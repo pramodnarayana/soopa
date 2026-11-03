@@ -1,9 +1,8 @@
-from typing import Any
-
 import structlog
 from edi.domain.events import ProvisioningEvent
-from edi.domain.replication import PermanentProvisioningError
+from edi.domain.replication.graph import PermanentProvisioningError
 from pydantic import TypeAdapter, ValidationError
+from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
 
 from config_sync_worker.application.service import ProvisioningWorkerService
@@ -21,13 +20,13 @@ class EdiConfigSyncSqsDispatcher:
         self,
         domain_service: ProvisioningWorkerService,
         transformer_port: EventTranslatorPort,
-    ):
+    ) -> None:
         self.domain_service = domain_service
         self.transformer_port = transformer_port
         self._envelope_adapter: TypeAdapter[EventEnvelope] = TypeAdapter(EventEnvelope)
         self._event_adapter: TypeAdapter[ProvisioningEvent] = TypeAdapter(ProvisioningEvent)
 
-    async def dispatch_raw(self, body: dict[str, Any]) -> None:
+    async def dispatch_raw(self, body: JsonDict) -> None:
         """
         Parses an SQS/SNS payload and dispatches it to the domain service.
 

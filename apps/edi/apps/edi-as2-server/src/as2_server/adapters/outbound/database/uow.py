@@ -1,22 +1,28 @@
 import contextlib
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from types import TracebackType
 
 from database.router import DatabaseRouterPort
-from edi.adapters.outbound.database.data_plane.outbox_repository import (
-    SqlAlchemyDataPlaneOutboxRepository,
-)
+from edi.ports.outbound.data_plane_outbox_repository_port import DataPlaneOutboxRepositoryPort
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from as2_server.adapters.outbound.database.edi_message_repository import EdiMessageRepositoryAdapter
-from as2_server.ports.outbound.uow_port import AS2UnitOfWorkPort
+from as2_server.ports.outbound.repository_port import EdiMessageRepositoryPort
+from as2_server.ports.outbound.uow_port import AS2UnitOfWorkFactoryPort, AS2UnitOfWorkPort
 
 
 class SqlAlchemyAS2UnitOfWork(AS2UnitOfWorkPort):
-    def __init__(self, session: AsyncSession) -> None:
+    """SQLAlchemy Unit of Work for AS2 Server data-plane persistence."""
+
+    def __init__(
+        self,
+        session: AsyncSession,
+        *,
+        message_repo: EdiMessageRepositoryPort,
+        outbox_repo: DataPlaneOutboxRepositoryPort,
+    ) -> None:
         self._session = session
-        self.message_repo = EdiMessageRepositoryAdapter(self._session)
-        self.outbox_repo = SqlAlchemyDataPlaneOutboxRepository(self._session)
+        self.message_repo = message_repo
+        self.outbox_repo = outbox_repo
 
     async def __aenter__(self) -> "SqlAlchemyAS2UnitOfWork":
         return self
@@ -39,17 +45,24 @@ class SqlAlchemyAS2UnitOfWork(AS2UnitOfWorkPort):
         await self._session.rollback()
 
 
-class SqlAlchemyAS2UnitOfWorkFactory:
-    def __init__(self, db_router: DatabaseRouterPort) -> None:
+class SqlAlchemyAS2UnitOfWorkFactory(AS2UnitOfWorkFactoryPort):
+    """Resolves a tenant shard session and constructs an AS2UnitOfWorkPort via injected builder."""
+
+    def __init__(
+        self,
+        db_router: DatabaseRouterPort,
+        uow_builder: Callable[[AsyncSession], AS2UnitOfWorkPort],
+    ) -> None:
         self.db_router = db_router
+        self._uow_builder = uow_builder
 
     @contextlib.asynccontextmanager
     async def create_uow(
         self, tenant_id: str, shard_key: str, shard_url: str
-    ) -> AsyncGenerator[SqlAlchemyAS2UnitOfWork, None]:
+    ) -> AsyncGenerator[AS2UnitOfWorkPort, None]:
         async with contextlib.aclosing(
             self.db_router.get_tenant_session(tenant_id, shard_key, shard_url)
         ) as session_gen:
             async for session in session_gen:
-                yield SqlAlchemyAS2UnitOfWork(session)
+                yield self._uow_builder(session)
                 break

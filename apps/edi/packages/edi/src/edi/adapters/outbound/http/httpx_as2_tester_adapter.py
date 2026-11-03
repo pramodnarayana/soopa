@@ -19,9 +19,9 @@ from shttp import (
     create_http_client,
 )
 
-from edi.adapters.inbound.as2.builder import build_outbound_message
-from edi.adapters.outbound.security import encrypt_payload, sign_payload
-from edi.domain.services.as2_protocol import parse_mdn
+from edi.domain.partner.as2.builder import build_outbound_message
+from edi.domain.partner.as2.protocol import parse_mdn
+from edi.ports.outbound.crypto_service_port import CryptoServicePort
 
 logger = structlog.get_logger(__name__)
 
@@ -57,8 +57,10 @@ class HttpxAS2TesterAdapter:
         self,
         allow_private_ips: bool = False,
         client: HttpClient | None = None,
+        crypto_service: CryptoServicePort | None = None,
     ) -> None:
         self.allow_private_ips = allow_private_ips
+        self._crypto_service = crypto_service
         self._owned_client = client is None
         if client is None:
             self._raw_client: httpx.AsyncClient | None = create_http_client(
@@ -85,27 +87,6 @@ class HttpxAS2TesterAdapter:
         signature_algorithm: str,
         custom_payload: str | None = None,
     ) -> tuple[bool, str | None, str | None, str | None]:
-        # Build sign/encrypt callables only if keys are available
-        sign_fn = (
-            functools.partial(
-                sign_payload,
-                private_key_pem=local_private_key_pem,
-                public_cert_pem=local_cert_pem,
-                algorithm=signature_algorithm,
-            )
-            if (local_private_key_pem and local_cert_pem)
-            else None
-        )
-        encrypt_fn = (
-            functools.partial(
-                encrypt_payload,
-                public_cert_pem=remote_cert_pem,
-                algorithm=encryption_algorithm,
-            )
-            if remote_cert_pem
-            else None
-        )
-
         payload_bytes = (
             custom_payload.encode("utf-8")
             if custom_payload
@@ -114,6 +95,38 @@ class HttpxAS2TesterAdapter:
         payload_str = payload_bytes.decode("utf-8", errors="replace")
 
         try:
+            needs_signing = bool(local_private_key_pem and local_cert_pem)
+            needs_encryption = bool(remote_cert_pem)
+            if (needs_signing or needs_encryption) and self._crypto_service is None:
+                raise ValueError(
+                    "CryptoServicePort is required when AS2 signing or encryption is configured."
+                )
+
+            sign_fn = (
+                functools.partial(
+                    self._crypto_service.sign,
+                    private_key_pem=local_private_key_pem,
+                    public_cert_pem=local_cert_pem,
+                    algorithm=signature_algorithm,
+                )
+                if (
+                    needs_signing
+                    and self._crypto_service is not None
+                    and local_private_key_pem
+                    and local_cert_pem
+                )
+                else None
+            )
+            encrypt_fn = (
+                functools.partial(
+                    self._crypto_service.encrypt,
+                    public_cert_pem=remote_cert_pem,
+                    algorithm=encryption_algorithm,
+                )
+                if (needs_encryption and self._crypto_service is not None and remote_cert_pem)
+                else None
+            )
+
             as2_msg = build_outbound_message(
                 payload=payload_bytes,
                 as2_from=as2_from,

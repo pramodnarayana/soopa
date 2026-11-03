@@ -5,7 +5,7 @@ from typing import cast
 from edi.adapters.outbound.transformer.domain.ast_utils import ASTUtils
 from edi.adapters.outbound.transformer.domain.envelope.base import BaseEnvelopeBuilder
 from edi.domain.exceptions import InvalidMessageFormatError
-from edi.domain.models.headers import EdiEnvelopeHeaders
+from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
 from edi.domain.types import AstNode, JsonDict, JsonValue
 
 

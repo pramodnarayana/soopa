@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.enums import AuthType
+from ip.engine.domain.connection.enums import AuthType
 from pydantic import BaseModel, Field
 from seedwork.domain.types import JsonDict
 

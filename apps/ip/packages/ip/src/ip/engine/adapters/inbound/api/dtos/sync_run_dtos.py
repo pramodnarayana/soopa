@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ip.engine.domain.enums import SyncRunKind
+from ip.engine.domain.replication.enums import SyncRunKind
 from pydantic import BaseModel, Field
 
 

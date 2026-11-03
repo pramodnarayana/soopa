@@ -1,14 +1,14 @@
+"""Update Inbound Route Use Case."""
+
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import structlog
+from seedwork.domain.exceptions import Result
 from seedwork.domain.types import UNSET, UnsetType
-from seedwork.id_registry import SystemIdPrefix
-from seedwork.utils import generate_id
 
-from edi.domain.enums import EdiConnectionType, EdiEventType
-from edi.domain.events import ProvisioningEvent
-from edi.domain.models.base import ProcessingMode
+from edi.domain.exceptions import EdiError, EdiValidationError, RouteNotFoundEdiError
+from edi.domain.routing.enums import EdiConnectionType, EdiDirection, ProcessingMode
+from edi.domain.routing.inbound_route import InboundRoute
 from edi.ports.outbound.uow import ControlPlaneUnitOfWorkPort as ControlPlaneUnitOfWork
 
 logger = structlog.get_logger(__name__)
@@ -18,76 +18,106 @@ logger = structlog.get_logger(__name__)
 class UpdateInboundRouteCmd:
     isa_sender_id: str | UnsetType = UNSET
     isa_receiver_id: str | UnsetType = UNSET
-    transaction_type: str | UnsetType = UNSET
+    transaction_type: str | UnsetType | None = UNSET
     webhook_id: str | UnsetType | None = UNSET
     as2_partner_id: str | UnsetType | None = UNSET
     sftp_partner_id: str | UnsetType | None = UNSET
     connection_type: EdiConnectionType | UnsetType | None = UNSET
     active: bool | UnsetType = UNSET
     name: str | UnsetType | None = UNSET
-    trading_partner_id: str | UnsetType = UNSET
-    gs_sender_id: str | UnsetType = UNSET
-    gs_receiver_id: str | UnsetType = UNSET
-    processing_mode: str | UnsetType = UNSET
+    trading_partner_id: str | UnsetType | None = UNSET
+    gs_sender_id: str | UnsetType | None = UNSET
+    gs_receiver_id: str | UnsetType | None = UNSET
+    processing_mode: str | UnsetType | None = UNSET
 
 
 class UpdateInboundRouteUseCase:
     def __init__(self, uow: ControlPlaneUnitOfWork) -> None:
         self.uow = uow
 
-    async def update_inbound_route(  # noqa: C901
+    async def update_inbound_route(
         self,
         tenant_id: str,
         route_id: str,
         cmd: UpdateInboundRouteCmd,
         idempotency_key: str | None = None,
-    ) -> bool:
-        aggregate = await self.uow.inbound_routes.get_inbound_route_by_id(tenant_id, route_id)
-        if not aggregate:
-            return False
-
-        if not isinstance(cmd.isa_sender_id, UnsetType):
-            aggregate.isa_sender_id = cmd.isa_sender_id
-        if not isinstance(cmd.isa_receiver_id, UnsetType):
-            aggregate.isa_receiver_id = cmd.isa_receiver_id
-        if not isinstance(cmd.transaction_type, UnsetType):
-            aggregate.transaction_type = cmd.transaction_type
-        if not isinstance(cmd.webhook_id, UnsetType):
-            aggregate.webhook_id = cmd.webhook_id
-        if not isinstance(cmd.as2_partner_id, UnsetType):
-            aggregate.as2_partner_id = cmd.as2_partner_id
-        if not isinstance(cmd.sftp_partner_id, UnsetType):
-            aggregate.sftp_partner_id = cmd.sftp_partner_id
-        # connection_type is strictly WEBHOOK for InboundRoutes
-        aggregate.connection_type = EdiConnectionType.WEBHOOK
-
-        if not isinstance(cmd.active, UnsetType):
-            aggregate.active = cmd.active
-        if not isinstance(cmd.name, UnsetType):
-            aggregate.name = cmd.name
-        if not isinstance(cmd.trading_partner_id, UnsetType):
-            aggregate.trading_partner_id = cmd.trading_partner_id
-        if not isinstance(cmd.gs_sender_id, UnsetType):
-            aggregate.gs_sender_id = cmd.gs_sender_id
-        if not isinstance(cmd.gs_receiver_id, UnsetType):
-            aggregate.gs_receiver_id = cmd.gs_receiver_id
-        if not isinstance(cmd.processing_mode, UnsetType):
-            aggregate.processing_mode = (
-                ProcessingMode(cmd.processing_mode)
-                if isinstance(cmd.processing_mode, str)
-                else None
-            )
-
-        aggregate.updated_at = datetime.now(UTC).replace(tzinfo=None)
-
-        aggregate.add_domain_event(
-            ProvisioningEvent(
-                tenant_id=tenant_id,
-                event_type=EdiEventType.edi_inbound_route_updated,
-                resource_id=route_id,
-                idempotency_key=idempotency_key or generate_id(SystemIdPrefix.GENERIC),
-            )
+    ) -> Result[InboundRoute, EdiError]:
+        aggregate: InboundRoute | None = await self.uow.inbound_routes.get_inbound_route_by_id(
+            tenant_id, route_id
         )
+        if not aggregate:
+            not_found = RouteNotFoundEdiError.for_id(route_id, direction=EdiDirection.INBOUND.value)
+            logger.error(
+                "inbound_route_update_not_found",
+                route_id=route_id,
+                tenant_id=tenant_id,
+                error_code=not_found.code,
+            )
+            return Result.fail(not_found)
+
+        mode: ProcessingMode | UnsetType | None = UNSET
+        if not isinstance(cmd.processing_mode, UnsetType):
+            if cmd.processing_mode:
+                try:
+                    mode = ProcessingMode(cmd.processing_mode)
+                except ValueError:
+                    bad_mode = EdiValidationError.with_message(
+                        f"Invalid processing_mode '{cmd.processing_mode}'.",
+                        details={"processing_mode": cmd.processing_mode},
+                    )
+                    logger.error(
+                        "inbound_route_update_invalid_processing_mode",
+                        route_id=route_id,
+                        processing_mode=cmd.processing_mode,
+                        tenant_id=tenant_id,
+                        error_code=bad_mode.code,
+                    )
+                    return Result.fail(bad_mode)
+            else:
+                mode = None
+
+        wh: str | UnsetType | None = (
+            (str(cmd.webhook_id) if cmd.webhook_id else None)
+            if not isinstance(cmd.webhook_id, UnsetType)
+            else UNSET
+        )
+        as2: str | UnsetType | None = (
+            (str(cmd.as2_partner_id) if cmd.as2_partner_id else None)
+            if not isinstance(cmd.as2_partner_id, UnsetType)
+            else UNSET
+        )
+        sftp: str | UnsetType | None = (
+            (str(cmd.sftp_partner_id) if cmd.sftp_partner_id else None)
+            if not isinstance(cmd.sftp_partner_id, UnsetType)
+            else UNSET
+        )
+
+        upd_res = aggregate.update(
+            isa_sender_id=cmd.isa_sender_id,
+            isa_receiver_id=cmd.isa_receiver_id,
+            gs_sender_id=cmd.gs_sender_id,
+            gs_receiver_id=cmd.gs_receiver_id,
+            transaction_type=cmd.transaction_type,
+            processing_mode=mode,
+            name=cmd.name,
+            trading_partner_id=cmd.trading_partner_id,
+            webhook_id=wh,
+            as2_partner_id=as2,
+            sftp_partner_id=sftp,
+            connection_type=cmd.connection_type,
+            active=cmd.active,
+            idempotency_key=idempotency_key,
+        )
+        if upd_res.is_err:
+            domain_err = upd_res.unwrap_err()
+            logger.error(
+                "inbound_route_update_validation_failed",
+                route_id=route_id,
+                tenant_id=tenant_id,
+                error_code=domain_err.code,
+                reason=domain_err.message,
+            )
+            return Result.fail(domain_err)
 
         await self.uow.inbound_routes.save(aggregate)
 
@@ -96,5 +126,4 @@ class UpdateInboundRouteUseCase:
             route_id=route_id,
             tenant_id=tenant_id,
         )
-
-        return True
+        return Result.ok(aggregate)

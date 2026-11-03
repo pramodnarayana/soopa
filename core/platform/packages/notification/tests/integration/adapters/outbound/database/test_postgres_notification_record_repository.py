@@ -10,10 +10,11 @@ from seedwork import generate_random_hex
 from sqlalchemy import select
 from ucp.domain.constants import LifecycleStatus
 
-from notification.adapters.outbound.database.postgres_notification_record_repository import (
+from notification.adapters.outbound.database.sqlalchemy_notification_record_repository import (
     SqlAlchemyNotificationRecordRepository,
 )
-from notification.domain.models import Channel, NotificationDispatch
+from notification.domain.dispatch import NotificationDispatch
+from notification.domain.enums import Channel
 
 
 @pytest.mark.asyncio

@@ -25,16 +25,20 @@ from ip.engine.application.use_cases.ingestion.fetch_record_use_case import (
     FetchRecordCommand,
     FetchRecordUseCase,
 )
-from ip.engine.domain.constants import DEFAULT_INLINE_THRESHOLD_BYTES, REDACTED_SECRET_VALUE
-from ip.engine.domain.enums import (
+from ip.engine.domain.connection.connection import Connection
+from ip.engine.domain.connection.enums import (
     AuthType,
     ConnectionStatus,
+)
+from ip.engine.domain.connection.events import ConnectionErrorRecordedEvent
+from ip.engine.domain.constants import DEFAULT_INLINE_THRESHOLD_BYTES, REDACTED_SECRET_VALUE
+from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
     OutboundConflictStrategy,
     OutboundDispatchStatus,
     OutboundFailureCategory,
 )
-from ip.engine.domain.events import ConnectionErrorRecordedEvent
+from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import (
     DuplicateConnectionFingerprintError,
     InvalidCredentialsError,
@@ -43,12 +47,18 @@ from ip.engine.domain.exceptions import (
     Result,
     UpstreamHttpError,
 )
-from ip.engine.domain.models.connection import Connection
-from ip.engine.domain.models.inbound_record import InboundRecord
-from ip.engine.domain.models.outbound_record import OutboundRecord
+from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
-from ip.engine.ports.outbound.connector_port import ConnectorPort
+from ip.engine.ports.outbound.connector_port import (
+    AppSpecDTO,
+    ConnectionCheckResultDTO,
+    ConnectorPort,
+    DiscoveredCatalogDTO,
+    RecordEnvelopeDTO,
+    WriteRecordCommand,
+    WriteResultDTO,
+)
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
@@ -82,14 +92,6 @@ from ip.engine.ports.outbound.transformation_repository_port import (
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
-)
-from ip.engine.ports.types import (
-    AppSpecDTO,
-    ConnectionCheckResultDTO,
-    DiscoveredCatalogDTO,
-    RecordEnvelopeDTO,
-    WriteRecordCommand,
-    WriteResultDTO,
 )
 from orchestration.domain.constants import StepFailureCode
 from orchestration.domain.failures import RetryableFailure, TerminalFailure

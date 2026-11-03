@@ -3,13 +3,26 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
+from ip.engine.domain.connection.http_spec import DeclarativeManifest
 from ip.engine.domain.exceptions import ConnectorNotFoundError, Result
-from ip.engine.domain.models.connector_spec import DeclarativeManifest
-from ip.engine.ports.outbound.connector_port import ConnectorPort
-from ip.engine.ports.types import AppSpecDTO, CatalogAppSummaryDTO
+from ip.engine.ports.outbound.connector_port import AppSpecDTO, ConnectorPort
+
+
+@dataclass(frozen=True)
+class CatalogAppSummaryDTO:
+    """Summary representation of a connector catalog application."""
+
+    app_id: str
+    display_name: str
+    category: str
+    auth_type: str
+    description: str | None = None
+    connector_type: str = "DECLARATIVE_HTTP"
+    icon_url: str | None = None
 
 
 class CatalogRegistryPort(Protocol):
@@ -47,3 +60,35 @@ class CatalogRegistryPort(Protocol):
     ) -> None:
         """Registers a native or custom Python connector into the live catalog."""
         ...
+
+
+class CatalogConnectorMapping(Mapping[str, ConnectorPort]):
+    """Read-only Mapping[str, ConnectorPort] view backed by CatalogRegistryPort."""
+
+    def __init__(self, registry: CatalogRegistryPort) -> None:
+        self._registry = registry
+
+    def __getitem__(self, key: str) -> ConnectorPort:
+        result = self._registry.get_connector(key)
+        if result.is_ok and result.value is not None:
+            return result.value
+        raise KeyError(key)
+
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
+        result = self._registry.get_connector(key)
+        return result.is_ok and result.value is not None
+
+    def __len__(self) -> int:
+        return len(self._registry.list_apps())
+
+    def __iter__(self) -> Iterator[str]:
+        return (app.app_id for app in self._registry.list_apps())
+
+
+__all__ = [
+    "CatalogAppSummaryDTO",
+    "CatalogConnectorMapping",
+    "CatalogRegistryPort",
+]

@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 import structlog
 from secret_store.ports.secret_store_port import SecretStorePort
+from security.ports.cipher_port import CipherPort
 from seedwork.domain.exceptions import ErrorCode
 
 from edi.core.pipeline.delivery.base import (
@@ -10,13 +11,12 @@ from edi.core.pipeline.delivery.base import (
     TerminalDeliveryError,
     TransientDeliveryError,
 )
-from edi.domain.models.transactions import EdiMessageDomainModel
+from edi.domain.transaction.edi_message import EdiMessage
 from edi.ports.outbound.exceptions import (
     PortAuthenticationError,
     PortConnectionError,
     PortTimeoutError,
 )
-from edi.ports.outbound.field_encryption import FieldEncryptionPort
 from edi.ports.outbound.sftp_delivery_port import SftpDeliveryPort
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 
@@ -29,7 +29,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         uow_factory: Callable[[], contextlib.AbstractAsyncContextManager[DataPlaneUnitOfWorkPort]],
         sftp_delivery: SftpDeliveryPort,
         vault: SecretStorePort | None = None,
-        field_encryption: FieldEncryptionPort | None = None,
+        field_encryption: CipherPort | None = None,
     ) -> None:
         super().__init__(uow_factory, vault)
         self.sftp_delivery = sftp_delivery
@@ -39,7 +39,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
         self,
         trace_id: str,
         partner_id: str,
-        edi_msg: EdiMessageDomainModel,
+        edi_msg: EdiMessage,
         idempotency_key: str | None = None,
     ) -> None:
         async with self.uow_factory() as uow, uow:
@@ -61,7 +61,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             client_key: str | None = None
 
             if partner.password_encrypted and self.field_encryption:
-                password = self.field_encryption.decrypt(partner.password_encrypted)
+                password = self.field_encryption.decrypt_str(partner.password_encrypted)
 
             if not password and partner.credentials_vault_ref and self.secret_store:
                 vault_secret = await self.secret_store.get_secret(partner.credentials_vault_ref)
@@ -104,7 +104,7 @@ class SftpDeliveryStrategy(BaseDeliveryStrategy):
             ) from e
 
         logger.info(
-            "Delivered trace_id={trace_id} → SFTP {partner_host}",
+            "sftp_delivery_succeeded",
             trace_id=trace_id,
             partner_host=partner.host,
         )

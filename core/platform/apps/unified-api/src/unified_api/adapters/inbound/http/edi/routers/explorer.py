@@ -1,43 +1,23 @@
 from typing import Literal
 
-from edi.application.dtos import EdiJsonDTO, EdiMessageDTO
+from edi.application.responses import EdiJsonDTO, EdiMessageDTO
+from edi.application.use_cases.trace.explore_edi_stage_use_case import (
+    ExploreEdiJsonQuery,
+    ExploreEdiMessagesQuery,
+    ExploreEdiStageUseCase,
+    RawStageFilterInput,
+)
+from edi.domain.transaction.stage_filter import ALLOWED_STAGE_FILTER_FIELDS
 from edi.ports.outbound.uow import DataPlaneUnitOfWorkPort
 from fastapi import APIRouter, Depends, Query, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from seedwork.domain.types import JsonDict, JsonValue
 
 from unified_api.adapters.inbound.http.dependencies.edi.auth import get_current_tenant_id
 from unified_api.adapters.inbound.http.dependencies.edi.database import get_data_plane_uow
+from unified_api.adapters.inbound.http.edi.error_mapper import raise_http_for_edi_error
 
 router = APIRouter(prefix="/api/v1/tenants/{tenant_id}/edi/explorer", tags=["Explorer"])
-
-# ---------------------------------------------------------------------------
-# Allowed filter fields and operators — enforce at the HTTP boundary so the
-# repository never receives an unvalidated filter dict.
-# ---------------------------------------------------------------------------
-_ALLOWED_FIELDS: frozenset[str] = frozenset(
-    {
-        "trading_partner_id",
-        "direction",
-        "status",
-        "transaction_type",
-        "sender_id",
-        "receiver_id",
-        "gs_sender_id",
-        "gs_receiver_id",
-        "format_standard",
-        "connection_type",
-        "business_metadata.shipment_id",
-        "business_metadata.purchase_order_id",
-        "business_metadata.po_number",
-        "business_metadata.invoice_number",
-        "business_metadata.load_number",
-        "business_metadata.business_reference",
-        "error_code",
-        "status_message",
-    }
-)
-_ALLOWED_OPERATORS: frozenset[str] = frozenset({"eq", "neq", "contains", "in"})
 
 AllowedOperator = Literal["eq", "neq", "contains", "in"]
 
@@ -50,25 +30,20 @@ class FilterRule(BaseModel):
     @field_validator("field")
     @classmethod
     def validate_field(_cls, v: str) -> str:
-        if v not in _ALLOWED_FIELDS:
+        if v not in ALLOWED_STAGE_FILTER_FIELDS:
             raise ValueError(
-                f"Filter field '{v}' is not allowed. Allowed fields: {sorted(_ALLOWED_FIELDS)}"
+                f"Filter field '{v}' is not allowed. "
+                f"Allowed fields: {sorted(ALLOWED_STAGE_FILTER_FIELDS)}"
             )
         return v
 
 
 class ExplorerRequest(BaseModel):
-    filters: list[FilterRule] = []
+    filters: list[FilterRule] = Field(default_factory=list)
 
 
 class ExplorerResponse(BaseModel):
     items: list[JsonDict]
-
-
-# ---------------------------------------------------------------------------
-# Shared serialisers — single source of truth so both endpoints produce the
-# same shape for the same model type.
-# ---------------------------------------------------------------------------
 
 
 def _serialize_edi_message(msg: EdiMessageDTO) -> JsonDict:
@@ -114,11 +89,6 @@ def _serialize_edi_json(j: EdiJsonDTO) -> JsonDict:
     }
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
-
-
 @router.post("/edi-messages", response_model=ExplorerResponse, status_code=status.HTTP_200_OK)
 async def explore_edi_messages(
     req: ExplorerRequest,
@@ -128,14 +98,20 @@ async def explore_edi_messages(
     offset: int = Query(0, ge=0),
 ) -> ExplorerResponse:
     async with uow:
-        filters_list = [f.model_dump() for f in req.filters]
-        messages = await uow.transactions.explorer_list_edi_messages(
-            tenant_id=tenant_id,
-            filters=filters_list,
-            limit=limit,
-            offset=offset,
+        result = await ExploreEdiStageUseCase(uow).explore_messages(
+            ExploreEdiMessagesQuery(
+                tenant_id=tenant_id,
+                filters=tuple(
+                    RawStageFilterInput(field=f.field, operator=f.operator, value=f.value)
+                    for f in req.filters
+                ),
+                limit=limit,
+                offset=offset,
+            )
         )
-        return ExplorerResponse(items=[_serialize_edi_message(msg) for msg in messages])
+        if result.is_err:
+            raise_http_for_edi_error(result.unwrap_err())
+        return ExplorerResponse(items=[_serialize_edi_message(msg) for msg in result.unwrap()])
 
 
 @router.post("/edi-json", response_model=ExplorerResponse, status_code=status.HTTP_200_OK)
@@ -147,11 +123,17 @@ async def explore_edi_json(
     offset: int = Query(0, ge=0),
 ) -> ExplorerResponse:
     async with uow:
-        filters_list = [f.model_dump() for f in req.filters]
-        jsons = await uow.transactions.explorer_list_edi_json(
-            tenant_id=tenant_id,
-            filters=filters_list,
-            limit=limit,
-            offset=offset,
+        result = await ExploreEdiStageUseCase(uow).explore_json(
+            ExploreEdiJsonQuery(
+                tenant_id=tenant_id,
+                filters=tuple(
+                    RawStageFilterInput(field=f.field, operator=f.operator, value=f.value)
+                    for f in req.filters
+                ),
+                limit=limit,
+                offset=offset,
+            )
         )
-        return ExplorerResponse(items=[_serialize_edi_json(j) for j in jsons])
+        if result.is_err:
+            raise_http_for_edi_error(result.unwrap_err())
+        return ExplorerResponse(items=[_serialize_edi_json(j) for j in result.unwrap()])

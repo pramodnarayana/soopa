@@ -1,6 +1,5 @@
-from typing import Any
-
 import structlog
+from seedwork.domain.types import JsonDict
 
 from config_sync_worker.adapters.acl.base import EventTranslator
 from config_sync_worker.adapters.acl.ucp_translators import (
@@ -27,7 +26,7 @@ _TRANSLATOR_REGISTRY: dict[str, EventTranslator] = {
 }
 
 
-def translate_external_event(event_type: str, payload: dict[str, Any]) -> dict[str, Any] | None:
+def translate_external_event(event_type: str, payload: JsonDict) -> JsonDict | None:
     """
     Translates an external event using the configured strategy in the registry.
 
@@ -51,7 +50,5 @@ def translate_external_event(event_type: str, payload: dict[str, Any]) -> dict[s
 
 
 class DefaultEventTranslator:
-    def translate_external_event(
-        self, event_type: str, payload: dict[str, Any]
-    ) -> dict[str, Any] | None:
+    def translate_external_event(self, event_type: str, payload: JsonDict) -> JsonDict | None:
         return translate_external_event(event_type, payload)

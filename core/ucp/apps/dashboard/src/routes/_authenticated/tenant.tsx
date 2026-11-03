@@ -3,10 +3,10 @@ import {
   Activity,
   ArrowLeftRight,
   Bell,
-  Cable,
   Compass,
   GitMerge,
   LayoutDashboard,
+  LayoutGrid,
   Settings,
   Workflow,
   Wrench,
@@ -49,7 +49,7 @@ function TenantSidebar({ subscriptions }: { subscriptions: string[] }) {
           </div>
           <NavItem icon={Compass} label="Command Center" to="/tenant/ip" exact />
           <NavItem icon={Activity} label="Support Traces" to="/tenant/ip/traces" />
-          <NavItem icon={Cable} label="Connections" to="/tenant/ip/connections" />
+          <NavItem icon={LayoutGrid} label="Apps" to="/tenant/ip/connections" />
           <NavItem icon={GitMerge} label="Transformations" to="/tenant/ip/transformations" />
           <NavItem icon={Workflow} label="Stitches" to="/tenant/ip/stitches" />
         </>

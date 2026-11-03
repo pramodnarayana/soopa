@@ -1,13 +1,14 @@
 from datetime import UTC, datetime
 
 import pytest
+from database.exceptions import DuplicateEntityError
 from seedwork import generate_id
-from seedwork.id_registry import DomainIdPrefix
 from ucp_models.subscriptions import App
 
-from ucp.adapters.outbound.database.tenant_repository import TenantRepository
+from ucp.adapters.outbound.database.tenant_repository import SqlAlchemyTenantRepository
 from ucp.domain.constants import LifecycleStatus
-from ucp.domain.models.tenant import Tenant, TenantSubscription
+from ucp.domain.constants import UcpIdPrefix as DomainIdPrefix
+from ucp.domain.tenant import Tenant, TenantSubscription
 
 pytestmark = pytest.mark.integration
 
@@ -21,7 +22,7 @@ async def test_save_and_find_tenant(db_session):
     db_session.add(app2)
     await db_session.flush()
 
-    repo = TenantRepository(db_session)
+    repo = SqlAlchemyTenantRepository(db_session)
 
     tenant_id = generate_id(DomainIdPrefix.TENANT.value)
     tenant = Tenant(
@@ -62,3 +63,47 @@ async def test_save_and_find_tenant(db_session):
     # Test find_all includes this tenant
     all_tenants = await repo.find_all()
     assert any(t.id == tenant_id for t in all_tenants)
+
+
+@pytest.mark.asyncio
+async def test_insert_if_slug_available_handles_slug_conflict_and_preserves_name_uniqueness(
+    db_session,
+) -> None:
+    repo = SqlAlchemyTenantRepository(db_session)
+    slug = f"slug-check-{generate_id(DomainIdPrefix.TENANT.value)}"
+
+    first = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Acme, Corp. {slug}",
+        slug=slug,
+        idp_tenant_id=None,
+    ).unwrap()
+    assert await repo.insert_if_slug_available(first) is True
+
+    # Slug collision with distinct name returns False cleanly without aborting transaction
+    slug_collision = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Acme Corp {slug}",
+        slug=slug,
+        idp_tenant_id=None,
+    ).unwrap()
+    assert await repo.insert_if_slug_available(slug_collision) is False
+
+    # Subsequent query in the exact same transaction succeeds
+    retry = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=f"Acme Corp {slug}",
+        slug=f"{slug}-2",
+        idp_tenant_id=None,
+    ).unwrap()
+    assert await repo.insert_if_slug_available(retry) is True
+
+    # Duplicate name with distinct slug still raises DuplicateEntityError
+    duplicate_name = Tenant.create(
+        id=generate_id(DomainIdPrefix.TENANT.value),
+        name=first.name,
+        slug=f"{slug}-3",
+        idp_tenant_id=None,
+    ).unwrap()
+    with pytest.raises(DuplicateEntityError):
+        await repo.insert_if_slug_available(duplicate_name)
