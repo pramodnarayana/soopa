@@ -3,7 +3,6 @@ import {
   Activity,
   ArrowLeftRight,
   Bell,
-  Cable,
   Compass,
   GitMerge,
   LayoutDashboard,
