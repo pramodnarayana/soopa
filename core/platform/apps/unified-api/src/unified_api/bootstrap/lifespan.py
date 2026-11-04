@@ -31,6 +31,7 @@ from notification.bootstrap.lifespan import startup as notification_startup
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
+from unified_api.bootstrap.identity_drift_guard import verify_platform_tenant_idp_alignment
 from unified_api.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -72,6 +73,11 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     edi_app.state.db_provider = db_provider
     ucp_container = app.state.ucp_container
     ucp_container.db_provider.override(providers.Object(db_provider))
+
+    await verify_platform_tenant_idp_alignment(
+        db_provider=db_provider,
+        expected_platform_org_id=get_settings().identity.platform_org_id,
+    )
 
     # Nested try/finally blocks ensure cleanup runs in reverse order
     # and only for services that have actually started.

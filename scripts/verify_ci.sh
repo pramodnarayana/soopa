@@ -1,89 +1,157 @@
-#!/bin/bash
-set -e
+#!/usr/bin/env bash
+set -euo pipefail
 
-echo "🧹 Clearing caches..."
-find . -name '.pytest_cache' -type d -exec rm -rf {} +
-find . -name '.ruff_cache' -type d -exec rm -rf {} +
-find . -name '.mypy_cache' -type d -exec rm -rf {} +
+MODE="full"
+BASE_REF=""
+CLEAN_CACHES=0
 
-echo "🔒 Hiding .env and injecting .env.example to simulate strict CI environment..."
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --affected)
+      MODE="affected"
+      shift
+      ;;
+    --full)
+      MODE="full"
+      shift
+      ;;
+    --base-ref)
+      BASE_REF="${2:-}"
+      shift 2
+      ;;
+    --clean-caches)
+      CLEAN_CACHES=1
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      echo "Usage: ./scripts/verify_ci.sh [--affected | --full] [--base-ref <ref>] [--clean-caches]" >&2
+      exit 2
+      ;;
+  esac
+done
 
-ENV_BACKED_UP=0
-ENV_INJECTED=0
+export TURBO_CONCURRENCY="${TURBO_CONCURRENCY:-4}"
 
-# Idempotent cleanup routine:
-# 1. Disable traps to prevent re-entrant execution loops
-# 2. Terminate any lingering background child processes
-# 3. Restore filesystem state (.env)
-# 4. Preserve original exit code
-_cleanup() {
-  local exit_code=$?
-  trap - EXIT INT TERM
-
-  local child_pids
-  child_pids=$(jobs -p 2>/dev/null || true)
-  if [ -n "$child_pids" ]; then
-    echo "$child_pids" | xargs kill 2>/dev/null || true
-  fi
-
-  echo ""
-  echo "🔓 Restoring .env..."
-  if [ "$ENV_INJECTED" -eq 1 ]; then
-    rm -f .env
-  fi
-  if [ "$ENV_BACKED_UP" -eq 1 ] && [ -f .env.bak ]; then
-    mv .env.bak .env
-  fi
-  echo "✅ .env restored."
-
-  exit "$exit_code"
-}
-
-trap _cleanup EXIT INT TERM
-
-if [ -f .env ]; then
-  mv .env .env.bak
-  ENV_BACKED_UP=1
+if [[ "$CLEAN_CACHES" -eq 1 ]]; then
+  echo "🧹 Clearing tool caches (--clean-caches)..."
+  find . \( -name '.pytest_cache' -o -name '.ruff_cache' -o -name '.mypy_cache' \) -type d -prune -exec rm -rf {} +
 fi
-if [ -f .env.example ]; then
+
+# Remove stale per-package coverage artifacts so aggregate_coverage.py evaluates only current-run scope
+find apps core -maxdepth 5 \( -name '.coverage' -o -name '.coverage.*' \) -delete 2>/dev/null || true
+
+# Seed initial .env on fresh checkouts where .env does not yet exist; never modify an existing .env
+if [[ ! -f .env ]] && [[ -f .env.example ]]; then
   cp .env.example .env
-  ENV_INJECTED=1
-
-  echo "🔌 Injecting Dynamic Topology Configuration into CI .env..."
-  pnpm infra:sync-topology
 fi
 
-echo "🔄 Ensuring infrastructure is running (Non-Destructive)..."
-pnpm infra:up
+RESOLVED_MODE="full"
+RESOLVED_BASE=""
+if [[ "$MODE" == "affected" ]]; then
+  SCOPE_ARGS=(--print-scope)
+  if [[ -n "$BASE_REF" ]]; then
+    SCOPE_ARGS+=(--base-ref "$BASE_REF")
+  fi
+  read -r RESOLVED_MODE RESOLVED_BASE < <(uv run python infra/local/scripts/run_in_test_env.py "${SCOPE_ARGS[@]}")
+  if [[ "$RESOLVED_MODE" == "affected_empty" ]]; then
+    echo "✨ No changes detected relative to ${RESOLVED_BASE}. Skipping redundant CI checks."
+    exit 0
+  fi
+fi
+
+if [[ "$RESOLVED_MODE" == "affected" ]]; then
+  echo "🎯 Running graph-aware CI verification for packages affected since ${RESOLVED_BASE:0:12} (concurrency=${TURBO_CONCURRENCY})..."
+else
+  echo "🔒 Running full clean-room CI verification (concurrency=${TURBO_CONCURRENCY}, .env untouched)..."
+fi
+
+echo "🔄 Ensuring local infrastructure containers are healthy (non-destructive)..."
+INFRA_SERVICES=()
+while IFS= read -r svc; do
+  case "$svc" in
+    postgres_global|*_postgres_shard|localstack|sftp)
+      INFRA_SERVICES+=("$svc")
+      ;;
+  esac
+done < <(docker compose --env-file .env.example --env-file versions.env config --services)
+
+if [[ "${#INFRA_SERVICES[@]}" -gt 0 ]]; then
+  docker compose --env-file .env.example --env-file versions.env up -d --wait "${INFRA_SERVICES[@]}"
+fi
+
+echo "🧪 Ensuring isolated *_test PostgreSQL databases are provisioned and synced..."
+uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example -- true
 
 echo "✅ Running Architectural Semgrep Checks..."
-uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --error apps core
+if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
+  SEMGREP_TARGETS=()
+  while IFS= read -r changed_file; do
+    if [[ -f "$changed_file" ]] && [[ "$changed_file" == apps/* || "$changed_file" == core/* ]]; then
+      SEMGREP_TARGETS+=("$changed_file")
+    fi
+  done < <(git diff --name-only "${RESOLVED_BASE}..HEAD")
+  if [[ "${#SEMGREP_TARGETS[@]}" -gt 0 ]]; then
+    uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --error "${SEMGREP_TARGETS[@]}"
+  fi
+else
+  uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --error apps core
+fi
 
-
-echo "✅ Validating Python-to-Package Dependency Sync..."
+echo "✅ Validating Python-to-Package Dependency Sync & Module Boundaries..."
 pnpm run syncpack:python:check
+uv run tach check
 
-echo "✅ Running Typechecks..."
-pnpm run typecheck
+echo "✅ Running Ruff Lint across workspace source trees..."
+uv run ruff check apps core infra/local/scripts
 
-echo "✅ Linting All Workspaces (Node & Python)..."
-pnpm turbo lint
+if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
+  AFFECTED_FILTER="--filter=...[${RESOLVED_BASE}]"
 
-echo "✅ Running Ruff lint across full EDI surface (including e2e, workers, and apps)..."
-# This runs unconditionally — bypasses turbo caching — to catch violations in all files
-# including e2e tests and worker entrypoints that pnpm test excludes from execution.
-uv run ruff check apps/edi
+  echo "✅ Running Affected Typechecks & Lints..."
+  pnpm turbo run typecheck --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER"
+  pnpm turbo run typecheck:tests --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER"
+  pnpm turbo run lint --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER"
 
-echo "✅ Running Tests (Node + Python Coverage)..."
-# Enterprise Standard: Hermetically sandbox ambient developer cloud credentials so tests run
-# in the exact same bare credential environment as GitHub Actions CI runners.
-AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null pnpm test:node
-AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null COVERAGE_FILE=.coverage.unit CI=true pnpm cov:python
+  echo "✅ Running Affected Unit Tests (Node + Python Coverage in hermetic .env.example)..."
+  uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm test:node -- "$AFFECTED_FILTER"
 
-echo "✅ Running Integration Tests..."
-AWS_SHARED_CREDENTIALS_FILE=/dev/null AWS_CONFIG_FILE=/dev/null COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
+  COVERAGE_FILE=.coverage.unit CI=true \
+    uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm turbo run cov --env-mode=loose --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER" \
+      --filter="!@soopa/seedwork" \
+      --filter="!@soopa/outbox" \
+      --filter="!@soopa/pubsub" \
+      --filter="!@soopa/edi-secrets-sidecar"
+
+  echo "✅ Running Affected Integration Tests (isolated *_test databases)..."
+  COVERAGE_FILE=.coverage.integration CI=true \
+    uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm turbo run test:integration --env-mode=loose --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER" \
+      --filter="!@soopa/pubsub"
+else
+  echo "✅ Running Full Typechecks & Lints..."
+  pnpm turbo run typecheck --concurrency="${TURBO_CONCURRENCY}"
+  pnpm turbo run typecheck:tests --concurrency="${TURBO_CONCURRENCY}"
+  pnpm turbo run lint --concurrency="${TURBO_CONCURRENCY}"
+
+  echo "✅ Running Full Unit Tests (Node + Python Coverage in hermetic .env.example)..."
+  uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm test:node
+
+  COVERAGE_FILE=.coverage.unit CI=true \
+    uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm cov:python -- --env-mode=loose --concurrency="${TURBO_CONCURRENCY}"
+
+  echo "✅ Running Full Integration Tests (isolated *_test databases)..."
+  COVERAGE_FILE=.coverage.integration CI=true \
+    uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
+    pnpm turbo run test:integration --env-mode=loose --concurrency="${TURBO_CONCURRENCY}" \
+      --filter="!@soopa/pubsub"
+fi
 
 echo "✅ Aggregating Coverage and Enforcing Thresholds..."
 ./scripts/aggregate_coverage.py
 
-echo "🎉 All CI checks passed perfectly!"
+echo "🎉 All CI checks passed! (.env and live development databases untouched)"

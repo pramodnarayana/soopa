@@ -5,10 +5,10 @@ import sys
 
 import asyncpg
 import structlog
-from dotenv import load_dotenv
+from seedwork.infra.config import load_repo_env
 
-# Load root .env to get database credentials if not exported
-load_dotenv()
+# Load resolved repo env file only for keys not already set in os.environ
+load_repo_env(override=False)
 
 logger = structlog.get_logger()
 

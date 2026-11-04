@@ -6,6 +6,7 @@ import runpy
 from pathlib import Path
 
 import structlog
+from seedwork.infra.config import load_repo_env
 
 logger = structlog.get_logger(__name__)
 
@@ -36,6 +37,7 @@ def execute_seed_script(script_relative_path: str) -> None:
     if not target_path.exists():
         raise FileNotFoundError(f"Seed script not found at path: {target_path}")
 
+    load_repo_env(repo_root=repo_root, override=False)
     logger.info("seed_script_started", script=script_relative_path)
     runpy.run_path(str(target_path), run_name="__main__")
     logger.info("seed_script_completed", script=script_relative_path)
