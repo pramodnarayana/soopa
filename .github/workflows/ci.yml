@@ -68,7 +68,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-unit
-          path: "**/.coverage.unit"
+          path: |
+            **/.coverage.unit
+            !**/node_modules/**
           include-hidden-files: true
 
   test-integration:
@@ -102,7 +104,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: coverage-integration
-          path: "**/.coverage.integration"
+          path: |
+            **/.coverage.integration
+            !**/node_modules/**
           include-hidden-files: true
 
   build-docker:
@@ -155,7 +159,4 @@ jobs:
           merge-multiple: false
 
       - name: Aggregate Coverage
-        run: |
-          cp -a coverage_artifacts/coverage-unit/. ./ || true
-          cp -a coverage_artifacts/coverage-integration/. ./ || true
-          ./scripts/aggregate_coverage.py
+        run: ./scripts/aggregate_coverage.py --artifacts-dir coverage_artifacts

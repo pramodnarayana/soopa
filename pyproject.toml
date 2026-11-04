@@ -266,6 +266,9 @@ source = ["apps", "core"]
 omit = [
     "*/tests/*",
     "*/migrations/*",
+    # Third-party compiled Cython extensions (e.g. dependency-injector) embed relative src/.../*.pyx paths.
+    "*.pyx",
+    "*.pxd",
     # Infrastructure adapters requiring live external connections (DB, SFTP, Vault, AWS).
     # These are covered by integration tests, not unit tests — per hexagonal arch conventions.
     "*/adapters/outbound/database/control_plane/*",
@@ -303,6 +306,10 @@ omit = [
 # Required 80% coverage
 show_missing = true
 fail_under = 80
+omit = [
+    "*.pyx",
+    "*.pxd",
+]
 exclude_also = [
     "if (typing\\.)?TYPE_CHECKING:",
     "@(abc\\.)?abstractmethod",
