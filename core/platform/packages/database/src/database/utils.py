@@ -1,7 +1,17 @@
-from sqlalchemy.engine.url import make_url
+from typing import Final
 
-DEFAULT_TEST_DB_SUFFIX = "_test"
-MAINTENANCE_DATABASE_NAME = "postgres"
+import asyncpg
+from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import SQLAlchemyError
+
+DEFAULT_TEST_DB_SUFFIX: Final[str] = "_test"
+MAINTENANCE_DATABASE_NAME: Final[str] = "postgres"
+DATABASE_CONNECTION_ERRORS: Final[tuple[type[Exception], ...]] = (
+    SQLAlchemyError,
+    asyncpg.PostgresError,
+    OSError,
+    TimeoutError,
+)
 
 
 def normalize_to_asyncpg(url: str) -> str:

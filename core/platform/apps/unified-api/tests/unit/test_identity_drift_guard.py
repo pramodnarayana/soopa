@@ -112,3 +112,28 @@ async def test_verify_platform_tenant_idp_alignment_logs_error_when_tenant_missi
         assert "pnpm db:seed" in str(missing_logs[0]["remedy"])
     finally:
         await provider.close()
+
+
+@pytest.mark.asyncio
+async def test_verify_platform_tenant_idp_alignment_logs_and_returns_false_on_driver_error() -> (
+    None
+):
+    provider = DatabaseProvider.from_url(
+        "postgresql+asyncpg://postgres:password@127.0.0.1:1/unreachable_test"
+    )
+    try:
+        with structlog.testing.capture_logs() as captured:
+            aligned = await verify_platform_tenant_idp_alignment(
+                db_provider=provider,
+                expected_platform_org_id="397365687661625347",
+            )
+
+        assert aligned is False
+        failure_logs = [
+            entry
+            for entry in captured
+            if entry.get("event") == "platform_tenant_idp_alignment_check_failed"
+        ]
+        assert len(failure_logs) == 1
+    finally:
+        await provider.close()

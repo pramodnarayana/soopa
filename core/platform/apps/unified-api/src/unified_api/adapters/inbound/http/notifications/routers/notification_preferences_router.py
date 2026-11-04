@@ -43,6 +43,17 @@ class UpsertPreferenceRequest(BaseModel):
         return value
 
 
+def _to_preference_response(
+    preference: NotificationPreference,
+) -> NotificationPreferenceResponse:
+    return NotificationPreferenceResponse(
+        id=preference.id,
+        tenant_id=preference.tenant_id,
+        event_type=preference.event_type,
+        channels=[ch.value for ch in preference.channels],
+    )
+
+
 @router.get(
     "/{tenant_id}/preferences",
     response_model=list[NotificationPreferenceResponse],
@@ -54,9 +65,10 @@ async def list_preferences(
     tenant_id: str,
     request: Request,
     repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),
-) -> list[NotificationPreference]:
+) -> list[NotificationPreferenceResponse]:
     assert_tenant_authorized(request, tenant_id)
-    return await repo.list_preferences(tenant_id)
+    preferences = await repo.list_preferences(tenant_id)
+    return [_to_preference_response(p) for p in preferences]
 
 
 @router.put(
@@ -72,13 +84,14 @@ async def upsert_preference(
     body: UpsertPreferenceRequest,
     request: Request,
     repo: NotificationPreferencesRepositoryPort = Depends(Provide[Container.route_repository]),
-) -> NotificationPreference:
+) -> NotificationPreferenceResponse:
     assert_tenant_authorized(request, tenant_id)
-    return await repo.upsert_preference(
+    preference = await repo.upsert_preference(
         tenant_id=tenant_id,
         event_type=event_type,
         channels=body.channels,
     )
+    return _to_preference_response(preference)
 
 
 @router.delete(

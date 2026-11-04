@@ -235,11 +235,12 @@ async def delete_certificate_secret(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
-    parts = vault_ref.replace("vault://", "").split("/")
+    normalized_ref = vault_ref.removeprefix("vault://").strip("/")
+    parts = normalized_ref.split("/")
     if (
-        not vault_ref.startswith("vault://")
-        or len(parts) < 1
-        or parts[0] != SecretCategory.AS2_KEY.value
+        len(parts) < 2
+        or any(not part or part in {".", ".."} for part in parts)
+        or parts[-2] != SecretCategory.AS2_KEY.value
     ):
         raise HTTPException(status_code=400, detail="Invalid vault reference category.")
 

@@ -115,15 +115,22 @@ if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
 
   echo "✅ Running Affected Unit Tests (Node + Python Coverage in hermetic .env.example)..."
   uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
-    pnpm test:node -- "$AFFECTED_FILTER"
+    pnpm test:node "$AFFECTED_FILTER"
+
+  # Match exact package scope of root `cov:python` when intersecting with Turbo's affected graph
+  COV_AFFECTED_EXCLUDES=(
+    --filter="!@soopa/seedwork"
+    --filter="!@soopa/outbox"
+    --filter="!@soopa/pubsub"
+    --filter="!@soopa/edi-secrets-sidecar"
+    --filter="!@soopa/unified-api"
+    --filter="!@soopa/dummy-pykcs11"
+  )
 
   COVERAGE_FILE=.coverage.unit CI=true \
     uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
     pnpm turbo run cov --env-mode=loose --concurrency="${TURBO_CONCURRENCY}" "$AFFECTED_FILTER" \
-      --filter="!@soopa/seedwork" \
-      --filter="!@soopa/outbox" \
-      --filter="!@soopa/pubsub" \
-      --filter="!@soopa/edi-secrets-sidecar"
+      "${COV_AFFECTED_EXCLUDES[@]}"
 
   echo "✅ Running Affected Integration Tests (isolated *_test databases)..."
   COVERAGE_FILE=.coverage.integration CI=true \
@@ -142,7 +149,7 @@ else
 
   COVERAGE_FILE=.coverage.unit CI=true \
     uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example --skip-db-ensure -- \
-    pnpm cov:python -- --env-mode=loose --concurrency="${TURBO_CONCURRENCY}"
+    pnpm cov:python --env-mode=loose --concurrency="${TURBO_CONCURRENCY}"
 
   echo "✅ Running Full Integration Tests (isolated *_test databases)..."
   COVERAGE_FILE=.coverage.integration CI=true \

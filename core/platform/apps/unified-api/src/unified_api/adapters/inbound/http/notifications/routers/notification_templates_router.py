@@ -95,6 +95,19 @@ class PreviewTemplateResponse(BaseModel):
     rendered_body: str
 
 
+def _to_template_response(template: Template) -> TemplateResponse:
+    return TemplateResponse(
+        id=template.id,
+        tenant_id=template.tenant_id,
+        name=template.name,
+        event_type=template.event_type,
+        channel=template.channel.value,
+        subject_template=template.subject,
+        body_template=template.body_content,
+        is_active=template.is_active,
+    )
+
+
 @router.get(
     "/{tenant_id}/templates",
     response_model=list[TemplateResponse],
@@ -106,9 +119,10 @@ async def list_templates(
     tenant_id: str,
     request: Request,
     repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),
-) -> list[Template]:
+) -> list[TemplateResponse]:
     assert_tenant_authorized(request, tenant_id)
-    return await repo.list_templates(tenant_id)
+    templates = await repo.list_templates(tenant_id)
+    return [_to_template_response(t) for t in templates]
 
 
 @router.put(
@@ -123,9 +137,9 @@ async def upsert_template(
     body: UpsertTemplateRequest,
     request: Request,
     repo: NotificationTemplatesRepositoryPort = Depends(Provide[Container.template_repository]),
-) -> Template:
+) -> TemplateResponse:
     assert_tenant_authorized(request, tenant_id)
-    return await repo.upsert_template(
+    template = await repo.upsert_template(
         tenant_id=tenant_id,
         name=body.name,
         event_type=body.event_type,
@@ -134,6 +148,7 @@ async def upsert_template(
         body_template=body.body_template,
         is_active=body.is_active,
     )
+    return _to_template_response(template)
 
 
 @router.delete(

@@ -5,9 +5,9 @@ from __future__ import annotations
 import structlog
 from database.models.identity import Tenant as TenantORM
 from database.provider import DatabaseProvider
+from database.utils import DATABASE_CONNECTION_ERRORS
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = structlog.get_logger(__name__)
 
@@ -35,7 +35,7 @@ async def verify_platform_tenant_idp_alignment(
                 select(TenantORM.idp_tenant_id).where(TenantORM.id == PLATFORM_TENANT_ID)
             )
             db_org_id = result.scalar_one_or_none()
-    except SQLAlchemyError:
+    except DATABASE_CONNECTION_ERRORS:
         logger.exception(
             "platform_tenant_idp_alignment_check_failed",
             tenant_id=PLATFORM_TENANT_ID,
