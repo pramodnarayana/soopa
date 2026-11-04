@@ -11,14 +11,14 @@ from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
-from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.infra.config import load_repo_env
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp_models.sharding import DatabaseShard, ShardRegistry
 from ucp_models.subscriptions import App
 
-load_dotenv(override=True)
+load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 

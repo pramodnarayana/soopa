@@ -6,18 +6,17 @@ from functools import lru_cache
 
 from pydantic import AliasChoices, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from seedwork.infra.config import load_settings_safely
 
 
 class IpEngineSettings(BaseSettings):
     """Unified configuration for IP Engine API, Orchestrator, Delivery, and Jobs workers.
 
-    Reads strictly from environment variables / `.env` in compliance with Shopify-style
-    single-image deployment and IaC URL injection standards.
+    Reads strictly from environment variables / resolved repo env file in compliance with
+    Shopify-style single-image deployment and IaC URL injection standards.
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
     )
@@ -180,7 +179,7 @@ class IpEngineSettings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_ip_engine_settings() -> IpEngineSettings:
     """Returns a cached singleton of IpEngineSettings."""
-    return IpEngineSettings()
+    return load_settings_safely(IpEngineSettings)
 
 
 __all__ = ["IpEngineSettings", "get_ip_engine_settings"]

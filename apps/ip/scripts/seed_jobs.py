@@ -12,12 +12,12 @@ import structlog
 from database.models.scheduling import ScheduledJob
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
-from dotenv import load_dotenv
 from ip.engine.domain.enums import IpJobName
 from scheduler.domain.constants import JobStatus
+from seedwork.infra.config import load_repo_env
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-load_dotenv(override=True)
+load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 
