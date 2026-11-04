@@ -80,6 +80,8 @@ def test_receive_as2_value_error_returns_rfc4130_mdn_disposition(
         },
     )
     assert response.status_code == 200
+    assert response.headers["content-type"].startswith("multipart/report")
+    assert "message/disposition-notification" in response.text
     assert expected_modifier in response.text
 
 
@@ -108,6 +110,8 @@ def test_receive_as2_orchestration_error_with_headers_returns_error_mdn() -> Non
         },
     )
     assert response.status_code == 200
+    assert response.headers["content-type"].startswith("multipart/report")
+    assert "message/disposition-notification" in response.text
     assert "error: unexpected-processing-error" in response.text
 
 

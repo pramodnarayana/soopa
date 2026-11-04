@@ -4,7 +4,6 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from seedwork.events import EventEnvelope
 
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_as2_tester
 
@@ -17,6 +16,7 @@ class _StubAs2Tester:
         responder: Callable[[], tuple[bool, str | None, str | None, str | None]],
     ) -> None:
         self._responder = responder
+        self.last_custom_payload: str | None = None
 
     async def test_connection(
         self,
@@ -39,8 +39,8 @@ class _StubAs2Tester:
             remote_cert_pem,
             encryption_algorithm,
             signature_algorithm,
-            custom_payload,
         )
+        self.last_custom_payload = custom_payload
         return self._responder()
 
 
@@ -141,6 +141,12 @@ async def test_as2_settings_and_certificate_lifecycle(
     )
     assert nested_wrong_category_del.status_code == 400
 
+    foreign_prefix_del = await auth_client.delete(
+        "/api/v1/as2/certificates/secret",
+        params={"vault_ref": "foreign_prefix/as2_key/gen_123"},
+    )
+    assert foreign_prefix_del.status_code == 400
+
     ok_del = await auth_client.delete(
         "/api/v1/as2/certificates/secret",
         params={"vault_ref": orphan_ref},
@@ -175,6 +181,18 @@ async def test_as2_settings_and_certificate_lifecycle(
     )
     assert in_use_del.status_code == 400
 
+    alias_scheme_del = await auth_client.delete(
+        "/api/v1/as2/certificates/secret",
+        params={"vault_ref": f"vault://{active_key_ref}"},
+    )
+    assert alias_scheme_del.status_code == 400
+
+    alias_slash_del = await auth_client.delete(
+        "/api/v1/as2/certificates/secret",
+        params={"vault_ref": f"/{active_key_ref}/"},
+    )
+    assert alias_slash_del.status_code == 400
+
     export_missing = await auth_client.get("/api/v1/as2/certificates/as2p_nonexistent/export")
     assert export_missing.status_code == 404
 
@@ -193,6 +211,12 @@ async def test_as2_settings_and_certificate_lifecycle(
         json={"action": "generate"},
     )
     assert rotate_local.status_code == 200
+
+    prev_in_use_alias_del = await auth_client.delete(
+        "/api/v1/as2/certificates/secret",
+        params={"vault_ref": f"vault://{active_key_ref}"},
+    )
+    assert prev_in_use_alias_del.status_code == 400
 
     export_rotated = await auth_client.get(f"/api/v1/as2/certificates/{local_partner_id}/export")
     assert export_rotated.status_code == 200
@@ -260,7 +284,6 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
     app: FastAPI,
     auth_client: httpx.AsyncClient,
 ) -> None:
-    _ = EventEnvelope
     gen_res = await auth_client.post(
         "/api/v1/as2/certificates/generate",
         json={"as2_id": "PS_LOCAL_STATION"},
@@ -375,9 +398,8 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
             "MDN-RAW-OK",
         )
     }
-    edi_sub_app.dependency_overrides[get_as2_tester] = lambda: _StubAs2Tester(
-        lambda: state["result"]
-    )
+    stub_tester = _StubAs2Tester(lambda: state["result"])
+    edi_sub_app.dependency_overrides[get_as2_tester] = lambda: stub_tester
     try:
         ping_ok = await auth_client.post(
             f"/api/v1/as2/partnerships/{partnership_id}/test",
@@ -386,6 +408,7 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
         assert ping_ok.status_code == 200
         assert ping_ok.json()["success"] is True
         assert ping_ok.json()["mdn_disposition"] == "processed"
+        assert stub_tester.last_custom_payload == "ISA*00*PING~"
 
         state["result"] = (
             True,

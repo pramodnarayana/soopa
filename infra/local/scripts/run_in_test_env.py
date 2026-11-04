@@ -142,7 +142,7 @@ def build_interactive_test_environment(
         for key, val in dotenv_values(resolved_env_file).items():
             if val is not None and key not in merged:
                 merged[key] = val
-        merged.setdefault(ENV_FILE_SELECTOR_VAR, str(resolved_env_file))
+        merged[ENV_FILE_SELECTOR_VAR] = str(resolved_env_file)
 
     for key, val in compose_topology_env_mappings(root_dir, domains=domains).items():
         merged.setdefault(key, val)

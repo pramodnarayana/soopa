@@ -41,11 +41,6 @@ fi
 # Remove stale per-package coverage artifacts so aggregate_coverage.py evaluates only current-run scope
 find apps core -maxdepth 5 \( -name '.coverage' -o -name '.coverage.*' \) -delete 2>/dev/null || true
 
-# Seed initial .env on fresh checkouts where .env does not yet exist; never modify an existing .env
-if [[ ! -f .env ]] && [[ -f .env.example ]]; then
-  cp .env.example .env
-fi
-
 RESOLVED_MODE="full"
 RESOLVED_BASE=""
 if [[ "$MODE" == "affected" ]]; then

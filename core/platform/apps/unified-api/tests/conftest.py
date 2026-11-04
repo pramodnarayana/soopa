@@ -116,6 +116,7 @@ async def db_engine():
 class FakeDatabaseProvider:
     def __init__(self, session_factory):
         self.session_factory = session_factory
+        self.closed = False
 
     @contextlib.asynccontextmanager
     async def session(self):
@@ -123,7 +124,7 @@ class FakeDatabaseProvider:
             yield session
 
     async def close(self):
-        pass
+        self.closed = True
 
 
 class FakeDatabaseRouter:
@@ -200,18 +201,26 @@ async def app(db_session_factory):
     """
     Returns the real Unified API shell with the patched database sessions.
     """
+    with tempfile.TemporaryDirectory() as temp_secrets_dir:
 
-    temp_secrets_dir = tempfile.mkdtemp()
+        async def override_get_secret_store():
+            return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
 
-    async def override_get_secret_store():
-        return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
+        prev_provider = _app.state.db_provider
+        prev_router = _app.state.db_router
+        _app.dependency_overrides[get_secret_store] = override_get_secret_store
+        if edi_app is not None:
+            edi_app.dependency_overrides[get_secret_store] = override_get_secret_store
 
-    _app.dependency_overrides[get_secret_store] = override_get_secret_store
-    if edi_app is not None:
-        edi_app.dependency_overrides[get_secret_store] = override_get_secret_store
-
-    async with shell_lifespan(_app):
-        yield _app
+        try:
+            async with shell_lifespan(_app):
+                yield _app
+        finally:
+            _app.state.db_provider = prev_provider
+            _app.state.db_router = prev_router
+            _app.dependency_overrides.pop(get_secret_store, None)
+            if edi_app is not None:
+                edi_app.dependency_overrides.pop(get_secret_store, None)
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -393,9 +402,6 @@ async def seeded_api_token(db_session_factory):
         }
 
 
-from identity.domain.identity_context import IdentityContext
-
-
 @pytest_asyncio.fixture(scope="function")
 async def auth_client(app, seeded_api_token, monkeypatch):
     """
@@ -409,8 +415,8 @@ async def auth_client(app, seeded_api_token, monkeypatch):
         subject="usr_platform_admin_123",
         tenant_id=seeded_api_token["tenant_id"],
         organization_id=None,
-        authorized_tenants={seeded_api_token["tenant_id"], "ten_000000000000000000000000"},
-        tenant_roles={"ten_000000000000000000000000": ["admin"]},
+        authorized_tenants={seeded_api_token["tenant_id"], PLATFORM_TENANT_ID},
+        tenant_roles={PLATFORM_TENANT_ID: ["admin"]},
         roles=("platform_admin",),
         permissions=(),
         claims={"is_m2m": True},

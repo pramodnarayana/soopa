@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from typing import Any
 
 import jinja2
 import structlog
@@ -17,6 +16,7 @@ from notification.ports.outbound.notification_templates_repository_port import (
 )
 from notification.ports.outbound.template_renderer_port import TemplateRendererPort
 from pydantic import BaseModel, Field, field_validator
+from seedwork.domain.types import JsonDict
 
 from unified_api.adapters.inbound.http.guards.notification_auth_guard import (
     assert_tenant_authorized,
@@ -78,7 +78,7 @@ class PreviewTemplateRequest(BaseModel):
 
     subject_template: str | None = None
     body_template: str
-    fake_payload: dict[str, Any] = Field(default_factory=dict)
+    fake_payload: JsonDict = Field(default_factory=dict)
 
     @field_validator("body_template")
     @classmethod
@@ -225,7 +225,7 @@ async def preview_template(
                     timeout=settings.render_timeout_seconds,
                 )
     except TimeoutError as exc:
-        logger.warning("template_render_timeout", tenant_id=tenant_id)
+        logger.error("template_render_timeout", tenant_id=tenant_id)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Template rendering timed out. Please simplify the template.",

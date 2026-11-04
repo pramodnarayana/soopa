@@ -7,12 +7,12 @@ import sys
 from collections.abc import Callable, Sequence
 
 import structlog
-from dotenv import load_dotenv
+from seedwork.infra.config import load_repo_env
 
 from platform_migrator.runners.platform_runner import run_platform_domain_migrations
 from platform_migrator.runners.seed_runner import run_domain_seeds
 
-load_dotenv()
+load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 

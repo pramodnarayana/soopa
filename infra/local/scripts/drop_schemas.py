@@ -17,10 +17,8 @@ from typing import Final
 
 import asyncpg
 import structlog
+from database.utils import normalize_to_standard_postgres
 from seedwork.infra.config import load_repo_env
-
-# Load resolved repo env file only for keys not already set in os.environ
-load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 
@@ -46,15 +44,6 @@ DOMAIN_SHARD_ENV_VARS: Final[dict[str, tuple[str, ...]]] = {
 }
 
 
-def _normalize_asyncpg_dsn(dsn: str) -> str:
-    """Normalizes SQLAlchemy asyncpg DSNs (e.g. postgresql+asyncpg://) for raw asyncpg driver."""
-    if dsn.startswith("postgresql+asyncpg://"):
-        return dsn.replace("postgresql+asyncpg://", "postgresql://", 1)
-    if dsn.startswith("postgres+asyncpg://"):
-        return dsn.replace("postgres+asyncpg://", "postgresql://", 1)
-    return dsn
-
-
 async def drop_schemas_for_db(
     dsn: str,
     db_name: str,
@@ -64,7 +53,7 @@ async def drop_schemas_for_db(
     Drops the specified schemas from the database.
     If target_schemas is None, drops all user/domain schemas (excluding pg_ and information_schema).
     """
-    normalized_dsn = _normalize_asyncpg_dsn(dsn)
+    normalized_dsn = normalize_to_standard_postgres(dsn)
     log = logger.bind(db_name=db_name, target_schemas=target_schemas)
     log.info("schema_reset_starting")
 
@@ -135,6 +124,7 @@ async def run_reset(selected_domains: set[str], global_url: str) -> None:
 
 
 def main() -> None:
+    load_repo_env(override=False)
     parser = argparse.ArgumentParser(
         description="Enterprise Database Schema Reset Utility (Isolated Domain Scopes)"
     )

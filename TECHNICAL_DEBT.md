@@ -524,13 +524,13 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Date Added**: 2026-10-14
 - **Status**: ✅ RESOLVED (Local CI & Test DB Isolation Implemented)
 - **Description**:
-  1. The canonical Platform Sentinel Tenant (`tnt_platform`) is mapped to the external IdP (Zitadel) organization ID via `identity.tenants.idp_tenant_id`.
+  1. The canonical Platform Sentinel Tenant (`ten_000000000000000000000000`) is mapped to the external IdP (Zitadel) organization ID via `identity.tenants.idp_tenant_id`.
   2. Zitadel generates ephemeral 64-bit integer IDs upon bootstrap (e.g., `394161401339314179`), whereas `.env.example` contains a static CI fixture ID (`384772010141548547`).
   3. Previously, running local CI simulation scripts like `scripts/verify_ci.sh` swapped `.env` with `.env.example` on disk and ran `db-seed` against the live `global_db`, overwriting `identity.tenants` with the dummy ID and causing HTTP 403 authentication failures in local development.
 - **Solution**:
   1. **Zero `.env` Disk Mutation (`SOOPA_ENV_FILE`)**: Central configuration loading (`seedwork.infra.config`) now supports in-memory environment file selection via `SOOPA_ENV_FILE`, eliminating `.env` file swapping on disk.
   2. **Physical Test Database Isolation (`*_test`)**: All integration tests and `verify_ci.sh` runs now provision and target isolated `global_db_test` and `<domain>_shard_test` databases (`infra/local/scripts/ensure_test_databases.py` & `run_in_test_env.py`), guarded globally by `database.pytest_plugin`. Live development databases (`global_db`) are never touched by test or pre-push workflows.
-  3. **Startup Identity Drift Check**: `unified-api` verifies `tnt_platform.idp_tenant_id` alignment with `IDENTITY_PLATFORM_ORG_ID` on local startup (`identity_drift_guard.py`) and logs structured remediation instructions immediately if drift occurs.
+  3. **Startup Identity Drift Check**: `unified-api` verifies `ten_000000000000000000000000.idp_tenant_id` alignment with `IDENTITY_PLATFORM_ORG_ID` on local startup (`identity_drift_guard.py`) and logs structured remediation instructions immediately if drift occurs.
 
 ## [Infrastructure] Rewrite Staging Power Script in Python
 

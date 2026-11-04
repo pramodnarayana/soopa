@@ -27,7 +27,7 @@ Three recurring developer pain points trace back to shared mutable state between
 
 ### 2.1 Silent Corruption of Local Zitadel Identity Mapping (`403 auth_middleware_tenant_not_provisioned`)
 
-1. During `pnpm bootstrap`, `infra/local/zitadel/bootstrap.py` provisions a local Zitadel instance and writes the live Snowflake organization ID (for example, `IDENTITY_PLATFORM_ORG_ID="397365687661625347"`) to `.env`, then seeds `identity.tenants` (`id = 'tnt_platform'`) in `global_db`.
+1. During `pnpm bootstrap`, `infra/local/zitadel/bootstrap.py` provisions a local Zitadel instance and writes the live Snowflake organization ID (for example, `IDENTITY_PLATFORM_ORG_ID="397365687661625347"`) to `.env`, then seeds `identity.tenants` (`id = 'ten_000000000000000000000000'`) in `global_db`.
 2. During every `git push`, `.husky/pre-push` runs `scripts/verify_ci.sh`:
    - Moves `.env` to `.env.bak` and copies `.env.example` (`IDENTITY_PLATFORM_ORG_ID=384772010141548547`) to `.env`.
    - Executes `pnpm infra:up`, which runs `db-seed` (`core/ucp/packages/ucp/scripts/seed.py`) against the **live `global_db` database**.
@@ -179,17 +179,17 @@ sequenceDiagram
     Dev->>Boot: Run pnpm bootstrap
     Boot->>Zit: Recreate Zitadel & provision Org/Projects
     Zit-->>Env: Write IDENTITY_PLATFORM_ORG_ID & Client IDs
-    Boot->>DevDB: Migrate & seed tnt_platform with .env Org ID
+    Boot->>DevDB: Migrate & seed ten_000000000000000000000000 with .env Org ID
     Dev->>API: Start pnpm dev
-    API->>DevDB: Verify tnt_platform.idp_tenant_id == settings.identity.platform_org_id
+    API->>DevDB: Verify ten_000000000000000000000000.idp_tenant_id == settings.identity.platform_org_id
     Note over API,DevDB: Logs clear actionable error on mismatch instead of opaque 403s
 ```
 
 1. **Clear Separation of Commands:**
    - `pnpm bootstrap`: Full clean-slate initialization (tears down Zitadel + Postgres + LocalStack, provisions Zitadel, writes `.env`, migrates and seeds `global_db`, and initializes `global_db_test`).
-   - `pnpm reset`: Resets domain data (`global_db`, `edi_shard`, LocalStack queues) while keeping Zitadel intact, then immediately runs `db:migrate` + `db:seed` from `.env` so `tnt_platform.idp_tenant_id` in `global_db` always matches Zitadel.
+   - `pnpm reset`: Resets domain data (`global_db`, `edi_shard`, LocalStack queues) while keeping Zitadel intact, then immediately runs `db:migrate` + `db:seed` from `.env` so `ten_000000000000000000000000.idp_tenant_id` in `global_db` always matches Zitadel.
 2. **Startup Identity Drift Check (Local Development Observability):**
-   - During `unified-api` lifespan startup in `local` / `development` environment, compare `IDENTITY_PLATFORM_ORG_ID` against `SELECT idp_tenant_id FROM identity.tenants WHERE id = 'tnt_platform'`.
+   - During `unified-api` lifespan startup in `local` / `development` environment, compare `IDENTITY_PLATFORM_ORG_ID` against `SELECT idp_tenant_id FROM identity.tenants WHERE id = 'ten_000000000000000000000000'`.
    - If mismatched or missing, emit a structured `logger.error("local_identity_org_id_mismatch", env_org_id=..., db_org_id=..., remedy="Run 'pnpm db:seed' to sync global_db with .env")` immediately at boot rather than failing silently until the first browser request hits `/api/v1/auth/me`.
 
 ---
@@ -217,6 +217,6 @@ sequenceDiagram
 ## 6. Acceptance Criteria
 
 1. **Zero `.env` Mutation:** `stat -f "%m" .env` (inode & modification timestamp) before, during, and after `git push` and `pnpm verify:ci` remains identical, even if `verify_ci.sh` is terminated mid-execution with `kill -9`.
-2. **Zero Dev DB Pollution:** Querying `SELECT idp_tenant_id FROM identity.tenants WHERE id = 'tnt_platform'` in `global_db` before and after `git push` returns the developer's real Zitadel organization ID unchanged; `/api/v1/auth/me` continues returning `200 OK` without running `pnpm db:seed`.
+2. **Zero Dev DB Pollution:** Querying `SELECT idp_tenant_id FROM identity.tenants WHERE id = 'ten_000000000000000000000000'` in `global_db` before and after `git push` returns the developer's real Zitadel organization ID unchanged; `/api/v1/auth/me` continues returning `200 OK` without running `pnpm db:seed`.
 3. **True `.env.example` Parity Enforcement:** Removing a required variable from `.env.example` while keeping it in `.env` causes `scripts/verify_ci.sh` to fail locally with `ValidationError`, proving `.env` on disk does not mask missing `.env.example` entries.
 4. **Workstation Responsiveness & Speed:** Pushing an isolated single-package change completes `pre-push` verification in under 35 seconds with peak concurrent `mypy`/`pytest` worker count <= 4 and zero IDE re-indexing storms.

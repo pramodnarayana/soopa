@@ -101,6 +101,10 @@ async def test_edi_headers_inbound_and_outbound_routes_crud(
         json={"name": "Acme 850 Header Updated"},
     )
     assert patch_hdr.status_code == 200
+    assert patch_hdr.json() == {"status": "ok"}
+    updated_headers = (await auth_client.get(headers_url)).json()
+    updated_hdr = next(h for h in updated_headers if h["id"] == header_id)
+    assert updated_hdr["name"] == "Acme 850 Header Updated"
 
     del_hdr = await auth_client.delete(f"{headers_url}/{header_id}")
     assert del_hdr.status_code == 204
@@ -136,6 +140,11 @@ async def test_edi_headers_inbound_and_outbound_routes_crud(
         json={"name": "Inbound 850 Updated", "active": False},
     )
     assert patch_in.status_code == 200
+    assert patch_in.json() == {"status": "ok"}
+    updated_in_routes = (await auth_client.get(in_url)).json()
+    updated_in = next(r for r in updated_in_routes if r["route_id"] == in_route_id)
+    assert updated_in["name"] == "Inbound 850 Updated"
+    assert updated_in["active"] is False
 
     del_in = await auth_client.delete(f"{in_url}/{in_route_id}")
     assert del_in.status_code == 204
@@ -174,6 +183,11 @@ async def test_edi_headers_inbound_and_outbound_routes_crud(
         json={"name": "Outbound SFTP Route Updated", "active": False},
     )
     assert patch_out.status_code == 200
+    assert patch_out.json() == {"status": "ok"}
+    updated_out_routes = (await auth_client.get(out_url)).json()
+    updated_out = next(r for r in updated_out_routes if r["route_id"] == out_route_id)
+    assert updated_out["name"] == "Outbound SFTP Route Updated"
+    assert updated_out["active"] is False
 
     del_out = await auth_client.delete(f"{out_url}/{out_route_id}")
     assert del_out.status_code == 204
@@ -186,11 +200,12 @@ async def test_edi_headers_inbound_and_outbound_routes_crud(
 async def test_edi_tools_transform_variants(auth_client: httpx.AsyncClient) -> None:
     sample_x12 = (
         "ISA*00*          *00*          *ZZ*PARTNER        *ZZ*SOOPAEDI       "
-        "*260101*1200*U*00401*000000001*0*P*:~"
-        "GS*PO*PARTNER*SOOPAEDI*20260101*1200*1*X*004010~"
-        "ST*850*0001~"
-        "BEG*00*NE*PO-999**20260101~"
-        "SE*3*0001~"
+        "*260101*1200*U*00401*000000001*0*P*>~"
+        "GS*FA*PARTNER*SOOPAEDI*20260101*1200*1*X*004010~"
+        "ST*997*0001~"
+        "AK1*PO*1~"
+        "AK9*A*1*1*1~"
+        "SE*4*0001~"
         "GE*1*1~"
         "IEA*1*000000001~"
     )
@@ -199,6 +214,7 @@ async def test_edi_tools_transform_variants(auth_client: httpx.AsyncClient) -> N
         json={"action": "EDI_TO_JSON", "payload": sample_x12},
     )
     assert edi_to_json_res.status_code == 200
+    assert edi_to_json_res.json()["valid"] is True
     envelope_str = edi_to_json_res.json()["result"]
     assert envelope_str is not None
 
@@ -208,6 +224,8 @@ async def test_edi_tools_transform_variants(auth_client: httpx.AsyncClient) -> N
         json={"action": "JSON_TO_EDI", "payload": envelope_str},
     )
     assert json_to_edi_res.status_code == 200
+    assert json_to_edi_res.json()["valid"] is True
+    assert "ST*997*0001" in json_to_edi_res.json()["result"]
 
     # Invalid JSON syntax returns structured invalid_json response
     bad_json_res = await auth_client.post(
@@ -319,6 +337,16 @@ async def test_dashboard_explorer_outbound_submission_and_transactions(
         )
         assert mod_replay_missing.status_code == 404
 
+        replay_ok = await auth_client.post(
+            f"/api/v1/tenants/{tenant_id}/edi/transactions/{trace_id}/replay",
+            json={"checkpoint": "TRANSFORM"},
+        )
+        assert replay_ok.status_code == 202
+        replay_body = replay_ok.json()
+        assert replay_body["status"] == "accepted"
+        assert replay_body["trace_id"] == trace_id
+        assert replay_body["replay_trace_id"] != trace_id
+
         bulk_replay_transform_missing = await auth_client.post(
             f"/api/v1/tenants/{tenant_id}/edi/transactions/bulk-replay",
             json={"trace_ids": [trace_id], "checkpoint": "TRANSFORM"},
@@ -329,6 +357,6 @@ async def test_dashboard_explorer_outbound_submission_and_transactions(
             f"/api/v1/tenants/{tenant_id}/edi/transactions/bulk-replay",
             json={"trace_ids": [trace_id], "checkpoint": "DELIVERY"},
         )
-        assert bulk_replay_delivery.status_code in (202, 400, 404, 409, 422)
+        assert bulk_replay_delivery.status_code == 404
     finally:
         edi_sub_app.dependency_overrides.pop(get_outbox_publisher, None)

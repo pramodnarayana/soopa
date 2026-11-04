@@ -18,9 +18,11 @@ import structlog
 from database.utils import (
     build_maintenance_dsn,
     extract_database_name,
+    is_postgres_dsn,
     normalize_to_standard_postgres,
     rewrite_dsn_to_test_db,
 )
+from drop_schemas import DOMAIN_SHARD_ENV_VARS
 from seedwork.infra.config import load_repo_env
 
 logger = structlog.get_logger(__name__)
@@ -28,11 +30,6 @@ logger = structlog.get_logger(__name__)
 GLOBAL_DB_ENV_KEYS: frozenset[str] = frozenset({"DATABASE_URL", "GLOBAL_DATABASE_URL"})
 EXPLICIT_SHARD_DB_ENV_KEYS: frozenset[str] = frozenset(
     {"TEST_SHARD_DB_URL", "SHARD_1_URL", "DB_SHARD_1_URL"}
-)
-POSTGRES_URL_PREFIXES: tuple[str, ...] = (
-    "postgres://",
-    "postgresql://",
-    "postgresql+asyncpg://",
 )
 VALID_DB_IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 SYNC_STATE_ROW_ID = "v1"
@@ -64,7 +61,9 @@ def rewrite_database_env_vars(env: Mapping[str, str]) -> dict[str, str]:
         if not is_database_url_env_key(key):
             continue
         stripped = val.strip()
-        if stripped.startswith(POSTGRES_URL_PREFIXES):
+        if not stripped:
+            continue
+        if is_postgres_dsn(stripped):
             rewritten[key] = rewrite_dsn_to_test_db(stripped)
     return rewritten
 
@@ -82,7 +81,7 @@ def discover_test_database_targets(env: Mapping[str, str]) -> list[TestDatabaseT
 
     for key in ordered_keys:
         raw_url = rewritten.get(key, "").strip()
-        if not raw_url.startswith(POSTGRES_URL_PREFIXES):
+        if not is_postgres_dsn(raw_url):
             continue
         db_name = extract_database_name(raw_url)
         if not db_name:
@@ -103,6 +102,66 @@ def discover_test_database_targets(env: Mapping[str, str]) -> list[TestDatabaseT
         )
 
     return targets
+
+
+def _target_identity_from_dsn(raw_url: str) -> tuple[str, str] | None:
+    stripped = raw_url.strip()
+    if not is_postgres_dsn(stripped):
+        return None
+    db_name = extract_database_name(stripped)
+    if not db_name:
+        return None
+    std_dsn = normalize_to_standard_postgres(stripped)
+    return (build_maintenance_dsn(std_dsn), db_name)
+
+
+def _collect_domain_target_identities(
+    rewritten_env: Mapping[str, str],
+    domains: Sequence[str],
+) -> set[tuple[str, str]]:
+    identities: set[tuple[str, str]] = set()
+    for domain in domains:
+        mapped_keys = set(DOMAIN_SHARD_ENV_VARS.get(domain, ()))
+        upper_domain = domain.upper()
+        for env_key in rewritten_env:
+            if env_key == f"{upper_domain}_DATABASE_URL" or env_key.startswith(
+                (
+                    f"SHARD_OVERRIDES__{upper_domain}_",
+                    f"DATABASE__SHARD_OVERRIDES__{upper_domain}_",
+                )
+            ):
+                mapped_keys.add(env_key)
+        for key in mapped_keys:
+            ident = _target_identity_from_dsn(rewritten_env.get(key, ""))
+            if ident is not None:
+                identities.add(ident)
+    return identities
+
+
+def filter_targets_for_active_domains(
+    targets: Sequence[TestDatabaseTarget],
+    rewritten_env: Mapping[str, str],
+    active_domains: Sequence[str],
+    *,
+    domains_arg: str = "all",
+) -> list[TestDatabaseTarget]:
+    """Retain global and active-domain shard targets while excluding inactive domain shards."""
+    active_set = set(active_domains)
+    inactive_domains = [d for d in DOMAIN_SHARD_ENV_VARS if d not in active_set]
+    active_identities = _collect_domain_target_identities(rewritten_env, active_domains)
+    inactive_identities = _collect_domain_target_identities(rewritten_env, inactive_domains)
+    unscoped = domains_arg.strip().lower() in ("", "all")
+
+    filtered: list[TestDatabaseTarget] = []
+    for target in targets:
+        ident = (target.maintenance_dsn, target.db_name)
+        if target.is_global or ident in active_identities:
+            filtered.append(target)
+        elif ident in inactive_identities:
+            continue
+        elif unscoped:
+            filtered.append(target)
+    return filtered
 
 
 def resolve_active_app_domains(root_dir: Path, domains_arg: str) -> list[str]:
@@ -147,6 +206,26 @@ def discover_app_migration_modules(root_dir: Path, app_domains: Sequence[str]) -
     return modules
 
 
+_IGNORED_WALK_DIRS: frozenset[str] = frozenset(
+    {"node_modules", ".venv", "__pycache__", "dist", "build", ".turbo", ".git"}
+)
+
+
+def _discover_seed_scripts(base_dir: Path) -> list[Path]:
+    """Find ``scripts/seed*.py`` under ``base_dir`` without traversing ``node_modules`` or ``.venv``."""
+    if not base_dir.is_dir():
+        return []
+    found: list[Path] = []
+    for root, dirs, files in os.walk(base_dir, topdown=True, followlinks=False):
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in _IGNORED_WALK_DIRS]
+        if os.path.basename(root) != "scripts":
+            continue
+        for filename in files:
+            if filename.startswith("seed") and filename.endswith(".py"):
+                found.append(Path(root) / filename)
+    return sorted(found)
+
+
 def compute_schema_and_seed_fingerprint(
     root_dir: Path,
     env: Mapping[str, str],
@@ -160,18 +239,24 @@ def compute_schema_and_seed_fingerprint(
     if init_sql.is_file():
         tracked_files.append(init_sql)
 
-    tracked_files.extend(
-        sorted(
-            (root_dir / "core" / "platform" / "packages" / "database" / "migrations").rglob("*.py")
+    migrations_dir = root_dir / "core" / "platform" / "packages" / "database" / "migrations"
+    if migrations_dir.is_dir():
+        tracked_files.extend(
+            sorted(p for p in migrations_dir.rglob("*.py") if "node_modules" not in p.parts)
         )
-    )
-    tracked_files.extend(sorted((root_dir / "core").glob("**/scripts/seed*.py")))
+    tracked_files.extend(_discover_seed_scripts(root_dir / "core"))
 
     for app_name in app_domains:
         app_root = root_dir / "apps" / app_name
         if app_root.is_dir():
-            tracked_files.extend(sorted(app_root.glob("packages/*/src/**/migrations/**/*.py")))
-            tracked_files.extend(sorted(app_root.glob("**/scripts/seed*.py")))
+            tracked_files.extend(
+                sorted(
+                    p
+                    for p in app_root.glob("packages/*/src/**/migrations/**/*.py")
+                    if "node_modules" not in p.parts
+                )
+            )
+            tracked_files.extend(_discover_seed_scripts(app_root))
 
     for file_path in tracked_files:
         if file_path.is_file():
@@ -320,11 +405,16 @@ async def ensure_test_databases_ready(
 ) -> dict[str, str]:
     """Ensure all ``*_test`` databases exist, have RLS functions, and match current migrations/seeds."""
     test_env = rewrite_database_env_vars(env)
-    targets = discover_test_database_targets(test_env)
+    active_apps = resolve_active_app_domains(root_dir, domains)
+    targets = filter_targets_for_active_domains(
+        discover_test_database_targets(test_env),
+        test_env,
+        active_apps,
+        domains_arg=domains,
+    )
     if not targets:
         raise RuntimeError("No PostgreSQL DSN variables found to provision test databases.")
 
-    active_apps = resolve_active_app_domains(root_dir, domains)
     newly_created = False
     for target in targets:
         created = await _ensure_single_database_exists(target)
