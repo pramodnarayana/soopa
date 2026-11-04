@@ -21,18 +21,11 @@ from database.models.identity import Tenant as TenantORM
 from database.provider import get_async_engine
 from edi.adapters.outbound.database.models.data_plane import TenantBase
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
+from identity.domain.constants import IdentityIdPrefix
 from identity.domain.identity_context import PLATFORM_TENANT_ID, IdentityContext
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
 from orchestration.adapters.outbound.database.models import WorkflowBase
 from secret_store import AwsSecretsManagerAdapter
-
-_IP_MODEL_MODULES = (
-    _ip_energy_models,
-    _ip_tms_models,
-    _ip_cp_models,
-    _ip_dp_models,
-)
-from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -47,6 +40,13 @@ from unified_api.adapters.inbound.http.dependencies.edi.services import get_secr
 from unified_api.bootstrap.lifespan import shell_lifespan
 from unified_api.main import app as _app
 from unified_api.main import edi_app
+
+_IP_MODEL_MODULES = (
+    _ip_energy_models,
+    _ip_tms_models,
+    _ip_cp_models,
+    _ip_dp_models,
+)
 
 
 def fake_build_machine_identity(client_id: str, tenant_id: str) -> IdentityContext:
