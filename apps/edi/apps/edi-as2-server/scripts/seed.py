@@ -4,13 +4,13 @@ import contextlib
 import structlog
 from database.models.identity import Tenant
 from database.router import DatabaseRouter
-from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.infra.config import load_repo_env
 from sqlalchemy.future import select
 
 from as2_server.settings import get_settings as get_worker_settings
 
-load_dotenv(override=True)
+load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 

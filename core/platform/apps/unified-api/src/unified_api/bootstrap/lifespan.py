@@ -22,6 +22,7 @@ from seedwork.infra.api import LaunchableApiModule
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
+from unified_api.bootstrap.identity_drift_guard import verify_platform_tenant_idp_alignment
 from unified_api.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -35,6 +36,11 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
     db_provider = DatabaseProvider.from_url(db_url)
     app.state.db_provider = db_provider
+
+    await verify_platform_tenant_idp_alignment(
+        db_provider=db_provider,
+        expected_platform_org_id=settings.identity.platform_org_id,
+    )
 
     db_router = DatabaseRouter(
         global_db_url=str(settings.database.global_url),

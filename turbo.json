@@ -1,5 +1,31 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "SOOPA_ENV_FILE",
+    "PYTEST_PLUGINS",
+    "COVERAGE_FILE",
+    "CI",
+    "ENVIRONMENT",
+    "ENABLED_APPS",
+    "*_DATABASE_URL",
+    "TEST_SHARD_DB_URL",
+    "SHARD_OVERRIDES__*",
+    "DATABASE__*",
+    "AWS_*",
+    "SQS_*",
+    "SNS_*",
+    "S3_*",
+    "IDENTITY_*",
+    "ZITADEL_*",
+    "SECRETS_*",
+    "STORAGE_*",
+    "AS2_*",
+    "SFTP_*",
+    "ENCRYPTION_*",
+    "VAULT_*",
+    "MASTER_KEY*",
+    "OTEL_*"
+  ],
   "tasks": {
     "dev": {
       "cache": false,
@@ -28,12 +54,12 @@
     "test:integration": {
       "dependsOn": ["build"],
       "env": ["DATABASE_URL", "DB_SHARD_1_URL", "SHARD_1_URL"],
-      "outputs": []
+      "outputs": [".coverage.integration", ".coverage"]
     },
     "cov": {
       "dependsOn": ["build"],
       "env": ["DATABASE_URL", "DB_SHARD_1_URL", "SHARD_1_URL"],
-      "outputs": []
+      "outputs": [".coverage.unit", ".coverage"]
     },
     "lint": {
       "outputs": []

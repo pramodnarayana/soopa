@@ -519,19 +519,18 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Description**: The system currently uses Post-Commit Sync Dispatch for the Outbox pattern. The same API thread that commits the transaction executes `sqs.send_message()` synchronously. While this avoids infrastructure bloat, it introduces blocking latency to the end-user API response, especially when producing multiple events.
 - **Action Item**: Refactor the outbox dispatch mechanism to use **In-Memory Async Dispatch**. Upon transaction commit, the API should push the event to an in-memory queue (e.g., `asyncio.Queue` or a background task) and immediately return `200 OK`. A dedicated background thread within the same process will drain the in-memory queue and publish to SQS. Rely on the existing database Sweeper as the fallback mechanism for container crashes.
 
-## [Identity Architecture] Enterprise IdP Mapping Resiliency & Local Dev Parity (Zitadel vs Postgres)
+## [RESOLVED] [Identity Architecture] Enterprise IdP Mapping Resiliency & Local Dev Parity (Zitadel vs Postgres)
 
 - **Date Added**: 2026-10-14
-- **Status**: TO DO
+- **Status**: ✅ RESOLVED (Local CI & Test DB Isolation Implemented)
 - **Description**:
-  1. The canonical Platform Sentinel Tenant (`ten_000000000000000000000000`) is mapped to the external IdP (Zitadel) organization ID via `identity.tenants.idp_tenant_id`.
-  2. Zitadel generates ephemeral 64-bit integer IDs upon bootstrap (e.g., `394161401339314179`), whereas `.env.example` has historically contained a static dummy ID (`384772010141548547`).
-  3. When running local CI simulation scripts like `scripts/verify_ci.sh`, `.env` is swapped with `.env.example` and `pnpm infra:up` runs `db-seed`, which overwrites `identity.tenants` in PostgreSQL with the dummy ID. Upon script exit, `.env` is restored but the database is not re-seeded, causing authentication failures (HTTP 403 `TenantNotProvisionedError`) when logging into the local UI.
-  4. In a pure enterprise architecture, the system should be resilient against IdP drift and not rely on manual re-seeding after script execution.
-- **Action Item**:
-  1. **Self-Healing Sentinel Mapping / JIT Linking**: In `JwtStrategy` (or `identity` use cases), if a verified token matches `settings.identity.platform_org_id`, automatically link or self-heal the mapping to `ten_000000000000000000000000` dynamically rather than rejecting with 403.
-  2. **Token Custom Claims / IdP Metadata**: When Zitadel (or external IdP) provisions the platform organization, attach metadata (`internal_tenant_id = ten_000000000000000000000000`) and configure Zitadel token enrichment to include this claim directly in JWTs so mapping does not require static database synchronization.
-  3. **Local Tooling Parity**: Ensure `scripts/verify_ci.sh`'s cleanup routine (`_cleanup`) re-runs `pnpm db:seed:ucp` after restoring `.env`, and update `infra/local/zitadel/sync.py` to keep `.env.example` synchronized with local Zitadel runs.
+  1. The canonical Platform Sentinel Tenant (`tnt_platform`) is mapped to the external IdP (Zitadel) organization ID via `identity.tenants.idp_tenant_id`.
+  2. Zitadel generates ephemeral 64-bit integer IDs upon bootstrap (e.g., `394161401339314179`), whereas `.env.example` contains a static CI fixture ID (`384772010141548547`).
+  3. Previously, running local CI simulation scripts like `scripts/verify_ci.sh` swapped `.env` with `.env.example` on disk and ran `db-seed` against the live `global_db`, overwriting `identity.tenants` with the dummy ID and causing HTTP 403 authentication failures in local development.
+- **Solution**:
+  1. **Zero `.env` Disk Mutation (`SOOPA_ENV_FILE`)**: Central configuration loading (`seedwork.infra.config`) now supports in-memory environment file selection via `SOOPA_ENV_FILE`, eliminating `.env` file swapping on disk.
+  2. **Physical Test Database Isolation (`*_test`)**: All integration tests and `verify_ci.sh` runs now provision and target isolated `global_db_test` and `<domain>_shard_test` databases (`infra/local/scripts/ensure_test_databases.py` & `run_in_test_env.py`), guarded globally by `database.pytest_plugin`. Live development databases (`global_db`) are never touched by test or pre-push workflows.
+  3. **Startup Identity Drift Check**: `unified-api` verifies `tnt_platform.idp_tenant_id` alignment with `IDENTITY_PLATFORM_ORG_ID` on local startup (`identity_drift_guard.py`) and logs structured remediation instructions immediately if drift occurs.
 
 ## [Infrastructure] Rewrite Staging Power Script in Python
 

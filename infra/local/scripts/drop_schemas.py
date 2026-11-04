@@ -17,10 +17,10 @@ from typing import Final
 
 import asyncpg
 import structlog
-from dotenv import load_dotenv
+from seedwork.infra.config import load_repo_env
 
-# Enforce .env as the authoritative Single Source of Truth, overriding ambient shell variables
-load_dotenv(override=True)
+# Load resolved repo env file only for keys not already set in os.environ
+load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 
