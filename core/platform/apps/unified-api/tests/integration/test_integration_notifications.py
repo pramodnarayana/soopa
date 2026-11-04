@@ -69,7 +69,13 @@ async def test_notification_templates_preferences_and_user_preferences_lifecycle
         },
     )
     assert upsert_tpl.status_code == 200, upsert_tpl.text
-    template_id = upsert_tpl.json()["id"]
+    upsert_body = upsert_tpl.json()
+    template_id = upsert_body["id"]
+    assert upsert_body["subject_template"] == "Order {{ order_id }} Dispatched"
+    assert (
+        upsert_body["body_template"] == "Hello {{ customer_name }}, order {{ order_id }} shipped."
+    )
+    assert upsert_body["is_active"] is True
 
     list_tpl = await auth_client.get(tpl_base)
     assert list_tpl.status_code == 200

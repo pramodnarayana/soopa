@@ -1,6 +1,7 @@
 import asyncio
 import os
 from logging.config import fileConfig  # noqa: TID251 - Required by Alembic for setup
+from pathlib import Path
 
 from alembic import context
 from dotenv import load_dotenv
@@ -12,7 +13,13 @@ import database.models  # noqa: F401
 from database.models.core import GlobalRegistry
 from database.utils import normalize_to_asyncpg
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "../../../../../.env"))
+_repo_root = Path(__file__).resolve().parents[5]
+_env_selector = os.environ.get("SOOPA_ENV_FILE", "").strip() or ".env"
+_env_path = (
+    Path(_env_selector) if Path(_env_selector).is_absolute() else (_repo_root / _env_selector)
+)
+if _env_path.is_file():
+    load_dotenv(_env_path, override=False)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

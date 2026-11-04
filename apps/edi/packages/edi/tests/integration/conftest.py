@@ -3,6 +3,10 @@ import uuid
 from typing import Any
 
 from dotenv import load_dotenv
+from secret_store.ports.secret_store_port import (
+    Category,
+    normalize_prefixed_category_ref,
+)
 
 from edi.bootstrap.container import create_edi_data_plane_uow
 from tests.test_settings import get_test_settings
@@ -165,6 +169,9 @@ async def override_get_tenant_session(tenant_db_connection):
 class FakeVault:
     def __init__(self):
         self.secrets: dict[str, str] = {}
+
+    def normalize_category_ref(self, vault_ref: str, category: Category) -> str | None:
+        return normalize_prefixed_category_ref(vault_ref, category=category)
 
     async def get_secret(self, vault_ref: str) -> str:
         return self.secrets.get(

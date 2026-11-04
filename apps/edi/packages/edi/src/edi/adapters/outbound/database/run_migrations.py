@@ -5,8 +5,7 @@ from pathlib import Path
 import structlog
 from alembic import command
 from alembic.config import Config
-from dotenv import load_dotenv
-from seedwork.infra.config import load_settings_safely
+from seedwork.infra.config import load_repo_env, load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -166,16 +165,7 @@ def run_migrations() -> None:
     Runs the Global Control Plane migration, then iterates dynamically
     to apply Tenant schema migrations across all database shards.
     """
-    cwd = Path.cwd()
-    if (cwd / ".env").exists():
-        load_dotenv(cwd / ".env")
-    else:
-        current = Path(__file__).resolve()
-        for parent in current.parents:
-            if (parent / ".env").exists():
-                load_dotenv(parent / ".env")
-                break
-
+    load_repo_env(override=False)
     settings = load_settings_safely(PlatformDatabaseSettings)
 
     # In hybrid multi-tenancy, the migrator container receives EDI_DATABASE_URL directly

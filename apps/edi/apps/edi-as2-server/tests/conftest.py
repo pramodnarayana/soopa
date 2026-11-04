@@ -1,5 +1,9 @@
 import uuid
 
+from secret_store.ports.secret_store_port import (
+    Category,
+    normalize_prefixed_category_ref,
+)
 from seedwork import generate_id
 
 from as2_server.main import app
@@ -350,6 +354,9 @@ class FakeS3Storage:
 class FakeHostVault:
     def __init__(self, private_key_pem: bytes):
         self.private_key_pem = private_key_pem
+
+    def normalize_category_ref(self, vault_ref: str, category: Category) -> str | None:
+        return normalize_prefixed_category_ref(vault_ref, category=category)
 
     async def retrieve_private_key(self, vault_ref: str) -> bytes:
         return self.private_key_pem

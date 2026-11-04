@@ -49,6 +49,22 @@ def test_rewrite_dsn_to_test_db_is_idempotent_and_preserves_driver_and_query() -
     assert rewrite_dsn_to_test_db(sqlite_url) == sqlite_url
 
 
+@pytest.mark.parametrize(
+    "missing_db_dsn",
+    [
+        "postgresql://ucp_admin:ucp_password@localhost:5432/",
+        "postgresql+asyncpg://ucp_admin:ucp_password@localhost:5432",
+        "postgresql+psycopg2://ucp_admin:ucp_password@localhost:5432/",
+    ],
+)
+def test_rewrite_dsn_to_test_db_rejects_postgres_dsn_without_database_name(
+    missing_db_dsn: str,
+) -> None:
+    with pytest.raises(ValueError, match="missing a database name") as exc_info:
+        rewrite_dsn_to_test_db(missing_db_dsn)
+    assert "ucp_password" not in str(exc_info.value)
+
+
 def test_build_maintenance_dsn_switches_to_postgres_and_standard_driver() -> None:
     assert (
         build_maintenance_dsn(
@@ -75,14 +91,17 @@ def test_assert_test_database_url_allows_isolated_test_databases_and_sqlite() ->
         "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard",
         "postgresql+asyncpg://billing:billing_password@localhost:5434/billing_shard",
         "postgresql://ucp_admin:ucp_password@localhost:5432/soopa_global",
+        "mysql://root:secret_pw@localhost:3306/app_test",
+        "://malformed:secret_pw@localhost/global_db_test",
         "",
     ],
 )
 def test_assert_test_database_url_rejects_live_development_databases(
     unsafe_dsn: str,
 ) -> None:
-    with pytest.raises(RuntimeError, match="non-test database"):
+    with pytest.raises(RuntimeError) as exc_info:
         assert_test_database_url(unsafe_dsn)
+    assert "secret_pw" not in str(exc_info.value)
 
 
 @pytest.mark.asyncio

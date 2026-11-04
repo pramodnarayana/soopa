@@ -209,3 +209,4 @@ def health_check() -> dict[str, str]:
 # ---------------------------------------------------------------------------
 edi_app = create_edi_app(settings=get_settings())
 app.mount("/", edi_app)
+app.state.edi_app = edi_app

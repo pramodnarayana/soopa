@@ -12,6 +12,7 @@ pytestmark = pytest.mark.integration
 class _StubSftpTester:
     def __init__(self, responder: Callable[[], tuple[bool, str | None]]) -> None:
         self._responder = responder
+        self.calls: list[tuple[str, int, str, str | None, str | None]] = []
 
     async def test_connection(
         self,
@@ -21,7 +22,7 @@ class _StubSftpTester:
         password: str | None = None,
         client_key_string: str | None = None,
     ) -> tuple[bool, str | None]:
-        _ = (host, port, username, password, client_key_string)
+        self.calls.append((host, port, username, password, client_key_string))
         return self._responder()
 
 
@@ -122,9 +123,8 @@ async def test_sftp_partners_crud_and_security_guards(
     # 8. Test Existing Connection & SFTP Tester Paths
     edi_sub_app: FastAPI | None = app.state.edi_app
     assert edi_sub_app is not None
-    edi_sub_app.dependency_overrides[get_sftp_tester] = lambda: _StubSftpTester(
-        lambda: (True, None)
-    )
+    stub_tester = _StubSftpTester(lambda: (True, None))
+    edi_sub_app.dependency_overrides[get_sftp_tester] = lambda: stub_tester
     try:
         direct_ok = await auth_client.post(
             f"{base_url}/test",
@@ -137,6 +137,7 @@ async def test_sftp_partners_crud_and_security_guards(
         )
         assert direct_ok.status_code == 200
         assert direct_ok.json()["success"] is True
+        assert stub_tester.calls[-1] == ("8.8.8.8", 22, "testuser", "secret-password", None)
 
         missing_vault_key = await auth_client.post(
             f"{base_url}/test",
@@ -169,6 +170,7 @@ async def test_sftp_partners_crud_and_security_guards(
         )
         assert existing_pw_ok.status_code == 200
         assert existing_pw_ok.json()["success"] is True
+        assert stub_tester.calls[-1] == ("8.8.8.8", 22, "pwuser", "stored-sftp-password", None)
 
         existing_vault_missing = await auth_client.post(
             f"{base_url}/{partner_id}/test",

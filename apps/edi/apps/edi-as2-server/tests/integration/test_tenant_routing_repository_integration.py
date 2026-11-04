@@ -2,6 +2,7 @@ import pytest
 from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant
 from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
+from edi.domain.constants import EdiIdPrefix
 from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id, generate_random_hex
 from sqlalchemy import select
@@ -76,7 +77,7 @@ async def test_tenant_routing_repository_queries_against_postgres(
     )
 
     local_partner = AS2Partner(
-        id=generate_id("as2p"),
+        id=generate_id(EdiIdPrefix.EDI_AS2_PARTNER.value),
         tenant_id=tenant_id,
         name=f"Local Station {suffix}",
         as2_id=local_as2_id,
@@ -84,7 +85,7 @@ async def test_tenant_routing_repository_queries_against_postgres(
         active=True,
     )
     remote_partner = AS2Partner(
-        id=generate_id("as2p"),
+        id=generate_id(EdiIdPrefix.EDI_AS2_PARTNER.value),
         tenant_id=tenant_id,
         name=f"Remote Peer {suffix}",
         as2_id=remote_as2_id,
@@ -95,7 +96,7 @@ async def test_tenant_routing_repository_queries_against_postgres(
     await global_db_session.flush()
 
     route_one = InboundRoute(
-        id=generate_id("route"),
+        id=generate_id(EdiIdPrefix.EDI_INBOUND_ROUTE.value),
         tenant_id=tenant_id,
         name=f"Inbound 850 {suffix}",
         isa_sender_id=f"SND{suffix[:6].upper()}",
@@ -132,7 +133,7 @@ async def test_tenant_routing_repository_queries_against_postgres(
 
     # Duplicate active route across two tenants raises AmbiguousTenantRoutingError
     duplicate_route = InboundRoute(
-        id=generate_id("route"),
+        id=generate_id(EdiIdPrefix.EDI_INBOUND_ROUTE.value),
         tenant_id=second_tenant_id,
         name=f"Duplicate Inbound 850 {suffix}",
         isa_sender_id=route_one.isa_sender_id,
@@ -155,4 +156,4 @@ async def test_tenant_routing_repository_queries_against_postgres(
     # 3. Shard lookup via Tenant -> ShardRegistry -> DatabaseShard SQL JOIN
     shard_info = await repo.get_tenant_shard_info(tenant_id)
     assert shard_info == (tenant_id, shard_id, shard_dsn)
-    assert await repo.get_tenant_shard_info(f"ten_missing_{suffix}") is None
+    assert await repo.get_tenant_shard_info(generate_id(IdentityIdPrefix.TENANT.value)) is None

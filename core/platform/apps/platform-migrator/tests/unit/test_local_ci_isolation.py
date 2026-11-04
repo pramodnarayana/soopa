@@ -5,9 +5,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ensure_test_databases import discover_test_database_targets, rewrite_database_env_vars
+import pytest
+from ensure_test_databases import (
+    compute_schema_and_seed_fingerprint,
+    discover_test_database_targets,
+    filter_targets_for_active_domains,
+    rewrite_database_env_vars,
+)
 from run_in_test_env import (
     build_hermetic_test_environment,
+    build_interactive_test_environment,
     should_escalate_to_full_verification,
 )
 
@@ -162,3 +169,117 @@ def test_should_escalate_to_full_verification_on_root_configs() -> None:
     assert should_escalate_to_full_verification(["pyproject.toml"]) is True
     assert should_escalate_to_full_verification(["turbo.json"]) is True
     assert should_escalate_to_full_verification(["semgrep-architecture.yml"]) is True
+
+
+def test_rewrite_and_discover_support_driver_qualified_postgres_and_reject_empty_db_name() -> None:
+    env = {
+        "DATABASE_URL": "postgresql+psycopg2://ucp_admin:ucp_password@localhost:5432/global_db",
+        "OPTIONAL_DATABASE_URL": "",
+        "SQLITE_DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+    }
+    rewritten = rewrite_database_env_vars(env)
+    assert (
+        rewritten["DATABASE_URL"]
+        == "postgresql+psycopg2://ucp_admin:ucp_password@localhost:5432/global_db_test"
+    )
+    assert rewritten["OPTIONAL_DATABASE_URL"] == ""
+    assert rewritten["SQLITE_DATABASE_URL"] == "sqlite+aiosqlite:///:memory:"
+
+    targets = discover_test_database_targets(env)
+    assert len(targets) == 1
+    assert targets[0].db_name == "global_db_test"
+    assert targets[0].dsn == "postgresql://ucp_admin:ucp_password@localhost:5432/global_db_test"
+
+    with pytest.raises(ValueError, match="missing a database name"):
+        rewrite_database_env_vars(
+            {"DATABASE_URL": "postgresql+psycopg2://ucp_admin:ucp_password@localhost:5432/"}
+        )
+
+
+def test_filter_targets_for_active_domains_excludes_inactive_shards() -> None:
+    raw_env = {
+        "DATABASE_URL": "postgresql://ucp_admin:ucp_password@localhost:5432/global_db",
+        "EDI_DATABASE_URL": "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard",
+        "TEST_SHARD_DB_URL": "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard",
+        "SHARD_OVERRIDES__EDI_SHARD_1": "postgresql+asyncpg://edi:edi_password@localhost:5433/edi_shard",
+        "BILLING_DATABASE_URL": "postgresql+asyncpg://billing:billing_password@localhost:5434/billing_shard",
+        "SHARD_OVERRIDES__BILLING_SHARD_1": "postgresql+asyncpg://billing:billing_password@localhost:5434/billing_shard",
+    }
+    rewritten = rewrite_database_env_vars(raw_env)
+    all_targets = discover_test_database_targets(rewritten)
+
+    edi_only = filter_targets_for_active_domains(
+        all_targets, rewritten, ["edi"], domains_arg="platform,edi"
+    )
+    assert [t.db_name for t in edi_only] == ["global_db_test", "edi_shard_test"]
+
+    billing_only = filter_targets_for_active_domains(
+        all_targets, rewritten, ["billing"], domains_arg="platform,billing"
+    )
+    assert [t.db_name for t in billing_only] == ["global_db_test", "billing_shard_test"]
+
+    platform_only = filter_targets_for_active_domains(
+        all_targets, rewritten, [], domains_arg="platform"
+    )
+    assert [t.db_name for t in platform_only] == ["global_db_test"]
+
+
+def test_build_interactive_test_environment_overrides_inherited_soopa_env_file(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "core" / "platform").mkdir(parents=True)
+    (tmp_path / "core" / "platform" / "topology.json").write_text(
+        json.dumps(
+            {
+                "topics": [],
+                "queues": [],
+                "subscriptions": [],
+                "buckets": [],
+                "secrets": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    explicit_env = tmp_path / ".env.custom"
+    explicit_env.write_text(
+        "DATABASE_URL=postgresql://ucp_admin:ucp_password@localhost:5432/global_db\n",
+        encoding="utf-8",
+    )
+
+    child_env = build_interactive_test_environment(
+        root_dir=tmp_path,
+        env_file=explicit_env,
+        base_environ={"SOOPA_ENV_FILE": "/stale/inherited/.env"},
+        domains="platform",
+    )
+    assert child_env["SOOPA_ENV_FILE"] == str(explicit_env)
+
+
+def test_compute_schema_and_seed_fingerprint_ignores_node_modules_seed_scripts(
+    tmp_path: Path,
+) -> None:
+    real_seed = tmp_path / "apps" / "edi" / "scripts" / "seed_jobs.py"
+    real_seed.parent.mkdir(parents=True)
+    real_seed.write_text("# canonical seed\n", encoding="utf-8")
+    (tmp_path / "core" / "platform" / "packages" / "database" / "migrations").mkdir(parents=True)
+
+    env = {"DATABASE_URL": "postgresql://ucp_admin:ucp_password@localhost:5432/global_db_test"}
+    baseline = compute_schema_and_seed_fingerprint(tmp_path, env, ["edi"])
+
+    vendored_seed = (
+        tmp_path
+        / "apps"
+        / "edi"
+        / "apps"
+        / "edi-delivery-worker"
+        / "node_modules"
+        / "@soopa"
+        / ".ignored_api"
+        / "scripts"
+        / "seed.py"
+    )
+    vendored_seed.parent.mkdir(parents=True)
+    vendored_seed.write_text("# transient pnpm artifact\n", encoding="utf-8")
+
+    after_node_modules = compute_schema_and_seed_fingerprint(tmp_path, env, ["edi"])
+    assert after_node_modules == baseline

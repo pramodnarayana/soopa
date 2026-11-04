@@ -1,7 +1,5 @@
 #!/bin/sh
 set -e
-export DATABASE_URL="postgresql://ucp_admin:ucp_password@localhost:5432/global_db_test"
-export SHARD_1_URL="postgresql://edi:edi_password@localhost:5433/edi_shard_test"
 export TURBO_CONCURRENCY="${TURBO_CONCURRENCY:-4}"
 
 echo "[pre-commit] Checking if database is running..."

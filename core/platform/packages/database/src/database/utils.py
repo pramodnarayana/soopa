@@ -2,7 +2,7 @@ from typing import Final
 
 import asyncpg
 from sqlalchemy.engine.url import make_url
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 
 DEFAULT_TEST_DB_SUFFIX: Final[str] = "_test"
 MAINTENANCE_DATABASE_NAME: Final[str] = "postgres"
@@ -12,6 +12,19 @@ DATABASE_CONNECTION_ERRORS: Final[tuple[type[Exception], ...]] = (
     OSError,
     TimeoutError,
 )
+
+
+def is_postgres_dsn(url: str) -> bool:
+    """Return True when ``url`` is a SQLAlchemy/PostgreSQL DSN (including driver-qualified URLs)."""
+    stripped = url.strip()
+    if not stripped:
+        return False
+    try:
+        url_obj = make_url(stripped)
+    except ArgumentError:
+        return False
+    driver = url_obj.drivername
+    return driver in ("postgres", "postgresql") or driver.startswith(("postgresql+", "postgres+"))
 
 
 def normalize_to_asyncpg(url: str) -> str:
@@ -30,14 +43,14 @@ def normalize_to_asyncpg(url: str) -> str:
 
 def normalize_to_standard_postgres(url: str) -> str:
     """
-    Normalizes a postgresql+asyncpg URL back to the standard postgresql driver.
+    Normalizes any PostgreSQL dialect/driver URL back to the standard postgresql driver.
     Useful for tools like raw asyncpg.connect() which do not support dialect prefixes.
     """
-    if not url:
+    if not url or not is_postgres_dsn(url):
         return url
 
     url_obj = make_url(url)
-    if url_obj.drivername == "postgresql+asyncpg":
+    if url_obj.drivername != "postgresql":
         return url_obj.set(drivername="postgresql").render_as_string(hide_password=False)
     return url
 
@@ -53,18 +66,19 @@ def extract_database_name(url: str) -> str:
 def rewrite_dsn_to_test_db(url: str, suffix: str = DEFAULT_TEST_DB_SUFFIX) -> str:
     """Rewrite a PostgreSQL DSN so its database name targets an isolated ``*_test`` DB.
 
-    Idempotent if the DSN already targets a ``*_test`` database or ``test``, and
-    leaves SQLite URLs untouched.
+    Idempotent if the DSN already targets a ``*_test`` database or ``test``,
+    leaves non-PostgreSQL URLs untouched, and rejects PostgreSQL DSNs missing a
+    database name.
     """
-    if not url:
+    if not url or not is_postgres_dsn(url):
         return url
 
     url_obj = make_url(url)
-    if url_obj.drivername.startswith("sqlite"):
-        return url
-
     db_name = (url_obj.database or "").strip("/")
-    if not db_name or db_name == "test" or db_name.endswith(suffix):
+    if not db_name:
+        redacted = url_obj.render_as_string(hide_password=True)
+        raise ValueError(f"PostgreSQL DSN is missing a database name: {redacted}")
+    if db_name == "test" or db_name.endswith(suffix):
         return url
 
     return url_obj.set(database=f"{db_name}{suffix}").render_as_string(hide_password=False)
@@ -76,7 +90,7 @@ def build_maintenance_dsn(url: str, maintenance_db: str = MAINTENANCE_DATABASE_N
         return url
 
     url_obj = make_url(url)
-    driver = "postgresql" if url_obj.drivername.startswith("postgres") else url_obj.drivername
+    driver = "postgresql" if is_postgres_dsn(url) else url_obj.drivername
     return url_obj.set(drivername=driver, database=maintenance_db).render_as_string(
         hide_password=False
     )

@@ -15,7 +15,11 @@ from seedwork.infra.config_models import PlatformAwsSettings
 from seedwork.utils import generate_id
 
 from secret_store.ports.secret_path_resolver_port import MountedSecretPathResolverPort
-from secret_store.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import (
+    Category,
+    SecretStorePort,
+    normalize_prefixed_category_ref,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -89,6 +93,13 @@ class AwsSecretsManagerAdapter(SecretStorePort):
             if vault_ref not in self._locks:
                 self._locks[vault_ref] = asyncio.Lock()
             return self._locks[vault_ref]
+
+    def normalize_category_ref(self, vault_ref: str, category: Category) -> str | None:
+        return normalize_prefixed_category_ref(
+            vault_ref,
+            category=category,
+            secrets_prefix=self._secrets_prefix,
+        )
 
     async def store_private_key(self, private_key_pem: bytes, category: str | None = None) -> str:
         category_val = category if category else "keys"

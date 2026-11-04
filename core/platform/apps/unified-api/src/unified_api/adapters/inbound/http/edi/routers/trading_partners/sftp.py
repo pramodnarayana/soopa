@@ -63,15 +63,16 @@ async def _is_ssrf_blocked(host: str) -> bool:
         return True
 
 
-async def _validate_sftp_request(
-    request: TestSFTPConnectionRequest, tenant_id: str
+async def _validate_sftp_connection_target(
+    *,
+    host: str,
+    credentials_vault_ref: str | None,
+    tenant_id: str,
 ) -> TestConnectionResponse | None:
-    if await _is_ssrf_blocked(request.host):
+    if await _is_ssrf_blocked(host):
         return TestConnectionResponse(success=False, reason="SSRF blocked: Invalid target host")
 
-    if request.credentials_vault_ref and not request.credentials_vault_ref.startswith(
-        f"{tenant_id}/"
-    ):
+    if credentials_vault_ref and not credentials_vault_ref.startswith(f"{tenant_id}/"):
         return TestConnectionResponse(
             success=False, reason="Tenant isolation violation: Invalid vault reference"
         )
@@ -91,7 +92,11 @@ async def test_sftp_connection(
             success=False, reason="Must provide either password or SSH key"
         )
 
-    if validation_err := await _validate_sftp_request(request, tenant_id):
+    if validation_err := await _validate_sftp_connection_target(
+        host=request.host,
+        credentials_vault_ref=request.credentials_vault_ref,
+        tenant_id=tenant_id,
+    ):
         return validation_err
 
     client_key_string = None
@@ -107,6 +112,7 @@ async def test_sftp_connection(
         host=request.host,
         port=request.port,
         username=request.username,
+        password=request.password,
         client_key_string=client_key_string,
     )
     return TestConnectionResponse(success=success, reason=reason)
@@ -132,36 +138,40 @@ async def test_existing_sftp_connection(
     field_encryption: CipherPort = Depends(get_field_encryption),
 ) -> TestConnectionResponse:
     """Tests an SFTP connection for an existing partner, pulling missing credentials from the DB."""
+    resolved_password = request.password
+    resolved_vault_ref = request.credentials_vault_ref
 
-    if not request.password and not request.credentials_vault_ref:
+    if not resolved_password and not resolved_vault_ref:
         async with uow:
             partner = await uow.sftp_partners.get_sftp_partner(tenant_id, partner_id)
             if partner:
                 if partner.password_encrypted:
                     try:
-                        request.password = field_encryption.decrypt_str(partner.password_encrypted)
+                        resolved_password = field_encryption.decrypt_str(partner.password_encrypted)
                     except (ValueError, VaultError) as e:
                         return TestConnectionResponse(
                             success=False,
                             reason=f"Failed to decrypt stored password: {e}",
                         )
                 elif partner.credentials_vault_ref:
-                    request.credentials_vault_ref = partner.credentials_vault_ref
+                    resolved_vault_ref = partner.credentials_vault_ref
 
-    if not request.password and not request.credentials_vault_ref:
+    if not resolved_password and not resolved_vault_ref:
         return TestConnectionResponse(
             success=False, reason="Must provide either password or SSH key"
         )
 
-    if validation_err := await _validate_sftp_request(request, tenant_id):
+    if validation_err := await _validate_sftp_connection_target(
+        host=request.host,
+        credentials_vault_ref=resolved_vault_ref,
+        tenant_id=tenant_id,
+    ):
         return validation_err
 
     client_key_string = None
-    if request.credentials_vault_ref:
+    if resolved_vault_ref:
         try:
-            client_key_string = await _get_client_key_from_vault(
-                request.credentials_vault_ref, vault_port
-            )
+            client_key_string = await _get_client_key_from_vault(resolved_vault_ref, vault_port)
         except (ValueError, VaultError) as e:
             return TestConnectionResponse(success=False, reason=f"Failed to fetch SSH key: {e}")
 
@@ -169,6 +179,7 @@ async def test_existing_sftp_connection(
         host=request.host,
         port=request.port,
         username=request.username,
+        password=resolved_password,
         client_key_string=client_key_string,
     )
     return TestConnectionResponse(success=success, reason=reason)
@@ -300,4 +311,4 @@ async def delete_sftp_partner(
         except HTTPException:
             raise
         except OrchestrationError as e:
-            raise OrchestrationError("Failed to update SFTP partner") from e
+            raise OrchestrationError("Failed to delete SFTP partner") from e
