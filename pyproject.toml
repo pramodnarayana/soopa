@@ -303,6 +303,11 @@ omit = [
 # Required 80% coverage
 show_missing = true
 fail_under = 80
+exclude_also = [
+    "if (typing\\.)?TYPE_CHECKING:",
+    "@(abc\\.)?abstractmethod",
+    "^\\s*\\.\\.\\.\\s*$",
+]
 
 [tool.pyright]
 ignore = ["apps/edi/packages/edi/src/edi/core/grammar", "**/migrations"]

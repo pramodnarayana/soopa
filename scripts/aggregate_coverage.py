@@ -14,7 +14,7 @@ def get_uv_path() -> str:
     return uv_path
 
 
-def process_package(pkg_json: str, uv_path: str) -> bool:
+def process_package(pkg_json: str, uv_path: str, rcfile_path: str) -> bool:
     if "node_modules" in pkg_json:
         return True
 
@@ -44,9 +44,22 @@ def process_package(pkg_json: str, uv_path: str) -> bool:
         os.rename(int_cov, os.path.join(pkg_dir, ".coverage.2"))
 
     try:
-        subprocess.run([uv_path, "run", "coverage", "combine"], cwd=pkg_dir, check=True)  # noqa: S603
-        result = subprocess.run(  # noqa: S603
-            [uv_path, "run", "coverage", "report", "--fail-under=80"], cwd=pkg_dir, check=False
+        subprocess.run(  # noqa: S603 - Safe uv path resolved via shutil.which
+            [uv_path, "run", "coverage", "combine", f"--rcfile={rcfile_path}"],
+            cwd=pkg_dir,
+            check=True,
+        )
+        result = subprocess.run(  # noqa: S603 - Safe uv path resolved via shutil.which
+            [
+                uv_path,
+                "run",
+                "coverage",
+                "report",
+                f"--rcfile={rcfile_path}",
+                "--fail-under=80",
+            ],
+            cwd=pkg_dir,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -66,6 +79,7 @@ def process_package(pkg_json: str, uv_path: str) -> bool:
 
 def main() -> None:
     uv_path = get_uv_path()
+    rcfile_path = os.path.abspath("pyproject.toml")
     failed = False
 
     for root, dirs, files in os.walk(".", topdown=True):
@@ -74,7 +88,7 @@ def main() -> None:
         ]
         if "package.json" in files:
             pkg_json = os.path.join(root, "package.json")
-            success = process_package(pkg_json, uv_path)
+            success = process_package(pkg_json, uv_path, rcfile_path)
             if not success:
                 failed = True
 
