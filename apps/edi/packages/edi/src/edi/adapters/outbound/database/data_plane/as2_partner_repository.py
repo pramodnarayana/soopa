@@ -1,5 +1,5 @@
 from identity.domain.identity_context import PLATFORM_TENANT_ID
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from edi.adapters.outbound.database.data_plane.exceptions import ReadOnlyDataPlaneRepositoryError
@@ -54,12 +54,20 @@ class SqlAlchemyDataPlaneAS2PartnerRepository(AS2TradingPartnerRepositoryPort):
         records = (await self.session.execute(stmt)).scalars().all()
         return [self._to_domain_model(r) for r in records]
 
-    async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str) -> bool:
-        stmt = select(OrmAS2Partner).where(
-            OrmAS2Partner.tenant_id == PLATFORM_TENANT_ID,
-            OrmAS2Partner.private_key_vault_ref == vault_ref,
+    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
+        normalized_ref = vault_ref.removeprefix("vault://").strip("/")
+        candidate_refs = (normalized_ref, f"vault://{normalized_ref}")
+        stmt = (
+            select(OrmAS2Partner.id)
+            .where(
+                or_(
+                    OrmAS2Partner.private_key_vault_ref.in_(candidate_refs),
+                    OrmAS2Partner.prev_private_key_vault_ref.in_(candidate_refs),
+                )
+            )
+            .limit(1)
         )
-        return (await self.session.execute(stmt)).scalars().first() is not None
+        return (await self.session.execute(stmt)).scalar_one_or_none() is not None
 
     @staticmethod
     def _to_domain_model(record: OrmAS2Partner) -> AS2Partner:

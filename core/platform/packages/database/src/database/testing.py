@@ -1,11 +1,8 @@
-from sqlalchemy import text
-
 """
 Enterprise Database Testing Utilities.
 
-Provides a TransactionalTestRouter that implements the DatabaseRouterPort.
-This allows tests to run inside a nested Savepoint for fast rollbacks without
-polluting the production router with test logic or violating the Open/Closed Principle.
+Provides a TransactionalTestRouter that implements the DatabaseRouterPort and
+fail-closed DSN guards ensuring tests never connect to live development databases.
 """
 
 import asyncio
@@ -14,10 +11,51 @@ from contextlib import asynccontextmanager
 from typing import cast
 
 from seedwork.infra.config_models import PlatformDatabaseSettings
+from sqlalchemy import text
+from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
 from database.router import DatabaseRouter, DatabaseRouterPort
 from database.types import GlobalSession, TenantSession
+from database.utils import DEFAULT_TEST_DB_SUFFIX, is_postgres_dsn
+
+
+def assert_test_database_url(url: str) -> str:
+    """Fail-closed guard ensuring test suites connect exclusively to isolated test DBs.
+
+    Allows SQLite test URLs and PostgreSQL databases named ``test`` or ending with
+    ``_test`` (for example, ``global_db_test``, ``edi_shard_test``). Raises
+    ``RuntimeError`` immediately if pointed at a live development database or
+    unsupported driver without leaking credentials.
+    """
+    if not url or not url.strip():
+        raise RuntimeError("Refusing to run tests against non-test database: empty DSN provided.")
+
+    try:
+        url_obj = make_url(url.strip())
+    except ArgumentError as exc:
+        raise RuntimeError(
+            "Refusing to run tests against non-test database: malformed DSN provided."
+        ) from exc
+
+    if url_obj.drivername.startswith("sqlite"):
+        return url
+
+    if not is_postgres_dsn(url):
+        raise RuntimeError(
+            f"Refusing to run tests against unsupported database driver '{url_obj.drivername}'."
+        )
+
+    db_name = (url_obj.database or "").strip("/")
+    if not db_name or (db_name != "test" and not db_name.endswith(DEFAULT_TEST_DB_SUFFIX)):
+        raise RuntimeError(
+            f"Refusing to run tests against non-test database '{db_name or '<empty>'}'. "
+            f"Expected a '*{DEFAULT_TEST_DB_SUFFIX}' database "
+            "(run via 'pnpm test:integration' or 'infra/local/scripts/run_in_test_env.py')."
+        )
+
+    return url
 
 
 class TransactionalTestRouter(DatabaseRouterPort):
@@ -33,6 +71,8 @@ class TransactionalTestRouter(DatabaseRouterPort):
         global_url: str,
         shard_url: str,
     ):
+        assert_test_database_url(global_url)
+        assert_test_database_url(shard_url)
         self.global_conn = global_conn
         self.shard_conn = shard_conn
         self.global_url = global_url

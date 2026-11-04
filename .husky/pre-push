@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
 set -e
 
-echo "Running full CI verification before push to prevent pipeline failures..."
-pnpm run verify:ci
+echo "Running graph-aware CI verification before push (.env & live DB untouched)..."
+./scripts/verify_ci.sh --affected

@@ -114,7 +114,10 @@ We use Turborepo to orchestrate commands across the monorepo. Here are the essen
 | **`pnpm build`** | Builds all packages in the monorepo (`ui`, `database`, `identity`, etc.). Run after updating shared package exports. |
 | **`pnpm typecheck`** | Runs TypeScript `tsc --noEmit` and Python `mypy` across the entire monorepo. |
 | **`pnpm lint`** | Runs ESLint and Python `ruff check` across the monorepo. |
-| **`pnpm test`** | Runs Vitest (Node) and PyTest (Python) across all domains. |
+| **`pnpm test`** | Runs Vitest (Node) and PyTest (Python) unit tests across all domains. |
+| **`pnpm test:integration`** | Provisions isolated `*_test` PostgreSQL databases (`global_db_test`, `edi_shard_test`) and runs narrow integration suites without touching live development data. |
+| **`pnpm verify:ci`** | Runs full clean-room CI verification in memory against `.env.example` and `*_test` databases without modifying `.env` or `global_db`. |
+| **`pnpm verify:ci:affected`** | Runs graph-aware CI verification for workspaces affected since the upstream branch (invoked automatically on `git push`). |
 | **`pnpm knip`** | Finds unused files, dependencies, and exports to keep the monorepo clean. |
 
 ### Database Management & Migrations
@@ -138,8 +141,8 @@ Database migrations are managed via **Alembic** and SQLAlchemy through the unifi
 | **UCP Web Dashboard** | `5173` | [http://localhost:5173](http://localhost:5173) | Vite React Dashboard UI |
 | **Unified API** | `3000` | [http://localhost:3000/docs](http://localhost:3000/docs) | FastAPI Unified HTTP Gateway & OpenAPI docs |
 | **Zitadel IAM** | `8080` | [http://ucp.localhost:8080](http://ucp.localhost:8080) | Identity Provider & OAuth2/OIDC Auth Server |
-| **Global PostgreSQL** | `5432` | `localhost:5432/soopa_global` | Multi-tenant control plane, users, identity, jobs |
-| **EDI Shard PostgreSQL** | `5433` | `localhost:5433/edi_tenant_shard` | B2B EDI transaction shard database |
+| **Global PostgreSQL** | `5432` | `localhost:5432/global_db` (`global_db_test` for tests) | Multi-tenant control plane, users, identity, jobs |
+| **EDI Shard PostgreSQL** | `5433` | `localhost:5433/edi_shard` (`edi_shard_test` for tests) | B2B EDI transaction shard database |
 | **LocalStack** | `4566` | [http://localhost:4566](http://localhost:4566) | Local AWS mock for SQS, S3, Secrets Manager |
 | **OpenAS2 Server** | `10080` | [http://localhost:10080](http://localhost:10080) | AS2 protocol inbound/outbound server and web UI |
 | **SFTP Server** | `2222` | `sftp://localhost:2222` | Mock SFTP trading partner endpoint |

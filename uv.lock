@@ -3055,6 +3055,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "database" },
     { name = "psycopg2-binary" },
+    { name = "seedwork" },
     { name = "sqlalchemy" },
     { name = "structlog" },
 ]
@@ -3065,6 +3066,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "database", editable = "core/platform/packages/database" },
     { name = "psycopg2-binary", specifier = ">=2.9.9" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "structlog", specifier = ">=24.4.0" },
 ]
@@ -3901,6 +3903,7 @@ dependencies = [
     { name = "database" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "python-dotenv" },
     { name = "typing-extensions" },
 ]
 
@@ -3909,6 +3912,7 @@ requires-dist = [
     { name = "database", editable = "core/platform/packages/database" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "typing-extensions", specifier = ">=4.12.0" },
 ]
 

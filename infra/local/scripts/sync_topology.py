@@ -121,6 +121,16 @@ def build_env_mappings(topology: dict[str, list[dict[str, object]]]) -> dict[str
     return mappings
 
 
+def compose_topology_env_mappings(
+    root_dir: Path,
+    domains: str = "all",
+) -> dict[str, str]:
+    """Compose per-domain topology manifests strictly in memory without mutating disk files."""
+    manifest_paths = resolve_topology_paths(root_dir, domains)
+    topology = compose_topology_manifests(manifest_paths)
+    return build_env_mappings(topology)
+
+
 def sync_topology(
     root_dir: Path,
     domains: str = "all",
