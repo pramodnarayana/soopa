@@ -36,6 +36,7 @@ from ucp_models.sharding import ShardRegistry as UcpShardRegistry
 from ucp_models.subscriptions import App as UcpApp
 from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
 
+import unified_api.bootstrap.lifespan
 from unified_api.adapters.inbound.http.dependencies.edi.services import get_secret_store
 from unified_api.bootstrap.lifespan import shell_lifespan
 from unified_api.main import app as _app
@@ -187,7 +188,9 @@ async def db_session_factory(db_engine, monkeypatch):
         edi.bootstrap.lifespan, "DatabaseRouter", lambda *args, **kwargs: fake_router
     )
     monkeypatch.setattr(
-        "unified_api.bootstrap.lifespan.DatabaseRouter", lambda *args, **kwargs: fake_router
+        unified_api.bootstrap.lifespan,
+        "DatabaseRouter",
+        lambda *args, **kwargs: fake_router,
     )
 
     yield SessionLocal
@@ -206,8 +209,8 @@ async def app(db_session_factory):
         async def override_get_secret_store():
             return AwsSecretsManagerAdapter(secrets_mount_path=temp_secrets_dir)
 
-        prev_provider = _app.state.db_provider
-        prev_router = _app.state.db_router
+        prev_provider = getattr(_app.state, "db_provider", None)
+        prev_router = getattr(_app.state, "db_router", None)
         _app.dependency_overrides[get_secret_store] = override_get_secret_store
         if edi_app is not None:
             edi_app.dependency_overrides[get_secret_store] = override_get_secret_store

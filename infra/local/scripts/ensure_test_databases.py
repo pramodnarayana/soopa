@@ -173,7 +173,12 @@ def resolve_active_app_domains(root_dir: Path, domains_arg: str) -> list[str]:
     available = sorted(
         child.name
         for child in apps_dir.iterdir()
-        if child.is_dir() and not child.name.startswith(".")
+        if child.is_dir()
+        and not child.name.startswith(".")
+        and (
+            (child / "scripts" / "seed_jobs.py").is_file()
+            or any(child.glob("**/run_migrations.py"))
+        )
     )
     normalized = domains_arg.strip().lower()
     if normalized in ("", "all"):

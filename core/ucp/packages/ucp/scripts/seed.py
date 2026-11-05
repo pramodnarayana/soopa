@@ -45,7 +45,6 @@ async def main() -> None:
     )
     if edi_shard_dsn:
         edi_shard_dsn = normalize_to_asyncpg(edi_shard_dsn)
-
     ip_shard_dsn = (
         os.environ.get("DATABASE__SHARD_OVERRIDES__IP_SHARD_1")
         or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")

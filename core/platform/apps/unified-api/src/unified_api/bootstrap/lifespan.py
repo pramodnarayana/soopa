@@ -40,6 +40,11 @@ async def _module_lifecycle(
             logger.info("shell_startup_module_initializing", module=module.name)
             await module.startup(app, db_router)
             started_modules.append(module)
+
+        edi_app = getattr(app.state, "edi_app", None)
+        if edi_app is not None and hasattr(edi_app.state, "tenant_resolver"):
+            app.state.tenant_resolver = edi_app.state.tenant_resolver
+
         yield
     finally:
         for module in reversed(started_modules):
@@ -48,6 +53,7 @@ async def _module_lifecycle(
                 await module.shutdown(app)
             except Exception:
                 logger.exception("shell_shutdown_module_failed", module=module.name)
+        app.state.tenant_resolver = None
         logger.info("shell_shutdown_closing_db_router")
         await db_router.close_all()
 
@@ -55,8 +61,7 @@ async def _module_lifecycle(
 @asynccontextmanager
 async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Shell application lifespan context manager."""
-    settings = app.state.settings or get_settings()
-
+    settings = getattr(app.state, "settings", None) or get_settings()
     db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
     db_provider = DatabaseProvider.from_url(db_url)
     app.state.db_provider = db_provider
@@ -66,7 +71,7 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             expected_platform_org_id=settings.identity.platform_org_id,
         )
 
-        ucp_container = app.state.ucp_container
+        ucp_container = getattr(app.state, "ucp_container", None)
         if ucp_container is not None:
             ucp_container.db_provider.override(providers.Object(db_provider))
 
@@ -86,8 +91,8 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 api_modules: list[LaunchableApiModule] = list(app.state.api_modules)
                 async with _module_lifecycle(app, db_router, api_modules):
                     yield
-                logger.info("shell_shutdown_notification_stopping")
             finally:
+                logger.info("shell_shutdown_notification_stopping")
                 await notification_shutdown()
         finally:
             logger.info("shell_shutdown_ucp_stopping")

@@ -1,3 +1,4 @@
+import uuid
 from collections.abc import Callable
 
 import httpx
@@ -153,9 +154,14 @@ async def test_as2_settings_and_certificate_lifecycle(
     )
     assert ok_del.status_code == 204
 
+    unique_suffix = uuid.uuid4().hex[:8].upper()
+    active_as2_id = f"ACTIVE_CERT_{unique_suffix}"
+    cert_managed_local_id = f"CERT_LOCAL_{unique_suffix}"
+    remote_cert_export_id = f"REMOTE_CERT_{unique_suffix}"
+
     gen_active = await auth_client.post(
         "/api/v1/as2/certificates/generate",
-        json={"as2_id": "ACTIVE_CERT_STATION"},
+        json={"as2_id": active_as2_id},
     )
     assert gen_active.status_code == 200
     active_cert_pem = gen_active.json()["public_cert_pem"]
@@ -165,7 +171,7 @@ async def test_as2_settings_and_certificate_lifecycle(
         "/api/v1/as2/trading-partners",
         json={
             "name": "Cert Managed Local Station",
-            "as2_id": "CERT_MANAGED_LOCAL",
+            "as2_id": cert_managed_local_id,
             "is_local": True,
             "url": "http://local-as2.example.com/as2/inbox",
             "public_cert_pem": active_cert_pem,
@@ -257,7 +263,7 @@ async def test_as2_settings_and_certificate_lifecycle(
         "/api/v1/as2/trading-partners",
         json={
             "name": "Remote Cert Export Partner",
-            "as2_id": "REMOTE_CERT_EXPORT",
+            "as2_id": remote_cert_export_id,
             "is_local": False,
             "url": "http://remote-cert.example.com/as2",
             "public_cert_pem": active_cert_pem,
@@ -284,9 +290,14 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
     app: FastAPI,
     auth_client: httpx.AsyncClient,
 ) -> None:
+    ps_suffix = uuid.uuid4().hex[:8].upper()
+    ps_local_id = f"PS_LOCAL_{ps_suffix}"
+    ps_remote_id = f"PS_REMOTE_{ps_suffix}"
+    ps_remote_no_url_id = f"PS_NO_URL_{ps_suffix}"
+
     gen_res = await auth_client.post(
         "/api/v1/as2/certificates/generate",
-        json={"as2_id": "PS_LOCAL_STATION"},
+        json={"as2_id": ps_local_id},
     )
     assert gen_res.status_code == 200
 
@@ -294,7 +305,7 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
         "/api/v1/as2/trading-partners",
         json={
             "name": "PS Local Station",
-            "as2_id": "PS_LOCAL_STATION",
+            "as2_id": ps_local_id,
             "is_local": True,
             "url": "http://local-station.example.com/as2/inbox",
             "public_cert_pem": gen_res.json()["public_cert_pem"],
@@ -308,7 +319,7 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
         "/api/v1/as2/trading-partners",
         json={
             "name": "PS Remote Partner",
-            "as2_id": "PS_REMOTE_STATION",
+            "as2_id": ps_remote_id,
             "is_local": False,
             "url": "http://remote-station.example.com/as2/inbox",
             "public_cert_pem": gen_res.json()["public_cert_pem"],
@@ -321,7 +332,7 @@ async def test_as2_partnerships_lifecycle_and_connection_test(
         "/api/v1/as2/trading-partners",
         json={
             "name": "PS Remote No URL",
-            "as2_id": "PS_REMOTE_NO_URL",
+            "as2_id": ps_remote_no_url_id,
             "is_local": False,
         },
     )
