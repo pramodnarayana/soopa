@@ -1,7 +1,11 @@
 from typing import cast
 
 import pytest
-from secret_store.ports.secret_store_port import SecretStorePort
+from secret_store.ports.secret_store_port import (
+    Category,
+    SecretStorePort,
+    normalize_prefixed_category_ref,
+)
 
 from edi.application.use_cases.as2_partners.create_as2_partner_use_case import (
     CreateAS2PartnerUseCase,
@@ -13,6 +17,9 @@ from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 
 
 class FakeSecretStore(SecretStorePort):
+    def normalize_category_ref(self, vault_ref: str, category: Category) -> str | None:
+        return normalize_prefixed_category_ref(vault_ref, category=category)
+
     async def get_secret(self, vault_ref: str) -> str:
         return "secret"
 

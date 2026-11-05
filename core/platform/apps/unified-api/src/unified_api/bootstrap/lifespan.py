@@ -1,9 +1,3 @@
-import os
-
-from database.provider import DatabaseProvider
-from dependency_injector import providers
-from starlette.routing import Mount
-
 """
 Shell Application Lifespan.
 
@@ -16,21 +10,29 @@ Architecture note:
     through explicit startup/shutdown hooks called here.
   - This module is the ONLY place allowed to import startup/shutdown hooks
     from multiple domains simultaneously.
-  - Startup order: UCP workers → EDI infrastructure.
-  - Shutdown order (reverse): EDI infrastructure → UCP workers.
+  - Startup order: UCP workers → Notification Engine → EDI infrastructure.
+  - Shutdown order (reverse): EDI infrastructure → Notification Engine → UCP workers.
 """
 
+from __future__ import annotations
+
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
+from database.provider import DatabaseProvider
+from database.router import DatabaseRouter
+from dependency_injector import providers
 from edi.bootstrap.lifespan import shutdown, startup
 from fastapi import FastAPI
 from notification.bootstrap.lifespan import shutdown as notification_shutdown
 from notification.bootstrap.lifespan import startup as notification_startup
+from starlette.routing import Mount
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
+from unified_api.bootstrap.identity_drift_guard import verify_platform_tenant_idp_alignment
 from unified_api.settings import get_settings
 
 logger = structlog.get_logger(__name__)
@@ -38,72 +40,67 @@ logger = structlog.get_logger(__name__)
 
 @asynccontextmanager
 async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Shell application lifespan context manager.
-
-    Startup order:
-      1. UCP background workers (outbox sweeper, event listener).
-      2. Notification Engine background workers.
-      3. EDI DatabaseRouter — attached to the EDI sub-app's state so that
-         ``request.app.state.db_router`` resolves correctly inside EDI routes.
-
-    Shutdown order (reverse):
-      1. EDI DatabaseRouter.
-      2. Notification Engine background workers.
-      3. UCP background workers.
-    """
-    # Retrieve the EDI sub-app from the Shell's mounted routes.
-    # The Shell created edi_app and passed it to app.mount("/", edi_app).
-    # We locate it here to pass to the EDI startup hook so it can attach
-    # db_router to the correct app.state object.
-
-    edi_app = next(
-        (route.app for route in app.routes if isinstance(route, Mount) and route.path == ""),
-        None,
-    )
-    if edi_app is None or not isinstance(edi_app, FastAPI):
-        raise RuntimeError(
-            "EDI sub-app not found or is not a FastAPI instance. "
-            "Ensure app.mount('/', edi_app) is called before Shell startup."
+    """Shell application lifespan context manager."""
+    settings = getattr(app.state, "settings", None) or get_settings()
+    db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
+    db_provider = DatabaseProvider.from_url(db_url)
+    app.state.db_provider = db_provider
+    try:
+        await verify_platform_tenant_idp_alignment(
+            db_provider=db_provider,
+            expected_platform_org_id=settings.identity.platform_org_id,
         )
 
-    db_provider = DatabaseProvider.from_url(os.environ.get("DATABASE_URL", ""))
-    app.state.db_provider = db_provider
-    edi_app.state.db_provider = db_provider
-    ucp_container = app.state.ucp_container
-    ucp_container.db_provider.override(providers.Object(db_provider))
+        ucp_container = getattr(app.state, "ucp_container", None)
+        if ucp_container is not None:
+            ucp_container.db_provider.override(providers.Object(db_provider))
 
-    # Nested try/finally blocks ensure cleanup runs in reverse order
-    # and only for services that have actually started.
-    logger.info("Shell startup: initializing UCP domain workers.")
-    await ucp_startup()
-    try:
-        logger.info("Shell startup: initializing Notification Engine workers.")
-        await notification_startup()
+        logger.info("shell_startup_ucp_initializing")
+        await ucp_startup()
         try:
-            logger.info("Shell startup: initializing EDI domain infrastructure.")
-            edi_settings = get_settings()
-            await startup(
-                edi_app,
-                global_db_url=str(edi_settings.database.global_url),
-                pool_size=edi_settings.database.pool_size,
-                max_overflow=edi_settings.database.max_overflow,
-                shard_overrides=edi_settings.database.shard_overrides,
-            )
+            logger.info("shell_startup_notification_initializing")
+            await notification_startup()
             try:
-                # Normal operation
-                yield
+                db_router = DatabaseRouter(
+                    global_db_url=db_url,
+                    pool_size=settings.database.pool_size,
+                    max_overflow=settings.database.max_overflow,
+                    shard_overrides=settings.database.shard_overrides or {},
+                )
+                app.state.db_router = db_router
+
+                edi_app = next(
+                    (
+                        route.app
+                        for route in app.routes
+                        if isinstance(route, Mount) and route.path == ""
+                    ),
+                    None,
+                )
+                if edi_app is not None and isinstance(edi_app, FastAPI):
+                    edi_app.state.db_provider = db_provider
+                    logger.info("shell_startup_edi_initializing")
+                    await startup(edi_app, db_router=db_router)
+                    app.state.edi_app = edi_app
+                    if hasattr(edi_app.state, "tenant_resolver"):
+                        app.state.tenant_resolver = edi_app.state.tenant_resolver
+
+                try:
+                    yield
+                finally:
+                    if edi_app is not None and isinstance(edi_app, FastAPI):
+                        logger.info("shell_shutdown_edi_stopping")
+                        await shutdown(edi_app)
+                        app.state.edi_app = None
+                        app.state.tenant_resolver = None
+                    logger.info("shell_shutdown_closing_db_router")
+                    await db_router.close_all()
             finally:
-                # EDI started successfully, always clean it up
-                logger.info("Shell shutdown: stopping EDI domain infrastructure.")
-                await shutdown(edi_app)
+                logger.info("shell_shutdown_notification_stopping")
+                await notification_shutdown()
         finally:
-            # Notification Engine started successfully, always clean it up
-            logger.info("Shell shutdown: stopping Notification Engine workers.")
-            await notification_shutdown()
+            logger.info("shell_shutdown_ucp_stopping")
+            await ucp_shutdown()
     finally:
-        # UCP started successfully, always clean it up
-        logger.info("Shell shutdown: stopping UCP domain workers.")
-        await ucp_shutdown()
-        logger.info("Shell shutdown: closing DatabaseProvider.")
+        logger.info("shell_shutdown_closing_db_provider")
         await db_provider.close()

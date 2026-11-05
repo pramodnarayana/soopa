@@ -145,6 +145,46 @@ async def test_aws_secrets_manager_store_private_key(tmp_path: Path) -> None:
     assert ref_default.startswith("stage/tenant-1/keys/")
 
 
+def test_secret_store_normalize_category_ref_enforces_configured_namespace(
+    tmp_path: Path,
+) -> None:
+    prefixed = AwsSecretsManagerAdapter(
+        secrets_mount_path=str(tmp_path),
+        client=FakeSecretsManagerClient(),
+        secrets_prefix="soopa/prod",
+    )
+    assert (
+        prefixed.normalize_category_ref("vault://soopa/prod/as2_key/gen_abc123", "as2_key")
+        == "soopa/prod/as2_key/gen_abc123"
+    )
+    assert (
+        prefixed.normalize_category_ref("/soopa/prod/as2_key/gen_abc123/", "as2_key")
+        == "soopa/prod/as2_key/gen_abc123"
+    )
+    assert prefixed.normalize_category_ref("other/prod/as2_key/gen_abc123", "as2_key") is None
+    assert prefixed.normalize_category_ref("as2_key/gen_abc123", "as2_key") is None
+    assert prefixed.normalize_category_ref("soopa/prod/as2_key/sub/gen_abc123", "as2_key") is None
+    assert prefixed.normalize_category_ref("soopa/prod/as2_key/..", "as2_key") is None
+
+    unprefixed = AwsSecretsManagerAdapter(
+        secrets_mount_path=str(tmp_path),
+        client=FakeSecretsManagerClient(),
+        secrets_prefix="",
+    )
+    assert (
+        unprefixed.normalize_category_ref("vault://as2_key/gen_abc123", "as2_key")
+        == "as2_key/gen_abc123"
+    )
+    assert unprefixed.normalize_category_ref("foreign/prefix/as2_key/gen_abc123", "as2_key") is None
+
+    in_memory = InMemoryVaultAdapter()
+    assert (
+        in_memory.normalize_category_ref("vault://as2_key/gen_abc123", "as2_key")
+        == "as2_key/gen_abc123"
+    )
+    assert in_memory.normalize_category_ref("foreign/as2_key/gen_abc123", "as2_key") is None
+
+
 @pytest.mark.asyncio
 async def test_aws_secrets_manager_fetch_from_aws_formats(tmp_path: Path) -> None:
     fake_client = FakeSecretsManagerClient(

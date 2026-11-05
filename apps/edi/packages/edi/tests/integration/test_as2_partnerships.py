@@ -1,9 +1,22 @@
+"""
+Tests for the AS2 Partnership connection test endpoint.
+
+POST /api/v1/as2/partnerships/{id}/test
+
+All infrastructure is injected via FakeControlPlaneUnitOfWork, a fixture-controlled FakeAS2Tester,
+and FakeVault — zero real network connections or Vault required.
+"""
+
+import uuid
+from collections.abc import Callable, Generator
+
 import pytest
-
-pytestmark = pytest.mark.integration
-
-from typing import Any
-
+from fastapi.testclient import TestClient
+from identity.domain.identity_context import PLATFORM_TENANT_ID
+from secret_store.ports.secret_store_port import (
+    Category,
+    normalize_prefixed_category_ref,
+)
 from unified_api.adapters.inbound.http.dependencies.edi.auth import (
     get_current_tenant_id,
     get_current_user_profile,
@@ -17,25 +30,11 @@ from unified_api.adapters.inbound.http.dependencies.edi.services import (
 )
 from unified_api.settings import get_settings
 
-"""
-Tests for the AS2 Partnership connection test endpoint.
-
-POST /api/v1/as2/partnerships/{id}/test
-
-All infrastructure is injected via FakeControlPlaneUnitOfWork, a fixture-controlled FakeAS2Tester,
-and FakeVault — zero real network connections or Vault required.
-"""
-
-import uuid
-from collections.abc import Callable
-
-import pytest
-from fastapi.testclient import TestClient
-from identity.domain.identity_context import PLATFORM_TENANT_ID
-
 from edi.module import create_edi_app
 from edi.testing.fakes.api_fakes import FakeControlPlaneUnitOfWork
 from tests.test_settings import get_test_settings
+
+pytestmark = pytest.mark.integration
 
 app = create_edi_app(settings=get_test_settings())
 
@@ -58,13 +57,19 @@ class FakeAS2Tester:
 
 
 class FakeVault:
+    def normalize_category_ref(self, vault_ref: str, category: Category) -> str | None:
+        return normalize_prefixed_category_ref(vault_ref, category=category)
+
     async def retrieve_secret(self, vault_ref: str) -> bytes:
         return b"-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----"
 
     async def retrieve_private_key(self, vault_ref: str) -> bytes:
         return await self.retrieve_secret(vault_ref)
 
-    async def store_private_key(self, private_key_pem: bytes, category: Any = None) -> str:
+    async def store_private_key(
+        self, private_key_pem: bytes, category: Category | None = None
+    ) -> str:
+        _ = (private_key_pem, category)
         return "vault_ref_123"
 
     async def delete_secret(self, vault_ref: str) -> None:
@@ -79,9 +84,6 @@ class FakeVault:
 @pytest.fixture
 def fake_uow() -> FakeControlPlaneUnitOfWork:
     return FakeControlPlaneUnitOfWork()
-
-
-from collections.abc import Generator
 
 
 @pytest.fixture

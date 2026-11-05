@@ -2,6 +2,8 @@ import structlog
 from edi.application.use_cases.as2_partners import (
     CreateAS2PartnerUseCase,
     DeleteAS2PartnerUseCase,
+    DeleteOrphanedAS2CertificateSecretCmd,
+    DeleteOrphanedAS2CertificateSecretUseCase,
     RotateAS2CertificatesUseCase,
     UpdateAS2PartnerUseCase,
 )
@@ -235,22 +237,14 @@ async def delete_certificate_secret(
     uow: ControlPlaneUnitOfWorkPort = Depends(get_control_plane_uow),
 ) -> None:
     """Deletes an orphaned private key from Vault if the UI discards it before saving."""
-    parts = vault_ref.replace("vault://", "").split("/")
-    if (
-        not vault_ref.startswith("vault://")
-        or len(parts) < 1
-        or parts[0] != SecretCategory.AS2_KEY.value
-    ):
-        raise HTTPException(status_code=400, detail="Invalid vault reference category.")
-
     async with uow:
-        in_use = await uow.as2_partners.is_vault_ref_in_use(PLATFORM_TENANT_ID, vault_ref)
-        if in_use:
-            raise HTTPException(
-                status_code=400, detail="Cannot delete a private key that is currently in use."
-            )
-
-        await secret_store.delete_secret(vault_ref)
+        use_case = DeleteOrphanedAS2CertificateSecretUseCase(
+            uow=uow,
+            secret_store=secret_store,
+        )
+        del_res = await use_case.execute(DeleteOrphanedAS2CertificateSecretCmd(vault_ref=vault_ref))
+        if del_res.is_err:
+            raise_http_for_edi_error(del_res.unwrap_err())
 
 
 @router.post(

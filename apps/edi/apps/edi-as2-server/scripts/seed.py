@@ -1,51 +1,51 @@
 import asyncio
-import contextlib
 
 import structlog
 from database.models.identity import Tenant
 from database.router import DatabaseRouter
-from dotenv import load_dotenv
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from seedwork.infra.config import load_repo_env
 from sqlalchemy.future import select
 
 from as2_server.settings import get_settings as get_worker_settings
 
-load_dotenv(override=True)
+load_repo_env(override=False)
 
 logger = structlog.get_logger(__name__)
 
 
 async def seed_database() -> None:
     """Seeds the database with required initial infrastructure and default Tenant 0."""
-    logger.info("Starting database seed...")
+    logger.info("as2_seed_started")
     settings = get_worker_settings()
 
     db_router = DatabaseRouter(settings.database.global_url)
 
-    async_gen = db_router.get_global_session()
-    session = await async_gen.__anext__()
-
     try:
-        # 1. Assert Core Platform Infrastructure Exists (Read-Only)
-        logger.info("Asserting Platform Infrastructure (Tenant %s)...", PLATFORM_TENANT_ID)
-        tenant_result = await session.execute(select(Tenant).filter_by(id=PLATFORM_TENANT_ID))
-        tenant_obj = tenant_result.scalar_one_or_none()
-        if not tenant_obj:
-            logger.warning(
-                "Platform Master Tenant not found! Ensure UCP seed.ts has been run first."
-            )
+        async with db_router.global_session_scope() as session:
+            try:
+                # 1. Assert Core Platform Infrastructure Exists (Read-Only)
+                logger.info(
+                    "as2_seed_asserting_platform_tenant",
+                    tenant_id=PLATFORM_TENANT_ID,
+                )
+                tenant_result = await session.execute(
+                    select(Tenant).filter_by(id=PLATFORM_TENANT_ID)
+                )
+                tenant_obj = tenant_result.scalar_one_or_none()
+                if not tenant_obj:
+                    logger.error(
+                        "as2_seed_platform_tenant_missing",
+                        tenant_id=PLATFORM_TENANT_ID,
+                    )
 
-        await session.commit()
-        logger.info("Database seed completed successfully.")
-
-    except Exception:
-        logger.exception("Seed failed")
-
-        await session.rollback()
-        raise
+                await session.commit()
+                logger.info("as2_seed_completed")
+            except Exception:
+                logger.exception("as2_seed_failed")
+                await session.rollback()
+                raise
     finally:
-        with contextlib.suppress(StopAsyncIteration):
-            await async_gen.__anext__()
         await db_router.close_all()
 
 

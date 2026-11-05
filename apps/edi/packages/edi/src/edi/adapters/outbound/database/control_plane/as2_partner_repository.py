@@ -94,16 +94,21 @@ class SqlAlchemyAS2TradingPartnerRepository(
         record = (await self.session.execute(stmt)).scalars().first()
         return self._to_domain_model(record) if record else None
 
-    async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str) -> bool:
-        stmt = select(OrmAS2Partner).where(
-            OrmAS2Partner.tenant_id == tenant_id,
-            or_(
-                OrmAS2Partner.private_key_vault_ref == vault_ref,
-                OrmAS2Partner.prev_private_key_vault_ref == vault_ref,
-            ),
+    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
+        normalized_ref = vault_ref.removeprefix("vault://").strip("/")
+        candidate_refs = (normalized_ref, f"vault://{normalized_ref}")
+        stmt = (
+            select(OrmAS2Partner.id)
+            .where(
+                or_(
+                    OrmAS2Partner.private_key_vault_ref.in_(candidate_refs),
+                    OrmAS2Partner.prev_private_key_vault_ref.in_(candidate_refs),
+                )
+            )
+            .limit(1)
         )
         res = await self.session.execute(stmt)
-        return res.scalars().first() is not None
+        return res.scalar_one_or_none() is not None
 
     async def list_as2_partners(self, tenant_id: str) -> list[AS2Partner]:
         result = await self.session.execute(

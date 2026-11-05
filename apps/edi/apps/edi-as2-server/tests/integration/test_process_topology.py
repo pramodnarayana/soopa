@@ -48,7 +48,7 @@ def test_as2_server_starts_and_serves_health_without_sqs_vars():
     healthy = False
     try:
         # 4. Wait for uvicorn to boot (simulate the ALB health check)
-        max_retries = 20
+        max_retries = 60
         for _ in range(max_retries):
             try:
                 if process.poll() is not None:
@@ -61,7 +61,8 @@ def test_as2_server_starts_and_serves_health_without_sqs_vars():
             except requests.RequestException:
                 time.sleep(0.5)
 
-        assert healthy, "AS2 Server failed to start or /health returned an error."
+        _stdout_out, _stderr_out = process.communicate() if process.poll() is not None else ("", "")
+        assert healthy, f"AS2 Server failed to start: {_stderr_out}"
     finally:
         # 5. Cleanup
         process.terminate()

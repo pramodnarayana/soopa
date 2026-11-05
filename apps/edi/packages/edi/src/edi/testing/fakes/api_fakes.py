@@ -346,11 +346,13 @@ class FakeAS2PartnerRepository:
             and self.partners[id].tenant_id in (PLATFORM_TENANT_ID, str(tenant_id))
         ]
 
-    async def is_vault_ref_in_use(self, tenant_id: str, vault_ref: str = "") -> bool:
-        effective_ref = vault_ref or tenant_id
+    async def is_vault_ref_in_use(self, vault_ref: str) -> bool:
+        normalized_ref = vault_ref.removeprefix("vault://").strip("/")
+        candidate_refs = {normalized_ref, f"vault://{normalized_ref}"}
         for p in self.partners.values():
             if isinstance(p, AS2Partner) and (
-                p.private_key_vault_ref == effective_ref or p.public_cert_vault_ref == effective_ref
+                p.private_key_vault_ref in candidate_refs
+                or p.prev_private_key_vault_ref in candidate_refs
             ):
                 return True
         return False
