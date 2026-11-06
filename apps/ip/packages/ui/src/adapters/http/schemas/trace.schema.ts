@@ -223,8 +223,14 @@ export const BulkReplayResultWireSchema = z.object({
 export type InboundRecordWire = z.infer<typeof InboundRecordWireSchema>;
 export type ReplicaRecordWire = z.infer<typeof ReplicaRecordWireSchema>;
 export type NormalizedRecordWire = z.infer<typeof NormalizedRecordWireSchema>;
+export type GlobalEntityMapWire = z.infer<typeof GlobalEntityMapWireSchema>;
 export type OutboundRecordWire = z.infer<typeof OutboundRecordWireSchema>;
 export type IpTraceWire = z.infer<typeof IpTraceWireSchema>;
 export type IpTraceLineageItemWire = z.infer<typeof IpTraceLineageItemWireSchema>;
 export type ReplayTransactionResultWire = z.infer<typeof ReplayTransactionResultWireSchema>;
 export type BulkReplayResultWire = z.infer<typeof BulkReplayResultWireSchema>;
+
+export const InboundRecordListWireSchema = z.array(InboundRecordWireSchema);
+export const ReplicaRecordListWireSchema = z.array(ReplicaRecordWireSchema);
+export const NormalizedRecordListWireSchema = z.array(NormalizedRecordWireSchema);
+export const GlobalEntityMapListWireSchema = z.array(GlobalEntityMapWireSchema);

@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ipQueryKeys } from '../application/query-keys';
 import { ConnectionStatus, PipelineLayer } from '../domain/enums';
+import type { IpUserRole } from '../domain/role';
 import {
   IpCommandCenterPage,
   IpConnectionDetailPage,
@@ -112,7 +113,11 @@ function createHydratedQueryClient(): QueryClient {
   return qc;
 }
 
-function renderInIpWorkspace(node: React.ReactNode, queryClient: QueryClient): string {
+function renderInIpWorkspace(
+  node: React.ReactNode,
+  queryClient: QueryClient,
+  userRole?: IpUserRole,
+): string {
   const harness = createInMemoryIpWorkspaceSeed();
   const logger = new RecordingLoggerFake();
 
@@ -125,6 +130,7 @@ function renderInIpWorkspace(node: React.ReactNode, queryClient: QueryClient): s
         repositories={harness.repositories}
         logger={logger}
         navigation={harness.navigation}
+        userRole={userRole ?? 'support'}
       >
         {node}
       </IpUIProvider>
@@ -205,20 +211,45 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(l5Html).toContain('POST 502');
   });
 
-  it('renders Connections, Connection Detail, Transformations Workbench, and Stitches DAG & Run Telemetry', () => {
+  it('renders Connections, Connection Detail, Transformations Workbench, and Stitches DAG & Run Telemetry', async () => {
     const qc = createHydratedQueryClient();
 
     const connectionsHtml = renderInIpWorkspace(<IpConnectionsPage />, qc);
-    expect(connectionsHtml).toContain('Itron Production West Grid');
+    expect(connectionsHtml).toContain('1 Connected');
+    expect(connectionsHtml).toContain('Itron Enterprise AMI');
     expect(connectionsHtml).toContain('itron_ami');
+
+    const activeConnectionsHtml = renderInIpWorkspace(
+      <IpConnectionsPage initialTab="active" />,
+      qc,
+    );
+    expect(activeConnectionsHtml).toContain('Itron Production West Grid');
+    expect(activeConnectionsHtml).toContain('Delete Itron Production West Grid');
 
     const connDetailHtml = renderInIpWorkspace(
       <IpConnectionDetailPage connectionId={SEED_CONNECTION_ID} />,
       qc,
     );
     expect(connDetailHtml).toContain('Itron Production West Grid');
-    expect(connDetailHtml).toContain('interval_end: 2026-10-29T08:00:00Z');
-    expect(connDetailHtml).toContain('48200');
+    expect(connDetailHtml).toContain('Connection');
+    expect(connDetailHtml).toContain('Entities');
+    expect(connDetailHtml).toContain('Data');
+    expect(connDetailHtml).toContain('Connection Details');
+    expect(connDetailHtml).toContain('Name');
+    expect(connDetailHtml).toContain('Save Changes');
+    expect(connDetailHtml).toContain('Delete Connection');
+
+    const harness = createInMemoryIpWorkspaceSeed();
+    const relinkRes = await harness.repositories.connections.relinkConnection(
+      SEED_TENANT_ID,
+      SEED_CONNECTION_ID,
+      { newName: 'Itron Renamed Grid' },
+    );
+    expect(relinkRes.ok).toBe(true);
+    if (relinkRes.ok) {
+      expect(relinkRes.value.name).toBe('Itron Renamed Grid');
+      expect(relinkRes.value.publicConfig).toEqual(SEED_CONNECTION.publicConfig);
+    }
 
     const transformationsHtml = renderInIpWorkspace(
       <IpTransformationsPage initialConnectionId={SEED_CONNECTION_ID} />,
@@ -307,8 +338,10 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
       />,
       qc,
     );
-    expect(overviewHtml).toContain('fp_88aa99bbccddeeff00112233');
-    expect(overviewHtml).toContain('Soft-Deactivate Connection');
+    expect(overviewHtml).toContain('Connection Details');
+    expect(overviewHtml).toContain('Name');
+    expect(overviewHtml).toContain('Save Changes');
+    expect(overviewHtml).toContain('Deactivate Connection');
 
     const catalogTabHtml = renderInIpWorkspace(
       <ConnectionCatalogTab
@@ -331,7 +364,7 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(workbenchHtml).toContain('Run Dry-Run Preview');
   });
 
-  it('excludes DEACTIVATED connections from catalog Connected badges and Active Connections pills', () => {
+  it('excludes DEACTIVATED connections from catalog Connected badges and omits connection names from card', () => {
     const qc = createHydratedQueryClient();
     const deactivatedOnlyApp = SEED_CATALOG_APPS[1];
     expect(deactivatedOnlyApp).toBeDefined();
@@ -371,10 +404,10 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(connectionsHtml).toContain('2 Connected');
     expect(connectionsHtml).not.toContain('3 Connected');
     expect(connectionsHtml).not.toContain('1 Connected');
-    expect(connectionsHtml).toContain(SEED_CONNECTION.name);
-    expect(connectionsHtml).toContain('Expired Backup Meter Vault');
-    expect(connectionsHtml).toContain('bg-emerald-500');
-    expect(connectionsHtml).toContain('bg-amber-500');
+    // Connected count badge is shown, but individual connection names are kept off the catalog card
+    expect(connectionsHtml).not.toContain('Active Connections:');
+    expect(connectionsHtml).not.toContain(SEED_CONNECTION.name);
+    expect(connectionsHtml).not.toContain('Expired Backup Meter Vault');
     expect(connectionsHtml).not.toContain('Deactivated Legacy Meter Vault');
     expect(connectionsHtml).not.toContain('Deactivated Secondary Connector');
   });

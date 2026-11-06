@@ -9,6 +9,7 @@ from ip.engine.domain.connection.events import (
     ConnectionActivatedEvent,
     ConnectionCreatedEvent,
     ConnectionDeactivatedEvent,
+    ConnectionDeletedEvent,
     ConnectionErrorRecordedEvent,
     ConnectionRelinkedEvent,
 )
@@ -297,3 +298,26 @@ def test_relink_uses_base_url_then_host_when_endpoint_url_missing() -> None:
     assert connection.connection_fingerprint == compute_connection_fingerprint(
         "ten_1", "itron_mdm", "https://base.example.com"
     )
+
+
+def test_connection_mark_deleted_emits_deleted_event() -> None:
+    connection = Connection.create(
+        tenant_id="ten_delete_1",
+        app_id="itron_mdm",
+        name="Itron MDM",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://ami.test.com"},
+        encrypted_credentials=b"secret",
+        endpoint_for_fingerprint="https://ami.test.com",
+    )
+    connection.clear_domain_events()
+
+    connection.mark_deleted()
+
+    events = connection.domain_events
+    assert len(events) == 1
+    assert isinstance(events[0], ConnectionDeletedEvent)
+    assert events[0].connection_id == connection.id
+    assert events[0].tenant_id == "ten_delete_1"
+    assert events[0].app_id == "itron_mdm"
+    assert events[0].event_name == "ip.connection.deleted"

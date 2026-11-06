@@ -37,6 +37,18 @@ class GlobalEntityMapRepositoryPort(Protocol):
         """Resolves all GlobalEntityMap entries associated with the given canonical ID."""
         ...
 
+    async def list_entries(
+        self,
+        tenant_id: str,
+        *,
+        entity_domain: str | None = None,
+        source_connection_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[GlobalEntityMap]:
+        """Lists GlobalEntityMap entries filtered by entity domain and/or source connection."""
+        return ()
+
     async def get_by_trace_id(
         self,
         trace_id: str,

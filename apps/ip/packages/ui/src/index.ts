@@ -4,10 +4,21 @@ export * from './domain';
 export * from './ports';
 export { IpCommandCenterPage } from './presentation/command-center/IpCommandCenterPage';
 export {
+  ConnectionCatalogTab,
+  ConnectionEntitiesSyncTab,
+  type ConnectionEntitiesSyncTabProps,
+  ConnectionOverviewTab,
+  ConnectionStreamsSyncTab,
+} from './presentation/connections/ConnectionDetailTabs';
+export {
   IpConnectionDetailPage,
   type IpConnectionDetailPageProps,
 } from './presentation/connections/IpConnectionDetailPage';
 export { IpConnectionsPage } from './presentation/connections/IpConnectionsPage';
+export {
+  SyncedDataInspectionPanel,
+  type SyncedDataInspectionPanelProps,
+} from './presentation/records/SyncedDataInspectionPanel';
 export {
   IpStitchDefinitionPage,
   type IpStitchDefinitionPageProps,

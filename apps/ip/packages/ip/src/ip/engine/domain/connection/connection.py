@@ -16,6 +16,7 @@ from ip.engine.domain.connection.events import (
     ConnectionActivatedEvent,
     ConnectionCreatedEvent,
     ConnectionDeactivatedEvent,
+    ConnectionDeletedEvent,
     ConnectionErrorRecordedEvent,
     ConnectionRelinkedEvent,
 )
@@ -329,3 +330,13 @@ class Connection(AggregateRoot):
         self.token_expires_at = token_expires_at
         self.last_refreshed_at = last_refreshed_at or now
         self.updated_at = now
+
+    def mark_deleted(self) -> None:
+        """Marks connection aggregate as deleted and appends domain event for transactional outbox draining."""
+        self.add_domain_event(
+            ConnectionDeletedEvent(
+                connection_id=self.id,
+                tenant_id=self.tenant_id,
+                app_id=self.app_id,
+            )
+        )

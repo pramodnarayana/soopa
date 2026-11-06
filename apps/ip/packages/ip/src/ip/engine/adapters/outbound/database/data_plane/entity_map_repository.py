@@ -114,6 +114,31 @@ class SqlAlchemyGlobalEntityMapRepository(
         rows = result.scalars().all()
         return [self._to_domain_model(r) for r in rows]
 
+    async def list_entries(
+        self,
+        tenant_id: str,
+        *,
+        entity_domain: str | None = None,
+        source_connection_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[GlobalEntityMap]:
+        stmt = select(GlobalEntityMapModel).where(GlobalEntityMapModel.tenant_id == tenant_id)
+        if entity_domain is not None:
+            stmt = stmt.where(GlobalEntityMapModel.entity_domain == str(entity_domain))
+        if source_connection_id is not None:
+            stmt = stmt.where(GlobalEntityMapModel.source_connection_id == source_connection_id)
+        stmt = (
+            stmt.order_by(
+                GlobalEntityMapModel.created_at.desc(),
+                GlobalEntityMapModel.id.asc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_model(r) for r in result.scalars().all()]
+
     async def get_by_trace_id(
         self,
         trace_id: str,

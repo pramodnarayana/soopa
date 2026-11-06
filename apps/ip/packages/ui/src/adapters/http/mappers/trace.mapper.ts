@@ -1,5 +1,6 @@
 import type {
   BulkReplayResult,
+  GlobalEntityMapEntry,
   InboundRecord,
   IpTrace,
   IpTraceLineageItem,
@@ -10,6 +11,7 @@ import type {
 } from '../../../domain/trace';
 import type {
   BulkReplayResultWire,
+  GlobalEntityMapWire,
   InboundRecordWire,
   IpTraceLineageItemWire,
   IpTraceWire,
@@ -19,7 +21,7 @@ import type {
   ReplicaRecordWire,
 } from '../schemas/trace.schema';
 
-function mapInboundFromWire(wire: InboundRecordWire): InboundRecord {
+export function mapInboundFromWire(wire: InboundRecordWire): InboundRecord {
   return {
     id: wire.id,
     tenantId: wire.tenant_id,
@@ -49,7 +51,7 @@ function mapInboundFromWire(wire: InboundRecordWire): InboundRecord {
   };
 }
 
-function mapReplicaFromWire(wire: ReplicaRecordWire): ReplicaRecord {
+export function mapReplicaFromWire(wire: ReplicaRecordWire): ReplicaRecord {
   return {
     id: wire.id,
     tenantId: wire.tenant_id,
@@ -77,7 +79,7 @@ function mapReplicaFromWire(wire: ReplicaRecordWire): ReplicaRecord {
   };
 }
 
-function mapNormalizedFromWire(wire: NormalizedRecordWire): NormalizedRecord {
+export function mapNormalizedFromWire(wire: NormalizedRecordWire): NormalizedRecord {
   return {
     id: wire.id,
     tenantId: wire.tenant_id,
@@ -91,6 +93,25 @@ function mapNormalizedFromWire(wire: NormalizedRecordWire): NormalizedRecord {
     sourceId: wire.source_id,
     canonicalData: wire.canonical_data,
     normalizedAt: wire.normalized_at,
+  };
+}
+
+export function mapGlobalEntityMapFromWire(wire: GlobalEntityMapWire): GlobalEntityMapEntry {
+  return {
+    id: wire.id,
+    tenantId: wire.tenant_id,
+    traceId: wire.trace_id,
+    correlationId: wire.correlation_id,
+    parentTraceId: wire.parent_trace_id,
+    originalTraceId: wire.original_trace_id,
+    replayCount: wire.replay_count,
+    entityDomain: wire.entity_domain,
+    canonicalId: wire.canonical_id,
+    sourceConnectionId: wire.source_connection_id,
+    sourceEntityId: wire.source_entity_id,
+    destConnectionId: wire.dest_connection_id,
+    destEntityId: wire.dest_entity_id,
+    createdAt: wire.created_at,
   };
 }
 
@@ -168,22 +189,7 @@ export function mapIpTraceFromWire(wire: IpTraceWire): IpTrace {
       correlationId: rej.correlation_id,
       createdAt: rej.created_at,
     })),
-    entityMappings: wire.entity_mappings.map((gem) => ({
-      id: gem.id,
-      tenantId: gem.tenant_id,
-      traceId: gem.trace_id,
-      correlationId: gem.correlation_id,
-      parentTraceId: gem.parent_trace_id,
-      originalTraceId: gem.original_trace_id,
-      replayCount: gem.replay_count,
-      entityDomain: gem.entity_domain,
-      canonicalId: gem.canonical_id,
-      sourceConnectionId: gem.source_connection_id,
-      sourceEntityId: gem.source_entity_id,
-      destConnectionId: gem.dest_connection_id,
-      destEntityId: gem.dest_entity_id,
-      createdAt: gem.created_at,
-    })),
+    entityMappings: wire.entity_mappings.map(mapGlobalEntityMapFromWire),
     outboundRecords: wire.outbound_records.map(mapOutboundFromWire),
     traceEvents: wire.trace_events.map((evt) => ({
       id: evt.id,

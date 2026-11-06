@@ -359,7 +359,7 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
         onChangeValue: () => undefined,
       }),
     );
-    expect(emptyHtml).toContain('no additional configuration properties');
+    expect(emptyHtml).toBe('');
 
     const allProps: readonly ConnectorPropertySpec[] = [
       ...SAMPLE_SPECS,
@@ -405,8 +405,8 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     expect(fullHtml).toContain('Base URL');
     expect(fullHtml).toContain('API Secret');
     expect(fullHtml).toContain('OAuth Token');
-    expect(fullHtml).toContain('Records per page');
-    expect(fullHtml).toContain('Target AMI utility grid');
+    expect(fullHtml).toContain('Batch Size');
+    expect(fullHtml).toContain('Grid Region');
   });
 
   it('evaluates connection preflight verification snapshots and maps failed handshake problems', () => {

@@ -3,6 +3,7 @@ import type {
   CheckConnectionInput,
   Connection,
   CreateConnectionInput,
+  DiscoveredCatalog,
   RelinkConnectionInput,
 } from '../domain/connection';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
@@ -26,6 +27,20 @@ export function useConnectionDetailQuery(connectionId: string): IpQueryView<Conn
     queryKey: ipQueryKeys.connections.detail(tenantId, connectionId),
     queryFn: ({ signal }) => repositories.connections.getConnection(tenantId, connectionId, signal),
     enabled: Boolean(tenantId && connectionId),
+  });
+  return projectResultQuery(query);
+}
+
+export function useConnectionCatalogQuery(
+  connectionId: string,
+  enabled: boolean = true,
+): IpQueryView<DiscoveredCatalog> {
+  const { tenantId, repositories } = useIpWorkspace();
+  const query = useQuery({
+    queryKey: ipQueryKeys.connections.catalog(tenantId, connectionId),
+    queryFn: () => repositories.connections.discoverCatalog(tenantId, connectionId),
+    enabled: Boolean(tenantId && connectionId && enabled),
+    staleTime: 5 * 60 * 1000,
   });
   return projectResultQuery(query);
 }
@@ -103,6 +118,29 @@ export function useDeactivateConnectionMutation(connectionId: string) {
     onSuccess: (res) => {
       logResultOutcome(logger, 'ip_connection.deactivate', res, {
         connection_id: connectionId,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });
+      }
+    },
+  });
+}
+
+export function useDeleteConnectionMutation(defaultConnectionId?: string) {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (targetId?: string) => {
+      const id = targetId ?? defaultConnectionId;
+      if (!id) {
+        throw new Error('Connection ID is required to delete connection.');
+      }
+      return repositories.connections.deleteConnection(tenantId, id);
+    },
+    onSuccess: (res, targetId) => {
+      const id = targetId ?? defaultConnectionId;
+      logResultOutcome(logger, 'ip_connection.delete', res, {
+        connection_id: id,
       });
       if (res.ok) {
         void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });

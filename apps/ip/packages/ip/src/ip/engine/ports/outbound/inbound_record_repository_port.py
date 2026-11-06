@@ -42,3 +42,16 @@ class InboundRecordRepositoryPort(Protocol):
     ) -> InboundRecord | None:
         """Retrieves an inbound record by external push event ID for deduplication."""
         ...
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[InboundRecord]:
+        """Lists inbound wire records filtered by connection and/or stream name."""
+        return ()

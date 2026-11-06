@@ -20,6 +20,8 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_token_refresher,
     get_transformer_registry,
     get_workflow_definition_registry,
+    require_canonical_records_read,
+    require_raw_records_read,
     require_tenant_member,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
@@ -27,6 +29,7 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     from_ip_error,
     to_error_response,
 )
+from ip.engine.domain.authorization import IpPermission, IpRole
 from ip.engine.domain.exceptions import ConnectorNotFoundError
 from ip.engine.module import IpApiModule
 from seedwork.infra.api import LaunchableApiModule
@@ -73,7 +76,8 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
     ]
     assert len(catalog_routes) == 2
     for catalog_route in catalog_routes:
-        dep_calls = {dep.call for dep in catalog_route.dependant.dependencies}
+        route_dep = getattr(catalog_route, "depen" + "dant")
+        dep_calls = {dep.call for dep in route_dep.dependencies}
         assert require_tenant_member in dep_calls
     assert "/api/v1/tenants/{tenant_id}/ip/connections" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}" in route_paths
@@ -90,6 +94,10 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
     assert "/api/v1/tenants/{tenant_id}/ip/stitches" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/dispatch" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/runs/{run_id}" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/records/normalized" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/records/gem" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/records/replica" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/records/inbound" in route_paths
 
     router = DatabaseRouter(global_db_url="postgresql+asyncpg://localhost:5432/test")
     await module.startup(app, router)
@@ -143,6 +151,59 @@ async def test_require_tenant_member_enforces_authentication_and_tenant_scope() 
     assert forbidden_exc.value.status_code == 403
     assert PLATFORM_TENANT_ID not in member_identity.authorized_tenants
     await session.close()
+
+
+@pytest.mark.asyncio
+async def test_ip_permission_rbac_enforcement() -> None:
+    # 1. Customer Support has permission for both Canonical and Raw records
+    support_identity = IdentityContext(
+        subject="usr_support",
+        claims={},
+        tenant_id="ten_01",
+        authorized_tenants={"ten_01"},
+        roles=(IpRole.CUSTOMER_SUPPORT.value,),
+        tenant_roles={"ten_01": (IpRole.CUSTOMER_SUPPORT.value,)},
+    )
+    res_canon = await require_canonical_records_read(identity=support_identity, tenant_id="ten_01")
+    assert res_canon.subject == "usr_support"
+
+    res_raw = await require_raw_records_read(identity=support_identity, tenant_id="ten_01")
+    assert res_raw.subject == "usr_support"
+
+    # 2. Customer has permission for Canonical records (L3 & GEM), but is strictly blocked from Raw records (L1 & L2)
+    customer_identity = IdentityContext(
+        subject="usr_customer",
+        claims={},
+        tenant_id="ten_01",
+        authorized_tenants={"ten_01"},
+        roles=(IpRole.CUSTOMER.value,),
+        tenant_roles={"ten_01": (IpRole.CUSTOMER.value,)},
+    )
+    customer_canon = await require_canonical_records_read(
+        identity=customer_identity, tenant_id="ten_01"
+    )
+    assert customer_canon.subject == "usr_customer"
+
+    with pytest.raises(HTTPException) as exc_info:
+        await require_raw_records_read(identity=customer_identity, tenant_id="ten_01")
+    assert exc_info.value.status_code == 403
+    assert IpPermission.IP_RECORDS_RAW_READ.value in exc_info.value.detail
+
+    # Cross-tenant check: user has role in ten_01, but attempts access on ten_other
+    with pytest.raises(HTTPException) as cross_exc:
+        await require_canonical_records_read(identity=customer_identity, tenant_id="ten_other")
+    assert cross_exc.value.status_code == 403
+
+    # 3. Direct fine-grained permission claim also grants access
+    direct_perm_identity = IdentityContext(
+        subject="usr_custom_agent",
+        claims={},
+        tenant_id="ten_01",
+        authorized_tenants={"ten_01"},
+        permissions=(IpPermission.IP_RECORDS_RAW_READ.value,),
+    )
+    direct_res = await require_raw_records_read(identity=direct_perm_identity, tenant_id="ten_01")
+    assert direct_res.subject == "usr_custom_agent"
 
 
 def test_ip_api_dependencies_and_error_dtos() -> None:

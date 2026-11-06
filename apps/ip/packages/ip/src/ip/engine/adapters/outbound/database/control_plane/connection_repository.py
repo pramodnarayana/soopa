@@ -4,7 +4,11 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchemyRepository
-from ip.engine.adapters.outbound.database.models.control_plane import ConnectionRecord
+from ip.engine.adapters.outbound.database.models.control_plane import (
+    ConnectionRecord,
+    ConnectionStreamStateRecord,
+    SyncRunRecord,
+)
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import (
     AuthType,
@@ -13,7 +17,7 @@ from ip.engine.domain.connection.enums import (
 from ip.engine.domain.exceptions import DuplicateConnectionFingerprintError, Result
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from seedwork.domain.types import JsonDict
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -174,3 +178,31 @@ class SqlAlchemyConnectionRepository(GlobalSqlAlchemyRepository, ConnectionRepos
         stmt = stmt.order_by(ConnectionRecord.created_at.desc())
         result = await self._session.execute(stmt)
         return [self._to_domain_model(r) for r in result.scalars().all()]
+
+    async def delete(self, connection: Connection) -> None:
+        """Drains aggregate domain events into Outbox and permanently deletes the connection record and its child references."""
+        self._drain_events(connection, default_tenant_id=connection.tenant_id)
+        await self._session.execute(
+            delete(ConnectionStreamStateRecord).where(
+                ConnectionStreamStateRecord.connection_id == connection.id
+            )
+        )
+        await self._session.execute(
+            delete(SyncRunRecord).where(SyncRunRecord.connection_id == connection.id)
+        )
+        stmt = delete(ConnectionRecord).where(ConnectionRecord.id == connection.id)
+        await self._session.execute(stmt)
+        await self._session.flush()
+
+    async def delete_by_id(self, connection_id: str) -> None:
+        await self._session.execute(
+            delete(ConnectionStreamStateRecord).where(
+                ConnectionStreamStateRecord.connection_id == connection_id
+            )
+        )
+        await self._session.execute(
+            delete(SyncRunRecord).where(SyncRunRecord.connection_id == connection_id)
+        )
+        stmt = delete(ConnectionRecord).where(ConnectionRecord.id == connection_id)
+        await self._session.execute(stmt)
+        await self._session.flush()

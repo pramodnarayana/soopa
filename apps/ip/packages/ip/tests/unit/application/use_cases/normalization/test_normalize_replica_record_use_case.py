@@ -199,6 +199,24 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
         )
         return matching[:limit]
 
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[ReplicaRecord]:
+        res = [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and (connection_id is None or r.connection_id == connection_id)
+            and (stream is None or r.stream == stream)
+        ]
+        return res[offset : offset + limit]
+
 
 class FakeTraceRepository(TraceRepositoryPort):
     def __init__(self) -> None:

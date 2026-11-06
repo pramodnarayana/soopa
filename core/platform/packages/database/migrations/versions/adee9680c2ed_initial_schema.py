@@ -373,6 +373,44 @@ def upgrade() -> None:
         schema="identity",
     )
     op.create_table(
+        "capabilities",
+        sa.Column("code", sa.String(length=128), nullable=False),
+        sa.Column("domain", sa.String(length=64), nullable=False),
+        sa.Column("resource", sa.String(length=64), nullable=False),
+        sa.Column("action", sa.String(length=32), nullable=False),
+        sa.Column("display_name", sa.String(length=255), nullable=False),
+        sa.Column("description", sa.String(length=1024), nullable=False),
+        sa.Column("is_sensitive", sa.Boolean(), server_default=sa.text("false"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.PrimaryKeyConstraint("code"),
+        schema="identity",
+    )
+    op.create_index(
+        op.f("ix_identity_capabilities_domain"),
+        "capabilities",
+        ["domain"],
+        unique=False,
+        schema="identity",
+    )
+    op.create_index(
+        "ix_capabilities_domain_resource",
+        "capabilities",
+        ["domain", "resource"],
+        unique=False,
+        schema="identity",
+    )
+    op.create_table(
         "roles",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
@@ -582,11 +620,45 @@ def upgrade() -> None:
     )
     op.execute(
         """
+        INSERT INTO identity.capabilities (code, domain, resource, action, display_name, description, is_sensitive, created_at, updated_at)
+        VALUES
+            ('platform:admin', 'platform', 'platform', 'admin', 'Platform Administration', 'Full administrative control over the entire platform.', TRUE, NOW(), NOW()),
+            ('tenant:admin', 'tenant', 'tenant', 'admin', 'Tenant Administration', 'Full administrative control over a specific tenant.', TRUE, NOW(), NOW()),
+            ('tenant_settings:read', 'tenant', 'settings', 'read', 'View Tenant Settings', 'View configuration and general settings for the tenant.', FALSE, NOW(), NOW()),
+            ('tenant_settings:write', 'tenant', 'settings', 'write', 'Manage Tenant Settings', 'Update configuration and general settings for the tenant.', FALSE, NOW(), NOW()),
+            ('users:read', 'identity', 'users', 'read', 'View Users', 'View user accounts and tenant memberships.', FALSE, NOW(), NOW()),
+            ('users:write', 'identity', 'users', 'write', 'Manage Users', 'Create, update, or deactivate tenant users.', FALSE, NOW(), NOW()),
+            ('roles:read', 'identity', 'roles', 'read', 'View Roles', 'View system and custom roles and their assigned capabilities.', FALSE, NOW(), NOW()),
+            ('roles:write', 'identity', 'roles', 'write', 'Manage Roles', 'Create, modify, and assign custom roles.', FALSE, NOW(), NOW()),
+            ('api_keys:read', 'identity', 'api_keys', 'read', 'View API Keys', 'Inspect configured API keys and tokens.', FALSE, NOW(), NOW()),
+            ('api_keys:write', 'identity', 'api_keys', 'write', 'Manage API Keys', 'Generate or revoke API keys and tokens.', TRUE, NOW(), NOW()),
+            ('webhooks:read', 'integration', 'webhooks', 'read', 'View Webhooks', 'View outgoing webhook subscriptions and delivery logs.', FALSE, NOW(), NOW()),
+            ('webhooks:write', 'integration', 'webhooks', 'write', 'Manage Webhooks', 'Configure webhook endpoints and subscriptions.', FALSE, NOW(), NOW()),
+            ('invoices:read', 'billing', 'invoices', 'read', 'View Invoices', 'View billing invoices and payment receipts.', FALSE, NOW(), NOW()),
+            ('invoices:write', 'billing', 'invoices', 'write', 'Manage Invoices', 'Update billing and invoice settings.', FALSE, NOW(), NOW()),
+            ('ip:records:canonical:read', 'ip', 'records:canonical', 'read', 'View Canonical Records (L3) & GEM', 'View business-ready normalized data and global entity identity crosswalks.', FALSE, NOW(), NOW()),
+            ('ip:records:raw:read', 'ip', 'records:raw', 'read', 'View Raw Wire (L1) & Staging (L2)', 'Inspect raw incoming payload streams and universal staging replicas.', TRUE, NOW(), NOW()),
+            ('ip:traces:read', 'ip', 'traces', 'read', 'View Traces & Waterfalls', 'Inspect integration pipeline execution traces, waterfalls, and status logs.', FALSE, NOW(), NOW()),
+            ('ip:sync:trigger', 'ip', 'sync', 'execute', 'Trigger Batch Sync', 'Execute on-demand batch synchronization jobs between external apps and canonical models.', FALSE, NOW(), NOW()),
+            ('ip:flows:read', 'ip', 'flows', 'read', 'View Integration Flows', 'View integration flow diagrams, stages, and transformations.', FALSE, NOW(), NOW()),
+            ('ip:flows:write', 'ip', 'flows', 'write', 'Manage Integration Flows', 'Author, edit, and publish integration flow pipelines.', FALSE, NOW(), NOW()),
+            ('ip:flows:execute', 'ip', 'flows', 'execute', 'Execute Integration Flows', 'Manually trigger execution runs of integration flows.', FALSE, NOW(), NOW())
+        ON CONFLICT (code) DO UPDATE SET
+            display_name = EXCLUDED.display_name,
+            description = EXCLUDED.description,
+            is_sensitive = EXCLUDED.is_sensitive,
+            updated_at = NOW();
+        """
+    )
+    op.execute(
+        """
         INSERT INTO identity.roles (id, tenant_id, name, description, capabilities, created_at, updated_at)
         VALUES
             ('rol_97f48b1115b74100', 'ten_000000000000000000000000', 'PlatformAdmin', 'Full access to the entire platform.', ARRAY['platform:admin'], NOW(), NOW()),
             ('rol_a62f2225bf70bfac', 'ten_000000000000000000000000', 'TenantAdmin', 'Full access to manage a specific tenant.', ARRAY['tenant:admin', 'tenant_settings:read', 'tenant_settings:write', 'users:read', 'users:write', 'roles:read', 'roles:write', 'api_keys:read', 'api_keys:write', 'webhooks:read', 'webhooks:write', 'invoices:read', 'invoices:write'], NOW(), NOW()),
-            ('rol_1d55e88863640224', 'ten_000000000000000000000000', 'Viewer', 'Read-only access to a specific tenant.', ARRAY['tenant_settings:read', 'users:read', 'roles:read', 'api_keys:read', 'webhooks:read', 'invoices:read'], NOW(), NOW())
+            ('rol_1d55e88863640224', 'ten_000000000000000000000000', 'Viewer', 'Read-only access to a specific tenant.', ARRAY['tenant_settings:read', 'users:read', 'roles:read', 'api_keys:read', 'webhooks:read', 'invoices:read', 'ip:records:canonical:read', 'ip:traces:read'], NOW(), NOW()),
+            ('rol_c58e771032bf4aa1', 'ten_000000000000000000000000', 'CustomerSupport', 'Customer Support with diagnostic access including L1, L2, L3 records and Traces.', ARRAY['ip:records:canonical:read', 'ip:records:raw:read', 'ip:traces:read', 'ip:sync:trigger', 'ip:flows:read'], NOW(), NOW()),
+            ('rol_e93f882143cc5bb2', 'ten_000000000000000000000000', 'Customer', 'Customer role with restricted view (L3 normalized data, GEM crosswalk, and Traces only).', ARRAY['ip:records:canonical:read', 'ip:traces:read', 'ip:flows:read'], NOW(), NOW())
         ON CONFLICT (tenant_id, name) DO UPDATE SET
             description = EXCLUDED.description,
             capabilities = EXCLUDED.capabilities,
@@ -651,6 +723,11 @@ def downgrade() -> None:
     )
     op.drop_index(op.f("ix_identity_roles_tenant_id"), table_name="roles", schema="identity")
     op.drop_table("roles", schema="identity")
+    op.drop_index("ix_capabilities_domain_resource", table_name="capabilities", schema="identity")
+    op.drop_index(
+        op.f("ix_identity_capabilities_domain"), table_name="capabilities", schema="identity"
+    )
+    op.drop_table("capabilities", schema="identity")
     op.drop_index(
         op.f("ix_identity_api_tokens_tenant_id"), table_name="api_tokens", schema="identity"
     )

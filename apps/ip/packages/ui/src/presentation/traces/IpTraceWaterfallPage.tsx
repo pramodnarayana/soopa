@@ -156,8 +156,10 @@ function TraceWaterfallBody({
   readonly onHydrateS3: () => void;
   readonly onProblem: (problem: ApiProblem | null) => void;
 }) {
-  const { navigation } = useIpWorkspace();
-  const [activeLayer, setActiveLayer] = useState<PipelineLayerValue>(PipelineLayer.L1_INGEST);
+  const { navigation, userRole } = useIpWorkspace();
+  const defaultLayer =
+    userRole === 'customer' ? PipelineLayer.L3_NORMALIZE : PipelineLayer.L1_INGEST;
+  const [activeLayer, setActiveLayer] = useState<PipelineLayerValue>(defaultLayer);
   const [modifyOpen, setModifyOpen] = useState(false);
 
   const waterfallSummary = useMemo(() => computePipelineWaterfallSummary(trace), [trace]);

@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 
 from identity.domain.constants import IdentityIdPrefix
 from seedwork.domain.types import JsonDict
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, func, text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -233,3 +233,34 @@ class IdentityOutbox(IdentityBase, OutboxMixin):
     def body(self) -> JsonDict:
         """Alias for payload to satisfy OutboxEvent protocol."""
         return self.payload
+
+
+class Capability(IdentityBase):
+    """
+    Catalog of all discrete capabilities/permissions available across the platform.
+    Used by the IAM Admin UI to render permission matrices, checkboxes, and descriptions.
+    """
+
+    __tablename__ = "capabilities"
+
+    code: Mapped[str] = mapped_column(String(128), primary_key=True)
+    domain: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    resource: Mapped[str] = mapped_column(String(64), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(1024), nullable=False)
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+        onupdate=lambda: datetime.now(UTC),
+    )
+
+    __table_args__ = (
+        Index("ix_capabilities_domain_resource", "domain", "resource"),
+        {"schema": "identity"},
+    )

@@ -301,6 +301,26 @@ class FakeInboundRecordRepo(InboundRecordRepositoryPort):
             r for r in self.records.values() if r.tenant_id == tenant_id and r.trace_id == trace_id
         ]
 
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[InboundRecord]:
+        _ = hydrate_payloads
+        res = [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and (connection_id is None or r.connection_id == connection_id)
+            and (stream_name is None or r.stream_name == stream_name)
+        ]
+        return res[offset : offset + limit]
+
 
 class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
     """In-memory ReplicaRecordRepositoryPort."""
@@ -381,6 +401,24 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
         limit: int = 100,
     ) -> list[ReplicaRecord]:
         return []
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[ReplicaRecord]:
+        res = [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and (connection_id is None or r.connection_id == connection_id)
+            and (stream is None or r.stream == stream)
+        ]
+        return res[offset : offset + limit]
 
 
 class FakeReplicaRejectionRepo(ReplicaRejectionRepositoryPort):

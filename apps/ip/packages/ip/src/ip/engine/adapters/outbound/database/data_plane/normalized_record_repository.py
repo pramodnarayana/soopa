@@ -99,6 +99,31 @@ class SqlAlchemyNormalizedRecordRepository(
         result = await self._session.execute(stmt)
         return [self._to_domain_model(orm) for orm in result.scalars().all()]
 
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        canonical_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[NormalizedRecord]:
+        stmt = select(NormalizedRecordModel).where(NormalizedRecordModel.tenant_id == tenant_id)
+        if connection_id is not None:
+            stmt = stmt.where(NormalizedRecordModel.connection_id == connection_id)
+        if canonical_type is not None:
+            stmt = stmt.where(NormalizedRecordModel.canonical_type == str(canonical_type))
+        stmt = (
+            stmt.order_by(
+                NormalizedRecordModel.normalized_at.desc(),
+                NormalizedRecordModel.id.asc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        return [self._to_domain_model(orm) for orm in result.scalars().all()]
+
     async def get_by_trace_id(
         self,
         trace_id: str,

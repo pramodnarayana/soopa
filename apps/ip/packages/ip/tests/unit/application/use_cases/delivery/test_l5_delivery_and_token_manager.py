@@ -171,6 +171,26 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
     ) -> InboundRecord | None:
         return None
 
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[InboundRecord]:
+        _ = hydrate_payloads
+        res = [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and (connection_id is None or r.connection_id == connection_id)
+            and (stream_name is None or r.stream_name == stream_name)
+        ]
+        return res[offset : offset + limit]
+
 
 class FakeOutboundRecordRepository(OutboundRecordRepositoryPort):
     def __init__(self) -> None:

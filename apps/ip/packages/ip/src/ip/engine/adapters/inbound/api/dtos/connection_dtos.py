@@ -43,6 +43,7 @@ class RelinkConnectionHttpRequest(BaseModel):
 
     new_name: str | None = None
     updated_raw_credentials: JsonDict | None = None
+    updated_public_config: JsonDict | None = None
 
 
 class ConnectionHttpResponse(BaseModel):

@@ -45,3 +45,11 @@ class ConnectionRepositoryPort(Protocol):
     ) -> Sequence[Connection]:
         """Lists all connections belonging to a tenant, optionally filtered by status."""
         ...
+
+    async def delete(self, connection: Connection) -> None:
+        """Drains aggregate domain events into Outbox and permanently deletes the connection record."""
+        raise NotImplementedError
+
+    async def delete_by_id(self, connection_id: str) -> None:
+        """Permanently deletes a connection record by id."""
+        raise NotImplementedError

@@ -9,7 +9,7 @@ from .core import (
     UcpRegistry,
 )
 from .idempotency import IdempotencyResult
-from .identity import ApiKey, ApiToken, Role, Tenant, TenantUser, User, UserRole
+from .identity import ApiKey, ApiToken, Capability, Role, Tenant, TenantUser, User, UserRole
 from .notifications import NotificationOutbox, NotificationTemplate, UserNotificationPreference
 from .observability import SystemAuditLog
 from .scheduling import ScheduledJob
@@ -22,6 +22,7 @@ __all__ = [
     "ApiToken",
     "App",
     "AppSubscription",
+    "Capability",
     "DatabaseShard",
     "IdempotencyResult",
     "IdentityBase",

@@ -1,5 +1,6 @@
 import {
   Button,
+  cn,
   Input,
   Label,
   Select,
@@ -146,11 +147,13 @@ function SecretPropertyInput({
   value,
   onChange,
   currentAuthType,
+  isEditing = false,
 }: {
   readonly prop: ConnectorPropertySpec;
   readonly value: string;
   readonly onChange: (val: string) => void;
   readonly currentAuthType?: string | null;
+  readonly isEditing?: boolean;
 }) {
   const [revealed, setRevealed] = useState(false);
   const normalizedAuth = currentAuthType ? normalizeAuthType(currentAuthType) : null;
@@ -172,7 +175,7 @@ function SecretPropertyInput({
           id={`spec-${prop.name}`}
           type={revealed ? 'text' : 'password'}
           value={value}
-          required={prop.required}
+          required={isEditing ? false : prop.required}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           className="font-mono text-xs"
@@ -268,16 +271,18 @@ function NumberPropertyInput({
   );
 }
 
-function SingleSpecPropertyControl({
+export function SingleSpecPropertyControl({
   prop,
   rawValue,
   onChange,
   currentAuthType,
+  isEditing = false,
 }: {
   readonly prop: ConnectorPropertySpec;
   readonly rawValue: unknown;
   readonly onChange: (nextVal: unknown) => void;
   readonly currentAuthType?: string | null;
+  readonly isEditing?: boolean;
 }) {
   if (prop.type === ConnectorPropertyType.BOOLEAN) {
     return <BooleanPropertyInput prop={prop} rawValue={rawValue} onChange={onChange} />;
@@ -292,6 +297,7 @@ function SingleSpecPropertyControl({
         value={coerceScalarString(rawValue)}
         onChange={onChange}
         currentAuthType={currentAuthType}
+        isEditing={isEditing}
       />
     );
   }
@@ -327,26 +333,24 @@ export function SpecFormRenderer({ properties, values, onChangeValue }: SpecForm
   );
 
   if (visibleProperties.length === 0) {
-    return (
-      <p className="rounded-xl border border-dashed border-border p-4 text-xs text-muted-foreground">
-        This connector requires no additional configuration properties.
-      </p>
-    );
+    return null;
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {visibleProperties.map((prop) => {
         const displayLabel = resolvePropertyLabel(prop, currentAuthType);
-        const displayDescription = resolvePropertyDescription(prop, currentAuthType);
+        const isFullWidth =
+          prop.type === ConnectorPropertyType.OAUTH ||
+          prop.name === 'base_url' ||
+          prop.name === 'description' ||
+          visibleProperties.length === 1;
+
         return (
-          <div key={prop.name} className="space-y-1.5">
+          <div key={prop.name} className={cn('space-y-1.5', isFullWidth && 'sm:col-span-2')}>
             <Label htmlFor={`spec-${prop.name}`} className="flex items-center gap-1.5">
               <span>{displayLabel}</span>
               {prop.required ? <span className="text-status-critical-fg">*</span> : null}
-              <span className="font-mono text-xs font-normal text-muted-foreground">
-                ({prop.name})
-              </span>
             </Label>
             <SingleSpecPropertyControl
               prop={prop}
@@ -354,9 +358,6 @@ export function SpecFormRenderer({ properties, values, onChangeValue }: SpecForm
               onChange={(nextVal) => onChangeValue(prop.name, nextVal)}
               currentAuthType={currentAuthType}
             />
-            {displayDescription ? (
-              <p className="text-xs text-muted-foreground">{displayDescription}</p>
-            ) : null}
           </div>
         );
       })}

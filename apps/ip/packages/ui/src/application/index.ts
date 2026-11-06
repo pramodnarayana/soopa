@@ -3,6 +3,7 @@ export * from './query-keys';
 export * from './result-query-state';
 export * from './use-catalog-queries';
 export * from './use-connection-queries';
+export * from './use-record-queries';
 export * from './use-stitch-queries';
 export * from './use-sync-run-queries';
 export * from './use-trace-queries';

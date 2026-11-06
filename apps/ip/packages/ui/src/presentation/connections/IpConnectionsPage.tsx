@@ -1,18 +1,29 @@
 import {
   Button,
-  CopyableIdPill,
-  DataTable,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Skeleton,
   StatusBadge,
   StatusTone,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
   Tabs,
   TabsList,
   TabsTrigger,
 } from '@soopa/ui';
-import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
+import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
   Cable,
+  ChevronRight,
   Cloud,
   CreditCard,
   Globe,
@@ -21,27 +32,26 @@ import {
   Plus,
   Search,
   Server,
+  Trash2,
   Zap,
 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { useCatalogAppsQuery } from '../../application/use-catalog-queries';
-import { useConnectionsQuery } from '../../application/use-connection-queries';
+import {
+  useConnectionsQuery,
+  useDeleteConnectionMutation,
+} from '../../application/use-connection-queries';
 import type { CatalogAppSummary } from '../../domain/catalog';
 import { type Connection, groupActiveConnectionsByApp } from '../../domain/connection';
-import { ConnectionStatus } from '../../domain/enums';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
-import {
-  formatRelativeTimestamp,
-  mapConnectionStatusDotClass,
-  mapConnectionStatusTone,
-} from '../shared/status-mapping';
+import { formatRelativeTimestamp, mapConnectionStatusTone } from '../shared/status-mapping';
 import { CreateConnectionModal } from './CreateConnectionModal';
 
-const ALL_TAB = 'ALL';
 const MAIN_TAB_DIRECTORY = 'directory';
-const MAIN_TAB_INSTALLED = 'installed';
+const MAIN_TAB_ACTIVE = 'active';
 
 const CATEGORIES = [
   { label: 'All', value: '' },
@@ -67,14 +77,22 @@ function getAppIcon(category?: string | null, appId?: string) {
   return <Layers className="h-5 w-5 text-primary" />;
 }
 
-export function IpConnectionsPage() {
+export interface IpConnectionsPageProps {
+  readonly initialTab?: typeof MAIN_TAB_DIRECTORY | typeof MAIN_TAB_ACTIVE;
+}
+
+export function IpConnectionsPage({
+  initialTab = MAIN_TAB_DIRECTORY,
+}: IpConnectionsPageProps = {}) {
   const { navigation } = useIpWorkspace();
-  const [mainTab, setMainTab] = useState<string>(MAIN_TAB_DIRECTORY);
-  const [statusTab, setStatusTab] = useState<string>(ALL_TAB);
+  const [mainTab, setMainTab] = useState<string>(initialTab);
+  const [activeSearch, setActiveSearch] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [configuredApp, setConfiguredApp] = useState<CatalogAppSummary | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
+  const deleteMutation = useDeleteConnectionMutation();
 
   // 1. Fetch catalog apps for the OpenAI-style plugin directory
   const catalogView = useCatalogAppsQuery({
@@ -83,21 +101,23 @@ export function IpConnectionsPage() {
   });
   const apps = catalogView.data ?? [];
 
-  // 2. Fetch all connections to display non-deactivated counts on app cards
+  // 2. Fetch all connections for badge count and active apps table
   const allConnectionsView = useConnectionsQuery();
-  const connectionsByApp = useMemo(
-    () => groupActiveConnectionsByApp(allConnectionsView.data ?? []),
-    [allConnectionsView.data],
-  );
+  const connections = allConnectionsView.data ?? [];
+  const connectionsByApp = useMemo(() => groupActiveConnectionsByApp(connections), [connections]);
 
-  // 3. Filtered connections for the Installed tab
-  const filteredConnectionsView = useConnectionsQuery(
-    statusTab === ALL_TAB ? undefined : statusTab,
-  );
-  const rows = useMemo(
-    () => [...(filteredConnectionsView.data ?? [])],
-    [filteredConnectionsView.data],
-  );
+  // 3. Filter connections for Active Apps tab
+  const filteredConnections = useMemo<Connection[]>(() => {
+    const q = activeSearch.trim().toLowerCase();
+    if (!q) return [...connections];
+    return connections.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.appId.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q) ||
+        c.authType.toLowerCase().includes(q),
+    );
+  }, [connections, activeSearch]);
 
   const handleConnectApp = (app: CatalogAppSummary) => {
     setConfiguredApp(app);
@@ -117,26 +137,19 @@ export function IpConnectionsPage() {
         ),
       },
       {
-        accessorKey: 'authType',
-        header: 'Auth Strategy',
-        cell: ({ row }) => <StatusBadge label={row.original.authType} tone={StatusTone.NEUTRAL} />,
-      },
-      {
-        accessorKey: 'connectionFingerprint',
-        header: 'SHA-256 Fingerprint',
-        cell: ({ row }) => (
-          <CopyableIdPill value={row.original.connectionFingerprint} truncateLength={16} />
-        ),
-      },
-      {
         accessorKey: 'status',
-        header: 'Health',
+        header: 'Status',
         cell: ({ row }) => (
           <StatusBadge
             label={row.original.status}
             tone={mapConnectionStatusTone(row.original.status)}
           />
         ),
+      },
+      {
+        accessorKey: 'authType',
+        header: 'Auth Strategy',
+        cell: ({ row }) => <StatusBadge label={row.original.authType} tone={StatusTone.NEUTRAL} />,
       },
       {
         accessorKey: 'tokenExpiresAt',
@@ -158,23 +171,72 @@ export function IpConnectionsPage() {
           </span>
         ),
       },
+      {
+        id: 'actions',
+        size: 80,
+        header: () => <span className="sr-only">Actions</span>,
+        cell: ({ row }) => (
+          <div
+            className="flex items-center justify-end gap-1 pr-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={(e) => {
+                e.stopPropagation();
+                navigation.toConnectionDetail(row.original.id);
+              }}
+              title={`View ${row.original.name} details`}
+              aria-label={`View ${row.original.name} details`}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                setConnectionToDelete(row.original);
+              }}
+              title={`Delete ${row.original.name}`}
+              aria-label={`Delete ${row.original.name}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ),
+      },
     ],
     [],
   );
 
+  const handleConfirmDelete = async () => {
+    if (!connectionToDelete) return;
+    const res = await deleteMutation.mutateAsync(connectionToDelete.id);
+    if (res.ok) {
+      toast.success(
+        `Connection "${connectionToDelete.name}" deleted. Historical entities and synced data preserved.`,
+      );
+      setConnectionToDelete(null);
+    } else {
+      toast.error(res.error.message || 'Failed to delete connection.');
+    }
+  };
+
   const table = useReactTable({
-    data: rows,
+    data: filteredConnections,
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
 
   return (
     <div className="space-y-6">
-      <IpPageHeader
-        eyebrow="Marketplace & Integration Hub"
-        title="Apps & Connectors"
-        subtitle="Explore pre-built enterprise apps and universal HTTP API protocols. Connect apps directly to run automated data ingestion, syncs, and stitches."
-      />
+      <IpPageHeader title="Apps" />
 
       <Tabs value={mainTab} onValueChange={setMainTab}>
         <TabsList>
@@ -182,9 +244,9 @@ export function IpConnectionsPage() {
             <LayoutGrid className="h-4 w-4" />
             <span>All Apps ({apps.length})</span>
           </TabsTrigger>
-          <TabsTrigger value={MAIN_TAB_INSTALLED} className="gap-1.5">
+          <TabsTrigger value={MAIN_TAB_ACTIVE} className="gap-1.5">
             <Cable className="h-4 w-4" />
-            <span>Installed Apps ({allConnectionsView.data?.length ?? 0})</span>
+            <span>Active Apps ({connections.length})</span>
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -266,62 +328,29 @@ export function IpConnectionsPage() {
                     key={app.appId}
                     className="flex flex-col justify-between rounded-2xl border border-border bg-card p-5 shadow-xs transition-all hover:border-primary/50 hover:shadow-md"
                   >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60">
-                            {getAppIcon(app.category, app.appId)}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold text-foreground text-sm leading-tight">
-                              {app.displayName}
-                            </h3>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {app.category} · {app.appId}
-                            </span>
-                          </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60">
+                          {getAppIcon(app.category, app.appId)}
                         </div>
-                        {isInstalled ? (
-                          <StatusBadge
-                            label={`${installedList.length} Connected`}
-                            tone={StatusTone.HEALTHY}
-                          />
-                        ) : null}
-                      </div>
-
-                      <p className="line-clamp-2 text-xs text-muted-foreground leading-relaxed">
-                        {app.description ||
-                          'Verified enterprise connector with live pre-flight checks.'}
-                      </p>
-
-                      {isInstalled ? (
-                        <div className="mt-2 space-y-1.5 rounded-xl border border-border/60 bg-muted/30 p-2.5">
-                          <span className="text-[11px] font-medium text-muted-foreground">
-                            Active Connections:
+                        <div>
+                          <h3 className="font-semibold text-foreground text-sm leading-tight">
+                            {app.displayName}
+                          </h3>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {app.category} · {app.appId}
                           </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {installedList.map((conn) => (
-                              <button
-                                key={conn.id}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigation.toConnectionDetail(conn.id);
-                                }}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-2 py-1 text-xs font-medium text-foreground hover:border-primary hover:text-primary transition-colors"
-                              >
-                                <span
-                                  className={`h-1.5 w-1.5 rounded-full ${mapConnectionStatusDotClass(conn.status)}`}
-                                />
-                                <span>{conn.name}</span>
-                              </button>
-                            ))}
-                          </div>
                         </div>
+                      </div>
+                      {isInstalled ? (
+                        <StatusBadge
+                          label={`${installedList.length} Connected`}
+                          tone={StatusTone.HEALTHY}
+                        />
                       ) : null}
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between border-t border-border/60 pt-3">
+                    <div className="mt-5 flex items-center justify-between border-t border-border/60 pt-3">
                       <StatusBadge label={app.authType} tone={StatusTone.NEUTRAL} />
                       <Button
                         type="button"
@@ -343,31 +372,98 @@ export function IpConnectionsPage() {
       ) : (
         <div className="space-y-4">
           <ApiProblemBanner
-            problem={filteredConnectionsView.problem}
-            onRetry={() => void filteredConnectionsView.refetch()}
+            problem={allConnectionsView.problem}
+            onRetry={() => void allConnectionsView.refetch()}
           />
 
-          <Tabs value={statusTab} onValueChange={setStatusTab}>
-            <TabsList>
-              <TabsTrigger value={ALL_TAB}>All</TabsTrigger>
-              <TabsTrigger value={ConnectionStatus.ACTIVE}>Active</TabsTrigger>
-              <TabsTrigger value={ConnectionStatus.AUTH_EXPIRED}>Auth Expired</TabsTrigger>
-              <TabsTrigger value={ConnectionStatus.DISCONNECTED}>Disconnected</TabsTrigger>
-              <TabsTrigger value={ConnectionStatus.DEACTIVATED}>Deactivated</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Search and Action Toolbar */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={activeSearch}
+                onChange={(e) => setActiveSearch(e.target.value)}
+                placeholder="Search active apps by name, connector, or status..."
+                className="h-9 pl-9 text-xs"
+              />
+            </div>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {filteredConnections.length} configured
+            </span>
+          </div>
 
-          <DataTable
-            table={table}
-            columnsLength={columns.length}
-            isLoading={filteredConnectionsView.isLoading}
-            dataLength={rows.length}
-            ariaLabel="Tenant integration connections"
-            emptyIcon={<Cable className="h-6 w-6" />}
-            emptyTitle="No Connections Configured"
-            emptyDescription="Explore the All Apps directory to connect your first integration."
-            onRowClick={(row) => navigation.toConnectionDetail(row.original.id)}
-          />
+          {/* EDI-Style Single-Border TanStack Table with Permanent TableHeader */}
+          <div className="rounded-xl border border-border bg-card overflow-hidden">
+            <Table>
+              <TableHeader className="bg-muted/50 border-b border-border">
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id} className="hover:bg-transparent border-0">
+                    {headerGroup.headers.map((header) => (
+                      <TableHead
+                        key={header.id}
+                        style={header.id === 'actions' ? { width: 56 } : undefined}
+                        className={`font-semibold text-foreground text-xs py-2.5 px-3 ${
+                          header.id === 'actions' ? 'w-14 text-right' : ''
+                        }`}
+                      >
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(header.column.columnDef.header, header.getContext())}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {allConnectionsView.isLoading ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="h-32 text-center text-xs text-muted-foreground"
+                    >
+                      Loading active apps...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredConnections.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="h-32 text-center text-xs text-muted-foreground"
+                    >
+                      No active apps configured. Explore All Apps to connect your first integration.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      tabIndex={0}
+                      role="button"
+                      className="cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          navigation.toConnectionDetail(row.original.id);
+                        }
+                      }}
+                      onClick={() => navigation.toConnectionDetail(row.original.id)}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell
+                          key={cell.id}
+                          className={`py-2.5 px-3 align-middle ${
+                            cell.column.id === 'actions' ? 'w-14 text-right' : ''
+                          }`}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </div>
       )}
 
@@ -380,6 +476,44 @@ export function IpConnectionsPage() {
         initialApp={configuredApp}
         onCreated={(id) => navigation.toConnectionDetail(id)}
       />
+
+      <Dialog
+        open={connectionToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setConnectionToDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Connection</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{' '}
+              <span className="font-semibold text-foreground">{connectionToDelete?.name}</span>?
+              Historical entities and synced data will remain preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={deleteMutation.isPending}
+              onClick={() => setConnectionToDelete(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deleteMutation.isPending}
+              onClick={() => void handleConfirmDelete()}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete Connection'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

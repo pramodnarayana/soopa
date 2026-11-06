@@ -32,10 +32,14 @@ import type {
 import type { StreamState, SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
 import type {
   BulkReplayResult,
+  GlobalEntityMapEntry,
+  InboundRecord,
   IpTrace,
   IpTraceLineageItem,
   ListRecentTracesFilter,
+  NormalizedRecord,
   ReplayTransactionResult,
+  ReplicaRecord,
 } from '../domain/trace';
 import type {
   BindStreamTransformationInput,
@@ -47,6 +51,13 @@ import type {
 } from '../domain/transformation';
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
+import type {
+  ListGemRecordsFilter,
+  ListInboundRecordsFilter,
+  ListNormalizedRecordsFilter,
+  ListReplicaRecordsFilter,
+  RecordRepositoryPort,
+} from '../ports/record-repository.port';
 import type { StitchRepositoryPort } from '../ports/stitch-repository.port';
 import type { SyncRunRepositoryPort } from '../ports/sync-run-repository.port';
 import type { TraceRepositoryPort } from '../ports/trace-repository.port';
@@ -156,19 +167,22 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     });
   }
 
+  private nextConnectionIndex = 1;
+
   public async createConnection(
     tenantId: string,
     input: CreateConnectionInput,
   ): Promise<Result<Connection, ApiProblem>> {
+    const uniqueId = `conn_created_${Date.now()}_${this.nextConnectionIndex++}`;
     const created: Connection = {
-      id: `conn_created_${this.items.length + 1}`,
+      id: uniqueId,
       tenantId,
       appId: input.appId,
       name: input.name,
       authType: input.authType,
       publicConfig: input.publicConfig,
       status: ConnectionStatus.ACTIVE,
-      connectionFingerprint: `fp_${input.appId}_${this.items.length + 1}`,
+      connectionFingerprint: `fp_${input.appId}_${uniqueId}`,
       tokenExpiresAt: null,
       lastRefreshedAt: '2026-10-29T09:00:00Z',
       lastErrorCode: null,
@@ -182,11 +196,40 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
   }
 
   public async discoverCatalog(
-    _tenantId: string,
+    tenantId: string,
     connectionId: string,
   ): Promise<Result<DiscoveredCatalog, ApiProblem>> {
+    const conn = this.items.find((c) => c.tenantId === tenantId && c.id === connectionId);
+    if (!conn) {
+      return err(notFoundProblem(`Connection ${connectionId} not found`));
+    }
     const catalog = this.catalogs.get(connectionId);
-    return catalog ? ok(catalog) : err(notFoundProblem(`Catalog for ${connectionId} not found`));
+    if (catalog) {
+      return ok(catalog);
+    }
+    const sampleNames =
+      conn.appId === 'stripe'
+        ? ['customers', 'invoices', 'charges']
+        : conn.appId === 'salesforce'
+          ? ['contacts', 'accounts', 'opportunities']
+          : conn.appId === 'hubspot'
+            ? ['contacts', 'companies', 'deals']
+            : ['posts', 'users', 'comments'];
+    const generated: DiscoveredCatalog = {
+      connectionId,
+      catalogVersion: 1,
+      catalogHash: `hash_${connectionId}`,
+      discoveredAt: '2026-11-05T12:00:00Z',
+      streams: sampleNames.map((name) => ({
+        name,
+        primaryKey: ['id'],
+        cursorField: 'updated_at',
+        supportedSyncModes: [SyncRunKind.INCREMENTAL, SyncRunKind.FULL_REFRESH],
+        fields: [{ name: 'id', dataType: 'string', nullable: false, description: 'Identifier' }],
+      })),
+    };
+    this.catalogs.set(connectionId, generated);
+    return ok(generated);
   }
 
   public async relinkConnection(
@@ -202,6 +245,9 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     const updated: Connection = {
       ...existing,
       name: input.newName ?? existing.name,
+      publicConfig: input.updatedPublicConfig
+        ? { ...existing.publicConfig, ...input.updatedPublicConfig }
+        : existing.publicConfig,
       status: ConnectionStatus.ACTIVE,
       updatedAt: '2026-10-29T09:10:00Z',
     };
@@ -225,6 +271,18 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     };
     this.items[idx] = updated;
     return ok(updated);
+  }
+
+  public async deleteConnection(
+    tenantId: string,
+    connectionId: string,
+  ): Promise<Result<void, ApiProblem>> {
+    const idx = this.items.findIndex((c) => c.tenantId === tenantId && c.id === connectionId);
+    if (idx < 0) {
+      return err(notFoundProblem(`Connection ${connectionId} not found`));
+    }
+    this.items.splice(idx, 1);
+    return ok(undefined);
   }
 }
 
@@ -669,6 +727,81 @@ export class InMemoryTraceRepository implements TraceRepositoryPort {
   }
 }
 
+export class InMemoryRecordRepository implements RecordRepositoryPort {
+  public normalizedRecords: NormalizedRecord[] = [];
+  public gemRecords: GlobalEntityMapEntry[] = [];
+  public replicaRecords: ReplicaRecord[] = [];
+  public inboundRecords: InboundRecord[] = [];
+
+  public async listNormalizedRecords(
+    tenantId: string,
+    filter?: ListNormalizedRecordsFilter,
+  ): Promise<Result<readonly NormalizedRecord[], ApiProblem>> {
+    let res = this.normalizedRecords.filter((r) => r.tenantId === tenantId);
+    if (filter?.connectionId) {
+      res = res.filter((r) => r.connectionId === filter.connectionId);
+    }
+    if (filter?.canonicalType) {
+      res = res.filter((r) => r.canonicalType === filter.canonicalType);
+    }
+    const offset = filter?.offset ?? 0;
+    const limit = filter?.limit ?? 50;
+    return ok(res.slice(offset, offset + limit));
+  }
+
+  public async listGemRecords(
+    tenantId: string,
+    filter?: ListGemRecordsFilter,
+  ): Promise<Result<readonly GlobalEntityMapEntry[], ApiProblem>> {
+    let res = this.gemRecords.filter((r) => r.tenantId === tenantId);
+    if (filter?.sourceConnectionId) {
+      res = res.filter((r) => r.sourceConnectionId === filter.sourceConnectionId);
+    }
+    if (filter?.entityDomain) {
+      res = res.filter((r) => r.entityDomain === filter.entityDomain);
+    }
+    const offset = filter?.offset ?? 0;
+    const limit = filter?.limit ?? 50;
+    return ok(res.slice(offset, offset + limit));
+  }
+
+  public async listReplicaRecords(
+    tenantId: string,
+    filter?: ListReplicaRecordsFilter,
+  ): Promise<Result<readonly ReplicaRecord[], ApiProblem>> {
+    let res = this.replicaRecords.filter((r) => r.tenantId === tenantId);
+    if (filter?.connectionId) {
+      res = res.filter((r) => r.connectionId === filter.connectionId);
+    }
+    if (filter?.stream) {
+      res = res.filter((r) => r.stream === filter.stream);
+    }
+    const offset = filter?.offset ?? 0;
+    const limit = filter?.limit ?? 50;
+    return ok(res.slice(offset, offset + limit));
+  }
+
+  public async listInboundRecords(
+    tenantId: string,
+    filter?: ListInboundRecordsFilter,
+  ): Promise<Result<readonly InboundRecord[], ApiProblem>> {
+    let res = this.inboundRecords.filter((r) => r.tenantId === tenantId);
+    if (filter?.connectionId) {
+      res = res.filter((r) => r.connectionId === filter.connectionId);
+    }
+    if (filter?.streamName) {
+      res = res.filter((r) => r.streamName === filter.streamName);
+    }
+    const offset = filter?.offset ?? 0;
+    const limit = filter?.limit ?? 50;
+    const page = res.slice(offset, offset + limit);
+    if (!filter?.hydratePayloads) {
+      return ok(page.map((r) => (r.requestS3Key ? { ...r, requestBody: null } : r)));
+    }
+    return ok(page);
+  }
+}
+
 export class InMemoryNavigationFake implements IpNavigationPort {
   public readonly visited: string[] = [];
 
@@ -723,6 +856,7 @@ export interface InMemoryIpWorkspaceHarness {
   readonly transformations: InMemoryTransformationRepository;
   readonly stitches: InMemoryStitchRepository;
   readonly traces: InMemoryTraceRepository;
+  readonly records: InMemoryRecordRepository;
   readonly navigation: InMemoryNavigationFake;
 }
 
@@ -733,6 +867,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
   const transformations = new InMemoryTransformationRepository();
   const stitches = new InMemoryStitchRepository();
   const traces = new InMemoryTraceRepository();
+  const records = new InMemoryRecordRepository();
   const navigation = new InMemoryNavigationFake();
 
   return {
@@ -743,6 +878,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
       transformations,
       stitches,
       traces,
+      records,
     },
     catalog,
     connections,
@@ -750,6 +886,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     transformations,
     stitches,
     traces,
+    records,
     navigation,
   };
 }
