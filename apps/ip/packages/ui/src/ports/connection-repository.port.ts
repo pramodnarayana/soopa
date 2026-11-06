@@ -47,4 +47,6 @@ export interface ConnectionRepositoryPort {
     tenantId: string,
     connectionId: string,
   ): Promise<Result<Connection, ApiProblem>>;
+
+  deleteConnection(tenantId: string, connectionId: string): Promise<Result<void, ApiProblem>>;
 }

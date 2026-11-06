@@ -1,4 +1,11 @@
-import type { ApiProblem, FrontendLoggerPort, HttpClientPort, Result } from '@soopa/ui';
+import {
+  type ApiProblem,
+  err,
+  type FrontendLoggerPort,
+  type HttpClientPort,
+  ok,
+  type Result,
+} from '@soopa/ui';
 import type {
   CheckConnectionInput,
   Connection,
@@ -143,15 +150,28 @@ export class HttpConnectionRepository implements ConnectionRepositoryPort {
     tenantId: string,
     connectionId: string,
   ): Promise<Result<Connection, ApiProblem>> {
-    const raw = await this.httpClient.delete<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}`,
+    const raw = await this.httpClient.post<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}/deactivate`,
     );
     return parseAndMapResult(
       raw,
       ConnectionWireSchema,
       mapConnectionFromWire,
-      `DELETE /ip/connections/${connectionId}`,
+      `POST /ip/connections/${connectionId}/deactivate`,
       this.logger,
     );
+  }
+
+  public async deleteConnection(
+    tenantId: string,
+    connectionId: string,
+  ): Promise<Result<void, ApiProblem>> {
+    const raw = await this.httpClient.delete<void>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}?permanent=true`,
+    );
+    if (!raw.ok) {
+      return err(raw.error);
+    }
+    return ok(undefined);
   }
 }

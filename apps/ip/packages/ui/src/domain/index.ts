@@ -5,6 +5,7 @@ export * from './dag/compute-dag-layout';
 export * from './enums';
 export * from './replay/derive-replay-eligibility';
 export * from './replay/parse-json-object';
+export * from './role';
 export * from './stitch';
 export * from './stitch-registration';
 export * from './sync-run';

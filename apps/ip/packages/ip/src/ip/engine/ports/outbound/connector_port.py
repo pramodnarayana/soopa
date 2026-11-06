@@ -58,6 +58,8 @@ class StreamSchemaDTO:
     primary_key: Sequence[str]
     cursor_field: str | None = None
     supported_sync_modes: Sequence[str] = ("FULL_REFRESH", "INCREMENTAL")
+    default_transformation_id: str | None = None
+    default_transformation_version: int = 1
 
 
 @dataclass(frozen=True)

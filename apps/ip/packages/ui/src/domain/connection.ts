@@ -73,6 +73,7 @@ export interface CheckConnectionInput {
 export interface RelinkConnectionInput {
   readonly newName?: string | null;
   readonly updatedRawCredentials?: JsonRecord | null;
+  readonly updatedPublicConfig?: JsonRecord | null;
 }
 
 export function isDeactivatedConnection(connection: Pick<Connection, 'status'>): boolean {

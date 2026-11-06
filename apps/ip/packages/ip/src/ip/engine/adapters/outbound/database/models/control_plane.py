@@ -87,9 +87,9 @@ class ConnectionCatalogRecord(IpGlobalBase):
 
 
 class ConnectionStreamStateRecord(IpGlobalBase):
-    """Database record representation of the ip.connection_stream_states table."""
+    """Database record representation of the ip.connection_stream_state table."""
 
-    __tablename__ = "connection_stream_states"
+    __tablename__ = "connection_stream_state"
     __table_args__ = (
         UniqueConstraint(
             "tenant_id",

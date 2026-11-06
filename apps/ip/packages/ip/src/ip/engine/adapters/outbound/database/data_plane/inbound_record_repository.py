@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import asyncio
+from collections.abc import Coroutine, Sequence
+from typing import Any
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import inbound_record_to_domain
@@ -82,6 +84,59 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
             return None
         return self._to_domain_model(orm)
 
+    async def _hydrate_single_request(
+        self,
+        rec: InboundRecord,
+        sem: asyncio.Semaphore,
+    ) -> None:
+        if not rec.request_s3_key or self._storage is None:
+            return
+        async with sem:
+            rec.request_body = await hydrate_s3_json_payload(
+                self._storage,
+                s3_key=rec.request_s3_key,
+                inline_body=rec.request_body,
+                size_bytes=rec.request_size_bytes,
+                sha256=rec.request_sha256,
+            )
+
+    async def _hydrate_single_response(
+        self,
+        rec: InboundRecord,
+        sem: asyncio.Semaphore,
+    ) -> None:
+        if not rec.response_s3_key or self._storage is None:
+            return
+        async with sem:
+            rec.response_body = await hydrate_s3_json_payload(
+                self._storage,
+                s3_key=rec.response_s3_key,
+                inline_body=rec.response_body,
+            )
+
+    async def _hydrate_payloads_concurrently(self, records: Sequence[InboundRecord]) -> None:
+        """Hydrates offloaded S3 request and response payloads concurrently with bounded concurrency and aggregate byte guard."""
+        if self._storage is None or not records:
+            return
+
+        max_concurrent_downloads = 10
+        max_aggregate_bytes = 50 * 1024 * 1024  # 50 MB safeguard
+        sem = asyncio.Semaphore(max_concurrent_downloads)
+        total_hydrated_bytes = 0
+
+        tasks: list[Coroutine[Any, Any, None]] = []
+        for r in records:
+            if r.request_s3_key and (
+                total_hydrated_bytes + r.request_size_bytes <= max_aggregate_bytes
+            ):
+                total_hydrated_bytes += r.request_size_bytes
+                tasks.append(self._hydrate_single_request(r, sem))
+            if r.response_s3_key:
+                tasks.append(self._hydrate_single_response(r, sem))
+
+        if tasks:
+            await asyncio.gather(*tasks)
+
     async def get_by_trace_id(
         self,
         trace_id: str,
@@ -99,16 +154,8 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
         )
         result = await self._session.execute(stmt)
         records = [self._to_domain_model(orm) for orm in result.scalars().all()]
-        if hydrate_payloads and self._storage is not None:
-            for rec in records:
-                if rec.request_s3_key:
-                    rec.request_body = await hydrate_s3_json_payload(
-                        self._storage,
-                        s3_key=rec.request_s3_key,
-                        inline_body=rec.request_body,
-                        size_bytes=rec.request_size_bytes,
-                        sha256=rec.request_sha256,
-                    )
+        if hydrate_payloads:
+            await self._hydrate_payloads_concurrently(records)
         return records
 
     async def get_by_external_event_id(
@@ -127,3 +174,29 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
         if orm is None:
             return None
         return self._to_domain_model(orm)
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream_name: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+        hydrate_payloads: bool = False,
+    ) -> Sequence[InboundRecord]:
+        stmt = select(InboundRecordModel).where(InboundRecordModel.tenant_id == tenant_id)
+        if connection_id is not None:
+            stmt = stmt.where(InboundRecordModel.connection_id == connection_id)
+        if stream_name is not None:
+            stmt = stmt.where(InboundRecordModel.stream_name == stream_name)
+        stmt = (
+            stmt.order_by(InboundRecordModel.received_at.desc(), InboundRecordModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(stmt)
+        records = [self._to_domain_model(orm) for orm in result.scalars().all()]
+        if hydrate_payloads:
+            await self._hydrate_payloads_concurrently(records)
+        return records

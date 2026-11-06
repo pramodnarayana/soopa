@@ -9,6 +9,7 @@ class IpEventType(StrEnum):
     CONNECTION_CREATED = "ip.connection.created"
     CONNECTION_ACTIVATED = "ip.connection.activated"
     CONNECTION_DEACTIVATED = "ip.connection.deactivated"
+    CONNECTION_DELETED = "ip.connection.deleted"
     CONNECTION_RELINKED = "ip.connection.relinked"
     CONNECTION_ERROR_RECORDED = "ip.connection.error_recorded"
     INBOUND_RECORD_CREATED = "ip.inbound_record.created"

@@ -20,6 +20,8 @@ from ip.engine.domain.exceptions import (
     InvalidConnectionConfigError,
     Result,
 )
+from ip.engine.domain.normalization.enums import TransformationMode
+from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.enums import SyncMode
 from ip.engine.ports.outbound.connector_port import (
     ConnectorMetadataPort,
@@ -171,8 +173,38 @@ class DiscoverCatalogUseCase:
 
             catalog_entity = catalog_res.value
             await self._uow.catalogs.save(catalog_entity)
+
+            # Auto-bind default canonical transformations if declared on retained streams and not yet bound
+            retained_stream_names = {ds.name for ds in domain_streams}
+            for s in catalog_dto.streams:
+                if s.name in retained_stream_names and s.default_transformation_id:
+                    existing_trans = await self._uow.transformations.get_by_stream(
+                        tenant_id=resolved.tenant_id,
+                        connection_id=resolved.connection_id,
+                        stream=s.name,
+                    )
+                    if existing_trans is None:
+                        new_trans = Transformation.create(
+                            tenant_id=resolved.tenant_id,
+                            connection_id=resolved.connection_id,
+                            stream=s.name,
+                            transformation_id=s.default_transformation_id,
+                            transformation_version=s.default_transformation_version,
+                            mode=TransformationMode.ACTIVE,
+                        )
+                        await self._uow.transformations.save(new_trans)
+                        logger.info(
+                            "stream_default_transformation_auto_bound",
+                            tenant_id=resolved.tenant_id,
+                            connection_id=resolved.connection_id,
+                            stream=s.name,
+                            transformation_id=s.default_transformation_id,
+                            transformation_version=s.default_transformation_version,
+                        )
+
             await self._uow.commit()
 
+            dto_stream_lookup = {s.name: s for s in catalog_dto.streams}
             response_streams = [
                 StreamSchemaDTO(
                     name=ds.name,
@@ -188,6 +220,16 @@ class DiscoverCatalogUseCase:
                     primary_key=list(ds.primary_key),
                     cursor_field=ds.cursor_field,
                     supported_sync_modes=[m.value for m in ds.supported_sync_modes],
+                    default_transformation_id=(
+                        dto_stream_lookup[ds.name].default_transformation_id
+                        if ds.name in dto_stream_lookup
+                        else None
+                    ),
+                    default_transformation_version=(
+                        dto_stream_lookup[ds.name].default_transformation_version
+                        if ds.name in dto_stream_lookup
+                        else 1
+                    ),
                 )
                 for ds in domain_streams
             ]

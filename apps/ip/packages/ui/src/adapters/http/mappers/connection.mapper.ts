@@ -86,5 +86,6 @@ export function mapRelinkConnectionToWire(input: RelinkConnectionInput): Record<
   return {
     new_name: input.newName ?? null,
     updated_raw_credentials: input.updatedRawCredentials ?? null,
+    updated_public_config: input.updatedPublicConfig ?? null,
   };
 }

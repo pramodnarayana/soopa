@@ -9,12 +9,14 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   HttpCatalogRepository,
   HttpConnectionRepository,
+  HttpRecordRepository,
   HttpStitchRepository,
   HttpSyncRunRepository,
   HttpTraceRepository,
   HttpTransformationRepository,
 } from '../adapters/http';
 import { IP_PRODUCT_THEME_TOKEN } from '../domain/enums';
+import type { IpUserRole } from '../domain/role';
 import { CommandPalette } from '../presentation/shared/CommandPalette';
 import {
   type IpNavigationPort,
@@ -31,6 +33,8 @@ export interface IpUIProviderProps {
   readonly repositories?: IpRepositoriesBundle;
   readonly logger?: FrontendLoggerPort;
   readonly navigation: IpNavigationPort;
+  readonly userRole?: IpUserRole;
+  readonly defaultUserRole?: IpUserRole;
   readonly children: React.ReactNode;
 }
 
@@ -51,6 +55,7 @@ function createHttpRepositoriesBundle(
     transformations: new HttpTransformationRepository(client, logger),
     stitches: new HttpStitchRepository(client, logger),
     traces: new HttpTraceRepository(client, logger),
+    records: new HttpRecordRepository(client, logger),
   };
 }
 
@@ -62,10 +67,14 @@ export function IpUIProvider({
   repositories: injectedRepositories,
   logger: injectedLogger,
   navigation,
+  userRole: propUserRole,
+  defaultUserRole,
   children,
 }: IpUIProviderProps) {
   useProductTheme(IP_PRODUCT_THEME_TOKEN);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const userRole: IpUserRole = propUserRole ?? defaultUserRole ?? 'customer';
+
   const tokenRef = useRef(token);
   tokenRef.current = token;
 
@@ -94,8 +103,9 @@ export function IpUIProvider({
       navigation,
       logger,
       openCommandPalette,
+      userRole,
     }),
-    [tenantId, tenantSlug, repositories, navigation, logger, openCommandPalette],
+    [tenantId, tenantSlug, repositories, navigation, logger, openCommandPalette, userRole],
   );
 
   return (

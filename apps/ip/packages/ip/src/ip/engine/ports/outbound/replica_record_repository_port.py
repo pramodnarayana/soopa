@@ -107,6 +107,18 @@ class ReplicaRecordRepositoryPort(Protocol):
         """Retrieves a deterministic keyset-paginated chunk of replica records for a stream."""
         ...
 
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[ReplicaRecord]:
+        """Lists replica snapshots filtered by connection and/or stream name."""
+        return ()
+
     async def get_by_trace_id(
         self,
         trace_id: str,

@@ -23,6 +23,7 @@ class IpErrorCode(StrEnum):
 
     CONNECTION_NOT_FOUND = "CONNECTION_NOT_FOUND"
     CONNECTION_DEACTIVATED = "CONNECTION_DEACTIVATED"
+    CONNECTION_PENDING_AUTH = "CONNECTION_PENDING_AUTH"
     DUPLICATE_FINGERPRINT = "DUPLICATE_FINGERPRINT"
     INVALID_CONNECTION_STATE = "INVALID_CONNECTION_STATE"
     INVALID_CONFIG = "INVALID_CONFIG"
@@ -111,6 +112,27 @@ class ConnectionDeactivatedError(IpError):
             connection_id=connection_id,
             message=f"Connection '{connection_id}' is deactivated and cannot accept ingress.",
             details={"connection_id": connection_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectionPendingAuthError(IpError):
+    """Returned when an operation (like schema discovery or sync) is attempted on a connection awaiting authentication."""
+
+    connection_id: str = ""
+    code: IpErrorCode = IpErrorCode.CONNECTION_PENDING_AUTH
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = (
+        "Complete the authentication handshake or configure valid credentials before discovering schemas or running syncs."
+    )
+
+    @classmethod
+    def for_connection(cls, connection_id: str) -> ConnectionPendingAuthError:
+        return cls(
+            connection_id=connection_id,
+            message=f"Connection '{connection_id}' is pending authentication.",
+            details={"connection_id": connection_id, "status": "PENDING_AUTH"},
         )
 
 
@@ -699,6 +721,7 @@ __all__ = [
     "ConnectionCheckError",
     "ConnectionDeactivatedError",
     "ConnectionNotFoundError",
+    "ConnectionPendingAuthError",
     "ConnectorNotFoundError",
     "DuplicateConnectionFingerprintError",
     "DuplicateExternalEventError",

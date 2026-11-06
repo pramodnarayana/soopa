@@ -58,6 +58,7 @@ class ResolvedConnectionCredentialsDTO:
     """Strongly-typed credentials and configuration resolved for a Connection."""
 
     connection_id: str
+    tenant_id: str
     app_id: str
     auth_type: AuthType
     public_config: JsonDict
@@ -163,6 +164,7 @@ class TokenManagerService:
                 return Result.ok(
                     ResolvedConnectionCredentialsDTO(
                         connection_id=connection.id,
+                        tenant_id=connection.tenant_id,
                         app_id=connection.app_id,
                         auth_type=connection.auth_type,
                         public_config=connection.resolved_public_config,
@@ -193,6 +195,7 @@ class TokenManagerService:
             )
             return ResolvedConnectionCredentialsDTO(
                 connection_id=locked_conn.id,
+                tenant_id=locked_conn.tenant_id,
                 app_id=locked_conn.app_id,
                 auth_type=locked_conn.auth_type,
                 public_config=locked_conn.resolved_public_config,
@@ -212,6 +215,7 @@ class TokenManagerService:
             )
             return ResolvedConnectionCredentialsDTO(
                 connection_id=locked_conn.id,
+                tenant_id=locked_conn.tenant_id,
                 app_id=locked_conn.app_id,
                 auth_type=locked_conn.auth_type,
                 public_config=locked_conn.resolved_public_config,
@@ -345,6 +349,7 @@ class TokenManagerService:
             return Result.ok(
                 ResolvedConnectionCredentialsDTO(
                     connection_id=locked_conn.id,
+                    tenant_id=locked_conn.tenant_id,
                     app_id=locked_conn.app_id,
                     auth_type=locked_conn.auth_type,
                     public_config=locked_conn.resolved_public_config,

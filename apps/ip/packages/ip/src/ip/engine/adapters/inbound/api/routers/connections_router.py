@@ -43,6 +43,10 @@ from ip.engine.application.use_cases.connections.deactivate_connection_use_case 
     DeactivateConnectionCommand,
     DeactivateConnectionUseCase,
 )
+from ip.engine.application.use_cases.connections.delete_connection_use_case import (
+    DeleteConnectionCommand,
+    DeleteConnectionUseCase,
+)
 from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
     DiscoverCatalogUseCase,
 )
@@ -61,8 +65,12 @@ from ip.engine.application.use_cases.connections.relink_connection_use_case impo
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
-from ip.engine.domain.connection.enums import ConnectionStatus
-from ip.engine.domain.exceptions import ConnectionNotFoundError, IpErrorCode
+from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
+from ip.engine.domain.exceptions import (
+    ConnectionNotFoundError,
+    ConnectionPendingAuthError,
+    IpErrorCode,
+)
 from ip.engine.ports.outbound.connector_port import ConnectorPort, DiscoveredCatalogDTO
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 from security.ports.cipher_port import CipherPort
@@ -278,6 +286,7 @@ async def get_connection(
     response_model=DiscoveredCatalogHttpResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
         status.HTTP_502_BAD_GATEWAY: {"model": ApiErrorHttpResponse},
     },
     status_code=status.HTTP_200_OK,
@@ -295,6 +304,19 @@ async def discover_connection_catalog(
     log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
     log.info("ip_discover_catalog.received")
 
+    async with ip_cp_uow:
+        existing_conn = await ip_cp_uow.connections.get_by_id(connection_id)
+        if (
+            existing_conn is not None
+            and existing_conn.tenant_id == tenant_id
+            and existing_conn.status == ConnectionStatus.PENDING_AUTH
+            and existing_conn.auth_type == AuthType.API_KEY
+            and not existing_conn.encrypted_credentials
+        ):
+            pending_err = ConnectionPendingAuthError.for_connection(connection_id)
+            log.error("ip_discover_catalog.failed", error_code=pending_err.code.value)
+            return from_ip_error(pending_err, status_code_override=status.HTTP_409_CONFLICT)
+
     use_case = DiscoverCatalogUseCase(
         uow=ip_cp_uow,
         cipher=cipher,
@@ -310,14 +332,22 @@ async def discover_connection_catalog(
                 status.HTTP_404_NOT_FOUND
                 if dto.error.code
                 in (IpErrorCode.CONNECTION_NOT_FOUND, IpErrorCode.CONNECTOR_NOT_FOUND)
-                else status.HTTP_502_BAD_GATEWAY
+                else (
+                    status.HTTP_409_CONFLICT
+                    if dto.error.code == IpErrorCode.CONNECTION_PENDING_AUTH
+                    else status.HTTP_502_BAD_GATEWAY
+                )
             )
             return from_ip_error(dto.error, status_code_override=status_override)
         status_code = (
             status.HTTP_404_NOT_FOUND
             if dto.error_code
             in (IpErrorCode.CONNECTION_NOT_FOUND.value, IpErrorCode.CONNECTOR_NOT_FOUND.value)
-            else status.HTTP_502_BAD_GATEWAY
+            else (
+                status.HTTP_409_CONFLICT
+                if dto.error_code == IpErrorCode.CONNECTION_PENDING_AUTH.value
+                else status.HTTP_502_BAD_GATEWAY
+            )
         )
         error_code = dto.error_code or IpErrorCode.CATALOG_DISCOVERY_FAILED.value
         log.error("ip_discover_catalog.failed", error_code=error_code)
@@ -334,8 +364,8 @@ async def discover_connection_catalog(
     return _map_catalog_dto_to_response(dto)
 
 
-@router.delete(
-    "/{connection_id}",
+@router.post(
+    "/{connection_id}/deactivate",
     response_model=ConnectionHttpResponse,
     responses={
         status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
@@ -343,13 +373,19 @@ async def discover_connection_catalog(
     },
     status_code=status.HTTP_200_OK,
 )
+@router.delete(
+    "/{connection_id}/deactivate",
+    response_model=ConnectionHttpResponse,
+    status_code=status.HTTP_200_OK,
+    include_in_schema=False,
+)
 async def deactivate_connection(
     tenant_id: str,
     connection_id: str,
     context: Annotated[IdentityContext, Depends(require_tenant_member)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
 ) -> ConnectionHttpResponse | Response:
-    """Soft-deactivates an active connection."""
+    """Soft-deactivates an active connection while preserving historical entities & data."""
     log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
     log.info("ip_deactivate_connection.received")
 
@@ -383,6 +419,53 @@ async def deactivate_connection(
     return _map_connection_dto_to_response(result.connection)
 
 
+@router.delete(
+    "/{connection_id}",
+    response_model=ConnectionHttpResponse,
+    responses={
+        status.HTTP_200_OK: {"model": ConnectionHttpResponse},
+        status.HTTP_204_NO_CONTENT: {"description": "Connection permanently deleted"},
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
+    },
+)
+async def delete_connection(
+    tenant_id: str,
+    connection_id: str,
+    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    permanent: Annotated[
+        bool, Query(description="Permanently delete instead of soft-deactivating")
+    ] = False,
+) -> ConnectionHttpResponse | Response:
+    """Soft-deactivates connection (default) or permanently deletes it when permanent=True."""
+    if not permanent:
+        return await deactivate_connection(
+            tenant_id=tenant_id,
+            connection_id=connection_id,
+            context=context,
+            ip_cp_uow=ip_cp_uow,
+        )
+
+    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    log.info("ip_delete_connection.received")
+
+    use_case = DeleteConnectionUseCase(uow=ip_cp_uow)
+    cmd = DeleteConnectionCommand(connection_id=connection_id, tenant_id=tenant_id)
+    result = await use_case.execute(cmd)
+    if not result.success:
+        if result.error is not None:
+            log.error("ip_delete_connection.failed", error_code=result.error.code.value)
+            return from_ip_error(result.error)
+        return to_error_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code=IpErrorCode.CONNECTION_NOT_FOUND.value,
+            message=result.error_message or "Connection not found",
+        )
+    log.info("ip_delete_connection.completed")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.post(
     "/{connection_id}/relink",
     response_model=ConnectionHttpResponse,
@@ -411,6 +494,7 @@ async def relink_connection(
         tenant_id=tenant_id,
         new_name=request.new_name,
         updated_raw_credentials=request.updated_raw_credentials,
+        updated_public_config=request.updated_public_config,
     )
     result = await use_case.execute(cmd)
     if not result.success:

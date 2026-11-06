@@ -9,6 +9,9 @@ from ip.engine.adapters.outbound.connectors.sftp_connector import SftpConnector
 from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
 from ip.engine.ports.outbound.catalog_registry_port import CatalogAppSummaryDTO
 from ip.solutions.connectors.manifests import BUILTIN_MANIFESTS
+from ip.solutions.connectors.sandbox.energy.ami_simulator_connector import (
+    EnergyAmiSimulatorConnector,
+)
 from shttp import HttpRequestAuthenticator
 
 
@@ -48,6 +51,13 @@ def register_builtin_connectors(
     # 2. SFTP connector
     sftp = SftpConnector()
     registry.register_connector(sftp, SftpConnector.default_catalog_summary())
+
+    # 3. First-Class Energy AMI Sandbox Simulator
+    ami_simulator = EnergyAmiSimulatorConnector()
+    registry.register_connector(
+        ami_simulator,
+        EnergyAmiSimulatorConnector.default_catalog_summary(),
+    )
 
 
 def create_default_catalog_registry(

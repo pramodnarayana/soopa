@@ -1,7 +1,9 @@
 import type { FrontendLoggerPort } from '@soopa/ui';
 import { createContext, useContext } from 'react';
+import type { IpUserRole } from '../domain/role';
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
+import type { RecordRepositoryPort } from '../ports/record-repository.port';
 import type { StitchRepositoryPort } from '../ports/stitch-repository.port';
 import type { SyncRunRepositoryPort } from '../ports/sync-run-repository.port';
 import type { TraceRepositoryPort } from '../ports/trace-repository.port';
@@ -14,6 +16,7 @@ export interface IpRepositoriesBundle {
   readonly transformations: TransformationRepositoryPort;
   readonly stitches: StitchRepositoryPort;
   readonly traces: TraceRepositoryPort;
+  readonly records: RecordRepositoryPort;
 }
 
 export interface IpNavigationPort {
@@ -35,6 +38,7 @@ export interface IpWorkspaceContextValue {
   readonly navigation: IpNavigationPort;
   readonly logger: FrontendLoggerPort;
   readonly openCommandPalette: () => void;
+  readonly userRole: IpUserRole;
 }
 
 export const IpWorkspaceContext = createContext<IpWorkspaceContextValue | null>(null);

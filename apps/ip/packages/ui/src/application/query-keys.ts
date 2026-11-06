@@ -1,6 +1,12 @@
 import type { CatalogAppsFilter } from '../domain/catalog';
 import type { ListStitchRunsFilter } from '../domain/stitch';
 import type { ListRecentTracesFilter } from '../domain/trace';
+import type {
+  ListGemRecordsFilter,
+  ListInboundRecordsFilter,
+  ListNormalizedRecordsFilter,
+  ListReplicaRecordsFilter,
+} from '../ports/record-repository.port';
 
 export const ipQueryKeys = {
   all: ['ip'] as const,
@@ -103,5 +109,56 @@ export const ipQueryKeys = {
       ['ip', 'tenant', tenantId, 'traces', 'detail', traceId, hydratePayloads] as const,
     lineage: (tenantId: string, traceId: string) =>
       ['ip', 'tenant', tenantId, 'traces', 'lineage', traceId] as const,
+  },
+  records: {
+    normalized: (tenantId: string, filter?: ListNormalizedRecordsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'records',
+        'normalized',
+        filter?.connectionId ?? '__ALL__',
+        filter?.canonicalType ?? '__ALL__',
+        filter?.limit ?? 50,
+        filter?.offset ?? 0,
+      ] as const,
+    gem: (tenantId: string, filter?: ListGemRecordsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'records',
+        'gem',
+        filter?.sourceConnectionId ?? '__ALL__',
+        filter?.entityDomain ?? '__ALL__',
+        filter?.limit ?? 50,
+        filter?.offset ?? 0,
+      ] as const,
+    replica: (tenantId: string, filter?: ListReplicaRecordsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'records',
+        'replica',
+        filter?.connectionId ?? '__ALL__',
+        filter?.stream ?? '__ALL__',
+        filter?.limit ?? 50,
+        filter?.offset ?? 0,
+      ] as const,
+    inbound: (tenantId: string, filter?: ListInboundRecordsFilter) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'records',
+        'inbound',
+        filter?.connectionId ?? '__ALL__',
+        filter?.streamName ?? '__ALL__',
+        filter?.hydratePayloads ?? false,
+        filter?.limit ?? 50,
+        filter?.offset ?? 0,
+      ] as const,
   },
 } as const;

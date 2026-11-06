@@ -143,7 +143,7 @@ def upgrade() -> None:
         schema="ip",
     )
     op.create_table(
-        "connection_stream_states",
+        "connection_stream_state",
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("tenant_id", sa.String(length=64), nullable=False),
         sa.Column("connection_id", sa.String(length=64), nullable=False),
@@ -170,7 +170,7 @@ def upgrade() -> None:
     )
     op.create_index(
         "idx_ip_stream_state_conn",
-        "connection_stream_states",
+        "connection_stream_state",
         ["tenant_id", "connection_id"],
         unique=False,
         schema="ip",
@@ -384,10 +384,10 @@ def downgrade() -> None:
     op.drop_table("sync_runs", schema="ip", if_exists=True)
     op.drop_index(
         "idx_ip_stream_state_conn",
-        table_name="connection_stream_states",
+        table_name="connection_stream_state",
         schema="ip",
     )
-    op.drop_table("connection_stream_states", schema="ip")
+    op.drop_table("connection_stream_state", schema="ip")
     op.drop_index(
         "ix_ip_outbox_pending",
         table_name="outbox",

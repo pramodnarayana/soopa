@@ -229,9 +229,11 @@ class AmiServicePointTransformerV1(TransformerPort):
                     source_id=sp_id,
                     fields={
                         "service_point_external_id": sp_id,
-                        "meter_serial_number": payload.get("meter_id"),
+                        "meter_serial_number": payload.get("meter_serial")
+                        or payload.get("meter_id"),
                         "customer_external_id": payload.get("customer_id"),
-                        "service_address": payload.get("address"),
+                        "service_address": payload.get("service_address") or payload.get("address"),
+                        "grid_region": payload.get("grid_region"),
                         "status": str(payload.get("status") or ServicePointStatus.ACTIVE.value),
                     },
                 ),

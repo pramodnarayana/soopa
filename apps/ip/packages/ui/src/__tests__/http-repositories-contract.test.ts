@@ -216,10 +216,11 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         ],
       },
       'POST /api/v1/tenants/ten_01/ip/connections/conn_01/relink': WIRE_CONNECTION,
-      'DELETE /api/v1/tenants/ten_01/ip/connections/conn_01': {
+      'POST /api/v1/tenants/ten_01/ip/connections/conn_01/deactivate': {
         ...WIRE_CONNECTION,
         status: 'INACTIVE',
       },
+      'DELETE /api/v1/tenants/ten_01/ip/connections/conn_01': null,
     });
 
     const client = new FetchHttpClientAdapter({
@@ -277,7 +278,12 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
 
     const deactivated = expectOk(await connRepo.deactivateConnection('ten_01', 'conn_01'));
     expect(deactivated.status).toBe('INACTIVE');
-    expect(calls).toHaveLength(9);
+
+    const deleted = expectOk(await connRepo.deleteConnection('ten_01', 'conn_01'));
+    expect(deleted).toBeUndefined();
+    expect(calls).toHaveLength(10);
+    const deleteCall = calls[calls.length - 1];
+    expect(deleteCall?.url).toContain('permanent=true');
   });
 
   it('maps HttpSyncRunRepository (all 5 methods) and HttpTransformationRepository (all 6 methods)', async () => {

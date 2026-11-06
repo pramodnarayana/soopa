@@ -490,6 +490,28 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
         res = await self._session.execute(stmt)
         return [self._to_domain_model(orm) for orm in res.scalars().all()]
 
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        stream: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[ReplicaRecord]:
+        stmt = select(ReplicaRecordModel).where(ReplicaRecordModel.tenant_id == tenant_id)
+        if connection_id is not None:
+            stmt = stmt.where(ReplicaRecordModel.connection_id == connection_id)
+        if stream is not None:
+            stmt = stmt.where(ReplicaRecordModel.stream == stream)
+        stmt = (
+            stmt.order_by(ReplicaRecordModel.updated_at.desc(), ReplicaRecordModel.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        res = await self._session.execute(stmt)
+        return [self._to_domain_model(orm) for orm in res.scalars().all()]
+
     async def get_by_trace_id(
         self,
         trace_id: str,

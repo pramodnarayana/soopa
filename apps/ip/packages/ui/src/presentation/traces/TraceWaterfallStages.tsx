@@ -10,7 +10,7 @@ import {
   StatusBadge,
   StatusTone,
 } from '@soopa/ui';
-import { CloudDownload } from 'lucide-react';
+import { CloudDownload, Lock } from 'lucide-react';
 import React from 'react';
 import { PipelineLayer, type PipelineLayerValue } from '../../domain/enums';
 import type {
@@ -23,6 +23,7 @@ import type {
   ReplicaRejection,
   TraceEventEntry,
 } from '../../domain/trace';
+import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { GemRosettaStrip } from '../shared/GemRosettaStrip';
 import {
   formatBytesCompact,
@@ -356,6 +357,33 @@ function OutboundDeliveryCard({ record }: { readonly record: OutboundRecord }) {
   );
 }
 
+function RestrictedDiagnosticStageCard({ layerLabel }: { readonly layerLabel: string }) {
+  return (
+    <Card className="border-dashed border-status-attention-border bg-status-attention-bg/20">
+      <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-status-attention-bg text-status-attention-fg">
+          <Lock className="h-6 w-6" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-semibold text-foreground">{layerLabel} is Restricted</h3>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Internal diagnostic payloads (L1 raw wire captures &amp; L2 replica staging) are
+            restricted to Customer Support engineers with the{' '}
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+              ip:records:raw:read
+            </code>{' '}
+            capability.
+          </p>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Switch to <span className="font-semibold text-foreground">Customer Support</span> role in
+          the workspace to inspect wire payloads.
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export interface TraceWaterfallStageContentProps {
   readonly activeLayer: PipelineLayerValue;
   readonly trace: IpTrace;
@@ -371,7 +399,13 @@ export function TraceWaterfallStageContent({
   onHydrateS3,
   onOpenStitches,
 }: TraceWaterfallStageContentProps) {
+  const { userRole } = useIpWorkspace();
+  const isCustomer = userRole === 'customer';
+
   if (activeLayer === PipelineLayer.L1_INGEST) {
+    if (isCustomer) {
+      return <RestrictedDiagnosticStageCard layerLabel="Layer 1: Raw Inbound Wire Capture" />;
+    }
     return (
       <InboundWireStagePanel
         record={trace.inboundRecord}
@@ -381,6 +415,9 @@ export function TraceWaterfallStageContent({
     );
   }
   if (activeLayer === PipelineLayer.L2_REPLICA) {
+    if (isCustomer) {
+      return <RestrictedDiagnosticStageCard layerLabel="Layer 2: Universal Replica Staging" />;
+    }
     return (
       <ReplicaStagePanel records={trace.replicaRecords} rejections={trace.replicaRejections} />
     );

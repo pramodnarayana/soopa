@@ -52,6 +52,20 @@ class ConnectionDeactivatedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class ConnectionDeletedEvent(DomainEvent):
+    connection_id: str
+    tenant_id: str
+    app_id: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_DELETED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
 class ConnectionRelinkedEvent(DomainEvent):
     connection_id: str
     tenant_id: str

@@ -222,6 +222,18 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
         createdConn.value.id,
       );
       expect(deactivated.ok && deactivated.value.status).toBe('DEACTIVATED');
+
+      const deleted = await harness.connections.deleteConnection(
+        SEED_TENANT_ID,
+        createdConn.value.id,
+      );
+      expect(deleted.ok).toBe(true);
+
+      const fetchAfterDelete = await harness.connections.getConnection(
+        SEED_TENANT_ID,
+        createdConn.value.id,
+      );
+      expect(fetchAfterDelete.ok).toBe(false);
     }
 
     const resetState = await harness.syncRuns.resetStreamCheckpoint(

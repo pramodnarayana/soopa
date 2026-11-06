@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator, Mapping
+from collections.abc import AsyncGenerator, Awaitable, Callable, Mapping
 from typing import Annotated
 
 import structlog
@@ -15,6 +15,7 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
 from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
+from ip.engine.domain.authorization import IpPermission, has_ip_permission
 from ip.engine.domain.enums import PipelineStage
 from ip.engine.ports.outbound.catalog_registry_port import (
     CatalogConnectorMapping,
@@ -144,6 +145,36 @@ async def require_tenant_member(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=f"User does not belong to tenant {tenant_id}.",
     )
+
+
+def require_ip_permission(
+    permission: IpPermission,
+) -> Callable[[IdentityContext, str], Awaitable[IdentityContext]]:
+    """FastAPI dependency factory enforcing a specific discrete IP resource permission."""
+
+    async def _dependency(
+        identity: Annotated[IdentityContext, Depends(require_tenant_member)],
+        tenant_id: str,
+    ) -> IdentityContext:
+        if not has_ip_permission(identity, permission, tenant_id=tenant_id):
+            logger.error(
+                "ip_permission_denied",
+                subject=identity.subject,
+                tenant_id=tenant_id,
+                required_permission=permission.value,
+                roles=list(identity.roles),
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"FORBIDDEN: Missing required permission '{permission.value}'.",
+            )
+        return identity
+
+    return _dependency
+
+
+require_raw_records_read = require_ip_permission(IpPermission.IP_RECORDS_RAW_READ)
+require_canonical_records_read = require_ip_permission(IpPermission.IP_RECORDS_CANONICAL_READ)
 
 
 def get_catalog_registry(request: Request) -> CatalogRegistryPort:
@@ -314,5 +345,8 @@ __all__ = [
     "get_token_refresher",
     "get_transformer_registry",
     "get_workflow_definition_registry",
+    "require_canonical_records_read",
+    "require_ip_permission",
+    "require_raw_records_read",
     "require_tenant_member",
 ]

@@ -4,7 +4,6 @@ import {
   Button,
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -14,7 +13,7 @@ import {
   StatusBadge,
   StatusTone,
 } from '@soopa/ui';
-import { CheckCircle2, PlugZap, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, PlugZap } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCatalogAppSpecQuery, useCatalogAppsQuery } from '../../application/use-catalog-queries';
@@ -28,7 +27,7 @@ import type { ConnectionCheckResult } from '../../domain/connection';
 import { ConnectorPropertyKey } from '../../domain/enums';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { buildFailedCheckProblem, isConnectionSnapshotVerified } from './connection-preflight';
-import { SpecFormRenderer, splitSpecFormValues } from './SpecFormRenderer';
+import { isPropertyVisible, SpecFormRenderer, splitSpecFormValues } from './SpecFormRenderer';
 
 export interface CreateConnectionModalProps {
   readonly open: boolean;
@@ -102,12 +101,10 @@ function MarketplaceStep({
 function VerifiedSpecConfigurator({
   spec,
   defaultName,
-  onBack,
   onCreated,
 }: {
   readonly spec: AppSpec;
   readonly defaultName: string;
-  readonly onBack: () => void;
   readonly onCreated: (connectionId: string) => void;
 }) {
   const [connectionName, setConnectionName] = useState(defaultName);
@@ -121,7 +118,21 @@ function VerifiedSpecConfigurator({
 
   const currentSnapshot = useMemo(() => JSON.stringify(formValues), [formValues]);
   const isVerified = isConnectionSnapshotVerified(currentSnapshot, verifiedSnapshot, checkResult);
-  const canSave = isVerified && connectionName.trim().length > 0 && !createMutation.isPending;
+
+  const hasRequiredFields = useMemo(() => {
+    if (connectionName.trim().length === 0) return false;
+    for (const prop of spec.properties) {
+      if (!prop.required) continue;
+      if (!isPropertyVisible(prop, formValues, spec.properties)) continue;
+      const val = formValues[prop.name] ?? prop.defaultValue;
+      if (val === undefined || val === null || String(val).trim().length === 0) {
+        return false;
+      }
+    }
+    return true;
+  }, [connectionName, spec.properties, formValues]);
+
+  const canSave = hasRequiredFields && !createMutation.isPending;
 
   const resolveEffectiveAuthType = (): string => {
     const defaultAuthFromProps = spec.properties.find(
@@ -197,7 +208,7 @@ function VerifiedSpecConfigurator({
   return (
     <>
       <ApiProblemBanner problem={problem} />
-      <div className="max-h-96 space-y-4 overflow-y-auto pr-1">
+      <div className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="new-connection-name">Connection Name *</Label>
           <Input
@@ -226,9 +237,6 @@ function VerifiedSpecConfigurator({
       </div>
 
       <DialogFooter className="gap-2">
-        <Button type="button" variant="ghost" onClick={onBack}>
-          Back to Catalog
-        </Button>
         <Button
           type="button"
           variant="outline"
@@ -245,8 +253,7 @@ function VerifiedSpecConfigurator({
           onClick={() => void handleSave()}
           className="gap-1.5"
         >
-          <ShieldCheck className="h-4 w-4" />
-          <span>{createMutation.isPending ? 'Encrypting...' : 'Save Encrypted Connection'}</span>
+          <span>{createMutation.isPending ? 'Saving...' : 'Save'}</span>
         </Button>
       </DialogFooter>
     </>
@@ -271,18 +278,11 @@ export function CreateConnectionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {selectedApp
-              ? `Configure ${selectedApp.displayName} Connection`
-              : 'New Connector From Catalog'}
+            {selectedApp ? `Connect ${selectedApp.displayName}` : 'Catalog'}
           </DialogTitle>
-          <DialogDescription>
-            {selectedApp
-              ? 'Run a live pre-flight connection check before persisting AES-256-GCM encrypted credentials.'
-              : 'Select a verified enterprise connector specification from the Integration Platform catalog.'}
-          </DialogDescription>
         </DialogHeader>
 
         {!selectedApp ? (
@@ -297,13 +297,6 @@ export function CreateConnectionModal({
             key={selectedApp.appId}
             spec={specView.data}
             defaultName={`${selectedApp.displayName} Primary`}
-            onBack={() => {
-              if (initialApp) {
-                onOpenChange(false);
-              } else {
-                setSelectedApp(null);
-              }
-            }}
             onCreated={(id) => {
               onOpenChange(false);
               onCreated(id);
