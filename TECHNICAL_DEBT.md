@@ -538,3 +538,50 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: Staging power management (`infra/cloud/scripts/manage_staging_power.sh`) is currently implemented as a ~500-line shell script invoked by GitHub Actions (`.github/workflows/staging-power-schedule.yml`). Bash lacks static typing, structured error handling, and unit testability.
 - **Action Item**: Rewrite `manage_staging_power.sh` into a clean, typed Python script (e.g., `infra/cloud/scripts/manage_staging_power.py`) using `boto3` to manage RDS and ECS states, and update the GitHub Actions workflow to run the Python script.
+
+## [Testing Architecture] Single Responsibility Principle (SRP) Violations in Test Cases & Suites (Eradicate Conjoined "and" Tests)
+
+- **Date Added**: 2026-11-06
+- **Status**: TO DO
+- **Description**: Test files and test cases in the IP integration platform frequently bundle multiple distinct behaviors into single test suites and test cases using conjoined "and" naming, violating the Single Responsibility Principle (SRP). When a conjoined test fails, it is ambiguous which concept failed, and assertions cannot execute independently:
+  1. **Conjoined Test Files (4 files in PR, 10 in `apps/ip`)**: Test suites bundle multiple architectural domains into single files, such as `apps/ip/packages/ui/src/__tests__/synced-data-and-entities.test.tsx` (bundling generic record inspection with entity sync configuration), `test_l5_delivery_and_token_manager.py`, `test_trace_and_replay_use_cases.py`, and `test_ip_worker_chunk_dispatch_and_disposition.py`.
+  2. **Conjoined Test Cases (28 cases in PR, 73 in `apps/ip`)**: Individual test cases combine multiple distinct assertions and lifecycles (e.g., `renders ConnectionEntitiesSyncTab with multi-select entity table and sync triggers`, `handles Result Err mutation outcomes without throwing and guards missing IpUIProvider`).
+- **Action Item**:
+  1. Decompose conjoined test files into single-responsibility test files (e.g., split `synced-data-and-entities.test.tsx` into `synced-data-inspection.test.tsx` and `connection-entities-sync.test.tsx`).
+  2. Split multi-concept test cases into isolated unit tests verifying one atomic behavior or state transition per test block.
+  3. Enforce a linter rule or pre-commit check discouraging `_and_` / ` and ` in test titles and file names.
+
+## [Domain Purity & Hexagonal Architecture] Eradicate Specific Business Domain Data from Generic Platform Files
+
+- **Date Added**: 2026-11-06
+- **Status**: TO DO
+- **Description**: Hexagonal Architecture and Domain-Driven Design require that the core IP engine, generic platform UI components, and platform test suites remain 100% agnostic to any specific business domain. Domain-specific business logic and schemas belong exclusively inside isolated solution modules (`apps/ip/packages/ip/src/ip/solutions/`). Currently, business data primitives (`Meter`, `service_points`, `AMI`, `Itron`, `energy`) have leaked across generic layers:
+  1. **Generic Production UI Components (5 occurrences across 3 files)**:
+     - `CreateConnectionModal.tsx`: Hardcodes `"Itron"` in connector search input placeholder.
+     - `IpConnectionsPage.tsx`: Hardcodes `{ label: 'Energy & AMI' }` and branches on `id?.includes('itron') || cat === 'energy'` to pick icons.
+     - `StitchModals.tsx`: Hardcodes `'energy.mdm_meter_reading'` as default component state.
+  2. **Generic Backend Engine Core (8 occurrences across 6 files)**:
+     - `ip.engine.bootstrap.container`: Directly imports concrete domain solution packages (`ip.solutions.domains.energy.ports`, `writers`, `repository`), creating a concrete reverse coupling from generic engine to specific domain.
+     - `catalog_router.py`, `catalog_dtos.py`, `ingress_router.py`: Hardcodes `"ENERGY"` and `"meters"` in parameter descriptions and DTO field documentation.
+     - `mqtt_subscribe_transport.py` & `transformer_port.py`: Hardcodes `"Smart Grid AMI interval readings"` and `'energy.ami_meter_reading'` in generic transport and port docstrings.
+  3. **Generic Test Suites (383 occurrences across 38 files)**:
+     - Generic UI tests (107 occurrences across 6 files, including `synced-data-and-entities.test.tsx`, `http-repositories-contract.test.ts`, `application-layer.test.ts`) hardcode `METER`, `service_points`, and `Itron`.
+     - Generic engine backend tests (276 occurrences across 32 files) test generic ingestion, normalization, and worker pipelines using hardcoded energy models rather than generic synthetic schemas or fixture factories.
+- **Action Item**:
+  1. **UI Presentation Genericism**: Drive category lists, search placeholders, and connector icons dynamically from connector manifest metadata (`ConnectorSpec` / `app.svg_icon`) rather than hardcoded UI string checks.
+  2. **IoC Solution Discovery**: Replace direct engine container imports of `ip.solutions.domains.energy` with a dynamic plugin/solution loader registry where solutions declare their own providers without coupling the engine.
+  3. **Synthetic Test Fixtures**: Refactor generic UI and backend tests to use domain-agnostic synthetic schemas (`TestRecord`, `canonical_type_a`, `stream_alpha`) to guarantee that tests validate generic engine plumbing rather than energy-specific assumptions.
+
+## [Developer Experience & CI/CD] Decouple Heavy CI Verification from Local Git Hooks (Eradicate Pre-Push Local CI Saturation)
+
+- **Date Added**: 2026-11-07
+- **Status**: TO DO
+- **Description**: The current local developer workflow suffers from severe velocity degradation due to an anti-pattern: *shifting full continuous integration (CI) verification directly onto the local developer machine inside Git hooks (`pre-commit` and `pre-push`)*. Developers spend up to 90% of their working loop waiting on or debugging local hook failures rather than delivering product features:
+  1. **Heavy Git Pre-Push Hook (`.husky/pre-push`)**: Running `./scripts/verify_ci.sh --affected` on `git push` forces the developer's laptop to act as a CI runner. It checks Docker container health, sets up and executes Alembic migrations on 3 isolated test PostgreSQL databases (`global_db_test`, `edi_shard_test`, `ip_shard_test`), executes test seed scripts, runs Semgrep, Turborepo typechecks, full unit test suites, integration tests, and calculates multi-package code coverage thresholds. A simple code checkpoint push locks the developer's terminal for 2 to 5 minutes.
+  2. **Over-Escalated Verification Scope**: `infra/local/scripts/run_in_test_env.py` (`should_escalate_to_full_verification`) automatically overrides `--affected` and escalates to `full` mode whenever any root file (`package.json`, `pnpm-lock.yaml`, `pyproject.toml`) or any script in `infra/local/scripts/` is touched. For a 41-file change touching `package.json` or `reconcile_schema_drift.py`, Semgrep scans all 20,586 files in the repository and executes all package test suites across the monorepo instead of restricting execution to the affected dependency graph.
+  3. **Overloaded Pre-Commit Hook (`.husky/pre-commit`)**: In addition to `lint-staged`, `.husky/pre-commit` runs workspace typechecks (`pnpm turbo typecheck` and `typecheck:tests`) across 38 packages on every single commit, causing high latency for incremental atomic commits.
+- **Action Item**:
+  1. **Lightweight Pre-Commit (< 3s)**: Strip `.husky/pre-commit` down strictly to `lint-staged` (Ruff formatting, Biome/Prettier, fast syntax checks on staged files). Move 38-package typechecking to PR CI or opt-in local commands.
+  2. **Eliminate Blocking Pre-Push**: Remove heavy full-pipeline verification (`verify_ci.sh`) from `.husky/pre-push`. Developers must be able to push WIP branches to the remote origin without executing integration test suites and database migrations locally.
+  3. **Refine Escalation Logic**: Update `should_escalate_to_full_verification` so that touching local utility scripts (such as `infra/local/scripts/reconcile_schema_drift.py`) or package scripts does not blow away graph-aware `--affected` scope for Semgrep and package test runs.
+  4. **Offload Heavy Verification to Remote CI**: Rely on GitHub Actions / cloud build farms with distributed runner matrices (running test shards in parallel on dedicated cloud instances) for full test runs, coverage threshold gates, and multi-tenant database migrations. Retain `./scripts/verify_ci.sh` strictly as an opt-in manual verification script for pre-PR checks.
