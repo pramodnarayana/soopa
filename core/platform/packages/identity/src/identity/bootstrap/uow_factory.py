@@ -3,6 +3,9 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.capability_repository import (
+    SqlAlchemyCapabilityRepository,
+)
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
 from identity.adapters.outbound.database.uow import SqlAlchemyIdentityUnitOfWork
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
@@ -15,6 +18,7 @@ def create_identity_uow(session: AsyncSession) -> SqlAlchemyIdentityUnitOfWork:
         user_repo=SqlAlchemyUserRepository(session=session),
         role_repo=SqlAlchemyRoleRepository(session=session),
         api_token_repo=SqlAlchemyApiTokenRepository(session=session),
+        capability_repo=SqlAlchemyCapabilityRepository(session=session),
     )
 
 

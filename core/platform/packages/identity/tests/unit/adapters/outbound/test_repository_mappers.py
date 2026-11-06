@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from database.models.identity import ApiToken as ApiTokenORM
+from database.models.identity import Capability as OrmCapability
 from database.models.identity import Role as OrmRole
 from database.models.identity import User as DbUser
 from database.provider import DatabaseProvider
@@ -15,6 +16,9 @@ from seedwork.utils import generate_id
 from sqlalchemy import text
 
 from identity.adapters.outbound.database.api_token_repository import SqlAlchemyApiTokenRepository
+from identity.adapters.outbound.database.capability_repository import (
+    SqlAlchemyCapabilityRepository,
+)
 from identity.adapters.outbound.database.role_repository import SqlAlchemyRoleRepository
 from identity.adapters.outbound.database.user_repository import SqlAlchemyUserRepository
 from identity.adapters.outbound.zitadel.jwks_token_verifier_adapter import (
@@ -237,3 +241,24 @@ async def test_sqlalchemy_api_token_repository_get_by_client_id_excludes_expired
         assert fetched_unbounded.id == unbounded.id
 
     await provider.engine.dispose()
+
+
+def test_capability_repository_mapper() -> None:
+    orm_cap = OrmCapability(
+        code="ip:records:canonical:read",
+        domain="ip",
+        resource="records:canonical",
+        action="read",
+        display_name="View Canonical Records",
+        description="Allows inspecting canonical L3 normalized records.",
+        is_sensitive=False,
+    )
+
+    domain_model = SqlAlchemyCapabilityRepository._to_domain_model(orm_cap)
+    assert domain_model.code == "ip:records:canonical:read"
+    assert domain_model.domain == "ip"
+    assert domain_model.resource == "records:canonical"
+    assert domain_model.action == "read"
+    assert domain_model.display_name == "View Canonical Records"
+    assert domain_model.description == "Allows inspecting canonical L3 normalized records."
+    assert domain_model.is_sensitive is False

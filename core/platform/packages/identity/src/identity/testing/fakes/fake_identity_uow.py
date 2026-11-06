@@ -3,10 +3,11 @@ from types import TracebackType
 from typing import Self
 
 from identity.domain.api_token import ApiToken
-from identity.domain.authorization import Role
+from identity.domain.authorization import CapabilityDescriptor, Role
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from identity.domain.user import User
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
+from identity.ports.outbound.capability_repository_port import CapabilityRepositoryPort
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.uow_port import IdentityUnitOfWorkPort
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
@@ -143,11 +144,29 @@ class FakeApiTokenRepository(ApiTokenRepositoryPort):
         )
 
 
+class FakeCapabilityRepository(CapabilityRepositoryPort):
+    def __init__(self, capabilities: list[CapabilityDescriptor] | None = None) -> None:
+        self.capabilities: list[CapabilityDescriptor] = capabilities or []
+
+    async def list_all(self) -> list[CapabilityDescriptor]:
+        return sorted(self.capabilities, key=lambda c: (c.domain, c.resource, c.action))
+
+    async def list_by_domain(self, domain: str) -> list[CapabilityDescriptor]:
+        return sorted(
+            [c for c in self.capabilities if c.domain == domain],
+            key=lambda c: (c.domain, c.resource, c.action),
+        )
+
+    async def get_by_code(self, code: str) -> CapabilityDescriptor | None:
+        return next((c for c in self.capabilities if c.code == code), None)
+
+
 class FakeIdentityUnitOfWork(IdentityUnitOfWorkPort):
     def __init__(self) -> None:
         self.user_repo = FakeUserRepository()
         self.role_repo = FakeRoleRepository()
         self.api_token_repo = FakeApiTokenRepository()
+        self.capability_repo = FakeCapabilityRepository()
         self.committed = False
         self.rolled_back = False
 

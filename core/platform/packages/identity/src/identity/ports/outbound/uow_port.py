@@ -2,6 +2,7 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from identity.ports.outbound.api_token_repository_port import ApiTokenRepositoryPort
+from identity.ports.outbound.capability_repository_port import CapabilityRepositoryPort
 from identity.ports.outbound.role_repository_port import RoleRepositoryPort
 from identity.ports.outbound.user_repository_port import UserRepositoryPort
 
@@ -15,6 +16,7 @@ class IdentityUnitOfWorkPort(Protocol):
     user_repo: UserRepositoryPort
     role_repo: RoleRepositoryPort
     api_token_repo: ApiTokenRepositoryPort
+    capability_repo: CapabilityRepositoryPort
 
     async def __aenter__(self) -> Self: ...
 

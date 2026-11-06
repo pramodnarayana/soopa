@@ -8,6 +8,12 @@ from identity.application.authenticate_use_case import (
     authenticate_bearer_token,
 )
 from identity.config import PlatformIdentitySettings
+from identity.domain.authorization import (
+    Capability,
+    CapabilityDescriptor,
+    Role,
+    StandardRole,
+)
 from identity.domain.identity_context import IdentityContext, TokenClaims
 from identity.domain.permissions import (
     AuthorizationError,
@@ -20,8 +26,12 @@ from identity.domain.permissions import (
 __all__ = [
     "AuthenticationError",
     "AuthorizationError",
+    "Capability",
+    "CapabilityDescriptor",
     "IdentityContext",
     "PlatformIdentitySettings",
+    "Role",
+    "StandardRole",
     "TokenClaims",
     "attach_identity_to_request",
     "authenticate_bearer_token",
