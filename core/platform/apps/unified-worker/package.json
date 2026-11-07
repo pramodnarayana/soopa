@@ -19,6 +19,7 @@
     "@soopa/orchestrator-worker": "workspace:*",
     "@soopa/compute-worker": "workspace:*",
     "@soopa/config-sync-worker": "workspace:*",
-    "@soopa/edi-cp-worker": "workspace:*"
+    "@soopa/edi-cp-worker": "workspace:*",
+    "@soopa/ip": "workspace:*"
   }
 }

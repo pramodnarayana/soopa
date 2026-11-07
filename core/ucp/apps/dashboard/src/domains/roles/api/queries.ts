@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 
 export interface Role {
   id: string;
@@ -9,6 +9,8 @@ export interface Role {
 }
 
 export const useGetRoles = () => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['roles'],
     queryFn: () => apiClient.get<Role[]>('/tenants/roles'),

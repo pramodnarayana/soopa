@@ -145,16 +145,12 @@ def sync_topology(
     topology = compose_topology_manifests(manifest_paths)
 
     composed_path = root_dir / "infra" / "topology.json"
-    existing_topology = (
-        json.loads(composed_path.read_text(encoding="utf-8")) if composed_path.exists() else None
+    composed_path.write_text(json.dumps(topology, indent=2) + "\n", encoding="utf-8")
+    logger.info(
+        "topology_composed_manifest_written",
+        output_path=str(composed_path),
+        manifests=[str(p.relative_to(root_dir)) for p in manifest_paths],
     )
-    if existing_topology != topology:
-        composed_path.write_text(json.dumps(topology, indent=2) + "\n", encoding="utf-8")
-        logger.info(
-            "topology_composed_manifest_written",
-            output_path=str(composed_path),
-            manifests=[str(p.relative_to(root_dir)) for p in manifest_paths],
-        )
 
     mappings = build_env_mappings(topology)
     env_content = env_path.read_text(encoding="utf-8")
@@ -185,7 +181,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--domains",
         type=str,
         default=os.environ.get("ENABLED_APPS", "all"),
-        help="Comma-separated domains to compose (e.g. 'platform,edi' or 'all')",
+        help="Comma-separated domains to compose (e.g. 'platform,ip', 'platform,edi', or 'all')",
     )
     parsed = parser.parse_args(argv)
 

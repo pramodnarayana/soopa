@@ -64,8 +64,8 @@ class FakeShardOutboxDrainRepository(ShardOutboxDrainPort):
 def _evt(event_id: str, lane: EventProcessingLane = EventProcessingLane.REALTIME) -> EventEnvelope:
     return EventEnvelope(
         id=event_id,
-        source="edi.data_plane",
-        event_type="edi.inbound_message.received",
+        source="ip.data_plane",
+        event_type="ip.inbound_record.created",
         tenant_id="tenant_1",
         idempotency_key=f"ik_{event_id}",
         payload={"record_ids": [f"rec_{event_id}"]},
@@ -81,8 +81,8 @@ async def test_multi_shard_outbox_drain_relay_drains_until_empty_with_bulk_compl
 
     repo = FakeShardOutboxDrainRepository(
         {
-            "edi_shard_1": shard_1_events,
-            "edi_shard_2": shard_2_events,
+            "ip_shard_1": shard_1_events,
+            "ip_shard_2": shard_2_events,
         }
     )
     publisher = FakeOutboxPublisher()
@@ -101,18 +101,18 @@ async def test_multi_shard_outbox_drain_relay_drains_until_empty_with_bulk_compl
     assert len(publisher.published_events) == 8
 
     # Shard 1 had 5 events with batch_size=2 -> 3 non-empty claims (2, 2, 1) + 1 empty check = 4 claims
-    assert repo.claim_calls_per_shard["edi_shard_1"] == 4
+    assert repo.claim_calls_per_shard["ip_shard_1"] == 4
     # Shard 2 had 3 events with batch_size=2 -> 2 non-empty claims (2, 1) + 1 empty check = 3 claims
-    assert repo.claim_calls_per_shard["edi_shard_2"] == 3
+    assert repo.claim_calls_per_shard["ip_shard_2"] == 3
 
     # Verify mark_shard_completed_batch was called per batch (not per individual event!)
-    s1_batches = [b[1] for b in repo.completed_batches if b[0] == "edi_shard_1"]
+    s1_batches = [b[1] for b in repo.completed_batches if b[0] == "ip_shard_1"]
     assert s1_batches == [("s1_0", "s1_1"), ("s1_2", "s1_3"), ("s1_4",)]
 
 
 @pytest.mark.asyncio
 async def test_multi_shard_outbox_drain_relay_start_and_stop_lifecycle() -> None:
-    repo = FakeShardOutboxDrainRepository({"edi_shard_1": [_evt("s1_0")]})
+    repo = FakeShardOutboxDrainRepository({"ip_shard_1": [_evt("s1_0")]})
     publisher = FakeOutboxPublisher()
     relay = MultiShardOutboxDrainRelay(
         repository=repo,
@@ -127,4 +127,4 @@ async def test_multi_shard_outbox_drain_relay_start_and_stop_lifecycle() -> None
     await relay.stop()
 
     assert len(publisher.published_events) == 1
-    assert repo.shard_events["edi_shard_1"] == []
+    assert repo.shard_events["ip_shard_1"] == []

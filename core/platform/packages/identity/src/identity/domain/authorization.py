@@ -36,6 +36,31 @@ class Capability(StrEnum):
     INVOICES_READ = "invoices:read"
     INVOICES_WRITE = "invoices:write"
 
+    # Integration Platform (IP)
+    IP_RECORDS_CANONICAL_READ = "ip:records:canonical:read"
+    IP_RECORDS_RAW_READ = "ip:records:raw:read"
+    IP_TRACES_READ = "ip:traces:read"
+    IP_SYNC_TRIGGER = "ip:sync:trigger"
+    IP_FLOWS_READ = "ip:flows:read"
+    IP_FLOWS_WRITE = "ip:flows:write"
+    IP_FLOWS_EXECUTE = "ip:flows:execute"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CapabilityDescriptor:
+    """
+    Domain entity representing a discrete system capability / permission in the catalog.
+    Used by the IAM Admin UI to render permission matrices, checkboxes, tooltips, and category trees.
+    """
+
+    code: str
+    domain: str
+    resource: str
+    action: str
+    display_name: str
+    description: str
+    is_sensitive: bool = False
+
 
 class StandardRole(StrEnum):
     """
@@ -44,6 +69,8 @@ class StandardRole(StrEnum):
 
     PLATFORM_ADMIN = "PlatformAdmin"
     TENANT_ADMIN = "TenantAdmin"
+    CUSTOMER_SUPPORT = "CustomerSupport"
+    CUSTOMER = "Customer"
     VIEWER = "Viewer"
     DEVELOPER = "Developer"
 

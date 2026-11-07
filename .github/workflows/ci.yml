@@ -30,13 +30,28 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
 
-      - name: Typecheck (Node)
+      - name: Verify Python-to-Turborepo Manifest Parity
+        run: pnpm run syncpack:python:check
+
+      - name: Architectural Boundary Check (Tach)
+        run: uv run tach check
+
+      - name: Lint & Format Check (Python)
+        run: |
+          uv run ruff check apps core infra/local/scripts scripts
+          uv run ruff format --check apps core infra/local/scripts scripts
+          uv run mypy --explicit-package-bases infra/local/scripts/run_in_test_env.py infra/local/scripts/ensure_test_databases.py infra/local/scripts/sync_topology.py scripts/aggregate_coverage.py
+
+      - name: Architectural & Enterprise Static Analysis (Semgrep)
+        run: uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --config=.semgrep/enterprise-rules.yml --exclude node_modules --exclude .venv --exclude dist --exclude build --error apps core
+
+      - name: Typecheck (Node & Python)
         run: pnpm turbo typecheck
 
-      - name: Typecheck Tests (Node)
+      - name: Typecheck Tests (Node & Python)
         run: pnpm turbo typecheck:tests
 
-      - name: Lint (Node)
+      - name: Lint (Workspaces)
         run: pnpm turbo lint
 
       - name: Build All Workspaces (Node & Dashboard Validation)
@@ -74,14 +89,26 @@ jobs:
           include-hidden-files: true
 
   test-integration:
-    name: Integration Tests
-    needs: [validate, test-unit]
+    name: Integration Tests (${{ matrix.shard }})
     runs-on: ubuntu-latest
     concurrency:
-      group: ${{ github.workflow }}-test-integration-${{ github.ref }}
+      group: ${{ github.workflow }}-test-integration-${{ matrix.shard }}-${{ github.ref }}
       cancel-in-progress: true
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: core
+            infra_cmd: pnpm infra:up && pnpm infra:init-edi
+            test_cmd: pnpm test:integration:core
+          - shard: edi
+            infra_cmd: pnpm infra:up:edi && pnpm infra:init-edi
+            test_cmd: pnpm test:integration:edi
+          - shard: ip
+            infra_cmd: pnpm infra:up:ip
+            test_cmd: pnpm test:integration:ip
     env:
       ENVIRONMENT: test
     steps:
@@ -92,22 +119,36 @@ jobs:
       - name: Setup Environment
         uses: ./.github/actions/setup-env
 
-      - name: Start Database & Infra
+      - name: Start Database & Infra (${{ matrix.shard }})
         run: |
           cp .env.example .env
-          pnpm infra:up
+          ${{ matrix.infra_cmd }}
 
-      - name: Test (Integration)
-        run: COVERAGE_FILE=.coverage.integration CI=true pnpm test:integration
+      - name: Test Integration (${{ matrix.shard }})
+        run: COVERAGE_FILE=.coverage.integration CI=true ${{ matrix.test_cmd }}
 
-      - name: Upload Integration Coverage
+      - name: Upload Integration Coverage (${{ matrix.shard }})
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-integration
+          name: coverage-integration-${{ matrix.shard }}
           path: |
             **/.coverage.integration
             !**/node_modules/**
           include-hidden-files: true
+
+  integration-gate:
+    name: Integration Tests
+    needs: [test-integration]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify All Integration Test Shards
+        run: |
+          if [ "${{ contains(needs.test-integration.result, 'failure') || contains(needs.test-integration.result, 'cancelled') }}" = "true" ]; then
+            echo "❌ Integration tests failed or were cancelled"
+            exit 1
+          fi
+          echo "✅ All integration test shards passed successfully"
 
   build-docker:
     name: Build Modular Monolith

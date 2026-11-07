@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 
 export interface AuthUser {
   authenticated: boolean;
@@ -13,6 +13,8 @@ export interface AuthUser {
 }
 
 export const useAuthUser = () => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['auth', 'me'],
     queryFn: () => apiClient.get<AuthUser>('/auth/me'),

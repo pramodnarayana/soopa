@@ -15,6 +15,7 @@
     "@soopa/observability": "workspace:*",
     "@soopa/notification": "workspace:*",
     "@soopa/security": "workspace:*",
-    "@soopa/secret-store": "workspace:*"
+    "@soopa/secret-store": "workspace:*",
+    "@soopa/ip": "workspace:*"
   }
 }

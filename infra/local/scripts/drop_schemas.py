@@ -1,4 +1,12 @@
 #!/usr/bin/env python3
+"""
+Enterprise Database Schema Reset Utility.
+
+Provides isolated, transactional schema wiping for local development and integration tests.
+Guarantees domain boundary isolation so resetting one domain's schema never cascades or corrupts
+shared Control Plane schemas belonging to other bounded contexts.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -26,11 +34,13 @@ DOMAIN_GLOBAL_SCHEMAS: Final[dict[str, tuple[str, ...]]] = {
         "public",
     ),
     "edi": ("edi",),
+    "ip": ("ip",),
 }
 
 # Domain to Environment Variable mappings for Shard DSNs
 DOMAIN_SHARD_ENV_VARS: Final[dict[str, tuple[str, ...]]] = {
     "edi": ("SHARD_OVERRIDES__EDI_SHARD_1", "EDI_DATABASE_URL"),
+    "ip": ("SHARD_OVERRIDES__IP_SHARD_1", "IP_DATABASE_URL"),
 }
 
 
@@ -100,7 +110,7 @@ async def run_reset(selected_domains: set[str], global_url: str) -> None:
             await drop_schemas_for_db(global_url, "Global DB", target_schemas=schemas_to_drop)
 
     # 2. Drop Domain Shards
-    for domain in ("edi",):
+    for domain in ("edi", "ip"):
         if "all" in selected_domains or domain in selected_domains:
             shard_dsn = _resolve_shard_dsn(domain)
             if not shard_dsn:
@@ -121,7 +131,7 @@ def main() -> None:
     parser.add_argument(
         "--domains",
         default="all",
-        help="Comma-separated list of domains to drop: all, platform, edi (default: all)",
+        help="Comma-separated list of domains to drop: all, platform, edi, ip (default: all)",
     )
     args = parser.parse_args()
     selected_domains = {d.strip().lower() for d in args.domains.split(",") if d.strip()}

@@ -1,20 +1,27 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
+import { type Subscription, tenantSubscriptionsQueryKey } from './queries';
+
+interface SubscriptionMutationContext {
+  readonly previousSubscriptions: Subscription[] | undefined;
+  readonly queryKey: ReturnType<typeof tenantSubscriptionsQueryKey>;
+}
 
 export const useSubscribeTenant = () => {
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
+
   return useMutation({
     mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) =>
       apiClient.post(`/tenants/${tenantId}/subscriptions`, { appId }),
-    onMutate: async (variables) => {
-      const queryKey = ['tenants', variables.tenantId, 'subscriptions'];
+    onMutate: async (variables): Promise<SubscriptionMutationContext> => {
+      const queryKey = tenantSubscriptionsQueryKey(variables.tenantId);
       await queryClient.cancelQueries({ queryKey });
 
-      const previousSubscriptions = queryClient.getQueryData(queryKey);
+      const previousSubscriptions = queryClient.getQueryData<Subscription[]>(queryKey);
 
-      // Optimistically add the subscription
-      queryClient.setQueryData(queryKey, (old: any) => [
-        ...(old || []),
+      queryClient.setQueryData<Subscription[]>(queryKey, (old) => [
+        ...(old ?? []),
         {
           id: `${variables.tenantId}_${variables.appId}`,
           appId: variables.appId,
@@ -25,7 +32,7 @@ export const useSubscribeTenant = () => {
 
       return { previousSubscriptions, queryKey };
     },
-    onError: (_err, _variables, context: any) => {
+    onError: (_err, _variables, context) => {
       if (context?.previousSubscriptions) {
         queryClient.setQueryData(context.queryKey, context.previousSubscriptions);
       }
@@ -35,23 +42,24 @@ export const useSubscribeTenant = () => {
 
 export const useUnsubscribeTenant = () => {
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
+
   return useMutation({
     mutationFn: ({ tenantId, appId }: { tenantId: string; appId: string }) =>
       apiClient.delete(`/tenants/${tenantId}/subscriptions/${appId}`),
-    onMutate: async (variables) => {
-      const queryKey = ['tenants', variables.tenantId, 'subscriptions'];
+    onMutate: async (variables): Promise<SubscriptionMutationContext> => {
+      const queryKey = tenantSubscriptionsQueryKey(variables.tenantId);
       await queryClient.cancelQueries({ queryKey });
 
-      const previousSubscriptions = queryClient.getQueryData(queryKey);
+      const previousSubscriptions = queryClient.getQueryData<Subscription[]>(queryKey);
 
-      // Optimistically remove the subscription
-      queryClient.setQueryData(queryKey, (old: any) =>
-        (old || []).filter((sub: any) => sub.appId !== variables.appId),
+      queryClient.setQueryData<Subscription[]>(queryKey, (old) =>
+        (old ?? []).filter((sub) => sub.appId !== variables.appId),
       );
 
       return { previousSubscriptions, queryKey };
     },
-    onError: (_err, _variables, context: any) => {
+    onError: (_err, _variables, context) => {
       if (context?.previousSubscriptions) {
         queryClient.setQueryData(context.queryKey, context.previousSubscriptions);
       }

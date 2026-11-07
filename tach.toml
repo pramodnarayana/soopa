@@ -11,9 +11,13 @@ source_roots = [
     "core/ucp/packages/models/src",
     "core/platform/packages/security/src",
     "core/platform/packages/secret-store/src",
+    "core/platform/packages/sftp/src",
+    "apps/ip/packages/ip/src",
     "core/platform/packages/shttp/src",
+    "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src"
 ]
+
 
 [[modules]]
 path = "strace.domain"
@@ -55,6 +59,217 @@ depends_on = [
     "strace.domain",
     "strace.ports"
 ]
+
+[[modules]]
+path = "orchestration.domain"
+depends_on = []
+
+[[modules]]
+path = "orchestration.ports"
+depends_on = [
+    "orchestration.domain"
+]
+
+[[modules]]
+path = "orchestration.application"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports"
+]
+
+[[modules]]
+path = "orchestration.adapters"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "database.models"
+]
+
+[[modules]]
+path = "orchestration.bootstrap"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.adapters"
+]
+
+[[modules]]
+path = "orchestration.testing"
+depends_on = [
+    "orchestration.domain",
+    "orchestration.ports"
+]
+
+[[modules]]
+path = "ip.engine.domain"
+depends_on = [
+    "orchestration.domain",
+    "strace.domain"
+]
+
+[[modules]]
+path = "ip.engine.ports"
+depends_on = [
+    "ip.engine.domain",
+    "orchestration.domain",
+    "orchestration.ports",
+    "strace.domain",
+    "strace.ports"
+]
+
+[[modules]]
+path = "ip.engine.application"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "security",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "strace.domain",
+    "strace.ports",
+    "strace.application"
+]
+
+[[modules]]
+path = "ip.engine.adapters"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.settings",
+    "security",
+    "database.models",
+    "shttp",
+    "sftp",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "strace.domain",
+    "strace.ports",
+    "strace.application",
+    "strace.orm"
+]
+
+[[modules]]
+path = "ip.engine.adapters.inbound.api"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.adapters",
+    "ip.engine.settings",
+    "identity",
+    "security",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "strace.domain"
+]
+
+[[modules]]
+path = "ip.engine.adapters.outbound.database.migrations"
+depends_on = [
+    "ip.engine.adapters",
+    "ip.engine.ports"
+]
+
+[[modules]]
+path = "ip.solutions.domains"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.adapters",
+    "ip.engine.adapters.outbound.database.migrations"
+]
+
+[[modules]]
+path = "ip.solutions.connectors"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.adapters",
+    "shttp",
+    "sftp"
+]
+
+[[modules]]
+path = "ip.solutions.transformers"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.solutions.domains"
+]
+
+[[modules]]
+path = "ip.solutions.stitches"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.solutions.domains",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application"
+]
+
+[[modules]]
+path = "ip.engine.bootstrap"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.application",
+    "ip.engine.adapters",
+    "ip.engine.settings",
+    "database.models",
+    "security",
+    "shttp",
+    "storage",
+    "orchestration.domain",
+    "orchestration.ports",
+    "orchestration.application",
+    "orchestration.bootstrap",
+    "strace.domain",
+    "strace.ports",
+    "strace.application",
+    "strace.adapters"
+]
+
+[[modules]]
+path = "ip.engine.module"
+depends_on = [
+    "ip.engine.application",
+    "ip.engine.bootstrap",
+    "ip.engine.adapters.inbound.api",
+    "ip.engine.settings"
+]
+
+[[modules]]
+path = "ip.solutions.bootstrap"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.adapters",
+    "ip.engine.bootstrap",
+    "ip.engine.settings",
+    "ip.solutions.connectors",
+    "ip.solutions.domains",
+    "ip.solutions.stitches",
+    "ip.solutions.transformers",
+    "shttp"
+]
+
+[[modules]]
+path = "ip.module"
+depends_on = [
+    "ip.engine.module",
+    "ip.solutions.bootstrap"
+]
+
+[[modules]]
+path = "ip.engine.settings"
+depends_on = []
 
 [[modules]]
 path = "security"

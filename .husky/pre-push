@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
 set -e
 
-echo "Running graph-aware CI verification before push (.env & live DB untouched)..."
-./scripts/verify_ci.sh --affected
+# Heavy CI verification (migrations, unit & integration suites, coverage, and full typechecks)
+# runs asynchronously in remote GitHub Actions CI across distributed runner shards.
+# For opt-in local pre-PR verification, run manually: pnpm verify:ci:affected
+exit 0

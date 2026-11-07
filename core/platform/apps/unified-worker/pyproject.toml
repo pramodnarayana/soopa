@@ -21,6 +21,7 @@ dependencies = [
     "config_sync_worker",
     "edi_cp_worker",
     "edi_dp_jobs_worker",
+    "ip",
 ]
 
 [build-system]
@@ -45,3 +46,4 @@ compute_worker = { workspace = true }
 config_sync_worker = { workspace = true }
 edi_cp_worker = { workspace = true }
 edi_dp_jobs_worker = { workspace = true }
+ip = { workspace = true }

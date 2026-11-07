@@ -31,7 +31,7 @@ class SqlAlchemyShardedOutboxRepository(
 ):
     """
     Stateless, generic SQLAlchemy 2.0 ORM Outbox repository across all tenant shards
-    for a given `app_slug` (e.g., `edi.outbox_events` across `edi_shard_*`).
+    for a given `app_slug` (e.g., `public.ip_outbox` across `ip_shard_*`).
 
     Satisfies:
     - `ShardOutboxDrainPort` for `MultiShardOutboxDrainRelay` (0s delay, per-shard bulk completion).

@@ -1,0 +1,63 @@
+"""Narrow integration tests for GetConnectionUseCase using real PostgreSQL SAVEPOINTs."""
+
+from __future__ import annotations
+
+import pytest
+from database.types import GlobalSession
+from identity.domain.constants import IdentityIdPrefix
+from ip.engine.application.use_cases.connections.create_connection_use_case import (
+    CreateConnectionCommand,
+    CreateConnectionUseCase,
+)
+from ip.engine.application.use_cases.connections.get_connection_use_case import (
+    GetConnectionQuery,
+    GetConnectionUseCase,
+)
+from ip.engine.bootstrap.container import create_ip_control_plane_uow
+from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
+from seedwork import generate_id
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.fixture
+def cipher() -> AesGcmCipher:
+    key = AesGcmCipher.generate_key()
+    return AesGcmCipher(key)
+
+
+@pytest.mark.asyncio
+async def test_get_connection_use_case(
+    global_session: GlobalSession,
+    cipher: AesGcmCipher,
+) -> None:
+    uow = create_ip_control_plane_uow(global_session)
+    create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
+    get_uc = GetConnectionUseCase(uow=uow)
+
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    create_res = await create_uc.execute(
+        CreateConnectionCommand(
+            tenant_id=tenant_id,
+            app_id="acme_source",
+            name="Get Target",
+            auth_type="API_KEY",
+            public_config={"endpoint_url": "https://get.acme.example.com"},
+            raw_credentials={"api_key": "k_get"},
+            endpoint_for_fingerprint="https://get.acme.example.com",
+        )
+    )
+    assert create_res.success is True
+    assert create_res.connection is not None
+    conn_id = create_res.connection.id
+
+    fetched = await get_uc.execute(GetConnectionQuery(tenant_id=tenant_id, connection_id=conn_id))
+    assert fetched.success is True
+    assert fetched.connection is not None
+    assert fetched.connection.id == conn_id
+
+    wrong_tenant = await get_uc.execute(
+        GetConnectionQuery(tenant_id="ten_other", connection_id=conn_id)
+    )
+    assert wrong_tenant.success is False
+    assert wrong_tenant.error_code == "CONNECTION_NOT_FOUND"

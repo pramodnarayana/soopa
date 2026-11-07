@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -167,8 +168,159 @@ def test_should_escalate_to_full_verification_on_root_configs() -> None:
     )
     assert should_escalate_to_full_verification([".env.example"]) is True
     assert should_escalate_to_full_verification(["pyproject.toml"]) is True
+    assert should_escalate_to_full_verification(["uv.lock"]) is True
+    assert should_escalate_to_full_verification(["tach.toml"]) is True
     assert should_escalate_to_full_verification(["turbo.json"]) is True
     assert should_escalate_to_full_verification(["semgrep-architecture.yml"]) is True
+    assert should_escalate_to_full_verification(["scripts/aggregate_coverage.py"]) is True
+    assert should_escalate_to_full_verification(["infra/local/scripts/run_in_test_env.py"]) is True
+    assert (
+        should_escalate_to_full_verification(["infra/local/scripts/ensure_test_databases.py"])
+        is True
+    )
+    assert should_escalate_to_full_verification(["infra/local/scripts/sync_topology.py"]) is True
+    assert should_escalate_to_full_verification([".github/actions/setup-env/action.yml"]) is True
+    assert should_escalate_to_full_verification([".github/workflows/ci.yml"]) is True
+    assert should_escalate_to_full_verification([".semgrep/enterprise-rules.yml"]) is True
+
+
+def test_should_not_escalate_on_local_utility_scripts_or_package_manifests() -> None:
+    assert (
+        should_escalate_to_full_verification(
+            [
+                "infra/local/scripts/reconcile_schema_drift.py",
+                "infra/local/scripts/drop_schemas.py",
+                "infra/local/scripts/print_credentials.py",
+                "infra/local/scripts/clean_openas2.py",
+                "infra/local/scripts/infra_reset.py",
+            ]
+        )
+        is False
+    )
+    assert (
+        should_escalate_to_full_verification(
+            [
+                "package.json",
+                "pnpm-lock.yaml",
+                "apps/ip/packages/ui/package.json",
+                "apps/ip/scripts/seed.py",
+            ]
+        )
+        is False
+    )
+
+
+def test_pre_commit_hook_runs_lightweight_staged_checks_only() -> None:
+    repo_root = Path(__file__).resolve().parents[6]
+    pre_commit = (repo_root / ".husky" / "pre-commit").read_text(encoding="utf-8")
+
+    assert "lint-staged" in pre_commit
+    assert "docker ps" not in pre_commit
+    assert "uvx pre-commit" not in pre_commit
+    assert "turbo typecheck" not in pre_commit
+
+
+def test_pre_push_hook_does_not_invoke_heavy_ci_verification() -> None:
+    repo_root = Path(__file__).resolve().parents[6]
+    pre_push = (repo_root / ".husky" / "pre-push").read_text(encoding="utf-8")
+
+    active_pre_push_lines = [
+        line.strip()
+        for line in pre_push.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    assert not any("verify_ci.sh" in line for line in active_pre_push_lines)
+
+
+def test_ci_workflow_runs_parallel_distributed_integration_shards() -> None:
+    repo_root = Path(__file__).resolve().parents[6]
+    ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "test:integration:core" in ci_workflow
+    assert "test:integration:edi" in ci_workflow
+    assert "test:integration:ip" in ci_workflow
+    assert "coverage-integration-${{ matrix.shard }}" in ci_workflow
+
+
+def test_aggregate_coverage_stages_distributed_matrix_shard_artifacts(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[6]
+    script_path = repo_root / "scripts" / "aggregate_coverage.py"
+    spec = importlib.util.spec_from_file_location("aggregate_coverage", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    pkg_rel = Path("apps") / "ip" / "packages" / "ip"
+    pkg_dir = tmp_path / pkg_rel
+    pkg_dir.mkdir(parents=True)
+
+    artifacts_dir = tmp_path / "coverage_artifacts"
+    unit_src = artifacts_dir / "coverage-unit" / pkg_rel / ".coverage.unit"
+    int_core_src = artifacts_dir / "coverage-integration-core" / pkg_rel / ".coverage.integration"
+    int_ip_src = artifacts_dir / "coverage-integration-ip" / pkg_rel / ".coverage.integration"
+
+    for artifact_file, content in (
+        (unit_src, b"unit-shard"),
+        (int_core_src, b"core-shard"),
+        (int_ip_src, b"ip-shard"),
+    ):
+        artifact_file.parent.mkdir(parents=True, exist_ok=True)
+        artifact_file.write_bytes(content)
+
+    prepared = module.prepare_coverage_inputs(str(pkg_dir), str(artifacts_dir), str(tmp_path))
+    assert prepared is True
+
+    staged_files = sorted(p.name for p in pkg_dir.glob(".coverage.*"))
+    assert len(staged_files) == 3
+    staged_payloads = {p.read_bytes() for p in pkg_dir.glob(".coverage.*")}
+    assert staged_payloads == {b"unit-shard", b"core-shard", b"ip-shard"}
+
+
+def test_aggregate_coverage_purges_stale_shard_and_local_files_before_staging(
+    tmp_path: Path,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[6]
+    script_path = repo_root / "scripts" / "aggregate_coverage.py"
+    spec = importlib.util.spec_from_file_location("aggregate_coverage", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    pkg_rel = Path("apps") / "ip" / "packages" / "ip"
+    pkg_dir = tmp_path / pkg_rel
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / ".coverage.shard_99").write_bytes(b"stale-shard-99")
+    (pkg_dir / ".coverage.local_unit").write_bytes(b"stale-local-unit")
+
+    artifacts_dir = tmp_path / "coverage_artifacts"
+    fresh_src = artifacts_dir / "coverage-unit" / pkg_rel / ".coverage.unit"
+    fresh_src.parent.mkdir(parents=True, exist_ok=True)
+    fresh_src.write_bytes(b"fresh-unit")
+
+    prepared = module.prepare_coverage_inputs(str(pkg_dir), str(artifacts_dir), str(tmp_path))
+    assert prepared is True
+
+    staged_files = [p.name for p in pkg_dir.glob(".coverage.*")]
+    assert staged_files == [".coverage.shard_1"]
+    assert (pkg_dir / ".coverage.shard_1").read_bytes() == b"fresh-unit"
+
+
+def test_verify_ci_enforces_enterprise_semgrep_and_scripts_static_checks() -> None:
+    repo_root = Path(__file__).resolve().parents[6]
+    verify_ci = (repo_root / "scripts" / "verify_ci.sh").read_text(encoding="utf-8")
+    ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    expected_script_mypy = (
+        "mypy --explicit-package-bases infra/local/scripts/run_in_test_env.py "
+        "infra/local/scripts/ensure_test_databases.py "
+        "infra/local/scripts/sync_topology.py "
+        "scripts/aggregate_coverage.py"
+    )
+    assert "--config=.semgrep/enterprise-rules.yml" in verify_ci
+    assert "ruff check apps core infra/local/scripts scripts" in verify_ci
+    assert expected_script_mypy in verify_ci
+    assert "ruff check apps core infra/local/scripts scripts" in ci_workflow
+    assert expected_script_mypy in ci_workflow
 
 
 def test_rewrite_and_discover_support_driver_qualified_postgres_and_reject_empty_db_name() -> None:

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+import os
+from collections.abc import Mapping
 from functools import lru_cache
 
 from pydantic import Field, computed_field
@@ -9,6 +13,28 @@ from seedwork.infra.config_models import (
 )
 
 
+def extract_physical_queue_name(queue_url: str) -> str:
+    """Extracts the physical SQS queue name from the final path segment of a QueueUrl."""
+    stripped = queue_url.strip().rstrip("/")
+    if not stripped or "/" not in stripped:
+        return ""
+    return stripped.rsplit("/", 1)[-1]
+
+
+def discover_jobs_queue_url_map(
+    environ: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """Dynamically discovers all SQS_*_JOBS_QUEUE_URL environment variables and maps physical queue names to URLs."""
+    source = environ if environ is not None else os.environ
+    queue_map: dict[str, str] = {}
+    for key, value in source.items():
+        if key.startswith("SQS_") and key.endswith("_JOBS_QUEUE_URL") and value.strip():
+            physical_name = extract_physical_queue_name(value)
+            if physical_name:
+                queue_map[physical_name] = value.strip()
+    return queue_map
+
+
 class SqsSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
     data_plane_jobs_queue_url: str = Field(
@@ -16,6 +42,12 @@ class SqsSettings(BaseSettings):
     )
     control_plane_jobs_queue_url: str = Field(
         validation_alias="SQS_CONTROL_PLANE_JOBS_QUEUE_URL", default=""
+    )
+    ip_data_plane_jobs_queue_url: str = Field(
+        validation_alias="SQS_IP_DATA_PLANE_JOBS_QUEUE_URL", default=""
+    )
+    ip_control_plane_jobs_queue_url: str = Field(
+        validation_alias="SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL", default=""
     )
     notification_jobs_queue_url: str = Field(
         validation_alias="SQS_NOTIFICATION_JOBS_QUEUE_URL", default=""
@@ -60,6 +92,16 @@ class AppSettings(BaseSettings):
 
     @computed_field
     @property
+    def sqs_ip_data_plane_jobs_queue_url(self) -> str:
+        return self.sqs.ip_data_plane_jobs_queue_url
+
+    @computed_field
+    @property
+    def sqs_ip_control_plane_jobs_queue_url(self) -> str:
+        return self.sqs.ip_control_plane_jobs_queue_url
+
+    @computed_field
+    @property
     def sqs_notification_jobs_queue_url(self) -> str:
         return self.sqs.notification_jobs_queue_url
 
@@ -72,6 +114,25 @@ class AppSettings(BaseSettings):
     @property
     def sqs_ucp_jobs_queue_url(self) -> str:
         return self.sqs.ucp_jobs_queue_url
+
+    @computed_field
+    @property
+    def sqs_queue_url_map(self) -> dict[str, str]:
+        discovered = discover_jobs_queue_url_map()
+        configured_urls = (
+            self.sqs.data_plane_jobs_queue_url,
+            self.sqs.control_plane_jobs_queue_url,
+            self.sqs.ip_data_plane_jobs_queue_url,
+            self.sqs.ip_control_plane_jobs_queue_url,
+            self.sqs.notification_jobs_queue_url,
+            self.sqs.identity_jobs_queue_url,
+            self.sqs.ucp_jobs_queue_url,
+        )
+        for url in configured_urls:
+            physical_name = extract_physical_queue_name(url)
+            if physical_name:
+                discovered[physical_name] = url.strip()
+        return discovered
 
     @computed_field
     @property

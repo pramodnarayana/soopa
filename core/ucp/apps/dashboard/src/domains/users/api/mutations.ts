@@ -1,8 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 
 export const useCreateTenantUser = () => {
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
+
   return useMutation({
     mutationFn: ({
       tenantId,
@@ -25,6 +27,8 @@ export const useCreateTenantUser = () => {
 
 export const useUpdateTenantUser = () => {
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
+
   return useMutation({
     mutationFn: ({
       tenantId,
@@ -47,6 +51,8 @@ export const useUpdateTenantUser = () => {
 
 export const useToggleTenantUserStatus = () => {
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
+
   return useMutation({
     mutationFn: ({
       tenantId,
@@ -82,6 +88,8 @@ export const useToggleTenantUserStatus = () => {
 
 export const useDeleteTenantUser = () => {
   const queryClient = useQueryClient();
+  const apiClient = useUcpApiClient();
+
   return useMutation({
     mutationFn: ({ tenantId, userId }: { tenantId: string; userId: string }) =>
       apiClient.delete(`/tenants/${tenantId}/users/${userId}`),

@@ -1,123 +1,228 @@
 import { getApiUrl } from './config';
 
-const UCP_API_URL = getApiUrl('/api/v1');
+export const HttpMethod = {
+  GET: 'GET',
+  POST: 'POST',
+  PUT: 'PUT',
+  PATCH: 'PATCH',
+  DELETE: 'DELETE',
+} as const;
+export type HttpMethodValue = (typeof HttpMethod)[keyof typeof HttpMethod];
 
-let globalToken: string | null = null;
+export type QueryParamsRecord = Readonly<
+  Record<string, string | number | boolean | null | undefined>
+>;
 
-class ApiError extends Error {
-  public statusCode: number;
-  public details?: unknown;
+export interface DashboardFetchOptions {
+  readonly method?: string;
+  readonly params?: QueryParamsRecord;
+  readonly headers?: HeadersInit;
+  readonly signal?: AbortSignal;
+  readonly body?: unknown;
+}
 
-  constructor(message: string, statusCode: number, details?: unknown) {
+export type DashboardRequestConfig = Omit<DashboardFetchOptions, 'method' | 'body'>;
+
+export class ApiClientError extends Error {
+  public readonly status: number;
+  public readonly statusText: string;
+  public readonly rawBody: string;
+
+  constructor(status: number, statusText: string, message: string, rawBody: string) {
     super(message);
-    this.name = 'ApiError';
-    this.statusCode = statusCode;
-    this.details = details;
+    this.name = 'ApiClientError';
+    this.status = status;
+    this.statusText = statusText;
+    this.rawBody = rawBody;
   }
 }
 
-interface FetchOptions extends RequestInit {
-  params?: Record<string, string>;
+export interface UcpApiClientPort {
+  readonly httpClient?: unknown;
+  request<T>(endpoint: string, options?: DashboardFetchOptions): Promise<T>;
+  get<T>(endpoint: string, options?: DashboardRequestConfig): Promise<T>;
+  post<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
+  put<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
+  patch<T>(endpoint: string, body?: unknown, options?: DashboardRequestConfig): Promise<T>;
+  delete<T>(endpoint: string, options?: DashboardRequestConfig): Promise<T>;
 }
 
-function getIdempotencyKey(): string {
-  return crypto.randomUUID();
+const VALID_HTTP_METHODS: ReadonlySet<string> = new Set(Object.values(HttpMethod));
+
+export function isHttpMethodValue(candidate: string): candidate is HttpMethodValue {
+  return VALID_HTTP_METHODS.has(candidate);
 }
 
-export const apiClient = {
-  setToken(token: string | null) {
-    globalToken = token;
-  },
+export function parseHttpMethod(raw?: string): HttpMethodValue {
+  const upper = raw?.toUpperCase();
+  if (upper && isHttpMethodValue(upper)) {
+    return upper;
+  }
+  return HttpMethod.GET;
+}
 
-  async request<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-    const { params, headers, ...customConfig } = options;
+function buildUrl(baseUrl: string, endpoint: string, params?: QueryParamsRecord): string {
+  const cleanBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
 
-    const url = new URL(`${UCP_API_URL}${endpoint}`, window.location.origin);
+  // If base is a fully qualified URL, parse with URL constructor; otherwise append relative path
+  if (cleanBase.startsWith('http://') || cleanBase.startsWith('https://')) {
+    const url = new URL(`${cleanBase}${cleanEndpoint}`);
     if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
-      });
-    }
-
-    const normalizedHeaders = new Headers(headers);
-    if (!normalizedHeaders.has('Content-Type') && customConfig.body !== undefined) {
-      normalizedHeaders.set('Content-Type', 'application/json');
-    }
-    if (globalToken && !normalizedHeaders.has('Authorization')) {
-      normalizedHeaders.set('Authorization', `Bearer ${globalToken}`);
-    }
-
-    // Inject strict idempotency key for mutating requests
-    const method = customConfig.method?.toUpperCase() || 'GET';
-    if (
-      ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) &&
-      !normalizedHeaders.has('Idempotency-Key')
-    ) {
-      const idempotencyKey = getIdempotencyKey();
-      normalizedHeaders.set('Idempotency-Key', idempotencyKey);
-    }
-
-    const config: RequestInit = {
-      ...customConfig,
-      headers: normalizedHeaders,
-    };
-
-    const response = await fetch(url.toString(), config);
-
-    if (!response.ok) {
-      let errorMessage = 'An unexpected error occurred';
-      let errorDetails: unknown = null;
-
-      const textData = await response.text();
-
-      if (textData) {
-        try {
-          const errorData = JSON.parse(textData) as Record<string, unknown>;
-          if (typeof errorData.message === 'string') {
-            errorMessage = errorData.message;
-          }
-          errorDetails = errorData.details || errorData;
-        } catch {
-          // Fallback if response is not valid JSON
-          errorMessage = textData;
+      for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+          url.searchParams.append(key, String(value));
         }
       }
+    }
+    return url.toString();
+  }
 
-      throw new ApiError(errorMessage, response.status, errorDetails);
+  const queryParts: string[] = [];
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== null) {
+        queryParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+      }
+    }
+  }
+  const queryString = queryParts.length > 0 ? `?${queryParts.join('&')}` : '';
+  return `${cleanBase}${cleanEndpoint}${queryString}`;
+}
+
+export interface CreateScopedUcpApiClientOptions {
+  readonly getToken?: () => string | null | undefined;
+  readonly baseUrl?: string;
+  readonly fetchImpl?: typeof fetch;
+}
+
+export function createScopedUcpApiClient(
+  options: CreateScopedUcpApiClientOptions,
+): UcpApiClientPort {
+  const fetchFn = options.fetchImpl ?? globalThis.fetch;
+  const baseUrl = options.baseUrl ?? getApiUrl('/api/v1');
+
+  const execute = async <T>(
+    method: HttpMethodValue,
+    endpoint: string,
+    body?: unknown,
+    config?: DashboardRequestConfig,
+  ): Promise<T> => {
+    const token = options.getToken?.();
+    const headers = new Headers(config?.headers);
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
-    if (response.status === 204 || response.headers.get('content-length') === '0') {
-      return {} as T;
+    let payload: BodyInit | undefined;
+    if (body !== undefined && body !== null) {
+      if (typeof body === 'string') {
+        payload = body;
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+      } else if (
+        body instanceof FormData ||
+        body instanceof Blob ||
+        body instanceof URLSearchParams
+      ) {
+        payload = body;
+      } else {
+        payload = JSON.stringify(body);
+        if (!headers.has('Content-Type')) {
+          headers.set('Content-Type', 'application/json');
+        }
+      }
     }
 
-    try {
+    const url = buildUrl(baseUrl, endpoint, config?.params);
+    const response = await fetchFn(url, {
+      method,
+      headers,
+      signal: config?.signal,
+      body: method !== HttpMethod.GET ? payload : undefined,
+    });
+
+    if (!response.ok) {
+      const rawText = await response.text();
+      let errorMessage = rawText || `HTTP ${response.status} ${response.statusText}`;
+      if (rawText) {
+        try {
+          const parsed = JSON.parse(rawText) as Record<string, unknown>;
+          if (parsed && typeof parsed === 'object') {
+            if (typeof parsed.detail === 'string' && parsed.detail) {
+              errorMessage = parsed.detail;
+            } else if (typeof parsed.message === 'string' && parsed.message) {
+              errorMessage = parsed.message;
+            } else if (Array.isArray(parsed.detail)) {
+              const messages = parsed.detail
+                .map((item) =>
+                  item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string'
+                    ? item.msg
+                    : null,
+                )
+                .filter((msg): msg is string => Boolean(msg));
+              if (messages.length > 0) {
+                errorMessage = messages.join('; ');
+              }
+            }
+          }
+        } catch {
+          // If body is not valid JSON, retain rawText fallback
+        }
+      }
+      throw new ApiClientError(response.status, response.statusText, errorMessage, rawText);
+    }
+
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
       return (await response.json()) as T;
-    } catch {
-      return {} as T;
     }
-  },
+    return (await response.text()) as unknown as T;
+  };
 
-  get<T>(endpoint: string, options?: Omit<FetchOptions, 'method'>) {
-    return this.request<T>(endpoint, { ...options, method: 'GET' });
-  },
+  return {
+    httpClient: { execute },
 
-  post<T>(endpoint: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: 'POST',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  },
+    async request<T>(endpoint: string, reqOptions: DashboardFetchOptions = {}): Promise<T> {
+      const method = parseHttpMethod(reqOptions.method);
+      return execute<T>(method, endpoint, reqOptions.body, {
+        params: reqOptions.params,
+        headers: reqOptions.headers,
+        signal: reqOptions.signal,
+      });
+    },
 
-  patch<T>(endpoint: string, body?: unknown, options?: Omit<FetchOptions, 'method' | 'body'>) {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: 'PATCH',
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  },
+    async get<T>(endpoint: string, reqOptions?: DashboardRequestConfig): Promise<T> {
+      return execute<T>(HttpMethod.GET, endpoint, undefined, reqOptions);
+    },
 
-  delete<T>(endpoint: string, options?: Omit<FetchOptions, 'method'>) {
-    return this.request<T>(endpoint, { ...options, method: 'DELETE' });
-  },
-};
+    async post<T>(
+      endpoint: string,
+      body?: unknown,
+      reqOptions?: DashboardRequestConfig,
+    ): Promise<T> {
+      return execute<T>(HttpMethod.POST, endpoint, body, reqOptions);
+    },
+
+    async put<T>(
+      endpoint: string,
+      body?: unknown,
+      reqOptions?: DashboardRequestConfig,
+    ): Promise<T> {
+      return execute<T>(HttpMethod.PUT, endpoint, body, reqOptions);
+    },
+
+    async patch<T>(
+      endpoint: string,
+      body?: unknown,
+      reqOptions?: DashboardRequestConfig,
+    ): Promise<T> {
+      return execute<T>(HttpMethod.PATCH, endpoint, body, reqOptions);
+    },
+
+    async delete<T>(endpoint: string, reqOptions?: DashboardRequestConfig): Promise<T> {
+      return execute<T>(HttpMethod.DELETE, endpoint, undefined, reqOptions);
+    },
+  };
+}

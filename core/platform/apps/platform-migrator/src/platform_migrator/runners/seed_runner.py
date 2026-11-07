@@ -3,6 +3,7 @@ Domain Data Seeding Runner (Isolated Bootstrap Tasks)
 """
 
 import runpy
+from collections.abc import Callable
 from pathlib import Path
 
 import structlog
@@ -43,23 +44,30 @@ def execute_seed_script(script_relative_path: str) -> None:
     logger.info("seed_script_completed", script=script_relative_path)
 
 
-def run_domain_seeds(domain: str) -> None:
+def run_domain_seeds(
+    domain: str,
+    script_executor: Callable[[str], None] = execute_seed_script,
+) -> None:
     """Execute data seeding for a specific domain or all domains."""
     domain = domain.lower()
     logger.info("domain_seeding_started", domain=domain)
 
     if domain in ("ucp", "platform", "all"):
-        execute_seed_script("core/ucp/packages/ucp/scripts/seed.py")
-        execute_seed_script("core/ucp/apps/ucp-jobs-worker/scripts/seed_jobs.py")
+        script_executor("core/ucp/packages/ucp/scripts/seed.py")
+        script_executor("core/ucp/apps/ucp-jobs-worker/scripts/seed_jobs.py")
 
     if domain in ("identity", "platform", "all"):
-        execute_seed_script("core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py")
+        script_executor("core/platform/apps/identity-jobs-worker/scripts/seed_jobs.py")
 
     if domain in ("notification", "platform", "all"):
-        execute_seed_script("core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py")
+        script_executor("core/platform/apps/notification-jobs-worker/scripts/seed_jobs.py")
 
     if domain in ("edi", "all"):
-        execute_seed_script("apps/edi/scripts/seed_jobs.py")
-        execute_seed_script("apps/edi/apps/edi-as2-server/scripts/seed.py")
+        script_executor("apps/edi/scripts/seed_jobs.py")
+        script_executor("apps/edi/apps/edi-as2-server/scripts/seed.py")
+
+    if domain in ("ip", "all"):
+        script_executor("apps/ip/scripts/seed.py")
+        script_executor("apps/ip/scripts/seed_jobs.py")
 
     logger.info("domain_seeding_completed", domain=domain)

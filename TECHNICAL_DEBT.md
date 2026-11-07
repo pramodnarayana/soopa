@@ -538,3 +538,50 @@ The taxonomy drifted organically as different engineers built different bounded 
 - **Status**: TO DO
 - **Description**: Staging power management (`infra/cloud/scripts/manage_staging_power.sh`) is currently implemented as a ~500-line shell script invoked by GitHub Actions (`.github/workflows/staging-power-schedule.yml`). Bash lacks static typing, structured error handling, and unit testability.
 - **Action Item**: Rewrite `manage_staging_power.sh` into a clean, typed Python script (e.g., `infra/cloud/scripts/manage_staging_power.py`) using `boto3` to manage RDS and ECS states, and update the GitHub Actions workflow to run the Python script.
+
+## [RESOLVED] [Testing Architecture] Single Responsibility Principle (SRP) Violations in Test Cases & Suites (Eradicate Conjoined "and" Tests)
+
+- **Date Added**: 2026-11-06
+- **Status**: ✅ RESOLVED (Atomic SRP Test Suites + Semgrep & AST Guardrails Enforced)
+- **Description**: Test files and test cases in the IP integration platform frequently bundle multiple distinct behaviors into single test suites and test cases using conjoined "and" naming, violating the Single Responsibility Principle (SRP). When a conjoined test fails, it is ambiguous which concept failed, and assertions cannot execute independently:
+  1. **Conjoined Test Files (4 files in PR, 10 in `apps/ip`)**: Test suites bundle multiple architectural domains into single files, such as `apps/ip/packages/ui/src/__tests__/synced-data-and-entities.test.tsx` (bundling generic record inspection with entity sync configuration), `test_l5_delivery_and_token_manager.py`, `test_trace_and_replay_use_cases.py`, and `test_ip_worker_chunk_dispatch_and_disposition.py`.
+  2. **Conjoined Test Cases (28 cases in PR, 73 in `apps/ip`)**: Individual test cases combine multiple distinct assertions and lifecycles (e.g., `renders ConnectionEntitiesSyncTab with multi-select entity table and sync triggers`, `handles Result Err mutation outcomes without throwing and guards missing IpUIProvider`).
+- **Solution**:
+  1. **Single-Responsibility Test Suites**: Decomposed all 10 conjoined test files (8 backend Python suites + 2 frontend Vitest suites) into 20 focused single-domain test files (e.g., `connection-entities-sync.test.tsx` + `synced-data-inspection.test.tsx`, `domain-services.test.ts` + `http-adapter-telemetry.test.ts`, `test_deliver_outbound_record_use_case.py` + `test_token_manager_service.py`, `test_trace_query_use_cases.py` + `test_replay_stage_use_cases.py`, `test_worker_chunk_dispatch.py` + `test_worker_disposition_handler.py`) with shared pure in-memory fakes extracted to `apps/ip/packages/ip/tests/helpers/`.
+  2. **Atomic Test Cases**: Split every conjoined `test_*_and_*` Python function and multi-concept Vitest `describe`/`it` block across `apps/ip` into isolated, single-behavior test cases.
+  3. **Automated Architectural Gatekeeping**: Added Semgrep rules (`ban-conjoined-and-tests-in-ip`, `ban-conjoined-and-tests-in-ip-ui` in `semgrep-architecture.yml`) and AST/regex regression tests (`apps/ip/packages/ip/tests/unit/engine/test_srp_test_conventions.py`) enforcing zero conjoined filenames, Python test functions, or Vitest titles.
+
+## [RESOLVED] [Domain Purity & Hexagonal Architecture] Eradicate Specific Business Domain Data from Generic Platform Files
+
+- **Date Added**: 2026-11-06
+- **Status**: ✅ RESOLVED (IoC Solution Plugin Architecture + Tach, Semgrep & Purity Guards Enforced)
+- **Description**: Hexagonal Architecture and Domain-Driven Design require that the core IP engine, generic platform UI components, and platform test suites remain 100% agnostic to any specific business domain. Domain-specific business logic and schemas belong exclusively inside isolated solution modules (`apps/ip/packages/ip/src/ip/solutions/`). Currently, business data primitives (`Meter`, `service_points`, `AMI`, `Itron`, `energy`) have leaked across generic layers:
+  1. **Generic Production UI Components (5 occurrences across 3 files)**:
+     - `CreateConnectionModal.tsx`: Hardcodes `"Itron"` in connector search input placeholder.
+     - `IpConnectionsPage.tsx`: Hardcodes `{ label: 'Energy & AMI' }` and branches on `id?.includes('itron') || cat === 'energy'` to pick icons.
+     - `StitchModals.tsx`: Hardcodes `'energy.mdm_meter_reading'` as default component state.
+  2. **Generic Backend Engine Core (8 occurrences across 6 files)**:
+     - `ip.engine.bootstrap.container`: Directly imports concrete domain solution packages (`ip.solutions.domains.energy.ports`, `writers`, `repository`), creating a concrete reverse coupling from generic engine to specific domain.
+     - `catalog_router.py`, `catalog_dtos.py`, `ingress_router.py`: Hardcodes `"ENERGY"` and `"meters"` in parameter descriptions and DTO field documentation.
+     - `mqtt_subscribe_transport.py` & `transformer_port.py`: Hardcodes `"Smart Grid AMI interval readings"` and `'energy.ami_meter_reading'` in generic transport and port docstrings.
+  3. **Generic Test Suites (383 occurrences across 38 files)**:
+     - Generic UI tests (107 occurrences across 6 files, including `synced-data-and-entities.test.tsx`, `http-repositories-contract.test.ts`, `application-layer.test.ts`) hardcode `METER`, `service_points`, and `Itron`.
+     - Generic engine backend tests (276 occurrences across 32 files) test generic ingestion, normalization, and worker pipelines using hardcoded energy models rather than generic synthetic schemas or fixture factories.
+- **Solution**:
+  1. **IoC Solution Plugin Architecture**: Introduced `CanonicalWriterFactoryPort` (`ip.engine.application.ports.canonical_writer_port`) so `ip.engine.bootstrap.container` and `ip.engine.bootstrap.api_provider` have zero imports from `ip.solutions.*`. Vertical domain wiring lives exclusively in `ip.solutions.bootstrap.solution_plugin` and is assembled at the outer composition root (`ip.module`).
+  2. **Metadata-Driven Generic UI**: Replaced hardcoded category tabs, connector icon branching, search placeholders, and stitch form defaults across `@soopa/ip-ui` (`IpConnectionsPage.tsx`, `CreateConnectionModal.tsx`, `StitchModals.tsx`) with dynamic catalog metadata derivation.
+  3. **Domain-Agnostic Synthetic Fixtures & Boundary Guards**: Purified all generic engine files, `@soopa/ip-ui` sources/tests, and generic backend unit/integration tests using synthetic schemas (`acme_source`, `records_alpha`, `canonical.record_alpha.v1`). Enforced unidirectional module boundaries via `tach.toml`, `ban-ip-solutions-in-ip-engine` in `semgrep-architecture.yml`, `test_engine_domain_purity.py`, and `domain-purity.test.ts`.
+
+## [RESOLVED] [Developer Experience & CI/CD] Decouple Heavy CI Verification from Local Git Hooks (Eradicate Pre-Push Local CI Saturation)
+
+- **Date Added**: 2026-11-07
+- **Status**: ✅ RESOLVED (Sub-3s Local Git Hooks + Granular Affected Graph + Parallel Remote CI Matrix)
+- **Description**: The current local developer workflow suffers from severe velocity degradation due to an anti-pattern: *shifting full continuous integration (CI) verification directly onto the local developer machine inside Git hooks (`pre-commit` and `pre-push`)*. Developers spend up to 90% of their working loop waiting on or debugging local hook failures rather than delivering product features:
+  1. **Heavy Git Pre-Push Hook (`.husky/pre-push`)**: Running `./scripts/verify_ci.sh --affected` on `git push` forces the developer's laptop to act as a CI runner. It checks Docker container health, sets up and executes Alembic migrations on 3 isolated test PostgreSQL databases (`global_db_test`, `edi_shard_test`, `ip_shard_test`), executes test seed scripts, runs Semgrep, Turborepo typechecks, full unit test suites, integration tests, and calculates multi-package code coverage thresholds. A simple code checkpoint push locks the developer's terminal for 2 to 5 minutes.
+  2. **Over-Escalated Verification Scope**: `infra/local/scripts/run_in_test_env.py` (`should_escalate_to_full_verification`) automatically overrides `--affected` and escalates to `full` mode whenever any root file (`package.json`, `pnpm-lock.yaml`, `pyproject.toml`) or any script in `infra/local/scripts/` is touched. For a 41-file change touching `package.json` or `reconcile_schema_drift.py`, Semgrep scans all 20,586 files in the repository and executes all package test suites across the monorepo instead of restricting execution to the affected dependency graph.
+  3. **Overloaded Pre-Commit Hook (`.husky/pre-commit`)**: In addition to `lint-staged`, `.husky/pre-commit` runs workspace typechecks (`pnpm turbo typecheck` and `typecheck:tests`) across 38 packages on every single commit, causing high latency for incremental atomic commits.
+- **Solution**:
+  1. **Sub-3s `.husky/pre-commit`**: Stripped `.husky/pre-commit` down to `npx lint-staged` (plus conditional `pnpm run syncpack:python:check` only when `pyproject.toml` or `package.json` is staged), removing workspace-wide `turbo typecheck` and Docker checks from incremental commits.
+  2. **Non-Blocking `.husky/pre-push`**: Removed `./scripts/verify_ci.sh --affected` from `.husky/pre-push` so WIP branch pushes complete immediately without running test databases or migrations locally, while retaining `./scripts/verify_ci.sh` (`pnpm verify:ci:affected` / `pnpm verify:ci:full`) as an opt-in pre-PR check.
+  3. **Granular `--affected` Escalation**: Narrowed `should_escalate_to_full_verification` in `infra/local/scripts/run_in_test_env.py` so local utility scripts (e.g., `reconcile_schema_drift.py`, `infra_reset.py`) and JS package manifests (`package.json`, `pnpm-lock.yaml`) preserve graph-aware `--affected` execution instead of escalating to full-repo scans.
+  4. **Parallel Distributed Remote CI**: Refactored `.github/workflows/ci.yml` and `scripts/aggregate_coverage.py` to execute integration suites across parallel matrix shards (`test:integration:core`, `test:integration:edi`, `test:integration:ip`) and combine distributed `.coverage.*` artifacts per package, verified by `test_local_ci_isolation.py`.

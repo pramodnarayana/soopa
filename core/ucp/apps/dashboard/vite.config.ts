@@ -68,6 +68,7 @@ export default defineConfig(({ command, mode }) => {
         '@': path.resolve(__dirname, './src'),
         '@soopa/ui': path.resolve(__dirname, '../../../packages/ui/src'),
         '@soopa/edi-ui': path.resolve(__dirname, '../../../../apps/edi/packages/ui/src'),
+        '@soopa/ip-ui': path.resolve(__dirname, '../../../../apps/ip/packages/ui/src'),
       },
     },
     server: {

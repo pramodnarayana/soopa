@@ -1,5 +1,5 @@
 from collections.abc import Awaitable, Callable
-from typing import Any, Protocol
+from typing import Protocol
 
 from seedwork.domain.types import JsonDict
 
@@ -15,13 +15,13 @@ class RoutableEvent(Protocol):
 
 class EdiDataPlaneRouteRegistry:
     def __init__(self) -> None:
-        self._registry: dict[tuple[str, str | None], Callable[..., Awaitable[Any]]] = {}
+        self._registry: dict[tuple[str, str | None], Callable[..., Awaitable[object]]] = {}
 
     def register(
         self,
         event_type: str,
         direction: str | None,
-        factory: Callable[..., Awaitable[Any]],
+        factory: Callable[..., Awaitable[object]],
     ) -> None:
         """
         Registers a factory function to be called when an event matching the
@@ -29,7 +29,7 @@ class EdiDataPlaneRouteRegistry:
         """
         self._registry[(event_type, direction)] = factory
 
-    async def route(self, event: RoutableEvent, uow_factory: Callable[..., object]) -> Any:
+    async def route(self, event: RoutableEvent, uow_factory: Callable[..., object]) -> object:
         """
         Looks up the registered factory and executes it.
         Raises ValueError if no matching route is found.

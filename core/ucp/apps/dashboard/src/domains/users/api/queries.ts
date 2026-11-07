@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api-client';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 
 export interface TenantUser {
   id: string;
@@ -13,6 +13,8 @@ export interface TenantUser {
 }
 
 export const useGetTenantUsers = (tenantId: string) => {
+  const apiClient = useUcpApiClient();
+
   return useQuery({
     queryKey: ['tenants', tenantId, 'users'],
     queryFn: async () => {

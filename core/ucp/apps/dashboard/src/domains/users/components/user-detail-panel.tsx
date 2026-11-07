@@ -15,6 +15,18 @@ import { TenantUser } from '@/domains/users/api/queries';
 
 const normalizeRole = (role?: string) => (role === 'Unknown' ? '' : role || '');
 
+function deriveUserFormValues(user: TenantUser): {
+  readonly firstName: string;
+  readonly lastName: string;
+  readonly role: string;
+} {
+  return {
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    role: normalizeRole(user.role),
+  };
+}
+
 export function UserDetailPanel({
   user,
   tenantId,
@@ -24,19 +36,20 @@ export function UserDetailPanel({
   tenantId: string;
   roles: { id: string; name: string }[];
 }) {
-  const [editFirst, setEditFirst] = useState(user.firstName || '');
-  const [editLast, setEditLast] = useState(user.lastName || '');
-  const [editRole, setEditRole] = useState(normalizeRole(user.role));
+  const baseline = deriveUserFormValues(user);
+  const [editFirst, setEditFirst] = useState(baseline.firstName);
+  const [editLast, setEditLast] = useState(baseline.lastName);
+  const [editRole, setEditRole] = useState(baseline.role);
   const isDirty =
-    editFirst !== (user.firstName || '') ||
-    editLast !== (user.lastName || '') ||
-    editRole !== normalizeRole(user.role);
+    editFirst !== baseline.firstName ||
+    editLast !== baseline.lastName ||
+    editRole !== baseline.role;
 
   useEffect(() => {
-    setEditFirst(user.firstName || '');
-    setEditLast(user.lastName || '');
-    setEditRole(normalizeRole(user.role));
-  }, [user.id, user.firstName, user.lastName, user.role]);
+    setEditFirst(baseline.firstName);
+    setEditLast(baseline.lastName);
+    setEditRole(baseline.role);
+  }, [baseline.firstName, baseline.lastName, baseline.role]);
 
   const updateMutationObj = useUpdateTenantUser();
 
@@ -55,9 +68,9 @@ export function UserDetailPanel({
   };
 
   const handleCancel = () => {
-    setEditFirst(user.firstName || '');
-    setEditLast(user.lastName || '');
-    setEditRole(normalizeRole(user.role));
+    setEditFirst(baseline.firstName);
+    setEditLast(baseline.lastName);
+    setEditRole(baseline.role);
   };
 
   return (

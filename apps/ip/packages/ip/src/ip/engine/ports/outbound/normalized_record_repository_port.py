@@ -1,0 +1,53 @@
+"""Port contract for storing and querying Layer 3 NormalizedRecord entities."""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from collections.abc import Sequence
+from typing import Protocol
+
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+
+
+class NormalizedRecordRepositoryPort(Protocol):
+    """Outbound repository port for Layer 3 canonical normalized record audit entries."""
+
+    @abstractmethod
+    async def save(self, record: NormalizedRecord) -> None:
+        """Persists the normalized record and drains trace/domain events into the outbox."""
+        ...
+
+    @abstractmethod
+    async def get_by_id(self, record_id: str, tenant_id: str) -> NormalizedRecord | None:
+        """Retrieves a normalized record by ID and tenant."""
+        ...
+
+    @abstractmethod
+    async def list_by_source(
+        self,
+        tenant_id: str,
+        canonical_type: str,
+        source_id: str,
+    ) -> Sequence[NormalizedRecord]:
+        """Lists normalized audit records for a given canonical entity type and source ID."""
+        ...
+
+    async def list_records(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        canonical_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[NormalizedRecord]:
+        """Lists normalized canonical records filtered by connection and/or canonical type."""
+        return ()
+
+    async def get_by_trace_id(
+        self,
+        trace_id: str,
+        tenant_id: str,
+    ) -> Sequence[NormalizedRecord]:
+        """Retrieves all normalized records associated with a trace ID."""
+        return ()

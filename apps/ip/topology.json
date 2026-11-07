@@ -1,0 +1,49 @@
+{
+  "topics": [{ "name": "ip-events-topic", "fifo": false, "env_var": "SNS_IP_EVENTS_TOPIC_ARN" }],
+  "queues": [
+    {
+      "name": "ip-orchestrator-realtime",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_IP_ORCHESTRATOR_REALTIME_QUEUE_URL"
+    },
+    {
+      "name": "ip-orchestrator-bulk",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_IP_ORCHESTRATOR_BULK_QUEUE_URL"
+    },
+    {
+      "name": "ip-delivery-realtime",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_IP_DELIVERY_REALTIME_QUEUE_URL"
+    },
+    {
+      "name": "ip-delivery-bulk",
+      "fifo": false,
+      "dlq": true,
+      "env_var": "SQS_IP_DELIVERY_BULK_QUEUE_URL"
+    },
+    {
+      "name": "ip-control-plane-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_IP_CONTROL_PLANE_JOBS_QUEUE_URL"
+    },
+    {
+      "name": "ip-data-plane-jobs",
+      "fifo": true,
+      "dlq": true,
+      "env_var": "SQS_IP_DATA_PLANE_JOBS_QUEUE_URL"
+    }
+  ],
+  "subscriptions": [],
+  "buckets": [{ "name": "ip-payloads" }],
+  "secrets": [
+    {
+      "name": "ip/ip-shard-db-credentials",
+      "mockValue": "{\"host\":\"ip_postgres_shard\",\"port\":5432,\"username\":\"ip\",\"password\":\"ip_password\",\"dbname\":\"ip_shard\"}"
+    }
+  ]
+}

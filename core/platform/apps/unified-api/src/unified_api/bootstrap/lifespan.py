@@ -1,17 +1,8 @@
-"""
-Shell Application Lifespan.
+"""Shell Application Lifespan.
 
-The Shell (Host) owns the process lifecycle and orchestrates startup and
-shutdown of all domain workers in the correct order.
-
-Architecture note:
-  - Starlette does NOT call mounted sub-app lifespans when the parent app
-    has its own lifespan. All domain initialization is therefore delegated
-    through explicit startup/shutdown hooks called here.
-  - This module is the ONLY place allowed to import startup/shutdown hooks
-    from multiple domains simultaneously.
-  - Startup order: UCP workers → Notification Engine → EDI infrastructure.
-  - Shutdown order (reverse): EDI infrastructure → Notification Engine → UCP workers.
+The Shell (Host) owns the shared DatabaseProvider and DatabaseRouter and orchestrates
+startup and shutdown of Core Platform hooks and all dynamically loaded LaunchableApiModule
+plugins in deterministic order.
 """
 
 from __future__ import annotations
@@ -24,11 +15,10 @@ import structlog
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouter
 from dependency_injector import providers
-from edi.bootstrap.lifespan import shutdown, startup
 from fastapi import FastAPI
 from notification.bootstrap.lifespan import shutdown as notification_shutdown
 from notification.bootstrap.lifespan import startup as notification_startup
-from starlette.routing import Mount
+from seedwork.infra.api import LaunchableApiModule
 from ucp.bootstrap.lifespan import shutdown as ucp_shutdown
 from ucp.bootstrap.lifespan import startup as ucp_startup
 
@@ -39,9 +29,45 @@ logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
+async def _module_lifecycle(
+    app: FastAPI,
+    db_router: DatabaseRouter,
+    api_modules: list[LaunchableApiModule],
+) -> AsyncGenerator[None, None]:
+    started_modules: list[LaunchableApiModule] = []
+    try:
+        for module in api_modules:
+            logger.info("shell_startup_module_initializing", module=module.name)
+            await module.startup(app, db_router)
+            started_modules.append(module)
+
+        try:
+            edi_app = app.state.edi_app
+        except AttributeError:
+            edi_app = None
+        if edi_app is not None and hasattr(edi_app.state, "tenant_resolver"):
+            app.state.tenant_resolver = edi_app.state.tenant_resolver
+
+        yield
+    finally:
+        for module in reversed(started_modules):
+            logger.info("shell_shutdown_module_stopping", module=module.name)
+            try:
+                await module.shutdown(app)
+            except Exception:
+                logger.exception("shell_shutdown_module_failed", module=module.name)
+        app.state.tenant_resolver = None
+        logger.info("shell_shutdown_closing_db_router")
+        await db_router.close_all()
+
+
+@asynccontextmanager
 async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Shell application lifespan context manager."""
-    settings = getattr(app.state, "settings", None) or get_settings()
+    try:
+        settings = app.state.settings
+    except AttributeError:
+        settings = get_settings()
     db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
     db_provider = DatabaseProvider.from_url(db_url)
     app.state.db_provider = db_provider
@@ -51,7 +77,10 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             expected_platform_org_id=settings.identity.platform_org_id,
         )
 
-        ucp_container = getattr(app.state, "ucp_container", None)
+        try:
+            ucp_container = app.state.ucp_container
+        except AttributeError:
+            ucp_container = None
         if ucp_container is not None:
             ucp_container.db_provider.override(providers.Object(db_provider))
 
@@ -68,33 +97,9 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     shard_overrides=settings.database.shard_overrides or {},
                 )
                 app.state.db_router = db_router
-
-                edi_app = next(
-                    (
-                        route.app
-                        for route in app.routes
-                        if isinstance(route, Mount) and route.path == ""
-                    ),
-                    None,
-                )
-                if edi_app is not None and isinstance(edi_app, FastAPI):
-                    edi_app.state.db_provider = db_provider
-                    logger.info("shell_startup_edi_initializing")
-                    await startup(edi_app, db_router=db_router)
-                    app.state.edi_app = edi_app
-                    if hasattr(edi_app.state, "tenant_resolver"):
-                        app.state.tenant_resolver = edi_app.state.tenant_resolver
-
-                try:
+                api_modules: list[LaunchableApiModule] = list(app.state.api_modules)
+                async with _module_lifecycle(app, db_router, api_modules):
                     yield
-                finally:
-                    if edi_app is not None and isinstance(edi_app, FastAPI):
-                        logger.info("shell_shutdown_edi_stopping")
-                        await shutdown(edi_app)
-                        app.state.edi_app = None
-                        app.state.tenant_resolver = None
-                    logger.info("shell_shutdown_closing_db_router")
-                    await db_router.close_all()
             finally:
                 logger.info("shell_shutdown_notification_stopping")
                 await notification_shutdown()

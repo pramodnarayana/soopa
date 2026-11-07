@@ -11,10 +11,13 @@ from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
 from seedwork.infra.config import load_repo_env
 
-from ucp.bootstrap.identity_bootstrap import PlatformSeedConfig, seed_platform_bootstrap
+from ucp.bootstrap.identity_bootstrap import (
+    PlatformSeedConfig,
+    ShardSeedSpec,
+    seed_platform_bootstrap,
+)
 
 load_repo_env(override=False)
-
 
 logger = structlog.get_logger(__name__)
 
@@ -42,6 +45,20 @@ async def main() -> None:
     )
     if edi_shard_dsn:
         edi_shard_dsn = normalize_to_asyncpg(edi_shard_dsn)
+    ip_shard_dsn = (
+        os.environ.get("DATABASE__SHARD_OVERRIDES__IP_SHARD_1")
+        or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
+        or os.environ.get("IP_DATABASE_URL", "")
+    )
+    extra_shards: tuple[ShardSeedSpec, ...] = ()
+    if ip_shard_dsn:
+        extra_shards = (
+            ShardSeedSpec(
+                shard_id="ip_shard_1",
+                name="IP Primary Shard",
+                dsn=normalize_to_asyncpg(ip_shard_dsn),
+            ),
+        )
 
     edi_project_id = os.environ.get("IDENTITY_EDI_PROJECT_ID", "")
 
@@ -54,6 +71,7 @@ async def main() -> None:
                 platform_admin_id=platform_admin_id,
                 edi_shard_dsn=edi_shard_dsn,
                 edi_project_id=edi_project_id,
+                extra_shards=extra_shards,
             ),
         )
     except Exception:

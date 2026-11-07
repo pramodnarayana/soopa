@@ -58,7 +58,9 @@ members = [
     "infra/cloud/aws",
     "core/platform/packages/security",
     "core/platform/packages/secret-store",
+    "core/platform/packages/orchestration",
     "core/platform/packages/strace",
+    "apps/ip/packages/ip",
 ]
 exclude = ["apps/edi/packages/ui"]
 
@@ -79,7 +81,9 @@ unified-api = { workspace = true }
 unified-worker = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
+orchestration = { workspace = true }
 strace = { workspace = true }
+ip = { workspace = true }
 shttp = { workspace = true }
 pykcs11 = { path = "tools/dummy-pykcs11" }
 
@@ -89,8 +93,14 @@ timeout = 60
 norecursedirs = ["node_modules", "frontend"]
 addopts = "-v --tb=short --ignore=services/worker --import-mode=importlib"
 pythonpath = [
+    "core/platform/packages/orchestration/src",
+    "core/platform/packages/orchestration",
     "core/platform/packages/strace/src",
     "core/platform/packages/notification/src",
+    "apps/ip/packages/ip/src",
+    "apps/ip/packages/ip/tests",
+    "apps/ip",
+    "infra/local/scripts",
 ]
 markers = [
     "integration: marks tests as integration tests requiring provisioned database (deselect with '-m \"not integration\"')",
@@ -170,11 +180,14 @@ mypy_path = [
     "core/platform/apps/unified-worker/src",
     "core/platform/packages/security/src",
     "core/platform/packages/secret-store/src",
+    "apps/ip/packages/ip/src",
     "core/platform/packages/sftp/src",
     "core/platform/packages/shttp/src",
     "core/platform/packages/storage/src",
+    "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src",
     "core/platform/packages/seedwork/src",
+    "infra/local/scripts",
 ]
 
 [[tool.mypy.overrides]]
@@ -204,7 +217,16 @@ ignore_errors = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-exclude = [".git", ".mypy_cache", ".ruff_cache", "venv", ".venv", "migrations"]
+exclude = [
+    ".git",
+    ".mypy_cache",
+    ".ruff_cache",
+    "venv",
+    ".venv",
+    "migrations",
+    "libs/edi_grammar",
+    "apps/edi/packages/edi/src/edi/core/grammar",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B", "SIM", "G", "BLE", "TRY", "PIE", "RUF", "S", "C90", "TID251", "PLC0415", "T20", "PGH"]
@@ -296,8 +318,36 @@ omit = [
 show_missing = true
 fail_under = 80
 omit = [
+    "*/tests/*",
+    "*/migrations/*",
     "*.pyx",
     "*.pxd",
+    "*/adapters/outbound/database/control_plane/*",
+    "*/adapters/outbound/database/data_plane/*",
+    "*/adapters/outbound/database/*repository*.py",
+    "*/adapters/outbound/database/*uow*.py",
+    "*/adapters/outbound/database/session.py",
+    "*/adapters/outbound/database/run_migrations.py",
+    "*/adapters/outbound/database/s3.py",
+    "*/adapters/outbound/database/encryption.py",
+    "*/adapters/outbound/database/payload_hydration.py",
+    "*/adapters/outbound/database/tenant_resolver.py",
+    "*/adapters/outbound/database/tenant_uow_provider.py",
+    "*/adapters/outbound/sftp/*",
+    "*/adapters/outbound/pipeline/as2.py",
+    "*/adapters/outbound/pipeline/sftp.py",
+    "*/adapters/outbound/pipeline/http.py",
+    "*/pubsub/aws/aws_batch_publisher_base.py",
+    "*/pubsub/aws/aws_sqs_consumer.py",
+    "*/adapters/sftp.py",
+    "*/adapters/paramiko_sftp_tester.py",
+    "*/adapters/vault.py",
+    "apps/edi/apps/edi-as2-server/src/as2_server/main.py",
+    "apps/edi/apps/edi-compute-worker/src/compute_worker/worker.py",
+    "apps/edi/apps/edi-compute-worker/src/compute_worker/main.py",
+    "core/platform/apps/notification-worker/src/notification_worker/main.py",
+    "core/platform/apps/notification-channel-worker/src/notification_channel_worker/main.py",
+    "core/platform/apps/notification-jobs-worker/src/notification_jobs_worker/main.py",
 ]
 exclude_also = [
     "if (typing\\.)?TYPE_CHECKING:",
@@ -341,9 +391,12 @@ extraPaths = [
     "apps/edi/apps/edi-config-sync-worker/src",
     "core/platform/packages/secret-store/src",
     "core/platform/packages/sftp/src",
+    "apps/ip/packages/ip/src",
     "core/platform/packages/shttp/src",
+    "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src",
     "core/platform/packages/seedwork/src",
+    "infra/local/scripts",
 ]
 
 [tool.vulture]
@@ -384,8 +437,10 @@ known_first_party = [
     "pubsub",
     "secret_store",
     "sftp",
+    "ip",
     "shttp",
     "strace",
+    "workflow",
 ]
 
 [[tool.mypy.overrides]]

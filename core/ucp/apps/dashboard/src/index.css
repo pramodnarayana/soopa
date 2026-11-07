@@ -4,6 +4,7 @@
 @import "@fontsource-variable/plus-jakarta-sans";
 @source "../../../../packages/ui";
 @source "../../../../../apps/edi/packages/ui";
+@source "../../../../../apps/ip/packages/ui";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -35,6 +36,28 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-brand-ink: var(--brand-ink);
+
+  --color-status-healthy-bg: var(--status-healthy-bg);
+  --color-status-healthy-fg: var(--status-healthy-fg);
+  --color-status-healthy-border: var(--status-healthy-border);
+
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-warning-border: var(--status-warning-border);
+
+  --color-status-critical-bg: var(--status-critical-bg);
+  --color-status-critical-fg: var(--status-critical-fg);
+  --color-status-critical-border: var(--status-critical-border);
+
+  --color-status-shadow-bg: var(--status-shadow-bg);
+  --color-status-shadow-fg: var(--status-shadow-fg);
+  --color-status-shadow-border: var(--status-shadow-border);
+
+  --color-status-replay-bg: var(--status-replay-bg);
+  --color-status-replay-fg: var(--status-replay-fg);
+  --color-status-replay-border: var(--status-replay-border);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -46,6 +69,8 @@
 
 @layer base {
   :root {
+    color-scheme: light;
+
     --background: #fafafa;
     --foreground: #0f172a;
     --card: #ffffff;
@@ -53,9 +78,10 @@
     --popover: #ffffff;
     --popover-foreground: #0f172a;
 
-    /* Vibrant Indigo Primary */
+    /* Default Core & EDI Electric Indigo Primary */
     --primary: #4f46e5;
     --primary-foreground: #ffffff;
+    --brand-ink: #4338ca;
 
     --secondary: #f1f5f9;
     --secondary-foreground: #0f172a;
@@ -69,15 +95,11 @@
     --destructive: #ef4444;
     --destructive-foreground: #ffffff;
 
-    /* Very subtle borders */
     --border: #e2e8f0;
     --input: #e2e8f0;
     --ring: #4f46e5;
-
-    /* Elegant rounded corners */
     --radius: 0.75rem;
 
-    /* Sidebar Variables */
     --sidebar: #ffffff;
     --sidebar-foreground: #0f172a;
     --sidebar-primary: #4f46e5;
@@ -86,27 +108,67 @@
     --sidebar-accent-foreground: #0f172a;
     --sidebar-border: #e2e8f0;
     --sidebar-ring: #4f46e5;
+
+    /* Semantic Operational Status Tokens (WCAG AA compliant) */
+    --status-healthy-bg: oklch(0.955 0.045 155);
+    --status-healthy-fg: oklch(0.37 0.105 155);
+    --status-healthy-border: oklch(0.84 0.095 155);
+
+    /* Warm Copper/Tangerine Hue 58° so warnings never collide with Solar Yellow brand buttons */
+    --status-warning-bg: oklch(0.955 0.05 62);
+    --status-warning-fg: oklch(0.41 0.125 55);
+    --status-warning-border: oklch(0.84 0.11 60);
+
+    --status-critical-bg: oklch(0.955 0.04 20);
+    --status-critical-fg: oklch(0.42 0.165 24);
+    --status-critical-border: oklch(0.84 0.1 20);
+
+    --status-shadow-bg: oklch(0.955 0.04 295);
+    --status-shadow-fg: oklch(0.41 0.155 295);
+    --status-shadow-border: oklch(0.84 0.095 295);
+
+    --status-replay-bg: oklch(0.955 0.04 220);
+    --status-replay-fg: oklch(0.4 0.115 225);
+    --status-replay-border: oklch(0.84 0.085 220);
+  }
+
+  /* Integration Platform (IP) Scoped Dual-Register Solar Yellow Theme (Light Mode) */
+  :root[data-product-theme='ip'] {
+    --primary: oklch(0.84 0.165 88);
+    --primary-foreground: oklch(0.18 0.02 85);
+    --brand-ink: oklch(0.54 0.145 72);
+    --accent: oklch(0.965 0.055 92);
+    --accent-foreground: oklch(0.24 0.045 80);
+    --ring: oklch(0.79 0.16 86);
+    --sidebar-primary: oklch(0.84 0.165 88);
+    --sidebar-primary-foreground: oklch(0.18 0.02 85);
+    --sidebar-accent: oklch(0.965 0.055 92);
+    --sidebar-accent-foreground: oklch(0.22 0.045 80);
+    --sidebar-ring: oklch(0.79 0.16 86);
   }
 
   .dark {
-    --background: oklch(0.2303 0.0125 264.2926);
-    --foreground: oklch(0.9219 0 0);
-    --card: oklch(0.3210 0.0078 223.6661);
-    --card-foreground: oklch(0.9219 0 0);
-    --popover: oklch(0.3210 0.0078 223.6661);
-    --popover-foreground: oklch(0.9219 0 0);
+    color-scheme: dark;
+
+    --background: oklch(0.21 0.01 260);
+    --foreground: oklch(0.94 0.005 260);
+    --card: oklch(0.26 0.01 260);
+    --card-foreground: oklch(0.94 0.005 260);
+    --popover: oklch(0.26 0.01 260);
+    --popover-foreground: oklch(0.94 0.005 260);
     --primary: oklch(0.6487 0.1538 150.3071);
-    --primary-foreground: oklch(1.0000 0 0);
-    --secondary: oklch(0.5880 0.0993 245.7394);
-    --secondary-foreground: oklch(0.9219 0 0);
-    --muted: oklch(0.3867 0 0);
-    --muted-foreground: oklch(0.7155 0 0);
-    --accent: oklch(0.6746 0.1414 261.3380);
-    --accent-foreground: oklch(0.9219 0 0);
+    --primary-foreground: oklch(1 0 0);
+    --brand-ink: oklch(0.78 0.14 265);
+    --secondary: oklch(0.32 0.015 260);
+    --secondary-foreground: oklch(0.94 0.005 260);
+    --muted: oklch(0.31 0.01 260);
+    --muted-foreground: oklch(0.73 0.01 260);
+    --accent: oklch(0.33 0.02 260);
+    --accent-foreground: oklch(0.95 0.005 260);
     --destructive: oklch(0.6368 0.2078 25.3313);
-    --destructive-foreground: oklch(1.0000 0 0);
-    --border: oklch(0.3867 0 0);
-    --input: oklch(0.3867 0 0);
+    --destructive-foreground: oklch(1 0 0);
+    --border: oklch(0.36 0.01 260);
+    --input: oklch(0.36 0.01 260);
     --ring: oklch(0.6487 0.1538 150.3071);
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
@@ -116,6 +178,41 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+
+    --status-healthy-bg: oklch(0.29 0.055 155);
+    --status-healthy-fg: oklch(0.86 0.12 155);
+    --status-healthy-border: oklch(0.45 0.095 155);
+
+    --status-warning-bg: oklch(0.3 0.06 60);
+    --status-warning-fg: oklch(0.86 0.13 65);
+    --status-warning-border: oklch(0.48 0.11 60);
+
+    --status-critical-bg: oklch(0.29 0.07 22);
+    --status-critical-fg: oklch(0.86 0.13 22);
+    --status-critical-border: oklch(0.48 0.13 22);
+
+    --status-shadow-bg: oklch(0.29 0.065 295);
+    --status-shadow-fg: oklch(0.86 0.12 295);
+    --status-shadow-border: oklch(0.47 0.11 295);
+
+    --status-replay-bg: oklch(0.29 0.055 220);
+    --status-replay-fg: oklch(0.86 0.11 220);
+    --status-replay-border: oklch(0.46 0.095 220);
+  }
+
+  /* Integration Platform (IP) Scoped Dual-Register Solar Yellow Theme (Dark Mode) */
+  .dark[data-product-theme='ip'] {
+    --primary: oklch(0.87 0.155 88);
+    --primary-foreground: oklch(0.17 0.02 85);
+    --brand-ink: oklch(0.87 0.155 88);
+    --accent: oklch(0.31 0.045 88);
+    --accent-foreground: oklch(0.96 0.03 90);
+    --ring: oklch(0.84 0.15 88);
+    --sidebar-primary: oklch(0.87 0.155 88);
+    --sidebar-primary-foreground: oklch(0.17 0.02 85);
+    --sidebar-accent: oklch(0.3 0.045 88);
+    --sidebar-accent-foreground: oklch(0.96 0.03 90);
+    --sidebar-ring: oklch(0.84 0.15 88);
   }
 }
 

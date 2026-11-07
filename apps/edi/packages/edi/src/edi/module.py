@@ -1,6 +1,6 @@
 import os
 from collections.abc import AsyncGenerator
-from typing import Protocol
+from typing import ClassVar, Protocol
 
 import fastapi
 import structlog
@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 from identity import PlatformIdentitySettings
+from pydantic.fields import FieldInfo
 from pydantic_settings import BaseSettings
 from seedwork.domain.types import JsonValue
 from seedwork.infra.config import load_settings_safely
@@ -51,6 +52,7 @@ logger = structlog.get_logger(__name__)
 class EdiHostSettingsProtocol(Protocol):
     database: PlatformDatabaseSettings
     identity: PlatformIdentitySettings
+    model_fields: ClassVar[dict[str, FieldInfo]]
 
 
 class EdiFastAPI(FastAPI):

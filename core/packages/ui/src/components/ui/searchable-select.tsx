@@ -19,7 +19,7 @@ export interface SearchableSelectOption {
 }
 
 export interface SearchableSelectProps {
-  options: SearchableSelectOption[];
+  options: readonly SearchableSelectOption[];
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -27,6 +27,7 @@ export interface SearchableSelectProps {
   disabled?: boolean;
   side?: 'top' | 'right' | 'bottom' | 'left';
   allowCustomValue?: boolean;
+  portaled?: boolean;
 }
 
 export function SearchableSelect({
@@ -38,6 +39,7 @@ export function SearchableSelect({
   disabled = false,
   side,
   allowCustomValue = false,
+  portaled = false,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState('');
@@ -69,7 +71,7 @@ export function SearchableSelect({
       </PopoverTrigger>
       <PopoverContent
         side={side}
-        portaled={false}
+        portaled={portaled}
         className="w-[var(--radix-popover-trigger-width)] p-0 rounded-xl shadow-lg border border-border overflow-hidden"
         align="start"
       >

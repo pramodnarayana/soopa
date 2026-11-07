@@ -22,12 +22,14 @@ members = [
     "identity-worker",
     "infra-aws",
     "infra-seedwork",
+    "ip",
     "modular-monolith",
     "notification",
     "notification-channel-worker",
     "notification-jobs-worker",
     "notification-worker",
     "observability",
+    "orchestration",
     "orchestrator-worker",
     "outbox",
     "platform-migrator",
@@ -1815,6 +1817,85 @@ wheels = [
 ]
 
 [[package]]
+name = "ip"
+version = "0.1.0"
+source = { editable = "apps/ip/packages/ip" }
+dependencies = [
+    { name = "aioboto3" },
+    { name = "alembic" },
+    { name = "asyncpg" },
+    { name = "botocore" },
+    { name = "cryptography" },
+    { name = "database" },
+    { name = "dependency-injector" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "identity" },
+    { name = "notification" },
+    { name = "observability" },
+    { name = "orchestration" },
+    { name = "outbox" },
+    { name = "paramiko" },
+    { name = "pubsub" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "security" },
+    { name = "seedwork" },
+    { name = "sftp" },
+    { name = "shttp" },
+    { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "strace" },
+    { name = "structlog" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-httpserver" },
+    { name = "pytest-mock" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aioboto3", specifier = ">=13.1.0" },
+    { name = "alembic", specifier = ">=1.13.0" },
+    { name = "asyncpg", specifier = ">=0.29.0" },
+    { name = "botocore" },
+    { name = "cryptography", specifier = ">=44.0.0" },
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "dependency-injector", specifier = ">=4.41.0" },
+    { name = "fastapi", specifier = "==0.136.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "identity", editable = "core/platform/packages/identity" },
+    { name = "notification", editable = "core/platform/packages/notification" },
+    { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "orchestration", editable = "core/platform/packages/orchestration" },
+    { name = "outbox", editable = "core/platform/packages/outbox" },
+    { name = "paramiko", specifier = ">=3.3.1" },
+    { name = "pubsub", editable = "core/platform/packages/pubsub" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "security", editable = "core/platform/packages/security" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sftp", editable = "core/platform/packages/sftp" },
+    { name = "shttp", editable = "core/platform/packages/shttp" },
+    { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
+    { name = "strace", editable = "core/platform/packages/strace" },
+    { name = "structlog", specifier = ">=24.1.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", specifier = ">=0.23.0" },
+    { name = "pytest-httpserver", specifier = ">=1.0.0" },
+    { name = "pytest-mock", specifier = ">=3.12.0" },
+]
+
+[[package]]
 name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
@@ -2706,6 +2787,25 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7c/b5/df4b61da899f6ebdffdbdf0c8b0f3189ee57151694ccd5b7d50ee2906241/opentelemetry_util_http-0.66b1.tar.gz", hash = "sha256:047dea1a628031f857a5a32261dc0e955bc162d39993ed1cffb8f2cff5ba8a62", size = 11586, upload-time = "2026-10-06T17:36:46.572Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/eb/9b/c77ecaea79ba0de1a11e7f06a7f5eea7043ec23f1860dcf5f03536698e4c/opentelemetry_util_http-0.66b1-py3-none-any.whl", hash = "sha256:8f443d7abcaf29c4a07b373bbd31b5b39132c0ed3c27d015a59dc0323d5b1c58", size = 8387, upload-time = "2026-10-06T17:36:06.984Z" },
+]
+
+[[package]]
+name = "orchestration"
+version = "0.1.0"
+source = { editable = "core/platform/packages/orchestration" }
+dependencies = [
+    { name = "database" },
+    { name = "observability" },
+    { name = "seedwork" },
+    { name = "sqlalchemy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "observability", editable = "core/platform/packages/observability" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sqlalchemy", specifier = ">=2.0.51" },
 ]
 
 [[package]]
@@ -4307,6 +4407,7 @@ source = { editable = "core/platform/apps/unified-api" }
 dependencies = [
     { name = "edi" },
     { name = "fastapi" },
+    { name = "ip" },
     { name = "notification" },
     { name = "observability" },
     { name = "secret-store" },
@@ -4334,6 +4435,7 @@ dev = [
 requires-dist = [
     { name = "edi", editable = "apps/edi/packages/edi" },
     { name = "fastapi", specifier = "==0.136.0" },
+    { name = "ip", editable = "apps/ip/packages/ip" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "notification", editable = "core/platform/packages/notification" },
     { name = "observability", editable = "core/platform/packages/observability" },
@@ -4366,6 +4468,7 @@ dependencies = [
     { name = "edi-dp-jobs-worker" },
     { name = "identity-jobs-worker" },
     { name = "identity-worker" },
+    { name = "ip" },
     { name = "notification-channel-worker" },
     { name = "notification-jobs-worker" },
     { name = "notification-worker" },
@@ -4386,6 +4489,7 @@ requires-dist = [
     { name = "edi-dp-jobs-worker", editable = "apps/edi/apps/edi-dp-jobs-worker" },
     { name = "identity-jobs-worker", editable = "core/platform/apps/identity-jobs-worker" },
     { name = "identity-worker", editable = "core/platform/apps/identity-worker" },
+    { name = "ip", editable = "apps/ip/packages/ip" },
     { name = "notification-channel-worker", editable = "core/platform/apps/notification-channel-worker" },
     { name = "notification-jobs-worker", editable = "core/platform/apps/notification-jobs-worker" },
     { name = "notification-worker", editable = "core/platform/apps/notification-worker" },

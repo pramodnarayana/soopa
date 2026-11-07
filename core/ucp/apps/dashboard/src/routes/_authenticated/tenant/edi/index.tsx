@@ -1,6 +1,7 @@
 import { DashboardProvider, EdiDashboardPage } from '@soopa/edi-ui';
 import { createFileRoute } from '@tanstack/react-router';
 import { useMemo } from 'react';
+import { useUcpApiClient } from '@/contexts/UcpApiClientContext';
 import { HttpDashboardRepository } from '@/lib/HttpDashboardRepository';
 import { useTenantContext } from '../../../../contexts/TenantContext';
 
@@ -16,7 +17,11 @@ export const Route = createFileRoute('/_authenticated/tenant/edi/')({
  */
 function EdiDashboard() {
   const { tenantId } = useTenantContext();
-  const dashboardRepository = useMemo(() => new HttpDashboardRepository(tenantId), [tenantId]);
+  const apiClient = useUcpApiClient();
+  const dashboardRepository = useMemo(
+    () => new HttpDashboardRepository(apiClient, tenantId),
+    [apiClient, tenantId],
+  );
 
   return (
     <DashboardProvider repository={dashboardRepository}>

@@ -1,0 +1,29 @@
+"""Unit tests for NormalizedRecord domain aggregate."""
+
+from __future__ import annotations
+
+from ip.engine.domain.normalization.events import NormalizedRecordCreatedEvent
+from ip.engine.domain.normalization.normalized_record import NormalizedRecord
+from ip.engine.domain.trace.enums import IpTraceEventType
+from strace.domain import TracedAggregateRoot
+
+
+def test_normalized_record_create_emits_creation_events() -> None:
+    norm = NormalizedRecord.create(
+        tenant_id="ten_01",
+        connection_id="ip_conn_01",
+        canonical_type="canonical.record_alpha",
+        source_id="REC-100",
+        canonical_data={"serial_number": "REC-100", "metric_value": 19.75},
+        trace_id="ip_trc_03",
+        correlation_id="corr-03",
+    )
+
+    assert isinstance(norm, TracedAggregateRoot)
+    assert norm.id.startswith("ip_nrm_")
+    assert norm.canonical_type == "canonical.record_alpha"
+    assert norm.canonical_data["metric_value"] == 19.75
+    assert len(norm.trace_events) == 1
+    assert norm.trace_events[0].event_type == IpTraceEventType.NORMALIZED.value
+    assert len(norm.domain_events) == 1
+    assert isinstance(norm.domain_events[0], NormalizedRecordCreatedEvent)
