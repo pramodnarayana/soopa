@@ -136,6 +136,20 @@ jobs:
             !**/node_modules/**
           include-hidden-files: true
 
+  integration-gate:
+    name: Integration Tests
+    needs: [test-integration]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Verify All Integration Test Shards
+        run: |
+          if [ "${{ contains(needs.test-integration.result, 'failure') || contains(needs.test-integration.result, 'cancelled') }}" = "true" ]; then
+            echo "❌ Integration tests failed or were cancelled"
+            exit 1
+          fi
+          echo "✅ All integration test shards passed successfully"
+
   build-docker:
     name: Build Modular Monolith
     needs: [validate, test-unit]
