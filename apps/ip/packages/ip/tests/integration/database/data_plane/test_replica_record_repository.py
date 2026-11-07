@@ -35,7 +35,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_l2_replica_record_repository_save_and_get_by_key(
+async def test_l2_replica_record_repository_round_trips_versioned_snapshots_by_key(
     tenant_session: TenantSession,
 ) -> None:
     repo = SqlAlchemyReplicaRecordRepository(tenant_session)
@@ -44,9 +44,9 @@ async def test_l2_replica_record_repository_save_and_get_by_key(
     replica = ReplicaRecord.create(
         tenant_id=tenant_id,
         connection_id="ip_conn_l2",
-        stream="meter_reading",
-        record_key="MTR-200",
-        data={"serial": "MTR-200", "kwh": 10.5},
+        stream="records_alpha",
+        record_key="REC-200",
+        data={"serial": "REC-200", "quantity": 10.5},
         trace_id="ip_trc_l2_v1",
         correlation_id="corr-l2",
     )
@@ -55,15 +55,15 @@ async def test_l2_replica_record_repository_save_and_get_by_key(
     fetched_v1 = await repo.get_by_key(
         tenant_id=tenant_id,
         connection_id="ip_conn_l2",
-        stream="meter_reading",
-        record_key="MTR-200",
+        stream="records_alpha",
+        record_key="REC-200",
     )
     assert fetched_v1 is not None
     assert fetched_v1.version == 1
-    assert fetched_v1.data["kwh"] == 10.5
+    assert fetched_v1.data["quantity"] == 10.5
 
     changed = fetched_v1.update_snapshot(
-        new_data={"serial": "MTR-200", "kwh": 22.8},
+        new_data={"serial": "REC-200", "quantity": 22.8},
         trace_id="ip_trc_l2_v2",
         correlation_id="corr-l2",
     )
@@ -73,17 +73,17 @@ async def test_l2_replica_record_repository_save_and_get_by_key(
     fetched_v2 = await repo.get_by_key(
         tenant_id=tenant_id,
         connection_id="ip_conn_l2",
-        stream="meter_reading",
-        record_key="MTR-200",
+        stream="records_alpha",
+        record_key="REC-200",
     )
     assert fetched_v2 is not None
     assert fetched_v2.version == 2
-    assert fetched_v2.data["kwh"] == 22.8
+    assert fetched_v2.data["quantity"] == 22.8
     assert fetched_v2.trace_id == "ip_trc_l2_v2"
 
 
 @pytest.mark.asyncio
-async def test_l2_replica_merge_batch_all_outcomes_and_outbox_emission(
+async def test_l2_replica_merge_batch_evaluates_outcomes_with_coalesced_outbox(
     tenant_session: TenantSession,
 ) -> None:
     repo = SqlAlchemyReplicaRecordRepository(tenant_session)
@@ -259,7 +259,7 @@ async def test_l2_replica_merge_batch_all_outcomes_and_outbox_emission(
 
 
 @pytest.mark.asyncio
-async def test_l2_tombstone_unseen_generations_drains_trace_and_outbox(
+async def test_l2_tombstone_unseen_generations_sweeps_stale_records_with_trace_events(
     tenant_session: TenantSession,
 ) -> None:
     repo = SqlAlchemyReplicaRecordRepository(tenant_session)
@@ -358,11 +358,11 @@ async def test_l2_replica_rejection_repository_persists_batch(
     rej = ReplicaRejection.create(
         tenant_id="ten_rej_l2",
         connection_id="ip_conn_rej",
-        stream="meters",
+        stream="records_alpha",
         inbound_record_id="ip_inb_rej",
         record_index=3,
         reason="MISSING_PRIMARY_KEY",
-        detail='{"kwh": 42}',
+        detail='{"quantity": 42}',
         trace_id="ip_trc_rej",
     )
     assert rej.id.startswith("ip_rej_")

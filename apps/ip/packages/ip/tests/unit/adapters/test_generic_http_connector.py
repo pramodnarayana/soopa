@@ -127,12 +127,12 @@ async def test_generic_http_connector_discover_introspects_streams(httpserver: H
         {
             "streams": [
                 {
-                    "name": "electric_meters",
+                    "name": "records_alpha",
                     "fields": [
-                        {"name": "meter_id", "data_type": "string", "nullable": False},
+                        {"name": "record_id", "data_type": "string", "nullable": False},
                         {"name": "firmware", "data_type": "string"},
                     ],
-                    "primary_key": ["meter_id"],
+                    "primary_key": ["record_id"],
                     "supported_sync_modes": ["FULL_REFRESH", "INCREMENTAL"],
                 }
             ]
@@ -152,9 +152,9 @@ async def test_generic_http_connector_discover_introspects_streams(httpserver: H
     assert catalog.connection_id == "ip_conn_test123"
     assert len(catalog.streams) == 1
     stream = catalog.streams[0]
-    assert stream.name == "electric_meters"
+    assert stream.name == "records_alpha"
     assert len(stream.fields) == 2
-    assert stream.primary_key == ["meter_id"]
+    assert stream.primary_key == ["record_id"]
 
 
 @pytest.mark.asyncio
@@ -182,15 +182,15 @@ async def test_generic_http_connector_discover_fallback_to_records_stream(
 
 
 @pytest.mark.asyncio
-async def test_generic_http_connector_list_and_read_records(httpserver: HTTPServer) -> None:
+async def test_generic_http_connector_reads_stream_records(httpserver: HTTPServer) -> None:
     httpserver.expect_request(
-        "/api/v1/streams/meters/records",
+        "/api/v1/streams/records_alpha/records",
         method="GET",
     ).respond_with_json(
         {
             "records": [
-                {"id": "mtr_101", "serial_number": "ITR-999-01", "model": "OpenWay Riva"},
-                {"id": "mtr_102", "serial_number": "ITR-999-02", "model": "Centron"},
+                {"id": "rec_101", "serial_number": "ACM-999-01", "model": "Alpha"},
+                {"id": "rec_102", "serial_number": "ACM-999-02", "model": "Beta"},
             ]
         }
     )
@@ -200,8 +200,8 @@ async def test_generic_http_connector_list_and_read_records(httpserver: HTTPServ
         "auth_type": "API_KEY",
         "streams": [
             {
-                "name": "meters",
-                "path": "/api/v1/streams/meters/records",
+                "name": "records_alpha",
+                "path": "/api/v1/streams/records_alpha/records",
                 "record_path": ["records"],
                 "primary_key": ["id"],
             }
@@ -212,23 +212,23 @@ async def test_generic_http_connector_list_and_read_records(httpserver: HTTPServ
     records = [
         r
         async for r in connector.read_stream(
-            stream_name="meters",
+            stream_name="records_alpha",
             public_config=public_config,
             credentials={"api_key": "secret"},
             limit=100,
         )
     ]
     assert len(records) == 2
-    assert records[0].record_id == "mtr_101"
-    assert records[0].data["serial_number"] == "ITR-999-01"
+    assert records[0].record_id == "rec_101"
+    assert records[0].data["serial_number"] == "ACM-999-01"
 
     ids = await connector.list_objects(
-        stream_name="meters",
+        stream_name="records_alpha",
         public_config=public_config,
         credentials={"api_key": "secret"},
         limit=50,
     )
-    assert ids == ["mtr_101", "mtr_102"]
+    assert ids == ["rec_101", "rec_102"]
 
 
 @pytest.mark.asyncio
@@ -236,7 +236,7 @@ async def test_generic_http_connector_read_records_handle_error_gracefully(
     httpserver: HTTPServer,
 ) -> None:
     httpserver.expect_request(
-        "/api/v1/streams/meters/records",
+        "/api/v1/streams/records_alpha/records",
         method="GET",
     ).respond_with_data("Server Error", status=500)
 
@@ -252,13 +252,13 @@ async def test_generic_http_connector_read_records_handle_error_gracefully(
         "auth_type": "API_KEY",
         "streams": [
             {
-                "name": "meters",
-                "path": "/api/v1/streams/meters/records",
+                "name": "records_alpha",
+                "path": "/api/v1/streams/records_alpha/records",
             }
         ],
     }
     ids = await connector.list_objects(
-        stream_name="meters",
+        stream_name="records_alpha",
         public_config=public_config,
         credentials={"api_key": "secret"},
     )
@@ -267,7 +267,7 @@ async def test_generic_http_connector_read_records_handle_error_gracefully(
     records = [
         r
         async for r in connector.read_stream(
-            stream_name="meters",
+            stream_name="records_alpha",
             public_config=public_config,
             credentials={"api_key": "secret"},
         )
@@ -301,9 +301,9 @@ async def test_generic_http_connector_discover_returns_failure_result_on_auth_er
 @pytest.mark.asyncio
 async def test_generic_http_connector_write_record(httpserver: HTTPServer) -> None:
     httpserver.expect_request(
-        "/api/v1/streams/meters/records",
+        "/api/v1/streams/records_alpha/records",
         method="POST",
-    ).respond_with_json({"id": "mtr_new_77", "destination_id": "api_meters_77"})
+    ).respond_with_json({"id": "rec_new_77", "destination_id": "api_records_77"})
 
     connector = GenericHttpConnector(auth_resolver=AuthStrategyResolver(), allow_private_ips=True)
     public_config: JsonDict = {
@@ -311,36 +311,36 @@ async def test_generic_http_connector_write_record(httpserver: HTTPServer) -> No
         "auth_type": "API_KEY",
         "streams": [
             {
-                "name": "meters",
-                "path": "/api/v1/streams/meters/records",
+                "name": "records_alpha",
+                "path": "/api/v1/streams/records_alpha/records",
             }
         ],
     }
     cmd = WriteRecordCommand(
-        stream_name="meters",
+        stream_name="records_alpha",
         operation="CREATE",
-        payload={"serial_number": "ITR-888-01", "model": "Riva"},
+        payload={"serial_number": "ACM-888-01", "model": "Alpha"},
     )
     result = await connector.write_record(
-        stream_name="meters",
+        stream_name="records_alpha",
         command=cmd,
         public_config=public_config,
         credentials={"api_key": "secret"},
     )
 
     assert result.success is True
-    assert result.record_id == "mtr_new_77"
+    assert result.record_id == "rec_new_77"
 
 
 @pytest.mark.asyncio
-async def test_generic_http_connector_write_record_upsert_and_rate_limit_extraction(
+async def test_generic_http_connector_write_record_upsert_extracts_rate_limit(
     httpserver: HTTPServer,
 ) -> None:
     httpserver.expect_request(
-        "/api/v1/streams/meters/records/mtr_99",
+        "/api/v1/streams/records_alpha/records/rec_99",
         method="PUT",
-        headers={"Idempotency-Key": "idem-mtr-99", "X-Custom": "grid"},
-    ).respond_with_json({"id": "mtr_99", "updated": True}, status=200)
+        headers={"Idempotency-Key": "idem-rec-99", "X-Custom": "acme"},
+    ).respond_with_json({"id": "rec_99", "updated": True}, status=200)
 
     fast_client = HttpClient(
         client=create_http_client(timeout=1.0),
@@ -358,33 +358,33 @@ async def test_generic_http_connector_write_record_upsert_and_rate_limit_extract
         "auth_type": "API_KEY",
         "streams": [
             {
-                "name": "meters",
-                "path": "/api/v1/streams/meters/records",
+                "name": "records_alpha",
+                "path": "/api/v1/streams/records_alpha/records",
             }
         ],
     }
 
     upsert_res = await connector.write_record(
-        stream_name="meters",
+        stream_name="records_alpha",
         command=WriteRecordCommand(
-            stream_name="meters",
+            stream_name="records_alpha",
             operation="UPSERT",
-            payload={"id": "mtr_99", "serial_number": "ITR-99"},
-            record_id="mtr_99",
-            idempotency_key="idem-mtr-99",
-            headers={"X-Custom": "grid"},
+            payload={"id": "rec_99", "serial_number": "ACM-99"},
+            record_id="rec_99",
+            idempotency_key="idem-rec-99",
+            headers={"X-Custom": "acme"},
         ),
         public_config=public_config,
         credentials={"api_key": "secret"},
     )
     assert upsert_res.success is True
-    assert upsert_res.record_id == "mtr_99"
+    assert upsert_res.record_id == "rec_99"
     assert upsert_res.http_method == "PUT"
-    assert upsert_res.target_url.endswith("/api/v1/streams/meters/records/mtr_99")
+    assert upsert_res.target_url.endswith("/api/v1/streams/records_alpha/records/rec_99")
 
     # Rate limit 429 with Retry-After header
     httpserver.expect_request(
-        "/api/v1/streams/meters/records",
+        "/api/v1/streams/records_alpha/records",
         method="POST",
     ).respond_with_json(
         {"error": "slow_down"},
@@ -392,11 +392,11 @@ async def test_generic_http_connector_write_record_upsert_and_rate_limit_extract
         headers={"Retry-After": "15"},
     )
     throttled_res = await connector.write_record(
-        stream_name="meters",
+        stream_name="records_alpha",
         command=WriteRecordCommand(
-            stream_name="meters",
+            stream_name="records_alpha",
             operation="CREATE",
-            payload={"serial_number": "ITR-100"},
+            payload={"serial_number": "ACM-100"},
         ),
         public_config=public_config,
         credentials={"api_key": "secret"},

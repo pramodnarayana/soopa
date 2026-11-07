@@ -54,7 +54,7 @@ function MarketplaceStep({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search connectors by name or category (e.g. Itron, SAP, Salesforce, S3)..."
+          placeholder="Search connectors by name, category, or authentication protocol..."
         />
 
         {appsView.isLoading ? (

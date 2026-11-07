@@ -41,7 +41,10 @@ async def _module_lifecycle(
             await module.startup(app, db_router)
             started_modules.append(module)
 
-        edi_app = getattr(app.state, "edi_app", None)
+        try:
+            edi_app = app.state.edi_app
+        except AttributeError:
+            edi_app = None
         if edi_app is not None and hasattr(edi_app.state, "tenant_resolver"):
             app.state.tenant_resolver = edi_app.state.tenant_resolver
 
@@ -61,7 +64,10 @@ async def _module_lifecycle(
 @asynccontextmanager
 async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Shell application lifespan context manager."""
-    settings = getattr(app.state, "settings", None) or get_settings()
+    try:
+        settings = app.state.settings
+    except AttributeError:
+        settings = get_settings()
     db_url = os.environ.get("DATABASE_URL") or str(settings.database.global_url)
     db_provider = DatabaseProvider.from_url(db_url)
     app.state.db_provider = db_provider
@@ -71,7 +77,10 @@ async def shell_lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             expected_platform_org_id=settings.identity.platform_org_id,
         )
 
-        ucp_container = getattr(app.state, "ucp_container", None)
+        try:
+            ucp_container = app.state.ucp_container
+        except AttributeError:
+            ucp_container = None
         if ucp_container is not None:
             ucp_container.db_provider.override(providers.Object(db_provider))
 

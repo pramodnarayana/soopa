@@ -25,7 +25,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_sync_run_repository_lifecycle_and_outbox(
+async def test_sync_run_repository_persists_lifecycle_events_in_outbox(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:
@@ -34,12 +34,12 @@ async def test_sync_run_repository_lifecycle_and_outbox(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Sync Run Test Connection",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://syncrun.grid-utility.com"},
+        public_config={"endpoint_url": "https://syncrun.partner.example.com"},
         encrypted_credentials=b"secret",
-        endpoint_for_fingerprint="https://syncrun.grid-utility.com",
+        endpoint_for_fingerprint="https://syncrun.partner.example.com",
     )
     await conn_repo.save(conn)
 
@@ -47,14 +47,14 @@ async def test_sync_run_repository_lifecycle_and_outbox(
     initial_gen = await run_repo.get_latest_generation_id(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="meters",
+        stream="records_alpha",
     )
     assert initial_gen == 1
 
     run = SyncRun.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="meters",
+        stream="records_alpha",
         kind=SyncRunKind.FULL_REFRESH,
         generation_id=2,
         start_checkpoint=None,
@@ -66,7 +66,7 @@ async def test_sync_run_repository_lifecycle_and_outbox(
     active = await run_repo.get_active_run(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="meters",
+        stream="records_alpha",
     )
     assert active is not None
     assert active.id == run.id
@@ -86,7 +86,7 @@ async def test_sync_run_repository_lifecycle_and_outbox(
         await run_repo.get_active_run(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
-            stream="meters",
+            stream="records_alpha",
         )
         is None
     )
@@ -102,7 +102,7 @@ async def test_sync_run_repository_lifecycle_and_outbox(
     latest_gen = await run_repo.get_latest_generation_id(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="meters",
+        stream="records_alpha",
     )
     assert latest_gen == 2
 

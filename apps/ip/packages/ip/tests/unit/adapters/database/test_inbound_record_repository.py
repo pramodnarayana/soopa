@@ -8,7 +8,7 @@ from ip.engine.adapters.outbound.database.data_plane.inbound_record_repository i
 from ip.engine.domain.replication.inbound_record import InboundRecord
 
 
-def test_inbound_record_orm_and_domain_roundtrip_mapper() -> None:
+def test_inbound_record_bidirectional_mapper_round_trips_fields() -> None:
     record = InboundRecord.create(
         tenant_id="tenant-123",
         connection_id="conn-456",

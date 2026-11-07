@@ -31,7 +31,7 @@ from ip.engine.domain.normalization.ledger import (
 from ip.engine.domain.normalization.transformation import Transformation
 
 
-def test_transformation_data_mappers_roundtrip_and_update() -> None:
+def test_transformation_data_mappers_round_trip_domain_mutations() -> None:
     transformation = Transformation.create(
         tenant_id="ten_01",
         connection_id="conn_01",
@@ -76,7 +76,7 @@ def test_transformation_data_mappers_roundtrip_and_update() -> None:
     assert orm.shadow_transformation_version is None
 
 
-def test_normalization_ledger_data_mappers_roundtrip_and_update() -> None:
+def test_normalization_ledger_data_mappers_round_trip_domain_mutations() -> None:
     entry = NormalizationLedgerEntry.create(
         tenant_id="ten_01",
         replica_record_id="rep_01",
@@ -125,7 +125,7 @@ def test_normalization_ledger_data_mappers_roundtrip_and_update() -> None:
     assert orm.trace_id == "trc_02"
 
 
-def test_normalization_rejection_and_shadow_diff_data_mappers_roundtrip() -> None:
+def test_normalization_rejection_data_mappers_round_trip_fields() -> None:
     rejection = NormalizationRejectionEntry.create(
         tenant_id="ten_01",
         replica_record_id="rep_01",
@@ -145,6 +145,8 @@ def test_normalization_rejection_and_shadow_diff_data_mappers_roundtrip() -> Non
     assert domain_rej.field_path == "amount"
     assert domain_rej.detail == "Amount must be numeric"
 
+
+def test_normalization_shadow_diff_data_mappers_round_trip_fields() -> None:
     diff = NormalizationShadowDiffEntry.create(
         tenant_id="ten_01",
         replica_record_id="rep_01",

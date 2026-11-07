@@ -54,26 +54,26 @@ import {
   SEED_WORKFLOW_ID,
 } from '../testing';
 
-describe('Application Layer — Query Keys, Result Projection, Telemetry & InMemory Ports', () => {
+describe('Application Layer Query Keys', () => {
   it('constructs deterministic hierarchical query keys across all 6 IP bounded sub-resources', () => {
     expect(ipQueryKeys.all).toEqual(['ip']);
     expect(ipQueryKeys.tenant('ten_1')).toEqual(['ip', 'tenant', 'ten_1']);
     expect(ipQueryKeys.catalog.all('ten_1')).toEqual(['ip', 'tenant', 'ten_1', 'catalog']);
-    expect(ipQueryKeys.catalog.spec('ten_1', 'itron_ami')).toEqual([
+    expect(ipQueryKeys.catalog.spec('ten_1', 'acme_source')).toEqual([
       'ip',
       'tenant',
       'ten_1',
       'catalog',
       'spec',
-      'itron_ami',
+      'acme_source',
     ]);
-    expect(ipQueryKeys.catalog.apps('ten_1', { category: 'energy' })).toEqual([
+    expect(ipQueryKeys.catalog.apps('ten_1', { category: 'api' })).toEqual([
       'ip',
       'tenant',
       'ten_1',
       'catalog',
       'apps',
-      'energy',
+      'api',
       '',
     ]);
     expect(ipQueryKeys.connections.all('ten_1')).toEqual(['ip', 'tenant', 'ten_1', 'connections']);
@@ -111,14 +111,14 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
       'conn_1',
       'stream-states',
     ]);
-    expect(ipQueryKeys.transformations.byStream('ten_1', 'conn_1', 'meter_reads')).toEqual([
+    expect(ipQueryKeys.transformations.byStream('ten_1', 'conn_1', 'records_alpha')).toEqual([
       'ip',
       'tenant',
       'ten_1',
       'transformations',
       'connection',
       'conn_1',
-      'meter_reads',
+      'records_alpha',
     ]);
     expect(ipQueryKeys.traces.all('ten_1')).toEqual(['ip', 'tenant', 'ten_1', 'traces']);
     expect(ipQueryKeys.transformations.byConnection('ten_1', 'conn_1')).toEqual([
@@ -157,8 +157,10 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
       75,
     ]);
   });
+});
 
-  it('projects Result<T, ApiProblem> query states cleanly and logs INFO/ERROR mutation outcomes', () => {
+describe('Application Layer Result Projection', () => {
+  it('projects Result query states into IpQueryView', () => {
     const refetchStub = async () => undefined;
     const okView = projectResultQuery({
       data: ok(['item_1']),
@@ -183,7 +185,15 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
     });
     expect(errView.data).toBeUndefined();
     expect(errView.problem).toEqual(problem);
+  });
 
+  it('logs structured telemetry outcomes for Result values', () => {
+    const problem = {
+      code: ApiErrorCode.RATE_LIMITED,
+      status: 429,
+      message: 'Slow down',
+      correlationId: 'corr_429',
+    };
     const logger = new RecordingLoggerFake().bind({ product: 'ip', tenant_id: SEED_TENANT_ID });
     logResultOutcome(logger, 'ip_trace.replay', ok({ newTraceId: 'trc_new' }), {
       trace_id: SEED_TRACE_ID,
@@ -199,18 +209,20 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
     expect(logger.entries[1]?.event).toBe('ip_trace.replay.failed');
     expect(logger.entries[1]?.attributes.correlation_id).toBe('corr_429');
   });
+});
 
-  it('executes full Liskov-substitutable state transitions across all 6 InMemory repositories', async () => {
+describe('Application Layer InMemory Repository Ports', () => {
+  it('executes Liskov-substitutable state transitions across InMemoryConnectionRepository', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
 
     const filteredApps = await harness.catalog.listApps(SEED_TENANT_ID, {
-      search: 'oracle',
+      search: 'globex',
     });
     expect(filteredApps.ok && filteredApps.value).toHaveLength(1);
 
     const createdConn = await harness.connections.createConnection(SEED_TENANT_ID, {
-      appId: 'oracle_mdm',
-      name: 'Oracle MDM Prod',
+      appId: 'globex_dest',
+      name: 'Globex Sink Prod',
       authType: AuthType.API_KEY,
       publicConfig: {},
       rawCredentials: { api_key: 'sec_99' },
@@ -235,27 +247,34 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
       );
       expect(fetchAfterDelete.ok).toBe(false);
     }
+  });
 
+  it('resets stream checkpoints in InMemorySyncRunRepository', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
     const resetState = await harness.syncRuns.resetStreamCheckpoint(
       SEED_TENANT_ID,
       SEED_CONNECTION_ID,
-      'meter_reads',
+      'records_alpha',
     );
     expect(resetState.ok && resetState.value.recordsSyncedCount).toBe(0);
+  });
+
+  it('promotes shadow transformations in InMemoryTransformationRepository', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
 
     const promoted = await harness.transformations.promoteShadowVersion(
       SEED_TENANT_ID,
       SEED_CONNECTION_ID,
-      'meter_reads',
+      'records_alpha',
     );
     expect(promoted.ok && promoted.value.promotedVersion).toBe(2);
 
     const rebound = await harness.transformations.bindStreamTransformation(
       SEED_TENANT_ID,
       SEED_CONNECTION_ID,
-      'voltage_events',
+      'events_beta',
       {
-        transformationId: 'itron.meter_read.to_gem',
+        transformationId: 'acme.record_alpha.to_gem',
         transformationVersion: 2,
         mode: TransformationMode.ACTIVE,
       },
@@ -263,18 +282,22 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
     expect(rebound.ok && rebound.value.wasCreated).toBe(true);
   });
 
-  it('dispatches stitches and filters replayed traces by minReplayCount across InMemory repositories', async () => {
+  it('dispatches stitches across InMemoryStitchRepository', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
 
     const dispatched = await harness.stitches.dispatchEvent(SEED_TENANT_ID, {
-      canonicalEventType: 'energy.meter_interval.v1',
-      payload: { meter_id: 'MTR-77410' },
-      correlationId: 'MTR-77410',
+      canonicalEventType: 'canonical.record_alpha.v1',
+      payload: { record_id: 'REC-77410' },
+      correlationId: 'REC-77410',
     });
     expect(dispatched.ok && dispatched.value.startedRunIds).toHaveLength(1);
 
     const def = await harness.stitches.getDefinition(SEED_TENANT_ID, SEED_WORKFLOW_ID);
     expect(def.ok && def.value.nodes).toHaveLength(2);
+  });
+
+  it('filters replayed traces by minReplayCount in InMemoryTraceRepository', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
 
     const bulk = await harness.traces.bulkReplayTransactions(
       SEED_TENANT_ID,
@@ -290,8 +313,10 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
       replayedOnlyList.ok && replayedOnlyList.value.every((item) => item.replayCount >= 1),
     ).toBe(true);
   });
+});
 
-  it('executes all TanStack mutation hooks and catalog queries end-to-end with structured telemetry', async () => {
+describe('Application Layer TanStack Hooks', () => {
+  it('executes TanStack mutation hooks end-to-end with structured telemetry', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
     const logger = new RecordingLoggerFake();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -318,7 +343,7 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
 
     function HooksProbe(): React.ReactElement {
       useCatalogAppsQuery();
-      useCatalogAppSpecQuery('itron_ami');
+      useCatalogAppSpecQuery('acme_source');
       captured = {
         checkConn: useCheckConnectionMutation(),
         createConn: useCreateConnectionMutation(),
@@ -354,7 +379,89 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
       ),
     );
 
-    // Also verify default HttpRepositoriesBundle creation inside IpUIProvider when repositories prop is omitted
+    if (!captured) {
+      throw new Error('Expected HooksProbe to capture mutations');
+    }
+    const api: CapturedMutations = captured;
+
+    await api.checkConn.mutateAsync({
+      appId: 'acme_source',
+      authType: AuthType.OAUTH2,
+      publicConfig: {},
+      rawCredentials: {},
+    });
+    await api.createConn.mutateAsync({
+      appId: 'globex_dest',
+      name: 'Globex Vault',
+      authType: AuthType.API_KEY,
+      publicConfig: {},
+      rawCredentials: { api_key: 'k' },
+    });
+    await api.discoverCat.mutateAsync();
+    await api.relinkConn.mutateAsync({ newName: 'Acme Renamed' });
+    await api.triggerSync.mutateAsync({
+      streamName: 'records_alpha',
+      forcedKind: SyncRunKind.INCREMENTAL,
+    });
+    await api.resetCheckpoint.mutateAsync('records_alpha');
+    await api.bindTransform.mutateAsync({
+      connectionId: SEED_CONNECTION_ID,
+      stream: 'records_alpha',
+      input: {
+        transformationId: 'acme.record_alpha.to_gem',
+        transformationVersion: 1,
+        mode: TransformationMode.SHADOW,
+        shadowTransformationVersion: 2,
+      },
+    });
+    await api.promoteShadow.mutateAsync({
+      connectionId: SEED_CONNECTION_ID,
+      stream: 'records_alpha',
+    });
+    await api.previewTransform.mutateAsync({
+      connectionId: SEED_CONNECTION_ID,
+      stream: 'records_alpha',
+      transformationId: 'acme.record_alpha.to_gem',
+      transformationVersion: 2,
+      recordKey: 'REC-77410',
+      samplePayload: { value_num: 42 },
+    });
+    await api.registerStitch.mutateAsync({
+      workflowId: SEED_WORKFLOW_ID,
+      workflowVersion: 1,
+      canonicalEventType: 'canonical.record_alpha.v1',
+      isTrigger: true,
+      idempotencyKeyField: 'source_id',
+      isActive: true,
+    });
+    await api.dispatchEvent.mutateAsync({
+      canonicalEventType: 'canonical.record_alpha.v1',
+      payload: { source_id: 'REC-77410' },
+      correlationId: 'REC-77410',
+    });
+    await api.replayTrace.mutateAsync({
+      traceId: SEED_TRACE_ID,
+      stage: ReplayStage.RETRY_DELIVER,
+    });
+    await api.modifyReplay.mutateAsync({
+      traceId: SEED_TRACE_ID,
+      stage: ReplayStage.RETRY_INGEST,
+      modifiedPayload: { record_id: 'REC-77410' },
+    });
+    await api.bulkReplay.mutateAsync({
+      traceIds: [SEED_TRACE_ID],
+      stage: ReplayStage.RETRY_DELIVER,
+    });
+    await api.deactivateConn.mutateAsync();
+
+    expect(logger.entries.length).toBeGreaterThanOrEqual(15);
+    expect(logger.entries.every((entry) => entry.level === LogLevel.INFO)).toBe(true);
+  });
+
+  it('instantiates default HttpRepositoriesBundle when repositories prop is omitted', () => {
+    const harness = createInMemoryIpWorkspaceSeed();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
     const defaultProviderHtml = renderToStaticMarkup(
       React.createElement(
         QueryClientProvider,
@@ -369,87 +476,9 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
       ),
     );
     expect(defaultProviderHtml).toContain('default-bundle');
-
-    if (!captured) {
-      throw new Error('Expected HooksProbe to capture mutations');
-    }
-    const api: CapturedMutations = captured;
-
-    await api.checkConn.mutateAsync({
-      appId: 'itron_ami',
-      authType: AuthType.OAUTH2,
-      publicConfig: {},
-      rawCredentials: {},
-    });
-    await api.createConn.mutateAsync({
-      appId: 'oracle_mdm',
-      name: 'Oracle Vault',
-      authType: AuthType.API_KEY,
-      publicConfig: {},
-      rawCredentials: { api_key: 'k' },
-    });
-    await api.discoverCat.mutateAsync();
-    await api.relinkConn.mutateAsync({ newName: 'Itron Renamed' });
-    await api.triggerSync.mutateAsync({
-      streamName: 'meter_reads',
-      forcedKind: SyncRunKind.INCREMENTAL,
-    });
-    await api.resetCheckpoint.mutateAsync('meter_reads');
-    await api.bindTransform.mutateAsync({
-      connectionId: SEED_CONNECTION_ID,
-      stream: 'meter_reads',
-      input: {
-        transformationId: 'itron.meter_read.to_gem',
-        transformationVersion: 1,
-        mode: TransformationMode.SHADOW,
-        shadowTransformationVersion: 2,
-      },
-    });
-    await api.promoteShadow.mutateAsync({
-      connectionId: SEED_CONNECTION_ID,
-      stream: 'meter_reads',
-    });
-    await api.previewTransform.mutateAsync({
-      connectionId: SEED_CONNECTION_ID,
-      stream: 'meter_reads',
-      transformationId: 'itron.meter_read.to_gem',
-      transformationVersion: 2,
-      recordKey: 'MTR-77410',
-      samplePayload: { kwh: 42 },
-    });
-    await api.registerStitch.mutateAsync({
-      workflowId: SEED_WORKFLOW_ID,
-      workflowVersion: 1,
-      canonicalEventType: 'energy.meter_interval.v1',
-      isTrigger: true,
-      idempotencyKeyField: 'source_id',
-      isActive: true,
-    });
-    await api.dispatchEvent.mutateAsync({
-      canonicalEventType: 'energy.meter_interval.v1',
-      payload: { source_id: 'MTR-77410' },
-      correlationId: 'MTR-77410',
-    });
-    await api.replayTrace.mutateAsync({
-      traceId: SEED_TRACE_ID,
-      stage: ReplayStage.RETRY_DELIVER,
-    });
-    await api.modifyReplay.mutateAsync({
-      traceId: SEED_TRACE_ID,
-      stage: ReplayStage.RETRY_INGEST,
-      modifiedPayload: { meter_id: 'MTR-77410' },
-    });
-    await api.bulkReplay.mutateAsync({
-      traceIds: [SEED_TRACE_ID],
-      stage: ReplayStage.RETRY_DELIVER,
-    });
-    await api.deactivateConn.mutateAsync();
-
-    expect(logger.entries.length).toBeGreaterThanOrEqual(15);
-    expect(logger.entries.every((entry) => entry.level === LogLevel.INFO)).toBe(true);
   });
 
-  it('executes all 17 TanStack query hooks against InMemory repositories and hydrates IpQueryView', async () => {
+  it('hydrates IpQueryView across all 17 TanStack query hooks', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
     const logger = new RecordingLoggerFake();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -457,8 +486,8 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
 
     function AllQueriesProbe(): React.ReactElement {
       capturedViews = [
-        useCatalogAppsQuery({ category: 'energy' }),
-        useCatalogAppSpecQuery('itron_ami'),
+        useCatalogAppsQuery({ category: 'api' }),
+        useCatalogAppSpecQuery('acme_source'),
         useConnectionsQuery('ACTIVE'),
         useConnectionDetailQuery(SEED_CONNECTION_ID),
         useSyncRunsQuery(SEED_CONNECTION_ID, 20),
@@ -471,7 +500,7 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
         useStitchRunsQuery({ workflowId: SEED_WORKFLOW_ID }),
         useStitchRunQuery(SEED_RUN_ID),
         useRecentTracesQuery({ limit: 15 }),
-        useSearchTracesByCorrelationQuery('MTR-77410', 25),
+        useSearchTracesByCorrelationQuery('REC-77410', 25),
         useIpTraceQuery(SEED_TRACE_ID, true),
         useIpTraceLineageQuery(SEED_TRACE_ID),
       ];
@@ -503,7 +532,7 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
     expect(capturedViews.every((view) => view.problem === null)).toBe(true);
   });
 
-  it('handles Result Err mutation outcomes without throwing and guards missing IpUIProvider', async () => {
+  it('throws explicit boundary error when useIpWorkspace is called outside IpUIProvider', () => {
     function OrphanConsumer(): React.ReactElement {
       useIpWorkspace();
       return React.createElement('div');
@@ -511,7 +540,9 @@ describe('Application Layer — Query Keys, Result Projection, Telemetry & InMem
     expect(() => renderToStaticMarkup(React.createElement(OrphanConsumer))).toThrow(
       'useIpWorkspace must be used inside <IpUIProvider>.',
     );
+  });
 
+  it('returns structured Result errors from mutation hooks without throwing', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
     const logger = new RecordingLoggerFake();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });

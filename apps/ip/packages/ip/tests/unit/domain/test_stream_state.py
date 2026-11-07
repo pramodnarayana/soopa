@@ -26,7 +26,7 @@ def test_create_connection_stream_state() -> None:
     assert len(state.domain_events) == 0
 
 
-def test_advance_checkpoint_updates_cursor_and_emits_event() -> None:
+def test_advance_checkpoint_updates_cursor_emitting_checkpoint_event() -> None:
     state = ConnectionStreamState.create(
         tenant_id="tenant_123",
         connection_id="conn_456",
@@ -72,7 +72,7 @@ def test_advance_checkpoint_accumulates_counts() -> None:
     assert state.records_synced_count == 25
 
 
-def test_reset_checkpoint_resets_cursor_and_count() -> None:
+def test_reset_checkpoint_clears_cursor_state() -> None:
     state = ConnectionStreamState.create(
         tenant_id="tenant_123",
         connection_id="conn_456",

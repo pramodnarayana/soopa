@@ -78,22 +78,22 @@ class _StubTieredStorage(TieredStoragePort):
         return Result.err(PayloadNotFoundError(s3_key=result.s3_key, message="Not used"))
 
 
-def test_data_plane_mappers_and_secret_header_redaction() -> None:
+def test_data_plane_mappers_redact_secret_headers() -> None:
     now = datetime.now(UTC)
     inb_orm = InboundRecordModel(
         id="ip_inb_01",
         tenant_id="ten_01",
         connection_id="conn_01",
-        app_id="itron_mdm",
+        app_id="acme_source",
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
         parent_trace_id=None,
         original_trace_id="ip_trc_01",
         replay_count=0,
-        stream_name="meter_reads",
+        stream_name="records_alpha",
         ingestion_mode="PUSH_FULL",
         request_headers={"Authorization": "Bearer secret-jwt", "X-Custom": "ok"},
-        request_body={"meter_id": "MTR-100"},
+        request_body={"record_id": "REC-100"},
         request_s3_key=None,
         request_size_bytes=128,
         request_sha256="abc123",
@@ -108,10 +108,10 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
         id="ip_rep_01",
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meter_reads",
+        stream="records_alpha",
         record_key="rk_01",
-        primary_key_values=["MTR-100"],
-        data={"meter_id": "MTR-100", "kwh": 42.5},
+        primary_key_values=["REC-100"],
+        data={"record_id": "REC-100", "amount": 42.5},
         data_hash="hash_01",
         version=1,
         generation_id=1,
@@ -121,21 +121,21 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
         updated_at=now,
         source_inbound_record_id="ip_inb_01",
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
     )
     rep = replica_record_to_domain(rep_orm)
     assert rep.id == "ip_rep_01"
-    assert rep.primary_key_values == ("MTR-100",)
+    assert rep.primary_key_values == ("REC-100",)
 
     rep_rej_orm = ReplicaRejectionModel(
         id="ip_rej_01",
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meter_reads",
+        stream="records_alpha",
         inbound_record_id="ip_inb_01",
         record_index=0,
         reason="MISSING_PRIMARY_KEY",
-        detail="Primary key meter_id is null",
+        detail="Primary key record_id is null",
         trace_id="ip_trc_01",
         created_at=now,
     )
@@ -146,11 +146,11 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
         id="ip_nrm_01",
         tenant_id="ten_01",
         connection_id="conn_01",
-        canonical_type="mdm.meter_reading",
-        source_id="MTR-100",
-        canonical_data={"meter_id": "MTR-100", "reading_kwh": 42.5},
+        canonical_type="canonical.record_alpha.v1",
+        source_id="REC-100",
+        canonical_data={"record_id": "REC-100", "amount": 42.5},
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
         parent_trace_id=None,
         original_trace_id="ip_trc_01",
         replay_count=0,
@@ -158,20 +158,20 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
     )
     nrm = normalized_record_to_domain(nrm_orm)
     assert nrm.id == "ip_nrm_01"
-    assert nrm.canonical_type == "mdm.meter_reading"
+    assert nrm.canonical_type == "canonical.record_alpha.v1"
 
     nrm_rej_orm = NormalizationRejectionModel(
         id="ip_nrj_01",
         tenant_id="ten_01",
         replica_record_id="ip_rep_01",
-        stream="meter_reads",
-        transformation_id="itron_meter_v1",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         reason_code="SCHEMA_VALIDATION_FAILED",
-        field_path="reading_kwh",
+        field_path="amount",
         detail="Must be non-negative",
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
         created_at=now,
     )
     nrm_rej = normalization_rejection_to_domain(nrm_rej_orm)
@@ -181,45 +181,45 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
         id="ip_gem_01",
         tenant_id="ten_01",
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
         parent_trace_id=None,
         original_trace_id="ip_trc_01",
         replay_count=0,
-        entity_domain="mdm.meter_reading",
-        canonical_id="ip_mdmr_01",
+        entity_domain="canonical.record_alpha.v1",
+        canonical_id="ip_canon_01",
         source_connection_id="conn_01",
-        source_entity_id="MTR-100",
+        source_entity_id="REC-100",
         dest_connection_id="conn_dest_01",
-        dest_entity_id="NS-INV-100",
+        dest_entity_id="DST-INV-100",
         created_at=now,
     )
     gem = entity_map_to_domain(gem_orm)
-    assert gem.canonical_id == "ip_mdmr_01"
+    assert gem.canonical_id == "ip_canon_01"
 
     out_orm = OutboundRecordModel(
         id="ip_out_01",
         tenant_id="ten_01",
         connection_id="conn_dest_01",
-        app_id="netsuite_erp",
+        app_id="globex_dest",
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
         parent_trace_id=None,
         original_trace_id="ip_trc_01",
         replay_count=0,
         stream_name="invoices",
         operation="CREATE",
         idempotency_key="ip_trc_01:invoices:CREATE",
-        external_record_id="NS-INV-100",
-        target_url="https://api.netsuite.example.com/v1/invoices",
+        external_record_id="DST-INV-100",
+        target_url="https://api.globex.example.com/v1/invoices",
         http_method="POST",
         request_headers={"X-API-Key": "super-secret-key"},
-        request_body={"meter_id": "MTR-100"},
+        request_body={"record_id": "REC-100"},
         request_s3_key=None,
         request_size_bytes=64,
         request_sha256="def456",
         response_status_code=201,
         response_headers={"Content-Type": "application/json"},
-        response_body={"id": "NS-INV-100"},
+        response_body={"id": "DST-INV-100"},
         response_s3_key=None,
         duration_ms=145,
         attempt_number=1,
@@ -233,7 +233,7 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
         id="ip_trace_evt_01",
         tenant_id="ten_01",
         trace_id="ip_trc_01",
-        correlation_id="MTR-100",
+        correlation_id="REC-100",
         event_type="L5_DISPATCH_DELIVERED",
         actor="SYSTEM",
         metadata_={"layer": "L5_DELIVER", "status": "SUCCESS"},
@@ -272,16 +272,16 @@ def test_data_plane_mappers_and_secret_header_redaction() -> None:
         trace_events=(evt,),
     )
     assert lineage_ctx.original_trace_id == "ip_trc_01"
-    assert lineage_ctx.correlation_id == "MTR-100"
+    assert lineage_ctx.correlation_id == "REC-100"
 
 
-def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
+def test_aggregate_lineage_items_preserves_replay_order() -> None:
     t0 = datetime.now(UTC)
     t1 = t0 + timedelta(seconds=10)
 
     root_inb = TraceStageAttemptRow(
         trace_id="ip_trc_root",
-        correlation_id="MTR-777",
+        correlation_id="REC-777",
         status=TraceStatus.INGESTED,
         primary_layer=PipelineStage.INGEST,
         created_at=t0,
@@ -291,7 +291,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
     )
     root_out = TraceStageAttemptRow(
         trace_id="ip_trc_root",
-        correlation_id="MTR-777",
+        correlation_id="REC-777",
         status=TraceStatus.FAILED,
         primary_layer=PipelineStage.DELIVER,
         created_at=t0,
@@ -301,7 +301,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
     )
     child_out = TraceStageAttemptRow(
         trace_id="ip_trc_child_1",
-        correlation_id="MTR-777",
+        correlation_id="REC-777",
         status=TraceStatus.DELIVERED,
         primary_layer=PipelineStage.DELIVER,
         created_at=t1,
@@ -324,9 +324,7 @@ def test_aggregate_lineage_items_merges_and_preserves_replay_order() -> None:
 
 
 @pytest.mark.asyncio
-async def test_trace_stage_specs_maps_in_flight_outbound_status_in_sql_and_uow_deduplicates_outbox() -> (
-    None
-):
+async def test_trace_stage_specs_map_in_flight_outbound_status_with_deduplicated_outbox() -> None:
     assert hasattr(dp_uow_module, "build_ip_outbox_record_from_envelope")
 
     provider = DatabaseProvider(get_async_engine("sqlite+aiosqlite:///:memory:"))

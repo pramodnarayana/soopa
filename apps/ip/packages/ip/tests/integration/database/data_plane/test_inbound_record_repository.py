@@ -20,7 +20,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_l1_inbound_record_repository_persists_record_trace_and_outbox(
+async def test_l1_inbound_record_repository_persists_record_with_trace_outbox(
     tenant_session: TenantSession,
 ) -> None:
     repo = SqlAlchemyInboundRecordRepository(tenant_session)
@@ -30,14 +30,14 @@ async def test_l1_inbound_record_repository_persists_record_trace_and_outbox(
     record = InboundRecord.create(
         tenant_id=tenant_id,
         connection_id="ip_conn_l1",
-        app_id="itron_mdm",
-        stream_name="meters",
+        app_id="acme_source",
+        stream_name="records_alpha",
         trace_id=trace_id,
         correlation_id="corr-l1-001",
-        payload_bytes=b'{"meter_serial": "MTR-900"}',
+        payload_bytes=b'{"record_serial": "REC-900"}',
         is_inlined=True,
         request_headers={"Content-Type": "application/json"},
-        request_body={"meter_serial": "MTR-900"},
+        request_body={"record_serial": "REC-900"},
         response_status_code=202,
         response_headers={"X-Trace-ID": trace_id},
         response_body={"status": "ACCEPTED"},
@@ -48,7 +48,7 @@ async def test_l1_inbound_record_repository_persists_record_trace_and_outbox(
     fetched = await repo.get_by_id(record.id, tenant_id)
     assert fetched is not None
     assert fetched.id == record.id
-    assert fetched.request_body == {"meter_serial": "MTR-900"}
+    assert fetched.request_body == {"record_serial": "REC-900"}
 
     by_trace = await repo.get_by_trace_id(trace_id, tenant_id)
     assert len(by_trace) == 1

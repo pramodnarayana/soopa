@@ -47,6 +47,7 @@
     "verify:ci": "./scripts/verify_ci.sh",
     "verify:ci:affected": "./scripts/verify_ci.sh --affected",
     "test:integration": "uv run python infra/local/scripts/run_in_test_env.py -- turbo run test:integration --env-mode=loose --filter=\"*@soopa/api\" --filter=\"@soopa/ip\" --filter=\"@soopa/unified-api\" --filter=\"@soopa/as2-server\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/*-cleanup\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/schemas\" --filter=\"*@soopa/secret-store\"",
+    "test:integration:core": "uv run python infra/local/scripts/run_in_test_env.py -- turbo run test:integration --env-mode=loose --filter=\"./core/**\" --filter=\"!@soopa/pubsub\"",
     "test:integration:edi": "uv run python infra/local/scripts/run_in_test_env.py --domains platform,edi -- turbo run test:integration --env-mode=loose --filter=\"*@soopa/api\" --filter=\"@soopa/as2-server\" --filter=\"*@soopa/edi*\" --filter=\"@soopa/compute-worker\" --filter=\"@soopa/config-sync-worker\" --filter=\"@soopa/orchestrator-worker\"",
     "test:integration:ip": "uv run python infra/local/scripts/run_in_test_env.py --domains platform,ip -- turbo run test:integration --env-mode=loose --filter=\"@soopa/ip\"",
     "test:mutation": "stryker run",
@@ -84,10 +85,10 @@
     "infra:bootstrap:ip": "docker compose --env-file .env --env-file versions.env down -v && pnpm infra:bootstrap-identity && pnpm infra:up:ip && pnpm credentials",
     "infra:up": "pnpm infra:sync-topology && docker compose --env-file .env --env-file versions.env up -d --wait postgres_global edi_postgres_shard ip_postgres_shard localstack sftp && docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml up -d && pnpm db:migrate:platform && pnpm db:seed && pnpm db:migrate:edi && pnpm db:migrate:ip",
     "infra:up:edi": "pnpm infra:sync-topology:edi && docker compose --env-file .env --env-file versions.env up -d --wait postgres_global edi_postgres_shard localstack sftp && docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml up -d && pnpm db:migrate:platform && pnpm db:seed:platform && pnpm db:seed:edi && pnpm db:migrate:edi",
-    "infra:up:ip": "pnpm infra:sync-topology:ip && docker compose --env-file .env --env-file versions.env up -d --wait postgres_global ip_postgres_shard localstack && docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml up -d && pnpm db:migrate:platform && pnpm db:seed:platform && pnpm db:seed:ip && pnpm db:migrate:ip",
+    "infra:up:ip": "pnpm infra:sync-topology:ip && docker compose --env-file .env --env-file versions.env up -d --wait postgres_global ip_postgres_shard localstack sftp && docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml up -d && pnpm db:migrate:platform && pnpm db:seed:platform && pnpm db:seed:ip && pnpm db:migrate:ip",
     "infra:down": "docker compose --env-file .env --env-file versions.env down && docker compose --env-file .env --env-file versions.env -f docker-compose.identity.yml down",
     "infra:down:edi": "docker compose --env-file .env --env-file versions.env stop edi_postgres_shard sftp",
-    "infra:down:ip": "docker compose --env-file .env --env-file versions.env stop ip_postgres_shard",
+    "infra:down:ip": "docker compose --env-file .env --env-file versions.env stop ip_postgres_shard sftp",
     "infra-reset": "pnpm openas2:clean && pnpm infra:start-identity && pnpm infra:clean-identity-org && docker compose --env-file .env --env-file versions.env down -v && pnpm infra:up && pnpm openas2:start && pnpm infra:init-edi && pnpm credentials",
     "infra-reset:edi": "pnpm openas2:clean && pnpm infra:start-identity && pnpm infra:clean-identity-org && docker compose --env-file .env --env-file versions.env down -v && pnpm infra:up:edi && pnpm openas2:start && pnpm infra:init-edi && pnpm credentials",
     "infra-reset:ip": "pnpm infra:start-identity && pnpm infra:clean-identity-org && docker compose --env-file .env --env-file versions.env down -v && pnpm infra:up:ip && pnpm credentials",
@@ -135,6 +136,10 @@
   "lint-staged": {
     "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
       "biome check --write --no-errors-on-unmatched"
+    ],
+    "*.{py,pyi}": [
+      "uv run ruff check --fix --force-exclude",
+      "uv run ruff format --force-exclude"
     ]
   },
   "packageManager": "pnpm@10.27.0",

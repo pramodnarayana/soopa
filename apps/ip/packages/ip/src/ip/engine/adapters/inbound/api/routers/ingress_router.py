@@ -144,7 +144,7 @@ async def ingest_record(
     ack: Annotated[InboundAckPort, Depends(get_inbound_ack)],
     stream_name: Annotated[
         str,
-        Query(..., alias="stream", description="Target stream name, e.g. meters, contacts"),
+        Query(..., alias="stream", description="Target stream name, e.g. events, contacts, orders"),
     ],
     body: Annotated[dict[str, JsonValue] | list[JsonValue], Body(...)],
     correlation_id: Annotated[str | None, Header(alias="X-Correlation-ID")] = None,

@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 import structlog
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.utils import generate_id
 
 from ip.engine.domain.constants import IpIdPrefix
@@ -261,8 +261,8 @@ class IngestStreamBatchUseCase:
         seen_batch_ids.add(message_id)
         return False
 
-    def _build_inbound_headers(self, msg: RawMessageDTO) -> dict[str, JsonValue]:
-        headers_dict: dict[str, JsonValue] = {str(k): str(v) for k, v in msg.headers.items()}
+    def _build_inbound_headers(self, msg: RawMessageDTO) -> JsonDict:
+        headers_dict: JsonDict = {str(k): str(v) for k, v in msg.headers.items()}
         if msg.partition_id:
             headers_dict["x-stream-partition"] = str(msg.partition_id)
         if msg.broker_offset:

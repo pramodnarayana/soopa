@@ -40,7 +40,7 @@ export function RegisterStitchModal({
 }) {
   const firstDef = definitions[0];
   const [workflowId, setWorkflowId] = useState(firstDef?.workflowId ?? '');
-  const [canonicalEventType, setCanonicalEventType] = useState('energy.mdm_meter_reading');
+  const [canonicalEventType, setCanonicalEventType] = useState('canonical.record.v1');
   const [idempotencyField, setIdempotencyField] = useState('source_id');
   const [concurrencyField, setConcurrencyField] = useState('source_id');
   const [isTrigger, setIsTrigger] = useState(true);
@@ -174,8 +174,8 @@ export function RegisterStitchModal({
 
 const DEFAULT_EVENT_PAYLOAD = JSON.stringify(
   {
-    source_id: 'MTR-700',
-    kwh_delivered: '142.85',
+    source_id: 'rec_1001',
+    status: 'ACTIVE',
   },
   null,
   2,
@@ -190,8 +190,8 @@ export function DispatchCanonicalEventModal({
   readonly onOpenChange: (open: boolean) => void;
   readonly onOpenRun: (runId: string) => void;
 }) {
-  const [canonicalEventType, setCanonicalEventType] = useState('energy.mdm_meter_reading');
-  const [correlationId, setCorrelationId] = useState('MTR-700');
+  const [canonicalEventType, setCanonicalEventType] = useState('canonical.record.v1');
+  const [correlationId, setCorrelationId] = useState('corr_1001');
   const [payloadText, setPayloadText] = useState(DEFAULT_EVENT_PAYLOAD);
   const [result, setResult] = useState<TriggerStitchEventResult | null>(null);
   const [problem, setProblem] = useState<ApiProblem | null>(null);

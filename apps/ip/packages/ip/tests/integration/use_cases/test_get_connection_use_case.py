@@ -39,12 +39,12 @@ async def test_get_connection_use_case(
     create_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
+            app_id="acme_source",
             name="Get Target",
             auth_type="API_KEY",
-            public_config={"endpoint_url": "https://get.grid.com"},
+            public_config={"endpoint_url": "https://get.acme.example.com"},
             raw_credentials={"api_key": "k_get"},
-            endpoint_for_fingerprint="https://get.grid.com",
+            endpoint_for_fingerprint="https://get.acme.example.com",
         )
     )
     assert create_res.success is True

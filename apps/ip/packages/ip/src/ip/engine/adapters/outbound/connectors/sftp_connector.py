@@ -10,6 +10,11 @@ from datetime import UTC, datetime
 import paramiko
 import structlog
 from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
+from ip.engine.domain.connection.enums import (
+    CatalogCategory,
+    ConnectorArchitectureType,
+    EngineConnectorId,
+)
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     PayloadNotFoundError,
@@ -45,12 +50,12 @@ class SftpConnector(BaseConnector):
     @classmethod
     def default_catalog_summary(cls) -> CatalogAppSummaryDTO:
         return CatalogAppSummaryDTO(
-            app_id="sftp",
+            app_id=EngineConnectorId.SFTP,
             display_name="SFTP File Gateway",
-            category="STORAGE",
+            category=CatalogCategory.STORAGE,
             auth_type="BASIC",
             description="Batch file ingress and delivery over secure SFTP protocol",
-            connector_type="NATIVE_PROTOCOL",
+            connector_type=ConnectorArchitectureType.NATIVE_PROTOCOL,
         )
 
     def __init__(self, timeout_seconds: float = 15.0, allow_local: bool = False) -> None:

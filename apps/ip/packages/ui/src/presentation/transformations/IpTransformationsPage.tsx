@@ -87,7 +87,7 @@ function ConfigureTransformationModal({
 }) {
   const defaultId = transformers[0]?.transformationId ?? '';
   const defaultVer = String(transformers[0]?.transformationVersion ?? 1);
-  const [stream, setStream] = useState('meter_readings');
+  const [stream, setStream] = useState('events');
   const [transformationId, setTransformationId] = useState(defaultId);
   const [version, setVersion] = useState(defaultVer);
   const [mode, setMode] = useState<TransformationModeValue>(TransformationMode.ACTIVE);

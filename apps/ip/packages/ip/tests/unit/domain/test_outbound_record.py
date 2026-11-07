@@ -12,15 +12,15 @@ from strace.domain import TracedAggregateRoot
 
 
 def test_outbound_record_create_pending() -> None:
-    data: JsonDict = {"shipment_id": "SHP-1234", "carrier": "FedEx"}
+    data: JsonDict = {"order_id": "ORD-1234", "partner": "Acme"}
     payload_bytes = json.dumps(data).encode("utf-8")
 
     record = OutboundRecord.create_pending(
-        tenant_id="ten_transport_1",
-        connection_id="ip_conn_mercury_gate",
-        app_id="mercurygate",
-        stream_name="shipments",
-        target_url="https://mercurygate.carrier.net/api/v1/shipments",
+        tenant_id="ten_partner_1",
+        connection_id="ip_conn_dest",
+        app_id="acme_destination",
+        stream_name="orders",
+        target_url="https://api.destination.example.com/api/v1/orders",
         http_method="POST",
         payload_bytes=payload_bytes,
         is_inlined=True,
@@ -32,13 +32,13 @@ def test_outbound_record_create_pending() -> None:
 
     assert isinstance(record, TracedAggregateRoot)
     assert record.id.startswith("ip_out_")
-    assert record.tenant_id == "ten_transport_1"
+    assert record.tenant_id == "ten_partner_1"
     assert record.trace_id == "ip_trc_9988"
     assert record.correlation_id == "TXN-901"
-    assert record.connection_id == "ip_conn_mercury_gate"
-    assert record.app_id == "mercurygate"
-    assert record.stream_name == "shipments"
-    assert record.target_url == "https://mercurygate.carrier.net/api/v1/shipments"
+    assert record.connection_id == "ip_conn_dest"
+    assert record.app_id == "acme_destination"
+    assert record.stream_name == "orders"
+    assert record.target_url == "https://api.destination.example.com/api/v1/orders"
     assert record.http_method == "POST"
     assert record.status == OutboundDispatchStatus.PENDING
     assert record.request_body == data
@@ -55,7 +55,7 @@ def test_outbound_record_create_pending() -> None:
     assert isinstance(event, OutboundRecordCreatedEvent)
     assert event.record_id == record.id
     assert event.trace_id == "ip_trc_9988"
-    assert event.app_id == "mercurygate"
+    assert event.app_id == "acme_destination"
     assert event.status == OutboundDispatchStatus.PENDING
     assert event.event_name == "ip.outbound_record.created"
 
@@ -64,9 +64,9 @@ def test_outbound_record_state_transitions() -> None:
     record = OutboundRecord.create_pending(
         tenant_id="ten_1",
         connection_id="ip_conn_1",
-        app_id="itron_mdm",
-        stream_name="meters",
-        target_url="https://ami.gridpower.com/api/v1/meters",
+        app_id="acme_source",
+        stream_name="records_alpha",
+        target_url="https://api.partner.example.com/api/v1/records_alpha",
         http_method="POST",
         payload_bytes=b'{"id": "1"}',
         is_inlined=True,

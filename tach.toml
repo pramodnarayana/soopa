@@ -222,12 +222,9 @@ depends_on = [
     "ip.engine.application",
     "ip.engine.adapters",
     "ip.engine.settings",
-    "ip.solutions.connectors",
-    "ip.solutions.domains",
-    "ip.solutions.stitches",
-    "ip.solutions.transformers",
     "database.models",
     "security",
+    "shttp",
     "storage",
     "orchestration.domain",
     "orchestration.ports",
@@ -242,9 +239,32 @@ depends_on = [
 [[modules]]
 path = "ip.engine.module"
 depends_on = [
+    "ip.engine.application",
     "ip.engine.bootstrap",
     "ip.engine.adapters.inbound.api",
     "ip.engine.settings"
+]
+
+[[modules]]
+path = "ip.solutions.bootstrap"
+depends_on = [
+    "ip.engine.domain",
+    "ip.engine.ports",
+    "ip.engine.adapters",
+    "ip.engine.bootstrap",
+    "ip.engine.settings",
+    "ip.solutions.connectors",
+    "ip.solutions.domains",
+    "ip.solutions.stitches",
+    "ip.solutions.transformers",
+    "shttp"
+]
+
+[[modules]]
+path = "ip.module"
+depends_on = [
+    "ip.engine.module",
+    "ip.solutions.bootstrap"
 ]
 
 [[modules]]

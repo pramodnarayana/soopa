@@ -38,12 +38,12 @@ async def test_deactivate_connection_use_case(
     create_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
-            name="Itron",
+            app_id="acme_source",
+            name="Acme Source",
             auth_type="API_KEY",
-            public_config={"endpoint_url": "https://ami.gridpower.com"},
+            public_config={"endpoint_url": "https://api.partner.example.com"},
             raw_credentials={"api_key": "valid_token"},
-            endpoint_for_fingerprint="https://ami.gridpower.com",
+            endpoint_for_fingerprint="https://api.partner.example.com",
         )
     )
     assert create_res.success is True

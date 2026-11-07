@@ -21,8 +21,8 @@ def _make_existing(
     record = ReplicaRecord.create(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meters",
-        record_key="MTR-01",
+        stream="records_alpha",
+        record_key="REC-01",
         data={"val": 1},
         trace_id="trc_01",
     )
@@ -55,7 +55,7 @@ def test_merge_policy_tombstone_when_is_deleted_true() -> None:
     assert outcome == MergeOutcome.TOMBSTONE
 
 
-def test_merge_policy_noop_when_already_tombstoned_and_is_deleted_true() -> None:
+def test_merge_policy_noop_when_deleted_flag_repeats_on_tombstoned_record() -> None:
     existing = _make_existing(deleted=True)
     outcome = ReplicaMergePolicy.evaluate(
         existing=existing,
@@ -76,7 +76,7 @@ def test_merge_policy_noop_when_hashes_match() -> None:
     assert outcome == MergeOutcome.NOOP
 
 
-def test_merge_policy_update_when_hashes_differ_and_cursor_advances() -> None:
+def test_merge_policy_update_when_advancing_cursor_carries_new_hash() -> None:
     existing = _make_existing(data_hash="old_hash", cursor_value="10")
     outcome = ReplicaMergePolicy.evaluate(
         existing=existing,

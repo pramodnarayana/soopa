@@ -34,3 +34,72 @@ rules:
     paths:
       include:
         - "**/tests/**"
+
+  - id: ban-ip-solutions-in-ip-engine
+    patterns:
+      - pattern-either:
+          - pattern: import ip.solutions.$ANY
+          - pattern: from ip.solutions import $ANY
+          - pattern: from ip.solutions.$MOD import $ANY
+    message: |
+      Enterprise Rule: Hexagonal Domain Purity. Generic platform engine modules (`ip.engine`)
+      must never import vertical domain solutions (`ip.solutions`). Inject vertical plugins
+      from the outer composition root (`ip.solutions.bootstrap` / `ip.module`).
+    severity: ERROR
+    languages:
+      - python
+    paths:
+      include:
+        - "apps/ip/packages/ip/src/ip/engine/**/*.py"
+
+  - id: ban-conjoined-and-tests-in-ip
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  def $FUNC(...):
+                    ...
+              - pattern: |
+                  async def $FUNC(...):
+                    ...
+          - metavariable-regex:
+              metavariable: $FUNC
+              regex: "^test_.*_and_.*$"
+      - patterns:
+          - pattern: |
+              class $CLS:
+                ...
+          - metavariable-regex:
+              metavariable: $CLS
+              regex: "^Test.*[a-z0-9]And[A-Z].*$"
+    message: |
+      Enterprise Rule: Single Responsibility Principle (SRP) in Tests. Split conjoined
+      `test_*_and_*` functions into atomic, single-behavior test cases so failures pinpoint
+      exact regressions.
+    severity: ERROR
+    languages:
+      - python
+    paths:
+      include:
+        - "apps/ip/packages/ip/tests/**/*.py"
+
+  - id: ban-conjoined-and-tests-in-ip-ui
+    patterns:
+      - pattern-either:
+          - pattern: describe($TITLE, ...)
+          - pattern: it($TITLE, ...)
+          - pattern: test($TITLE, ...)
+      - metavariable-regex:
+          metavariable: $TITLE
+          regex: "(?i).*(\\band\\b|&).*"
+    message: |
+      Enterprise Rule: Single Responsibility Principle (SRP) in UI Tests. Split conjoined
+      Vitest `describe`/`it`/`test` blocks containing `and` or `&` into focused single-concept
+      test cases.
+    severity: ERROR
+    languages:
+      - typescript
+    paths:
+      include:
+        - "apps/ip/packages/ui/src/__tests__/**/*.ts"
+        - "apps/ip/packages/ui/src/__tests__/**/*.tsx"

@@ -122,9 +122,7 @@ def test_energy_domain_repository_mappers() -> None:
     assert sp_dto.service_point_external_id == "SP-1"
 
 
-def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_finite_metrics() -> (
-    None
-):
+def test_energy_meter_reading_transformer_rejects_invalid_iso_timestamp() -> None:
     ctx = TransformationContext(
         tenant_id="ten_01",
         connection_id="conn_01",
@@ -132,7 +130,6 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
         trace_id="ip_trc_01",
     )
     v1 = AmiMeterReadingTransformerV1()
-    v2 = AmiMeterReadingTransformerV2()
 
     bad_ts_res = v1.transform(
         ReplicaSnapshot(
@@ -151,6 +148,16 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
 
     with pytest.raises(ValueError, match="Invalid ISO-8601 timestamp"):
         _parse_iso_datetime("not-a-timestamp")
+
+
+def test_energy_meter_reading_transformer_rejects_non_finite_required_metrics() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="meter_reads",
+        trace_id="ip_trc_01",
+    )
+    v2 = AmiMeterReadingTransformerV2()
 
     for field_name, bad_val in (
         ("kwh_delivered", "nan"),
@@ -181,6 +188,16 @@ def test_energy_meter_reading_transformer_rejects_invalid_timestamp_and_non_fini
             non_finite_res.rejections[0].reason
             == NormalizationRejectionReason.QUALITY_RULE_REJECTED
         )
+
+
+def test_energy_meter_reading_transformer_coerces_non_finite_optional_metrics() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="meter_reads",
+        trace_id="ip_trc_01",
+    )
+    v2 = AmiMeterReadingTransformerV2()
 
     valid_with_non_finite_optional = v2.transform(
         ReplicaSnapshot(

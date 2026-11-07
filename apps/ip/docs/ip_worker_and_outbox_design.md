@@ -1,7 +1,7 @@
 # Gold-Standard Design Document: High-Scalability IP Worker Topology & Transactional Outbox Event Architecture
 
-**Bounded Context:** `apps/ip` (`ip.engine` & `ip.application`) & Shared Platform (`seedwork`, `database`, `outbox`, `strace`, `pubsub`, `orchestration`, `unified-worker`)  
-**Status:** Architecture Specification (v5 — Pure 2-Plane `ip.engine` / `ip.application` Taxonomy, Zero `ip/bootstrap`, Global `EventEnvelope`, & 4 High-Scalability Pillars)  
+**Bounded Context:** `apps/ip` (`ip.engine` & `ip.application`) & Shared Platform (`seedwork`, `database`, `outbox`, `strace`, `pubsub`, `orchestration`, `unified-worker`)
+**Status:** Architecture Specification (v5 — Pure 2-Plane `ip.engine` / `ip.application` Taxonomy, Zero `ip/bootstrap`, Global `EventEnvelope`, & 4 High-Scalability Pillars)
 **Target Modules:**
 - `core/platform/packages/seedwork/src/seedwork/events.py`
 - `core/platform/packages/database/src/database/models/common.py`
@@ -298,22 +298,22 @@ To maximize throughput while protecting PostgreSQL connection pools and external
 #### 4.2 Physical Compute vs. External I/O Worker Bulkheads (`unified-worker`)
 Following our **Shopify-Style Single-Image, Multiple-Containers** paradigm, we physically isolate fast internal compute from slow external network I/O across four worker entrypoints in [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](../../../core/platform/apps/unified-worker/src/unified_worker/registry.py):
 
-1. **`ip-orchestrator-worker` (`ip.engine.adapters.inbound.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule`) — *Fast Internal Compute & DB Bulkhead*:**
+1. **`ip-orchestrator-worker` (`ip.solutions.bootstrap.IpSolutionOrchestratorWorkerModule`) — *Fast Internal Compute & DB Bulkhead*:**
    - Consumes `ip-orchestrator-realtime-queue` and `ip-orchestrator-bulk-queue` via `EventEnvelopeDispatcher`.
    - Executes **only** in-cluster CPU and shard-DB stages (`5–15ms` per record, **zero** external internet calls):
      - **L2 Replication:** [`ReplicateRecordsUseCase`](../packages/ip/src/ip/engine/application/use_cases/replication/replicate_records_use_case.py) & [`SweepStaleReplicasUseCase`](../packages/ip/src/ip/engine/application/use_cases/replication/sweep_stale_replicas_use_case.py)
      - **L3 Normalization & GEM:** [`NormalizeReplicaRecordUseCase`](../packages/ip/src/ip/engine/application/use_cases/normalization/normalize_replica_record_use_case.py) & [`BackfillStreamNormalizationUseCase`](../packages/ip/src/ip/engine/application/use_cases/normalization/backfill_stream_normalization_use_case.py)
      - **L4 Durable Stitch Orchestration:** [`DispatchCanonicalEventToStitchesUseCase`](../packages/ip/src/ip/engine/application/use_cases/stitch/dispatch_canonical_event_to_stitches_use_case.py) + immediate inline [`ExecuteStitchWorkerTickUseCase`](../packages/ip/src/ip/engine/application/use_cases/stitch/execute_stitch_worker_tick_use_case.py), plus a background `IpMultiShardStitchTickLoop` for waking expired `SLEEP` timers.
-2. **`ip-delivery-worker` (`ip.engine.adapters.inbound.workers.ip_delivery_worker.IpDeliveryWorkerModule`) — *External Network I/O Bulkhead*:**
+2. **`ip-delivery-worker` (`ip.solutions.bootstrap.IpSolutionDeliveryWorkerModule`) — *External Network I/O Bulkhead*:**
    - Consumes `ip-delivery-realtime-queue` and `ip-delivery-bulk-queue` via `EventEnvelopeDispatcher`.
    - Physically isolates slow, rate-limited, or flaky third-party ERP/CRM/MDM/AMI network calls (`500ms–30s`):
      - **L5 Outbound Delivery:** [`DeliverOutboundRecordUseCase`](../packages/ip/src/ip/engine/application/use_cases/delivery/deliver_outbound_record_use_case.py) (with `TokenManagerService` distributed OAuth2 refresh lock, crash reconciliation via `reconcile_in_flight()`, `429 Retry-After` extraction, and S3 wire-payload offload).
      - **L1 Thin-Webhook Fetch:** [`FetchRecordUseCase`](../packages/ip/src/ip/engine/application/use_cases/ingestion/fetch_record_use_case.py)
      - **L1 Pull Sync Execution:** [`RunSyncUseCase`](../packages/ip/src/ip/engine/application/use_cases/ingestion/run_sync_use_case.py)
-3. **`ip-dp-jobs-worker` (`ip.engine.adapters.inbound.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule`) — *Data Plane High-Speed Outbox Drain & Retention Worker*:**
+3. **`ip-dp-jobs-worker` (`ip.engine.bootstrap.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule`) — *Data Plane High-Speed Outbox Drain & Retention Worker*:**
    - Runs **`MultiShardOutboxDrainRelay`** (Pillar 3 Drain-Until-Empty loop across all IP tenant shards, `batch_size=500`, `0ms` active sleep / `200ms` idle sleep, concurrent SQS batching, bulk `ANY(:ids)` completion).
    - Consumes `ip-dp-jobs-queue` for scheduled maintenance jobs (`ip.data_plane.outbox_sweeper`, `ip.data_plane.outbox_cleanup`, `ip.data_plane.data_retention_cleanup`).
-4. **`ip-cp-jobs-worker` (`ip.engine.adapters.inbound.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule`) — *Control Plane Outbox & Jobs Worker*:**
+4. **`ip-cp-jobs-worker` (`ip.engine.bootstrap.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule`) — *Control Plane Outbox & Jobs Worker*:**
    - Runs `PostgresOutboxRelay` (`LISTEN ip_cp_outbox_channel` on `global_db`, where config change volume is <1 event/sec) + `OutboxSweeperUseCase` and `OutboxCleanerUseCase`.
 
 ---
@@ -332,12 +332,12 @@ Per [`platform_vs_application_architecture_plan.md`](./platform_vs_application_a
 | **1. IP Platform Kernel (`ip.engine`)** | `ip/engine/{domain,ports,application,adapters,container.py,settings.py,lifespan.py}` | All 5-layer SEDA pipeline logic, repositories, outbox, DI container, lifespan, and all 4 `LaunchableWorker` inbound adapters (`ip/engine/adapters/inbound/workers/`). | **Core modules have zero imports from `ip.application.*`.** Only `ip.engine.container` and `ip.engine.adapters.inbound.api` are allowed by `tach.toml` to wire `ip.application` registries. |
 | **2. IP Application Layer (`ip.application`)** | `ip/application/{domains,connectors,transformers,stitches}/` | Industry verticals (`energy`, `tms`), partner connectors (`itron`, `salesforce`, `sftp_csv`), pure L3 mappers, and L4 stitch templates. | Depends strictly inward on `ip.engine.domain` and `ip.engine.ports` (plus `ip.engine.adapters` for ORM base/connectors). |
 
-And [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](../../../core/platform/apps/unified-worker/src/unified_worker/registry.py) registers the four workers directly from `ip.engine.adapters.inbound.workers`:
+And [`core/platform/apps/unified-worker/src/unified_worker/registry.py`](../../../core/platform/apps/unified-worker/src/unified_worker/registry.py) registers the four workers via their composition roots:
 ```python
-    "ip-orchestrator-worker": "ip.engine.adapters.inbound.workers.ip_orchestrator_worker.IpOrchestratorWorkerModule",
-    "ip-delivery-worker": "ip.engine.adapters.inbound.workers.ip_delivery_worker.IpDeliveryWorkerModule",
-    "ip-cp-jobs-worker": "ip.engine.adapters.inbound.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule",
-    "ip-dp-jobs-worker": "ip.engine.adapters.inbound.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule",
+    "ip-orchestrator-worker": "ip.solutions.bootstrap.IpSolutionOrchestratorWorkerModule",
+    "ip-delivery-worker": "ip.solutions.bootstrap.IpSolutionDeliveryWorkerModule",
+    "ip-cp-jobs-worker": "ip.engine.bootstrap.workers.ip_cp_jobs_worker.IpCpJobsWorkerModule",
+    "ip-dp-jobs-worker": "ip.engine.bootstrap.workers.ip_dp_jobs_worker.IpDpJobsWorkerModule",
 ```
 
 ---

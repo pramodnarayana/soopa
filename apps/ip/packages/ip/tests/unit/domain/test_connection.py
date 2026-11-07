@@ -22,15 +22,15 @@ from ip.engine.domain.exceptions import (
 )
 
 
-def test_connection_creation_emits_created_event_and_sets_prefix_id() -> None:
+def test_connection_creation_initializes_pending_aggregate_with_created_event() -> None:
     tenant_id = "ten_12345"
-    app_id = "itron_mdm"
-    endpoint = "https://ami.utility.com/api"
+    app_id = "acme_source"
+    endpoint = "https://api.partner.example.com/api"
 
     connection = Connection.create(
         tenant_id=tenant_id,
         app_id=app_id,
-        name="Production Itron MDM",
+        name="Production Source API",
         auth_type=AuthType.API_KEY,
         public_config={"endpoint_url": endpoint},
         encrypted_credentials=b"encrypted_secret",
@@ -40,7 +40,7 @@ def test_connection_creation_emits_created_event_and_sets_prefix_id() -> None:
     assert connection.id.startswith(f"{IpIdPrefix.CONNECTION.value}_")
     assert connection.tenant_id == tenant_id
     assert connection.app_id == app_id
-    assert connection.name == "Production Itron MDM"
+    assert connection.name == "Production Source API"
     assert connection.auth_type == AuthType.API_KEY
     assert connection.status == ConnectionStatus.PENDING_AUTH
     assert connection.connection_fingerprint == compute_connection_fingerprint(
@@ -59,7 +59,7 @@ def test_connection_creation_emits_created_event_and_sets_prefix_id() -> None:
 def test_connection_try_create_returns_typed_error_for_empty_parameters() -> None:
     res_tenant = Connection.try_create(
         tenant_id="",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.NO_AUTH,
         public_config={},
@@ -88,7 +88,7 @@ def test_connection_try_create_returns_typed_error_for_empty_parameters() -> Non
 
     res_name = Connection.try_create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="",
         auth_type=AuthType.NO_AUTH,
         public_config={},
@@ -104,7 +104,7 @@ def test_connection_try_create_returns_typed_error_for_empty_parameters() -> Non
 def test_connection_activation_flow() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={},
@@ -122,10 +122,10 @@ def test_connection_activation_flow() -> None:
     assert isinstance(events[0], ConnectionActivatedEvent)
 
 
-def test_connection_error_and_deactivation_flow() -> None:
+def test_connection_mark_error_records_failure_state() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={},
@@ -142,6 +142,17 @@ def test_connection_error_and_deactivation_flow() -> None:
     assert len(connection.domain_events) == 1
     assert isinstance(connection.domain_events[0], ConnectionErrorRecordedEvent)
 
+
+def test_connection_deactivate_transitions_to_deactivated_state() -> None:
+    connection = Connection.create(
+        tenant_id="ten_1",
+        app_id="acme_source",
+        name="Test",
+        auth_type=AuthType.API_KEY,
+        public_config={},
+        encrypted_credentials=None,
+        endpoint_for_fingerprint="https://endpoint.com",
+    )
     connection.clear_domain_events()
     deact_res = connection.deactivate()
     assert deact_res.is_ok is True
@@ -154,7 +165,7 @@ def test_connection_error_and_deactivation_flow() -> None:
 def test_deactivated_connection_cannot_be_activated_directly() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={},
@@ -175,7 +186,7 @@ def test_deactivated_connection_cannot_be_activated_directly() -> None:
 def test_relink_restores_deactivated_connection() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={},
@@ -186,11 +197,11 @@ def test_relink_restores_deactivated_connection() -> None:
     connection.clear_domain_events()
 
     relink_res = connection.relink(
-        new_name="Restored Itron Connection", updated_encrypted_credentials=b"new_creds"
+        new_name="Restored Source Connection", updated_encrypted_credentials=b"new_creds"
     )
     assert relink_res.is_ok is True
     assert connection.status == ConnectionStatus.ACTIVE
-    assert connection.name == "Restored Itron Connection"
+    assert connection.name == "Restored Source Connection"
     assert connection.encrypted_credentials == b"new_creds"
     assert connection.deactivated_at is None
     assert len(connection.domain_events) == 1
@@ -217,7 +228,7 @@ def test_compute_connection_fingerprint_preserves_path_case() -> None:
 def test_relink_recomputes_fingerprint_when_public_config_changes() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={"endpoint_url": "https://api.example.com/v1"},
@@ -235,11 +246,11 @@ def test_relink_recomputes_fingerprint_when_public_config_changes() -> None:
 
     assert new_fingerprint != old_fingerprint
     assert new_fingerprint == compute_connection_fingerprint(
-        "ten_1", "itron_mdm", "https://api.example.com/v2"
+        "ten_1", "acme_source", "https://api.example.com/v2"
     )
 
 
-def test_compute_connection_fingerprint_preserves_userinfo_and_params() -> None:
+def test_compute_connection_fingerprint_preserves_userinfo_case() -> None:
     fp1 = compute_connection_fingerprint(
         "ten_1", "app_1", "https://UserAdmin:SecretPass@API.Example.COM:8080/path;param?query"
     )
@@ -263,7 +274,7 @@ def test_compute_connection_fingerprint_handles_malformed_url() -> None:
 def test_relink_preserves_fingerprint_when_no_endpoint_in_public_config() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={"endpoint_url": "https://api.example.com/v1"},
@@ -283,7 +294,7 @@ def test_relink_preserves_fingerprint_when_no_endpoint_in_public_config() -> Non
 def test_relink_uses_base_url_then_host_when_endpoint_url_missing() -> None:
     connection = Connection.create(
         tenant_id="ten_1",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test",
         auth_type=AuthType.API_KEY,
         public_config={"endpoint_url": "https://api.example.com/v1"},
@@ -296,19 +307,19 @@ def test_relink_uses_base_url_then_host_when_endpoint_url_missing() -> None:
         updated_public_config={"base_url": "https://base.example.com"},
     )
     assert connection.connection_fingerprint == compute_connection_fingerprint(
-        "ten_1", "itron_mdm", "https://base.example.com"
+        "ten_1", "acme_source", "https://base.example.com"
     )
 
 
 def test_connection_mark_deleted_emits_deleted_event() -> None:
     connection = Connection.create(
         tenant_id="ten_delete_1",
-        app_id="itron_mdm",
-        name="Itron MDM",
+        app_id="acme_source",
+        name="Partner Source API",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://ami.test.com"},
+        public_config={"endpoint_url": "https://api.test.example.com"},
         encrypted_credentials=b"secret",
-        endpoint_for_fingerprint="https://ami.test.com",
+        endpoint_for_fingerprint="https://api.test.example.com",
     )
     connection.clear_domain_events()
 
@@ -319,5 +330,5 @@ def test_connection_mark_deleted_emits_deleted_event() -> None:
     assert isinstance(events[0], ConnectionDeletedEvent)
     assert events[0].connection_id == connection.id
     assert events[0].tenant_id == "ten_delete_1"
-    assert events[0].app_id == "itron_mdm"
+    assert events[0].app_id == "acme_source"
     assert events[0].event_name == "ip.connection.deleted"

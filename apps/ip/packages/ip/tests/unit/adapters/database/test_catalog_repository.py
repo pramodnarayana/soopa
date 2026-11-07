@@ -13,23 +13,23 @@ from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
 from ip.engine.domain.replication.enums import SyncMode
 
 
-def test_catalog_serialize_and_to_domain_model_roundtrip() -> None:
+def test_catalog_schema_roundtrip_mapping() -> None:
     now = datetime.now(UTC)
     catalog = ConnectionCatalog.create(
         connection_id="ip_conn_12345",
         catalog_version=3,
         streams=[
             StreamSchema(
-                name="meters",
+                name="records_alpha",
                 fields=[
                     StreamField(
                         name="serial_number",
                         data_type="string",
                         nullable=False,
-                        description="Unique meter serial",
+                        description="Unique record serial",
                     ),
                     StreamField(
-                        name="voltage",
+                        name="amount",
                         data_type="number",
                         nullable=True,
                         description=None,
@@ -61,10 +61,10 @@ def test_catalog_serialize_and_to_domain_model_roundtrip() -> None:
     assert restored.catalog_hash == catalog.catalog_hash
     assert len(restored.streams) == 1
     stream = restored.streams[0]
-    assert stream.name == "meters"
+    assert stream.name == "records_alpha"
     assert list(stream.primary_key) == ["serial_number"]
     assert stream.cursor_field == "updated_at"
     assert len(stream.fields) == 2
     assert stream.fields[0].name == "serial_number"
     assert stream.fields[0].nullable is False
-    assert stream.fields[0].description == "Unique meter serial"
+    assert stream.fields[0].description == "Unique record serial"

@@ -19,7 +19,7 @@ from ip.engine.ports.outbound.uow import IpTenantResolverPort
 
 
 @pytest.mark.asyncio
-async def test_generic_registry_registration_and_unregistration() -> None:
+async def test_catalog_registry_registers_manifest_connector() -> None:
     registry = ConnectorCatalogRegistry(auth_resolver=AuthStrategyResolver())
     assert len(registry.list_apps()) == 0
 
@@ -53,7 +53,31 @@ async def test_generic_registry_registration_and_unregistration() -> None:
     assert connector_res.value is not None
     assert connector_res.value.app_id == "custom_crm"
 
+
+@pytest.mark.asyncio
+async def test_catalog_registry_unregisters_manifest_connector() -> None:
+    registry = ConnectorCatalogRegistry(auth_resolver=AuthStrategyResolver())
+    schema = ConnectorPropertySchema(
+        app_id="custom_crm",
+        display_name="Custom Enterprise CRM",
+        auth_type="API_KEY",
+        category="CRM",
+        description="Dynamic custom connector",
+        properties=(),
+    )
+    manifest = DeclarativeManifest(
+        app_id="custom_crm",
+        display_name="Custom Enterprise CRM",
+        category="CRM",
+        auth_type="API_KEY",
+        base_url_template="https://api.custom.com",
+        property_schema=schema,
+        check_action=HttpActionSpec(path="/ping", method="GET"),
+        streams={},
+    )
+    registry.register_manifest(manifest)
     registry.unregister("custom_crm")
+
     assert len(registry.list_apps()) == 0
     missing_res = registry.get_connector("custom_crm")
     assert missing_res.is_err is True
@@ -107,7 +131,7 @@ class _StubTenantResolver(IpTenantResolverPort):
         return Result.ok(("shard_01", "postgresql+asyncpg://localhost/ip"))
 
 
-def test_catalog_connector_mapping_and_container_wiring() -> None:
+def test_catalog_connector_mapping_exposes_registered_connectors() -> None:
     registry = ConnectorCatalogRegistry(auth_resolver=AuthStrategyResolver())
     schema = ConnectorPropertySchema(
         app_id="custom_crm",
@@ -141,6 +165,8 @@ def test_catalog_connector_mapping_and_container_wiring() -> None:
     assert resolved.app_id == "custom_crm"
     assert mapping.get("missing_app") is None
 
+
+def test_engine_container_wires_catalog_connector_mapping_into_use_cases() -> None:
     container = Container(
         db_router=_StubRouter(),
         tenant_resolver=_StubTenantResolver(),

@@ -8,7 +8,7 @@ from ip.engine.domain.exceptions import EndpointSecurityViolationError
 
 def test_public_internet_egress_policy_allows_valid_https() -> None:
     policy = PublicInternetEgressPolicy()
-    result = policy.validate_url("https://api.github.com/events")
+    result = policy.validate_url("https://93.184.216.34/events")
     assert result.is_ok is True
     assert result.value is None
 

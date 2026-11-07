@@ -18,7 +18,7 @@ from ip.engine.domain.normalization.transformation import (
 from ip.engine.ports.outbound.connector_port import (
     RecordEnvelopeDTO,
 )
-from ip.solutions.connectors.registry_loader import create_default_catalog_registry
+from ip.solutions.bootstrap import create_solution_catalog_registry
 from ip.solutions.connectors.sandbox.energy.ami_simulator_connector import (
     EnergyAmiSimulatorConnector,
 )
@@ -217,7 +217,7 @@ async def test_read_stream_cursor_pagination(
 
 
 def test_builtin_catalog_registry_includes_simulator() -> None:
-    registry = create_default_catalog_registry()
+    registry = create_solution_catalog_registry()
     apps = registry.list_apps(category="ENERGY")
     app_summary = next((a for a in apps if a.app_id == "energy_ami_simulator"), None)
     assert app_summary is not None

@@ -11,31 +11,31 @@ from ip.engine.domain.replication.enums import SyncMode
 def test_catalog_create_deterministic_hash_is_order_independent() -> None:
     """Catalog hash must be identical regardless of stream or field ordering."""
     stream_a_v1 = StreamSchema(
-        name="meters",
+        name="records_alpha",
         fields=[
             StreamField(name="serial_number", data_type="string", nullable=False),
-            StreamField(name="voltage", data_type="number", nullable=True),
+            StreamField(name="quantity", data_type="number", nullable=True),
         ],
         primary_key=["serial_number"],
         cursor_field="updated_at",
         supported_sync_modes=[SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL],
     )
     stream_b_v1 = StreamSchema(
-        name="interval_reads",
+        name="events_beta",
         fields=[
-            StreamField(name="reading_id", data_type="string", nullable=False),
-            StreamField(name="kwh", data_type="number", nullable=False),
+            StreamField(name="event_id", data_type="string", nullable=False),
+            StreamField(name="metric_value", data_type="number", nullable=False),
         ],
-        primary_key=["reading_id"],
+        primary_key=["event_id"],
         cursor_field="timestamp",
         supported_sync_modes=[SyncMode.INCREMENTAL, SyncMode.FULL_REFRESH],
     )
 
     # Reversed field and stream order
     stream_a_v2 = StreamSchema(
-        name="meters",
+        name="records_alpha",
         fields=[
-            StreamField(name="voltage", data_type="number", nullable=True),
+            StreamField(name="quantity", data_type="number", nullable=True),
             StreamField(name="serial_number", data_type="string", nullable=False),
         ],
         primary_key=["serial_number"],
@@ -61,15 +61,15 @@ def test_catalog_create_deterministic_hash_is_order_independent() -> None:
 
 def test_catalog_hash_changes_when_schema_mutates() -> None:
     stream_v1 = StreamSchema(
-        name="meters",
+        name="records_alpha",
         fields=[StreamField(name="serial_number", data_type="string", nullable=False)],
         primary_key=["serial_number"],
     )
     stream_v2 = StreamSchema(
-        name="meters",
+        name="records_alpha",
         fields=[
             StreamField(name="serial_number", data_type="string", nullable=False),
-            StreamField(name="firmware_version", data_type="string", nullable=True),
+            StreamField(name="schema_revision", data_type="string", nullable=True),
         ],
         primary_key=["serial_number"],
     )
@@ -89,20 +89,20 @@ def test_catalog_hash_changes_when_schema_mutates() -> None:
 
 
 def test_catalog_get_stream_lookup() -> None:
-    meters_stream = StreamSchema(
-        name="meters",
+    records_stream = StreamSchema(
+        name="records_alpha",
         fields=[StreamField(name="id", data_type="string", nullable=False)],
         primary_key=["id"],
     )
     cat = ConnectionCatalog.create(
         connection_id="ip_conn_123",
         catalog_version=1,
-        streams=[meters_stream],
+        streams=[records_stream],
     )
 
-    found = cat.get_stream("meters")
+    found = cat.get_stream("records_alpha")
     assert found is not None
-    assert found.name == "meters"
+    assert found.name == "records_alpha"
     assert cat.get_stream("non_existent_stream") is None
 
 

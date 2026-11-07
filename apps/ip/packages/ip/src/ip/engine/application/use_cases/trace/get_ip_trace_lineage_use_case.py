@@ -24,7 +24,7 @@ class GetIpTraceLineageQuery:
 
 @dataclass(frozen=True, kw_only=True)
 class SearchTracesByCorrelationQuery:
-    """Query to search traces by business correlation key (e.g. meter_id, order_id, invoice_no)."""
+    """Query to search traces by business correlation key (e.g. external_id, order_id, invoice_no)."""
 
     tenant_id: str
     correlation_id: str

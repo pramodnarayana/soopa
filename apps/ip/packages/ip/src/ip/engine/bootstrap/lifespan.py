@@ -1,50 +1,23 @@
 """Integration Platform (IP) Engine Startup and Shutdown Hooks.
 
-These hooks initialize and tear down IP infrastructure resources and IoC container state.
-They are called by the Shell's lifespan (`unified_api/bootstrap/lifespan.py`).
+These hooks initialize and tear down pure IP IoC container state on `app.state`.
+They are invoked by the Shell's lifespan (`unified_api/bootstrap/lifespan.py`).
+All physical infrastructure provisioning (such as S3 buckets and SQS queues) is
+managed declaratively via IaC (`topology.json` / Terraform), never at HTTP startup.
 """
 
 from __future__ import annotations
 
-import os
+from collections.abc import Callable
 
-import aioboto3
 import structlog
-from botocore.exceptions import BotoCoreError, ClientError
 from database.router import DatabaseRouterPort
 from dependency_injector import providers
 from fastapi import FastAPI
 
-from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
-from ip.engine.adapters.outbound.storage.tiered_storage_adapter import (
-    DEFAULT_IP_PAYLOAD_BUCKET,
-)
-from ip.engine.bootstrap.container import Container
+from ip.engine.bootstrap.container import Container, create_ip_tenant_resolver
 
 logger = structlog.get_logger(__name__)
-
-
-async def _ensure_payload_bucket(bucket_name: str = DEFAULT_IP_PAYLOAD_BUCKET) -> None:
-    """Ensures the IP payload bucket exists when running against a local S3 endpoint."""
-    endpoint_url = os.getenv("S3_ENDPOINT_URL") or os.getenv("AWS_ENDPOINT_URL")
-    if not endpoint_url:
-        return
-    session = aioboto3.Session()
-    try:
-        async with session.client(
-            "s3",
-            region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-            endpoint_url=endpoint_url,
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "test"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "test"),
-        ) as s3:
-            await s3.create_bucket(Bucket=bucket_name)
-    except (ClientError, BotoCoreError, OSError) as exc:
-        logger.info(
-            "ip_s3_bucket_init_skipped",
-            bucket=bucket_name,
-            reason=str(exc),
-        )
 
 
 async def startup(
@@ -52,18 +25,20 @@ async def startup(
     *,
     db_router: DatabaseRouterPort,
     allow_private_ips: bool = False,
+    container_configurator: Callable[[Container], object] | None = None,
 ) -> None:
-    """Initializes the IP IoC Container and SqlAlchemyIpTenantResolver and attaches them to `app.state`."""
+    """Initializes the IP IoC Container and tenant resolver and attaches them to `app.state`."""
     logger.info("ip_startup_initializing")
-    await _ensure_payload_bucket(DEFAULT_IP_PAYLOAD_BUCKET)
 
-    resolver = SqlAlchemyIpTenantResolver(db_router)
+    resolver = create_ip_tenant_resolver(db_router)
     app.state.ip_tenant_resolver = resolver
 
     container = Container()
     container.config.allow_private_ips.from_value(allow_private_ips)
     container.tenant_resolver.override(providers.Object(resolver))
     container.db_router.override(providers.Object(db_router))
+    if container_configurator is not None:
+        container_configurator(container)
     app.state.ip_container = container
     app.state.ip_tiered_storage = container.tiered_storage()
     app.state.ip_transformer_registry = container.transformer_registry()

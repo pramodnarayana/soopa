@@ -33,10 +33,10 @@ import { stringifyJsonPretty } from '../shared/status-mapping';
 
 const DEFAULT_SAMPLE_PAYLOAD = JSON.stringify(
   {
-    meter_id: 'MTR-700',
-    reading_kwh: 142.85,
+    record_id: 'rec_1001',
+    amount: 142.85,
     captured_at: '2026-10-29T08:00:00Z',
-    register_channel: 'A',
+    channel: 'primary',
   },
   null,
   2,
@@ -304,8 +304,8 @@ export function TransformationWorkbenchPanel({
 }: TransformationWorkbenchPanelProps) {
   const initial = resolveInitialTransformer(transformers);
   const [selectedId, setSelectedId] = useState(initial.id);
-  const [stream, setStream] = useState('meter_readings');
-  const [recordKey, setRecordKey] = useState('MTR-700');
+  const [stream, setStream] = useState('events');
+  const [recordKey, setRecordKey] = useState('rec_1001');
   const [activeVersion, setActiveVersion] = useState(initial.version);
   const [shadowVersion, setShadowVersion] = useState('');
   const [sampleText, setSampleText] = useState(DEFAULT_SAMPLE_PAYLOAD);

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from database.models.identity import Tenant as TenantORM
 from database.router import DatabaseRouterPort
@@ -15,8 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ip.engine.application.api_provider_port import IpApiProviderPort
 from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
 from ip.engine.bootstrap.container import (
+    DomainRepositoryFactory,
     create_default_stage_replay_processors,
     create_default_stitch_catalog,
+    create_empty_transformer_registry,
+    create_empty_workflow_definition_registry,
+    create_engine_catalog_registry,
     create_ip_control_plane_uow,
     create_ip_inbound_ack,
     create_ip_inbound_decoder,
@@ -49,11 +53,6 @@ from ip.engine.ports.outbound.uow import (
     IpTenantResolverPort,
 )
 from ip.engine.settings import get_ip_engine_settings
-from ip.solutions.connectors.registry_loader import create_default_catalog_registry
-from ip.solutions.stitches.registry_loader import (
-    create_default_workflow_definition_registry,
-)
-from ip.solutions.transformers.registry_loader import create_default_transformer_registry
 
 
 def _as_async_session(handle: object) -> AsyncSession:
@@ -69,7 +68,27 @@ def _as_db_router(handle: object) -> DatabaseRouterPort:
 
 
 class IpApiProvider(IpApiProviderPort):
-    """Composition Root implementation of IpApiProviderPort."""
+    """Domain-agnostic Composition Root implementation of IpApiProviderPort."""
+
+    def __init__(
+        self,
+        *,
+        catalog_registry_factory: Callable[[bool], CatalogRegistryPort] | None = None,
+        transformer_registry_factory: Callable[[], TransformerRegistryPort] | None = None,
+        stitch_catalog_factory: Callable[[], StitchCatalogRegistryPort] | None = None,
+        workflow_definition_registry_factory: Callable[[], WorkflowDefinitionRegistryPort]
+        | None = None,
+        domain_repository_factories: Mapping[str, DomainRepositoryFactory] | None = None,
+    ) -> None:
+        self._catalog_registry_factory = catalog_registry_factory
+        self._transformer_registry_factory = (
+            transformer_registry_factory or create_empty_transformer_registry
+        )
+        self._stitch_catalog_factory = stitch_catalog_factory or create_default_stitch_catalog
+        self._workflow_definition_registry_factory = (
+            workflow_definition_registry_factory or create_empty_workflow_definition_registry
+        )
+        self._domain_repository_factories = domain_repository_factories
 
     def create_control_plane_uow(self, global_session: object) -> IpControlPlaneUnitOfWorkPort:
         return create_ip_control_plane_uow(_as_async_session(global_session))
@@ -88,6 +107,7 @@ class IpApiProvider(IpApiProviderPort):
             resolver=resolved_resolver,
             db_router=typed_router,
             storage=resolved_storage,
+            domain_repository_factories=self._domain_repository_factories,
         )
         return provider, resolved_resolver, resolved_storage
 
@@ -103,7 +123,9 @@ class IpApiProvider(IpApiProviderPort):
 
     def get_catalog_registry(self) -> CatalogRegistryPort:
         settings = get_ip_engine_settings()
-        return create_default_catalog_registry(allow_private_ips=settings.allow_private_ips)
+        if self._catalog_registry_factory is not None:
+            return self._catalog_registry_factory(settings.allow_private_ips)
+        return create_engine_catalog_registry(allow_private_ips=settings.allow_private_ips)
 
     def get_cipher(self) -> CipherPort:
         return SecurityProvider.get_cipher()
@@ -129,13 +151,13 @@ class IpApiProvider(IpApiProviderPort):
         return create_ip_token_refresher(allow_private_ips=settings.allow_private_ips)
 
     def create_transformer_registry(self) -> TransformerRegistryPort:
-        return create_default_transformer_registry()
+        return self._transformer_registry_factory()
 
     def create_stitch_catalog_registry(self) -> StitchCatalogRegistryPort:
-        return create_default_stitch_catalog()
+        return self._stitch_catalog_factory()
 
     def create_workflow_definition_registry(self) -> WorkflowDefinitionRegistryPort:
-        return create_default_workflow_definition_registry()
+        return self._workflow_definition_registry_factory()
 
     def create_stitch_shard_gateway(
         self,

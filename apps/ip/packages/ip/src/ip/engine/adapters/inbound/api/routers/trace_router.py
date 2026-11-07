@@ -111,7 +111,7 @@ async def search_traces_by_correlation_id(
     correlation_id: str = Query(
         ...,
         min_length=1,
-        description="Business correlation key (e.g. meter_id, order_id, invoice_no)",
+        description="Business correlation key (e.g. external_id, order_id, invoice_no)",
     ),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[IpTraceLineageItemHttpResponse] | Response:

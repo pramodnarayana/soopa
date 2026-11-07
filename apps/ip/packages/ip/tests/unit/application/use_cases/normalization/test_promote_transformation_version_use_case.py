@@ -82,8 +82,8 @@ async def test_promote_transformation_version_success() -> None:
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         mode=TransformationMode.SHADOW,
         shadow_transformation_version=2,
@@ -94,7 +94,7 @@ async def test_promote_transformation_version_success() -> None:
     command = PromoteTransformationVersionCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
     )
 
     result = await use_case.execute(command)
@@ -107,7 +107,7 @@ async def test_promote_transformation_version_success() -> None:
 
     # Verify state in repository
     updated = await uow.transformations.get_by_stream(
-        tenant_id="tenant_1", connection_id="conn_1", stream="readings"
+        tenant_id="tenant_1", connection_id="conn_1", stream="records_alpha"
     )
     assert updated is not None
     assert updated.transformation_version == 2
@@ -128,8 +128,8 @@ async def test_promote_fails_when_no_shadow_version() -> None:
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         mode=TransformationMode.ACTIVE,
         shadow_transformation_version=None,
@@ -140,7 +140,7 @@ async def test_promote_fails_when_no_shadow_version() -> None:
     command = PromoteTransformationVersionCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
     )
 
     result = await use_case.execute(command)

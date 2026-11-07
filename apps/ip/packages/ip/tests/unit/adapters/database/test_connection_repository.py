@@ -20,8 +20,8 @@ def test_connection_record_to_domain_model_mapping() -> None:
     record = ConnectionRecord(
         id="ip_conn_12345",
         tenant_id="ten_01",
-        app_id="itron_mdm",
-        name="Production Itron",
+        app_id="acme_source",
+        name="Production Acme",
         auth_type="API_KEY",
         public_config={"endpoint_url": "https://api.example.com"},
         encrypted_credentials=b"kid:k1:ciphertext",
@@ -41,8 +41,8 @@ def test_connection_record_to_domain_model_mapping() -> None:
 
     assert domain.id == "ip_conn_12345"
     assert domain.tenant_id == "ten_01"
-    assert domain.app_id == "itron_mdm"
-    assert domain.name == "Production Itron"
+    assert domain.app_id == "acme_source"
+    assert domain.name == "Production Acme"
     assert domain.auth_type == AuthType.API_KEY
     assert domain.public_config == {"endpoint_url": "https://api.example.com"}
     assert domain.encrypted_credentials == b"kid:k1:ciphertext"
@@ -56,7 +56,7 @@ def test_connection_update_record_from_domain_mapping() -> None:
     record = ConnectionRecord(
         id="ip_conn_12345",
         tenant_id="ten_01",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Initial Name",
         auth_type="API_KEY",
         public_config={"endpoint_url": "https://old.example.com"},
@@ -75,7 +75,7 @@ def test_connection_update_record_from_domain_mapping() -> None:
 
     domain = Connection.create(
         tenant_id="ten_01",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Updated Name",
         auth_type=AuthType.OAUTH2,
         public_config={"endpoint_url": "https://new.example.com"},

@@ -38,7 +38,7 @@ async def test_sftp_connector_check_failure_with_invalid_credentials() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sftp_connector_write_and_read_stream_against_local_sftp() -> None:
+async def test_sftp_connector_round_trips_stream_file_against_local_sftp() -> None:
     connector = SftpConnector(timeout_seconds=5.0, allow_local=True)
     public_config: JsonDict = {"host": "127.0.0.1", "port": 2222, "base_directory": "/upload"}
     credentials: JsonDict = {"username": "testuser", "password": "pass"}
@@ -50,7 +50,7 @@ async def test_sftp_connector_write_and_read_stream_against_local_sftp() -> None
             stream_name="files",
             operation="CREATE",
             record_id=filename,
-            payload={"filename": filename, "content": "meter_id,kwh\nMTR-01,42.5\n"},
+            payload={"filename": filename, "content": "record_id,quantity\nREC-01,42.5\n"},
         ),
         public_config=public_config,
         credentials=credentials,

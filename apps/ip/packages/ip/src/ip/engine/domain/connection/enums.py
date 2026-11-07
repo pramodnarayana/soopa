@@ -69,3 +69,31 @@ class PaginationType(StrEnum):
     PAGE_NUMBER = "page_number"
     CURSOR = "cursor"
     LINK_HEADER = "link_header"
+
+
+class EngineConnectorId(StrEnum):
+    """Built-in protocol-level engine connector application identifiers."""
+
+    HTTP = "http"
+    SFTP = "sftp"
+
+
+class CatalogCategory(StrEnum):
+    """Standard domain-agnostic application categories for the connector catalog."""
+
+    API = "API"
+    CRM = "CRM"
+    BILLING = "BILLING"
+    STORAGE = "STORAGE"
+    SANDBOX = "SANDBOX"
+    ITSM = "ITSM"
+
+
+class ConnectorArchitectureType(StrEnum):
+    """Runtime architecture classifications for catalog connectors."""
+
+    DECLARATIVE_HTTP = "DECLARATIVE_HTTP"
+    GENERIC_HTTP = "GENERIC_HTTP"
+    NATIVE_PROTOCOL = "NATIVE_PROTOCOL"
+    NATIVE_SIMULATOR = "NATIVE_SIMULATOR"
+    CUSTOM_PYTHON = "CUSTOM_PYTHON"

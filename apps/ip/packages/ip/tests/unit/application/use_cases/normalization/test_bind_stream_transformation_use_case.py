@@ -86,7 +86,7 @@ async def test_bind_new_stream_transformation() -> None:
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         mode=TransformationMode.ACTIVE,
         shadow_transformation_version=2,
@@ -98,7 +98,7 @@ async def test_bind_new_stream_transformation() -> None:
     assert dto.id.startswith("ip_xfrm_")
     assert dto.connection_id == "conn_1"
     assert dto.stream == "readings"
-    assert dto.transformation_id == "energy.ami_meter_reading"
+    assert dto.transformation_id == "synthetic.record_alpha"
     assert dto.transformation_version == 1
     assert dto.shadow_transformation_version == 2
     assert dto.mode == "ACTIVE"
@@ -108,7 +108,7 @@ async def test_bind_new_stream_transformation() -> None:
     assert len(uow.transformations.events) == 1
     event = uow.transformations.events[0]
     assert isinstance(event, TransformationChangedEvent)
-    assert event.transformation_id == "energy.ami_meter_reading"
+    assert event.transformation_id == "synthetic.record_alpha"
     assert event.transformation_version == 1
 
 
@@ -119,7 +119,7 @@ async def test_update_existing_stream_transformation() -> None:
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
     )
     await uow.transformations.save(existing)
@@ -129,7 +129,7 @@ async def test_update_existing_stream_transformation() -> None:
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        transformation_id="synthetic.record_alpha",
         transformation_version=2,
         mode=TransformationMode.SHADOW,
     )
@@ -152,7 +152,7 @@ async def test_bind_stream_transformation_rejects_unregistered_version() -> None
         tenant_id="tenant_1",
         connection_id="conn_1",
         stream="readings",
-        transformation_id="energy.unregistered_transformer",
+        transformation_id="synthetic.unregistered_transformer",
         transformation_version=1,
     )
     result = await use_case.execute(command)

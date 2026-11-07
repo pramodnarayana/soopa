@@ -200,23 +200,23 @@ async def test_ingest_stream_batch_success() -> None:
     messages = [
         RawMessageDTO(
             message_id="msg_001",
-            raw_payload=b'{"device_id":"meter_1","kwh":10.5}',
+            raw_payload=b'{"device_id":"dev_1","quantity":10.5}',
             partition_id="part_0",
             broker_offset="101",
         ),
         RawMessageDTO(
             message_id="msg_002",
-            raw_payload=b'{"device_id":"meter_2","kwh":12.1}',
+            raw_payload=b'{"device_id":"dev_2","quantity":12.1}',
             partition_id="part_0",
             broker_offset="102",
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
-        app_id="grid_streamer",
-        stream_name="readings",
+        app_id="partner_streamer",
+        stream_name="telemetry",
         batch=batch,
     )
 
@@ -246,8 +246,8 @@ async def test_ingest_stream_batch_deduplication_skips_existing() -> None:
     existing = InboundRecord.create(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
-        app_id="grid_streamer",
-        stream_name="readings",
+        app_id="partner_streamer",
+        stream_name="telemetry",
         payload_bytes=b"{}",
         is_inlined=True,
         external_event_id="msg_001",
@@ -258,19 +258,19 @@ async def test_ingest_stream_batch_deduplication_skips_existing() -> None:
     messages = [
         RawMessageDTO(
             message_id="msg_001",  # duplicate!
-            raw_payload=b'{"device_id":"meter_1","kwh":10.5}',
+            raw_payload=b'{"device_id":"dev_1","quantity":10.5}',
         ),
         RawMessageDTO(
             message_id="msg_002",  # new!
-            raw_payload=b'{"device_id":"meter_2","kwh":12.1}',
+            raw_payload=b'{"device_id":"dev_2","quantity":12.1}',
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
-        app_id="grid_streamer",
-        stream_name="readings",
+        app_id="partner_streamer",
+        stream_name="telemetry",
         batch=batch,
     )
 
@@ -292,15 +292,15 @@ async def test_ingest_stream_batch_failure_returns_nack() -> None:
     messages = [
         RawMessageDTO(
             message_id="msg_001",
-            raw_payload=b'{"device_id":"meter_1"}',
+            raw_payload=b'{"device_id":"dev_1"}',
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
-        app_id="grid_streamer",
-        stream_name="readings",
+        app_id="partner_streamer",
+        stream_name="telemetry",
         batch=batch,
     )
 
@@ -332,12 +332,12 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
             raw_payload=b"INVALID_PAYLOAD_2",
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
-        app_id="grid_streamer",
-        stream_name="readings",
+        app_id="partner_streamer",
+        stream_name="telemetry",
         batch=batch,
     )
 
@@ -362,7 +362,7 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ingest_stream_batch_partial_failure_processes_valid_and_rejects_failing() -> None:
+async def test_ingest_stream_batch_partial_failure_isolates_corrupt_messages() -> None:
     class ConditionalFailingDecoder(InboundPayloadDecoderPort):
         def decode(self, *, content_type: str, raw_body: bytes) -> Result[JsonDict, Exception]:
             if b"INVALID" in raw_body:
@@ -380,23 +380,23 @@ async def test_ingest_stream_batch_partial_failure_processes_valid_and_rejects_f
     messages = [
         RawMessageDTO(
             message_id="msg_valid",
-            raw_payload=b'{"device_id":"meter_1","kwh":10.5}',
+            raw_payload=b'{"device_id":"dev_1","quantity":10.5}',
         ),
         RawMessageDTO(
             message_id="msg_valid",  # in-batch duplicate of msg_valid
-            raw_payload=b'{"device_id":"meter_1_duplicate","kwh":99.9}',
+            raw_payload=b'{"device_id":"dev_1_duplicate","quantity":99.9}',
         ),
         RawMessageDTO(
             message_id="msg_failing",  # triggers ValueError in decoder
             raw_payload=b"INVALID_PAYLOAD",
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="readings", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
-        app_id="grid_streamer",
-        stream_name="readings",
+        app_id="partner_streamer",
+        stream_name="telemetry",
         batch=batch,
     )
 

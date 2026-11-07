@@ -11,7 +11,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRecord
 from ip.engine.domain.replication.replica_record import ReplicaRecord
 
 
-def test_replica_record_mapper_and_update_record_from_domain() -> None:
+def test_replica_record_mapper_round_trips_domain_fields() -> None:
     now = datetime.now(UTC)
     orm = ReplicaRecordModel(
         id="ip_rep_01",
@@ -19,12 +19,12 @@ def test_replica_record_mapper_and_update_record_from_domain() -> None:
         trace_id="trc_01",
         correlation_id="corr_01",
         connection_id="conn_01",
-        stream="meter",
-        record_key="MTR-01",
-        primary_key_values=["MTR-01"],
+        stream="records_alpha",
+        record_key="REC-01",
+        primary_key_values=["REC-01"],
         cursor_value="100",
         cursor_kind="INTEGER",
-        data={"kwh": 10.0},
+        data={"quantity": 10.0},
         data_hash="h1",
         version=1,
         generation_id=1,
@@ -39,21 +39,21 @@ def test_replica_record_mapper_and_update_record_from_domain() -> None:
     domain = SqlAlchemyReplicaRecordRepository._to_domain_model(orm)
     assert domain.id == "ip_rep_01"
     assert domain.version == 1
-    assert domain.stream == "meter"
-    assert domain.record_key == "MTR-01"
+    assert domain.stream == "records_alpha"
+    assert domain.record_key == "REC-01"
     assert domain.cursor_value == "100"
 
     updated_domain = ReplicaRecord.create(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meter",
-        record_key="MTR-01",
-        data={"kwh": 25.0},
+        stream="records_alpha",
+        record_key="REC-01",
+        data={"quantity": 25.0},
         trace_id="trc_02",
     )
     updated_domain.version = 2
     SqlAlchemyReplicaRecordRepository._update_record_from_domain(orm, updated_domain)
 
-    assert orm.data == {"kwh": 25.0}
+    assert orm.data == {"quantity": 25.0}
     assert orm.version == 2
     assert orm.trace_id == "trc_02"

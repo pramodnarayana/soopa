@@ -54,7 +54,7 @@ class MqttConsumerClientPort(Protocol):
 
 
 class MqttSubscribeTransport(SubscribeTransportPort):
-    """MQTT subscriber transport for Smart Grid AMI interval readings and IoT streams.
+    """MQTT subscriber transport for brokered telemetry and event streams.
 
     In compliance with Section 6.3:
     - Library/Semantics: aiomqtt / MQTT 3.1.1 & 5.0.

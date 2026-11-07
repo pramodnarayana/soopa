@@ -91,10 +91,10 @@ class _FakeNotificationOutbox(NotificationOutboxPort):
         self.envelopes.append(envelope)
 
 
-class _EnrichOutageContextStepHandler(StepHandlerPort[JsonDict, JsonDict]):
+class _EnrichIncidentContextStepHandler(StepHandlerPort[JsonDict, JsonDict]):
     @property
     def step_type(self) -> str:
-        return "ip.stitch.enrich_outage"
+        return "ip.stitch.enrich_incident"
 
     @property
     def effect_policy(self) -> EffectPolicy:
@@ -106,10 +106,10 @@ class _EnrichOutageContextStepHandler(StepHandlerPort[JsonDict, JsonDict]):
         return Result.ok(
             {
                 "channel": "email",
-                "template_id": "tpl_outage_restored",
-                "recipient": "grid-ops@soopa.io",
+                "template_id": "tpl_incident_resolved",
+                "recipient": "ops-team@soopa.io",
                 "variables": {
-                    "meter_id": step_input.get("meter_id", "unknown"),
+                    "resource_id": step_input.get("resource_id", "unknown"),
                     "run_id": context.run_id,
                 },
             }
@@ -157,12 +157,12 @@ def test_stitch_dto_codecs_validate_inputs_without_raising_exceptions() -> None:
     good_q = QueryReplicaStepInput.from_payload(
         {
             "connection_id": "conn_1",
-            "stream": "meters",
+            "stream": "records_alpha",
             "record_key": "rk_1",
         }
     )
     assert good_q.is_ok
-    assert good_q.unwrap().stream == "meters"
+    assert good_q.unwrap().stream == "records_alpha"
 
     bad_notif = EmitNotificationStepInput.from_payload({"channel": "email"})
     assert bad_notif.is_err
@@ -222,7 +222,7 @@ def test_stitch_dto_codecs_validate_inputs_without_raising_exceptions() -> None:
     assert payload_out["was_token_refreshed"] is True
 
 
-async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1_notification() -> (
+async def test_canonical_event_triggers_stitch_through_signal_resolution_to_stage1_notification() -> (
     None
 ):
     now = datetime(2026, 10, 25, 12, 0, 0, tzinfo=UTC)
@@ -234,25 +234,25 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     stitch_catalog = InMemoryStitchCatalogRegistry()
     outbox = _FakeNotificationOutbox()
 
-    handlers.register(_EnrichOutageContextStepHandler())
+    handlers.register(_EnrichIncidentContextStepHandler())
     handlers.register(_PrepareNotificationInputHandler(EmitNotificationStepHandler(outbox)))
 
     defn = WorkflowDefinition(
-        workflow_id="energy.outage_restoration_stitch",
+        workflow_id="synthetic.incident_resolution_stitch",
         version=1,
         nodes=(
             NodeDefinition(
-                node_key="enrich_outage",
+                node_key="enrich_incident",
                 kind=NodeKind.TASK,
-                step_type="ip.stitch.enrich_outage",
+                step_type="ip.stitch.enrich_incident",
             ),
             NodeDefinition(
-                node_key="wait_restored",
+                node_key="wait_resolved",
                 kind=NodeKind.WAIT_FOR_EVENT,
-                parents=("enrich_outage",),
+                parents=("enrich_incident",),
                 wait_event=WaitEventSpec(
-                    event_key="canonical.meter_restored.normalized",
-                    resource_hint_template="mtr_777",
+                    event_key="canonical.resource_resolved.normalized",
+                    resource_hint_template="res_777",
                     timeout=timedelta(hours=2),
                 ),
             ),
@@ -260,36 +260,36 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
                 node_key="notify_ops",
                 kind=NodeKind.TASK,
                 step_type=StitchStepType.EMIT_NOTIFICATION.value,
-                parents=("wait_restored",),
+                parents=("wait_resolved",),
             ),
         ),
     )
     assert definitions.register(defn).is_ok
 
-    # Register trigger stitch on `canonical.outage_event.normalized`
+    # Register trigger stitch on `canonical.incident_event.normalized`
     stitch_catalog.register_stitch(
         Stitch(
-            id="sub_trigger_outage",
-            tenant_id="ten_energy",
-            workflow_id="energy.outage_restoration_stitch",
+            id="sub_trigger_incident",
+            tenant_id="ten_alpha",
+            workflow_id="synthetic.incident_resolution_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.outage_event.normalized",
+            canonical_event_type="canonical.incident_event.normalized",
             is_trigger=True,
-            idempotency_key_field="outage_id",
-            concurrency_key_field="meter_id",
+            idempotency_key_field="incident_id",
+            concurrency_key_field="resource_id",
         )
     )
-    # Register signal stitch on `canonical.meter_restored.normalized`
+    # Register signal stitch on `canonical.resource_resolved.normalized`
     stitch_catalog.register_stitch(
         Stitch(
-            id="sub_signal_restored",
-            tenant_id="ten_energy",
-            workflow_id="energy.outage_restoration_stitch",
+            id="sub_signal_resolved",
+            tenant_id="ten_alpha",
+            workflow_id="synthetic.incident_resolution_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.meter_restored.normalized",
+            canonical_event_type="canonical.resource_resolved.normalized",
             is_trigger=False,
-            condition_event_key="canonical.meter_restored.normalized",
-            resource_hint_field="meter_id",
+            condition_event_key="canonical.resource_resolved.normalized",
+            resource_hint_field="resource_id",
         )
     )
 
@@ -335,14 +335,14 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
         handler_registry=handlers,
     )
 
-    # 1. Dispatch L3 Canonical Outage Event -> starts Stitch run
+    # 1. Dispatch L3 Canonical Incident Event -> starts Stitch run
     disp1 = (
         await dispatcher.execute(
             DispatchCanonicalEventToStitchesCommand(
-                tenant_id="ten_energy",
-                canonical_event_type="canonical.outage_event.normalized",
+                tenant_id="ten_alpha",
+                canonical_event_type="canonical.incident_event.normalized",
                 event_id="evt_1",
-                payload={"outage_id": "out_900", "meter_id": "mtr_777"},
+                payload={"incident_id": "inc_900", "resource_id": "res_777"},
                 trace_id="trc_stitch_1",
                 now=now,
             )
@@ -351,14 +351,14 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     assert len(disp1.started_run_ids) == 1
     run_id = disp1.started_run_ids[0]
 
-    # Duplicate canonical event with same outage_id is deduplicated!
+    # Duplicate canonical event with same incident_id is deduplicated!
     disp_dup = (
         await dispatcher.execute(
             DispatchCanonicalEventToStitchesCommand(
-                tenant_id="ten_energy",
-                canonical_event_type="canonical.outage_event.normalized",
+                tenant_id="ten_alpha",
+                canonical_event_type="canonical.incident_event.normalized",
                 event_id="evt_2",
-                payload={"outage_id": "out_900", "meter_id": "mtr_777"},
+                payload={"incident_id": "inc_900", "resource_id": "res_777"},
                 trace_id="trc_stitch_1",
                 now=now,
             )
@@ -366,7 +366,7 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     ).unwrap()
     assert disp_dup.deduplicated_run_ids == (run_id,)
 
-    # 2. Worker tick 1 claims and executes `enrich_outage` -> transitions `wait_restored` to WAITING
+    # 2. Worker tick 1 claims and executes `enrich_incident` -> transitions `wait_resolved` to WAITING
     tick1 = (
         await worker_tick.execute(
             ExecuteStitchWorkerTickCommand(
@@ -377,17 +377,17 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     ).unwrap()
     assert len(tick1.completed_step_ids) == 1
 
-    run_after_tick1 = (await uow.runs.get_by_id("ten_energy", run_id)).unwrap()
+    run_after_tick1 = (await uow.runs.get_by_id("ten_alpha", run_id)).unwrap()
     assert run_after_tick1.status == RunStatus.WAITING
 
-    # 3. Dispatch L3 Canonical Meter Restored Event -> satisfies `wait_restored` and queues `notify_ops`!
+    # 3. Dispatch L3 Canonical Resource Resolved Event -> satisfies `wait_resolved` and queues `notify_ops`!
     disp_signal = (
         await dispatcher.execute(
             DispatchCanonicalEventToStitchesCommand(
-                tenant_id="ten_energy",
-                canonical_event_type="canonical.meter_restored.normalized",
+                tenant_id="ten_alpha",
+                canonical_event_type="canonical.resource_resolved.normalized",
                 event_id="evt_3",
-                payload={"meter_id": "mtr_777", "restored_at": "2026-10-25T12:05:00Z"},
+                payload={"resource_id": "res_777", "resolved_at": "2026-10-25T12:05:00Z"},
                 trace_id="trc_stitch_2",
                 now=now + timedelta(minutes=5),
             )
@@ -406,7 +406,7 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     ).unwrap()
     assert len(tick2.completed_step_ids) == 1
 
-    final_run = (await uow.runs.get_by_id("ten_energy", run_id)).unwrap()
+    final_run = (await uow.runs.get_by_id("ten_alpha", run_id)).unwrap()
     assert final_run.status == RunStatus.SUCCEEDED
     assert len(outbox.envelopes) == 1
     assert outbox.envelopes[0].event_type == NotificationEventType.NOTIFICATION_TRIGGERED.value
@@ -416,15 +416,15 @@ async def test_canonical_event_triggers_stitch_waits_for_signal_and_emits_stage1
     assert notif_data.get("event_id") == f"{run_id}:notify_ops:0"
 
 
-async def test_query_replica_step_handler_and_worker_error_paths() -> None:
+async def test_query_replica_step_handler_resolves_replica_snapshots() -> None:
     now = datetime(2026, 10, 25, 13, 0, 0, tzinfo=UTC)
     lookup = _FakeReplicaLookup()
     rec = ReplicaRecord.create(
-        tenant_id="ten_energy",
-        connection_id="conn_ami",
-        stream="meters",
-        record_key="mtr_999",
-        data={"voltage": 240.5, "status": "ONLINE"},
+        tenant_id="ten_alpha",
+        connection_id="conn_source",
+        stream="records_alpha",
+        record_key="rec_999",
+        data={"quantity": 240.5, "status": "ONLINE"},
         trace_id="trc_rep_1",
     )
     lookup.add(rec)
@@ -434,14 +434,14 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     assert handler.effect_policy == EffectPolicy.PURE
 
     ctx = StepContext(
-        tenant_id="ten_energy",
+        tenant_id="ten_alpha",
         run_id="wfr_01",
         step_run_id="wfs_01",
-        node_key="lookup_meter",
+        node_key="lookup_record",
         retry_count=0,
         app_retry_count=0,
         internal_retry_count=0,
-        idempotency_key="wfr_01:lookup_meter:0",
+        idempotency_key="wfr_01:lookup_record:0",
         trace_id="trc_01",
         correlation_id=None,
         deadline=now + timedelta(minutes=5),
@@ -451,23 +451,23 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     res_found = await handler.execute(
         ctx,
         {
-            "connection_id": "conn_ami",
-            "stream": "meters",
-            "record_key": "mtr_999",
+            "connection_id": "conn_source",
+            "stream": "records_alpha",
+            "record_key": "rec_999",
         },
     )
     assert res_found.is_ok
     assert res_found.unwrap()["found"] is True
     assert res_found.unwrap()["record_id"] == rec.id
-    assert res_found.unwrap()["data"] == {"voltage": 240.5, "status": "ONLINE"}
+    assert res_found.unwrap()["data"] == {"quantity": 240.5, "status": "ONLINE"}
 
     # 2. Missing replica record
     res_missing = await handler.execute(
         ctx,
         {
-            "connection_id": "conn_ami",
-            "stream": "meters",
-            "record_key": "mtr_missing",
+            "connection_id": "conn_source",
+            "stream": "records_alpha",
+            "record_key": "rec_missing",
         },
     )
     assert res_missing.is_ok
@@ -477,7 +477,9 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     res_invalid = await handler.execute(ctx, {"connection_id": ""})
     assert res_invalid.is_err
 
-    # 4. Worker tick with unregistered step handler fails step gracefully via Result
+
+async def test_stitch_worker_tick_marks_unregistered_step_handler_failed() -> None:
+    now = datetime(2026, 10, 25, 13, 0, 0, tzinfo=UTC)
     uow = InMemoryWorkflowUnitOfWork()
     definitions = InMemoryWorkflowDefinitionRegistry()
     handlers = InMemoryStepHandlerRegistry()
@@ -513,7 +515,7 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
         match_resolver=match_resolver,
     )
     defn = WorkflowDefinition(
-        workflow_id="energy.unregistered_step_stitch",
+        workflow_id="synthetic.unregistered_step_stitch",
         version=1,
         nodes=(
             NodeDefinition(
@@ -527,8 +529,8 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     stitch_catalog = InMemoryStitchCatalogRegistry()
     sub = Stitch(
         id="sub_unreg",
-        tenant_id="ten_energy",
-        workflow_id="energy.unregistered_step_stitch",
+        tenant_id="ten_alpha",
+        workflow_id="synthetic.unregistered_step_stitch",
         workflow_version=1,
         canonical_event_type="canonical.test.event",
         is_trigger=True,
@@ -537,7 +539,7 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     assert (
         len(
             stitch_catalog.list_stitches_for_event(
-                tenant_id="ten_energy",
+                tenant_id="ten_alpha",
                 canonical_event_type="canonical.test.event",
             )
         )
@@ -551,7 +553,7 @@ async def test_query_replica_step_handler_and_worker_error_paths() -> None:
     )
     await dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
-            tenant_id="ten_energy",
+            tenant_id="ten_alpha",
             canonical_event_type="canonical.test.event",
             event_id="evt_99",
             payload={"k": "v"},
@@ -630,7 +632,7 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
     )
 
     defn = WorkflowDefinition(
-        workflow_id="energy.crash_stitch",
+        workflow_id="synthetic.crash_stitch",
         version=1,
         nodes=(
             NodeDefinition(
@@ -644,8 +646,8 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
     stitch_catalog = InMemoryStitchCatalogRegistry()
     sub = Stitch(
         id="sub_crash",
-        tenant_id="ten_energy",
-        workflow_id="energy.crash_stitch",
+        tenant_id="ten_alpha",
+        workflow_id="synthetic.crash_stitch",
         workflow_version=1,
         canonical_event_type="canonical.test.event",
         is_trigger=True,
@@ -659,7 +661,7 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
     )
     await dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
-            tenant_id="ten_energy",
+            tenant_id="ten_alpha",
             canonical_event_type="canonical.test.event",
             event_id="evt_crash",
             payload={"k": "v"},

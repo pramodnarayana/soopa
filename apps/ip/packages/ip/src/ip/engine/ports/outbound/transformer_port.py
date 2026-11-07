@@ -16,7 +16,7 @@ class TransformerPort(Protocol):
 
     @property
     def transformation_id(self) -> str:
-        """Unique business identifier of the transformer (e.g. 'energy.ami_meter_reading')."""
+        """Unique business identifier of the transformer (e.g. 'crm.contact_sync')."""
         ...
 
     @property

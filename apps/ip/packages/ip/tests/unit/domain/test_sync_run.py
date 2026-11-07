@@ -59,7 +59,7 @@ def test_sync_run_create_initial() -> None:
     assert len(run.domain_events) == 0
 
 
-def test_sync_run_start_returns_ok_and_emits_event() -> None:
+def test_sync_run_start_transitions_to_running_emitting_started_event() -> None:
     run = SyncRun.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -82,7 +82,19 @@ def test_sync_run_start_returns_ok_and_emits_event() -> None:
     assert events[0].kind == "INCREMENTAL"
     assert events[0].start_checkpoint == "2026-10-01T00:00:00Z"
 
-    # Starting an already running SyncRun returns Result.fail
+
+def test_sync_run_start_rejects_duplicate_start_on_running_run() -> None:
+    run = SyncRun.create(
+        tenant_id="tenant_1",
+        connection_id="conn_1",
+        stream="invoices",
+        kind=SyncRunKind.INCREMENTAL,
+        generation_id=2,
+        start_checkpoint="2026-10-01T00:00:00Z",
+        trace_id="trc_1",
+    )
+    assert run.start().is_ok
+
     second_res = run.start()
     assert second_res.is_err
     err = second_res.unwrap_err()
@@ -162,7 +174,7 @@ def test_sync_run_succeed_full_refresh_emits_generation_completed() -> None:
     assert run.cancel().is_err
 
 
-def test_sync_run_fail_and_cancel_transitions() -> None:
+def test_sync_run_fail_transitions_to_failed_once() -> None:
     run = SyncRun.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -191,6 +203,8 @@ def test_sync_run_fail_and_cancel_transitions() -> None:
     assert run.error_message == "HTTP 429 Too Many Requests"
     assert len([e for e in run.domain_events if isinstance(e, SyncRunFailedEvent)]) == 1
 
+
+def test_sync_run_cancel_transitions_pending_run_to_cancelled() -> None:
     pending_run = SyncRun.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -210,7 +224,7 @@ def test_sync_run_fail_and_cancel_transitions() -> None:
     assert pending_run.cancel().is_err
 
 
-def test_inbound_record_thin_fetch_and_transformation_behavioral_methods() -> None:
+def test_inbound_record_request_thin_record_fetch_emits_fetch_event() -> None:
     inbound = InboundRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -228,6 +242,8 @@ def test_inbound_record_thin_fetch_and_transformation_behavioral_methods() -> No
     assert fetch_events[0].record_id == "ord_1"
     assert fetch_events[0].notice_inbound_record_id == inbound.id
 
+
+def test_transformation_promote_shadow_version_activates_candidate() -> None:
     transformation = Transformation.bind(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -251,11 +267,10 @@ def test_inbound_record_thin_fetch_and_transformation_behavioral_methods() -> No
         isinstance(e, TransformationVersionPromotedEvent) for e in transformation.domain_events
     )
 
-    # Promoting again with no shadow_transformation_version returns Result.fail
     assert transformation.promote_shadow_version().is_err
 
 
-def test_replica_record_batch_behaviors_and_stream_lookup() -> None:
+def test_replica_record_batch_upsert_chunk_emits_batch_event() -> None:
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
@@ -275,6 +290,8 @@ def test_replica_record_batch_behaviors_and_stream_lookup() -> None:
     assert isinstance(replica.domain_events[0], ReplicaRecordChangedEvent)
     assert replica.domain_events[0].outcome == MergeOutcome.BATCH_UPSERT.value
 
+
+def test_http_source_spec_looks_up_stream_by_name() -> None:
     spec = HttpSourceSpec(
         base_url="https://api.example.com",
         auth_type=AuthType.BEARER_TOKEN,

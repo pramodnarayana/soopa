@@ -79,7 +79,15 @@ echo "🧪 Ensuring isolated *_test PostgreSQL databases are provisioned and syn
 uv run python infra/local/scripts/run_in_test_env.py --hermetic --env-file .env.example -- true
 
 echo "✅ Running Architectural Semgrep Checks..."
-if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
+SEMGREP_EXCLUDES=(--exclude node_modules --exclude .venv --exclude dist --exclude build)
+SEMGREP_CONFIG_CHANGED=0
+if [[ "$MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
+  if git diff --name-only "${RESOLVED_BASE}..HEAD" | grep -qE '^(semgrep-architecture\.yml|\.semgrep/)'; then
+    SEMGREP_CONFIG_CHANGED=1
+  fi
+fi
+
+if [[ "$MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]] && [[ "$SEMGREP_CONFIG_CHANGED" -eq 0 ]]; then
   SEMGREP_TARGETS=()
   while IFS= read -r changed_file; do
     if [[ -f "$changed_file" ]] && [[ "$changed_file" == apps/* || "$changed_file" == core/* ]]; then
@@ -87,18 +95,20 @@ if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
     fi
   done < <(git diff --name-only "${RESOLVED_BASE}..HEAD")
   if [[ "${#SEMGREP_TARGETS[@]}" -gt 0 ]]; then
-    uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --error "${SEMGREP_TARGETS[@]}"
+    uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --config=.semgrep/enterprise-rules.yml "${SEMGREP_EXCLUDES[@]}" --error "${SEMGREP_TARGETS[@]}"
   fi
 else
-  uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --error apps core
+  uv run --with "semgrep==1.165.0" semgrep --config=semgrep-architecture.yml --config=.semgrep/enterprise-rules.yml "${SEMGREP_EXCLUDES[@]}" --error apps core
 fi
 
 echo "✅ Validating Python-to-Package Dependency Sync & Module Boundaries..."
 pnpm run syncpack:python:check
 uv run tach check
 
-echo "✅ Running Ruff Lint across workspace source trees..."
-uv run ruff check apps core infra/local/scripts
+echo "✅ Running Ruff & Mypy across workspace source trees and root scripts..."
+uv run ruff check apps core infra/local/scripts scripts
+uv run ruff format --check apps core infra/local/scripts scripts
+uv run mypy --explicit-package-bases infra/local/scripts/run_in_test_env.py infra/local/scripts/ensure_test_databases.py infra/local/scripts/sync_topology.py scripts/aggregate_coverage.py
 
 if [[ "$RESOLVED_MODE" == "affected" ]] && [[ -n "$RESOLVED_BASE" ]]; then
   AFFECTED_FILTER="--filter=...[${RESOLVED_BASE}]"

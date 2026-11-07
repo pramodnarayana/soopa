@@ -13,15 +13,15 @@ from ip.engine.domain.replication.stream_definition import DeletionMarker, Strea
 def test_extractor_extracts_from_nested_record_path() -> None:
     extractor = DeclarativeRecordExtractor()
     stream = StreamDefinition(
-        stream="meters",
+        stream="records_alpha",
         primary_key=(("serial",),),
         record_path=("response", "items"),
     )
     payload = {
         "response": {
             "items": [
-                {"serial": "MTR-01", "reading": 100},
-                {"serial": "MTR-02", "reading": 200},
+                {"serial": "REC-01", "reading": 100},
+                {"serial": "REC-02", "reading": 200},
             ]
         }
     }
@@ -29,15 +29,15 @@ def test_extractor_extracts_from_nested_record_path() -> None:
     batch = extractor.extract(payload, stream)
     assert len(batch.rejections) == 0
     assert len(batch.records) == 2
-    assert batch.records[0].primary_key_values == ("MTR-01",)
+    assert batch.records[0].primary_key_values == ("REC-01",)
     assert batch.records[0].data["reading"] == 100
-    assert batch.records[1].primary_key_values == ("MTR-02",)
+    assert batch.records[1].primary_key_values == ("REC-02",)
 
 
 def test_extractor_returns_rejection_when_record_path_not_found() -> None:
     extractor = DeclarativeRecordExtractor()
     stream = StreamDefinition(
-        stream="meters",
+        stream="records_alpha",
         primary_key=(("id",),),
         record_path=("data", "results"),
     )
@@ -102,24 +102,40 @@ def test_extractor_rejection_for_non_object_item() -> None:
     assert batch.rejections[0].reason == RejectionReason.NOT_AN_OBJECT
 
 
-def test_extractor_cursor_extraction_and_integer_validation() -> None:
+def test_extractor_extracts_valid_integer_cursor() -> None:
     extractor = DeclarativeRecordExtractor()
     stream = StreamDefinition(
-        stream="readings",
+        stream="records_alpha",
         primary_key=(("id",),),
         cursor_field=("seq",),
         cursor_kind=CursorKind.INTEGER,
     )
     payload = [
         {"id": "r1", "seq": 105},
-        {"id": "r2", "seq": "not-an-integer"},
     ]
 
     batch = extractor.extract(payload, stream)
     assert len(batch.records) == 1
     assert batch.records[0].cursor_value == 105
+    assert len(batch.rejections) == 0
+
+
+def test_extractor_rejects_invalid_integer_cursor() -> None:
+    extractor = DeclarativeRecordExtractor()
+    stream = StreamDefinition(
+        stream="records_alpha",
+        primary_key=(("id",),),
+        cursor_field=("seq",),
+        cursor_kind=CursorKind.INTEGER,
+    )
+    payload = [
+        {"id": "r2", "seq": "not-an-integer"},
+    ]
+
+    batch = extractor.extract(payload, stream)
+    assert len(batch.records) == 0
     assert len(batch.rejections) == 1
-    assert batch.rejections[0].record_index == 1
+    assert batch.rejections[0].record_index == 0
     assert batch.rejections[0].reason == RejectionReason.INVALID_CURSOR
 
 

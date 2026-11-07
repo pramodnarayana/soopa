@@ -15,6 +15,13 @@ class TmsEntityType(StrEnum):
     TMS_CARRIER = "TMS_CARRIER"
 
 
+class TmsIdPrefix(StrEnum):
+    """Canonical entity ID prefixes for the TMS vertical."""
+
+    TMS_LOAD = "ip_tmsl"
+    TMS_CARRIER = "ip_tmsc"
+
+
 @dataclass(frozen=True)
 class CanonicalLoadDTO:
     """Canonical representation of a TMS freight load / shipment."""

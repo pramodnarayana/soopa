@@ -62,29 +62,44 @@ ROOT_ESCALATION_FILENAMES: frozenset[str] = frozenset(
     {
         "pyproject.toml",
         "uv.lock",
-        "package.json",
-        "pnpm-lock.yaml",
+        "tach.toml",
         "pnpm-workspace.yaml",
         "turbo.json",
+        "docker-compose.yml",
+        "Dockerfile",
         ".env.example",
         "semgrep-architecture.yml",
         ".semgrep/enterprise-rules.yml",
         "infra/local/init.sql",
+        "infra/local/scripts/run_in_test_env.py",
+        "infra/local/scripts/ensure_test_databases.py",
+        "infra/local/scripts/sync_topology.py",
         "scripts/verify_ci.sh",
         "scripts/aggregate_coverage.py",
     }
 )
 
+ROOT_ESCALATION_PREFIXES: tuple[str, ...] = (
+    ".github/actions/",
+    ".github/workflows/",
+    ".semgrep/",
+)
+
 
 def should_escalate_to_full_verification(changed_files: Sequence[str]) -> bool:
-    """Return True if any changed path modifies root configuration requiring full-repo checks."""
+    """Return True only when global Python/workspace or CI harness configs change.
+
+    Standalone developer CLI utilities (e.g. ``reconcile_schema_drift.py``) and
+    ``package.json`` / ``pnpm-lock.yaml`` changes preserve graph-aware ``--affected``
+    execution via Turborepo's native dependency graph analyzer.
+    """
     for raw_path in changed_files:
         normalized = raw_path.strip().removeprefix("./")
         if not normalized:
             continue
         if normalized in ROOT_ESCALATION_FILENAMES:
             return True
-        if normalized.startswith((".github/actions/", "infra/local/scripts/")):
+        if normalized.startswith(ROOT_ESCALATION_PREFIXES):
             return True
     return False
 

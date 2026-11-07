@@ -181,9 +181,9 @@ async def test_receive_push_full_success() -> None:
 
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
-        connection_id="conn_solar",
+        connection_id="conn_source",
         stream_name="telemetry",
-        raw_payload=b'{"device_id":"meter_01","kwh":42}',
+        raw_payload=b'{"device_id":"dev_01","value":42}',
         headers={"Content-Type": "application/json"},
         external_event_id="evt_001",
     )
@@ -226,9 +226,9 @@ async def test_receive_push_verification_failure_rejects() -> None:
 
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
-        connection_id="conn_solar",
+        connection_id="conn_source",
         stream_name="telemetry",
-        raw_payload=b'{"device_id":"meter_01","kwh":42}',
+        raw_payload=b'{"device_id":"dev_01","value":42}',
         headers={"X-Signature": "invalid_sig"},
         secret="valid_secret",
     )
@@ -259,9 +259,9 @@ async def test_receive_push_deduplication() -> None:
 
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
-        connection_id="conn_solar",
+        connection_id="conn_source",
         stream_name="telemetry",
-        raw_payload=b'{"device_id":"meter_01","kwh":42}',
+        raw_payload=b'{"device_id":"dev_01","value":42}',
         headers={},
         external_event_id="evt_002",
     )
@@ -296,12 +296,12 @@ async def test_receive_push_thin_emits_fetch_record_requested() -> None:
 
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
-        connection_id="conn_solar",
-        stream_name="meters",
-        raw_payload=b'{"notification":"meter_updated","id":"meter_999"}',
+        connection_id="conn_source",
+        stream_name="records_alpha",
+        raw_payload=b'{"notification":"record_updated","id":"rec_999"}',
         headers={},
         is_thin=True,
-        thin_record_id="meter_999",
+        thin_record_id="rec_999",
     )
 
     result = await use_case.execute(cmd)
@@ -314,8 +314,8 @@ async def test_receive_push_thin_emits_fetch_record_requested() -> None:
     events = stored.domain_events
     fetch_reqs = [e for e in events if isinstance(e, FetchRecordRequestedEvent)]
     assert len(fetch_reqs) == 1
-    assert fetch_reqs[0].record_id == "meter_999"
-    assert fetch_reqs[0].stream == "meters"
+    assert fetch_reqs[0].record_id == "rec_999"
+    assert fetch_reqs[0].stream == "records_alpha"
 
 
 @pytest.mark.asyncio

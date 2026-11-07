@@ -8,7 +8,6 @@ from ip.engine.adapters.outbound.database.data_plane.normalized_record_repositor
     SqlAlchemyNormalizedRecordRepository,
 )
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
-from ip.solutions.domains.energy.canonical import EnergyEntityType
 
 pytestmark = pytest.mark.integration
 
@@ -23,20 +22,20 @@ async def test_l3_normalized_record_repository(
     norm = NormalizedRecord.create(
         tenant_id=tenant_id,
         connection_id="ip_conn_l3",
-        canonical_type=EnergyEntityType.MDM_METER_READING,
-        source_id="MTR-300",
-        canonical_data={"meter_serial_number": "MTR-300", "kwh_delivered": 55.2},
+        canonical_type="canonical.record_alpha.v1",
+        source_id="REC-300",
+        canonical_data={"external_id": "REC-300", "amount": 55.2},
         trace_id="ip_trc_l3_001",
     )
     await norm_repo.save(norm)
 
     fetched_norm = await norm_repo.get_by_id(norm.id, tenant_id)
     assert fetched_norm is not None
-    assert fetched_norm.canonical_type == EnergyEntityType.MDM_METER_READING
+    assert fetched_norm.canonical_type == "canonical.record_alpha.v1"
 
     by_source = await norm_repo.list_by_source(
         tenant_id=tenant_id,
-        canonical_type=EnergyEntityType.MDM_METER_READING,
-        source_id="MTR-300",
+        canonical_type="canonical.record_alpha.v1",
+        source_id="REC-300",
     )
     assert len(by_source) == 1

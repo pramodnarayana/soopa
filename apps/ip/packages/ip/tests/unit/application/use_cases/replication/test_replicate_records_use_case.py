@@ -389,58 +389,86 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
 
 
 @pytest.mark.asyncio
-async def test_replicate_records_inserts_and_updates() -> None:
+async def test_replicate_records_inserts_new_stream_records() -> None:
     uow = FakeDataPlaneUnitOfWork()
     use_case = ReplicateRecordsUseCase(uow=uow)
 
     stream_def = StreamDefinition(
-        stream="meters",
+        stream="records_alpha",
         primary_key=(("id",),),
         cursor_field=("updated_seq",),
         cursor_kind=CursorKind.INTEGER,
     )
 
-    # 1. Initial batch -> 2 INSERTs
-    cmd1 = ReplicateRecordsCommand(
+    cmd = ReplicateRecordsCommand(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meters",
+        stream="records_alpha",
         inbound_record_id="inb_01",
         generation_id=1,
         sync_id="sync_01",
         trace_id="trc_01",
         stream_definition=stream_def,
         raw_payload=[
-            {"id": "m1", "val": 10, "updated_seq": 1},
-            {"id": "m2", "val": 20, "updated_seq": 1},
+            {"id": "r1", "val": 10, "updated_seq": 1},
+            {"id": "r2", "val": 20, "updated_seq": 1},
         ],
     )
 
-    res1 = await use_case.execute(cmd1)
-    assert res1.is_ok
-    summary1 = res1.value
-    assert summary1.inserted_count == 2
-    assert summary1.updated_count == 0
-    assert summary1.noop_count == 0
-    assert summary1.rejected_count == 0
+    res = await use_case.execute(cmd)
+    assert res.is_ok
+    summary = res.value
+    assert summary.inserted_count == 2
+    assert summary.updated_count == 0
+    assert summary.noop_count == 0
+    assert summary.rejected_count == 0
 
-    # 2. Second batch -> 1 UPDATE (m1 changed), 1 NOOP (m2 unchanged)
-    cmd2 = ReplicateRecordsCommand(
-        tenant_id="ten_01",
-        connection_id="conn_01",
-        stream="meters",
-        inbound_record_id="inb_02",
-        generation_id=1,
-        sync_id="sync_02",
-        trace_id="trc_02",
-        stream_definition=stream_def,
-        raw_payload=[
-            {"id": "m1", "val": 99, "updated_seq": 2},  # Changed
-            {"id": "m2", "val": 20, "updated_seq": 1},  # Unchanged
-        ],
+
+@pytest.mark.asyncio
+async def test_replicate_records_updates_changed_records_while_skipping_unchanged() -> None:
+    uow = FakeDataPlaneUnitOfWork()
+    use_case = ReplicateRecordsUseCase(uow=uow)
+
+    stream_def = StreamDefinition(
+        stream="records_alpha",
+        primary_key=(("id",),),
+        cursor_field=("updated_seq",),
+        cursor_kind=CursorKind.INTEGER,
     )
 
-    res2 = await use_case.execute(cmd2)
+    await use_case.execute(
+        ReplicateRecordsCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="records_alpha",
+            inbound_record_id="inb_01",
+            generation_id=1,
+            sync_id="sync_01",
+            trace_id="trc_01",
+            stream_definition=stream_def,
+            raw_payload=[
+                {"id": "r1", "val": 10, "updated_seq": 1},
+                {"id": "r2", "val": 20, "updated_seq": 1},
+            ],
+        )
+    )
+
+    res2 = await use_case.execute(
+        ReplicateRecordsCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="records_alpha",
+            inbound_record_id="inb_02",
+            generation_id=1,
+            sync_id="sync_02",
+            trace_id="trc_02",
+            stream_definition=stream_def,
+            raw_payload=[
+                {"id": "r1", "val": 99, "updated_seq": 2},
+                {"id": "r2", "val": 20, "updated_seq": 1},
+            ],
+        )
+    )
     assert res2.is_ok
     summary2 = res2.value
     assert summary2.inserted_count == 0
@@ -454,22 +482,22 @@ async def test_replicate_records_persists_rejections_with_registered_prefix() ->
     use_case = ReplicateRecordsUseCase(uow=uow)
 
     stream_def = StreamDefinition(
-        stream="meters",
-        primary_key=(("meter_code",),),
+        stream="records_alpha",
+        primary_key=(("record_code",),),
     )
 
     cmd = ReplicateRecordsCommand(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meters",
+        stream="records_alpha",
         inbound_record_id="inb_01",
         generation_id=1,
         sync_id="sync_01",
         trace_id="trc_01",
         stream_definition=stream_def,
         raw_payload=[
-            {"meter_code": "M-100", "kwh": 50},
-            {"kwh": 60},  # Missing meter_code -> rejection
+            {"record_code": "REC-100", "quantity": 50},
+            {"quantity": 60},  # Missing record_code -> rejection
         ],
     )
 
@@ -491,7 +519,7 @@ async def test_replicate_records_unseen_delete_creates_tombstone() -> None:
     use_case = ReplicateRecordsUseCase(uow=uow)
 
     stream_def = StreamDefinition(
-        stream="meters",
+        stream="records_alpha",
         primary_key=(("id",),),
         deletion_marker=DeletionMarker(field_path=("is_deleted",), expected_value=True),
     )
@@ -499,14 +527,14 @@ async def test_replicate_records_unseen_delete_creates_tombstone() -> None:
     cmd = ReplicateRecordsCommand(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meters",
+        stream="records_alpha",
         inbound_record_id="inb_del_01",
         generation_id=1,
         sync_id="sync_01",
         trace_id="trc_del_01",
         stream_definition=stream_def,
         raw_payload=[
-            {"id": "m_unseen", "is_deleted": True},
+            {"id": "r_unseen", "is_deleted": True},
         ],
     )
 
@@ -516,7 +544,7 @@ async def test_replicate_records_unseen_delete_creates_tombstone() -> None:
     assert summary.tombstone_count == 1
     assert summary.inserted_count == 0
     rec = await uow.replica_records.get_by_key(
-        "ten_01", "conn_01", "meters", compute_record_key(("m_unseen",))
+        "ten_01", "conn_01", "records_alpha", compute_record_key(("r_unseen",))
     )
     assert rec is not None
     assert rec.deleted_at is not None
@@ -528,20 +556,20 @@ async def test_replicate_records_chunks_large_batches_by_500() -> None:
     use_case = ReplicateRecordsUseCase(uow=uow)
 
     stream_def = StreamDefinition(
-        stream="meters",
+        stream="records_alpha",
         primary_key=(("id",),),
     )
 
     cmd = ReplicateRecordsCommand(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meters",
+        stream="records_alpha",
         inbound_record_id="inb_bulk_01",
         generation_id=1,
         sync_id="sync_bulk_01",
         trace_id="trc_bulk_01",
         stream_definition=stream_def,
-        raw_payload=[{"id": f"m_{i}", "val": i} for i in range(525)],
+        raw_payload=[{"id": f"r_{i}", "val": i} for i in range(525)],
     )
 
     res = await use_case.execute(cmd)
@@ -624,7 +652,7 @@ async def test_sweep_stale_replicas_use_case_iterates_in_chunks() -> None:
         SweepStaleReplicasCommand(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="meters",
+            stream="records_alpha",
             current_generation=5,
             chunk_size=500,
             trace_id="trc_sweep_01",

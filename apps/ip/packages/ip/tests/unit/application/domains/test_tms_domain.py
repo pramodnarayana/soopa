@@ -106,25 +106,15 @@ def test_tms_domain_repository_mappers() -> None:
     assert carrier_dto.scac_code == "SCAC"
 
 
-def test_tms_load_transformer_rejects_non_finite_weight_and_charge() -> None:
+def test_tms_load_transformer_rejects_non_finite_weight() -> None:
     ctx = TransformationContext(
         tenant_id="ten_01",
         connection_id="conn_01",
         stream="loads",
         trace_id="ip_trc_02",
     )
-    v1 = MercuryGateLoadTransformerV1()
-    v2 = MercuryGateLoadTransformerV2()
-
-    for transformer in (v1, v2):
-        for field_name, bad_val in (
-            ("total_weight_lbs", "nan"),
-            ("total_weight_lbs", float("inf")),
-            ("total_weight_lbs", 10**400),
-            ("freight_charge_usd", "-inf"),
-            ("freight_charge_usd", float("nan")),
-            ("freight_charge_usd", -(10**400)),
-        ):
+    for transformer in (MercuryGateLoadTransformerV1(), MercuryGateLoadTransformerV2()):
+        for bad_val in ("nan", float("inf"), 10**400):
             res = transformer.transform(
                 ReplicaSnapshot(
                     id="rep_tms_nan",
@@ -132,7 +122,32 @@ def test_tms_load_transformer_rejects_non_finite_weight_and_charge() -> None:
                     stream="loads",
                     record_key="LD-100",
                     version=1,
-                    data={"load_id": "LD-100", field_name: bad_val},
+                    data={"load_id": "LD-100", "total_weight_lbs": bad_val},
+                ),
+                ctx,
+            )
+            assert not res.drafts
+            assert len(res.rejections) == 1
+            assert res.rejections[0].reason == NormalizationRejectionReason.QUALITY_RULE_REJECTED
+
+
+def test_tms_load_transformer_rejects_non_finite_freight_charge() -> None:
+    ctx = TransformationContext(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="loads",
+        trace_id="ip_trc_02",
+    )
+    for transformer in (MercuryGateLoadTransformerV1(), MercuryGateLoadTransformerV2()):
+        for bad_val in ("-inf", float("nan"), -(10**400)):
+            res = transformer.transform(
+                ReplicaSnapshot(
+                    id="rep_tms_nan",
+                    connection_id="conn_01",
+                    stream="loads",
+                    record_key="LD-100",
+                    version=1,
+                    data={"load_id": "LD-100", "freight_charge_usd": bad_val},
                 ),
                 ctx,
             )

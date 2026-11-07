@@ -47,19 +47,19 @@ async def test_discover_catalog_use_case(
         {
             "streams": [
                 {
-                    "name": "meters",
+                    "name": "records_alpha",
                     "fields": [{"name": "id", "data_type": "string", "nullable": False}],
                     "primary_key": ["id"],
                     "supported_sync_modes": ["FULL_REFRESH", "INCREMENTAL"],
                 },
                 {
-                    "name": "interval_reads",
-                    "fields": [{"name": "meter_id", "data_type": "string", "nullable": False}],
-                    "primary_key": ["meter_id"],
+                    "name": "interval_events",
+                    "fields": [{"name": "record_id", "data_type": "string", "nullable": False}],
+                    "primary_key": ["record_id"],
                     "supported_sync_modes": ["FULL_REFRESH", "INCREMENTAL"],
                 },
                 {
-                    "name": "service_points",
+                    "name": "parent_entities",
                     "fields": [{"name": "id", "data_type": "string", "nullable": False}],
                     "primary_key": ["id"],
                     "supported_sync_modes": ["FULL_REFRESH"],
@@ -70,7 +70,7 @@ async def test_discover_catalog_use_case(
     )
 
     connector = GenericHttpConnector(
-        app_id="itron_mdm",
+        app_id="acme_source",
         auth_resolver=AuthStrategyResolver(),
         allow_private_ips=True,
     )
@@ -82,8 +82,8 @@ async def test_discover_catalog_use_case(
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
-            name="Itron",
+            app_id="acme_source",
+            name="Acme Source",
             auth_type="API_KEY",
             public_config={"endpoint_url": httpserver.url_for("")},
             raw_credentials={"api_key": "valid_token"},
@@ -142,7 +142,7 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
     )
 
     connector = GenericHttpConnector(
-        app_id="itron_mdm",
+        app_id="acme_source",
         auth_resolver=AuthStrategyResolver(),
         allow_private_ips=True,
     )
@@ -154,8 +154,8 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
-            name="Itron Custom Schema",
+            app_id="acme_source",
+            name="Acme Custom Schema",
             auth_type="API_KEY",
             public_config={"endpoint_url": httpserver.url_for("")},
             raw_credentials={"api_key": "valid_token"},
@@ -243,7 +243,7 @@ async def test_discover_catalog_deactivated_connection_returns_failure(
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
+            app_id="acme_source",
             name="Deactivated Conn",
             auth_type="API_KEY",
             public_config={},
@@ -282,7 +282,7 @@ async def test_discover_catalog_mismatched_tenant_id_returns_not_found(
     conn_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
+            app_id="acme_source",
             name="Tenant Isolation Test",
             auth_type="API_KEY",
             public_config={},

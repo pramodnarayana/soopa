@@ -162,11 +162,27 @@ export type StagePostureValue = (typeof StagePosture)[keyof typeof StagePosture]
 
 export const ConnectorRuntimeArchitecture = {
   DECLARATIVE_HTTP: 'DECLARATIVE_HTTP',
+  GENERIC_HTTP: 'GENERIC_HTTP',
+  NATIVE_PROTOCOL: 'NATIVE_PROTOCOL',
+  NATIVE_SIMULATOR: 'NATIVE_SIMULATOR',
+  CUSTOM_PYTHON: 'CUSTOM_PYTHON',
   PYTHON_HOOK: 'PYTHON_HOOK',
   WASM: 'WASM',
 } as const;
 export type ConnectorRuntimeArchitectureValue =
   | (typeof ConnectorRuntimeArchitecture)[keyof typeof ConnectorRuntimeArchitecture]
+  | (string & {});
+
+export const CatalogAppCategory = {
+  API: 'API',
+  CRM: 'CRM',
+  BILLING: 'BILLING',
+  STORAGE: 'STORAGE',
+  SANDBOX: 'SANDBOX',
+  ITSM: 'ITSM',
+} as const;
+export type CatalogAppCategoryValue =
+  | (typeof CatalogAppCategory)[keyof typeof CatalogAppCategory]
   | (string & {});
 
 export const ConnectorPropertyType = {

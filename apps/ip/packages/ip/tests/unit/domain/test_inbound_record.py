@@ -11,13 +11,13 @@ from strace.domain import TracedAggregateRoot
 
 
 def test_inbound_record_create_inline() -> None:
-    data: JsonDict = {"meter_id": "MTR-101", "reading": 450.5}
+    data: JsonDict = {"record_id": "REC-101", "reading": 450.5}
     payload_bytes = json.dumps(data).encode("utf-8")
 
     record = InboundRecord.create(
         tenant_id="ten_test_123",
         connection_id="ip_conn_abc",
-        app_id="itron_mdm",
+        app_id="acme_source",
         stream_name="readings",
         payload_bytes=payload_bytes,
         is_inlined=True,
@@ -36,7 +36,7 @@ def test_inbound_record_create_inline() -> None:
     assert record.trace_id.startswith("ip_trc_")
     assert record.tenant_id == "ten_test_123"
     assert record.connection_id == "ip_conn_abc"
-    assert record.app_id == "itron_mdm"
+    assert record.app_id == "acme_source"
     assert record.stream_name == "readings"
     assert record.request_body == data
     assert record.request_s3_key is None
@@ -62,7 +62,7 @@ def test_inbound_record_create_inline() -> None:
     assert event.original_trace_id == "ip_trc_orig"
     assert event.replay_count == 1
     assert event.tenant_id == "ten_test_123"
-    assert event.app_id == "itron_mdm"
+    assert event.app_id == "acme_source"
     assert event.is_inlined is True
     assert event.s3_key is None
     assert event.event_name == "ip.inbound_record.created"
@@ -75,8 +75,8 @@ def test_inbound_record_create_s3_offloaded() -> None:
     record = InboundRecord.create(
         tenant_id="ten_1",
         connection_id="ip_conn_xyz",
-        app_id="itron_mdm",
-        stream_name="bulk_meters",
+        app_id="acme_source",
+        stream_name="bulk_records",
         payload_bytes=large_payload,
         is_inlined=False,
         request_body=None,

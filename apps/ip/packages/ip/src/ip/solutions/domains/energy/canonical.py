@@ -14,6 +14,13 @@ class EnergyEntityType(StrEnum):
     MDM_SERVICE_POINT = "MDM_SERVICE_POINT"
 
 
+class EnergyIdPrefix(StrEnum):
+    """Canonical entity ID prefixes for the Energy Smart Grid MDM vertical."""
+
+    MDM_READING = "ip_mdmr"
+    MDM_SERVICE_POINT = "ip_mdms"
+
+
 class MeterReadingQualityFlag(StrEnum):
     """Canonical quality flags for AMI Smart Grid interval meter readings."""
 

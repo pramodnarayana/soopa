@@ -20,7 +20,7 @@ async def test_check_connection_use_case(httpserver: HTTPServer) -> None:
         "/api/v1/health",
         method="GET",
         headers={"X-API-Key": "valid_token"},
-    ).respond_with_json({"status": "ok", "system": "Itron Head-End"})
+    ).respond_with_json({"status": "ok", "system": "Partner Upstream API"})
 
     connector = GenericHttpConnector(
         auth_resolver=AuthStrategyResolver(),

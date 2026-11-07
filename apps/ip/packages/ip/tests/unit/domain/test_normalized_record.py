@@ -8,21 +8,21 @@ from ip.engine.domain.trace.enums import IpTraceEventType
 from strace.domain import TracedAggregateRoot
 
 
-def test_normalized_record_create_emits_trace_and_domain_event() -> None:
+def test_normalized_record_create_emits_creation_events() -> None:
     norm = NormalizedRecord.create(
         tenant_id="ten_01",
         connection_id="ip_conn_01",
-        canonical_type="MDM_METER_READING",
-        source_id="MTR-100",
-        canonical_data={"meter_serial_number": "MTR-100", "kwh_delivered": 19.75},
+        canonical_type="canonical.record_alpha",
+        source_id="REC-100",
+        canonical_data={"serial_number": "REC-100", "metric_value": 19.75},
         trace_id="ip_trc_03",
         correlation_id="corr-03",
     )
 
     assert isinstance(norm, TracedAggregateRoot)
     assert norm.id.startswith("ip_nrm_")
-    assert norm.canonical_type == "MDM_METER_READING"
-    assert norm.canonical_data["kwh_delivered"] == 19.75
+    assert norm.canonical_type == "canonical.record_alpha"
+    assert norm.canonical_data["metric_value"] == 19.75
     assert len(norm.trace_events) == 1
     assert norm.trace_events[0].event_type == IpTraceEventType.NORMALIZED.value
     assert len(norm.domain_events) == 1
