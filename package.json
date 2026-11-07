@@ -47,6 +47,7 @@
     "verify:ci": "./scripts/verify_ci.sh",
     "verify:ci:affected": "./scripts/verify_ci.sh --affected",
     "test:integration": "uv run python infra/local/scripts/run_in_test_env.py -- turbo run test:integration --env-mode=loose --filter=\"*@soopa/api\" --filter=\"@soopa/ip\" --filter=\"@soopa/unified-api\" --filter=\"@soopa/as2-server\" --filter=\"*@soopa/*-worker\" --filter=\"*@soopa/*-cleanup\" --filter=\"*@soopa/domain\" --filter=\"*@soopa/database\" --filter=\"*@soopa/*-engine\" --filter=\"*@soopa/ucp*\" --filter=\"*@soopa/identity\" --filter=\"*@soopa/notification\" --filter=\"*@soopa/scheduler*\" --filter=\"*@soopa/observability\" --filter=\"*@soopa/schemas\" --filter=\"*@soopa/secret-store\"",
+    "test:integration:core": "uv run python infra/local/scripts/run_in_test_env.py -- turbo run test:integration --env-mode=loose --filter=\"./core/**\"",
     "test:integration:edi": "uv run python infra/local/scripts/run_in_test_env.py --domains platform,edi -- turbo run test:integration --env-mode=loose --filter=\"*@soopa/api\" --filter=\"@soopa/as2-server\" --filter=\"*@soopa/edi*\" --filter=\"@soopa/compute-worker\" --filter=\"@soopa/config-sync-worker\" --filter=\"@soopa/orchestrator-worker\"",
     "test:integration:ip": "uv run python infra/local/scripts/run_in_test_env.py --domains platform,ip -- turbo run test:integration --env-mode=loose --filter=\"@soopa/ip\"",
     "test:mutation": "stryker run",
@@ -135,6 +136,10 @@
   "lint-staged": {
     "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}": [
       "biome check --write --no-errors-on-unmatched"
+    ],
+    "*.{py,pyi}": [
+      "uv run ruff check --fix --force-exclude",
+      "uv run ruff format --force-exclude"
     ]
   },
   "packageManager": "pnpm@10.27.0",

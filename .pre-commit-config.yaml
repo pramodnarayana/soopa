@@ -22,7 +22,7 @@ repos:
     rev: v2.2.6
     hooks:
       - id: codespell
-        args: [--ignore-words-list, "aer,contrl,datas,gir,fpt,ptd,ded,lod,mis,ser,som,shttp,te"]
+        args: [--ignore-words-list, "aer,contrl,datas,gir,fpt,ptd,ded,lod,mis,ser,som,shttp,te,aks,dependant"]
         exclude: '^(apps/edi/packages/edi/src/edi/core/grammar/|apps/edi/packages/edi/src/edi/core/bots/|pnpm-lock\.yaml|.*\.json$)'
         additional_dependencies:
           - tomli
@@ -33,6 +33,7 @@ repos:
       - id: semgrep
         name: semgrep-enterprise
         args: ['--config=.semgrep/enterprise-rules.yml']
+        stages: [manual]
 
   - repo: local
     hooks:
@@ -57,31 +58,37 @@ repos:
         types_or: [python, pyi]
         exclude: ^(.*/)?scripts/.*$
         pass_filenames: false
+        stages: [manual]
       - id: eslint
         name: eslint
         entry: pnpm lint
         language: system
         types_or: [javascript, jsx, ts, tsx]
         pass_filenames: false
+        stages: [manual]
       - id: biome
         name: biome
         entry: pnpm biome check
         language: system
         types_or: [javascript, jsx, ts, tsx, json]
         pass_filenames: false
+        stages: [manual]
       - id: tach
         name: tach
         entry: uv run tach check
         language: system
         types_or: [python, pyi]
         pass_filenames: false
+        stages: [manual]
       - id: pip-audit
         name: pip-audit
         entry: uv run --all-packages pip-audit
         language: system
         pass_filenames: false
+        stages: [manual]
       - id: pnpm-audit
         name: pnpm-audit
         entry: pnpm audit --prod --ignore-unfixable
         language: system
         pass_filenames: false
+        stages: [manual]

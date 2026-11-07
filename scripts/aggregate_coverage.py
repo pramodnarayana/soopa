@@ -15,16 +15,37 @@ def get_uv_path() -> str:
     return uv_path
 
 
-def stage_package_artifacts(pkg_dir: str, artifacts_dir: str) -> None:
-    rel_pkg_dir = os.path.relpath(pkg_dir, ".")
-    artifact_sources = (
-        ("coverage-unit", ".coverage.unit"),
-        ("coverage-integration", ".coverage.integration"),
-    )
-    for artifact_subdir, filename in artifact_sources:
-        src_file = os.path.join(artifacts_dir, artifact_subdir, rel_pkg_dir, filename)
-        if os.path.isfile(src_file):
-            shutil.copy2(src_file, os.path.join(pkg_dir, filename))
+def stage_package_artifacts(
+    pkg_dir: str,
+    artifacts_dir: str,
+    repo_root: str = ".",
+) -> list[str]:
+    rel_pkg_dir = os.path.relpath(pkg_dir, repo_root)
+    if not os.path.isdir(artifacts_dir):
+        return []
+
+    staged_paths: list[str] = []
+    shard_index = 0
+    for entry in sorted(os.listdir(artifacts_dir)):
+        subdir_path = os.path.join(artifacts_dir, entry)
+        if not os.path.isdir(subdir_path):
+            continue
+        if entry.startswith("coverage-unit"):
+            candidate_filenames = (".coverage.unit",)
+        elif entry.startswith("coverage-integration"):
+            candidate_filenames = (".coverage.integration",)
+        else:
+            continue
+
+        for filename in candidate_filenames:
+            src_file = os.path.join(subdir_path, rel_pkg_dir, filename)
+            if os.path.isfile(src_file):
+                shard_index += 1
+                dest_file = os.path.join(pkg_dir, f".coverage.shard_{shard_index}")
+                shutil.copy2(src_file, dest_file)
+                staged_paths.append(dest_file)
+
+    return staged_paths
 
 
 def has_coverage_script(pkg_json: str) -> bool:
@@ -41,24 +62,30 @@ def has_coverage_script(pkg_json: str) -> bool:
     return isinstance(scripts, dict) and "cov" in scripts
 
 
-def prepare_coverage_inputs(pkg_dir: str, artifacts_dir: str | None) -> bool:
+def prepare_coverage_inputs(
+    pkg_dir: str,
+    artifacts_dir: str | None,
+    repo_root: str = ".",
+) -> bool:
+    for entry in os.listdir(pkg_dir):
+        if entry == ".coverage" or entry.startswith((".coverage.shard_", ".coverage.local_")):
+            os.remove(os.path.join(pkg_dir, entry))
+
+    staged_paths: list[str] = []
     if artifacts_dir is not None:
-        stage_package_artifacts(pkg_dir, artifacts_dir)
+        staged_paths = stage_package_artifacts(pkg_dir, artifacts_dir, repo_root=repo_root)
 
     unit_cov = os.path.join(pkg_dir, ".coverage.unit")
     int_cov = os.path.join(pkg_dir, ".coverage.integration")
 
-    if not (os.path.exists(unit_cov) or os.path.exists(int_cov)):
+    has_local_inputs = os.path.exists(unit_cov) or os.path.exists(int_cov)
+    if not staged_paths and not has_local_inputs:
         return False
 
-    combined_cov = os.path.join(pkg_dir, ".coverage")
-    if os.path.exists(combined_cov):
-        os.remove(combined_cov)
-
     if os.path.exists(unit_cov):
-        os.rename(unit_cov, os.path.join(pkg_dir, ".coverage.1"))
+        os.rename(unit_cov, os.path.join(pkg_dir, ".coverage.local_unit"))
     if os.path.exists(int_cov):
-        os.rename(int_cov, os.path.join(pkg_dir, ".coverage.2"))
+        os.rename(int_cov, os.path.join(pkg_dir, ".coverage.local_integration"))
 
     return True
 
