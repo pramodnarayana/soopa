@@ -75,7 +75,7 @@ class StubPullConnector(SourceConnectorPort):
 
     @property
     def app_id(self) -> str:
-        return "itron_mdm"
+        return "acme_source"
 
     @property
     def last_error(self) -> IpError | None:
@@ -83,10 +83,10 @@ class StubPullConnector(SourceConnectorPort):
 
     def spec(self) -> AppSpecDTO:
         return AppSpecDTO(
-            app_id="itron_mdm",
-            display_name="Itron MDM",
+            app_id="acme_source",
+            display_name="Acme Source",
             auth_type="API_KEY",
-            category="ENERGY",
+            category="GENERIC",
         )
 
     async def check(
@@ -147,7 +147,7 @@ class StubPullConnector(SourceConnectorPort):
 
 
 @pytest.mark.asyncio
-async def test_run_sync_use_case_initial_and_incremental_on_postgres(
+async def test_run_sync_use_case_advances_cursor_across_runs_on_postgres(
     global_session: GlobalSession,
     tenant_session: TenantSession,
     seeded_ip_tenant: str,
@@ -159,12 +159,12 @@ async def test_run_sync_use_case_initial_and_incremental_on_postgres(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
-        name="Grid Pull Integration",
+        app_id="acme_source",
+        name="Partner Pull Integration",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://pull.grid.com"},
+        public_config={"endpoint_url": "https://pull.partner.example.com"},
         encrypted_credentials=cipher.encrypt({"api_key": "k1"}),
-        endpoint_for_fingerprint="https://pull.grid.com",
+        endpoint_for_fingerprint="https://pull.partner.example.com",
     )
     async with cp_uow:
         await cp_uow.connections.save(conn)
@@ -172,8 +172,8 @@ async def test_run_sync_use_case_initial_and_incremental_on_postgres(
 
     connector = StubPullConnector(
         records=[
-            {"id": "m1", "updated_at": "2026-10-23T10:00:00+00:00", "kwh": 11.2},
-            {"id": "m2", "updated_at": "2026-10-23T10:05:00+00:00", "kwh": 15.8},
+            {"id": "rec_1", "updated_at": "2026-10-23T10:00:00+00:00", "quantity": 11.2},
+            {"id": "rec_2", "updated_at": "2026-10-23T10:05:00+00:00", "quantity": 15.8},
         ]
     )
     use_case = RunSyncUseCase(
@@ -181,7 +181,7 @@ async def test_run_sync_use_case_initial_and_incremental_on_postgres(
         data_plane_uow=dp_uow,
         tiered_storage=storage,
         cipher=cipher,
-        connectors={"itron_mdm": connector},
+        connectors={"acme_source": connector},
     )
 
     # 1. First execution -> INITIAL sync
@@ -189,7 +189,7 @@ async def test_run_sync_use_case_initial_and_incremental_on_postgres(
         RunSyncCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
-            stream_name="meters",
+            stream_name="records_alpha",
             page_batch_size=10,
         )
     )
@@ -203,7 +203,7 @@ async def test_run_sync_use_case_initial_and_incremental_on_postgres(
         RunSyncCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
-            stream_name="meters",
+            stream_name="records_alpha",
             lookback_seconds=300,
             page_batch_size=10,
         )
@@ -226,12 +226,12 @@ async def test_run_sync_use_case_marks_failed_when_connector_sets_last_error(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
-        name="Grid Failing Pull",
+        app_id="acme_source",
+        name="Partner Failing Pull",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://fail-pull.grid.com"},
+        public_config={"endpoint_url": "https://fail-pull.partner.example.com"},
         encrypted_credentials=cipher.encrypt({"api_key": "k1"}),
-        endpoint_for_fingerprint="https://fail-pull.grid.com",
+        endpoint_for_fingerprint="https://fail-pull.partner.example.com",
     )
     async with cp_uow:
         await cp_uow.connections.save(conn)
@@ -246,14 +246,14 @@ async def test_run_sync_use_case_marks_failed_when_connector_sets_last_error(
         data_plane_uow=dp_uow,
         tiered_storage=storage,
         cipher=cipher,
-        connectors={"itron_mdm": failing_connector},
+        connectors={"acme_source": failing_connector},
     )
 
     res = await use_case.execute(
         RunSyncCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
-            stream_name="meters",
+            stream_name="records_alpha",
         )
     )
     assert res.status == SyncRunStatus.FAILED.value
@@ -262,7 +262,7 @@ async def test_run_sync_use_case_marks_failed_when_connector_sets_last_error(
 
 
 @pytest.mark.asyncio
-async def test_receive_push_and_fetch_record_on_postgres(
+async def test_thin_push_notification_hydrates_upstream_record_on_postgres(
     global_session: GlobalSession,
     tenant_session: TenantSession,
     seeded_ip_tenant: str,
@@ -274,19 +274,19 @@ async def test_receive_push_and_fetch_record_on_postgres(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
-        name="Grid Push & Fetch",
+        app_id="acme_source",
+        name="Partner Push Hydration",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://push.grid.com"},
+        public_config={"endpoint_url": "https://push.partner.example.com"},
         encrypted_credentials=cipher.encrypt({"api_key": "k1"}),
-        endpoint_for_fingerprint="https://push.grid.com",
+        endpoint_for_fingerprint="https://push.partner.example.com",
     )
     async with cp_uow:
         await cp_uow.connections.save(conn)
         await cp_uow.commit()
 
-    secret = "whsec_grid_secret"
-    raw_body = b'{"event":"meter.updated","meter_id":"m_99"}'
+    secret = "whsec_partner_secret"
+    raw_body = b'{"event":"record.updated","record_id":"rec_99"}'
     sig = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
 
     push_uc = ReceivePushUseCase(
@@ -305,8 +305,8 @@ async def test_receive_push_and_fetch_record_on_postgres(
     cmd = ReceivePushCommand(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        app_id="itron_mdm",
-        stream_name="meters",
+        app_id="acme_source",
+        stream_name="records_alpha",
         raw_payload=raw_body,
         headers={
             "Content-Type": "application/json",
@@ -315,7 +315,7 @@ async def test_receive_push_and_fetch_record_on_postgres(
         secret=secret,
         external_event_id="evt_thin_99",
         is_thin=True,
-        thin_record_id="m_99",
+        thin_record_id="rec_99",
     )
     res1 = await push_uc.execute(cmd)
     assert res1.status_code == 202
@@ -338,21 +338,21 @@ async def test_receive_push_and_fetch_record_on_postgres(
 
     # 3. Execute FetchRecordUseCase for the thin push notification
     connector = StubPullConnector(
-        records=[{"id": "m_99", "updated_at": "2026-10-23T12:00:00Z", "kwh": 99.5}]
+        records=[{"id": "rec_99", "updated_at": "2026-10-23T12:00:00Z", "quantity": 99.5}]
     )
     fetch_uc = FetchRecordUseCase(
         control_plane_uow=cp_uow,
         data_plane_uow=dp_uow,
         tiered_storage=storage,
         cipher=cipher,
-        connectors={"itron_mdm": connector},
+        connectors={"acme_source": connector},
     )
     fetch_res = await fetch_uc.execute(
         FetchRecordCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=conn.id,
-            stream_name="meters",
-            record_id="m_99",
+            stream_name="records_alpha",
+            record_id="rec_99",
             parent_trace_id=res1.trace_id,
         )
     )
@@ -388,13 +388,13 @@ async def test_ingest_stream_batch_use_case_on_postgres(
         messages=[
             RawMessageDTO(
                 message_id="kafka-0-1001",
-                raw_payload=b'{"meter":"m1","kwh":10}',
+                raw_payload=b'{"record_id":"r1","quantity":10}',
                 partition_id="0",
                 broker_offset="1001",
             ),
             RawMessageDTO(
                 message_id="kafka-0-1002",
-                raw_payload=b'{"meter":"m2","kwh":20}',
+                raw_payload=b'{"record_id":"r2","quantity":20}',
                 partition_id="0",
                 broker_offset="1002",
             ),

@@ -8,6 +8,7 @@ from ip.engine.adapters.outbound.connectors.declarative_http_connector import (
     DeclarativeHttpConnector,
 )
 from ip.engine.adapters.outbound.connectors.spec_mapper import schema_to_app_spec_dto
+from ip.engine.domain.connection.enums import ConnectorArchitectureType
 from ip.engine.domain.connection.http_spec import DeclarativeManifest
 from ip.engine.domain.exceptions import ConnectorNotFoundError, Result
 from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
@@ -46,7 +47,7 @@ class ConnectorCatalogRegistry(CatalogRegistryPort):
             category=manifest.category,
             auth_type=manifest.auth_type,
             description=manifest.property_schema.description,
-            connector_type="DECLARATIVE_HTTP",
+            connector_type=ConnectorArchitectureType.DECLARATIVE_HTTP,
         )
 
     def register_connector(

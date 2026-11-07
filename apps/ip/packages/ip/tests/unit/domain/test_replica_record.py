@@ -17,7 +17,7 @@ from ip.engine.domain.trace.enums import IpTraceEventType
 from strace.domain import TracedAggregateRoot
 
 
-def test_compute_data_hash_is_canonical_and_key_order_independent() -> None:
+def test_compute_data_hash_is_key_order_independent() -> None:
     hash_1 = compute_data_hash({"b": 2, "a": 1, "nested": {"y": True, "x": False}})
     hash_2 = compute_data_hash({"a": 1, "nested": {"x": False, "y": True}, "b": 2})
 
@@ -25,14 +25,14 @@ def test_compute_data_hash_is_canonical_and_key_order_independent() -> None:
     assert len(hash_1) == 64
 
 
-def test_replica_record_create_and_idempotent_update_snapshot() -> None:
+def test_replica_record_update_snapshot_handles_idempotent_mutations() -> None:
     replica = ReplicaRecord.create(
         tenant_id="ten_01",
         connection_id="ip_conn_01",
-        stream="meter",
-        record_key="MTR-100",
-        primary_key_values=("MTR-100",),
-        data={"serial": "MTR-100", "kwh": 12.5},
+        stream="records_alpha",
+        record_key="REC-100",
+        primary_key_values=("REC-100",),
+        data={"serial": "REC-100", "quantity": 12.5},
         source_inbound_record_id="inb_01",
         trace_id="ip_trc_01",
         correlation_id="corr-01",
@@ -52,7 +52,7 @@ def test_replica_record_create_and_idempotent_update_snapshot() -> None:
 
     # 1. Updating with identical data (different key order) is a no-op
     mutated = replica.update_snapshot(
-        new_data={"kwh": 12.5, "serial": "MTR-100"},
+        new_data={"quantity": 12.5, "serial": "REC-100"},
         trace_id="ip_trc_02",
     )
     assert mutated is False
@@ -62,7 +62,7 @@ def test_replica_record_create_and_idempotent_update_snapshot() -> None:
 
     # 2. Updating with modified payload increments version and emits trace + domain event
     mutated_2 = replica.update_snapshot(
-        new_data={"serial": "MTR-100", "kwh": 19.75},
+        new_data={"serial": "REC-100", "quantity": 19.75},
         trace_id="ip_trc_03",
         correlation_id="corr-03",
         parent_trace_id="ip_trc_01",
@@ -85,14 +85,14 @@ def test_replica_record_create_and_idempotent_update_snapshot() -> None:
     assert event.data_hash == replica.data_hash
 
 
-def test_replica_record_create_tombstone_and_rejection_create() -> None:
+def test_replica_record_create_tombstone_marks_deleted_with_event() -> None:
     tomb = ReplicaRecord.create_tombstone(
         tenant_id="ten_01",
         connection_id="ip_conn_01",
-        stream="meter",
-        record_key="MTR-DEL-01",
-        primary_key_values=("MTR-DEL-01",),
-        data={"serial": "MTR-DEL-01", "deleted": True},
+        stream="records_alpha",
+        record_key="REC-DEL-01",
+        primary_key_values=("REC-DEL-01",),
+        data={"serial": "REC-DEL-01", "deleted": True},
         trace_id="ip_trc_del",
     )
     assert tomb.deleted_at is not None
@@ -102,10 +102,12 @@ def test_replica_record_create_tombstone_and_rejection_create() -> None:
     assert isinstance(event, ReplicaRecordChangedEvent)
     assert event.outcome == MergeOutcome.TOMBSTONE.value
 
+
+def test_replica_rejection_create_generates_prefixed_id() -> None:
     rej = ReplicaRejection.create(
         tenant_id="ten_01",
         connection_id="ip_conn_01",
-        stream="meter",
+        stream="records_alpha",
         inbound_record_id="inb_01",
         record_index=0,
         reason="MISSING_PRIMARY_KEY",
@@ -141,9 +143,9 @@ def test_replica_record_tombstone_revival_with_same_payload() -> None:
     replica = ReplicaRecord.create(
         tenant_id="ten_01",
         connection_id="ip_conn_01",
-        stream="meter",
-        record_key="MTR-200",
-        data={"serial": "MTR-200", "kwh": 50},
+        stream="records_alpha",
+        record_key="REC-200",
+        data={"serial": "REC-200", "quantity": 50},
         trace_id="trc_01",
     )
     replica.tombstone(trace_id="trc_del")
@@ -151,7 +153,7 @@ def test_replica_record_tombstone_revival_with_same_payload() -> None:
 
     # Reviving with identical payload must NOT be skipped as noop
     mutated = replica.update_snapshot(
-        new_data={"serial": "MTR-200", "kwh": 50},
+        new_data={"serial": "REC-200", "quantity": 50},
         trace_id="trc_revive",
     )
     assert mutated is True

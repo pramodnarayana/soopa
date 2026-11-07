@@ -20,7 +20,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_catalog_repository_versioning_and_active_resolution(
+async def test_catalog_repository_resolves_latest_active_version(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:
@@ -29,12 +29,12 @@ async def test_catalog_repository_versioning_and_active_resolution(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Catalog Test Connection",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://catalog.grid-utility.com"},
+        public_config={"endpoint_url": "https://catalog.partner.example.com"},
         encrypted_credentials=b"secret",
-        endpoint_for_fingerprint="https://catalog.grid-utility.com",
+        endpoint_for_fingerprint="https://catalog.partner.example.com",
     )
     await conn_repo.save(conn)
 
@@ -43,9 +43,9 @@ async def test_catalog_repository_versioning_and_active_resolution(
         catalog_version=1,
         streams=[
             StreamSchema(
-                name="meters",
-                fields=[StreamField(name="meter_id", data_type="string", nullable=False)],
-                primary_key=["meter_id"],
+                name="records_alpha",
+                fields=[StreamField(name="record_id", data_type="string", nullable=False)],
+                primary_key=["record_id"],
                 cursor_field="updated_at",
                 supported_sync_modes=[SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL],
             )
@@ -58,12 +58,12 @@ async def test_catalog_repository_versioning_and_active_resolution(
         catalog_version=2,
         streams=[
             StreamSchema(
-                name="meters",
+                name="records_alpha",
                 fields=[
-                    StreamField(name="meter_id", data_type="string", nullable=False),
-                    StreamField(name="grid_zone", data_type="string", nullable=True),
+                    StreamField(name="record_id", data_type="string", nullable=False),
+                    StreamField(name="region_zone", data_type="string", nullable=True),
                 ],
-                primary_key=["meter_id"],
+                primary_key=["record_id"],
                 cursor_field="updated_at",
                 supported_sync_modes=[SyncMode.FULL_REFRESH, SyncMode.INCREMENTAL],
             )

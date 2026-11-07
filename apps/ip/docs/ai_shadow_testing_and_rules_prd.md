@@ -12,7 +12,7 @@
 ## 1. Executive Summary & Problem Statement
 
 ### 1.1 The High Risk of Transformation Regressions in Production
-In enterprise utilities, healthcare, and finance, modifying an active L3 Normalization transformer (e.g., updating how Itron OpenWay interval pulses are aggregated or how Landis+Gyr multiplier offsets are applied) is historically one of the highest-risk operations an IT team can undertake. 
+In enterprise utilities, healthcare, and finance, modifying an active L3 Normalization transformer (e.g., updating how Itron OpenWay interval pulses are aggregated or how Landis+Gyr multiplier offsets are applied) is historically one of the highest-risk operations an IT team can undertake.
 
 A minor code tweak intended to fix an edge case for one customer or meter model frequently and silently corrupts downstream billing calculations for tens of thousands of other accounts:
 1. **Manual test suites are never exhaustive:** Engineers write 10 to 20 unit tests covering the "happy path", missing critical real-world boundary conditions:

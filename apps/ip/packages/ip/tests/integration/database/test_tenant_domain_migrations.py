@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 pytestmark = pytest.mark.integration
 
 
-def test_domain_migration_modules_ownership_and_invariants() -> None:
+def test_domain_migration_modules_claim_every_tenant_table_uniquely() -> None:
     """Verifies that every table in IpTenantBase.metadata is owned by exactly one domain branch."""
     all_metadata_tables = set(IpTenantBase.registry.metadata.tables.keys())
     assert len(all_metadata_tables) == 17
@@ -46,13 +46,12 @@ def test_domain_migration_modules_ownership_and_invariants() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tenant_domain_migrations_rls_and_isolation(
+async def test_tenant_domain_migrations_enable_row_level_security(
     tenant_db_connection: AsyncConnection,
 ) -> None:
-    """Verifies that RLS and tenant_isolation policies are active on all tenant tables."""
+    """Verifies that PostgreSQL row-level security is enabled on all tenant tables."""
     all_tables = [table for m in DOMAIN_MIGRATION_MODULES for table in m.owned_tables]
 
-    # Check pg_class relrowsecurity
     rel_res = await tenant_db_connection.execute(
         text("SELECT relname, relrowsecurity FROM pg_class WHERE relname = ANY(:names)"),
         {"names": all_tables},
@@ -61,7 +60,14 @@ async def test_tenant_domain_migrations_rls_and_isolation(
     for table in all_tables:
         assert rls_map.get(table) is True, f"RLS not enabled on table {table}"
 
-    # Check pg_policies
+
+@pytest.mark.asyncio
+async def test_tenant_domain_migrations_attach_tenant_isolation_policies(
+    tenant_db_connection: AsyncConnection,
+) -> None:
+    """Verifies that tenant_isolation policies are active on all tenant tables."""
+    all_tables = [table for m in DOMAIN_MIGRATION_MODULES for table in m.owned_tables]
+
     pol_res = await tenant_db_connection.execute(
         text("SELECT tablename, policyname FROM pg_policies WHERE tablename = ANY(:names)"),
         {"names": all_tables},

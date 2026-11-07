@@ -48,7 +48,7 @@ class InMemoryTieredStorageAdapter(TieredStoragePort):
 
 
 @pytest.mark.asyncio
-async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage(
+async def test_trace_repository_hydrates_upstream_waterfall_with_ordered_lineage(
     tenant_session: TenantSession,
 ) -> None:
     tenant_id = "ten_dp_trace_01"
@@ -57,7 +57,7 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
 
     storage = InMemoryTieredStorageAdapter(
         {
-            "s3://ip-payloads/ten_dp_trace_01/inb_01.json": b'{"meter_id":"MTR-500","kwh":88.2}',
+            "s3://ip-payloads/ten_dp_trace_01/inb_01.json": b'{"record_id":"REC-500","quantity":88.2}',
         }
     )
     uow = create_ip_data_plane_uow(tenant_session, storage=storage)
@@ -66,13 +66,13 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
     inb = InboundRecord.create(
         tenant_id=tenant_id,
         connection_id="ip_conn_src_01",
-        app_id="itron_mdm",
-        stream_name="meter_reads",
-        payload_bytes=b'{"meter_id":"MTR-500","kwh":88.2}',
+        app_id="acme_source",
+        stream_name="records_alpha",
+        payload_bytes=b'{"record_id":"REC-500","quantity":88.2}',
         is_inlined=False,
         request_s3_key="s3://ip-payloads/ten_dp_trace_01/inb_01.json",
         trace_id=root_trace_id,
-        correlation_id="MTR-500",
+        correlation_id="REC-500",
         ingestion_mode=IngestionMode.PUSH_FULL,
         request_headers={"Authorization": "Bearer top-secret"},
         request_body=None,
@@ -82,36 +82,36 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
     rep = ReplicaRecord.create(
         tenant_id=tenant_id,
         connection_id="ip_conn_src_01",
-        stream="meter_reads",
-        primary_key_values=("MTR-500",),
-        data={"meter_id": "MTR-500", "kwh": 88.2},
+        stream="records_alpha",
+        primary_key_values=("REC-500",),
+        data={"record_id": "REC-500", "quantity": 88.2},
         source_inbound_record_id=inb.id,
         trace_id=root_trace_id,
-        correlation_id="MTR-500",
+        correlation_id="REC-500",
     )
     await uow.replica_records.save(rep)
 
     nrm = NormalizedRecord.create(
         tenant_id=tenant_id,
         connection_id="ip_conn_src_01",
-        canonical_type="mdm.meter_reading",
-        source_id="MTR-500",
-        canonical_data={"meter_id": "MTR-500", "reading_kwh": 88.2},
+        canonical_type="canonical.record_alpha",
+        source_id="REC-500",
+        canonical_data={"record_id": "REC-500", "metric_value": 88.2},
         trace_id=root_trace_id,
-        correlation_id="MTR-500",
+        correlation_id="REC-500",
     )
     await uow.normalized_records.save(nrm)
 
     gem = GlobalEntityMap.create(
         tenant_id=tenant_id,
-        entity_domain="mdm.meter_reading",
+        entity_domain="canonical.record_alpha",
         canonical_id=nrm.id,
         source_connection_id="ip_conn_src_01",
-        source_entity_id="MTR-500",
+        source_entity_id="REC-500",
         dest_connection_id="ip_conn_dest_01",
         dest_entity_id="NS-INV-500",
         trace_id=root_trace_id,
-        correlation_id="MTR-500",
+        correlation_id="REC-500",
     )
     await uow.entity_maps.save(gem)
 
@@ -122,13 +122,13 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
         stream_name="invoices",
         target_url="https://api.netsuite.example.com/v1/invoices",
         http_method="POST",
-        payload_bytes=b'{"meter_id":"MTR-500"}',
+        payload_bytes=b'{"record_id":"REC-500"}',
         is_inlined=True,
         trace_id=root_trace_id,
         operation=HttpWriteOperation.CREATE.value,
-        correlation_id="MTR-500",
+        correlation_id="REC-500",
         request_headers={"X-API-Key": "secret-key"},
-        request_body={"meter_id": "MTR-500"},
+        request_body={"record_id": "REC-500"},
     )
     out_root.mark_failed(error_message="HTTP 503 Unavailable", response_status_code=503)
     await uow.outbound_records.save(out_root)
@@ -165,7 +165,7 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
     assert child_waterfall.inbound_record is not None
     assert child_waterfall.inbound_record.id == inb.id
     assert child_waterfall.inbound_record.request_headers["Authorization"] == REDACTED_SECRET_VALUE
-    assert child_waterfall.inbound_record.request_body == {"meter_id": "MTR-500", "kwh": 88.2}
+    assert child_waterfall.inbound_record.request_body == {"record_id": "REC-500", "quantity": 88.2}
     assert len(child_waterfall.replica_records) == 1
     assert len(child_waterfall.normalized_records) == 1
     assert len(child_waterfall.outbound_records) == 1
@@ -183,5 +183,5 @@ async def test_trace_repository_5_layer_waterfall_upstream_hydration_and_lineage
     assert lineage[1].primary_layer == PipelineStage.DELIVER.value
 
     # 5. Verify uow.traces.find_traces_by_correlation_id
-    corr_results = await uow.traces.find_traces_by_correlation_id(tenant_id, "MTR-500")
+    corr_results = await uow.traces.find_traces_by_correlation_id(tenant_id, "REC-500")
     assert len(corr_results) == 2

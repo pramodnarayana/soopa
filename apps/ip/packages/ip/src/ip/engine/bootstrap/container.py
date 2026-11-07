@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
 from dependency_injector import containers, providers
+from orchestration.application.services import InMemoryWorkflowDefinitionRegistry
 from orchestration.application.services.registries import (
     InMemoryPredicateRegistry,
     InMemoryStepHandlerRegistry,
@@ -33,6 +34,7 @@ from outbox.ports.outbox_repository_port import OutboxRepositoryPort
 from outbox.ports.shard_outbox_drain_port import ShardOutboxDrainPort
 from security.ports.cipher_port import CipherPort
 from security.provider import SecurityProvider
+from shttp import HttpRequestAuthenticator
 from sqlalchemy.ext.asyncio import AsyncSession
 from storage.provider import StorageProvider
 from strace.adapters import SqlAlchemyTraceRepository
@@ -46,6 +48,9 @@ from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.auth.token_refresh_lock import (
     SqlAlchemyTokenRefreshLockAdapter,
 )
+from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
+from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
+from ip.engine.adapters.outbound.connectors.sftp_connector import SftpConnector
 from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
     SqlAlchemyCatalogRepository,
 )
@@ -205,6 +210,12 @@ from ip.engine.bootstrap.publisher_factory import (
     create_ip_cp_outbox_publisher,
     create_ip_dp_outbox_publisher,
 )
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    CatalogCategory,
+    ConnectorArchitectureType,
+    EngineConnectorId,
+)
 from ip.engine.domain.enums import IpOutboxSource, PipelineStage
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.domain.normalization.policies import (
@@ -213,9 +224,14 @@ from ip.engine.domain.normalization.policies import (
 from ip.engine.domain.normalization.registries import (
     CanonicalEntityRegistry,
     CanonicalWriterRegistry,
+    TransformerRegistry,
 )
+from ip.engine.ports.outbound.auth_resolver_port import AuthStrategyResolverPort
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
-from ip.engine.ports.outbound.catalog_registry_port import CatalogConnectorMapping
+from ip.engine.ports.outbound.catalog_registry_port import (
+    CatalogAppSummaryDTO,
+    CatalogConnectorMapping,
+)
 from ip.engine.ports.outbound.connector_port import ConnectorPort, DestinationConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
@@ -228,25 +244,59 @@ from ip.engine.ports.outbound.token_refresh_lock_port import (
     TokenRefreshLockPort,
 )
 from ip.engine.ports.outbound.uow import (
-    IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
     IpTenantResolverPort,
 )
 from ip.engine.settings import IpEngineSettings
-from ip.solutions.connectors.registry_loader import create_default_catalog_registry
-from ip.solutions.domains.energy.ports import (
-    ENERGY_DOMAIN_REPOSITORY_KEY,
-    EnergyDomainRepositoryPort,
-)
-from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
-from ip.solutions.domains.energy.writers import (
-    create_default_canonical_writer_registry,
-)
-from ip.solutions.stitches.registry_loader import (
-    create_default_workflow_definition_registry,
-    register_default_stitches,
-)
-from ip.solutions.transformers.registry_loader import create_default_transformer_registry
+
+DomainRepositoryFactory = Callable[[AsyncSession], object]
+
+
+def create_engine_catalog_registry(
+    allow_private_ips: bool = False,
+    *,
+    auth_resolver: AuthStrategyResolverPort[HttpRequestAuthenticator] | None = None,
+) -> ConnectorCatalogRegistry:
+    """Creates a pure domain-agnostic catalog registry pre-seeded only with standard protocol transports."""
+    resolved_auth_resolver = auth_resolver or AuthStrategyResolver()
+    registry = ConnectorCatalogRegistry(
+        auth_resolver=resolved_auth_resolver,
+        allow_private_ips=allow_private_ips,
+    )
+    http_conn = GenericHttpConnector(
+        app_id=EngineConnectorId.HTTP,
+        auth_resolver=resolved_auth_resolver,
+        allow_private_ips=allow_private_ips,
+    )
+    registry.register_connector(
+        http_conn,
+        CatalogAppSummaryDTO(
+            app_id=EngineConnectorId.HTTP,
+            display_name="HTTP / REST API",
+            category=CatalogCategory.API,
+            auth_type=AuthType.BEARER_TOKEN,
+            description="Universal HTTP / REST API connector for SaaS and custom web endpoints.",
+            connector_type=ConnectorArchitectureType.GENERIC_HTTP,
+        ),
+    )
+    sftp = SftpConnector(allow_local=allow_private_ips)
+    registry.register_connector(sftp, SftpConnector.default_catalog_summary())
+    return registry
+
+
+def create_empty_transformer_registry() -> TransformerRegistry:
+    """Creates an empty domain-agnostic L3 TransformerRegistry."""
+    return TransformerRegistry()
+
+
+def create_empty_canonical_writer_registry() -> CanonicalWriterRegistry[CanonicalWriterPort]:
+    """Creates an empty domain-agnostic L3 CanonicalWriterRegistry."""
+    return CanonicalWriterRegistry()
+
+
+def create_empty_workflow_definition_registry() -> InMemoryWorkflowDefinitionRegistry:
+    """Creates an empty domain-agnostic L4 InMemoryWorkflowDefinitionRegistry."""
+    return InMemoryWorkflowDefinitionRegistry()
 
 
 def create_ip_control_plane_uow(
@@ -267,8 +317,14 @@ def create_ip_control_plane_uow(
 def create_ip_data_plane_uow(
     tenant_session: AsyncSession,
     storage: TieredStoragePort | None = None,
+    *,
+    domain_repository_factories: Mapping[str, DomainRepositoryFactory] | None = None,
 ) -> SqlAlchemyIpDataPlaneUnitOfWork:
     """Composition root factory assembling SqlAlchemyIpDataPlaneUnitOfWork with concrete repositories."""
+    resolved_domain_repos = {
+        name: factory(tenant_session)
+        for name, factory in (domain_repository_factories or {}).items()
+    }
     return SqlAlchemyIpDataPlaneUnitOfWork(
         tenant_session,
         inbound_records=SqlAlchemyInboundRecordRepository(tenant_session, storage=storage),
@@ -285,9 +341,7 @@ def create_ip_data_plane_uow(
             event_spec=IP_TRACE_EVENT_SPEC,
             stage_specs=IP_TRACE_STAGE_SPECS,
         ),
-        domain_repositories={
-            ENERGY_DOMAIN_REPOSITORY_KEY.name: SqlAlchemyEnergyDomainRepository(tenant_session),
-        },
+        domain_repositories=resolved_domain_repos,
     )
 
 
@@ -300,12 +354,18 @@ def create_ip_tenant_uow_provider(
     resolver: IpTenantResolverPort,
     db_router: DatabaseRouterPort,
     storage: TieredStoragePort | None = None,
+    *,
+    domain_repository_factories: Mapping[str, DomainRepositoryFactory] | None = None,
 ) -> SqlAlchemyIpTenantUoWProvider:
     """Composition root factory assembling SqlAlchemyIpTenantUoWProvider."""
     return SqlAlchemyIpTenantUoWProvider(
         resolver=resolver,
         db_router=db_router,
-        uow_factory=lambda session: create_ip_data_plane_uow(session, storage=storage),
+        uow_factory=lambda session: create_ip_data_plane_uow(
+            session,
+            storage=storage,
+            domain_repository_factories=domain_repository_factories,
+        ),
     )
 
 
@@ -503,18 +563,9 @@ class SessionScopedOutboundDeliveryExecutor(
             return await use_case.execute(command)
 
 
-def _resolve_energy_domain_repo(
-    uow: IpDataPlaneUnitOfWorkPort,
-) -> EnergyDomainRepositoryPort | None:
-    """Resolves EnergyDomainRepositoryPort from IpDataPlaneUnitOfWorkPort without concrete UoW downcasting."""
-    return uow.resolve_domain_repository(ENERGY_DOMAIN_REPOSITORY_KEY)
-
-
 def create_default_stitch_catalog() -> InMemoryStitchCatalogRegistry:
-    """Creates and populates an InMemoryStitchCatalogRegistry with built-in stitches."""
-    registry = InMemoryStitchCatalogRegistry()
-    register_default_stitches(registry)
-    return registry
+    """Creates an empty domain-agnostic InMemoryStitchCatalogRegistry."""
+    return InMemoryStitchCatalogRegistry()
 
 
 def create_default_step_handler_registry(
@@ -563,7 +614,7 @@ class Container(containers.DeclarativeContainer):
     auth_resolver = providers.Singleton(AuthStrategyResolver)
 
     catalog_registry = providers.Factory(
-        create_default_catalog_registry,
+        create_engine_catalog_registry,
         allow_private_ips=config.allow_private_ips.as_(bool),
         auth_resolver=auth_resolver,
     )
@@ -589,16 +640,21 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     db_router: providers.Dependency[DatabaseRouterPort] = providers.Dependency()
     tenant_resolver: providers.Dependency[IpTenantResolverPort] = providers.Dependency()
+    domain_repository_factories: providers.Object[Mapping[str, DomainRepositoryFactory]] = (
+        providers.Object({})
+    )
     cp_uow = providers.Factory(create_ip_control_plane_uow)
     dp_uow = providers.Factory(
         create_ip_data_plane_uow,
         storage=tiered_storage,
+        domain_repository_factories=domain_repository_factories,
     )
     dp_uow_provider = providers.Factory(
         create_ip_tenant_uow_provider,
         resolver=tenant_resolver,
         db_router=db_router,
         storage=tiered_storage,
+        domain_repository_factories=domain_repository_factories,
     )
 
     # -----------------------------------------------------------------------
@@ -614,12 +670,9 @@ class Container(containers.DeclarativeContainer):
     # -----------------------------------------------------------------------
     # Normalization Registries & Use Cases (Layer 3)
     # -----------------------------------------------------------------------
-    transformer_registry = providers.Singleton(create_default_transformer_registry)
+    transformer_registry = providers.Singleton(create_empty_transformer_registry)
     writer_registry: providers.Singleton[CanonicalWriterRegistry[CanonicalWriterPort]] = (
-        providers.Singleton(
-            create_default_canonical_writer_registry,
-            repo_factory=_resolve_energy_domain_repo,
-        )
+        providers.Singleton(create_empty_canonical_writer_registry)
     )
     entity_registry = providers.Singleton(CanonicalEntityRegistry)
     normalization_error_policy = providers.Singleton(DefaultNormalizationErrorPolicy)
@@ -722,7 +775,7 @@ class Container(containers.DeclarativeContainer):
     # Stitch / Durable Workflow Registries (Layer 4)
     # -----------------------------------------------------------------------
     stitch_catalog = providers.Singleton(create_default_stitch_catalog)
-    workflow_definition_registry = providers.Singleton(create_default_workflow_definition_registry)
+    workflow_definition_registry = providers.Singleton(create_empty_workflow_definition_registry)
     step_handler_registry = providers.Singleton(
         create_default_step_handler_registry,
         uow_provider=dp_uow_provider,
@@ -762,9 +815,14 @@ class Container(containers.DeclarativeContainer):
 
 __all__ = [
     "Container",
+    "DomainRepositoryFactory",
     "SessionScopedOutboundDeliveryExecutor",
     "create_default_stage_replay_processors",
     "create_default_stitch_catalog",
+    "create_empty_canonical_writer_registry",
+    "create_empty_transformer_registry",
+    "create_empty_workflow_definition_registry",
+    "create_engine_catalog_registry",
     "create_ip_control_plane_uow",
     "create_ip_cp_outbox_components",
     "create_ip_cp_outbox_relay",

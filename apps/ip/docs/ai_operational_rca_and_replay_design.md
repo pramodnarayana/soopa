@@ -146,15 +146,15 @@ CREATE TABLE ip_operational_diagnostics (
 );
 
 -- Enhancing ip_traces for sub-15ms Natural Language Search & Attempt Trees
-ALTER TABLE ip_traces 
+ALTER TABLE ip_traces
 ADD COLUMN IF NOT EXISTS parent_trace_id VARCHAR(36),
 ADD COLUMN IF NOT EXISTS attempt_number INT NOT NULL DEFAULT 1,
 ADD COLUMN IF NOT EXISTS root_cause_category VARCHAR(32);
 
-CREATE INDEX idx_ip_traces_parent_attempt 
+CREATE INDEX idx_ip_traces_parent_attempt
 ON ip_traces (tenant_id, parent_trace_id, attempt_number);
 
-CREATE INDEX idx_ip_traces_search_composite 
+CREATE INDEX idx_ip_traces_search_composite
 ON ip_traces (tenant_id, status, created_at DESC, root_cause_category);
 
 ALTER TABLE ip_operational_diagnostics ENABLE ROW LEVEL SECURITY;

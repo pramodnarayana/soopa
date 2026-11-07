@@ -120,7 +120,7 @@ function HeroCorrelationBar({
               value={value}
               onChange={(e) => setValue(e.target.value)}
               aria-label="Search business correlation key or trace ID"
-              placeholder="Instant <15ms Support Audit — enter meter_id (MTR-700), order_id, external record ID, or ip_trc_..."
+              placeholder="Instant <15ms Support Audit — enter correlation ID, order_id, external record ID, or ip_trc_..."
               className="h-11 bg-card pl-10 font-mono text-sm"
             />
           </div>

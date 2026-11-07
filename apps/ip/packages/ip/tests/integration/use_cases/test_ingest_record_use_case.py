@@ -64,9 +64,9 @@ async def test_ingest_record_inline(tenant_session: TenantSession) -> None:
     command = IngestRecordCommand(
         tenant_id=tenant_id,
         connection_id=connection_id,
-        stream_name="meter_readings",
-        payload={"meter": "MTR-9001", "kwh": 128.4},
-        headers={"x-vendor": "itron"},
+        stream_name="records_alpha",
+        payload={"record_id": "REC-9001", "quantity": 128.4},
+        headers={"x-vendor": "acme"},
         correlation_id="TXN-4040",
     )
 
@@ -82,10 +82,10 @@ async def test_ingest_record_inline(tenant_session: TenantSession) -> None:
     assert saved is not None
     assert saved.correlation_id == "TXN-4040"
     assert saved.request_body is not None
-    assert saved.request_body["meter"] == "MTR-9001"
-    assert saved.request_body["kwh"] == 128.4
+    assert saved.request_body["record_id"] == "REC-9001"
+    assert saved.request_body["quantity"] == 128.4
     assert "__raw_payload_b64__" in saved.request_body
-    assert saved.stream_name == "meter_readings"
+    assert saved.stream_name == "records_alpha"
 
 
 @pytest.mark.asyncio

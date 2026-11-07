@@ -72,7 +72,7 @@ class PreviewStreamTransformationResultDTO:
 def _compute_preview_shadow_diffs(
     active_drafts: tuple[CanonicalDraft, ...],
     shadow_drafts: tuple[CanonicalDraft, ...],
-) -> dict[str, EntityShadowDiff]:
+) -> Mapping[str, EntityShadowDiff]:
     active_by_key = {f"{d.canonical_type}:{d.source_id}": d.fields for d in active_drafts}
     shadow_by_key = {f"{d.canonical_type}:{d.source_id}": d.fields for d in shadow_drafts}
     all_keys = sorted(set(active_by_key.keys()) | set(shadow_by_key.keys()))
@@ -185,7 +185,7 @@ class PreviewStreamTransformationUseCase:
             for r in active_res.rejections
         )
 
-        shadow_diffs: dict[str, EntityShadowDiff] = {}
+        shadow_diffs: Mapping[str, EntityShadowDiff] = {}
         if shadow_transformer is not None:
             shadow_res = shadow_transformer.transform(snapshot, ctx)
             shadow_diffs = _compute_preview_shadow_diffs(active_res.drafts, shadow_res.drafts)

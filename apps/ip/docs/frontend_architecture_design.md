@@ -1,9 +1,9 @@
 # Soopa Integration Platform (IP) — Enterprise Frontend Architecture & Presentation Layer Design
 
-**Status:** Proposed Architecture (Gold Standard)  
-**Bounded Context:** Integration Platform (`apps/ip/packages/ui` $\rightarrow$ `@soopa/ip-ui`)  
-**Shared Foundation:** Platform Design System & Network Core (`core/packages/ui` $\rightarrow$ `@soopa/ui`)  
-**Composition Host:** Unified Control Plane Shell (`core/ucp/apps/dashboard` $\rightarrow$ `@soopa/dashboard`)  
+**Status:** Proposed Architecture (Gold Standard)
+**Bounded Context:** Integration Platform (`apps/ip/packages/ui` $\rightarrow$ `@soopa/ip-ui`)
+**Shared Foundation:** Platform Design System & Network Core (`core/packages/ui` $\rightarrow$ `@soopa/ui`)
+**Composition Host:** Unified Control Plane Shell (`core/ucp/apps/dashboard` $\rightarrow$ `@soopa/dashboard`)
 
 ---
 

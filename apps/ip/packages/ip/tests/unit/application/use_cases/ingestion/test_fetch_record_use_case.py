@@ -245,7 +245,7 @@ class FakeSourceConnector(SourceConnectorPort):
 
     @property
     def app_id(self) -> str:
-        return "itron_mdm"
+        return "acme_source"
 
     def spec(self) -> AppSpecDTO:
         raise NotImplementedError
@@ -308,16 +308,14 @@ async def test_fetch_record_success() -> None:
     cipher = FakeCipher()
     storage = FakeTieredStorageAdapter()
 
-    connector = FakeSourceConnector(
-        records={"meter_42": {"meter_id": "meter_42", "consumption_kwh": 350.5}}
-    )
-    connectors = {"itron_mdm": connector}
+    connector = FakeSourceConnector(records={"rec_42": {"record_id": "rec_42", "amount": 350.5}})
+    connectors = {"acme_source": connector}
 
     conn = Connection(
         id="conn_1",
         tenant_id="tenant_x",
-        app_id="itron_mdm",
-        name="Itron MDM Grid",
+        app_id="acme_source",
+        name="Acme Source Endpoint",
         auth_type=AuthType.API_KEY,
         connection_fingerprint="fp1",
         status=ConnectionStatus.ACTIVE,
@@ -335,22 +333,22 @@ async def test_fetch_record_success() -> None:
     cmd = FetchRecordCommand(
         tenant_id="tenant_x",
         connection_id="conn_1",
-        stream_name="meters",
-        record_id="meter_42",
+        stream_name="records_alpha",
+        record_id="rec_42",
         parent_trace_id="trc_parent_notice",
     )
 
     result = await use_case.execute(cmd)
 
     assert result.status == "FETCHED"
-    assert result.record_id == "meter_42"
+    assert result.record_id == "rec_42"
     assert result.inbound_record_id is not None
 
     stored = await dp_uow.inbound_records.get_by_id(result.inbound_record_id, "tenant_x")
     assert stored is not None
     assert stored.ingestion_mode == IngestionMode.FETCH_ON_NOTIFY
     assert stored.parent_trace_id == "trc_parent_notice"
-    assert stored.request_body == {"meter_id": "meter_42", "consumption_kwh": 350.5}
+    assert stored.request_body == {"record_id": "rec_42", "amount": 350.5}
 
 
 @pytest.mark.asyncio
@@ -361,13 +359,13 @@ async def test_fetch_record_not_found() -> None:
     storage = FakeTieredStorageAdapter()
 
     connector = FakeSourceConnector(records={})
-    connectors = {"itron_mdm": connector}
+    connectors = {"acme_source": connector}
 
     conn = Connection(
         id="conn_1",
         tenant_id="tenant_x",
-        app_id="itron_mdm",
-        name="Itron MDM Grid",
+        app_id="acme_source",
+        name="Acme Source Endpoint",
         auth_type=AuthType.API_KEY,
         connection_fingerprint="fp1",
         status=ConnectionStatus.ACTIVE,
@@ -385,8 +383,8 @@ async def test_fetch_record_not_found() -> None:
     cmd = FetchRecordCommand(
         tenant_id="tenant_x",
         connection_id="conn_1",
-        stream_name="meters",
-        record_id="meter_missing",
+        stream_name="records_alpha",
+        record_id="rec_missing",
     )
 
     result = await use_case.execute(cmd)

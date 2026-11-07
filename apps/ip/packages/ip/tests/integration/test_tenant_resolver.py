@@ -19,7 +19,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_ip_tenant_resolver_resolves_shard_and_returns_result(
+async def test_ip_tenant_resolver_resolves_registered_tenant_shard(
     transactional_router: TransactionalTestRouter,
     seeded_ip_tenant: str,
 ) -> None:
@@ -33,6 +33,12 @@ async def test_ip_tenant_resolver_resolves_shard_and_returns_result(
     assert shard_id == "ip_shard_1"
     assert "ip_shard" in shard_dsn
 
+
+@pytest.mark.asyncio
+async def test_ip_tenant_resolver_returns_not_found_result_for_unknown_tenant(
+    transactional_router: TransactionalTestRouter,
+) -> None:
+    resolver = SqlAlchemyIpTenantResolver(db_router=transactional_router)
     missing_res = await resolver.resolve_tenant_shard("ten_unknown")
     assert missing_res.is_err is True
     assert isinstance(missing_res.error, TenantShardNotFoundError)

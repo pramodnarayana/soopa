@@ -13,7 +13,7 @@ from ip.engine.domain.dispatch.enums import (
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 
 
-def test_outbound_record_orm_and_domain_roundtrip_mapper() -> None:
+def test_outbound_record_bidirectional_mapper_round_trips_delivered_fields() -> None:
     record = OutboundRecord.create_pending(
         tenant_id="tenant-123",
         connection_id="conn-456",
@@ -50,7 +50,7 @@ def test_outbound_record_orm_and_domain_roundtrip_mapper() -> None:
     assert restored.duration_ms == 120
 
 
-def test_outbound_record_mapper_preserves_retry_and_failure_metadata() -> None:
+def test_outbound_record_mapper_preserves_scheduled_retry_metadata() -> None:
     record = OutboundRecord.create_pending(
         tenant_id="tenant-123",
         connection_id="conn-456",

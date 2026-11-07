@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -223,7 +223,7 @@ class ResolveMatchConditionsUseCase:
         uow: WorkflowUnitOfWorkPort,
         tenant_id: str,
         run_id: str,
-        affected_runs: dict[tuple[str, str], WorkflowRun],
+        affected_runs: MutableMapping[tuple[str, str], WorkflowRun],
     ) -> Result[WorkflowRun, WorkflowError]:
         run_key = (tenant_id, run_id)
         existing = affected_runs.get(run_key)
@@ -533,7 +533,7 @@ class ResolveMatchConditionsUseCase:
     async def _finalize_affected_runs(
         *,
         uow: WorkflowUnitOfWorkPort,
-        affected_runs: dict[tuple[str, str], WorkflowRun],
+        affected_runs: MutableMapping[tuple[str, str], WorkflowRun],
         now: datetime,
     ) -> None:
         for run in affected_runs.values():

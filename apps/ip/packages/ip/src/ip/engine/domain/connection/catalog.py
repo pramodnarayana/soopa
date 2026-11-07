@@ -120,7 +120,7 @@ class DropdownOption:
     label: str
     value: str
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> JsonDict:
         return {
             "label": self.label,
             "value": self.value,

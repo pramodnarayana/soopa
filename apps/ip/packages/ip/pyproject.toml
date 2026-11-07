@@ -64,7 +64,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["src", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src"]
+pythonpath = ["src", "tests", "../../../../core/platform/packages/orchestration/src", "../../../../core/platform/packages/strace/src", "../../../../core/platform/packages/identity/src"]
 addopts = "-v --tb=short --import-mode=importlib"
 markers = [
     "integration: narrow integration tests against live PostgreSQL, S3, SFTP, and HTTP",

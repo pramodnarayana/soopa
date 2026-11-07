@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from datetime import timedelta
 
@@ -188,8 +189,10 @@ class WorkflowDefinition:
         return Result.ok(node_map)
 
     def _build_and_validate_edges(
-        self, node_map: dict[str, NodeDefinition]
-    ) -> Result[tuple[dict[str, int], dict[str, list[str]]], DagValidationError]:
+        self, node_map: Mapping[str, NodeDefinition]
+    ) -> Result[
+        tuple[MutableMapping[str, int], MutableMapping[str, list[str]]], DagValidationError
+    ]:
         in_degree: dict[str, int] = {n.node_key: 0 for n in self.nodes}
         adjacency: dict[str, list[str]] = {n.node_key: [] for n in self.nodes}
 
@@ -206,9 +209,9 @@ class WorkflowDefinition:
     def _validate_node_parents(
         self,
         node: NodeDefinition,
-        node_map: dict[str, NodeDefinition],
-        in_degree: dict[str, int],
-        adjacency: dict[str, list[str]],
+        node_map: Mapping[str, NodeDefinition],
+        in_degree: MutableMapping[str, int],
+        adjacency: MutableMapping[str, list[str]],
     ) -> DagValidationError | None:
         seen_parents: set[str] = set()
         for parent_key in node.parents:
@@ -232,7 +235,9 @@ class WorkflowDefinition:
             in_degree[node.node_key] += 1
         return None
 
-    def _has_cycle(self, in_degree: dict[str, int], adjacency: dict[str, list[str]]) -> bool:
+    def _has_cycle(
+        self, in_degree: MutableMapping[str, int], adjacency: Mapping[str, list[str]]
+    ) -> bool:
         queue: deque[str] = deque(k for k, deg in in_degree.items() if deg == 0)
         visited_count = 0
         while queue:

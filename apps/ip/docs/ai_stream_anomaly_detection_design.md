@@ -150,11 +150,11 @@ CREATE TABLE ip_quarantine_hold (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_ip_quarantine_tenant_stream_status 
+CREATE INDEX idx_ip_quarantine_tenant_stream_status
 ON ip_quarantine_hold (tenant_id, stream_id, status, created_at DESC);
 
 -- Chunked retention purging index
-CREATE INDEX idx_ip_quarantine_retention 
+CREATE INDEX idx_ip_quarantine_retention
 ON ip_quarantine_hold (created_at);
 
 ALTER TABLE ip_quarantine_hold ENABLE ROW LEVEL SECURITY;

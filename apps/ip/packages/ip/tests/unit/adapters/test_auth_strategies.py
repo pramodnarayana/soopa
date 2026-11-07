@@ -108,7 +108,7 @@ async def test_oauth2_strategy_detects_expiration() -> None:
 
 
 @pytest.mark.asyncio
-async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
+async def test_oauth2_strategy_refreshes_expired_token_invoking_callback(
     httpserver: HTTPServer,
 ) -> None:
     past_epoch = datetime.now(UTC).timestamp() - 600
@@ -148,7 +148,10 @@ async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
     assert len(refreshed_values) == 1
     assert refreshed_values[0][0] == "tok_fresh_999"
 
-    # Rejects insecure non-localhost HTTP token_url without raising
+
+@pytest.mark.asyncio
+async def test_oauth2_strategy_rejects_insecure_http_token_url() -> None:
+    past_epoch = datetime.now(UTC).timestamp() - 600
     insecure_strategy = OAuth2Strategy(
         client_id="cid",
         client_secret="sec",
@@ -160,7 +163,12 @@ async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
     assert await insecure_strategy.refresh_if_needed() is False
     assert isinstance(insecure_strategy.last_error, EndpointSecurityViolationError)
 
-    # Handles 401 token refresh failure gracefully via PassThroughPolicy
+
+@pytest.mark.asyncio
+async def test_oauth2_strategy_records_invalid_credentials_error_on_401(
+    httpserver: HTTPServer,
+) -> None:
+    past_epoch = datetime.now(UTC).timestamp() - 600
     httpserver.expect_request(
         "/oauth/token_fail",
         method="POST",
@@ -178,7 +186,12 @@ async def test_oauth2_strategy_refresh_via_shttp_and_async_callback(
     assert await fail_strategy.refresh_if_needed() is False
     assert isinstance(fail_strategy.last_error, InvalidCredentialsError)
 
-    # Supports client_credentials grant refresh without a refresh_token
+
+@pytest.mark.asyncio
+async def test_oauth2_strategy_refreshes_client_credentials_grant_without_refresh_token(
+    httpserver: HTTPServer,
+) -> None:
+    past_epoch = datetime.now(UTC).timestamp() - 600
     httpserver.expect_request(
         "/oauth/token_client_credentials",
         method="POST",

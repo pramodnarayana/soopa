@@ -48,12 +48,12 @@ async def test_relink_connection_use_case(
     create_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
-            name="Itron",
+            app_id="acme_source",
+            name="Acme Source",
             auth_type="API_KEY",
-            public_config={"endpoint_url": "https://ami.gridpower.com"},
+            public_config={"endpoint_url": "https://api.partner.example.com"},
             raw_credentials={"api_key": "valid_token"},
-            endpoint_for_fingerprint="https://ami.gridpower.com",
+            endpoint_for_fingerprint="https://api.partner.example.com",
         )
     )
     assert create_res.success is True
@@ -66,7 +66,7 @@ async def test_relink_connection_use_case(
         RelinkConnectionCommand(
             connection_id=dto.id,
             tenant_id=tenant_id,
-            new_name="Itron Resurrected",
+            new_name="Acme Source Resurrected",
             updated_raw_credentials={"api_key": "new_refreshed_key"},
         )
     )
@@ -75,7 +75,7 @@ async def test_relink_connection_use_case(
     relink_dto = relink_res.connection
 
     assert relink_dto.status == "ACTIVE"
-    assert relink_dto.name == "Itron Resurrected"
+    assert relink_dto.name == "Acme Source Resurrected"
     assert relink_dto.deactivated_at is None
 
     updated_conn = await conn_repo.get_by_id(dto.id)

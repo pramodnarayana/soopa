@@ -559,7 +559,7 @@ class SimpleTransformer(TransformerPort):
 
     @property
     def target_types(self) -> tuple[str, ...]:
-        return ("energy.meter_reading",)
+        return ("canonical.record_alpha",)
 
     def transform(
         self, replica: ReplicaSnapshot, context: TransformationContext
@@ -578,31 +578,31 @@ class SimpleTransformer(TransformerPort):
                 )
             )
 
-        raw_kwh = replica.data.get("kwh", 0.0)
-        kwh_val = float(raw_kwh) * self._multiplier if isinstance(raw_kwh, (int, float)) else 0.0
-        target_sp = str(replica.data.get("service_point_source_id", "sp_999"))
+        raw_val = replica.data.get("metric_value", 0.0)
+        metric_val = float(raw_val) * self._multiplier if isinstance(raw_val, (int, float)) else 0.0
+        target_parent = str(replica.data.get("parent_entity_source_id", "parent_999"))
         draft = CanonicalDraft(
-            canonical_type="energy.meter_reading",
+            canonical_type="canonical.record_alpha",
             source_id=replica.record_key,
             fields={
-                "kwh": kwh_val,
-                "meter_serial": replica.data.get("serial"),
+                "metric_value": metric_val,
+                "record_serial": replica.data.get("serial"),
             },
             references=(
                 SourceReference(
-                    field_name="service_point_id",
-                    target_canonical_type="energy.service_point",
-                    target_source_id=target_sp,
+                    field_name="parent_entity_id",
+                    target_canonical_type="canonical.parent_entity",
+                    target_source_id=target_parent,
                 ),
             ),
         )
         return TransformationResult(drafts=(draft,))
 
 
-class ServicePointTransformer(TransformerPort):
+class ParentEntityTransformer(TransformerPort):
     @property
     def transformation_id(self) -> str:
-        return "energy.ami_service_point"
+        return "synthetic.parent_entity"
 
     @property
     def transformation_version(self) -> int:
@@ -610,15 +610,15 @@ class ServicePointTransformer(TransformerPort):
 
     @property
     def target_types(self) -> tuple[str, ...]:
-        return ("energy.service_point",)
+        return ("canonical.parent_entity",)
 
     def transform(
         self, replica: ReplicaSnapshot, context: TransformationContext
     ) -> TransformationResult:
         draft = CanonicalDraft(
-            canonical_type="energy.service_point",
+            canonical_type="canonical.parent_entity",
             source_id=replica.record_key,
-            fields={"utility_code": replica.data.get("utility_code", "ERCOT")},
+            fields={"region_code": replica.data.get("region_code", "US-EAST")},
         )
         return TransformationResult(drafts=(draft,))
 
@@ -635,7 +635,7 @@ class NormalizationTestEnv:
     dp_uow: FakeDataPlaneUoW
     dp_provider: FakeDataPlaneUoWProvider
     writer: RecordingCanonicalWriter
-    sp_writer: RecordingCanonicalWriter
+    parent_writer: RecordingCanonicalWriter
     transformer_registry: TransformerRegistry
     writer_registry: CanonicalWriterRegistry[CanonicalWriterPort]
     entity_registry: CanonicalEntityRegistry
@@ -651,14 +651,14 @@ def setup_env() -> NormalizationTestEnv:
     entity_registry = CanonicalEntityRegistry()
     error_policy = DefaultNormalizationErrorPolicy()
 
-    transformer = SimpleTransformer("energy.ami_meter_reading", 1)
+    transformer = SimpleTransformer("synthetic.record_alpha", 1)
     transformer_registry.register(transformer)
-    transformer_registry.register(ServicePointTransformer())
+    transformer_registry.register(ParentEntityTransformer())
 
-    writer = RecordingCanonicalWriter("energy.meter_reading")
-    sp_writer = RecordingCanonicalWriter("energy.service_point")
+    writer = RecordingCanonicalWriter("canonical.record_alpha")
+    parent_writer = RecordingCanonicalWriter("canonical.parent_entity")
     writer_registry.register(writer)
-    writer_registry.register(sp_writer)
+    writer_registry.register(parent_writer)
 
     use_case = NormalizeReplicaRecordUseCase(
         control_plane_uow=cp_uow,
@@ -675,7 +675,7 @@ def setup_env() -> NormalizationTestEnv:
         dp_uow=dp_uow,
         dp_provider=dp_provider,
         writer=writer,
-        sp_writer=sp_writer,
+        parent_writer=parent_writer,
         transformer_registry=transformer_registry,
         writer_registry=writer_registry,
         entity_registry=entity_registry,
@@ -687,7 +687,7 @@ async def test_normalize_skipped_no_transformation(setup_env: NormalizationTestE
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
         replica_record_id="rep_1",
         replica_version=1,
         trace_id="trc_1",
@@ -698,14 +698,14 @@ async def test_normalize_skipped_no_transformation(setup_env: NormalizationTestE
 
 
 @pytest.mark.asyncio
-async def test_normalize_version_guard_skips_stale_and_emits_trace(
+async def test_normalize_version_guard_skips_stale_replica_version(
     setup_env: NormalizationTestEnv,
 ) -> None:
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
     )
     await setup_env.cp_uow.transformations.save(transformation)
@@ -713,9 +713,9 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_stale",
-        data={"kwh": 10.0},
+        stream="records_alpha",
+        record_key="rec_stale",
+        data={"metric_value": 10.0},
         trace_id="trc_old",
     )
     await setup_env.dp_uow.replica_records.save(replica)
@@ -725,7 +725,7 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
         tenant_id="tenant_1",
         replica_record_id=replica.id,
         replica_version=3,
-        transformation_id="energy.ami_meter_reading",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         produced_canonical_refs=(),
         outcome=NormalizationOutcome.NORMALIZED,
@@ -736,7 +736,7 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
         replica_record_id=replica.id,
         replica_version=2,
         trace_id="trc_new",
@@ -751,14 +751,14 @@ async def test_normalize_version_guard_skips_stale_and_emits_trace(
 
 
 @pytest.mark.asyncio
-async def test_normalize_success_upserts_and_emits_event_and_trace(
+async def test_normalize_success_persists_canonical_draft(
     setup_env: NormalizationTestEnv,
 ) -> None:
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
     )
     await setup_env.cp_uow.transformations.save(transformation)
@@ -766,9 +766,9 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_100",
-        data={"kwh": 105.4, "serial": "SN-MTR-1"},
+        stream="records_alpha",
+        record_key="rec_100",
+        data={"metric_value": 105.4, "serial": "SN-REC-1"},
         trace_id="trc_1",
     )
     await setup_env.dp_uow.replica_records.save(replica)
@@ -777,7 +777,7 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
         replica_record_id=replica.id,
         replica_version=replica.version,
         trace_id="trc_1",
@@ -787,17 +787,17 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
     assert result.is_ok
     dto = result.unwrap()
     assert dto.outcome == NormalizationOutcome.NORMALIZED
-    assert dto.canonical_refs_produced == (("energy.meter_reading", "mtr_100"),)
+    assert dto.canonical_refs_produced == (("canonical.record_alpha", "rec_100"),)
     assert setup_env.dp_uow.committed
 
     assert len(setup_env.writer.upserted) == 1
-    assert setup_env.writer.upserted[0][0] == "mtr_100"
-    assert setup_env.writer.upserted[0][1]["kwh"] == 105.4
+    assert setup_env.writer.upserted[0][0] == "rec_100"
+    assert setup_env.writer.upserted[0][1]["metric_value"] == 105.4
 
     assert len(setup_env.dp_uow.pending_references.pending) == 1
     pref = setup_env.dp_uow.pending_references.pending[0]
-    assert pref.target_canonical_type == "energy.service_point"
-    assert pref.target_source_id == "sp_999"
+    assert pref.target_canonical_type == "canonical.parent_entity"
+    assert pref.target_source_id == "parent_999"
 
     events = [
         e
@@ -806,8 +806,8 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
     ]
     assert len(events) == 1
     assert events[0].action == CanonicalAction.UPSERT.value
-    assert events[0].canonical_type == "energy.meter_reading"
-    assert events[0].source_id == "mtr_100"
+    assert events[0].canonical_type == "canonical.record_alpha"
+    assert events[0].source_id == "rec_100"
     assert len(setup_env.dp_uow.replica_records.trace_events) == 0
 
     trace_events = setup_env.dp_uow.traces.events
@@ -818,21 +818,21 @@ async def test_normalize_success_upserts_and_emits_event_and_trace(
         t for t in trace_events if t.event_type == IpTraceEventType.NORMALIZED.value
     )
     assert normalized_trace.metadata is not None
-    assert normalized_trace.metadata["transformation_id"] == "energy.ami_meter_reading"
+    assert normalized_trace.metadata["transformation_id"] == "synthetic.record_alpha"
     assert normalized_trace.metadata["transformation_version"] == 1
 
 
 @pytest.mark.asyncio
-async def test_normalize_reference_resolution_and_late_arrival_backpatching(
+async def test_normalize_backpatches_pending_reference_on_late_target_arrival(
     setup_env: NormalizationTestEnv,
 ) -> None:
-    """Verifies Step 5 immediate reference resolution and Step 13 late-arriving back-patching."""
+    """Verifies Step 13 late-arriving back-patching when referenced entity arrives out of order."""
     await setup_env.cp_uow.transformations.save(
         Transformation.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
-            transformation_id="energy.ami_meter_reading",
+            stream="records_alpha",
+            transformation_id="synthetic.record_alpha",
             transformation_version=1,
         )
     )
@@ -840,97 +840,138 @@ async def test_normalize_reference_resolution_and_late_arrival_backpatching(
         Transformation.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="service_points",
-            transformation_id="energy.ami_service_point",
+            stream="parent_entities",
+            transformation_id="synthetic.parent_entity",
             transformation_version=1,
         )
     )
 
-    # 1. Reading arrives BEFORE service point sp_999 -> records pending reference
-    reading_rep = ReplicaRecord.create(
+    child_rep = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_early",
-        data={"kwh": 42.0, "serial": "SN-1", "service_point_source_id": "sp_999"},
+        stream="records_alpha",
+        record_key="rec_early",
+        data={"metric_value": 42.0, "serial": "SN-1", "parent_entity_source_id": "parent_999"},
         trace_id="trc_early",
     )
-    await setup_env.dp_uow.replica_records.save(reading_rep)
+    await setup_env.dp_uow.replica_records.save(child_rep)
     res1 = await setup_env.use_case.execute(
         NormalizeReplicaRecordCommand(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
-            replica_record_id=reading_rep.id,
-            replica_version=reading_rep.version,
+            stream="records_alpha",
+            replica_record_id=child_rep.id,
+            replica_version=child_rep.version,
             trace_id="trc_early",
         )
     )
     assert res1.is_ok
-    assert "service_point_id" not in setup_env.writer.rows_by_source_id["mtr_early"]
+    assert "parent_entity_id" not in setup_env.writer.rows_by_source_id["rec_early"]
     assert len(setup_env.dp_uow.pending_references.pending) == 1
 
-    # 2. Service point sp_999 arrives later -> back-patches mtr_early's service_point_id!
-    sp_rep = ReplicaRecord.create(
+    parent_rep = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="service_points",
-        record_key="sp_999",
-        data={"utility_code": "ONCOR"},
-        trace_id="trc_sp",
+        stream="parent_entities",
+        record_key="parent_999",
+        data={"region_code": "US-WEST"},
+        trace_id="trc_parent",
     )
-    await setup_env.dp_uow.replica_records.save(sp_rep)
+    await setup_env.dp_uow.replica_records.save(parent_rep)
     setup_env.dp_uow.traces.events.clear()
 
     res2 = await setup_env.use_case.execute(
         NormalizeReplicaRecordCommand(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="service_points",
-            replica_record_id=sp_rep.id,
-            replica_version=sp_rep.version,
-            trace_id="trc_sp",
+            stream="parent_entities",
+            replica_record_id=parent_rep.id,
+            replica_version=parent_rep.version,
+            trace_id="trc_parent",
         )
     )
     assert res2.is_ok
     assert res2.unwrap().resolved_references_count == 1
     assert setup_env.writer.resolved_references == [
-        ("mtr_early", "service_point_id", "canon_energy.service_point_sp_999")
+        ("rec_early", "parent_entity_id", "canon_canonical.parent_entity_parent_999")
     ]
     assert (
-        setup_env.writer.rows_by_source_id["mtr_early"]["service_point_id"]
-        == "canon_energy.service_point_sp_999"
+        setup_env.writer.rows_by_source_id["rec_early"]["parent_entity_id"]
+        == "canon_canonical.parent_entity_parent_999"
     )
     trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
     assert IpTraceEventType.REFERENCE_RESOLVED.value in trace_types
 
-    # 3. Second reading referencing existing sp_999 resolves immediately without pending reference!
-    reading_rep2 = ReplicaRecord.create(
+
+@pytest.mark.asyncio
+async def test_normalize_resolves_reference_immediately_when_target_exists(
+    setup_env: NormalizationTestEnv,
+) -> None:
+    """Verifies Step 5 immediate reference resolution when referenced target already exists."""
+    await setup_env.cp_uow.transformations.save(
+        Transformation.create(
+            tenant_id="tenant_1",
+            connection_id="conn_1",
+            stream="records_alpha",
+            transformation_id="synthetic.record_alpha",
+            transformation_version=1,
+        )
+    )
+    await setup_env.cp_uow.transformations.save(
+        Transformation.create(
+            tenant_id="tenant_1",
+            connection_id="conn_1",
+            stream="parent_entities",
+            transformation_id="synthetic.parent_entity",
+            transformation_version=1,
+        )
+    )
+
+    parent_rep = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_after_sp",
-        data={"kwh": 88.0, "serial": "SN-2", "service_point_source_id": "sp_999"},
-        trace_id="trc_after",
+        stream="parent_entities",
+        record_key="parent_999",
+        data={"region_code": "US-WEST"},
+        trace_id="trc_parent",
     )
-    await setup_env.dp_uow.replica_records.save(reading_rep2)
-    res3 = await setup_env.use_case.execute(
+    await setup_env.dp_uow.replica_records.save(parent_rep)
+    await setup_env.use_case.execute(
         NormalizeReplicaRecordCommand(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
-            replica_record_id=reading_rep2.id,
-            replica_version=reading_rep2.version,
+            stream="parent_entities",
+            replica_record_id=parent_rep.id,
+            replica_version=parent_rep.version,
+            trace_id="trc_parent",
+        )
+    )
+
+    child_rep = ReplicaRecord.create(
+        tenant_id="tenant_1",
+        connection_id="conn_1",
+        stream="records_alpha",
+        record_key="rec_after_parent",
+        data={"metric_value": 88.0, "serial": "SN-2", "parent_entity_source_id": "parent_999"},
+        trace_id="trc_after",
+    )
+    await setup_env.dp_uow.replica_records.save(child_rep)
+    res = await setup_env.use_case.execute(
+        NormalizeReplicaRecordCommand(
+            tenant_id="tenant_1",
+            connection_id="conn_1",
+            stream="records_alpha",
+            replica_record_id=child_rep.id,
+            replica_version=child_rep.version,
             trace_id="trc_after",
         )
     )
-    assert res3.is_ok
+    assert res.is_ok
     assert (
-        setup_env.writer.rows_by_source_id["mtr_after_sp"]["service_point_id"]
-        == "canon_energy.service_point_sp_999"
+        setup_env.writer.rows_by_source_id["rec_after_parent"]["parent_entity_id"]
+        == "canon_canonical.parent_entity_parent_999"
     )
-    # Still only 1 pending reference entry in total (which is RESOLVED)
-    assert len(setup_env.dp_uow.pending_references.pending) == 1
+    assert len(setup_env.dp_uow.pending_references.pending) == 0
 
 
 @pytest.mark.asyncio
@@ -940,14 +981,14 @@ async def test_normalize_shadow_mode_does_not_mutate_canonical_or_outbox(
     """Verifies TransformationMode.SHADOW writes only shadow diffs and never mutates canonical tables or outbox."""
     # Register v2 transformer with 2.0 multiplier
     setup_env.transformer_registry.register(
-        SimpleTransformer("energy.ami_meter_reading", 2, multiplier=2.0)
+        SimpleTransformer("synthetic.record_alpha", 2, multiplier=2.0)
     )
 
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         mode=TransformationMode.SHADOW,
         shadow_transformation_version=2,
@@ -957,9 +998,9 @@ async def test_normalize_shadow_mode_does_not_mutate_canonical_or_outbox(
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_shadow",
-        data={"kwh": 50.0, "serial": "SN-SHD"},
+        stream="records_alpha",
+        record_key="rec_shadow",
+        data={"metric_value": 50.0, "serial": "SN-SHD"},
         trace_id="trc_shd",
     )
     await setup_env.dp_uow.replica_records.save(replica)
@@ -970,7 +1011,7 @@ async def test_normalize_shadow_mode_does_not_mutate_canonical_or_outbox(
         NormalizeReplicaRecordCommand(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
+            stream="records_alpha",
             replica_record_id=replica.id,
             replica_version=replica.version,
             trace_id="trc_shd",
@@ -996,18 +1037,18 @@ async def test_normalize_shadow_mode_does_not_mutate_canonical_or_outbox(
     diff_entry = setup_env.dp_uow.normalization_rejections.shadow_diffs[0]
     assert diff_entry.candidate_version == 2
     assert diff_entry.diff_data == {
-        "energy.meter_reading:mtr_shadow": {
-            "kwh": {"active": 50.0, "shadow": 100.0},
+        "canonical.record_alpha:rec_shadow": {
+            "metric_value": {"active": 50.0, "shadow": 100.0},
         }
     }
 
 
 @pytest.mark.asyncio
 async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv) -> None:
-    rule = MockQualityRule("REQ_SERIAL", RuleSeverity.REJECT, "meter_serial")
+    rule = MockQualityRule("REQ_SERIAL", RuleSeverity.REJECT, "record_serial")
     setup_env.entity_registry.register(
         CanonicalEntityDefinition(
-            canonical_type="energy.meter_reading",
+            canonical_type="canonical.record_alpha",
             schema_version=1,
             quality_rules=(rule,),
         )
@@ -1016,8 +1057,8 @@ async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv)
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
     )
     await setup_env.cp_uow.transformations.save(transformation)
@@ -1025,9 +1066,9 @@ async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv)
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_invalid",
-        data={"kwh": 50.0},
+        stream="records_alpha",
+        record_key="rec_invalid",
+        data={"metric_value": 50.0},
         trace_id="trc_1",
     )
     await setup_env.dp_uow.replica_records.save(replica)
@@ -1036,7 +1077,7 @@ async def test_normalize_quality_rule_rejection(setup_env: NormalizationTestEnv)
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
         replica_record_id=replica.id,
         replica_version=replica.version,
         trace_id="trc_1",
@@ -1063,8 +1104,8 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
     )
     await setup_env.cp_uow.transformations.save(transformation)
@@ -1073,9 +1114,9 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
         tenant_id="tenant_1",
         replica_record_id="rep_tomb",
         replica_version=1,
-        transformation_id="energy.ami_meter_reading",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
-        produced_canonical_refs=(("energy.meter_reading", "mtr_tomb"),),
+        produced_canonical_refs=(("canonical.record_alpha", "rec_tomb"),),
         outcome=NormalizationOutcome.NORMALIZED,
         trace_id="trc_prev",
     )
@@ -1087,8 +1128,8 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
         trace_id="trc_tomb",
         correlation_id=None,
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_tomb",
+        stream="records_alpha",
+        record_key="rec_tomb",
         primary_key_values=(),
         cursor_value=None,
         cursor_kind=None,
@@ -1109,7 +1150,7 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
         replica_record_id="rep_tomb",
         replica_version=2,
         trace_id="trc_tomb",
@@ -1120,7 +1161,7 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
     dto = result.unwrap()
     assert dto.outcome == NormalizationOutcome.TOMBSTONED
 
-    assert "mtr_tomb" in setup_env.writer.soft_deleted
+    assert "rec_tomb" in setup_env.writer.soft_deleted
 
     tomb_events = [
         e
@@ -1129,7 +1170,7 @@ async def test_normalize_tombstone_cascades_soft_delete(setup_env: Normalization
         and e.action == CanonicalAction.TOMBSTONE.value
     ]
     assert len(tomb_events) == 1
-    assert tomb_events[0].source_id == "mtr_tomb"
+    assert tomb_events[0].source_id == "rec_tomb"
 
     trace_types = [t.event_type for t in setup_env.dp_uow.traces.events]
     assert IpTraceEventType.TOMBSTONED.value in trace_types
@@ -1142,8 +1183,8 @@ async def test_normalize_terminal_transformer_error_handling(
     transformation = Transformation.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
     )
     await setup_env.cp_uow.transformations.save(transformation)
@@ -1151,8 +1192,8 @@ async def test_normalize_terminal_transformer_error_handling(
     replica = ReplicaRecord.create(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
-        record_key="mtr_err",
+        stream="records_alpha",
+        record_key="rec_err",
         data={"trigger_error": True},
         trace_id="trc_err",
     )
@@ -1162,7 +1203,7 @@ async def test_normalize_terminal_transformer_error_handling(
     command = NormalizeReplicaRecordCommand(
         tenant_id="tenant_1",
         connection_id="conn_1",
-        stream="readings",
+        stream="records_alpha",
         replica_record_id=replica.id,
         replica_version=replica.version,
         trace_id="trc_err",
@@ -1189,8 +1230,8 @@ async def test_backfill_stream_normalization_chunks_records(
         Transformation.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
-            transformation_id="energy.ami_meter_reading",
+            stream="records_alpha",
+            transformation_id="synthetic.record_alpha",
             transformation_version=1,
         )
     )
@@ -1199,9 +1240,9 @@ async def test_backfill_stream_normalization_chunks_records(
         rep = ReplicaRecord.create(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
-            record_key=f"mtr_bf_{idx}",
-            data={"kwh": float(idx * 10), "serial": f"SN-BF-{idx}"},
+            stream="records_alpha",
+            record_key=f"rec_bf_{idx}",
+            data={"metric_value": float(idx * 10), "serial": f"SN-BF-{idx}"},
             trace_id=f"trc_bf_{idx}",
         )
         await setup_env.dp_uow.replica_records.save(rep)
@@ -1214,7 +1255,7 @@ async def test_backfill_stream_normalization_chunks_records(
         BackfillStreamNormalizationCommand(
             tenant_id="tenant_1",
             connection_id="conn_1",
-            stream="readings",
+            stream="records_alpha",
             chunk_size=2,
         )
     )

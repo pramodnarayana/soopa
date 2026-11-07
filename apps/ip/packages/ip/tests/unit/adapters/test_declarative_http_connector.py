@@ -285,7 +285,7 @@ def test_declarative_connector_query_param_auth(sample_manifest: DeclarativeMani
     assert tuple(auth.sensitive_header_names) == ()
 
 
-def test_declarative_connector_requires_https_and_rejects_restricted_hosts(
+def test_declarative_connector_rejects_non_https_urls(
     sample_manifest: DeclarativeManifest,
 ) -> None:
     connector = DeclarativeHttpConnector(
@@ -296,6 +296,13 @@ def test_declarative_connector_requires_https_and_rejects_restricted_hosts(
     assert isinstance(http_res.error, EndpointSecurityViolationError)
     assert "must use HTTPS" in http_res.error.message
 
+
+def test_declarative_connector_rejects_restricted_loopback_hosts(
+    sample_manifest: DeclarativeManifest,
+) -> None:
+    connector = DeclarativeHttpConnector(
+        manifest=sample_manifest, auth_resolver=AuthStrategyResolver()
+    )
     local_res = connector._interpolate_string("https://localhost/api", {}, {})
     assert local_res.is_err is True
     assert isinstance(local_res.error, EndpointSecurityViolationError)
@@ -377,7 +384,7 @@ async def test_declarative_connector_fetch_page_handles_http_error(
 
 
 @pytest.mark.asyncio
-async def test_declarative_connector_write_record_injects_idempotency_key_and_extracts_retry_after(
+async def test_declarative_connector_write_record_propagates_idempotency_key_on_rate_limit(
     httpserver: HTTPServer,
 ) -> None:
     httpserver.expect_request(

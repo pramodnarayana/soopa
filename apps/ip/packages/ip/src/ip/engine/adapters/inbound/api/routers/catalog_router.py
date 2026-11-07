@@ -50,7 +50,7 @@ async def list_catalog_apps(
     tenant_id: str,
     _context: Annotated[IdentityContext, Depends(require_tenant_member)],
     category: str | None = Query(
-        None, description="Filter by category (CRM, BILLING, STORAGE, ENERGY, ITSM)"
+        None, description="Filter by category (e.g. API, CRM, BILLING, STORAGE, ITSM)"
     ),
     search: str | None = Query(None, description="Search query by name or appId"),
     registry: CatalogRegistryPort = Depends(get_catalog_registry),

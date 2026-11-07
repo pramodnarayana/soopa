@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 import structlog
 from database.router import DatabaseRouter, DatabaseRouterPort
 from dependency_injector import providers
-from observability import ObservabilityProvider
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.envelope_dispatcher import EventEnvelopeDispatcher
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from pubsub.provider import PubSubProvider
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
+from seedwork.infra.worker import LaunchableWorker
 
 from ip.engine.adapters.inbound.workers.ip_orchestrator_route_registry import (
     IpOrchestratorRouteRegistry,
@@ -100,6 +100,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         db_router: DatabaseRouterPort | None = None,
         realtime_consumer: MessageConsumerPort | None = None,
         bulk_consumer: MessageConsumerPort | None = None,
+        container_configurator: Callable[[Container], object] | None = None,
     ) -> None:
         self._initial_settings = settings
         self.settings: IpEngineSettings | None = settings
@@ -108,6 +109,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         self._owns_db_router: bool = db_router is None
         self._realtime_consumer = realtime_consumer
         self._bulk_consumer = bulk_consumer
+        self._container_configurator = container_configurator
 
         self.container: Container | None = None
         self.dispatcher: EventEnvelopeDispatcher | None = None
@@ -133,6 +135,8 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         container.config.allow_private_ips.from_value(self.settings.allow_private_ips)
         container.db_router.override(providers.Object(self.db_router))
         container.tenant_resolver.override(providers.Object(resolver))
+        if self._container_configurator is not None:
+            self._container_configurator(container)
         self.container = container
 
         dp_uow_provider = container.dp_uow_provider()
@@ -231,13 +235,4 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         logger.info("ip_orchestrator_worker_stopped")
 
 
-async def main(stop_event: asyncio.Event | None = None) -> None:
-    ObservabilityProvider.auto_configure_from_env("ip-orchestrator-worker")
-    module = IpOrchestratorWorkerModule()
-    await run_worker_app_async(module, stop_event=stop_event)
-
-
-if __name__ == "__main__":
-    run_worker_app(main)
-
-__all__ = ["IpOrchestratorWorkerModule", "main"]
+__all__ = ["IpOrchestratorWorkerModule"]

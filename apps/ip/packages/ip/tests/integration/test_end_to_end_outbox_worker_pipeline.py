@@ -4,7 +4,7 @@ Exercises the complete 5-Stage SEDA Pipeline (L1 -> Outbox Drain -> L2 -> Outbox
 L3 -> Outbox Drain -> L4 -> Outbox Drain -> L5 + Trace Waterfall & Consumer Idempotency)
 for both:
   1. Realtime Webhook (N=1 on EventProcessingLane.REALTIME)
-  2. Bulk Meter Sync Batch (N=4 on EventProcessingLane.BULK)
+  2. Bulk Stream Sync Batch (N=4 on EventProcessingLane.BULK)
 inside SAVEPOINT-isolated transactions (`global_session`, `tenant_session`, `transactional_router`).
 """
 
@@ -141,12 +141,12 @@ class _InMemoryQueueBridgePublisher(OutboxPublisherPort):
         return [e.id for e in events]
 
 
-class _PipelineMeterTransformer(TransformerPort):
-    """Pure L3 Transformer transforming meter_reads replica snapshots into energy.meter.v1 drafts."""
+class _PipelineRecordTransformer(TransformerPort):
+    """Pure L3 Transformer transforming records_alpha replica snapshots into canonical.record_alpha.v1 drafts."""
 
     @property
     def transformation_id(self) -> str:
-        return "itron_meter_to_energy_meter"
+        return "acme_record_to_canonical_alpha"
 
     @property
     def transformation_version(self) -> int:
@@ -154,22 +154,23 @@ class _PipelineMeterTransformer(TransformerPort):
 
     @property
     def target_types(self) -> tuple[str, ...]:
-        return ("energy.meter.v1",)
+        return ("canonical.record_alpha.v1",)
 
     def transform(
         self, replica: ReplicaSnapshot, context: TransformationContext
     ) -> TransformationResult:
-        meter_id = str(replica.data.get("meter_id", replica.record_key))
-        raw_kwh = replica.data.get("kwh", 0.0)
-        kwh = float(raw_kwh) if isinstance(raw_kwh, (int, float)) else 0.0
+        _ = context
+        record_id = str(replica.data.get("record_id", replica.record_key))
+        raw_amount = replica.data.get("amount", 0.0)
+        amount = float(raw_amount) if isinstance(raw_amount, (int, float)) else 0.0
         return TransformationResult(
             drafts=(
                 CanonicalDraft(
-                    canonical_type="energy.meter.v1",
-                    source_id=meter_id,
+                    canonical_type="canonical.record_alpha.v1",
+                    source_id=record_id,
                     fields={
-                        "meter_serial": meter_id,
-                        "kwh": kwh,
+                        "external_id": record_id,
+                        "amount": amount,
                         "status": "ACTIVE",
                     },
                 ),
@@ -185,7 +186,7 @@ class _PipelineCanonicalWriter(CanonicalWriterPort):
 
     @property
     def canonical_type(self) -> str:
-        return "energy.meter.v1"
+        return "canonical.record_alpha.v1"
 
     async def upsert(
         self,
@@ -226,7 +227,7 @@ class _PipelineCanonicalWriter(CanonicalWriterPort):
         source_id: str,
     ) -> str | None:
         if source_id in self.rows:
-            return f"canon_meter_{source_id}"
+            return f"canon_alpha_{source_id}"
         return None
 
     async def resolve_reference(
@@ -279,9 +280,9 @@ class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
         out_rec = OutboundRecord.create_pending(
             tenant_id=command.tenant_id,
             connection_id=self._connection_id,
-            app_id="itron",
-            stream_name="erp_meters",
-            target_url="https://erp.example.com/api/meters",
+            app_id="acme_source",
+            stream_name="sink_records",
+            target_url="https://sink.example.com/api/records",
             http_method="POST",
             payload_bytes=raw_bytes,
             is_inlined=True,
@@ -344,7 +345,7 @@ class _PipelineOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
                 trace_id=command.trace_id or "tr_1",
                 idempotency_key=command.idempotency_key or "idem_1",
                 record_id=command.record_id or "rec_1",
-                destination_id=f"erp_{command.record_id}",
+                destination_id=f"sink_{command.record_id}",
                 response_status_code=200,
                 duration_ms=11,
             )
@@ -376,7 +377,7 @@ class _NoopRunSyncExecutor(IpRunSyncExecutorPort):
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
+async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
     seeded_ip_tenant: str,
     global_session: GlobalSession,
     transactional_router: TransactionalTestRouter,
@@ -389,15 +390,14 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
         db_router=transactional_router,
     )
 
-    # 1. Seed Control Plane Connection & Transformation for stream 'meter_reads'
     connection = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron",
-        name="Itron Utility MDM",
+        app_id="acme_source",
+        name="Acme Source Endpoint",
         auth_type=AuthType.API_KEY,
-        public_config={"base_url": "https://itron.example.com"},
+        public_config={"base_url": "https://api.acme.example.com"},
         encrypted_credentials=b"enc_secret",
-        endpoint_for_fingerprint="https://itron.example.com",
+        endpoint_for_fingerprint="https://api.acme.example.com",
     )
     connection.activate()
     save_conn_res = await cp_uow.connections.save(connection)
@@ -406,12 +406,12 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
     entity_registry = CanonicalEntityRegistry()
     entity_registry.register(
         CanonicalEntityDefinition(
-            canonical_type="energy.meter.v1",
+            canonical_type="canonical.record_alpha.v1",
             schema_version=1,
         )
     )
     transformer_registry = TransformerRegistry()
-    transformer_registry.register(_PipelineMeterTransformer())
+    transformer_registry.register(_PipelineRecordTransformer())
     canonical_writer = _PipelineCanonicalWriter()
     writer_registry: CanonicalWriterRegistry[CanonicalWriterPort] = CanonicalWriterRegistry()
     writer_registry.register(canonical_writer)
@@ -424,8 +424,8 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
         BindStreamTransformationCommand(
             tenant_id=seeded_ip_tenant,
             connection_id=connection.id,
-            stream="meter_reads",
-            transformation_id="itron_meter_to_energy_meter",
+            stream="records_alpha",
+            transformation_id="acme_record_to_canonical_alpha",
             transformation_version=1,
             mode=TransformationMode.ACTIVE,
         )
@@ -447,14 +447,13 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
     stitch_dispatcher = _PipelineStitchDispatcher(dp_uow_provider, connection.id)
     delivery_executor = _PipelineOutboundDeliveryExecutor(dp_uow_provider)
 
-    # 2. Wire Orchestrator & Delivery Route Registries and Outbox Router (Realtime + Bulk lanes)
     orch_dispatcher = EventEnvelopeDispatcher()
     deliv_dispatcher = EventEnvelopeDispatcher()
 
     stream_def = StreamDefinition(
-        stream="meter_reads",
-        primary_key=(("meter_id",),),
-        cursor_field=("read_at",),
+        stream="records_alpha",
+        primary_key=(("record_id",),),
+        cursor_field=("observed_at",),
         cursor_kind=CursorKind.STRING,
         sync_mode=SyncMode.INCREMENTAL,
     )
@@ -503,62 +502,54 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
         batch_size=100,
     )
 
-    # ==========================================================================
-    # SCENARIO A: Realtime Single-Record Webhook (N=1, Lane=REALTIME)
-    # ==========================================================================
     shard_res = await dp_uow_provider.resolve_shard_info(seeded_ip_tenant)
     shard_id, shard_dsn = shard_res.unwrap()
 
     rt_payload: JsonDict = {
-        "meter_id": "MTR-RT-01",
-        "kwh": 42.5,
-        "read_at": "2026-10-27T10:00:00Z",
+        "record_id": "REC-RT-01",
+        "amount": 42.5,
+        "observed_at": "2026-10-27T10:00:00Z",
     }
     rt_record = InboundRecord.create(
         tenant_id=seeded_ip_tenant,
         connection_id=connection.id,
-        app_id="itron",
-        stream_name="meter_reads",
+        app_id="acme_source",
+        stream_name="records_alpha",
         payload_bytes=json.dumps(rt_payload).encode("utf-8"),
         is_inlined=True,
         request_body=rt_payload,
         trace_id="ip_trc_rt_001",
-        correlation_id="MTR-RT-01",
+        correlation_id="REC-RT-01",
         ingestion_mode=IngestionMode.PUSH_FULL,
     )
     async with dp_uow_provider.get_data_plane_uow(seeded_ip_tenant, shard_id, shard_dsn) as uow:
         await uow.inbound_records.save(rt_record)
         await uow.commit()
 
-    # Drain until all cascading stages (L1 -> L2 -> L3 -> L4 -> L5) settle
     for _ in range(6):
         drained = await drain_relay.drain_all_shards_once()
         if drained == 0:
             break
 
-    # Verify Realtime record reached L3 Canonical Writer and L5 Outbound Delivery
-    assert "MTR-RT-01" in canonical_writer.rows
-    assert canonical_writer.rows["MTR-RT-01"]["kwh"] == 42.5
-    assert any(c.record_id == "MTR-RT-01" for c in delivery_executor.delivered_commands)
-    assert len(orch_rt_bridge.published_envelopes) >= 3  # L1->L2, L2->L3, L3->L4 on REALTIME lane
-    assert len(deliv_rt_bridge.published_envelopes) >= 1  # L4->L5 on REALTIME lane
+    assert "REC-RT-01" in canonical_writer.rows
+    assert canonical_writer.rows["REC-RT-01"]["amount"] == 42.5
+    assert any(c.record_id == "REC-RT-01" for c in delivery_executor.delivered_commands)
+    assert len(orch_rt_bridge.published_envelopes) >= 3
+    assert len(deliv_rt_bridge.published_envelopes) >= 1
 
-    # ==========================================================================
-    # SCENARIO B: Bulk Multi-Record Batch (N=4 records in 1 L1 batch)
-    # ==========================================================================
     bulk_records_payload: JsonDict = {
         "records": [
-            {"meter_id": "MTR-BLK-01", "kwh": 100.0, "read_at": "2026-10-27T11:00:00Z"},
-            {"meter_id": "MTR-BLK-02", "kwh": 200.0, "read_at": "2026-10-27T11:00:00Z"},
-            {"meter_id": "MTR-BLK-03", "kwh": 300.0, "read_at": "2026-10-27T11:00:00Z"},
-            {"meter_id": "MTR-BLK-04", "kwh": 400.0, "read_at": "2026-10-27T11:00:00Z"},
+            {"record_id": "REC-BLK-01", "amount": 100.0, "observed_at": "2026-10-27T11:00:00Z"},
+            {"record_id": "REC-BLK-02", "amount": 200.0, "observed_at": "2026-10-27T11:00:00Z"},
+            {"record_id": "REC-BLK-03", "amount": 300.0, "observed_at": "2026-10-27T11:00:00Z"},
+            {"record_id": "REC-BLK-04", "amount": 400.0, "observed_at": "2026-10-27T11:00:00Z"},
         ]
     }
     stream_def_bulk = StreamDefinition(
-        stream="meter_reads",
+        stream="records_alpha",
         record_path=("records",),
-        primary_key=(("meter_id",),),
-        cursor_field=("read_at",),
+        primary_key=(("record_id",),),
+        cursor_field=("observed_at",),
         cursor_kind=CursorKind.STRING,
         sync_mode=SyncMode.INCREMENTAL,
     )
@@ -567,8 +558,8 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
     bulk_inb = InboundRecord.create(
         tenant_id=seeded_ip_tenant,
         connection_id=connection.id,
-        app_id="itron",
-        stream_name="meter_reads",
+        app_id="acme_source",
+        stream_name="records_alpha",
         payload_bytes=json.dumps(bulk_records_payload).encode("utf-8"),
         is_inlined=True,
         request_body=bulk_records_payload,
@@ -585,15 +576,12 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
         if drained == 0:
             break
 
-    # Verify all 4 Bulk meter records were extracted, normalized, stitched, and delivered!
     for idx in range(1, 5):
-        meter_key = f"MTR-BLK-0{idx}"
-        assert meter_key in canonical_writer.rows
-        assert canonical_writer.rows[meter_key]["kwh"] == float(idx * 100)
-        assert any(c.record_id == meter_key for c in delivery_executor.delivered_commands)
+        rec_key = f"REC-BLK-0{idx}"
+        assert rec_key in canonical_writer.rows
+        assert canonical_writer.rows[rec_key]["amount"] == float(idx * 100)
+        assert any(c.record_id == rec_key for c in delivery_executor.delivered_commands)
 
-    # Verify L2 emitted a BULK chunk-pointer event (`len(record_ids) == 4`, `lane == BULK`)
-    # which was routed to `orch_bulk_bridge`!
     rep_bulk_envelopes = [
         env
         for env in orch_bulk_bridge.published_envelopes
@@ -605,7 +593,6 @@ async def test_end_to_end_pipeline_realtime_and_bulk_across_all_5_layers(
     raw_bulk_ids = rep_bulk_env.payload.get("record_ids")
     assert isinstance(raw_bulk_ids, list) and len(raw_bulk_ids) == 4
 
-    # Verify trace events and consumer idempotency rows were persisted in the tenant shard
     session_yielded = False
     async for verify_session in transactional_router.get_tenant_session(
         seeded_ip_tenant, shard_id, shard_dsn

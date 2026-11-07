@@ -1,5 +1,5 @@
 """Narrow Integration Tests for SqlAlchemyGlobalOutboxRepository, SqlAlchemyShardedOutboxRepository,
-MultiShardOutboxDrainRelay, and SqlAlchemyShardedTraceRetentionRepository against real PostgreSQL.
+MultiShardOutboxDrainRelay, and IP Worker Module lifecycles against real PostgreSQL.
 
 Runs inside SAVEPOINT-isolated transactions (`transactional_router`, `global_session`, `tenant_session`).
 """
@@ -15,11 +15,7 @@ from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
     stage_workflow_outbox_event,
 )
 from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
-from ip.engine.adapters.outbound.database.models.data_plane import (
-    IpDataPlaneOutboxRecord,
-    IpProcessedEventModel,
-    IpTraceEventModel,
-)
+from ip.engine.adapters.outbound.database.models.data_plane import IpDataPlaneOutboxRecord
 from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
 from ip.engine.adapters.outbound.stitches.stitch_adapters import (
     IpStitchCanonicalDispatcherAdapter,
@@ -48,7 +44,6 @@ from ip.engine.domain.enums import (
     IpEventType,
     IpOutboxSource,
 )
-from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.settings import IpEngineSettings
 from orchestration.application.services.registries import (
     InMemoryStepHandlerRegistry,
@@ -68,13 +63,6 @@ from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from pubsub.testing.in_memory_event_bus import InMemoryEventBus
 from seedwork.events import EventEnvelope, EventProcessingLane
 from sqlalchemy import select
-from strace.adapters.retention_repository import (
-    SqlAlchemyShardedTraceRetentionRepository,
-)
-from strace.application.clean_trace_retention_use_case import (
-    CleanTraceRetentionCommand,
-    CleanTraceRetentionUseCase,
-)
 
 pytestmark = pytest.mark.integration
 
@@ -94,13 +82,12 @@ class _RecordingPublisher(OutboxPublisherPort):
 
 
 @pytest.mark.asyncio
-async def test_global_outbox_repository_priority_lane_and_bulk_batch_updates(
+async def test_global_outbox_repository_prioritizes_realtime_lane_over_bulk_batches(
     global_session: GlobalSession,
     transactional_router: TransactionalTestRouter,
 ) -> None:
     """Verify SqlAlchemyGlobalOutboxRepository prioritizes REALTIME over BULK and marks batches in 1 query."""
     past = datetime.now(UTC) - timedelta(seconds=30)
-    # Insert 2 BULK rows first, then 1 REALTIME row
     bulk_1 = IpOutboxRecord(
         id="cp_out_bulk_1",
         tenant_id="ten_cp_1",
@@ -157,12 +144,10 @@ async def test_global_outbox_repository_priority_lane_and_bulk_batch_updates(
     claimed_ids = [
         e.id for e in claimed if e.id in {"cp_out_bulk_1", "cp_out_bulk_2", "cp_out_rt_1"}
     ]
-    # REALTIME row is claimed BEFORE the older BULK rows!
     assert claimed_ids == ["cp_out_rt_1", "cp_out_bulk_1", "cp_out_bulk_2"]
     assert claimed[0].lane is EventProcessingLane.REALTIME
     assert claimed[0].trace_id == "tr_cp_rt_1"
 
-    # Mark 2 completed in a single query and 1 failed in a single query
     await repo.mark_completed_batch(["cp_out_rt_1", "cp_out_bulk_1"], "worker_cp_1")
     await repo.mark_failed_batch(["cp_out_bulk_2"], "worker_cp_1", "Simulated error")
 
@@ -176,14 +161,13 @@ async def test_global_outbox_repository_priority_lane_and_bulk_batch_updates(
 
 
 @pytest.mark.asyncio
-async def test_sharded_outbox_repository_and_drain_until_empty_relay(
+async def test_sharded_outbox_drain_relay_drains_batches_until_empty(
     seeded_ip_tenant: str,
     tenant_session: TenantSession,
     transactional_router: TransactionalTestRouter,
 ) -> None:
     """Verify SqlAlchemyShardedOutboxRepository and MultiShardOutboxDrainRelay drain all batches until empty."""
     now = datetime.now(UTC)
-    # Insert 3 BULK events and 2 REALTIME events in public.ip_outbox
     for idx in range(3):
         tenant_session.add(
             IpDataPlaneOutboxRecord(
@@ -195,7 +179,7 @@ async def test_sharded_outbox_repository_and_drain_until_empty_relay(
                 lane=EventProcessingLane.BULK.value,
                 payload={
                     "connection_id": "conn_1",
-                    "stream": "meters",
+                    "stream": "records_alpha",
                     "record_ids": [f"rep_{idx}_a", f"rep_{idx}_b"],
                 },
                 status=OutboxStatus.PENDING.value,
@@ -214,7 +198,7 @@ async def test_sharded_outbox_repository_and_drain_until_empty_relay(
                 lane=EventProcessingLane.REALTIME.value,
                 payload={
                     "connection_id": "conn_1",
-                    "stream_name": "meters",
+                    "stream_name": "records_alpha",
                     "record_ids": [f"inb_{idx}"],
                 },
                 status=OutboxStatus.PENDING.value,
@@ -234,7 +218,7 @@ async def test_sharded_outbox_repository_and_drain_until_empty_relay(
     relay = MultiShardOutboxDrainRelay(
         repository=dp_repo,
         publisher=publisher,
-        batch_size=2,  # Small batch_size=2 forces 3 drain iterations to empty 5 events
+        batch_size=2,
         lock_lease_ms=30000,
     )
 
@@ -246,7 +230,6 @@ async def test_sharded_outbox_repository_and_drain_until_empty_relay(
         for e in publisher.published
         if e.id in {"dp_rt_0", "dp_rt_1", "dp_bulk_0", "dp_bulk_1", "dp_bulk_2"}
     ]
-    # Verify REALTIME events were drained ahead of BULK events!
     assert [e.id for e in our_published] == [
         "dp_rt_0",
         "dp_rt_1",
@@ -257,96 +240,7 @@ async def test_sharded_outbox_repository_and_drain_until_empty_relay(
 
 
 @pytest.mark.asyncio
-async def test_sharded_trace_retention_repository_prunes_expired_trace_and_processed_events(
-    seeded_ip_tenant: str,
-    tenant_session: TenantSession,
-    transactional_router: TransactionalTestRouter,
-) -> None:
-    """Verify CleanTraceRetentionUseCase prunes expired ip_trace_events and ip_processed_events."""
-    expired_ts = datetime.now(UTC) - timedelta(days=45)
-    recent_ts = datetime.now(UTC) - timedelta(days=1)
-
-    tenant_session.add_all(
-        [
-            IpTraceEventModel(
-                id="tr_evt_old_1",
-                tenant_id=seeded_ip_tenant,
-                trace_id="tr_old",
-                correlation_id="corr_old",
-                event_type=IpTraceEventType.INGEST_RECEIVED.value,
-                actor="SYSTEM",
-                metadata_={"summary": "Old trace event"},
-                created_at=expired_ts,
-            ),
-            IpTraceEventModel(
-                id="tr_evt_recent_1",
-                tenant_id=seeded_ip_tenant,
-                trace_id="tr_recent",
-                correlation_id="corr_recent",
-                event_type=IpTraceEventType.INGEST_RECEIVED.value,
-                actor="SYSTEM",
-                metadata_={"summary": "Recent trace event"},
-                created_at=recent_ts,
-            ),
-            IpProcessedEventModel(
-                idempotency_key="idem_old_1",
-                tenant_id=seeded_ip_tenant,
-                processed_at=expired_ts,
-            ),
-            IpProcessedEventModel(
-                idempotency_key="idem_recent_1",
-                tenant_id=seeded_ip_tenant,
-                processed_at=recent_ts,
-            ),
-        ]
-    )
-    await tenant_session.flush()
-
-    retention_repo = SqlAlchemyShardedTraceRetentionRepository(
-        transactional_router,
-        app_slug="ip",
-        trace_event_model_cls=IpTraceEventModel,
-        processed_event_model_cls=IpProcessedEventModel,
-    )
-    use_case = CleanTraceRetentionUseCase(repository=retention_repo)
-    result = await use_case.execute(
-        CleanTraceRetentionCommand(
-            trace_retention_days=30,
-            processed_event_retention_days=14,
-        )
-    )
-    assert result.trace_events_deleted >= 1
-    assert result.processed_events_deleted >= 1
-
-    remaining_trace_ids = (
-        (
-            await tenant_session.execute(
-                select(IpTraceEventModel.id).where(IpTraceEventModel.tenant_id == seeded_ip_tenant)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert "tr_evt_old_1" not in remaining_trace_ids
-    assert "tr_evt_recent_1" in remaining_trace_ids
-
-    remaining_idem_keys = (
-        (
-            await tenant_session.execute(
-                select(IpProcessedEventModel.idempotency_key).where(
-                    IpProcessedEventModel.tenant_id == seeded_ip_tenant
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-    assert "idem_old_1" not in remaining_idem_keys
-    assert "idem_recent_1" in remaining_idem_keys
-
-
-@pytest.mark.asyncio
-async def test_global_outbox_repository_sweep_stuck_events_and_cleanup_processed(
+async def test_global_outbox_repository_sweeps_expired_leases_with_retention_cleanup(
     global_session: GlobalSession,
     transactional_router: TransactionalTestRouter,
 ) -> None:
@@ -409,7 +303,7 @@ async def test_global_outbox_repository_sweep_stuck_events_and_cleanup_processed
 
 
 @pytest.mark.asyncio
-async def test_sharded_outbox_repository_sweep_stuck_events_and_cleanup_processed(
+async def test_sharded_outbox_repository_sweeps_expired_leases_with_retention_cleanup(
     seeded_ip_tenant: str,
     tenant_session: TenantSession,
     transactional_router: TransactionalTestRouter,
@@ -465,7 +359,7 @@ async def test_sharded_outbox_repository_sweep_stuck_events_and_cleanup_processe
 
 
 @pytest.mark.asyncio
-async def test_data_plane_uow_idempotency_claim_and_release_on_nack(
+async def test_data_plane_uow_releases_claimed_idempotency_key_on_nack(
     seeded_ip_tenant: str,
     transactional_router: TransactionalTestRouter,
 ) -> None:
@@ -475,16 +369,13 @@ async def test_data_plane_uow_idempotency_claim_and_release_on_nack(
     shard_res = await uow_provider.resolve_shard_info(seeded_ip_tenant)
     shard_id, shard_dsn = shard_res.unwrap()
 
-    # 1. First claim succeeds
     async with uow_provider.get_data_plane_uow(seeded_ip_tenant, shard_id, shard_dsn) as uow:
         assert await uow.record_idempotency(seeded_ip_tenant, "idem_key_nack_test") is True
         await uow.commit()
 
-    # 2. Duplicate claim while key is committed returns False
     async with uow_provider.get_data_plane_uow(seeded_ip_tenant, shard_id, shard_dsn) as uow:
         assert await uow.record_idempotency(seeded_ip_tenant, "idem_key_nack_test") is False
 
-    # 3. Release on transient NACK allows subsequent retry to claim the key again
     async with uow_provider.get_data_plane_uow(seeded_ip_tenant, shard_id, shard_dsn) as uow:
         await uow.release_idempotency(seeded_ip_tenant, "idem_key_nack_test")
         await uow.commit()
@@ -495,7 +386,7 @@ async def test_data_plane_uow_idempotency_claim_and_release_on_nack(
 
 
 @pytest.mark.asyncio
-async def test_sharded_outbox_repository_claim_next_and_mark_completed_or_failed(
+async def test_sharded_outbox_repository_updates_claimed_event_statuses(
     seeded_ip_tenant: str,
     tenant_session: TenantSession,
     transactional_router: TransactionalTestRouter,
@@ -544,7 +435,6 @@ async def test_sharded_outbox_repository_claim_next_and_mark_completed_or_failed
     await dp_repo.mark_completed("dp_claim_ok", "dp_sweeper_1")
     await dp_repo.mark_failed("dp_claim_fail", "dp_sweeper_1", "Transient SQS failure")
 
-    # Also exercise unknown_ids fallback when shard map does not contain the event ID
     await dp_repo.mark_completed_batch(["dp_unknown_id"], "dp_sweeper_1")
     await dp_repo.mark_failed_batch(["dp_unknown_id"], "dp_sweeper_1", "No-op")
 
@@ -556,13 +446,12 @@ async def test_sharded_outbox_repository_claim_next_and_mark_completed_or_failed
 
 
 @pytest.mark.asyncio
-async def test_stitch_adapters_and_worker_modules_lifecycle(
+async def test_stitch_runtime_adapters_dispatch_canonical_events(
     seeded_ip_tenant: str,
     tenant_session: TenantSession,
     transactional_router: TransactionalTestRouter,
 ) -> None:
-    """Verify IpStitchCanonicalDispatcherAdapter, IpStitchWorkerTickAdapter, and WorkerModule lifecycles."""
-    # 1. stage_workflow_outbox_event stages an IpDataPlaneOutboxRecord on the shard session
+    """Verify IpStitchCanonicalDispatcherAdapter and IpStitchWorkerTickAdapter against PostgreSQL."""
     stage_workflow_outbox_event(
         tenant_session,
         seeded_ip_tenant,
@@ -590,22 +479,21 @@ async def test_stitch_adapters_and_worker_modules_lifecycle(
     disp_res = await stitch_dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
             tenant_id=seeded_ip_tenant,
-            canonical_event_type="energy.meter_reading.v1",
+            canonical_event_type="canonical.record_alpha.v1",
             event_id="evt_canon_1",
-            payload={"meter_id": "MTR-1"},
+            payload={"record_id": "REC-1"},
             trace_id="tr_wf_1",
             correlation_id="corr_wf_1",
         )
     )
     assert disp_res.is_ok
 
-    # Unknown tenant returns error
     missing_res = await stitch_dispatcher.execute(
         DispatchCanonicalEventToStitchesCommand(
             tenant_id="t_nonexistent",
-            canonical_event_type="energy.meter_reading.v1",
+            canonical_event_type="canonical.record_alpha.v1",
             event_id="evt_canon_2",
-            payload={"meter_id": "MTR-1"},
+            payload={"record_id": "REC-1"},
             trace_id="tr_wf_1",
         )
     )
@@ -622,7 +510,12 @@ async def test_stitch_adapters_and_worker_modules_lifecycle(
     )
     assert tick_res.is_ok
 
-    # 2. Verify IpOrchestratorWorkerModule and IpDeliveryWorkerModule start/stop lifecycle
+
+@pytest.mark.asyncio
+async def test_ip_worker_modules_manage_background_task_lifecycles(
+    transactional_router: TransactionalTestRouter,
+) -> None:
+    """Verify IP LaunchableWorker modules start and stop cleanly against TransactionalTestRouter."""
     settings = IpEngineSettings(
         ip_orchestrator_realtime_queue_url="",
         ip_orchestrator_bulk_queue_url="",

@@ -12,7 +12,7 @@ logger = structlog.get_logger(__name__)
 
 # Ordered so inline router modules ("ip") are registered before catch-all sub-app mounts ("edi").
 API_MODULE_REGISTRY: dict[str, str] = {
-    "ip": "ip.engine.module.IpApiModule",
+    "ip": "ip.module.IpApiModule",
     "edi": "edi.module.EdiApiModule",
 }
 
@@ -32,8 +32,10 @@ def get_api_module_instance(app_name: str) -> LaunchableApiModule:
 
     try:
         module = importlib.import_module(module_path)
-        module_class = getattr(module, class_name)
-    except (ImportError, AttributeError) as exc:
+        if class_name not in module.__dict__:
+            raise AttributeError(f"module {module_path!r} has no attribute {class_name!r}")
+        module_class = module.__dict__[class_name]
+    except (ImportError, AttributeError, KeyError) as exc:
         raise RuntimeError(f"Failed to load API module class {target_fqn}: {exc}") from exc
 
     instance = module_class()

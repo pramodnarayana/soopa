@@ -23,7 +23,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_connection_repository_save_query_and_outbox_draining(
+async def test_connection_repository_persists_aggregate_with_outbox_event(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:
@@ -31,12 +31,12 @@ async def test_connection_repository_save_query_and_outbox_draining(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
-        name="Primary Grid Itron",
+        app_id="acme_source",
+        name="Primary Partner Source",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://ami.grid-utility.com"},
+        public_config={"endpoint_url": "https://api.partner.example.com"},
         encrypted_credentials=b"kid:k1:encrypted_payload",
-        endpoint_for_fingerprint="https://ami.grid-utility.com",
+        endpoint_for_fingerprint="https://api.partner.example.com",
     )
 
     save_res = await repo.save(conn)
@@ -46,7 +46,7 @@ async def test_connection_repository_save_query_and_outbox_draining(
     assert fetched is not None
     assert fetched.id == conn.id
     assert fetched.tenant_id == seeded_ip_tenant
-    assert fetched.name == "Primary Grid Itron"
+    assert fetched.name == "Primary Partner Source"
     assert fetched.status == ConnectionStatus.PENDING_AUTH
     assert fetched.encrypted_credentials == b"kid:k1:encrypted_payload"
 
@@ -64,7 +64,7 @@ async def test_connection_repository_save_query_and_outbox_draining(
 
 
 @pytest.mark.asyncio
-async def test_connection_partial_unique_index_enforces_active_fingerprint_and_allows_deactivated_replacement(
+async def test_connection_partial_unique_index_allows_replacing_deactivated_fingerprint(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:
@@ -73,24 +73,24 @@ async def test_connection_partial_unique_index_enforces_active_fingerprint_and_a
 
     conn_1 = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Active Connection 1",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://dup.grid-utility.com"},
+        public_config={"endpoint_url": "https://dup.partner.example.com"},
         encrypted_credentials=b"secret1",
-        endpoint_for_fingerprint="https://dup.grid-utility.com",
+        endpoint_for_fingerprint="https://dup.partner.example.com",
     )
     res_1 = await repo.save(conn_1)
     assert res_1.is_ok is True
 
     conn_dup = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Duplicate Active Connection",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://dup.grid-utility.com"},
+        public_config={"endpoint_url": "https://dup.partner.example.com"},
         encrypted_credentials=b"secret2",
-        endpoint_for_fingerprint="https://dup.grid-utility.com",
+        endpoint_for_fingerprint="https://dup.partner.example.com",
     )
     async with global_session.begin_nested():
         dup_res = await repo.save(conn_dup)
@@ -104,12 +104,12 @@ async def test_connection_partial_unique_index_enforces_active_fingerprint_and_a
 
     conn_replacement = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Replacement Active Connection",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://dup.grid-utility.com"},
+        public_config={"endpoint_url": "https://dup.partner.example.com"},
         encrypted_credentials=b"secret3",
-        endpoint_for_fingerprint="https://dup.grid-utility.com",
+        endpoint_for_fingerprint="https://dup.partner.example.com",
     )
     rep_res = await repo.save(conn_replacement)
     assert rep_res.is_ok is True
@@ -120,7 +120,7 @@ async def test_connection_partial_unique_index_enforces_active_fingerprint_and_a
 
 
 @pytest.mark.asyncio
-async def test_connection_repository_get_by_id_for_update_and_update_tokens(
+async def test_connection_repository_rotates_oauth_tokens_under_row_lock(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:

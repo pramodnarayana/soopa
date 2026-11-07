@@ -67,7 +67,7 @@ import {
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
   SEED_DISCOVERED_CATALOG,
-  SEED_ITRON_APP_SPEC,
+  SEED_SOURCE_APP_SPEC,
   SEED_STITCH,
   SEED_STITCH_DEFINITION,
   SEED_STITCH_RUN,
@@ -93,7 +93,7 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
 
   constructor(
     apps: readonly CatalogAppSummary[] = SEED_CATALOG_APPS,
-    specs: readonly AppSpec[] = [SEED_ITRON_APP_SPEC],
+    specs: readonly AppSpec[] = [SEED_SOURCE_APP_SPEC],
   ) {
     this.apps = [...apps];
     this.specs = new Map(specs.map((spec) => [spec.appId, spec]));
@@ -484,13 +484,13 @@ export class InMemoryTransformationRepository implements TransformationRepositor
     input: PreviewStreamTransformationInput,
   ): Promise<Result<TransformationPreviewResult, ApiProblem>> {
     const shadowDiffs: Readonly<Record<string, Readonly<Record<string, unknown>>>> =
-      input.shadowTransformationVersion ? { unit: { active: 'KWH', shadow: 'kWh' } } : {};
+      input.shadowTransformationVersion ? { unit: { active: 'COUNT', shadow: 'count' } } : {};
     return ok({
       transformationId: input.transformationId,
       transformationVersion: input.transformationVersion,
       drafts: [
         {
-          canonicalType: 'energy.meter_interval.v1',
+          canonicalType: 'canonical.record_alpha.v1',
           sourceId: input.recordKey,
           fields: input.samplePayload,
           extensions: {},

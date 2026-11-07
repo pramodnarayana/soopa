@@ -6,7 +6,6 @@ import asyncio
 
 import structlog
 from database.router import DatabaseRouter, DatabaseRouterPort
-from observability import ObservabilityProvider
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_processor_use_case import OutboxProcessorUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
@@ -19,7 +18,7 @@ from pubsub.dispatcher import DispatchKey, MessageDispatcher
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from pubsub.provider import PubSubProvider
 from seedwork.domain.types import JsonDict
-from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
+from seedwork.infra.worker import LaunchableWorker
 
 from ip.engine.bootstrap.container import (
     create_ip_cp_outbox_components,
@@ -163,13 +162,4 @@ class IpCpJobsWorkerModule(LaunchableWorker):
         logger.info("ip_cp_jobs_worker_stopped")
 
 
-async def main(stop_event: asyncio.Event | None = None) -> None:
-    ObservabilityProvider.auto_configure_from_env("ip-cp-jobs-worker")
-    module = IpCpJobsWorkerModule()
-    await run_worker_app_async(module, stop_event=stop_event)
-
-
-if __name__ == "__main__":
-    run_worker_app(main)
-
-__all__ = ["IpCpJobsWorkerModule", "main"]
+__all__ = ["IpCpJobsWorkerModule"]

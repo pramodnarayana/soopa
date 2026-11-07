@@ -7,6 +7,7 @@ with strict action resolution precedence: SKIP > CANCEL > CREATE > QUEUE > CREAT
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Protocol
@@ -203,7 +204,7 @@ class DagMatchCompiler:
         tenant_id: str,
         run_id: str,
         definition: WorkflowDefinition,
-        step_ids_by_node_key: dict[str, tuple[str, datetime]],
+        step_ids_by_node_key: Mapping[str, tuple[str, datetime]],
         now: datetime | None = None,
     ) -> tuple[WorkflowMatch, ...]:
         """Build initial DAG_DEPENDENCY or SIGNAL_WAIT matches for all non-root or wait/sleep nodes."""
@@ -261,7 +262,7 @@ class DagMatchCompiler:
         step_run_id: str,
         step_created_at: datetime,
         node: NodeDefinition,
-        step_ids_by_node_key: dict[str, tuple[str, datetime]],
+        step_ids_by_node_key: Mapping[str, tuple[str, datetime]],
         positive_action: MatchAction,
         now: datetime,
     ) -> WorkflowMatch:

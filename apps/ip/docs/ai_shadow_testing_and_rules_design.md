@@ -179,10 +179,10 @@ CREATE TABLE ip_shadow_evaluations (
 );
 
 -- Indices for sub-15ms Monaco Diff Viewer queries and chunked retention purging
-CREATE INDEX idx_ip_shadow_evaluations_stream_diff 
+CREATE INDEX idx_ip_shadow_evaluations_stream_diff
 ON ip_shadow_evaluations (tenant_id, stream_id, has_diff, created_at DESC);
 
-CREATE INDEX idx_ip_shadow_evaluations_retention 
+CREATE INDEX idx_ip_shadow_evaluations_retention
 ON ip_shadow_evaluations (created_at);
 
 ALTER TABLE ip_transformers ENABLE ROW LEVEL SECURITY;

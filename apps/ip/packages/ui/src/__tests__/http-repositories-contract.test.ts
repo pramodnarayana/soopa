@@ -64,10 +64,10 @@ function createRouteFetch(routes: Readonly<Record<string, unknown>>): {
 const WIRE_CONNECTION = {
   id: 'conn_01',
   tenant_id: 'ten_01',
-  app_id: 'itron_ami',
-  name: 'Itron Prod',
+  app_id: 'acme_source',
+  name: 'Acme Prod',
   auth_type: 'OAUTH2',
-  public_config: { base_url: 'https://ami.example.com' },
+  public_config: { base_url: 'https://api.acme.example.com' },
   status: 'ACTIVE',
   connection_fingerprint: 'fp_01',
   created_at: '2026-10-29T08:00:00Z',
@@ -78,7 +78,7 @@ const WIRE_SYNC_RUN = {
   run_id: 'sync_01',
   tenant_id: 'ten_01',
   connection_id: 'conn_01',
-  stream_name: 'meter_reads',
+  stream_name: 'records_alpha',
   kind: 'INCREMENTAL',
   generation_id: 2,
   status: 'SUCCEEDED',
@@ -94,8 +94,8 @@ const WIRE_STREAM_STATE = {
   state_id: 'st_01',
   tenant_id: 'ten_01',
   connection_id: 'conn_01',
-  stream_name: 'meter_reads',
-  cursor_field: 'interval_end',
+  stream_name: 'records_alpha',
+  cursor_field: 'captured_at',
   cursor_value: '2026-10-29T08:00:00Z',
   records_synced_count: 150,
   last_synced_at: '2026-10-29T08:00:05Z',
@@ -105,8 +105,8 @@ const WIRE_TRANSFORMATION = {
   id: 'trn_01',
   tenant_id: 'ten_01',
   connection_id: 'conn_01',
-  stream: 'meter_reads',
-  transformation_id: 'itron.meter_read.to_gem',
+  stream: 'records_alpha',
+  transformation_id: 'acme.record_alpha.to_gem',
   transformation_version: 1,
   mode: 'SHADOW',
   shadow_transformation_version: 2,
@@ -114,10 +114,10 @@ const WIRE_TRANSFORMATION = {
 };
 
 const WIRE_STITCH_DEFINITION = {
-  workflow_id: 'energy.ami_to_mdm',
+  workflow_id: 'workflow.sync_alpha_to_sink',
   version: 1,
   default_priority: 'HIGH',
-  description: 'AMI to MDM',
+  description: 'Source Alpha to Sink',
   nodes: [
     {
       node_key: 'step_1',
@@ -134,7 +134,7 @@ const WIRE_STITCH_DEFINITION = {
 const WIRE_STITCH_RUN = {
   run_id: 'run_01',
   tenant_id: 'ten_01',
-  workflow_id: 'energy.ami_to_mdm',
+  workflow_id: 'workflow.sync_alpha_to_sink',
   workflow_version: 1,
   status: 'SUCCEEDED',
   priority: 'HIGH',
@@ -155,23 +155,23 @@ const WIRE_STITCH_RUN = {
   ],
 };
 
-describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift Telemetry', () => {
-  it('maps HttpCatalogRepository (listApps, getAppSpec) and HttpConnectionRepository (all 7 methods)', async () => {
+describe('Outbound HTTP Repositories Wire Contracts', () => {
+  it('maps HttpCatalogRepository wire responses', async () => {
     const logger = new RecordingLoggerFake();
     const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/catalog/apps': [
         {
-          app_id: 'itron_ami',
-          display_name: 'Itron AMI',
-          category: 'energy',
+          app_id: 'acme_source',
+          display_name: 'Acme Source API',
+          category: 'api',
           auth_type: 'OAUTH2',
         },
       ],
-      'GET /api/v1/tenants/ten_01/ip/catalog/apps/itron_ami/spec': {
-        app_id: 'itron_ami',
-        display_name: 'Itron AMI',
+      'GET /api/v1/tenants/ten_01/ip/catalog/apps/acme_source/spec': {
+        app_id: 'acme_source',
+        display_name: 'Acme Source API',
         auth_type: 'OAUTH2',
-        category: 'energy',
+        category: 'api',
         properties: [
           {
             name: 'region',
@@ -181,7 +181,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             oauth_config: {
               auth_url: 'https://auth.example.com/authorize',
               token_url: 'https://auth.example.com/token',
-              scopes: ['ami:read'],
+              scopes: ['records:read'],
             },
           },
           {
@@ -192,6 +192,28 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
           },
         ],
       },
+    });
+
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local',
+      fetchImpl,
+      logger,
+    });
+    const catalogRepo = new HttpCatalogRepository(client, logger);
+
+    const apps = expectOk(
+      await catalogRepo.listApps('ten_01', { category: 'api', search: 'acme' }),
+    );
+    expect(apps[0]?.appId).toBe('acme_source');
+
+    const spec = expectOk(await catalogRepo.getAppSpec('ten_01', 'acme_source'));
+    expect(spec.properties[0]?.oauthConfig?.scopes).toEqual(['records:read']);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('maps HttpConnectionRepository wire responses across all 8 methods', async () => {
+    const logger = new RecordingLoggerFake();
+    const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/connections': [WIRE_CONNECTION],
       'GET /api/v1/tenants/ten_01/ip/connections/conn_01': WIRE_CONNECTION,
       'POST /api/v1/tenants/ten_01/ip/connections/check': {
@@ -207,9 +229,9 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         discovered_at: '2026-10-29T08:02:00Z',
         streams: [
           {
-            name: 'meter_reads',
-            fields: [{ name: 'meter_id', data_type: 'string', nullable: false }],
-            primary_key: ['meter_id'],
+            name: 'records_alpha',
+            fields: [{ name: 'record_id', data_type: 'string', nullable: false }],
+            primary_key: ['record_id'],
             cursor_field: 'updated_at',
             supported_sync_modes: ['INCREMENTAL'],
           },
@@ -228,16 +250,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       fetchImpl,
       logger,
     });
-    const catalogRepo = new HttpCatalogRepository(client, logger);
     const connRepo = new HttpConnectionRepository(client, logger);
-
-    const apps = expectOk(
-      await catalogRepo.listApps('ten_01', { category: 'energy', search: 'itron' }),
-    );
-    expect(apps[0]?.appId).toBe('itron_ami');
-
-    const spec = expectOk(await catalogRepo.getAppSpec('ten_01', 'itron_ami'));
-    expect(spec.properties[0]?.oauthConfig?.scopes).toEqual(['ami:read']);
 
     const listed = expectOk(await connRepo.listConnections('ten_01', 'ACTIVE'));
     expect(listed[0]?.connectionFingerprint).toBe('fp_01');
@@ -247,9 +260,9 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
 
     const checked = expectOk(
       await connRepo.checkConnection('ten_01', {
-        appId: 'itron_ami',
+        appId: 'acme_source',
         authType: AuthType.OAUTH2,
-        publicConfig: { base_url: 'https://ami.example.com' },
+        publicConfig: { base_url: 'https://api.acme.example.com' },
         rawCredentials: { secret: 'sec_1' },
       }),
     );
@@ -257,21 +270,21 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
 
     const created = expectOk(
       await connRepo.createConnection('ten_01', {
-        appId: 'itron_ami',
-        name: 'Itron Prod',
+        appId: 'acme_source',
+        name: 'Acme Prod',
         authType: AuthType.OAUTH2,
-        publicConfig: { base_url: 'https://ami.example.com' },
+        publicConfig: { base_url: 'https://api.acme.example.com' },
         rawCredentials: { secret: 'sec_1' },
       }),
     );
-    expect(created.name).toBe('Itron Prod');
+    expect(created.name).toBe('Acme Prod');
 
     const discovered = expectOk(await connRepo.discoverCatalog('ten_01', 'conn_01'));
     expect(discovered.streams[0]?.fields[0]?.dataType).toBe('string');
 
     const relinked = expectOk(
       await connRepo.relinkConnection('ten_01', 'conn_01', {
-        newName: 'Itron Rotated',
+        newName: 'Acme Rotated',
       }),
     );
     expect(relinked.id).toBe('conn_01');
@@ -281,64 +294,22 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
 
     const deleted = expectOk(await connRepo.deleteConnection('ten_01', 'conn_01'));
     expect(deleted).toBeUndefined();
-    expect(calls).toHaveLength(10);
+    expect(calls).toHaveLength(8);
     const deleteCall = calls[calls.length - 1];
     expect(deleteCall?.url).toContain('permanent=true');
   });
 
-  it('maps HttpSyncRunRepository (all 5 methods) and HttpTransformationRepository (all 6 methods)', async () => {
+  it('maps HttpSyncRunRepository wire responses across all 5 methods', async () => {
     const logger = new RecordingLoggerFake();
     const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/connections/conn_01/sync-runs': [WIRE_SYNC_RUN],
       'GET /api/v1/tenants/ten_01/ip/connections/conn_01/sync-runs/sync_01': WIRE_SYNC_RUN,
       'POST /api/v1/tenants/ten_01/ip/connections/conn_01/sync-runs': WIRE_SYNC_RUN,
       'GET /api/v1/tenants/ten_01/ip/connections/conn_01/streams/state': [WIRE_STREAM_STATE],
-      'POST /api/v1/tenants/ten_01/ip/connections/conn_01/streams/meter_reads/reset': {
+      'POST /api/v1/tenants/ten_01/ip/connections/conn_01/streams/records_alpha/reset': {
         ...WIRE_STREAM_STATE,
         cursor_value: null,
         records_synced_count: 0,
-      },
-      'GET /api/v1/tenants/ten_01/ip/transformations/transformers': [
-        {
-          transformation_id: 'itron.meter_read.to_gem',
-          transformation_version: 2,
-          target_types: ['energy.meter_interval.v1'],
-        },
-      ],
-      'GET /api/v1/tenants/ten_01/ip/transformations/connections/conn_01': [WIRE_TRANSFORMATION],
-      'GET /api/v1/tenants/ten_01/ip/transformations/connections/conn_01/streams/meter_reads':
-        WIRE_TRANSFORMATION,
-      'PUT /api/v1/tenants/ten_01/ip/transformations/connections/conn_01/streams/meter_reads':
-        WIRE_TRANSFORMATION,
-      'POST /api/v1/tenants/ten_01/ip/transformations/connections/conn_01/streams/meter_reads/promote':
-        {
-          id: 'trn_01',
-          connection_id: 'conn_01',
-          stream: 'meter_reads',
-          transformation_id: 'itron.meter_read.to_gem',
-          promoted_version: 2,
-          previous_version: 1,
-        },
-      'POST /api/v1/tenants/ten_01/ip/transformations/preview': {
-        transformation_id: 'itron.meter_read.to_gem',
-        transformation_version: 1,
-        drafts: [
-          {
-            canonical_type: 'energy.meter_interval.v1',
-            source_id: 'MTR-01',
-            fields: { kwh: 12.5 },
-            references: [
-              {
-                field_name: 'service_point',
-                target_canonical_type: 'energy.service_point.v1',
-                target_source_id: 'SP-01',
-              },
-            ],
-          },
-        ],
-        rejections: [{ reason: 'WARN_OPTIONAL', field_path: '$.voltage', detail: 'Missing' }],
-        shadow_transformation_version: 2,
-        shadow_diffs: { kwh: { active: 12.5, shadow: 12.5 } },
       },
     });
 
@@ -348,7 +319,6 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       logger,
     });
     const syncRepo = new HttpSyncRunRepository(client, logger);
-    const transRepo = new HttpTransformationRepository(client, logger);
 
     const runs = expectOk(await syncRepo.listSyncRuns('ten_01', 'conn_01'));
     expect(runs[0]?.recordsCount).toBe(150);
@@ -358,19 +328,75 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
 
     const triggered = expectOk(
       await syncRepo.triggerSyncRun('ten_01', 'conn_01', {
-        streamName: 'meter_reads',
+        streamName: 'records_alpha',
         forcedKind: SyncRunKind.FULL_REFRESH,
       }),
     );
     expect(triggered.runId).toBe('sync_01');
 
     const states = expectOk(await syncRepo.listStreamStates('ten_01', 'conn_01'));
-    expect(states[0]?.cursorField).toBe('interval_end');
+    expect(states[0]?.cursorField).toBe('captured_at');
 
     const reset = expectOk(
-      await syncRepo.resetStreamCheckpoint('ten_01', 'conn_01', 'meter_reads'),
+      await syncRepo.resetStreamCheckpoint('ten_01', 'conn_01', 'records_alpha'),
     );
     expect(reset.cursorValue).toBeNull();
+    expect(calls).toHaveLength(5);
+  });
+
+  it('maps HttpTransformationRepository wire responses across all 6 methods', async () => {
+    const logger = new RecordingLoggerFake();
+    const { fetchImpl, calls } = createRouteFetch({
+      'GET /api/v1/tenants/ten_01/ip/transformations/transformers': [
+        {
+          transformation_id: 'acme.record_alpha.to_gem',
+          transformation_version: 2,
+          target_types: ['canonical.record_alpha.v1'],
+        },
+      ],
+      'GET /api/v1/tenants/ten_01/ip/transformations/connections/conn_01': [WIRE_TRANSFORMATION],
+      'GET /api/v1/tenants/ten_01/ip/transformations/connections/conn_01/streams/records_alpha':
+        WIRE_TRANSFORMATION,
+      'PUT /api/v1/tenants/ten_01/ip/transformations/connections/conn_01/streams/records_alpha':
+        WIRE_TRANSFORMATION,
+      'POST /api/v1/tenants/ten_01/ip/transformations/connections/conn_01/streams/records_alpha/promote':
+        {
+          id: 'trn_01',
+          connection_id: 'conn_01',
+          stream: 'records_alpha',
+          transformation_id: 'acme.record_alpha.to_gem',
+          promoted_version: 2,
+          previous_version: 1,
+        },
+      'POST /api/v1/tenants/ten_01/ip/transformations/preview': {
+        transformation_id: 'acme.record_alpha.to_gem',
+        transformation_version: 1,
+        drafts: [
+          {
+            canonical_type: 'canonical.record_alpha.v1',
+            source_id: 'REC-01',
+            fields: { value_num: 12.5 },
+            references: [
+              {
+                field_name: 'parent_entity',
+                target_canonical_type: 'canonical.parent_entity.v1',
+                target_source_id: 'PE-01',
+              },
+            ],
+          },
+        ],
+        rejections: [{ reason: 'WARN_OPTIONAL', field_path: '$.score', detail: 'Missing' }],
+        shadow_transformation_version: 2,
+        shadow_diffs: { value_num: { active: 12.5, shadow: 12.5 } },
+      },
+    });
+
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local',
+      fetchImpl,
+      logger,
+    });
+    const transRepo = new HttpTransformationRepository(client, logger);
 
     const transformers = expectOk(await transRepo.listRegisteredTransformers('ten_01'));
     expect(transformers[0]?.transformationVersion).toBe(2);
@@ -379,13 +405,13 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
     expect(connTrans[0]?.shadowTransformationVersion).toBe(2);
 
     const streamTrans = expectOk(
-      await transRepo.getStreamTransformation('ten_01', 'conn_01', 'meter_reads'),
+      await transRepo.getStreamTransformation('ten_01', 'conn_01', 'records_alpha'),
     );
     expect(streamTrans.wasCreated).toBe(true);
 
     const bound = expectOk(
-      await transRepo.bindStreamTransformation('ten_01', 'conn_01', 'meter_reads', {
-        transformationId: 'itron.meter_read.to_gem',
+      await transRepo.bindStreamTransformation('ten_01', 'conn_01', 'records_alpha', {
+        transformationId: 'acme.record_alpha.to_gem',
         transformationVersion: 1,
         mode: TransformationMode.SHADOW,
         shadowTransformationVersion: 2,
@@ -394,8 +420,8 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
     expect(bound.id).toBe('trn_01');
 
     const boundActive = expectOk(
-      await transRepo.bindStreamTransformation('ten_01', 'conn_01', 'meter_reads', {
-        transformationId: 'itron.meter_read.to_gem',
+      await transRepo.bindStreamTransformation('ten_01', 'conn_01', 'records_alpha', {
+        transformationId: 'acme.record_alpha.to_gem',
         transformationVersion: 2,
         mode: TransformationMode.ACTIVE,
       }),
@@ -403,49 +429,37 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
     expect(boundActive.id).toBe('trn_01');
 
     const promoted = expectOk(
-      await transRepo.promoteShadowVersion('ten_01', 'conn_01', 'meter_reads'),
+      await transRepo.promoteShadowVersion('ten_01', 'conn_01', 'records_alpha'),
     );
     expect(promoted.promotedVersion).toBe(2);
 
     const preview = expectOk(
       await transRepo.previewTransformation('ten_01', {
         connectionId: 'conn_01',
-        stream: 'meter_reads',
-        transformationId: 'itron.meter_read.to_gem',
+        stream: 'records_alpha',
+        transformationId: 'acme.record_alpha.to_gem',
         transformationVersion: 1,
-        recordKey: 'MTR-01',
-        samplePayload: { kwh: 12.5 },
+        recordKey: 'REC-01',
+        samplePayload: { value_num: 12.5 },
       }),
     );
-    expect(preview.drafts[0]?.references[0]?.targetSourceId).toBe('SP-01');
-    expect(calls).toHaveLength(12);
+    expect(preview.drafts[0]?.references[0]?.targetSourceId).toBe('PE-01');
+    expect(calls).toHaveLength(7);
   });
 
-  it('maps HttpStitchRepository (all 7 methods) and HttpTraceRepository (all 7 methods)', async () => {
+  it('maps HttpStitchRepository wire responses across all 7 methods', async () => {
     const logger = new RecordingLoggerFake();
-    const lineageWire = [
-      {
-        trace_id: 'trc_01',
-        correlation_id: 'MTR-77410',
-        status: 'FAILED',
-        primary_layer: 'L5_DELIVERY',
-        created_at: '2026-10-29T08:00:00Z',
-        replay_count: 0,
-        parent_trace_id: null,
-        original_trace_id: 'trc_01',
-      },
-    ];
     const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/stitches/definitions': [WIRE_STITCH_DEFINITION],
-      'GET /api/v1/tenants/ten_01/ip/stitches/definitions/energy.ami_to_mdm':
+      'GET /api/v1/tenants/ten_01/ip/stitches/definitions/workflow.sync_alpha_to_sink':
         WIRE_STITCH_DEFINITION,
       'GET /api/v1/tenants/ten_01/ip/stitches': [
         {
           id: 'stc_01',
           tenant_id: 'ten_01',
-          workflow_id: 'energy.ami_to_mdm',
+          workflow_id: 'workflow.sync_alpha_to_sink',
           workflow_version: 1,
-          canonical_event_type: 'energy.meter_interval.v1',
+          canonical_event_type: 'canonical.record_alpha.v1',
           is_trigger: true,
           idempotency_key_field: 'source_id',
           is_active: true,
@@ -454,9 +468,9 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       'POST /api/v1/tenants/ten_01/ip/stitches': {
         id: 'stc_02',
         tenant_id: 'ten_01',
-        workflow_id: 'energy.ami_to_mdm',
+        workflow_id: 'workflow.sync_alpha_to_sink',
         workflow_version: 1,
-        canonical_event_type: 'energy.meter_interval.v1',
+        canonical_event_type: 'canonical.record_alpha.v1',
         is_trigger: true,
         idempotency_key_field: 'source_id',
         is_active: true,
@@ -468,12 +482,66 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       },
       'GET /api/v1/tenants/ten_01/ip/stitches/runs': [WIRE_STITCH_RUN],
       'GET /api/v1/tenants/ten_01/ip/stitches/runs/run_01': WIRE_STITCH_RUN,
+    });
+
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local',
+      fetchImpl,
+      logger,
+    });
+    const stitchRepo = new HttpStitchRepository(client, logger);
+
+    expect((await stitchRepo.listDefinitions('ten_01')).ok).toBe(true);
+    expect((await stitchRepo.getDefinition('ten_01', 'workflow.sync_alpha_to_sink', 1)).ok).toBe(
+      true,
+    );
+    expect((await stitchRepo.listStitches('ten_01')).ok).toBe(true);
+    expect(
+      (
+        await stitchRepo.registerStitch('ten_01', {
+          workflowId: 'workflow.sync_alpha_to_sink',
+          workflowVersion: 1,
+          canonicalEventType: 'canonical.record_alpha.v1',
+          isTrigger: true,
+          idempotencyKeyField: 'source_id',
+          isActive: true,
+        })
+      ).ok,
+    ).toBe(true);
+    expect(
+      (
+        await stitchRepo.dispatchEvent('ten_01', {
+          canonicalEventType: 'canonical.record_alpha.v1',
+          payload: { value_num: 10 },
+        })
+      ).ok,
+    ).toBe(true);
+    expect((await stitchRepo.listRuns('ten_01', { status: 'SUCCEEDED' })).ok).toBe(true);
+    expect((await stitchRepo.getRun('ten_01', 'run_01')).ok).toBe(true);
+    expect(calls).toHaveLength(7);
+  });
+
+  it('maps HttpTraceRepository wire responses across all 7 methods', async () => {
+    const logger = new RecordingLoggerFake();
+    const lineageWire = [
+      {
+        trace_id: 'trc_01',
+        correlation_id: 'REC-77410',
+        status: 'FAILED',
+        primary_layer: 'L5_DELIVERY',
+        created_at: '2026-10-29T08:00:00Z',
+        replay_count: 0,
+        parent_trace_id: null,
+        original_trace_id: 'trc_01',
+      },
+    ];
+    const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/traces': lineageWire,
       'GET /api/v1/tenants/ten_01/ip/traces/search': lineageWire,
       'GET /api/v1/tenants/ten_01/ip/traces/trc_01': {
         trace_id: 'trc_01',
         tenant_id: 'ten_01',
-        correlation_id: 'MTR-77410',
+        correlation_id: 'REC-77410',
         original_trace_id: 'trc_01',
         parent_trace_id: null,
         replay_count: 0,
@@ -483,8 +551,8 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
           tenant_id: 'ten_01',
           trace_id: 'trc_01',
           connection_id: 'conn_01',
-          app_id: 'itron_ami',
-          stream_name: 'meter_reads',
+          app_id: 'acme_source',
+          stream_name: 'records_alpha',
           ingestion_mode: 'WEBHOOK',
           request_size_bytes: 64,
           request_sha256: 'sha_01',
@@ -496,8 +564,8 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             tenant_id: 'ten_01',
             trace_id: 'trc_01',
             connection_id: 'conn_01',
-            stream: 'meter_reads',
-            record_key: 'MTR-77410',
+            stream: 'records_alpha',
+            record_key: 'REC-77410',
             data_hash: 'dh_01',
             version: 1,
             generation_id: 1,
@@ -513,11 +581,11 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             id: 'rrej_01',
             tenant_id: 'ten_01',
             connection_id: 'conn_01',
-            stream: 'meter_reads',
+            stream: 'records_alpha',
             inbound_record_id: 'inb_01',
             record_index: 1,
             reason: 'MISSING_PRIMARY_KEY',
-            detail: 'meter_id missing',
+            detail: 'record_id missing',
             trace_id: 'trc_01',
             created_at: '2026-10-29T08:00:01Z',
           },
@@ -528,8 +596,8 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             tenant_id: 'ten_01',
             trace_id: 'trc_01',
             connection_id: 'conn_01',
-            canonical_type: 'energy.meter_interval.v1',
-            source_id: 'MTR-77410',
+            canonical_type: 'canonical.record_alpha.v1',
+            source_id: 'REC-77410',
             normalized_at: '2026-10-29T08:00:02Z',
           },
         ],
@@ -538,14 +606,14 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             id: 'nrej_01',
             tenant_id: 'ten_01',
             replica_record_id: 'rep_01',
-            stream: 'meter_reads',
-            transformation_id: 'itron.meter_read.to_gem',
+            stream: 'records_alpha',
+            transformation_id: 'acme.record_alpha.to_gem',
             transformation_version: 1,
             reason_code: 'SCHEMA_MISMATCH',
-            field_path: '$.kwh',
-            detail: 'Expected numeric kwh',
+            field_path: '$.value_num',
+            detail: 'Expected numeric value_num',
             trace_id: 'trc_01',
-            correlation_id: 'MTR-77410',
+            correlation_id: 'REC-77410',
             created_at: '2026-10-29T08:00:02Z',
           },
         ],
@@ -554,12 +622,12 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             id: 'gem_01',
             tenant_id: 'ten_01',
             trace_id: 'trc_01',
-            entity_domain: 'energy.meter',
-            canonical_id: 'gem_mtr_01',
+            entity_domain: 'domain.record_alpha',
+            canonical_id: 'gem_rec_01',
             source_connection_id: 'conn_01',
-            source_entity_id: 'MTR-77410',
-            dest_connection_id: 'conn_mdm',
-            dest_entity_id: 'ORA-SP-01',
+            source_entity_id: 'REC-77410',
+            dest_connection_id: 'conn_globex',
+            dest_entity_id: 'GLX-ENT-01',
             created_at: '2026-10-29T08:00:02Z',
           },
         ],
@@ -568,11 +636,11 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
             id: 'out_01',
             tenant_id: 'ten_01',
             trace_id: 'trc_01',
-            connection_id: 'conn_mdm',
-            app_id: 'oracle_mdm',
-            stream_name: 'determinants',
+            connection_id: 'conn_globex',
+            app_id: 'globex_dest',
+            stream_name: 'canonical_sink',
             operation: 'UPSERT',
-            target_url: 'https://mdm.example.com/api',
+            target_url: 'https://globex.example.com/api',
             http_method: 'POST',
             request_size_bytes: 80,
             request_sha256: 'sha_out_01',
@@ -608,7 +676,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         new_trace_id: 'trc_02',
         stage: 'RETRY_DELIVER',
         replay_count: 1,
-        correlation_id: 'MTR-77410',
+        correlation_id: 'REC-77410',
       },
       'POST /api/v1/tenants/ten_01/ip/traces/trc_01/modify-and-replay': {
         status: 'QUEUED',
@@ -617,7 +685,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
         new_trace_id: 'trc_03',
         stage: 'RETRY_NORMALIZE',
         replay_count: 1,
-        correlation_id: 'MTR-77410',
+        correlation_id: 'REC-77410',
       },
       'POST /api/v1/tenants/ten_01/ip/traces/bulk-replay': {
         status: 'PARTIAL',
@@ -640,40 +708,13 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       fetchImpl,
       logger,
     });
-    const stitchRepo = new HttpStitchRepository(client, logger);
     const traceRepo = new HttpTraceRepository(client, logger);
-
-    expect((await stitchRepo.listDefinitions('ten_01')).ok).toBe(true);
-    expect((await stitchRepo.getDefinition('ten_01', 'energy.ami_to_mdm', 1)).ok).toBe(true);
-    expect((await stitchRepo.listStitches('ten_01')).ok).toBe(true);
-    expect(
-      (
-        await stitchRepo.registerStitch('ten_01', {
-          workflowId: 'energy.ami_to_mdm',
-          workflowVersion: 1,
-          canonicalEventType: 'energy.meter_interval.v1',
-          isTrigger: true,
-          idempotencyKeyField: 'source_id',
-          isActive: true,
-        })
-      ).ok,
-    ).toBe(true);
-    expect(
-      (
-        await stitchRepo.dispatchEvent('ten_01', {
-          canonicalEventType: 'energy.meter_interval.v1',
-          payload: { kwh: 10 },
-        })
-      ).ok,
-    ).toBe(true);
-    expect((await stitchRepo.listRuns('ten_01', { status: 'SUCCEEDED' })).ok).toBe(true);
-    expect((await stitchRepo.getRun('ten_01', 'run_01')).ok).toBe(true);
 
     expect((await traceRepo.listRecentTraces('ten_01', { minReplayCount: 1 })).ok).toBe(true);
     expect(calls.some((c) => c.url.includes('min_replay_count=1'))).toBe(true);
-    expect((await traceRepo.searchByCorrelation('ten_01', 'MTR-77410')).ok).toBe(true);
+    expect((await traceRepo.searchByCorrelation('ten_01', 'REC-77410')).ok).toBe(true);
     const fullTrace = expectOk(await traceRepo.getTrace('ten_01', 'trc_01', true));
-    expect(fullTrace.entityMappings[0]?.destEntityId).toBe('ORA-SP-01');
+    expect(fullTrace.entityMappings[0]?.destEntityId).toBe('GLX-ENT-01');
     expect(fullTrace.replicaRejections[0]?.reason).toBe('MISSING_PRIMARY_KEY');
     expect(fullTrace.normalizationRejections[0]?.reasonCode).toBe('SCHEMA_MISMATCH');
     const traceWithoutInbound = expectOk(await traceRepo.getTrace('ten_01', 'trc_no_inb', false));
@@ -688,7 +729,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
           'ten_01',
           'trc_01',
           ReplayStage.RETRY_NORMALIZE,
-          { kwh: 50 },
+          { value_num: 50 },
         )
       ).ok,
     ).toBe(true);
@@ -700,7 +741,7 @@ describe('Outbound HTTP Repositories — Full 34-Method Contract & Schema Drift 
       ),
     );
     expect(bulkResult.failedItems[0]?.errorCode).toBe('REPLAY_CAP_EXCEEDED');
-    expect(calls).toHaveLength(15);
+    expect(calls).toHaveLength(8);
   });
 
   it('emits structured ERROR http_wire.schema_drift log when wire JSON violates Zod contract', async () => {

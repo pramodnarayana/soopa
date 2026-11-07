@@ -19,7 +19,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_transformation_repository_save_and_query(
+async def test_transformation_repository_persists_stream_transformations(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:
@@ -27,12 +27,12 @@ async def test_transformation_repository_save_and_query(
     conn_repo = SqlAlchemyConnectionRepository(global_session)
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Transformation Test Connection",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://ami.test.com"},
+        public_config={"endpoint_url": "https://api.test.example.com"},
         encrypted_credentials=b"dummy_creds",
-        endpoint_for_fingerprint="https://ami.test.com",
+        endpoint_for_fingerprint="https://api.test.example.com",
     )
     save_conn_res = await conn_repo.save(conn)
     assert save_conn_res.is_ok
@@ -43,8 +43,8 @@ async def test_transformation_repository_save_and_query(
     transformation = Transformation.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="readings",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         mode=TransformationMode.ACTIVE,
         shadow_transformation_version=2,
@@ -55,14 +55,14 @@ async def test_transformation_repository_save_and_query(
     fetched = await repo.get_by_stream(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="readings",
+        stream="records_alpha",
     )
     assert fetched is not None
     assert fetched.id == transformation.id
     assert fetched.tenant_id == seeded_ip_tenant
     assert fetched.connection_id == conn.id
-    assert fetched.stream == "readings"
-    assert fetched.transformation_id == "energy.ami_meter_reading"
+    assert fetched.stream == "records_alpha"
+    assert fetched.transformation_id == "synthetic.record_alpha"
     assert fetched.transformation_version == 1
     assert fetched.mode == TransformationMode.ACTIVE
     assert fetched.shadow_transformation_version == 2
@@ -93,7 +93,7 @@ async def test_transformation_repository_save_and_query(
     re_fetched = await repo.get_by_stream(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream="readings",
+        stream="records_alpha",
     )
     assert re_fetched is not None
     assert re_fetched.transformation_version == 2

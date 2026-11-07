@@ -1,4 +1,4 @@
-"""Zero-mock unit tests for IpApiModule, LaunchableApiModule protocol, and IP API dependencies."""
+"""Zero-mock unit tests for pure engine IpApiModule, LaunchableApiModule protocol, and IP API dependencies."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def _make_request(app: FastAPI, identity: IdentityContext | None = None) -> Requ
 
 
 @pytest.mark.asyncio
-async def test_ip_api_module_implements_launchable_api_module_and_registers_routes() -> None:
+async def test_ip_api_module_registers_routes_with_lifecycle_hooks() -> None:
     module = IpApiModule()
     assert isinstance(module, LaunchableApiModule)
     assert module.name == "ip"
@@ -60,7 +60,7 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
     app = FastAPI()
     module.register_routes(app)
 
-    route_paths = {getattr(r, "path", "") for r in app.routes}
+    route_paths = {r.path for r in app.routes if isinstance(r, APIRoute)}
     assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/catalog/apps/{app_id}/spec" in route_paths
 
@@ -76,8 +76,7 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
     ]
     assert len(catalog_routes) == 2
     for catalog_route in catalog_routes:
-        route_dep = getattr(catalog_route, "depen" + "dant")
-        dep_calls = {dep.call for dep in route_dep.dependencies}
+        dep_calls = {dep.call for dep in catalog_route.dependant.dependencies}
         assert require_tenant_member in dep_calls
     assert "/api/v1/tenants/{tenant_id}/ip/connections" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}" in route_paths
@@ -111,7 +110,7 @@ async def test_ip_api_module_implements_launchable_api_module_and_registers_rout
 
 
 @pytest.mark.asyncio
-async def test_require_tenant_member_enforces_authentication_and_tenant_scope() -> None:
+async def test_require_tenant_member_rejects_unauthenticated_requests() -> None:
     app = FastAPI()
     IpApiModule().register_routes(app)
     session = AsyncSession()
@@ -124,7 +123,14 @@ async def test_require_tenant_member_enforces_authentication_and_tenant_scope() 
             tenant_id="ten_01",
         )
     assert exc_info.value.status_code == 401
+    await session.close()
 
+
+@pytest.mark.asyncio
+async def test_require_tenant_member_validates_tenant_scope() -> None:
+    app = FastAPI()
+    IpApiModule().register_routes(app)
+    session = AsyncSession()
     member_identity = IdentityContext(
         subject="usr_01",
         claims={},
@@ -155,7 +161,6 @@ async def test_require_tenant_member_enforces_authentication_and_tenant_scope() 
 
 @pytest.mark.asyncio
 async def test_ip_permission_rbac_enforcement() -> None:
-    # 1. Customer Support has permission for both Canonical and Raw records
     support_identity = IdentityContext(
         subject="usr_support",
         claims={},
@@ -170,7 +175,6 @@ async def test_ip_permission_rbac_enforcement() -> None:
     res_raw = await require_raw_records_read(identity=support_identity, tenant_id="ten_01")
     assert res_raw.subject == "usr_support"
 
-    # 2. Customer has permission for Canonical records (L3 & GEM), but is strictly blocked from Raw records (L1 & L2)
     customer_identity = IdentityContext(
         subject="usr_customer",
         claims={},
@@ -189,12 +193,10 @@ async def test_ip_permission_rbac_enforcement() -> None:
     assert exc_info.value.status_code == 403
     assert IpPermission.IP_RECORDS_RAW_READ.value in exc_info.value.detail
 
-    # Cross-tenant check: user has role in ten_01, but attempts access on ten_other
     with pytest.raises(HTTPException) as cross_exc:
         await require_canonical_records_read(identity=customer_identity, tenant_id="ten_other")
     assert cross_exc.value.status_code == 403
 
-    # 3. Direct fine-grained permission claim also grants access
     direct_perm_identity = IdentityContext(
         subject="usr_custom_agent",
         claims={},
@@ -206,15 +208,14 @@ async def test_ip_permission_rbac_enforcement() -> None:
     assert direct_res.subject == "usr_custom_agent"
 
 
-def test_ip_api_dependencies_and_error_dtos() -> None:
+def test_pure_engine_api_dependencies_expose_protocol_only_defaults() -> None:
     app = FastAPI()
     IpApiModule().register_routes(app)
     req = _make_request(app)
 
     registry = get_catalog_registry(req)
     connectors = get_connectors(registry)
-    assert len(connectors) >= 6
-    assert "http" in list(connectors)
+    assert set(connectors) == {"http", "sftp"}
     assert connectors["http"] is not None
     with pytest.raises(KeyError):
         _ = connectors["non_existent_connector"]
@@ -229,16 +230,18 @@ def test_ip_api_dependencies_and_error_dtos() -> None:
 
     transformer_reg = get_transformer_registry(req)
     assert transformer_reg is get_transformer_registry(req)
-    assert len(transformer_reg.list_transformers()) >= 6
+    assert transformer_reg.list_transformers() == ()
 
     wf_reg = get_workflow_definition_registry(req)
     assert wf_reg is get_workflow_definition_registry(req)
-    assert len(wf_reg.list_definitions()) >= 3
+    assert wf_reg.list_definitions() == ()
 
     stitch_cat = get_stitch_catalog_registry(req)
     assert stitch_cat is get_stitch_catalog_registry(req)
-    assert len(stitch_cat.list_stitches(tenant_id="*")) >= 2
+    assert stitch_cat.list_stitches(tenant_id="*") == ()
 
+
+def test_ip_error_dto_responses_map_domain_errors_to_http_status() -> None:
     err_resp = to_error_response(
         status_code=400,
         code="BAD_INPUT",

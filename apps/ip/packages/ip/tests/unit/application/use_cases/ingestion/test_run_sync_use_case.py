@@ -312,7 +312,7 @@ class FakePagingConnector(SourceConnectorPort):
 
     @property
     def app_id(self) -> str:
-        return "itron_mdm"
+        return "acme_source"
 
     def spec(self) -> AppSpecDTO:
         raise NotImplementedError
@@ -385,13 +385,13 @@ async def test_run_sync_initial_pull() -> None:
         {"id": "m2", "timestamp": "2026-10-23T10:01:00Z"},
     ]
     connector = FakePagingConnector([batch_1])
-    connectors = {"itron_mdm": connector}
+    connectors = {"acme_source": connector}
 
     conn = Connection(
         id="conn_1",
         tenant_id="tenant_a",
-        app_id="itron_mdm",
-        name="Itron MDM Grid",
+        app_id="acme_source",
+        name="Acme Source Endpoint",
         auth_type=AuthType.API_KEY,
         connection_fingerprint="fp1",
         status=ConnectionStatus.ACTIVE,
@@ -409,7 +409,7 @@ async def test_run_sync_initial_pull() -> None:
     cmd = RunSyncCommand(
         tenant_id="tenant_a",
         connection_id="conn_1",
-        stream_name="meters",
+        stream_name="records_alpha",
         page_batch_size=2,
     )
 
@@ -421,7 +421,7 @@ async def test_run_sync_initial_pull() -> None:
     assert res.end_checkpoint == "2026-10-23T10:01:00Z"
 
     # Check Control Plane: Stream state updated
-    state = await cp_uow.stream_states.get_by_stream("tenant_a", "conn_1", "meters")
+    state = await cp_uow.stream_states.get_by_stream("tenant_a", "conn_1", "records_alpha")
     assert state is not None
     assert state.cursor_value == "2026-10-23T10:01:00Z"
     assert state.records_synced_count == 2
@@ -444,19 +444,19 @@ async def test_run_sync_incremental_with_lookback() -> None:
     existing_state = ConnectionStreamState.create(
         tenant_id="tenant_a",
         connection_id="conn_1",
-        stream_name="meters",
+        stream_name="records_alpha",
         initial_cursor="2026-10-23T10:05:00+00:00",
     )
     await cp_uow.stream_states.save(existing_state)
 
     connector = FakePagingConnector([])
-    connectors = {"itron_mdm": connector}
+    connectors = {"acme_source": connector}
 
     conn = Connection(
         id="conn_1",
         tenant_id="tenant_a",
-        app_id="itron_mdm",
-        name="Itron MDM Grid",
+        app_id="acme_source",
+        name="Acme Source Endpoint",
         auth_type=AuthType.API_KEY,
         connection_fingerprint="fp1",
         status=ConnectionStatus.ACTIVE,
@@ -474,7 +474,7 @@ async def test_run_sync_incremental_with_lookback() -> None:
     cmd = RunSyncCommand(
         tenant_id="tenant_a",
         connection_id="conn_1",
-        stream_name="meters",
+        stream_name="records_alpha",
         lookback_seconds=300,
     )
 
@@ -497,7 +497,7 @@ async def test_run_sync_single_active_run_enforced() -> None:
     existing_run = SyncRun.create(
         tenant_id="tenant_a",
         connection_id="conn_1",
-        stream="meters",
+        stream="records_alpha",
         kind=SyncRunKind.INITIAL,
         generation_id=1,
     )
@@ -515,7 +515,7 @@ async def test_run_sync_single_active_run_enforced() -> None:
     cmd = RunSyncCommand(
         tenant_id="tenant_a",
         connection_id="conn_1",
-        stream_name="meters",
+        stream_name="records_alpha",
     )
 
     res = await use_case.execute(cmd)
@@ -538,7 +538,7 @@ async def test_run_sync_full_refresh_fails_when_page_cap_reached() -> None:
     conn = Connection(
         id="conn_cap_1",
         tenant_id="tenant_a",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test Conn",
         auth_type=AuthType.NO_AUTH,
         connection_fingerprint="fp_cap",
@@ -551,13 +551,13 @@ async def test_run_sync_full_refresh_fails_when_page_cap_reached() -> None:
         data_plane_uow=dp_uow,
         tiered_storage=storage,
         cipher=cipher,
-        connectors={"itron_mdm": connector},
+        connectors={"acme_source": connector},
     )
 
     cmd = RunSyncCommand(
         tenant_id="tenant_a",
         connection_id=conn.id,
-        stream_name="meters",
+        stream_name="records_alpha",
         page_batch_size=10,
         max_pages=1,
         forced_kind=SyncRunKind.FULL_REFRESH,
@@ -583,7 +583,7 @@ async def test_run_sync_incremental_succeeds_when_page_cap_reached() -> None:
     conn = Connection(
         id="conn_cap_2",
         tenant_id="tenant_a",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test Conn",
         auth_type=AuthType.NO_AUTH,
         connection_fingerprint="fp_cap_2",
@@ -596,13 +596,13 @@ async def test_run_sync_incremental_succeeds_when_page_cap_reached() -> None:
         data_plane_uow=dp_uow,
         tiered_storage=storage,
         cipher=cipher,
-        connectors={"itron_mdm": connector},
+        connectors={"acme_source": connector},
     )
 
     cmd = RunSyncCommand(
         tenant_id="tenant_a",
         connection_id=conn.id,
-        stream_name="meters",
+        stream_name="records_alpha",
         page_batch_size=10,
         max_pages=1,
         forced_kind=SyncRunKind.INCREMENTAL,
@@ -627,7 +627,7 @@ async def test_run_sync_full_refresh_succeeds_when_stream_ends_exactly_at_page_c
     conn = Connection(
         id="conn_cap_exact",
         tenant_id="tenant_a",
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Test Conn",
         auth_type=AuthType.NO_AUTH,
         connection_fingerprint="fp_cap_exact",
@@ -640,13 +640,13 @@ async def test_run_sync_full_refresh_succeeds_when_stream_ends_exactly_at_page_c
         data_plane_uow=dp_uow,
         tiered_storage=storage,
         cipher=cipher,
-        connectors={"itron_mdm": connector},
+        connectors={"acme_source": connector},
     )
 
     cmd = RunSyncCommand(
         tenant_id="tenant_a",
         connection_id=conn.id,
-        stream_name="meters",
+        stream_name="records_alpha",
         page_batch_size=10,
         max_pages=1,
         forced_kind=SyncRunKind.FULL_REFRESH,
@@ -672,7 +672,7 @@ def test_run_sync_use_case_requires_data_plane_dependency() -> None:
             control_plane_uow=cp_uow,
             tiered_storage=storage,
             cipher=cipher,
-            connectors={"itron_mdm": connector},
+            connectors={"acme_source": connector},
         )
 
 
@@ -693,7 +693,7 @@ async def test_run_sync_does_not_save_when_sync_run_transition_fails() -> None:
     terminal_run = SyncRun.create(
         tenant_id="tenant_a",
         connection_id="conn_1",
-        stream="meters",
+        stream="records_alpha",
         kind=SyncRunKind.INITIAL,
         generation_id=1,
     )

@@ -8,23 +8,22 @@ from ip.engine.application.use_cases.catalog.get_app_spec_use_case import (
     GetAppSpecQuery,
     GetAppSpecUseCase,
 )
+from ip.engine.bootstrap.container import create_engine_catalog_registry
 from ip.engine.domain.exceptions import ConnectorNotFoundError, IpErrorCode
-from ip.solutions.connectors.registry_loader import create_default_catalog_registry
 
 
 @pytest.fixture
 def catalog_registry() -> ConnectorCatalogRegistry:
-    return create_default_catalog_registry()
+    return create_engine_catalog_registry()
 
 
 @pytest.mark.asyncio
 async def test_get_app_spec_use_case(catalog_registry: ConnectorCatalogRegistry) -> None:
     use_case = GetAppSpecUseCase(registry=catalog_registry)
-    result = await use_case.execute(GetAppSpecQuery(tenant_id="ten_01", app_id="salesforce"))
+    result = await use_case.execute(GetAppSpecQuery(tenant_id="ten_01", app_id="http"))
     assert result.success is True
     assert result.spec is not None
-    assert result.spec.app_id == "salesforce"
-    assert result.spec.display_name == "Salesforce CRM"
+    assert result.spec.app_id == "http"
     assert len(result.spec.properties) > 0
 
 

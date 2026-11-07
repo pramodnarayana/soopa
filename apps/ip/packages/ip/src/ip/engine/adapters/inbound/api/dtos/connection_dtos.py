@@ -10,7 +10,9 @@ from seedwork.domain.types import JsonDict
 class CreateConnectionHttpRequest(BaseModel):
     """Payload to create a new external system connection."""
 
-    app_id: str = Field(..., description="Unique application identifier (e.g. 'itron_mdm')")
+    app_id: str = Field(
+        ..., description="Unique application identifier (e.g. 'http', 'salesforce')"
+    )
     name: str = Field(..., description="User-friendly name for this connection")
     auth_type: AuthType = Field(
         ..., description="Authentication strategy (e.g. 'API_KEY', 'OAUTH2')"

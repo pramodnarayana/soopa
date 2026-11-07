@@ -21,7 +21,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio
-async def test_stream_state_repository_checkpoint_progression_and_outbox(
+async def test_stream_state_repository_persists_checkpoint_progression_with_outbox_events(
     global_session: GlobalSession,
     seeded_ip_tenant: str,
 ) -> None:
@@ -30,20 +30,20 @@ async def test_stream_state_repository_checkpoint_progression_and_outbox(
 
     conn = Connection.create(
         tenant_id=seeded_ip_tenant,
-        app_id="itron_mdm",
+        app_id="acme_source",
         name="Stream State Connection",
         auth_type=AuthType.API_KEY,
-        public_config={"endpoint_url": "https://state.grid-utility.com"},
+        public_config={"endpoint_url": "https://state.partner.example.com"},
         encrypted_credentials=b"secret",
-        endpoint_for_fingerprint="https://state.grid-utility.com",
+        endpoint_for_fingerprint="https://state.partner.example.com",
     )
     await conn_repo.save(conn)
 
     state = ConnectionStreamState.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
-        stream_name="interval_reads",
-        cursor_field="reading_timestamp",
+        stream_name="interval_events",
+        cursor_field="event_timestamp",
         initial_cursor="2026-10-20T00:00:00Z",
     )
     state.advance_checkpoint(
@@ -52,7 +52,7 @@ async def test_stream_state_repository_checkpoint_progression_and_outbox(
     )
     await state_repo.save(state)
 
-    fetched = await state_repo.get_by_stream(seeded_ip_tenant, conn.id, "interval_reads")
+    fetched = await state_repo.get_by_stream(seeded_ip_tenant, conn.id, "interval_events")
     assert fetched is not None
     assert fetched.cursor_value == "2026-10-21T00:00:00Z"
     assert fetched.records_synced_count == 250
@@ -63,7 +63,7 @@ async def test_stream_state_repository_checkpoint_progression_and_outbox(
     )
     await state_repo.save(fetched)
 
-    updated = await state_repo.get_by_stream(seeded_ip_tenant, conn.id, "interval_reads")
+    updated = await state_repo.get_by_stream(seeded_ip_tenant, conn.id, "interval_events")
     assert updated is not None
     assert updated.cursor_value == "2026-10-22T00:00:00Z"
     assert updated.records_synced_count == 400

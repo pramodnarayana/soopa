@@ -5,7 +5,12 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { ipQueryKeys } from '../application/query-keys';
-import { ConnectionStatus, PipelineLayer } from '../domain/enums';
+import {
+  CatalogAppCategory,
+  ConnectionStatus,
+  ConnectorRuntimeArchitecture,
+  PipelineLayer,
+} from '../domain/enums';
 import type { IpUserRole } from '../domain/role';
 import {
   IpCommandCenterPage,
@@ -46,6 +51,8 @@ import {
   SEED_TRANSFORMERS,
   SEED_WORKFLOW_ID,
 } from '../testing';
+
+const SEED_CHILD_TRACE_MARKER = 'trc_2b3c4d5e6f7a8b9c0d1e2f3a';
 
 function createHydratedQueryClient(): QueryClient {
   const qc = new QueryClient({
@@ -100,7 +107,7 @@ function createHydratedQueryClient(): QueryClient {
     ok(SEED_TRACE_LINEAGE),
   );
   qc.setQueryData(
-    ipQueryKeys.traces.search(SEED_TENANT_ID, 'MTR-77410', 75),
+    ipQueryKeys.traces.search(SEED_TENANT_ID, 'REC-77410', 75),
     ok(SEED_TRACE_LINEAGE),
   );
   qc.setQueryData(ipQueryKeys.traces.detail(SEED_TENANT_ID, SEED_TRACE_ID, false), ok(SEED_TRACE));
@@ -126,7 +133,7 @@ function renderInIpWorkspace(
       <IpUIProvider
         baseUrl="https://api.soopa.local"
         tenantId={SEED_TENANT_ID}
-        tenantSlug="solar-grid"
+        tenantSlug="acme-tenant"
         repositories={harness.repositories}
         logger={logger}
         navigation={harness.navigation}
@@ -138,25 +145,33 @@ function renderInIpWorkspace(
   );
 }
 
-describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Class Error States', () => {
-  it('renders Command Center, Support Timeline, and 5-Layer Trace Waterfall with Solar Yellow scoping & Rosetta strip', () => {
+describe('IP Presentation Workspaces Narrow Integration', () => {
+  it('renders IpCommandCenterPage with Solar Yellow product theme scoping', () => {
     const qc = createHydratedQueryClient();
 
     const commandCenterHtml = renderInIpWorkspace(<IpCommandCenterPage />, qc);
     expect(commandCenterHtml).toContain('data-product-theme="ip"');
     expect(commandCenterHtml).toContain('Integration Platform');
-    expect(commandCenterHtml).toContain('MTR-77410');
+    expect(commandCenterHtml).toContain('REC-77410');
+  });
+
+  it('renders IpTracesTimelinePage with correlation filtering', () => {
+    const qc = createHydratedQueryClient();
 
     const timelineHtml = renderInIpWorkspace(
-      <IpTracesTimelinePage initialCorrelationQuery="MTR-77410" />,
+      <IpTracesTimelinePage initialCorrelationQuery="REC-77410" />,
       qc,
     );
-    expect(timelineHtml).toContain('MTR-77410');
+    expect(timelineHtml).toContain('REC-77410');
     expect(timelineHtml).toContain(SEED_TRACE_ID);
+  });
+
+  it('renders IpTraceWaterfallPage across all 5 pipeline stages', () => {
+    const qc = createHydratedQueryClient();
 
     const waterfallHtml = renderInIpWorkspace(<IpTraceWaterfallPage traceId={SEED_TRACE_ID} />, qc);
-    expect(waterfallHtml).toContain('MTR-77410');
-    expect(waterfallHtml).toContain('itron_ami');
+    expect(waterfallHtml).toContain('REC-77410');
+    expect(waterfallHtml).toContain('acme_source');
     expect(waterfallHtml).toContain(SEED_CHILD_TRACE_MARKER);
 
     const l2Html = renderInIpWorkspace(
@@ -169,7 +184,7 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
       />,
       qc,
     );
-    expect(l2Html).toContain('meter_reads');
+    expect(l2Html).toContain('records_alpha');
 
     const l3RosettaHtml = renderInIpWorkspace(
       <TraceWaterfallStageContent
@@ -181,8 +196,8 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
       />,
       qc,
     );
-    expect(l3RosettaHtml).toContain('ORA-SP-44910');
-    expect(l3RosettaHtml).toContain('gem_mtr_99887766');
+    expect(l3RosettaHtml).toContain('GLX-ENT-44910');
+    expect(l3RosettaHtml).toContain('gem_rec_99887766');
 
     const l4Html = renderInIpWorkspace(
       <TraceWaterfallStageContent
@@ -211,26 +226,30 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(l5Html).toContain('POST 502');
   });
 
-  it('renders Connections, Connection Detail, Transformations Workbench, and Stitches DAG & Run Telemetry', async () => {
+  it('renders IpConnectionsPage with active connection tabs', () => {
     const qc = createHydratedQueryClient();
 
     const connectionsHtml = renderInIpWorkspace(<IpConnectionsPage />, qc);
     expect(connectionsHtml).toContain('1 Connected');
-    expect(connectionsHtml).toContain('Itron Enterprise AMI');
-    expect(connectionsHtml).toContain('itron_ami');
+    expect(connectionsHtml).toContain('Acme Source API');
+    expect(connectionsHtml).toContain('acme_source');
 
     const activeConnectionsHtml = renderInIpWorkspace(
       <IpConnectionsPage initialTab="active" />,
       qc,
     );
-    expect(activeConnectionsHtml).toContain('Itron Production West Grid');
-    expect(activeConnectionsHtml).toContain('Delete Itron Production West Grid');
+    expect(activeConnectionsHtml).toContain('Acme Primary Workspace');
+    expect(activeConnectionsHtml).toContain('Delete Acme Primary Workspace');
+  });
+
+  it('renders IpConnectionDetailPage with workspace rename support', async () => {
+    const qc = createHydratedQueryClient();
 
     const connDetailHtml = renderInIpWorkspace(
       <IpConnectionDetailPage connectionId={SEED_CONNECTION_ID} />,
       qc,
     );
-    expect(connDetailHtml).toContain('Itron Production West Grid');
+    expect(connDetailHtml).toContain('Acme Primary Workspace');
     expect(connDetailHtml).toContain('Connection');
     expect(connDetailHtml).toContain('Entities');
     expect(connDetailHtml).toContain('Data');
@@ -243,20 +262,28 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     const relinkRes = await harness.repositories.connections.relinkConnection(
       SEED_TENANT_ID,
       SEED_CONNECTION_ID,
-      { newName: 'Itron Renamed Grid' },
+      { newName: 'Acme Renamed Workspace' },
     );
     expect(relinkRes.ok).toBe(true);
     if (relinkRes.ok) {
-      expect(relinkRes.value.name).toBe('Itron Renamed Grid');
+      expect(relinkRes.value.name).toBe('Acme Renamed Workspace');
       expect(relinkRes.value.publicConfig).toEqual(SEED_CONNECTION.publicConfig);
     }
+  });
+
+  it('renders IpTransformationsPage workbench', () => {
+    const qc = createHydratedQueryClient();
 
     const transformationsHtml = renderInIpWorkspace(
       <IpTransformationsPage initialConnectionId={SEED_CONNECTION_ID} />,
       qc,
     );
-    expect(transformationsHtml).toContain('itron.meter_read.to_gem');
-    expect(transformationsHtml).toContain('meter_reads');
+    expect(transformationsHtml).toContain('acme.record_alpha.to_gem');
+    expect(transformationsHtml).toContain('records_alpha');
+  });
+
+  it('renders IpStitchesPage with DAG topology views', () => {
+    const qc = createHydratedQueryClient();
 
     const stitchesHtml = renderInIpWorkspace(<IpStitchesPage />, qc);
     expect(stitchesHtml).toContain(SEED_WORKFLOW_ID);
@@ -265,17 +292,17 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
       <IpStitchDefinitionPage workflowId={SEED_WORKFLOW_ID} />,
       qc,
     );
-    expect(dagHtml).toContain('validate_interval');
-    expect(dagHtml).toContain('deliver_oracle_mdm');
+    expect(dagHtml).toContain('validate_payload');
+    expect(dagHtml).toContain('deliver_globex_sink');
 
     const runHtml = renderInIpWorkspace(<IpStitchRunPage runId={SEED_RUN_ID} />, qc);
     expect(runHtml).toContain('app:0 · sys:1');
     expect(runHtml).toContain('WAITING');
-    expect(runHtml).toContain('validate_interval');
-    expect(runHtml).toContain('deliver_oracle_mdm');
+    expect(runHtml).toContain('validate_payload');
+    expect(runHtml).toContain('deliver_globex_sink');
   });
 
-  it('renders first-class ApiProblem error banners (429 Retry-After, 422 field errors, SCHEMA_DRIFT) without throwing', () => {
+  it('renders degraded ApiProblem banners without throwing', () => {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     qc.setQueryData(
       ipQueryKeys.traces.detail(SEED_TENANT_ID, SEED_TRACE_ID, false),
@@ -310,7 +337,7 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(validationBannerHtml).toContain('Expected JSON object');
   });
 
-  it('renders ConnectionOverviewTab, ConnectionCatalogTab, TransformationWorkbenchPanel, and Attention Radar', () => {
+  it('renders Connection Attention Radar for expired credentials', () => {
     const qc = createHydratedQueryClient();
     qc.setQueryData(
       ipQueryKeys.connections.list(SEED_TENANT_ID, undefined),
@@ -329,6 +356,10 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     const radarHtml = renderInIpWorkspace(<IpCommandCenterPage />, qc);
     expect(radarHtml).toContain('Connection Attention Radar');
     expect(radarHtml).toContain('SAP S/4HANA Expired Vault');
+  });
+
+  it('renders ConnectionOverviewTab with ConnectionCatalogTab', () => {
+    const qc = createHydratedQueryClient();
 
     const overviewHtml = renderInIpWorkspace(
       <ConnectionOverviewTab
@@ -352,6 +383,10 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
       qc,
     );
     expect(catalogTabHtml).toContain('Discover Schema Catalog');
+  });
+
+  it('renders TransformationWorkbenchPanel dry-run controls', () => {
+    const qc = createHydratedQueryClient();
 
     const workbenchHtml = renderInIpWorkspace(
       <TransformationWorkbenchPanel
@@ -364,7 +399,7 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(workbenchHtml).toContain('Run Dry-Run Preview');
   });
 
-  it('excludes DEACTIVATED connections from catalog Connected badges and omits connection names from card', () => {
+  it('excludes DEACTIVATED connections from catalog Connected count badges', () => {
     const qc = createHydratedQueryClient();
     const deactivatedOnlyApp = SEED_CATALOG_APPS[1];
     expect(deactivatedOnlyApp).toBeDefined();
@@ -379,14 +414,14 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
         {
           ...SEED_CONNECTION,
           id: 'conn_primary_deactivated',
-          name: 'Deactivated Legacy Meter Vault',
+          name: 'Deactivated Legacy Source Vault',
           status: ConnectionStatus.DEACTIVATED,
           deactivatedAt: '2026-10-30T10:00:00Z',
         },
         {
           ...SEED_CONNECTION,
           id: 'conn_primary_expired',
-          name: 'Expired Backup Meter Vault',
+          name: 'Expired Backup Source Vault',
           status: ConnectionStatus.AUTH_EXPIRED,
         },
         {
@@ -404,13 +439,45 @@ describe('IP Presentation Workspaces — Narrow Integration Rendering & First-Cl
     expect(connectionsHtml).toContain('2 Connected');
     expect(connectionsHtml).not.toContain('3 Connected');
     expect(connectionsHtml).not.toContain('1 Connected');
-    // Connected count badge is shown, but individual connection names are kept off the catalog card
     expect(connectionsHtml).not.toContain('Active Connections:');
     expect(connectionsHtml).not.toContain(SEED_CONNECTION.name);
-    expect(connectionsHtml).not.toContain('Expired Backup Meter Vault');
-    expect(connectionsHtml).not.toContain('Deactivated Legacy Meter Vault');
+    expect(connectionsHtml).not.toContain('Expired Backup Source Vault');
+    expect(connectionsHtml).not.toContain('Deactivated Legacy Source Vault');
     expect(connectionsHtml).not.toContain('Deactivated Secondary Connector');
   });
-});
 
-const SEED_CHILD_TRACE_MARKER = 'trc_2b3c4d5e6f7a8b9c0d1e2f3a';
+  it('renders IpConnectionsPage icons across typed CatalogAppCategory values', () => {
+    const qc = createHydratedQueryClient();
+    qc.setQueryData(
+      ipQueryKeys.catalog.apps(SEED_TENANT_ID, { category: undefined, search: undefined }),
+      ok([
+        {
+          ...SEED_CATALOG_APPS[0]!,
+          appId: 'http',
+          displayName: 'Universal REST Gateway',
+          category: CatalogAppCategory.API,
+          runtimeArchitecture: ConnectorRuntimeArchitecture.GENERIC_HTTP,
+        },
+        {
+          ...SEED_CATALOG_APPS[0]!,
+          appId: 'sftp',
+          displayName: 'SFTP Batch Gateway',
+          category: CatalogAppCategory.STORAGE,
+          runtimeArchitecture: ConnectorRuntimeArchitecture.NATIVE_PROTOCOL,
+        },
+        {
+          ...SEED_CATALOG_APPS[0]!,
+          appId: 'synthetic_sim',
+          displayName: 'Synthetic Event Simulator',
+          category: CatalogAppCategory.SANDBOX,
+          runtimeArchitecture: ConnectorRuntimeArchitecture.NATIVE_SIMULATOR,
+        },
+      ]),
+    );
+
+    const html = renderInIpWorkspace(<IpConnectionsPage />, qc);
+    expect(html).toContain('Universal REST Gateway');
+    expect(html).toContain('SFTP Batch Gateway');
+    expect(html).toContain('Synthetic Event Simulator');
+  });
+});

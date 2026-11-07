@@ -38,12 +38,12 @@ async def test_create_connection_use_case(
 
     cmd = CreateConnectionCommand(
         tenant_id=tenant_id,
-        app_id="itron_mdm",
-        name="Utility Itron Head-End",
+        app_id="acme_source",
+        name="Acme Partner Source",
         auth_type="API_KEY",
-        public_config={"endpoint_url": "https://ami.gridpower.com"},
+        public_config={"endpoint_url": "https://api.partner.example.com"},
         raw_credentials={"api_key": "sec_top_secret"},
-        endpoint_for_fingerprint="https://ami.gridpower.com",
+        endpoint_for_fingerprint="https://api.partner.example.com",
     )
 
     result = await use_case.execute(cmd)
@@ -53,7 +53,7 @@ async def test_create_connection_use_case(
 
     assert dto.id.startswith("ip_conn_")
     assert dto.tenant_id == tenant_id
-    assert dto.name == "Utility Itron Head-End"
+    assert dto.name == "Acme Partner Source"
     assert dto.status == "PENDING_AUTH"
 
     stored = await repo.get_by_id(dto.id)
@@ -74,12 +74,12 @@ async def test_create_duplicate_active_connection_rejected(
 
     cmd = CreateConnectionCommand(
         tenant_id=tenant_id,
-        app_id="itron_mdm",
-        name="Utility Itron",
+        app_id="acme_source",
+        name="Acme Partner",
         auth_type="API_KEY",
-        public_config={"endpoint_url": "https://ami.gridpower.com"},
+        public_config={"endpoint_url": "https://api.partner.example.com"},
         raw_credentials={"api_key": "sec_1"},
-        endpoint_for_fingerprint="https://ami.gridpower.com",
+        endpoint_for_fingerprint="https://api.partner.example.com",
     )
 
     result = await use_case.execute(cmd)

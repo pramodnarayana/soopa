@@ -172,9 +172,9 @@ async def test_list_normalized_records_use_case_success() -> None:
         tenant_id="ten_01",
         trace_id="trc_01",
         connection_id="conn_01",
-        canonical_type="METER",
-        source_id="MTR-100",
-        canonical_data={"serial": "MTR-100", "voltage": 240},
+        canonical_type="RECORD_ALPHA",
+        source_id="REC-100",
+        canonical_data={"serial": "REC-100", "quantity": 240},
         normalized_at=datetime.now(UTC),
     )
     uow = FakeDataPlaneUoW(normalized_records=[norm])
@@ -185,7 +185,7 @@ async def test_list_normalized_records_use_case_success() -> None:
         ListNormalizedRecordsQuery(
             tenant_id="ten_01",
             connection_id="conn_01",
-            canonical_type="METER",
+            canonical_type="RECORD_ALPHA",
             limit=25,
             offset=10,
         )
@@ -194,11 +194,11 @@ async def test_list_normalized_records_use_case_success() -> None:
     records = res.unwrap()
     assert len(records) == 1
     assert records[0].id == "norm_01"
-    assert records[0].canonical_type == "METER"
+    assert records[0].canonical_type == "RECORD_ALPHA"
     assert uow.normalized_records.last_query == {
         "tenant_id": "ten_01",
         "connection_id": "conn_01",
-        "canonical_type": "METER",
+        "canonical_type": "RECORD_ALPHA",
         "limit": 25,
         "offset": 10,
     }
@@ -210,10 +210,10 @@ async def test_list_gem_entries_use_case_success() -> None:
         id="gem_01",
         tenant_id="ten_01",
         trace_id="trc_01",
-        entity_domain="METER",
+        entity_domain="RECORD_ALPHA",
         canonical_id="canon_01",
-        source_connection_id="conn_itron",
-        source_entity_id="MTR-100",
+        source_connection_id="conn_source",
+        source_entity_id="REC-100",
         dest_connection_id="conn_sap",
         dest_entity_id="SAP-EQ-100",
         created_at=datetime.now(UTC),
@@ -225,8 +225,8 @@ async def test_list_gem_entries_use_case_success() -> None:
     res = await use_case.execute(
         ListGlobalEntityMapQuery(
             tenant_id="ten_01",
-            entity_domain="METER",
-            source_connection_id="conn_itron",
+            entity_domain="RECORD_ALPHA",
+            source_connection_id="conn_source",
             limit=20,
             offset=5,
         )
@@ -234,12 +234,12 @@ async def test_list_gem_entries_use_case_success() -> None:
     assert res.is_ok
     entries = res.unwrap()
     assert len(entries) == 1
-    assert entries[0].source_entity_id == "MTR-100"
+    assert entries[0].source_entity_id == "REC-100"
     assert entries[0].dest_entity_id == "SAP-EQ-100"
     assert uow.entity_maps.last_query == {
         "tenant_id": "ten_01",
-        "entity_domain": "METER",
-        "source_connection_id": "conn_itron",
+        "entity_domain": "RECORD_ALPHA",
+        "source_connection_id": "conn_source",
         "limit": 20,
         "offset": 5,
     }
@@ -251,9 +251,9 @@ async def test_list_replica_records_use_case_success() -> None:
         id="rep_01",
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="meters",
-        record_key="MTR-100",
-        primary_key_values=("MTR-100",),
+        stream="records_alpha",
+        record_key="REC-100",
+        primary_key_values=("REC-100",),
         data={"badge": "B123"},
         data_hash="abc",
         trace_id="trc_01",
@@ -266,7 +266,7 @@ async def test_list_replica_records_use_case_success() -> None:
         ListReplicaRecordsQuery(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="meters",
+            stream="records_alpha",
             limit=15,
             offset=2,
         )
@@ -274,11 +274,11 @@ async def test_list_replica_records_use_case_success() -> None:
     assert res.is_ok
     reps = res.unwrap()
     assert len(reps) == 1
-    assert reps[0].record_key == "MTR-100"
+    assert reps[0].record_key == "REC-100"
     assert uow.replica_records.last_query == {
         "tenant_id": "ten_01",
         "connection_id": "conn_01",
-        "stream": "meters",
+        "stream": "records_alpha",
         "limit": 15,
         "offset": 2,
     }
@@ -291,8 +291,8 @@ async def test_list_inbound_records_use_case_success() -> None:
         tenant_id="ten_01",
         trace_id="trc_01",
         connection_id="conn_01",
-        app_id="itron",
-        stream_name="meters",
+        app_id="acme_source",
+        stream_name="records_alpha",
         ingestion_mode=IngestionMode.PUSH_FULL,
         request_headers={"content-type": "application/json"},
         request_size_bytes=100,
@@ -307,7 +307,7 @@ async def test_list_inbound_records_use_case_success() -> None:
         ListInboundRecordsQuery(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream_name="meters",
+            stream_name="records_alpha",
             limit=30,
             offset=4,
             hydrate_payloads=True,
@@ -320,7 +320,7 @@ async def test_list_inbound_records_use_case_success() -> None:
     assert uow.inbound_records.last_query == {
         "tenant_id": "ten_01",
         "connection_id": "conn_01",
-        "stream_name": "meters",
+        "stream_name": "records_alpha",
         "limit": 30,
         "offset": 4,
         "hydrate_payloads": True,

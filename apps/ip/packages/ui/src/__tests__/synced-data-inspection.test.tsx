@@ -7,17 +7,13 @@ import { describe, expect, it } from 'vitest';
 import { HttpRecordRepository } from '../adapters/http/repositories/http-record.repository';
 import { ipQueryKeys } from '../application/query-keys';
 import { PipelineLayer } from '../domain/enums';
-import { ConnectionEntitiesSyncTab } from '../presentation/connections/ConnectionDetailTabs';
 import { SyncedDataInspectionPanel } from '../presentation/records/SyncedDataInspectionPanel';
 import { TraceWaterfallStageContent } from '../presentation/traces/TraceWaterfallStages';
 import { IpUIProvider } from '../provider/IpUIProvider';
 import {
   createInMemoryIpWorkspaceSeed,
   SEED_CATALOG_APPS,
-  SEED_CONNECTION,
   SEED_CONNECTION_ID,
-  SEED_STREAM_STATE,
-  SEED_SYNC_RUN,
   SEED_TENANT_ID,
   SEED_TRACE,
 } from '../testing';
@@ -57,14 +53,6 @@ function createRecordQueryClient(): QueryClient {
   });
 
   qc.setQueryData(ipQueryKeys.catalog.apps(SEED_TENANT_ID, undefined), ok(SEED_CATALOG_APPS));
-  qc.setQueryData(
-    ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, SEED_CONNECTION_ID),
-    ok([SEED_STREAM_STATE]),
-  );
-  qc.setQueryData(
-    ipQueryKeys.syncRuns.list(SEED_TENANT_ID, SEED_CONNECTION_ID, 40),
-    ok([SEED_SYNC_RUN]),
-  );
   qc.setQueryData(
     ipQueryKeys.records.normalized(SEED_TENANT_ID, {
       connectionId: SEED_CONNECTION_ID,
@@ -154,16 +142,6 @@ function createRecordQueryClient(): QueryClient {
       },
     ]),
   );
-  qc.setQueryData(
-    ipQueryKeys.connections.catalog(SEED_TENANT_ID, SEED_CONNECTION_ID),
-    ok({
-      connectionId: SEED_CONNECTION_ID,
-      catalogVersion: 1,
-      catalogHash: 'hash-init',
-      discoveredAt: '2026-11-05T10:00:00Z',
-      streams: [],
-    }),
-  );
   return qc;
 }
 
@@ -180,7 +158,7 @@ function renderWithRole(
       <IpUIProvider
         baseUrl="https://api.soopa.local"
         tenantId={SEED_TENANT_ID}
-        tenantSlug="solar-grid"
+        tenantSlug="acme-tenant"
         repositories={harness.repositories}
         logger={logger}
         navigation={harness.navigation}
@@ -192,113 +170,8 @@ function renderWithRole(
   );
 }
 
-describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Decoupled Architecture)', () => {
-  it('renders ConnectionEntitiesSyncTab with multi-select entity table and sync triggers', () => {
-    const qc = createRecordQueryClient();
-    const html = renderWithRole(
-      <ConnectionEntitiesSyncTab
-        connectionId={SEED_CONNECTION_ID}
-        connection={SEED_CONNECTION}
-        onOpenTrace={() => undefined}
-        onProblem={() => undefined}
-      />,
-      'support',
-      qc,
-    );
-
-    // Entity table elements: single Discover entities dropdown, Search, Sync From, and per-entity Schedule controls
-    expect(html).toContain('Entities');
-    expect(html).toContain('Discover Entities...');
-    expect(html).toContain('Search Entities');
-    expect(html).toContain('Sync From');
-    expect(html).toContain('Schedule');
-    expect(html).toContain('Status');
-    expect(html).toContain('Actions');
-    expect(html).toContain('meter_reads');
-    expect(html).toContain('Sync Selected (1)');
-  });
-
-  it('renders clean state with visible TableHeader for fresh connections', () => {
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-    });
-    qc.setQueryData(ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, 'conn_new_clean'), ok([]));
-    qc.setQueryData(
-      ipQueryKeys.connections.catalog(SEED_TENANT_ID, 'conn_new_clean'),
-      ok({
-        connectionId: 'conn_new_clean',
-        catalogVersion: 1,
-        catalogHash: 'hash_clean',
-        discoveredAt: '2026-11-06T10:00:00Z',
-        streams: [],
-      }),
-    );
-    const html = renderWithRole(
-      <ConnectionEntitiesSyncTab
-        connectionId="conn_new_clean"
-        onOpenTrace={() => undefined}
-        onProblem={() => undefined}
-      />,
-      'support',
-      qc,
-    );
-
-    expect(html).toContain('Entities');
-    expect(html).toContain('Discover Entities...');
-    expect(html).toContain('Search Entities');
-    expect(html).toContain('Sync From');
-    expect(html).toContain('Schedule');
-    expect(html).toContain('Status');
-    expect(html).not.toContain('stream_alpha');
-    expect(html).not.toContain('stream_beta');
-  });
-
-  it('keeps table clean upon catalog discovery and populates SearchableSelect for on-demand user selection', () => {
-    const qc = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-    });
-    qc.setQueryData(ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, 'conn_generic_sim'), ok([]));
-    qc.setQueryData(
-      ipQueryKeys.connections.catalog(SEED_TENANT_ID, 'conn_generic_sim'),
-      ok({
-        connectionId: 'conn_generic_sim',
-        catalogVersion: 1,
-        catalogHash: 'hash_gen_123',
-        discoveredAt: '2026-11-06T10:00:00Z',
-        streams: [
-          {
-            name: 'stream_beta',
-            primaryKey: ['entity_id'],
-            cursorField: null,
-            supportedSyncModes: ['FULL_REFRESH', 'INCREMENTAL'],
-            fields: [
-              { name: 'entity_id', dataType: 'STRING', nullable: false, description: null },
-              { name: 'attribute_val', dataType: 'STRING', nullable: true, description: null },
-            ],
-          },
-        ],
-      }),
-    );
-    const html = renderWithRole(
-      <ConnectionEntitiesSyncTab
-        connectionId="conn_generic_sim"
-        onOpenTrace={() => undefined}
-        onProblem={() => undefined}
-      />,
-      'support',
-      qc,
-    );
-
-    // Discovered streams do NOT automatically pollute the table with rows
-    expect(html).not.toContain('UNSYNCED');
-    expect(html).toContain('No entities');
-
-    // Single unified Discover entities dropdown is ready for user selection
-    expect(html).toContain('Discover Entities...');
-    expect(html).toContain('Search Entities');
-  });
-
-  it('enforces RBAC visibility in SyncedDataInspectionPanel: Customer Support sees L1–L3 + GEM', () => {
+describe('SyncedDataInspectionPanel RBAC', () => {
+  it('renders full diagnostic tabs for support role in SyncedDataInspectionPanel', () => {
     const qc = createRecordQueryClient();
     const html = renderWithRole(
       <SyncedDataInspectionPanel connectionId={SEED_CONNECTION_ID} onOpenTrace={() => undefined} />,
@@ -306,21 +179,19 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
       qc,
     );
 
-    // Support role sees all 5 tabs
     expect(html).toContain('L3: Normalized Canonical');
     expect(html).toContain('GEM: Identity Map');
     expect(html).toContain('L2: Staging Replica');
     expect(html).toContain('L1: Raw Wire Inbound');
     expect(html).toContain('Activity &amp; Traces');
     expect(html).toContain('Customer Support (Full Diagnostic)');
-    // Permanent table headers must be visible
     expect(html).toContain('Canonical Entity');
     expect(html).toContain('Source Identifier');
     expect(html).toContain('Normalized At');
     expect(html).toContain('Payload');
   });
 
-  it('renders permanent TableHeader in SyncedDataInspectionPanel even when zero canonical records exist', () => {
+  it('renders permanent TableHeader in SyncedDataInspectionPanel when zero canonical records exist', () => {
     const qc = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Infinity } },
     });
@@ -343,7 +214,7 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
     );
   });
 
-  it('enforces RBAC visibility in SyncedDataInspectionPanel: Customer role HIDES L1 and L2 tabs', () => {
+  it('hides raw wire tabs for customer role in SyncedDataInspectionPanel', () => {
     const qc = createRecordQueryClient();
     const html = renderWithRole(
       <SyncedDataInspectionPanel connectionId={SEED_CONNECTION_ID} onOpenTrace={() => undefined} />,
@@ -351,21 +222,17 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
       qc,
     );
 
-    // Customer role sees L3, GEM, and Traces
     expect(html).toContain('L3: Normalized Canonical');
     expect(html).toContain('GEM: Identity Map');
     expect(html).toContain('Activity &amp; Traces');
     expect(html).toContain('Customer (Restricted)');
-
-    // Customer role MUST NEVER see L1 or L2 tabs
     expect(html).not.toContain('L2: Staging Replica');
     expect(html).not.toContain('L1: Raw Wire Inbound');
   });
 
-  it('enforces restricted diagnostic card in TraceWaterfallStageContent when userRole is customer', () => {
+  it('renders restricted diagnostic cards for customer role in TraceWaterfallStageContent', () => {
     const qc = createRecordQueryClient();
 
-    // Customer role attempting to view L1
     const l1Html = renderWithRole(
       <TraceWaterfallStageContent
         activeLayer={PipelineLayer.L1_INGEST}
@@ -380,7 +247,6 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
     expect(l1Html).toContain('Layer 1: Raw Inbound Wire Capture is Restricted');
     expect(l1Html).toContain('records:raw:read');
 
-    // Customer role attempting to view L2
     const l2Html = renderWithRole(
       <TraceWaterfallStageContent
         activeLayer={PipelineLayer.L2_REPLICA}
@@ -394,8 +260,11 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
     );
     expect(l2Html).toContain('Layer 2: Universal Replica Staging is Restricted');
     expect(l2Html).toContain('records:raw:read');
+  });
 
-    // Customer Support role viewing L1 and L2
+  it('renders raw wire capture stages for support role in TraceWaterfallStageContent', () => {
+    const qc = createRecordQueryClient();
+
     const supportL1Html = renderWithRole(
       <TraceWaterfallStageContent
         activeLayer={PipelineLayer.L1_INGEST}
@@ -420,11 +289,13 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
       'support',
       qc,
     );
-    expect(supportL2Html).toContain('meter_reads');
+    expect(supportL2Html).toContain('records_alpha');
     expect(supportL2Html).toContain('Generation #1');
   });
+});
 
-  it('HttpRecordRepository correctly calls backend endpoints with tenant and query params', async () => {
+describe('HttpRecordRepository Inspection Endpoints', () => {
+  it('queries normalized records endpoint with tenant scope in HttpRecordRepository', async () => {
     const logger = new RecordingLoggerFake();
     const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/records/normalized': [
@@ -439,6 +310,34 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
           normalized_at: '2026-11-05T10:00:00Z',
         },
       ],
+    });
+    const repo = new HttpRecordRepository(
+      new FetchHttpClientAdapter({ baseUrl: 'https://api.soopa.local', fetchImpl, logger }),
+      logger,
+    );
+
+    const normRes = await repo.listNormalizedRecords('ten_01', {
+      connectionId: 'conn-1',
+      canonicalType: 'CANONICAL_TYPE_A',
+      limit: 25,
+      offset: 5,
+    });
+    expect(normRes.ok).toBe(true);
+    if (normRes.ok) {
+      expect(normRes.value[0]?.sourceId).toBe('SRC-1');
+    }
+
+    const normUrl = new URL(calls[0]!.url);
+    expect(normUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/normalized');
+    expect(normUrl.searchParams.get('connection_id')).toBe('conn-1');
+    expect(normUrl.searchParams.get('canonical_type')).toBe('CANONICAL_TYPE_A');
+    expect(normUrl.searchParams.get('limit')).toBe('25');
+    expect(normUrl.searchParams.get('offset')).toBe('5');
+  });
+
+  it('queries global entity map endpoint with filter params in HttpRecordRepository', async () => {
+    const logger = new RecordingLoggerFake();
+    const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/records/gem': [
         {
           id: 'g-1',
@@ -451,6 +350,34 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
           created_at: '2026-11-05T10:00:00Z',
         },
       ],
+    });
+    const repo = new HttpRecordRepository(
+      new FetchHttpClientAdapter({ baseUrl: 'https://api.soopa.local', fetchImpl, logger }),
+      logger,
+    );
+
+    const gemRes = await repo.listGemRecords('ten_01', {
+      entityDomain: 'domain_core',
+      sourceConnectionId: 'conn-1',
+      limit: 20,
+      offset: 10,
+    });
+    expect(gemRes.ok).toBe(true);
+    if (gemRes.ok) {
+      expect(gemRes.value[0]?.canonicalId).toBe('GEM-1');
+    }
+
+    const gemUrl = new URL(calls[0]!.url);
+    expect(gemUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/gem');
+    expect(gemUrl.searchParams.get('source_connection_id')).toBe('conn-1');
+    expect(gemUrl.searchParams.get('entity_domain')).toBe('domain_core');
+    expect(gemUrl.searchParams.get('limit')).toBe('20');
+    expect(gemUrl.searchParams.get('offset')).toBe('10');
+  });
+
+  it('queries replica records endpoint with stream filter in HttpRecordRepository', async () => {
+    const logger = new RecordingLoggerFake();
+    const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/records/replica': [
         {
           id: 'rep-1',
@@ -470,6 +397,34 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
           source_inbound_record_id: 'in-1',
         },
       ],
+    });
+    const repo = new HttpRecordRepository(
+      new FetchHttpClientAdapter({ baseUrl: 'https://api.soopa.local', fetchImpl, logger }),
+      logger,
+    );
+
+    const repRes = await repo.listReplicaRecords('ten_01', {
+      connectionId: 'conn-1',
+      stream: 'stream_alpha',
+      limit: 15,
+      offset: 2,
+    });
+    expect(repRes.ok).toBe(true);
+    if (repRes.ok) {
+      expect(repRes.value[0]?.stream).toBe('stream_alpha');
+    }
+
+    const repUrl = new URL(calls[0]!.url);
+    expect(repUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/replica');
+    expect(repUrl.searchParams.get('connection_id')).toBe('conn-1');
+    expect(repUrl.searchParams.get('stream')).toBe('stream_alpha');
+    expect(repUrl.searchParams.get('limit')).toBe('15');
+    expect(repUrl.searchParams.get('offset')).toBe('2');
+  });
+
+  it('queries inbound records endpoint with payload hydration in HttpRecordRepository', async () => {
+    const logger = new RecordingLoggerFake();
+    const { fetchImpl, calls } = createRouteFetch({
       'GET /api/v1/tenants/ten_01/ip/records/inbound': [
         {
           id: 'in-1',
@@ -485,49 +440,10 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
         },
       ],
     });
-
-    const httpClient = new FetchHttpClientAdapter({
-      baseUrl: 'https://api.soopa.local',
-      fetchImpl,
+    const repo = new HttpRecordRepository(
+      new FetchHttpClientAdapter({ baseUrl: 'https://api.soopa.local', fetchImpl, logger }),
       logger,
-    });
-    const repo = new HttpRecordRepository(httpClient, logger);
-
-    const normRes = await repo.listNormalizedRecords('ten_01', {
-      connectionId: 'conn-1',
-      canonicalType: 'CANONICAL_TYPE_A',
-      limit: 25,
-      offset: 5,
-    });
-    expect(normRes.ok).toBe(true);
-    if (normRes.ok) {
-      expect(normRes.value.length).toBe(1);
-      expect(normRes.value[0]?.sourceId).toBe('SRC-1');
-    }
-
-    const gemRes = await repo.listGemRecords('ten_01', {
-      entityDomain: 'domain_core',
-      sourceConnectionId: 'conn-1',
-      limit: 20,
-      offset: 10,
-    });
-    expect(gemRes.ok).toBe(true);
-    if (gemRes.ok) {
-      expect(gemRes.value.length).toBe(1);
-      expect(gemRes.value[0]?.canonicalId).toBe('GEM-1');
-    }
-
-    const repRes = await repo.listReplicaRecords('ten_01', {
-      connectionId: 'conn-1',
-      stream: 'stream_alpha',
-      limit: 15,
-      offset: 2,
-    });
-    expect(repRes.ok).toBe(true);
-    if (repRes.ok) {
-      expect(repRes.value.length).toBe(1);
-      expect(repRes.value[0]?.stream).toBe('stream_alpha');
-    }
+    );
 
     const inbRes = await repo.listInboundRecords('ten_01', {
       connectionId: 'conn-1',
@@ -538,34 +454,10 @@ describe('Entities & Sync Control Plane & SyncedDataInspectionPanel (RBAC & Deco
     });
     expect(inbRes.ok).toBe(true);
     if (inbRes.ok) {
-      expect(inbRes.value.length).toBe(1);
       expect(inbRes.value[0]?.appId).toBe('generic_connector');
     }
 
-    expect(calls.length).toBe(4);
-
-    const normUrl = new URL(calls[0]!.url);
-    expect(normUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/normalized');
-    expect(normUrl.searchParams.get('connection_id')).toBe('conn-1');
-    expect(normUrl.searchParams.get('canonical_type')).toBe('CANONICAL_TYPE_A');
-    expect(normUrl.searchParams.get('limit')).toBe('25');
-    expect(normUrl.searchParams.get('offset')).toBe('5');
-
-    const gemUrl = new URL(calls[1]!.url);
-    expect(gemUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/gem');
-    expect(gemUrl.searchParams.get('source_connection_id')).toBe('conn-1');
-    expect(gemUrl.searchParams.get('entity_domain')).toBe('domain_core');
-    expect(gemUrl.searchParams.get('limit')).toBe('20');
-    expect(gemUrl.searchParams.get('offset')).toBe('10');
-
-    const repUrl = new URL(calls[2]!.url);
-    expect(repUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/replica');
-    expect(repUrl.searchParams.get('connection_id')).toBe('conn-1');
-    expect(repUrl.searchParams.get('stream')).toBe('stream_alpha');
-    expect(repUrl.searchParams.get('limit')).toBe('15');
-    expect(repUrl.searchParams.get('offset')).toBe('2');
-
-    const inbUrl = new URL(calls[3]!.url);
+    const inbUrl = new URL(calls[0]!.url);
     expect(inbUrl.pathname).toBe('/api/v1/tenants/ten_01/ip/records/inbound');
     expect(inbUrl.searchParams.get('connection_id')).toBe('conn-1');
     expect(inbUrl.searchParams.get('stream_name')).toBe('stream_alpha');

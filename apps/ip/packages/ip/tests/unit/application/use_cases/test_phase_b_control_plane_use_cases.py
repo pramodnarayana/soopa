@@ -1,4 +1,4 @@
-"""Zero-mock unit tests for Phase B Control Plane use cases, transformer registries, and stitch registries."""
+"""Zero-mock unit tests for generic IP Engine Phase B Control Plane use cases."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import os
 from collections.abc import AsyncGenerator, AsyncIterator, Sequence
+from datetime import timedelta
 from types import TracebackType
 
 import pytest
@@ -77,8 +78,19 @@ from ip.engine.domain.exceptions import (
     StitchRunNotFoundError,
     TenantShardNotFoundError,
 )
-from ip.engine.domain.normalization.enums import TransformationMode
-from ip.engine.domain.normalization.transformation import Transformation
+from ip.engine.domain.normalization.enums import (
+    NormalizationRejectionReason,
+    TransformationMode,
+)
+from ip.engine.domain.normalization.registries import TransformerRegistry
+from ip.engine.domain.normalization.transformation import (
+    CanonicalDraft,
+    ReplicaSnapshot,
+    Transformation,
+    TransformationContext,
+    TransformationRejection,
+    TransformationResult,
+)
 from ip.engine.domain.replication.enums import (
     SyncRunKind,
     SyncRunStatus,
@@ -86,6 +98,7 @@ from ip.engine.domain.replication.enums import (
 from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.domain.replication.sync_run import SyncRun
+from ip.engine.domain.stitch.enums import StitchStepType
 from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
@@ -130,31 +143,232 @@ from ip.engine.ports.outbound.tiered_storage_port import (
 from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
 )
+from ip.engine.ports.outbound.transformer_port import TransformerPort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
 )
-from ip.solutions.domains.energy.canonical import EnergyEntityType
-from ip.solutions.stitches.registry_loader import (
-    create_default_workflow_definition_registry,
-    register_default_stitches,
+from orchestration.application.services import (
+    InMemoryWorkflowDefinitionRegistry,
+    WorkflowStepSchedulerService,
 )
-from ip.solutions.transformers.registry_loader import (
-    create_default_transformer_registry,
-)
-from orchestration.application.services import WorkflowStepSchedulerService
 from orchestration.application.use_cases import (
     ResolveMatchConditionsUseCase,
     StartRunUseCase,
 )
-from orchestration.domain.constants import RunStatus
+from orchestration.domain.constants import EffectPolicy, NodeKind, Priority, RunStatus
+from orchestration.domain.definition import (
+    NodeDefinition,
+    WaitEventSpec,
+    WorkflowDefinition,
+)
 from orchestration.domain.run import WorkflowRun
 from orchestration.testing import InMemoryWorkflowUnitOfWork
 from security.ports.cipher_port import CipherPort
 from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.events import EventEnvelope
 from strace.ports import TraceRepositoryPort
+
+
+class _SyntheticAlphaTransformerV1(TransformerPort):
+    @property
+    def transformation_id(self) -> str:
+        return "synthetic.record_alpha"
+
+    @property
+    def transformation_version(self) -> int:
+        return 1
+
+    @property
+    def target_types(self) -> tuple[str, ...]:
+        return ("canonical.record_alpha.v1",)
+
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
+        _ = context
+        rec_id = str(replica.data.get("record_id") or replica.record_key)
+        if not rec_id:
+            return TransformationResult(
+                rejections=(
+                    TransformationRejection(
+                        reason=NormalizationRejectionReason.MISSING_REQUIRED_FIELD,
+                        field_path="record_id",
+                        detail="Missing record_id",
+                    ),
+                )
+            )
+        raw_amount = replica.data.get("amount", 0.0)
+        amount = float(raw_amount) if isinstance(raw_amount, (int, float)) else 0.0
+        return TransformationResult(
+            drafts=(
+                CanonicalDraft(
+                    canonical_type="canonical.record_alpha.v1",
+                    source_id=rec_id,
+                    fields={"external_id": rec_id, "amount": amount, "tier": "STANDARD"},
+                ),
+            )
+        )
+
+
+class _SyntheticAlphaTransformerV2(TransformerPort):
+    @property
+    def transformation_id(self) -> str:
+        return "synthetic.record_alpha"
+
+    @property
+    def transformation_version(self) -> int:
+        return 2
+
+    @property
+    def target_types(self) -> tuple[str, ...]:
+        return ("canonical.record_alpha.v1",)
+
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
+        _ = context
+        rec_id = str(replica.data.get("record_id") or replica.record_key)
+        raw_amount = replica.data.get("amount", 0.0)
+        amount = float(raw_amount) if isinstance(raw_amount, (int, float)) else 0.0
+        return TransformationResult(
+            drafts=(
+                CanonicalDraft(
+                    canonical_type="canonical.record_alpha.v1",
+                    source_id=rec_id,
+                    fields={"external_id": rec_id, "amount": amount, "tier": "ENRICHED_V2"},
+                ),
+            )
+        )
+
+
+class _SyntheticBetaTransformerV1(TransformerPort):
+    @property
+    def transformation_id(self) -> str:
+        return "synthetic.record_beta"
+
+    @property
+    def transformation_version(self) -> int:
+        return 1
+
+    @property
+    def target_types(self) -> tuple[str, ...]:
+        return ("canonical.record_beta.v1",)
+
+    def transform(
+        self, replica: ReplicaSnapshot, context: TransformationContext
+    ) -> TransformationResult:
+        _ = context
+        rec_id = str(replica.data.get("beta_id") or replica.record_key)
+        return TransformationResult(
+            drafts=(
+                CanonicalDraft(
+                    canonical_type="canonical.record_beta.v1",
+                    source_id=rec_id,
+                    fields={"external_id": rec_id, "label": str(replica.data.get("label", ""))},
+                ),
+            )
+        )
+
+
+def _create_synthetic_transformer_registry() -> TransformerRegistry:
+    registry = TransformerRegistry()
+    registry.register(_SyntheticAlphaTransformerV1())
+    registry.register(_SyntheticAlphaTransformerV2())
+    registry.register(_SyntheticBetaTransformerV1())
+    return registry
+
+
+def _create_synthetic_workflow_registry() -> InMemoryWorkflowDefinitionRegistry:
+    registry = InMemoryWorkflowDefinitionRegistry()
+    registry.register(
+        WorkflowDefinition(
+            workflow_id="workflow.reconcile_alpha_stitch",
+            version=1,
+            default_priority=Priority.REALTIME,
+            description="Synthetic three-step correlation workflow.",
+            nodes=(
+                NodeDefinition(
+                    node_key="lookup_alpha_replica",
+                    kind=NodeKind.TASK,
+                    step_type=StitchStepType.QUERY_REPLICA.value,
+                    effect_policy=EffectPolicy.PURE,
+                ),
+                NodeDefinition(
+                    node_key="wait_alpha_signal",
+                    kind=NodeKind.WAIT_FOR_EVENT,
+                    parents=("lookup_alpha_replica",),
+                    wait_event=WaitEventSpec(
+                        event_key="canonical.alpha_confirmed.normalized",
+                        timeout=timedelta(hours=2),
+                    ),
+                ),
+                NodeDefinition(
+                    node_key="notify_ops_sink",
+                    kind=NodeKind.TASK,
+                    step_type=StitchStepType.EMIT_NOTIFICATION.value,
+                    parents=("wait_alpha_signal",),
+                    effect_policy=EffectPolicy.IDEMPOTENT_EFFECT,
+                ),
+            ),
+        )
+    )
+    registry.register(
+        WorkflowDefinition(
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
+            version=1,
+            default_priority=Priority.BULK,
+            description="Synthetic two-step outbound delivery workflow.",
+            nodes=(
+                NodeDefinition(
+                    node_key="lookup_beta_context",
+                    kind=NodeKind.TASK,
+                    step_type=StitchStepType.QUERY_REPLICA.value,
+                    effect_policy=EffectPolicy.PURE,
+                ),
+                NodeDefinition(
+                    node_key="dispatch_sink_record",
+                    kind=NodeKind.TASK,
+                    step_type=StitchStepType.EXECUTE_HTTP_ACTION.value,
+                    parents=("lookup_beta_context",),
+                    effect_policy=EffectPolicy.RECONCILABLE_EFFECT,
+                ),
+            ),
+        )
+    )
+    return registry
+
+
+def _create_synthetic_stitch_catalog() -> InMemoryStitchCatalogRegistry:
+    catalog = InMemoryStitchCatalogRegistry()
+    catalog.register_stitch(
+        Stitch(
+            id="stch_default_alpha_sync",
+            tenant_id="*",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.record_alpha.v1",
+            is_trigger=True,
+            idempotency_key_field="event_id",
+            concurrency_key_field="external_id",
+            is_active=True,
+        )
+    )
+    catalog.register_stitch(
+        Stitch(
+            id="stch_default_beta_reconcile",
+            tenant_id="*",
+            workflow_id="workflow.reconcile_alpha_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.record_beta.v1",
+            is_trigger=True,
+            idempotency_key_field="event_id",
+            concurrency_key_field="external_id",
+            is_active=True,
+        )
+    )
+    return catalog
 
 
 class _InMemoryConnectionRepo(ConnectionRepositoryPort):
@@ -476,7 +690,7 @@ class _InMemoryPagingConnector(SourceConnectorPort):
 
     @property
     def app_id(self) -> str:
-        return "itron_mdm"
+        return "acme_source"
 
     def spec(self) -> AppSpecDTO:
         raise NotImplementedError
@@ -604,119 +818,63 @@ class _InMemoryStitchShardGateway(StitchShardGatewayPort):
 
 
 @pytest.mark.asyncio
-async def test_default_transformer_registry_and_transformation_use_cases() -> None:
-    registry = create_default_transformer_registry()
+async def test_transformation_preview_use_case_with_shadow_diff_comparison() -> None:
+    registry = _create_synthetic_transformer_registry()
     list_transformers_uc = ListRegisteredTransformersUseCase(transformer_registry=registry)
     transformers = list_transformers_uc.execute()
-    assert len(transformers) == 6
+    assert len(transformers) == 3
     transformer_keys = {(m.transformation_id, m.transformation_version) for m in transformers}
-    assert ("energy.ami_meter_reading", 1) in transformer_keys
-    assert ("energy.ami_meter_reading", 2) in transformer_keys
-    assert ("energy.ami_service_point", 1) in transformer_keys
-    assert ("tms.mercury_gate_load", 1) in transformer_keys
-    assert ("tms.mercury_gate_load", 2) in transformer_keys
-    assert ("tms.mercury_gate_carrier", 1) in transformer_keys
+    assert ("synthetic.record_alpha", 1) in transformer_keys
+    assert ("synthetic.record_alpha", 2) in transformer_keys
+    assert ("synthetic.record_beta", 1) in transformer_keys
 
-    # Preview use case: Energy v1 + shadow v2 diff
     preview_uc = PreviewStreamTransformationUseCase(transformer_registry=registry)
-    energy_preview = preview_uc.execute(
+    alpha_preview = preview_uc.execute(
         PreviewStreamTransformationCommand(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="interval_reads",
-            transformation_id="energy.ami_meter_reading",
+            stream="records_alpha",
+            transformation_id="synthetic.record_alpha",
             transformation_version=1,
-            record_key="MTR-100",
+            record_key="REC-100",
             sample_payload={
-                "meter_id": "MTR-100",
-                "kwh_delivered": 120.5,
-                "kwh_received": 10.5,
+                "record_id": "REC-100",
+                "amount": 120.5,
                 "timestamp": "2026-10-27T10:00:00Z",
-                "quality": "ESTIMATED",
-                "service_point_id": "SP-100",
             },
             shadow_transformation_version=2,
         )
     )
-    assert energy_preview.is_ok
-    dto = energy_preview.unwrap()
+    assert alpha_preview.is_ok
+    dto = alpha_preview.unwrap()
     assert len(dto.drafts) == 1
-    assert dto.drafts[0].source_id == "MTR-100"
+    assert dto.drafts[0].source_id == "REC-100"
     assert dto.shadow_transformation_version == 2
     assert len(dto.shadow_diffs) >= 1
 
-    # Preview use case: TMS Load v1 + shadow v2 diff
-    tms_preview = preview_uc.execute(
+    beta_preview = preview_uc.execute(
         PreviewStreamTransformationCommand(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="loads",
-            transformation_id="tms.mercury_gate_load",
+            stream="records_beta",
+            transformation_id="synthetic.record_beta",
             transformation_version=1,
-            record_key="LD-500",
-            sample_payload={
-                "load_id": "LD-500",
-                "carrier_scac": "CAR9",
-                "status": "TENDERED",
-                "origin_city": "Chicago",
-                "origin_state": "IL",
-                "destination_city": "Dallas",
-                "destination_state": "TX",
-                "total_weight_lbs": 40000.0,
-                "freight_charge_usd": 2400.0,
-            },
-            shadow_transformation_version=2,
+            record_key="BETA-01",
+            sample_payload={"beta_id": "BETA-01", "label": "Primary Sink"},
         )
     )
-    assert tms_preview.is_ok
-    assert len(tms_preview.unwrap().drafts) == 1
-    assert len(tms_preview.unwrap().shadow_diffs) >= 1
-
-    # Preview use case: Service Point & Carrier transformers + rejection paths
-    sp_preview = preview_uc.execute(
-        PreviewStreamTransformationCommand(
-            tenant_id="ten_01",
-            connection_id="conn_01",
-            stream="service_points",
-            transformation_id="energy.ami_service_point",
-            transformation_version=1,
-            record_key="SP-01",
-            sample_payload={
-                "service_point_id": "SP-01",
-                "customer_id": "CUST-99",
-                "meter_id": "MTR-100",
-            },
-        )
-    )
-    assert sp_preview.is_ok
-    assert len(sp_preview.unwrap().drafts) == 1
-
-    carrier_preview = preview_uc.execute(
-        PreviewStreamTransformationCommand(
-            tenant_id="ten_01",
-            connection_id="conn_01",
-            stream="carriers",
-            transformation_id="tms.mercury_gate_carrier",
-            transformation_version=1,
-            record_key="CAR-01",
-            sample_payload={
-                "scac": "ABCD",
-                "carrier_name": "Fast Freight LLC",
-            },
-        )
-    )
-    assert carrier_preview.is_ok
-    assert len(carrier_preview.unwrap().drafts) == 1
+    assert beta_preview.is_ok
+    assert len(beta_preview.unwrap().drafts) == 1
 
     rejected_preview = preview_uc.execute(
         PreviewStreamTransformationCommand(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="interval_reads",
-            transformation_id="energy.ami_meter_reading",
+            stream="records_alpha",
+            transformation_id="synthetic.record_alpha",
             transformation_version=1,
             record_key="",
-            sample_payload={"kwh_delivered": 10.0},
+            sample_payload={"amount": 10.0},
         )
     )
     assert rejected_preview.is_ok
@@ -726,23 +884,25 @@ async def test_default_transformer_registry_and_transformation_use_cases() -> No
         PreviewStreamTransformationCommand(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="interval_reads",
+            stream="records_alpha",
             transformation_id="unknown.transformer",
             transformation_version=99,
-            record_key="MTR-100",
+            record_key="REC-100",
             sample_payload={},
         )
     )
     assert missing_transformer.is_err
     assert missing_transformer.unwrap_err().code == IpErrorCode.TRANSFORMER_NOT_FOUND
 
-    # Connection transformations queries
+
+@pytest.mark.asyncio
+async def test_connection_transformation_query_use_cases() -> None:
     uow = _InMemoryControlPlaneUoW()
     conn = Connection(
         id="conn_01",
         tenant_id="ten_01",
-        app_id="itron_mdm",
-        name="Itron Connection",
+        app_id="acme_source",
+        name="Acme Source Connection",
         auth_type=AuthType.API_KEY,
         connection_fingerprint="fp_01",
         status=ConnectionStatus.ACTIVE,
@@ -751,8 +911,8 @@ async def test_default_transformer_registry_and_transformation_use_cases() -> No
     transformation = Transformation.create(
         tenant_id="ten_01",
         connection_id="conn_01",
-        stream="interval_reads",
-        transformation_id="energy.ami_meter_reading",
+        stream="records_alpha",
+        transformation_id="synthetic.record_alpha",
         transformation_version=1,
         mode=TransformationMode.ACTIVE,
         shadow_transformation_version=2,
@@ -777,7 +937,7 @@ async def test_default_transformer_registry_and_transformation_use_cases() -> No
         GetStreamTransformationQuery(
             tenant_id="ten_01",
             connection_id="conn_01",
-            stream="interval_reads",
+            stream="records_alpha",
         )
     )
     assert get_res.is_ok
@@ -795,27 +955,26 @@ async def test_default_transformer_registry_and_transformation_use_cases() -> No
 
 
 @pytest.mark.asyncio
-async def test_sync_run_control_plane_use_cases_and_pending_run_resume() -> None:
+async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
     cp_uow = _InMemoryControlPlaneUoW()
     dp_uow = _InMemoryDataPlaneUoW()
     conn = Connection(
         id="conn_sync_01",
         tenant_id="ten_01",
-        app_id="itron_mdm",
-        name="Itron Pull Connection",
+        app_id="acme_source",
+        name="Acme Pull Connection",
         auth_type=AuthType.API_KEY,
         connection_fingerprint="fp_sync_01",
         status=ConnectionStatus.ACTIVE,
     )
     await cp_uow.connections.save(conn)
 
-    # 1. TriggerSyncRunUseCase queues a PENDING SyncRun
     trigger_uc = TriggerSyncRunUseCase(control_plane_uow=cp_uow)
     trigger_res = await trigger_uc.execute(
         TriggerSyncRunCommand(
             tenant_id="ten_01",
             connection_id="conn_sync_01",
-            stream_name="meters",
+            stream_name="records_alpha",
             correlation_id="corr_sync_01",
         )
     )
@@ -825,31 +984,29 @@ async def test_sync_run_control_plane_use_cases_and_pending_run_resume() -> None
     assert queued_dto.kind == SyncRunKind.INITIAL.value
     assert queued_dto.generation_id == 1
 
-    # 2. Triggering another sync while PENDING returns 409 ACTIVE_SYNC_RUN_EXISTS
     conflict_res = await trigger_uc.execute(
         TriggerSyncRunCommand(
             tenant_id="ten_01",
             connection_id="conn_sync_01",
-            stream_name="meters",
+            stream_name="records_alpha",
         )
     )
     assert conflict_res.is_err
     assert conflict_res.unwrap_err().code == IpErrorCode.ACTIVE_SYNC_RUN_EXISTS
 
-    # 3. RunSyncUseCase resumes the PENDING SyncRun when trace_id matches!
-    connector = _InMemoryPagingConnector([[{"id": "mtr_01", "timestamp": "2026-10-27T11:00:00Z"}]])
+    connector = _InMemoryPagingConnector([[{"id": "rec_01", "timestamp": "2026-10-27T11:00:00Z"}]])
     run_sync_uc = RunSyncUseCase(
         control_plane_uow=cp_uow,
         data_plane_uow=dp_uow,
         tiered_storage=_InMemoryTieredStorage(),
         cipher=_InMemoryCipher(),
-        connectors={"itron_mdm": connector},
+        connectors={"acme_source": connector},
     )
     exec_res = await run_sync_uc.execute(
         RunSyncCommand(
             tenant_id="ten_01",
             connection_id="conn_sync_01",
-            stream_name="meters",
+            stream_name="records_alpha",
             trace_id=queued_dto.trace_id,
         )
     )
@@ -857,7 +1014,6 @@ async def test_sync_run_control_plane_use_cases_and_pending_run_resume() -> None
     assert exec_res.status == SyncRunStatus.SUCCEEDED.value
     assert exec_res.records_synced == 1
 
-    # 4. ListSyncRunsUseCase and GetSyncRunUseCase
     list_runs_uc = ListSyncRunsUseCase(control_plane_uow=cp_uow)
     runs_res = await list_runs_uc.execute(
         ListSyncRunsQuery(tenant_id="ten_01", connection_id="conn_sync_01")
@@ -886,7 +1042,6 @@ async def test_sync_run_control_plane_use_cases_and_pending_run_resume() -> None
     assert missing_run_res.is_err
     assert missing_run_res.unwrap_err().code == IpErrorCode.SYNC_RUN_NOT_FOUND
 
-    # 5. ListStreamStatesUseCase and ResetStreamCheckpointUseCase
     list_states_uc = ListStreamStatesUseCase(control_plane_uow=cp_uow)
     states_res = await list_states_uc.execute(
         ListStreamStatesQuery(tenant_id="ten_01", connection_id="conn_sync_01")
@@ -900,7 +1055,7 @@ async def test_sync_run_control_plane_use_cases_and_pending_run_resume() -> None
         ResetStreamCheckpointCommand(
             tenant_id="ten_01",
             connection_id="conn_sync_01",
-            stream_name="meters",
+            stream_name="records_alpha",
         )
     )
     assert reset_res.is_ok
@@ -909,28 +1064,25 @@ async def test_sync_run_control_plane_use_cases_and_pending_run_resume() -> None
 
 @pytest.mark.asyncio
 async def test_stitch_control_plane_use_cases() -> None:
-    wf_reg = create_default_workflow_definition_registry()
-    stitch_cat = InMemoryStitchCatalogRegistry()
-    register_default_stitches(stitch_cat)
+    wf_reg = _create_synthetic_workflow_registry()
+    stitch_cat = _create_synthetic_stitch_catalog()
 
-    # 1. List and Get StitchDefinitions
     list_defs_uc = ListStitchDefinitionsUseCase(definition_registry=wf_reg)
     defs = list_defs_uc.execute()
-    assert len(defs) == 3
+    assert len(defs) == 2
 
     get_def_uc = GetStitchDefinitionUseCase(definition_registry=wf_reg)
     def_res = get_def_uc.execute(
-        GetStitchDefinitionQuery(workflow_id="energy.outage_restoration_stitch")
+        GetStitchDefinitionQuery(workflow_id="workflow.reconcile_alpha_stitch")
     )
     assert def_res.is_ok
-    assert def_res.unwrap().workflow_id == "energy.outage_restoration_stitch"
+    assert def_res.unwrap().workflow_id == "workflow.reconcile_alpha_stitch"
     assert len(def_res.unwrap().nodes) == 3
 
     missing_def_res = get_def_uc.execute(GetStitchDefinitionQuery(workflow_id="unknown.stitch"))
     assert missing_def_res.is_err
     assert missing_def_res.unwrap_err().code == IpErrorCode.STITCH_DEFINITION_NOT_FOUND
 
-    # 2. List and Register Stitches
     tenant_id = f"ten_{os.urandom(12).hex()}"
     other_tenant_id = f"ten_{os.urandom(12).hex()}"
     custom_stitch_id = f"stitch_{os.urandom(12).hex()}"
@@ -955,81 +1107,76 @@ async def test_stitch_control_plane_use_cases() -> None:
         RegisterStitchCommand(
             tenant_id=tenant_id,
             stitch_id=custom_stitch_id,
-            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.custom_meter_reading.normalized",
+            canonical_event_type="canonical.custom_alpha.normalized",
             is_trigger=True,
-            idempotency_key_field="meter_serial_number",
+            idempotency_key_field="external_id",
         )
     )
     assert reg_res.is_ok
     assert reg_res.unwrap().id == custom_stitch_id
 
-    # Wildcard override and cross-tenant collision tests
     reg_wildcard = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id="*",
             stitch_id=shared_stitch_id,
-            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.custom_meter_reading.normalized",
+            canonical_event_type="canonical.custom_alpha.normalized",
             is_trigger=True,
         )
     )
     assert reg_wildcard.is_ok
 
-    # Concrete tenant overrides wildcard stitch with same ID without 409
     reg_override = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id=tenant_id,
             stitch_id=shared_stitch_id,
-            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.custom_meter_reading.normalized",
+            canonical_event_type="canonical.custom_alpha.normalized",
             is_trigger=True,
         )
     )
     assert reg_override.is_ok
 
-    # Different concrete tenant attempting same stitch ID triggers 409 collision
     reg_conflict = await reg_stitch_uc.execute(
         RegisterStitchCommand(
             tenant_id=other_tenant_id,
             stitch_id=shared_stitch_id,
-            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.custom_meter_reading.normalized",
+            canonical_event_type="canonical.custom_alpha.normalized",
             is_trigger=True,
         )
     )
     assert reg_conflict.is_err
     assert reg_conflict.unwrap_err().http_status == 409
 
-    # In-memory stitch catalog list_stitches_for_event prioritizes tenant stitch
     matching_stitches = stitch_cat.list_stitches_for_event(
         tenant_id=tenant_id,
-        canonical_event_type="canonical.custom_meter_reading.normalized",
+        canonical_event_type="canonical.custom_alpha.normalized",
     )
     matching_ids = [s.id for s in matching_stitches]
     assert matching_ids.count(shared_stitch_id) == 1
     overridden = next(s for s in matching_stitches if s.id == shared_stitch_id)
     assert overridden.tenant_id == tenant_id
 
-    # Inactive tenant override completely suppresses the wildcard stitch
     stitch_cat.register_stitch(
         Stitch(
             id=shared_stitch_id,
             tenant_id=tenant_id,
-            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
             workflow_version=1,
-            canonical_event_type="canonical.custom_meter_reading.normalized",
+            canonical_event_type="canonical.custom_alpha.normalized",
             is_trigger=True,
             is_active=False,
         )
     )
     inactive_override_matches = stitch_cat.list_stitches_for_event(
         tenant_id=tenant_id,
-        canonical_event_type="canonical.custom_meter_reading.normalized",
+        canonical_event_type="canonical.custom_alpha.normalized",
     )
     assert not any(s.id == shared_stitch_id for s in inactive_override_matches)
 
@@ -1046,7 +1193,6 @@ async def test_stitch_control_plane_use_cases() -> None:
     assert bad_reg_res.is_err
     assert bad_reg_res.unwrap_err().code == IpErrorCode.STITCH_DEFINITION_NOT_FOUND
 
-    # 3. TriggerStitchEventUseCase and GetStitchRunUseCase
     wf_uow = InMemoryWorkflowUnitOfWork()
     scheduler = WorkflowStepSchedulerService()
     match_resolver = ResolveMatchConditionsUseCase(
@@ -1070,13 +1216,13 @@ async def test_stitch_control_plane_use_cases() -> None:
     disp_res = await trigger_stitch_uc.execute(
         TriggerStitchEventCommand(
             tenant_id=tenant_id,
-            canonical_event_type=EnergyEntityType.MDM_METER_READING.value,
+            canonical_event_type="canonical.record_alpha.v1",
             payload={
-                "source_id": "MTR-777",
-                "meter_serial_number": "MTR-777",
-                "kwh_delivered": 88.2,
+                "source_id": "REC-777",
+                "external_id": "REC-777",
+                "amount": 88.2,
             },
-            correlation_id="MTR-777",
+            correlation_id="REC-777",
         )
     )
     assert disp_res.is_ok
@@ -1089,7 +1235,7 @@ async def test_stitch_control_plane_use_cases() -> None:
     assert run_res.is_ok
     run_dto = run_res.unwrap()
     assert run_dto.run_id == run_id
-    assert run_dto.workflow_id == "energy.meter_reading_erp_sync_stitch"
+    assert run_dto.workflow_id == "workflow.sync_alpha_to_sink_stitch"
     assert len(run_dto.steps) == 2
 
     missing_stitch_run = await get_stitch_run_uc.execute(
@@ -1102,7 +1248,7 @@ async def test_stitch_control_plane_use_cases() -> None:
     listed_runs_res = await list_runs_uc.execute(
         ListStitchRunsQuery(
             tenant_id=tenant_id,
-            workflow_id="energy.meter_reading_erp_sync_stitch",
+            workflow_id="workflow.sync_alpha_to_sink_stitch",
             status=RunStatus(run_dto.status),
             limit=20,
         )
@@ -1164,10 +1310,9 @@ class _StaticDpUowProvider(IpDataPlaneUnitOfWorkProviderPort):
 
 
 @pytest.mark.asyncio
-async def test_stitch_dispatcher_adapter_list_runs_handles_empty_session_and_shard_errors() -> None:
-    wf_reg = create_default_workflow_definition_registry()
-    stitch_cat = InMemoryStitchCatalogRegistry()
-    register_default_stitches(stitch_cat)
+async def test_stitch_dispatcher_adapter_list_runs_returns_shard_not_found_errors() -> None:
+    wf_reg = _create_synthetic_workflow_registry()
+    stitch_cat = _create_synthetic_stitch_catalog()
     wf_uow = InMemoryWorkflowUnitOfWork()
     tenant_id = f"ten_{os.urandom(12).hex()}"
     missing_tenant_id = f"ten_{os.urandom(12).hex()}"

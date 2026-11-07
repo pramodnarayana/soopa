@@ -39,12 +39,12 @@ async def test_list_connections_use_case(
     create_res = await create_uc.execute(
         CreateConnectionCommand(
             tenant_id=tenant_id,
-            app_id="itron_mdm",
+            app_id="acme_source",
             name="List Target",
             auth_type="API_KEY",
-            public_config={"endpoint_url": "https://list.grid.com"},
+            public_config={"endpoint_url": "https://list.acme.example.com"},
             raw_credentials={"api_key": "k_list"},
-            endpoint_for_fingerprint="https://list.grid.com",
+            endpoint_for_fingerprint="https://list.acme.example.com",
         )
     )
     assert create_res.success is True

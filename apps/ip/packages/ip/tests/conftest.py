@@ -6,8 +6,6 @@ from typing import cast
 
 import ip.engine.adapters.outbound.database.models.control_plane as _ip_cp_models
 import ip.engine.adapters.outbound.database.models.data_plane as _ip_dp_models
-import ip.solutions.domains.energy.models as _ip_energy_models
-import ip.solutions.domains.tms.models as _ip_tms_models
 import pytest_asyncio
 from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant as TenantORM
@@ -35,8 +33,6 @@ from ucp_models.subscriptions import AppSubscription as UcpAppSubscription
 load_dotenv()
 
 _REGISTERED_MODEL_MODULES = (
-    _ip_energy_models,
-    _ip_tms_models,
     _ip_cp_models,
     _ip_dp_models,
 )

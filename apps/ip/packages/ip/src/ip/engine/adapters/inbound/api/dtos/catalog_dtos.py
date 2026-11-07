@@ -45,7 +45,7 @@ class CatalogAppSummaryHttpResponse(BaseModel):
 
     app_id: str = Field(..., description="Unique connector identifier")
     display_name: str = Field(..., description="Human-readable application name")
-    category: str = Field(..., description="Application category, e.g. CRM, BILLING, ENERGY")
+    category: str = Field(..., description="Application category, e.g. API, CRM, BILLING, STORAGE")
     auth_type: str = Field(
         ..., description="Authentication protocol: OAUTH2, BEARER, API_KEY, BASIC"
     )

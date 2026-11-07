@@ -44,6 +44,7 @@ import {
 } from '../../application/use-connection-queries';
 import type { CatalogAppSummary } from '../../domain/catalog';
 import { type Connection, groupActiveConnectionsByApp } from '../../domain/connection';
+import { CatalogAppCategory, ConnectorRuntimeArchitecture } from '../../domain/enums';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
@@ -53,27 +54,58 @@ import { CreateConnectionModal } from './CreateConnectionModal';
 const MAIN_TAB_DIRECTORY = 'directory';
 const MAIN_TAB_ACTIVE = 'active';
 
-const CATEGORIES = [
-  { label: 'All', value: '' },
-  { label: 'API & REST', value: 'API' },
-  { label: 'CRM', value: 'CRM' },
-  { label: 'Billing', value: 'BILLING' },
-  { label: 'Energy & AMI', value: 'ENERGY' },
-  { label: 'ITSM', value: 'ITSM' },
-  { label: 'Storage', value: 'STORAGE' },
-] as const;
+const CATEGORY_LABELS: Readonly<Record<string, string>> = {
+  API: 'API & REST',
+  BILLING: 'Billing',
+  CRM: 'CRM',
+  ERP: 'ERP',
+  ITSM: 'ITSM',
+  SANDBOX: 'Sandbox',
+  STORAGE: 'Storage',
+};
 
-function getAppIcon(category?: string | null, appId?: string) {
-  const cat = category?.toLowerCase();
-  const id = appId?.toLowerCase();
-  if (id === 'http' || cat === 'api') return <Globe className="h-5 w-5 text-brand-ink" />;
-  if (id?.includes('stripe') || cat === 'billing')
+function formatCategoryLabel(rawCategory: string): string {
+  const normalized = rawCategory.trim().toUpperCase();
+  const known = CATEGORY_LABELS[normalized];
+  if (known) {
+    return known;
+  }
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function deriveCategoryPills(
+  apps: readonly CatalogAppSummary[],
+): ReadonlyArray<{ readonly label: string; readonly value: string }> {
+  const seen = new Set<string>();
+  const dynamicPills: Array<{ readonly label: string; readonly value: string }> = [];
+  for (const app of apps) {
+    const raw = app.category.trim();
+    if (!raw) continue;
+    const upper = raw.toUpperCase();
+    if (seen.has(upper)) continue;
+    seen.add(upper);
+    dynamicPills.push({ label: formatCategoryLabel(raw), value: raw });
+  }
+  dynamicPills.sort((a, b) => a.label.localeCompare(b.label));
+  return [{ label: 'All', value: '' }, ...dynamicPills];
+}
+
+function getAppIcon(category?: string | null, runtimeArchitecture?: string | null) {
+  const cat = category?.toUpperCase();
+  const arch = runtimeArchitecture?.toUpperCase();
+  if (cat === CatalogAppCategory.API || arch === ConnectorRuntimeArchitecture.GENERIC_HTTP)
+    return <Globe className="h-5 w-5 text-brand-ink" />;
+  if (cat === CatalogAppCategory.BILLING)
     return <CreditCard className="h-5 w-5 text-status-healthy-fg" />;
-  if (id?.includes('salesforce') || id?.includes('hubspot') || cat === 'crm')
-    return <Cloud className="h-5 w-5 text-primary" />;
-  if (id?.includes('sftp') || cat === 'storage')
+  if (cat === CatalogAppCategory.CRM) return <Cloud className="h-5 w-5 text-primary" />;
+  if (cat === CatalogAppCategory.STORAGE || arch === ConnectorRuntimeArchitecture.NATIVE_PROTOCOL)
     return <Server className="h-5 w-5 text-status-warning-fg" />;
-  if (id?.includes('itron') || cat === 'energy') return <Zap className="h-5 w-5 text-brand-ink" />;
+  if (cat === CatalogAppCategory.SANDBOX || arch === ConnectorRuntimeArchitecture.NATIVE_SIMULATOR)
+    return <Zap className="h-5 w-5 text-brand-ink" />;
   return <Layers className="h-5 w-5 text-primary" />;
 }
 
@@ -95,11 +127,16 @@ export function IpConnectionsPage({
   const deleteMutation = useDeleteConnectionMutation();
 
   // 1. Fetch catalog apps for the OpenAI-style plugin directory
+  const allCatalogView = useCatalogAppsQuery();
   const catalogView = useCatalogAppsQuery({
     category: selectedCategory || undefined,
     search: search.trim() || undefined,
   });
   const apps = catalogView.data ?? [];
+  const categoryPills = useMemo(
+    () => deriveCategoryPills(allCatalogView.data ?? apps),
+    [allCatalogView.data, apps],
+  );
 
   // 2. Fetch all connections for badge count and active apps table
   const allConnectionsView = useConnectionsQuery();
@@ -212,7 +249,7 @@ export function IpConnectionsPage({
         ),
       },
     ],
-    [],
+    [navigation],
   );
 
   const handleConfirmDelete = async () => {
@@ -266,7 +303,7 @@ export function IpConnectionsPage({
             </div>
 
             <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((cat) => {
+              {categoryPills.map((cat) => {
                 const isSelected = selectedCategory === cat.value;
                 return (
                   <Button
@@ -331,7 +368,7 @@ export function IpConnectionsPage({
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/60">
-                          {getAppIcon(app.category, app.appId)}
+                          {getAppIcon(app.category, app.runtimeArchitecture)}
                         </div>
                         <div>
                           <h3 className="font-semibold text-foreground text-sm leading-tight">

@@ -85,20 +85,20 @@ const SPEC_OAUTH: ConnectorPropertySpec = {
 
 const SAMPLE_SPECS: readonly ConnectorPropertySpec[] = [SPEC_URL, SPEC_SECRET, SPEC_OAUTH];
 
-describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', () => {
-  it('strictly isolates secretText and oauth fields into rawCredentials away from publicConfig', () => {
+describe('IP Presentation Helpers: SpecFormRenderer', () => {
+  it('isolates secret connector properties into rawCredentials away from publicConfig', () => {
     expect(isSecretConnectorProperty(SPEC_URL)).toBe(false);
     expect(isSecretConnectorProperty(SPEC_SECRET)).toBe(true);
     expect(isSecretConnectorProperty(SPEC_OAUTH)).toBe(true);
 
     const split = splitSpecFormValues(SAMPLE_SPECS, {
-      [ConnectorPropertyKey.BASE_URL]: 'https://mdm.itron.local',
+      [ConnectorPropertyKey.BASE_URL]: 'https://api.acme.local',
       api_secret: 'sec_live_99',
       oauth_token: '',
     });
 
     expect(split.publicConfig).toEqual({
-      [ConnectorPropertyKey.BASE_URL]: 'https://mdm.itron.local',
+      [ConnectorPropertyKey.BASE_URL]: 'https://api.acme.local',
     });
     expect(split.rawCredentials).toEqual({ api_secret: 'sec_live_99' });
 
@@ -120,7 +120,7 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     expect(splitDefaults.rawCredentials).toEqual({ api_secret: 'default_secret_key' });
   });
 
-  it('dynamically filters credential fields and customizes labels based on selected auth_type', () => {
+  it('filters visible credential fields dynamically based on selected auth_type', () => {
     const httpSpecs: readonly ConnectorPropertySpec[] = [
       SPEC_URL,
       {
@@ -197,7 +197,6 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     const passwordProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.PASSWORD)!;
     const tokenUrlProp = httpSpecs.find((p) => p.name === ConnectorPropertyKey.TOKEN_URL)!;
 
-    // Bearer Token auth
     expect(
       isPropertyVisible(
         tokenProp,
@@ -228,7 +227,6 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     ).toBe(false);
     expect(resolvePropertyLabel(tokenProp, AuthType.BEARER_TOKEN)).toBe('Bearer Token');
 
-    // API Key auth
     expect(
       isPropertyVisible(
         tokenProp,
@@ -252,7 +250,6 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     ).toBe(false);
     expect(resolvePropertyLabel(tokenProp, AuthType.API_KEY)).toBe('API Key Secret');
 
-    // Basic Auth
     expect(
       isPropertyVisible(
         tokenProp,
@@ -275,7 +272,6 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
       ),
     ).toBe(true);
 
-    // OAuth2 Client Credentials
     expect(
       isPropertyVisible(
         tokenProp,
@@ -291,7 +287,6 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
       ),
     ).toBe(true);
 
-    // No Auth
     expect(
       isPropertyVisible(
         tokenProp,
@@ -307,7 +302,6 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
       ),
     ).toBe(false);
 
-    // Splitting values omits hidden fields with defaults (e.g. param_name with default X-API-Key is omitted in BEARER_TOKEN)
     const bearerSplit = splitSpecFormValues(httpSpecs, {
       [ConnectorPropertyKey.BASE_URL]: 'https://api.github.com',
       [ConnectorPropertyKey.AUTH_TYPE]: AuthType.BEARER_TOKEN,
@@ -323,35 +317,7 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     });
   });
 
-  it('maps operational statuses to WCAG-compliant non-brand status tones and formats units', () => {
-    expect(mapTraceStatusTone(TraceStatus.DELIVERED)).toBe(StatusTone.HEALTHY);
-    expect(mapTraceStatusTone(TraceStatus.FAILED)).toBe(StatusTone.CRITICAL);
-    expect(mapTraceStatusTone('UNKNOWN_CUSTOM')).toBe(StatusTone.NEUTRAL);
-    expect(mapConnectionStatusTone(ConnectionStatus.AUTH_EXPIRED)).toBe(StatusTone.WARNING);
-    expect(mapConnectionStatusTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
-    expect(mapSyncRunStatusTone(SyncRunStatus.SUCCEEDED)).toBe(StatusTone.HEALTHY);
-    expect(mapSyncRunStatusTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
-    expect(mapStitchRunStatusTone(StitchRunStatus.RUNNING)).toBe(StatusTone.REPLAY);
-    expect(mapStitchRunStatusTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
-    expect(mapTransformationModeTone(TransformationMode.SHADOW)).toBe(StatusTone.SHADOW);
-    expect(mapTransformationModeTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
-    expect(mapStagePostureTone(StagePosture.CRITICAL)).toBe(StatusTone.CRITICAL);
-    expect(formatLayerLabel(PipelineLayer.L3_NORMALIZE)).toBe('L3 Canonical + GEM');
-    expect(formatLayerLabel('CUSTOM_LAYER')).toBe('CUSTOM_LAYER');
-    expect(formatReplayStageLabel(ReplayStage.RETRY_DELIVER)).toBe(
-      'L5 · Retry Destination Delivery',
-    );
-    expect(formatRelativeTimestamp(null)).toBe('—');
-    expect(formatRelativeTimestamp('not-a-date')).toBe('not-a-date');
-    expect(formatRelativeTimestamp('2026-10-29T08:00:00Z')).toBeTruthy();
-    expect(formatBytesCompact(512)).toBe('512 B');
-    expect(formatBytesCompact(2048)).toBe('2.0 KB');
-    expect(formatBytesCompact(2_097_152)).toBe('2.00 MB');
-    expect(stringifyJsonPretty(null)).toBe('null');
-    expect(stringifyJsonPretty({ ok: true })).toContain('"ok": true');
-  });
-
-  it('renders SpecFormRenderer across empty state and all 6 connector property types', () => {
+  it('renders SpecFormRenderer across empty state', () => {
     const emptyHtml = renderToStaticMarkup(
       React.createElement(SpecFormRenderer, {
         properties: [],
@@ -360,7 +326,9 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
       }),
     );
     expect(emptyHtml).toBe('');
+  });
 
+  it('renders SpecFormRenderer across all 6 connector property types', () => {
     const allProps: readonly ConnectorPropertySpec[] = [
       ...SAMPLE_SPECS,
       {
@@ -385,11 +353,11 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
       },
       {
         name: 'region',
-        label: 'Grid Region',
+        label: 'Cloud Region',
         type: ConnectorPropertyType.DROPDOWN,
         required: true,
         defaultValue: 'us-west',
-        description: 'Target AMI utility grid',
+        description: 'Target deployment region',
         options: [{ label: 'US West', value: 'us-west' }],
         oauthConfig: null,
       },
@@ -398,7 +366,7 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     const fullHtml = renderToStaticMarkup(
       React.createElement(SpecFormRenderer, {
         properties: allProps,
-        values: { base_url: 'https://ami.local', verify_tls: true, batch_size: 250 },
+        values: { base_url: 'https://api.acme.local', verify_tls: true, batch_size: 250 },
         onChangeValue: () => undefined,
       }),
     );
@@ -406,10 +374,45 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     expect(fullHtml).toContain('API Secret');
     expect(fullHtml).toContain('OAuth Token');
     expect(fullHtml).toContain('Batch Size');
-    expect(fullHtml).toContain('Grid Region');
+    expect(fullHtml).toContain('Cloud Region');
+  });
+});
+
+describe('IP Presentation Helpers: Semantic Status Mappers', () => {
+  it('maps operational statuses to WCAG-compliant status tones', () => {
+    expect(mapTraceStatusTone(TraceStatus.DELIVERED)).toBe(StatusTone.HEALTHY);
+    expect(mapTraceStatusTone(TraceStatus.FAILED)).toBe(StatusTone.CRITICAL);
+    expect(mapTraceStatusTone('UNKNOWN_CUSTOM')).toBe(StatusTone.NEUTRAL);
+    expect(mapConnectionStatusTone(ConnectionStatus.AUTH_EXPIRED)).toBe(StatusTone.WARNING);
+    expect(mapConnectionStatusTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
+    expect(mapSyncRunStatusTone(SyncRunStatus.SUCCEEDED)).toBe(StatusTone.HEALTHY);
+    expect(mapSyncRunStatusTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
+    expect(mapStitchRunStatusTone(StitchRunStatus.RUNNING)).toBe(StatusTone.REPLAY);
+    expect(mapStitchRunStatusTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
+    expect(mapTransformationModeTone(TransformationMode.SHADOW)).toBe(StatusTone.SHADOW);
+    expect(mapTransformationModeTone('UNKNOWN')).toBe(StatusTone.NEUTRAL);
+    expect(mapStagePostureTone(StagePosture.CRITICAL)).toBe(StatusTone.CRITICAL);
   });
 
-  it('evaluates connection preflight verification snapshots and maps failed handshake problems', () => {
+  it('formats byte sizes with relative timestamps', () => {
+    expect(formatLayerLabel(PipelineLayer.L3_NORMALIZE)).toBe('L3 Canonical + GEM');
+    expect(formatLayerLabel('CUSTOM_LAYER')).toBe('CUSTOM_LAYER');
+    expect(formatReplayStageLabel(ReplayStage.RETRY_DELIVER)).toBe(
+      'L5 · Retry Destination Delivery',
+    );
+    expect(formatRelativeTimestamp(null)).toBe('—');
+    expect(formatRelativeTimestamp('not-a-date')).toBe('not-a-date');
+    expect(formatRelativeTimestamp('2026-10-29T08:00:00Z')).toBeTruthy();
+    expect(formatBytesCompact(512)).toBe('512 B');
+    expect(formatBytesCompact(2048)).toBe('2.0 KB');
+    expect(formatBytesCompact(2_097_152)).toBe('2.00 MB');
+    expect(stringifyJsonPretty(null)).toBe('null');
+    expect(stringifyJsonPretty({ ok: true })).toContain('"ok": true');
+  });
+});
+
+describe('IP Presentation Helpers: Connection Preflight', () => {
+  it('builds structured ApiProblem for failed connection preflight checks', () => {
     const failedProblem = buildFailedCheckProblem({
       success: false,
       status: ConnectionHandshakeStatus.AUTH_FAILED,
@@ -431,7 +434,9 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     });
     expect(explicitProblem.serverCode).toBe('INVALID_CLIENT');
     expect(explicitProblem.message).toBe('Invalid OAuth2 client secret');
+  });
 
+  it('verifies connection preflight snapshot equality', () => {
     expect(
       isConnectionSnapshotVerified('{"a":1}', '{"a":1}', {
         success: true,
@@ -450,17 +455,21 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     ).toBe(false);
     expect(isConnectionSnapshotVerified('{"a":1}', null, null)).toBe(false);
   });
+});
 
-  it('resolves Cmd+K/Ctrl+K shortcuts, correlation/trace/run instant jumps, and command palette workspace actions', () => {
+describe('IP Presentation Helpers: Command Palette Actions', () => {
+  it('resolves command palette keyboard shortcuts', () => {
     expect(isCommandPaletteShortcutEvent({ metaKey: true, ctrlKey: false, key: 'k' })).toBe(true);
     expect(isCommandPaletteShortcutEvent({ metaKey: false, ctrlKey: true, key: 'K' })).toBe(true);
     expect(isCommandPaletteShortcutEvent({ metaKey: false, ctrlKey: false, key: 'k' })).toBe(false);
     expect(isCommandPaletteShortcutEvent({ metaKey: true, ctrlKey: false, key: 'p' })).toBe(false);
+  });
 
+  it('builds command palette instant navigation jumps', () => {
     const nav = new InMemoryNavigationFake();
     expect(buildCommandPaletteInstantCommands('   ', nav)).toEqual([]);
 
-    const corrCmds = buildCommandPaletteInstantCommands('  MTR-77410 ', nav);
+    const corrCmds = buildCommandPaletteInstantCommands('  REC-77410 ', nav);
     expect(corrCmds).toHaveLength(1);
     expect(corrCmds[0]?.kind).toBe(CommandPaletteInstantActionKind.SEARCH_CORRELATION);
     corrCmds[0]?.execute();
@@ -492,7 +501,7 @@ describe('IP Presentation Helpers: SpecFormRenderer & Semantic Status Mappers', 
     }
 
     expect(nav.visited).toEqual([
-      '/tenant/ip/traces?q=MTR-77410',
+      '/tenant/ip/traces?q=REC-77410',
       '/tenant/ip/traces/ip_trc_9988',
       '/tenant/ip/stitches/runs/wfr_5544',
       '/tenant/ip',

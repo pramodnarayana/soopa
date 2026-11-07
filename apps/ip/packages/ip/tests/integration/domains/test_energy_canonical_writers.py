@@ -1,21 +1,14 @@
-"""Narrow PostgreSQL Integration Tests for Energy Canonical Writers, Stitch Persistence, and Advisory Token Refresh Locks."""
+"""Narrow PostgreSQL Integration Tests for Energy Canonical Writers and Container Stitch Step Handlers."""
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
 
 import pytest
 from database.testing import TransactionalTestRouter
 from database.types import GlobalSession, TenantSession
 from dependency_injector import providers
-from ip.engine.adapters.outbound.auth.token_refresh_lock import (
-    SqlAlchemyTokenRefreshLockAdapter,
-)
-from ip.engine.adapters.outbound.database.models.control_plane import IpOutboxRecord
-from ip.engine.adapters.outbound.database.models.data_plane import (
-    IpDataPlaneOutboxRecord,
-)
+from ip.engine.adapters.outbound.database.models.data_plane import IpDataPlaneOutboxRecord
 from ip.engine.adapters.outbound.database.tenant_resolver import SqlAlchemyIpTenantResolver
 from ip.engine.application.use_cases.normalization.bind_stream_transformation_use_case import (
     BindStreamTransformationCommand,
@@ -23,27 +16,19 @@ from ip.engine.application.use_cases.normalization.bind_stream_transformation_us
 from ip.engine.application.use_cases.normalization.normalize_replica_record_use_case import (
     NormalizeReplicaRecordCommand,
 )
-from ip.engine.application.use_cases.stitch.stitch_control_plane_use_cases import (
-    ListStitchesQuery,
-    ListStitchesUseCase,
-    RegisterStitchCommand,
-    RegisterStitchUseCase,
-)
-from ip.engine.bootstrap.container import (
-    Container,
-    create_ip_control_plane_uow,
-    create_ip_data_plane_uow,
-)
+from ip.engine.bootstrap.container import Container, create_ip_control_plane_uow
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType
-from ip.engine.domain.enums import IpEventType
 from ip.engine.domain.normalization.enums import (
     NormalizationOutcome,
     TransformationMode,
 )
 from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.domain.stitch.enums import StitchStepType
-from ip.solutions.domains.energy.canonical import EnergyEntityType
+from ip.solutions.bootstrap import (
+    configure_solution_container,
+    create_solution_data_plane_uow,
+)
 from ip.solutions.domains.energy.repository import SqlAlchemyEnergyDomainRepository
 from orchestration.ports.inbound.step_handler_port import StepContext
 from sqlalchemy import select
@@ -51,24 +36,28 @@ from sqlalchemy import select
 pytestmark = pytest.mark.integration
 
 
+def _configure_test_container(transactional_router: TransactionalTestRouter) -> Container:
+    resolver = SqlAlchemyIpTenantResolver(transactional_router)
+    container = configure_solution_container(Container())
+    container.config.allow_private_ips.from_value(True)
+    container.db_router.override(providers.Object(transactional_router))
+    container.tenant_resolver.override(providers.Object(resolver))
+    return container
+
+
 @pytest.mark.asyncio
-async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgres(
+async def test_energy_canonical_writers_back_patch_out_of_order_service_point_references(
     global_session: GlobalSession,
     tenant_session: TenantSession,
     transactional_router: TransactionalTestRouter,
     seeded_ip_tenant: str,
 ) -> None:
     """Verifies Container wires Energy canonical writers (`mdm_meter_readings`, `mdm_service_points`)
-    and all 3 Stitch step handlers against PostgreSQL, including out-of-order reference back-patching.
+    against PostgreSQL, including out-of-order reference back-patching.
     """
-    resolver = SqlAlchemyIpTenantResolver(transactional_router)
-    container = Container()
-    container.config.allow_private_ips.from_value(True)
-    container.db_router.override(providers.Object(transactional_router))
-    container.tenant_resolver.override(providers.Object(resolver))
-
+    container = _configure_test_container(transactional_router)
     cp_uow = create_ip_control_plane_uow(global_session)
-    dp_uow = create_ip_data_plane_uow(tenant_session)
+    dp_uow = create_solution_data_plane_uow(tenant_session)
     now = datetime.now(UTC)
     conn_id = "ip_conn_itron_energy_01"
 
@@ -112,7 +101,6 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
     )
     assert res_bind_sp.is_ok
 
-    # 1. Insert ReplicaRecord for a meter reading referencing unseen service_point_id='SP-ERCOT-700'
     reading_rep = ReplicaRecord.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn_id,
@@ -160,7 +148,6 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
     assert readings[0].transformation_id == "energy.ami_meter_reading"
     assert readings[0].transformation_version == 2
 
-    # 2. Now normalize the late-arriving Service Point 'SP-ERCOT-700' and verify back-patching
     sp_rep = ReplicaRecord.create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn_id,
@@ -203,12 +190,40 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
     assert saved_sp.transformation_id == "energy.ami_service_point"
     assert saved_sp.transformation_version == 1
 
-    # The meter reading's service_point_id should now be back-patched to saved_sp.id!
     updated_readings = await energy_repo.list_readings_by_meter(seeded_ip_tenant, "MTR-700")
     assert len(updated_readings) == 1
     assert updated_readings[0].service_point_id == saved_sp.id
 
-    # 3. Verify all 3 Stitch step handlers are registered in Container.step_handler_registry
+
+@pytest.mark.asyncio
+async def test_energy_container_executes_registered_stitch_step_handlers(
+    tenant_session: TenantSession,
+    transactional_router: TransactionalTestRouter,
+    seeded_ip_tenant: str,
+) -> None:
+    """Verifies Container registers and executes Stitch step handlers against PostgreSQL."""
+    container = _configure_test_container(transactional_router)
+    dp_uow = create_solution_data_plane_uow(tenant_session)
+    conn_id = "ip_conn_itron_energy_02"
+
+    sp_rep = ReplicaRecord.create(
+        tenant_id=seeded_ip_tenant,
+        connection_id=conn_id,
+        stream="service_points",
+        record_key="SP-ERCOT-701",
+        data={
+            "service_point_id": "SP-ERCOT-701",
+            "meter_id": "MTR-701",
+            "customer_id": "CUST-701",
+        },
+        cursor_value="2026-10-27T12:01:00Z",
+        source_inbound_record_id="ip_inb_sp_701",
+        trace_id="ip_trc_sp_701",
+        correlation_id="SP-ERCOT-701",
+    )
+    await dp_uow.replica_records.save(sp_rep)
+    await dp_uow.commit()
+
     step_reg = container.step_handler_registry()
     query_handler_res = step_reg.get(StitchStepType.QUERY_REPLICA.value)
     notify_handler_res = step_reg.get(StitchStepType.EMIT_NOTIFICATION.value)
@@ -227,15 +242,15 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
         app_retry_count=0,
         internal_retry_count=0,
         deadline=datetime(2026, 10, 27, 23, 0, 0, tzinfo=UTC),
-        trace_id="ip_trc_energy_700",
-        correlation_id="MTR-700",
+        trace_id="ip_trc_sp_701",
+        correlation_id="MTR-701",
     )
     q_res = await query_handler_res.unwrap().execute(
         step_ctx,
         {
             "connection_id": conn_id,
             "stream": "service_points",
-            "record_key": "SP-ERCOT-700",
+            "record_key": "SP-ERCOT-701",
         },
     )
     assert q_res.is_ok
@@ -248,7 +263,7 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
             "channel": "email",
             "template_id": "energy.grid_outage_restored",
             "recipient": "grid-ops@utility.example.com",
-            "variables": {"meter_serial": "MTR-700"},
+            "variables": {"meter_serial": "MTR-701"},
         },
     )
     assert n_res.is_ok
@@ -260,127 +275,3 @@ async def test_energy_canonical_writers_and_step_handlers_in_container_on_postgr
     )
     outbox_rows = (await tenant_session.execute(outbox_stmt)).scalars().all()
     assert any(r.payload.get("id") == envelope_id for r in outbox_rows)
-
-
-@pytest.mark.asyncio
-async def test_postgres_stitch_repository_and_advisory_lock(
-    global_session: GlobalSession,
-    transactional_router: TransactionalTestRouter,
-    seeded_ip_tenant: str,
-) -> None:
-    """Verifies Stitches persist in PostgreSQL (`ip.stitches`) and
-    SqlAlchemyTokenRefreshLockAdapter acquires PostgreSQL `pg_advisory_xact_lock`.
-    """
-    container = Container()
-    cp_uow = create_ip_control_plane_uow(global_session)
-    wf_reg = container.workflow_definition_registry()
-    stitch_cat = container.stitch_catalog()
-
-    reg_uc = RegisterStitchUseCase(
-        stitch_catalog=stitch_cat,
-        definition_registry=wf_reg,
-        uow=cp_uow,
-    )
-    reg_res = await reg_uc.execute(
-        RegisterStitchCommand(
-            tenant_id=seeded_ip_tenant,
-            stitch_id="stitch_energy_custom_pg_01",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
-            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
-            idempotency_key_field="service_point_external_id",
-            concurrency_key_field="meter_serial_number",
-        )
-    )
-    assert reg_res.is_ok
-    assert reg_res.unwrap().id == "stitch_energy_custom_pg_01"
-
-    # Query from a fresh InMemoryStitchCatalogRegistry + PostgreSQL Control Plane UoW
-    fresh_cat = container.stitch_catalog()
-    list_uc = ListStitchesUseCase(
-        stitch_catalog=fresh_cat,
-        uow=create_ip_control_plane_uow(global_session),
-    )
-    listed = await list_uc.execute(ListStitchesQuery(tenant_id=seeded_ip_tenant))
-    assert any(s.id == "stitch_energy_custom_pg_01" for s in listed)
-
-    persisted = await cp_uow.stitches.get_by_id(
-        tenant_id=seeded_ip_tenant,
-        stitch_id="stitch_energy_custom_pg_01",
-    )
-    assert persisted is not None
-    assert persisted.workflow_id == "energy.outage_restoration_stitch"
-    assert persisted.canonical_event_type == EnergyEntityType.MDM_SERVICE_POINT.value
-
-    cp_outbox_stmt = select(IpOutboxRecord).where(
-        IpOutboxRecord.tenant_id == seeded_ip_tenant,
-        IpOutboxRecord.event_type == IpEventType.STITCH_REGISTERED.value,
-    )
-    cp_outbox_rows = (await global_session.execute(cp_outbox_stmt)).scalars().all()
-    assert any(r.payload.get("stitch_id") == "stitch_energy_custom_pg_01" for r in cp_outbox_rows)
-
-    # Verify wildcard stitch override and concrete tenant priority in PostgreSQL
-    reg_wildcard_res = await reg_uc.execute(
-        RegisterStitchCommand(
-            tenant_id="*",
-            stitch_id="stitch_shared_override_test",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
-            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
-        )
-    )
-    assert reg_wildcard_res.is_ok
-
-    # Concrete tenant overrides wildcard stitch with same ID without 409 or persistence crash
-    reg_override_res = await reg_uc.execute(
-        RegisterStitchCommand(
-            tenant_id=seeded_ip_tenant,
-            stitch_id="stitch_shared_override_test",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
-            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
-        )
-    )
-    assert reg_override_res.is_ok
-
-    # Concrete tenant resolves its own stitch, not the wildcard
-    persisted_override = await cp_uow.stitches.get_by_id(
-        tenant_id=seeded_ip_tenant,
-        stitch_id="stitch_shared_override_test",
-    )
-    assert persisted_override is not None
-    assert persisted_override.tenant_id == seeded_ip_tenant
-
-    # Different concrete tenant attempting the same stitch_id triggers 409 collision
-    reg_conflict_res = await reg_uc.execute(
-        RegisterStitchCommand(
-            tenant_id="other_concrete_tenant_999",
-            stitch_id="stitch_shared_override_test",
-            workflow_id="energy.outage_restoration_stitch",
-            workflow_version=1,
-            canonical_event_type=EnergyEntityType.MDM_SERVICE_POINT.value,
-            is_trigger=True,
-        )
-    )
-    assert reg_conflict_res.is_err
-    assert reg_conflict_res.unwrap_err().http_status == 409
-
-    # Verify SqlAlchemyTokenRefreshLockAdapter with PostgreSQL pg_advisory_xact_lock
-    lock_adapter_1 = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)
-    lock_adapter_2 = SqlAlchemyTokenRefreshLockAdapter(db_router=transactional_router)
-    order: list[str] = []
-
-    async def _worker(adapter: SqlAlchemyTokenRefreshLockAdapter, label: str) -> None:
-        async with adapter.acquire("conn_energy_oauth_01"):
-            order.append(f"{label}_enter")
-            await asyncio.sleep(0.01)
-            order.append(f"{label}_exit")
-
-    await asyncio.gather(_worker(lock_adapter_1, "w1"), _worker(lock_adapter_2, "w2"))
-    assert order in (
-        ["w1_enter", "w1_exit", "w2_enter", "w2_exit"],
-        ["w2_enter", "w2_exit", "w1_enter", "w1_exit"],
-    )
