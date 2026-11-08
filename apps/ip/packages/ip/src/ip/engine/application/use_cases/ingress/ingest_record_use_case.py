@@ -41,6 +41,7 @@ class IngestRecordCommand:
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    causation_depth: int = 0
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,10 @@ class IngestRecordResultDTO:
 
     record_id: str
     trace_id: str
+    batch_id: str = ""
+    range_start: str = ""
+    range_end: str = ""
+    count: int = 1
     status: str = "ACCEPTED"
     payload_size_bytes: int = 0
     is_inlined: bool = True
@@ -71,6 +76,7 @@ class IngestRecordUseCase:
         # 1. Normalize payload to raw bytes and optional parsed dict
         payload_bytes: bytes
         parsed_payload: JsonDict | None = None
+        decoded_array_len: int | None = None
 
         if isinstance(command.payload, bytes):
             payload_bytes = command.payload
@@ -78,6 +84,8 @@ class IngestRecordUseCase:
                 decoded = json.loads(payload_bytes.decode("utf-8"))
                 if isinstance(decoded, dict):
                     parsed_payload = decoded
+                elif isinstance(decoded, list):
+                    decoded_array_len = len(decoded)
             except (json.JSONDecodeError, UnicodeDecodeError):
                 parsed_payload = None
         else:
@@ -93,6 +101,15 @@ class IngestRecordUseCase:
             parsed_payload=parsed_payload,
         )
 
+        if decoded_array_len is not None:
+            batch_record_count = max(1, decoded_array_len)
+        elif isinstance(command.payload, Sequence) and not isinstance(
+            command.payload, (bytes, str, dict)
+        ):
+            batch_record_count = max(1, len(command.payload))
+        else:
+            batch_record_count = 1
+
         # 3. Create InboundRecord traced aggregate root (emits InboundRecordCreatedEvent & IpTraceEvent)
         record = InboundRecord.create(
             tenant_id=command.tenant_id,
@@ -101,6 +118,8 @@ class IngestRecordUseCase:
             stream_name=command.stream_name,
             payload_bytes=payload_bytes,
             is_inlined=storage_result.is_inlined,
+            batch_record_count=batch_record_count,
+            causation_depth=command.causation_depth,
             request_body=storage_result.raw_payload,
             request_s3_key=storage_result.s3_key,
             request_headers=command.headers,
@@ -126,6 +145,8 @@ class IngestRecordUseCase:
         logger.info(
             "inbound_record_ingested",
             record_id=record.id,
+            batch_id=record.batch_id,
+            count=batch_record_count,
             trace_id=record.trace_id,
             tenant_id=record.tenant_id,
             connection_id=record.connection_id,
@@ -137,6 +158,10 @@ class IngestRecordUseCase:
         return IngestRecordResultDTO(
             record_id=record.id,
             trace_id=record.trace_id,
+            batch_id=record.batch_id,
+            range_start=record.id,
+            range_end=record.id,
+            count=batch_record_count,
             status="ACCEPTED",
             payload_size_bytes=storage_result.payload_size_bytes,
             is_inlined=storage_result.is_inlined,

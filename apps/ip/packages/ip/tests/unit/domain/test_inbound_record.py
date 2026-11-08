@@ -5,8 +5,13 @@ from __future__ import annotations
 import json
 
 from ip.engine.domain.replication.events import InboundRecordCreatedEvent
-from ip.engine.domain.replication.inbound_record import InboundRecord, compute_payload_sha256
+from ip.engine.domain.replication.inbound_record import (
+    InboundBatchItemSpec,
+    InboundRecord,
+    compute_payload_sha256,
+)
 from seedwork.domain.types import JsonDict
+from seedwork.events import EventProcessingLane
 from strace.domain import TracedAggregateRoot
 
 
@@ -92,3 +97,73 @@ def test_inbound_record_create_s3_offloaded() -> None:
     assert isinstance(event, InboundRecordCreatedEvent)
     assert event.is_inlined is False
     assert event.s3_key == s3_key
+
+
+def test_inbound_record_create_assigns_batch_metadata() -> None:
+    body: JsonDict = {"id": "ORD-1", "total": 99.0}
+    raw = json.dumps(body).encode("utf-8")
+
+    record = InboundRecord.create(
+        tenant_id="ten_batch_1",
+        connection_id="ip_conn_01",
+        app_id="crm_source",
+        stream_name="orders",
+        payload_bytes=raw,
+        is_inlined=True,
+        request_body=body,
+        causation_depth=1,
+    )
+
+    assert record.batch_id.startswith("ip_bch_")
+    assert record.batch_seq == 0
+    assert record.causation_depth == 1
+    event = record.domain_events[0]
+    assert isinstance(event, InboundRecordCreatedEvent)
+    assert event.batch_id == record.batch_id
+    assert event.range_start == record.id
+    assert event.range_end == record.id
+    assert event.count == 1
+    assert event.causation_depth == 1
+    assert event.get_processing_lane() == EventProcessingLane.REALTIME
+
+
+def test_inbound_record_create_range_batch_emits_single_range_claim_check() -> None:
+    items = [
+        InboundBatchItemSpec(
+            payload_bytes=json.dumps({"id": f"ORD-{idx}"}).encode("utf-8"),
+            is_inlined=True,
+            request_body={"id": f"ORD-{idx}"},
+            external_event_id=f"ext_{idx}",
+        )
+        for idx in range(3)
+    ]
+
+    records = InboundRecord.create_range_batch(
+        tenant_id="ten_batch_range",
+        connection_id="ip_conn_bulk",
+        app_id="erp_source",
+        stream_name="invoices",
+        items=items,
+    )
+
+    assert len(records) == 3
+    assert [r.batch_seq for r in records] == [0, 1, 2]
+    assert len({r.batch_id for r in records}) == 1
+    assert records[0].batch_id.startswith("ip_bch_")
+    assert records[0].id < records[1].id < records[2].id
+    assert all(len(r.trace_events) == 1 for r in records)
+
+    all_domain_events = [evt for r in records for evt in r.domain_events]
+    assert len(all_domain_events) == 1
+    assert len(records[0].domain_events) == 1
+    assert len(records[1].domain_events) == 0
+    assert len(records[2].domain_events) == 0
+
+    claim_check = all_domain_events[0]
+    assert isinstance(claim_check, InboundRecordCreatedEvent)
+    assert claim_check.batch_id == records[0].batch_id
+    assert claim_check.range_start == records[0].id
+    assert claim_check.range_end == records[2].id
+    assert claim_check.count == 3
+    assert claim_check.record_ids == ()
+    assert claim_check.get_processing_lane() == EventProcessingLane.BULK

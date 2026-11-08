@@ -8,7 +8,8 @@ without raising exceptions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import structlog
@@ -28,6 +29,8 @@ from ip.engine.domain.normalization.enums import (
     RuleSeverity,
     TransformationMode,
 )
+from ip.engine.domain.normalization.event_policies import STANDALONE_OUTBOX_EVENT_POLICY
+from ip.engine.domain.normalization.events import CanonicalRecordChangedEvent
 from ip.engine.domain.normalization.ledger import (
     EntityShadowDiff,
     FieldShadowDiff,
@@ -43,12 +46,16 @@ from ip.engine.domain.normalization.transformation import (
     TransformationContext,
     TransformationResult,
 )
+from ip.engine.domain.replication.replica_record import ReplicaRecord
 from ip.engine.ports.outbound.canonical_writer_port import (
     CanonicalEntityRegistryPort,
     CanonicalWriterRegistryPort,
 )
 from ip.engine.ports.outbound.normalization_error_policy_port import (
     NormalizationErrorPolicyPort,
+)
+from ip.engine.ports.outbound.pipeline_event_policy_port import (
+    NormalizationEventPolicyPort,
 )
 from ip.engine.ports.outbound.transformer_port import (
     TransformerPort,
@@ -85,10 +92,12 @@ class NormalizeReplicaRecordResultDTO:
 
     outcome: NormalizationOutcome
     canonical_refs_produced: tuple[tuple[str, str], ...] = ()
+    canonical_events: tuple[CanonicalRecordChangedEvent, ...] = ()
     rejections_count: int = 0
     shadow_diff_count: int = 0
     resolved_references_count: int = 0
     error_detail: str | None = None
+    canonical_payloads: Mapping[tuple[str, str], JsonDict] = field(default_factory=dict)
 
 
 class _RejectionPersistenceStrategy(Protocol):
@@ -225,180 +234,232 @@ class NormalizeReplicaRecordUseCase:
                 )
             )
 
-        # 3. Open Data Plane Unit of Work
+        # 3. Open Data Plane Unit of Work and execute normalization atomically
         async with self._data_plane_uow_provider.get_data_plane_uow(
             command.tenant_id, shard_id, shard_dsn
         ) as uow:
-            # 4. Version Guard check: Idempotency & out-of-order protection
-            if transformation.mode == TransformationMode.ACTIVE and await self._is_version_stale(
-                uow, command, transformation
-            ):
-                await uow.traces.save_trace_event(
-                    transformation.build_skipped_stale_trace(
-                        replica_version=command.replica_version,
-                        trace_id=command.trace_id,
-                        correlation_id=command.correlation_id,
-                    )
-                )
+            result = await self.normalize_replica_in_uow(
+                uow=uow,
+                transformation=transformation,
+                command=command,
+                event_policy=STANDALONE_OUTBOX_EVENT_POLICY,
+            )
+            if result.is_ok:
                 await uow.commit()
-                bound_logger.info("l3_normalization_skipped_stale")
-                return Result.ok(
-                    NormalizeReplicaRecordResultDTO(outcome=NormalizationOutcome.SKIPPED_STALE)
-                )
+            return result
 
-            # 5. Retrieve replica record
-            replica = await uow.replica_records.get_by_id(
+    async def normalize_replica_in_uow(
+        self,
+        *,
+        uow: IpDataPlaneUnitOfWorkPort,
+        transformation: Transformation | None,
+        command: NormalizeReplicaRecordCommand,
+        replica: ReplicaRecord | None = None,
+        event_policy: NormalizationEventPolicyPort | None = None,
+    ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
+        """Executes Layer 3 normalization inside an caller-managed Data Plane UoW without committing."""
+        effective_policy = (
+            event_policy if event_policy is not None else STANDALONE_OUTBOX_EVENT_POLICY
+        )
+        bound_logger: FilteringBoundLogger = logger.bind(
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
+            stream=command.stream,
+            replica_record_id=command.replica_record_id,
+            replica_version=command.replica_version,
+            trace_id=command.trace_id,
+        )
+
+        if transformation is None or transformation.mode == TransformationMode.DISABLED:
+            bound_logger.info(
+                "l3_normalization_skipped_no_transformation",
+                mode=transformation.mode.value if transformation else "NONE",
+            )
+            return Result.ok(
+                NormalizeReplicaRecordResultDTO(
+                    outcome=NormalizationOutcome.SKIPPED_NO_TRANSFORMATION
+                )
+            )
+
+        # 4. Version Guard check: Idempotency & out-of-order protection
+        if transformation.mode == TransformationMode.ACTIVE and await self._is_version_stale(
+            uow, command, transformation
+        ):
+            await uow.traces.save_trace_event(
+                transformation.build_skipped_stale_trace(
+                    replica_version=command.replica_version,
+                    trace_id=command.trace_id,
+                    correlation_id=command.correlation_id,
+                )
+            )
+            bound_logger.info("l3_normalization_skipped_stale")
+            return Result.ok(
+                NormalizeReplicaRecordResultDTO(outcome=NormalizationOutcome.SKIPPED_STALE)
+            )
+
+        # 5. Resolve replica record (use caller-supplied aggregate when fused, else query UoW)
+        resolved_replica = (
+            replica
+            if replica is not None
+            else await uow.replica_records.get_by_id(
                 tenant_id=command.tenant_id,
                 record_id=command.replica_record_id,
             )
-            if replica is None:
-                bound_logger.error("replica_record_not_found")
-                return Result.err(ReplicaRecordNotFoundError.for_id(command.replica_record_id))
+        )
+        if resolved_replica is None:
+            bound_logger.error("replica_record_not_found")
+            return Result.err(ReplicaRecordNotFoundError.for_id(command.replica_record_id))
 
-            # 6. Construct immutable ReplicaSnapshot & TransformationContext
-            snapshot = ReplicaSnapshot(
-                id=replica.id,
-                connection_id=replica.connection_id,
-                stream=replica.stream,
-                record_key=replica.record_key,
-                version=replica.version,
-                data=replica.data,
-                is_deleted=(replica.deleted_at is not None),
-            )
-            context = TransformationContext(
-                connection_id=command.connection_id,
-                stream=command.stream,
-                tenant_id=command.tenant_id,
-                trace_id=command.trace_id,
-                correlation_id=command.correlation_id,
-            )
+        # 6. Construct immutable ReplicaSnapshot & TransformationContext
+        snapshot = ReplicaSnapshot(
+            id=resolved_replica.id,
+            connection_id=resolved_replica.connection_id,
+            stream=resolved_replica.stream,
+            record_key=resolved_replica.record_key,
+            version=resolved_replica.version,
+            data=resolved_replica.data,
+            is_deleted=(resolved_replica.deleted_at is not None),
+        )
+        context = TransformationContext(
+            connection_id=command.connection_id,
+            stream=command.stream,
+            tenant_id=command.tenant_id,
+            trace_id=command.trace_id,
+            correlation_id=command.correlation_id,
+        )
 
-            # 7. Shadow-Only Mode: Never mutate canonical tables or emit CanonicalRecordChangedEvent
-            if transformation.mode == TransformationMode.SHADOW:
-                return await self._execute_shadow_only_mode(
-                    uow=uow,
-                    snapshot=snapshot,
-                    context=context,
-                    command=command,
-                    transformation=transformation,
-                    bound_logger=bound_logger,
-                )
-
-            # 8. Resolve active transformer
-            transformer = self._transformer_registry.get(
-                transformation.transformation_id, transformation.transformation_version
-            )
-            if transformer is None:
-                return await self._handle_unregistered_transformer(
-                    uow=uow,
-                    command=command,
-                    transformation=transformation,
-                    target_version=transformation.transformation_version,
-                    bound_logger=bound_logger,
-                    rejection_strategy=_ACTIVE_REJECTION_STRATEGY,
-                )
-
-            # 9. Handle Tombstone: Cascade soft-delete to canonical domain entities
-            if snapshot.is_deleted:
-                return await self._handle_tombstone(
-                    uow=uow,
-                    command=command,
-                    transformation=transformation,
-                    bound_logger=bound_logger,
-                )
-
-            # 10. Execute Transformer with strategy error handling
-            transformation_result, early_result = await self._execute_transformer(
-                transformer=transformer,
+        # 7. Shadow-Only Mode: Never mutate canonical tables or emit CanonicalRecordChangedEvent
+        if transformation.mode == TransformationMode.SHADOW:
+            return await self._execute_shadow_only_mode(
+                uow=uow,
                 snapshot=snapshot,
                 context=context,
                 command=command,
                 transformation=transformation,
+                bound_logger=bound_logger,
+            )
+
+        # 8. Resolve active transformer
+        transformer = self._transformer_registry.get(
+            transformation.transformation_id, transformation.transformation_version
+        )
+        if transformer is None:
+            return await self._handle_unregistered_transformer(
                 uow=uow,
+                command=command,
+                transformation=transformation,
+                target_version=transformation.transformation_version,
                 bound_logger=bound_logger,
                 rejection_strategy=_ACTIVE_REJECTION_STRATEGY,
             )
-            if early_result is not None or transformation_result is None:
-                assert early_result is not None
-                return early_result
 
-            ledger_entry = NormalizationLedgerEntry.begin(
-                tenant_id=command.tenant_id,
-                replica_record_id=command.replica_record_id,
-                replica_version=command.replica_version,
-                transformation_id=transformation.transformation_id,
-                transformation_version=transformation.transformation_version,
-                trace_id=command.trace_id,
-                correlation_id=command.correlation_id,
-                parent_trace_id=command.parent_trace_id,
-                original_trace_id=command.original_trace_id,
-                replay_count=command.replay_count,
-            )
-
-            # 11. Record explicit transformer rejections
-            rejections_count = await self._record_transformer_rejections(
-                uow, command, transformation, transformation_result
-            )
-
-            # 12. Evaluate Quality Rules, Resolve References & Upsert Canonical Drafts
-            current_produced_refs, qr_rej_count = await self._apply_drafts_and_references(
-                uow=uow,
-                ledger_entry=ledger_entry,
-                command=command,
-                transformation=transformation,
-                drafts=transformation_result.drafts,
-            )
-            rejections_count += qr_rej_count
-
-            # 13. Tombstone Unseen Previous Drafts (Diffing)
-            await self._tombstone_unseen_drafts(
-                uow=uow,
-                ledger_entry=ledger_entry,
-                command=command,
-                transformation=transformation,
-                current_produced_refs=current_produced_refs,
-            )
-
-            # 14. Late-Arriving Reference Resolution & Back-Patching
-            resolved_count = await self._resolve_late_arriving_references(
-                uow=uow,
-                ledger_entry=ledger_entry,
-                command=command,
-                current_produced_refs=current_produced_refs,
-            )
-
-            # 15. Active + Shadow Candidate Diff Calculation
-            shadow_diff_count = await self._compute_and_record_shadow_diff(
+        # 9. Handle Tombstone: Cascade soft-delete to canonical domain entities
+        if snapshot.is_deleted:
+            return await self._handle_tombstone(
                 uow=uow,
                 command=command,
                 transformation=transformation,
-                snapshot=snapshot,
-                context=context,
-                active_drafts=transformation_result.drafts,
+                bound_logger=bound_logger,
+                event_policy=effective_policy,
             )
 
-            # 16. Complete L3 Normalization Ledger Aggregate (drains domain & trace events) & Commit
-            outcome = ledger_entry.complete_normalization(rejections_count=rejections_count)
-            await uow.normalization_ledger.record_entry(ledger_entry)
-            await uow.commit()
+        # 10. Execute Transformer with strategy error handling
+        transformation_result, early_result = await self._execute_transformer(
+            transformer=transformer,
+            snapshot=snapshot,
+            context=context,
+            command=command,
+            transformation=transformation,
+            uow=uow,
+            bound_logger=bound_logger,
+            rejection_strategy=_ACTIVE_REJECTION_STRATEGY,
+        )
+        if early_result is not None or transformation_result is None:
+            assert early_result is not None
+            return early_result
 
-            bound_logger.info(
-                "l3_normalization_completed",
-                outcome=outcome.value,
-                produced_count=len(current_produced_refs),
+        ledger_entry = NormalizationLedgerEntry.begin(
+            tenant_id=command.tenant_id,
+            replica_record_id=command.replica_record_id,
+            replica_version=command.replica_version,
+            transformation_id=transformation.transformation_id,
+            transformation_version=transformation.transformation_version,
+            trace_id=command.trace_id,
+            correlation_id=command.correlation_id,
+            parent_trace_id=command.parent_trace_id,
+            original_trace_id=command.original_trace_id,
+            replay_count=command.replay_count,
+        )
+
+        # 11. Record explicit transformer rejections
+        rejections_count = await self._record_transformer_rejections(
+            uow, command, transformation, transformation_result
+        )
+
+        # 12. Evaluate Quality Rules, Resolve References & Upsert Canonical Drafts
+        current_produced_refs, qr_rej_count = await self._apply_drafts_and_references(
+            uow=uow,
+            ledger_entry=ledger_entry,
+            command=command,
+            transformation=transformation,
+            drafts=transformation_result.drafts,
+        )
+        rejections_count += qr_rej_count
+
+        # 13. Tombstone Unseen Previous Drafts (Diffing)
+        await self._tombstone_unseen_drafts(
+            uow=uow,
+            ledger_entry=ledger_entry,
+            command=command,
+            transformation=transformation,
+            current_produced_refs=current_produced_refs,
+        )
+
+        # 14. Late-Arriving Reference Resolution & Back-Patching
+        resolved_count = await self._resolve_late_arriving_references(
+            uow=uow,
+            ledger_entry=ledger_entry,
+            command=command,
+            current_produced_refs=current_produced_refs,
+        )
+
+        # 15. Active + Shadow Candidate Diff Calculation
+        shadow_diff_count = await self._compute_and_record_shadow_diff(
+            uow=uow,
+            command=command,
+            transformation=transformation,
+            snapshot=snapshot,
+            context=context,
+            active_drafts=transformation_result.drafts,
+        )
+
+        # 16. Complete L3 Normalization Ledger Aggregate & apply event policy
+        outcome = ledger_entry.complete_normalization(rejections_count=rejections_count)
+        canonical_events = effective_policy.prepare_ledger_for_persistence(ledger_entry)
+        await uow.normalization_ledger.record_entry(ledger_entry)
+
+        bound_logger.info(
+            "l3_normalization_completed",
+            outcome=outcome.value,
+            produced_count=len(current_produced_refs),
+            rejections_count=rejections_count,
+            resolved_refs_count=resolved_count,
+        )
+
+        return Result.ok(
+            NormalizeReplicaRecordResultDTO(
+                outcome=outcome,
+                canonical_refs_produced=ledger_entry.produced_canonical_refs,
+                canonical_events=canonical_events,
                 rejections_count=rejections_count,
-                resolved_refs_count=resolved_count,
+                shadow_diff_count=shadow_diff_count,
+                resolved_references_count=resolved_count,
+                canonical_payloads={
+                    (d.canonical_type, d.source_id): dict(d.fields)
+                    for d in transformation_result.drafts
+                },
             )
-
-            return Result.ok(
-                NormalizeReplicaRecordResultDTO(
-                    outcome=outcome,
-                    canonical_refs_produced=ledger_entry.produced_canonical_refs,
-                    rejections_count=rejections_count,
-                    shadow_diff_count=shadow_diff_count,
-                    resolved_references_count=resolved_count,
-                )
-            )
+        )
 
     async def _execute_shadow_only_mode(
         self,
@@ -507,7 +568,6 @@ class NormalizeReplicaRecordUseCase:
                 correlation_id=command.correlation_id,
             )
         )
-        await uow.commit()
 
         bound_logger.info(
             "l3_shadow_normalization_completed",
@@ -574,7 +634,6 @@ class NormalizeReplicaRecordUseCase:
             detail=detail,
             summary_message=detail,
         )
-        await uow.commit()
         return Result.ok(
             NormalizeReplicaRecordResultDTO(
                 outcome=NormalizationOutcome.REJECTED,
@@ -590,6 +649,7 @@ class NormalizeReplicaRecordUseCase:
         command: NormalizeReplicaRecordCommand,
         transformation: Transformation,
         bound_logger: FilteringBoundLogger,
+        event_policy: NormalizationEventPolicyPort,
     ) -> Result[NormalizeReplicaRecordResultDTO, IpError]:
         previous_refs = await uow.normalization_ledger.get_latest_produced_refs(
             tenant_id=command.tenant_id,
@@ -626,13 +686,18 @@ class NormalizeReplicaRecordUseCase:
             )
 
         outcome = ledger_entry.complete_tombstone(tombstoned_count=len(previous_refs))
+        canonical_events = event_policy.prepare_ledger_for_persistence(ledger_entry)
         await uow.normalization_ledger.record_entry(ledger_entry)
-        await uow.commit()
         bound_logger.info(
             "l3_normalization_tombstoned",
             previous_refs_count=len(previous_refs),
         )
-        return Result.ok(NormalizeReplicaRecordResultDTO(outcome=outcome))
+        return Result.ok(
+            NormalizeReplicaRecordResultDTO(
+                outcome=outcome,
+                canonical_events=canonical_events,
+            )
+        )
 
     async def _execute_transformer(
         self,
@@ -674,7 +739,6 @@ class NormalizeReplicaRecordUseCase:
                     detail=detail,
                     summary_message=summary,
                 )
-                await uow.commit()
                 return None, Result.ok(
                     NormalizeReplicaRecordResultDTO(
                         outcome=NormalizationOutcome.REJECTED,

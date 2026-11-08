@@ -8,6 +8,7 @@ class OutboundDispatchStatus(StrEnum):
 
     PENDING = "PENDING"
     IN_FLIGHT = "IN_FLIGHT"
+    RATE_LIMITED = "RATE_LIMITED"
     DELIVERED = "DELIVERED"
     FAILED = "FAILED"
     RETRY_SCHEDULED = "RETRY_SCHEDULED"

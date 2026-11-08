@@ -93,6 +93,9 @@ from ip.engine.adapters.outbound.database.data_plane.outbound_record_repository 
 from ip.engine.adapters.outbound.database.data_plane.pending_reference_repository import (
     SqlAlchemyPendingReferenceRepository,
 )
+from ip.engine.adapters.outbound.database.data_plane.quarantine_record_repository import (
+    SqlAlchemyQuarantineRecordRepository,
+)
 from ip.engine.adapters.outbound.database.data_plane.replica_record_repository import (
     SqlAlchemyReplicaRecordRepository,
 )
@@ -121,7 +124,7 @@ from ip.engine.adapters.outbound.inbound.verifiers import NoOpVerifier
 from ip.engine.adapters.outbound.stitches.step_handlers import (
     EmitNotificationStepHandler,
     ExecuteHttpActionStepHandler,
-    OutboundDeliveryExecutorPort,
+    OutboundDeliveryStagerPort,
     OutboundRecordLookupPort,
     QueryReplicaStepHandler,
     TenantAwareNotificationOutboxAdapter,
@@ -153,6 +156,11 @@ from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case i
 from ip.engine.application.use_cases.delivery.replay_deliver_stage import (
     DeliverStageReplayProcessor,
 )
+from ip.engine.application.use_cases.delivery.stage_outbound_delivery_use_case import (
+    StageOutboundDeliveryCommand,
+    StageOutboundDeliveryResponse,
+    StageOutboundDeliveryUseCase,
+)
 from ip.engine.application.use_cases.ingestion.fetch_record_use_case import (
     FetchRecordUseCase,
 )
@@ -170,6 +178,9 @@ from ip.engine.application.use_cases.normalization.bind_stream_transformation_us
 )
 from ip.engine.application.use_cases.normalization.normalize_replica_record_use_case import (
     NormalizeReplicaRecordUseCase,
+)
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    ProcessInboundRangeUseCase,
 )
 from ip.engine.application.use_cases.normalization.promote_transformation_version_use_case import (
     PromoteTransformationVersionUseCase,
@@ -215,6 +226,10 @@ from ip.engine.domain.connection.enums import (
     CatalogCategory,
     ConnectorArchitectureType,
     EngineConnectorId,
+)
+from ip.engine.domain.constants import (
+    DEFAULT_MAX_CAUSATION_DEPTH,
+    DEFAULT_MAX_DELIVERY_ATTEMPTS,
 )
 from ip.engine.domain.enums import IpOutboxSource, PipelineStage
 from ip.engine.domain.exceptions import IpError, Result
@@ -333,6 +348,7 @@ def create_ip_data_plane_uow(
         normalized_records=SqlAlchemyNormalizedRecordRepository(tenant_session),
         entity_maps=SqlAlchemyGlobalEntityMapRepository(tenant_session),
         outbound_records=SqlAlchemyOutboundRecordRepository(tenant_session, storage=storage),
+        quarantine_records=SqlAlchemyQuarantineRecordRepository(tenant_session),
         normalization_ledger=SqlAlchemyNormalizationLedgerRepository(tenant_session),
         normalization_rejections=SqlAlchemyNormalizationRejectionRepository(tenant_session),
         pending_references=SqlAlchemyPendingReferenceRepository(tenant_session),
@@ -518,9 +534,7 @@ def create_ip_dp_outbox_relay(
     )
 
 
-class SessionScopedOutboundDeliveryExecutor(
-    OutboundDeliveryExecutorPort, IpOutboundDeliveryExecutorPort
-):
+class SessionScopedOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
     """Opens an isolated Control Plane GlobalSession per outbound delivery execution."""
 
     def __init__(
@@ -533,6 +547,8 @@ class SessionScopedOutboundDeliveryExecutor(
         cipher: CipherPort,
         token_refresher: OAuth2TokenRefresherPort,
         lock_port: TokenRefreshLockPort,
+        max_delivery_attempts: int = DEFAULT_MAX_DELIVERY_ATTEMPTS,
+        max_causation_depth: int = DEFAULT_MAX_CAUSATION_DEPTH,
     ) -> None:
         self._db_router = db_router
         self._dp_uow_provider = dp_uow_provider
@@ -541,6 +557,8 @@ class SessionScopedOutboundDeliveryExecutor(
         self._cipher = cipher
         self._token_refresher = token_refresher
         self._lock_port = lock_port
+        self._max_delivery_attempts = max_delivery_attempts
+        self._max_causation_depth = max_causation_depth
 
     async def execute(
         self,
@@ -559,6 +577,36 @@ class SessionScopedOutboundDeliveryExecutor(
                 connectors=self._connectors,
                 tiered_storage=self._tiered_storage,
                 token_manager=token_mgr,
+                max_delivery_attempts=self._max_delivery_attempts,
+                max_causation_depth=self._max_causation_depth,
+            )
+            return await use_case.execute(command)
+
+
+class SessionScopedOutboundDeliveryStager(OutboundDeliveryStagerPort):
+    """Opens an isolated Control Plane GlobalSession per pure L4->L5 egress outbox staging call."""
+
+    def __init__(
+        self,
+        *,
+        db_router: DatabaseRouterPort,
+        dp_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
+        tiered_storage: TieredStoragePort,
+    ) -> None:
+        self._db_router = db_router
+        self._dp_uow_provider = dp_uow_provider
+        self._tiered_storage = tiered_storage
+
+    async def execute(
+        self,
+        command: StageOutboundDeliveryCommand,
+    ) -> Result[StageOutboundDeliveryResponse, IpError]:
+        async with self._db_router.global_session_scope() as global_session:
+            cp_uow = create_ip_control_plane_uow(global_session)
+            use_case = StageOutboundDeliveryUseCase(
+                control_plane_uow=cp_uow,
+                data_plane_uow_provider=self._dp_uow_provider,
+                tiered_storage=self._tiered_storage,
             )
             return await use_case.execute(command)
 
@@ -571,7 +619,7 @@ def create_default_stitch_catalog() -> InMemoryStitchCatalogRegistry:
 def create_default_step_handler_registry(
     *,
     uow_provider: IpDataPlaneUnitOfWorkProviderPort,
-    delivery_executor: OutboundDeliveryExecutorPort,
+    delivery_stager: OutboundDeliveryStagerPort,
     outbound_lookup: OutboundRecordLookupPort,
 ) -> InMemoryStepHandlerRegistry:
     """Creates and populates an InMemoryStepHandlerRegistry with all 3 built-in IP Stitch step handlers."""
@@ -584,7 +632,7 @@ def create_default_step_handler_registry(
     )
     registry.register(
         ExecuteHttpActionStepHandler(
-            delivery_executor=delivery_executor,
+            delivery_stager=delivery_stager,
             outbound_lookup=outbound_lookup,
         )
     )
@@ -605,7 +653,13 @@ def create_default_stage_replay_processors() -> dict[PipelineStage, StageReplayP
 class Container(containers.DeclarativeContainer):
     """Declarative IoC container for the Integration Platform Engine."""
 
-    config = providers.Configuration()
+    config = providers.Configuration(
+        default={
+            "allow_private_ips": False,
+            "max_delivery_attempts": DEFAULT_MAX_DELIVERY_ATTEMPTS,
+            "max_causation_depth": DEFAULT_MAX_CAUSATION_DEPTH,
+        }
+    )
 
     # -----------------------------------------------------------------------
     # External Adapters & Providers (Stateless singletons / factories)
@@ -695,6 +749,14 @@ class Container(containers.DeclarativeContainer):
         entity_registry=entity_registry,
         error_policy=normalization_error_policy,
     )
+    process_inbound_range_use_case = providers.Factory(
+        ProcessInboundRangeUseCase,
+        control_plane_uow=cp_uow,
+        data_plane_uow_provider=dp_uow_provider,
+        normalize_use_case=normalize_replica_record_use_case,
+        extractor_registry=extractor_registry,
+        tiered_storage=tiered_storage,
+    )
     backfill_stream_normalization_use_case = providers.Factory(
         BackfillStreamNormalizationUseCase,
         data_plane_uow_provider=dp_uow_provider,
@@ -764,10 +826,24 @@ class Container(containers.DeclarativeContainer):
         cipher=cipher,
         token_refresher=oauth2_token_refresher,
         lock_port=token_refresh_lock,
+        max_delivery_attempts=config.max_delivery_attempts.as_(int),
+        max_causation_depth=config.max_causation_depth.as_(int),
+    )
+    session_scoped_outbound_delivery_stager = providers.Factory(
+        SessionScopedOutboundDeliveryStager,
+        db_router=db_router,
+        dp_uow_provider=dp_uow_provider,
+        tiered_storage=tiered_storage,
+    )
+    stage_outbound_delivery_use_case = providers.Factory(
+        StageOutboundDeliveryUseCase,
+        control_plane_uow=cp_uow,
+        data_plane_uow_provider=dp_uow_provider,
+        tiered_storage=tiered_storage,
     )
     execute_http_action_step_handler = providers.Factory(
         ExecuteHttpActionStepHandler,
-        delivery_executor=session_scoped_outbound_delivery,
+        delivery_stager=session_scoped_outbound_delivery_stager,
         outbound_lookup=outbound_record_lookup,
     )
 
@@ -779,7 +855,7 @@ class Container(containers.DeclarativeContainer):
     step_handler_registry = providers.Singleton(
         create_default_step_handler_registry,
         uow_provider=dp_uow_provider,
-        delivery_executor=session_scoped_outbound_delivery,
+        delivery_stager=session_scoped_outbound_delivery_stager,
         outbound_lookup=outbound_record_lookup,
     )
     predicate_registry = providers.Singleton(InMemoryPredicateRegistry)
@@ -817,6 +893,7 @@ __all__ = [
     "Container",
     "DomainRepositoryFactory",
     "SessionScopedOutboundDeliveryExecutor",
+    "SessionScopedOutboundDeliveryStager",
     "create_default_stage_replay_processors",
     "create_default_stitch_catalog",
     "create_empty_canonical_writer_registry",

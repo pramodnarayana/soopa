@@ -11,11 +11,11 @@ from seedwork.domain.exceptions import Result
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope, EventProcessingLane
 
-from pubsub.enums import ConsumerAction
+from pubsub.enums import ConsumerAction, ConsumerOutcome
 
 logger = structlog.get_logger(__name__)
 
-EnvelopeRouteHandler = Callable[[EventEnvelope], Awaitable[ConsumerAction | None]]
+EnvelopeRouteHandler = Callable[[EventEnvelope], Awaitable[ConsumerOutcome | None]]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -167,7 +167,7 @@ class EventEnvelopeDispatcher:
         """Returns the tuple of all subscribed event types."""
         return tuple(self._handlers.keys())
 
-    async def handle(self, raw_message: JsonDict) -> ConsumerAction:
+    async def handle(self, raw_message: JsonDict) -> ConsumerOutcome:
         """Entrypoint callback compatible with SqsConsumerManager.handler."""
         parsed = parse_event_envelope(raw_message)
         if parsed.is_err:
@@ -182,7 +182,7 @@ class EventEnvelopeDispatcher:
         envelope = parsed.unwrap()
         return await self.dispatch_envelope(envelope)
 
-    async def dispatch_envelope(self, envelope: EventEnvelope) -> ConsumerAction:
+    async def dispatch_envelope(self, envelope: EventEnvelope) -> ConsumerOutcome:
         """Dispatches a validated `EventEnvelope` to its registered route handler."""
         handler = self._handlers.get(envelope.event_type)
         if handler is None:
@@ -208,7 +208,7 @@ class EventEnvelopeDispatcher:
             action = await handler(envelope)
             return action or ConsumerAction.ACK
 
-    async def dispatch(self, raw_message: JsonDict) -> ConsumerAction:
+    async def dispatch(self, raw_message: JsonDict) -> ConsumerOutcome:
         """Alias for `handle(raw_message)` satisfying `SqsConsumerManager.handler`."""
         return await self.handle(raw_message)
 

@@ -6,6 +6,7 @@ from ip.engine.adapters.outbound.stitches.step_handlers import (
     EmitNotificationStepHandler,
     ExecuteHttpActionStepHandler,
     NotificationOutboxPort,
+    OutboundDeliveryStagerPort,
     QueryReplicaStepHandler,
     ReplicaLookupPort,
 )
@@ -24,6 +25,7 @@ __all__ = [
     "IpStitchCanonicalDispatcherAdapter",
     "IpStitchWorkerTickAdapter",
     "NotificationOutboxPort",
+    "OutboundDeliveryStagerPort",
     "QueryReplicaStepHandler",
     "ReplicaLookupPort",
 ]

@@ -124,6 +124,9 @@ from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRec
 from ip.engine.ports.outbound.pending_reference_repository_port import (
     PendingReferenceRepositoryPort,
 )
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecordRepositoryPort
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
@@ -589,6 +592,22 @@ class _InMemoryInboundRecordRepository(InboundRecordRepositoryPort):
         rec = self.records.get(record_id)
         return rec if rec and rec.tenant_id == tenant_id else None
 
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            self.records[rec_id]
+            for rec_id in target_ids
+            if rec_id in self.records and self.records[rec_id].tenant_id == tenant_id
+        ]
+
     async def get_by_trace_id(
         self,
         trace_id: str,
@@ -613,6 +632,7 @@ class _InMemoryDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     normalized_records: NormalizedRecordRepositoryPort
     entity_maps: GlobalEntityMapRepositoryPort
     outbound_records: OutboundRecordRepositoryPort
+    quarantine_records: QuarantineRecordRepositoryPort
     normalization_ledger: NormalizationLedgerRepositoryPort
     normalization_rejections: NormalizationRejectionRepositoryPort
     pending_references: PendingReferenceRepositoryPort

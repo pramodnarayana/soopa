@@ -570,6 +570,7 @@ class RunSyncUseCase:
             stream_name=stream_name,
             payload_bytes=page_bytes,
             is_inlined=storage_result.is_inlined,
+            batch_record_count=len(page),
             request_body=storage_result.raw_payload,
             request_s3_key=storage_result.s3_key,
             response_status_code=200,

@@ -82,6 +82,7 @@ from helpers.trace_fakes import (
     DummyPendingRefRepo,
     DummyReplicaRejectionRepo,
     InMemoryNormalizedRecordRepo,
+    InMemoryQuarantineRecordRepo,
     InMemoryReplicaRecordRepo,
     InMemoryTraceRepo,
 )
@@ -146,13 +147,54 @@ class FakeConnectionRepository(ConnectionRepositoryPort):
 class FakeInboundRecordRepository(InboundRecordRepositoryPort):
     def __init__(self) -> None:
         self.records: dict[str, InboundRecord] = {}
+        self.events: list[object] = []
 
     async def save(self, record: InboundRecord) -> None:
         self.records[record.id] = record
+        self.events.extend(record.domain_events)
+        record.clear_domain_events()
+
+    async def save_batch(self, records: Sequence[InboundRecord]) -> None:
+        for record in records:
+            self.records[record.id] = record
+            self.events.extend(record.domain_events)
+            record.clear_domain_events()
 
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
         rec = self.records.get(record_id)
         return rec if rec and rec.tenant_id == tenant_id else None
+
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        if batch_id and range_start and range_end:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id
+                and r.batch_id == batch_id
+                and range_start <= r.id <= range_end
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        if batch_id:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id and r.batch_id == batch_id
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            self.records[rec_id]
+            for rec_id in target_ids
+            if rec_id in self.records and self.records[rec_id].tenant_id == tenant_id
+        ]
 
     async def get_by_trace_id(
         self,
@@ -195,9 +237,12 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
 class FakeOutboundRecordRepository(OutboundRecordRepositoryPort):
     def __init__(self) -> None:
         self.records: dict[str, OutboundRecord] = {}
+        self.events: list[object] = []
 
     async def save(self, record: OutboundRecord) -> None:
         self.records[record.id] = record
+        self.events.extend(record.domain_events)
+        record.clear_domain_events()
 
     async def get_by_id(self, record_id: str, tenant_id: str) -> OutboundRecord | None:
         rec = self.records.get(record_id)
@@ -365,6 +410,7 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
     def __init__(self) -> None:
         self.inbound_records = FakeInboundRecordRepository()
         self.outbound_records = FakeOutboundRecordRepository()
+        self.quarantine_records = InMemoryQuarantineRecordRepo()
         self.replica_records: ReplicaRecordRepositoryPort = InMemoryReplicaRecordRepo()
         self.replica_rejections: ReplicaRejectionRepositoryPort = DummyReplicaRejectionRepo()
         self.normalized_records = InMemoryNormalizedRecordRepo()

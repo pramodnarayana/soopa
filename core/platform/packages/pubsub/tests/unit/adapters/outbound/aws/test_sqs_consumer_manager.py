@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import pytest
 from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
 from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
-from pubsub.enums import ConsumerAction
+from pubsub.enums import ConsumerAction, ConsumerDecision
 from pubsub.exceptions import ConsumerTerminalError
 from pubsub.message import AckableMessage
 from pubsub.ports.consumer_error_handler_port import ConsumerErrorHandlerPort
@@ -76,8 +76,9 @@ async def test_sqs_consumer_manager_processes_message_with_ack() -> None:
         nonlocal ack_called
         ack_called = True
 
-    async def nack() -> None:
+    async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
         nonlocal nack_called
+        _ = visibility_timeout_seconds
         nack_called = True
 
     msg = AckableMessage(payload={"trace_id": "tr_1"}, ack=ack, nack=nack)
@@ -111,8 +112,9 @@ async def test_sqs_consumer_manager_processes_message_with_nack() -> None:
         nonlocal ack_called
         ack_called = True
 
-    async def nack() -> None:
+    async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
         nonlocal nack_called
+        _ = visibility_timeout_seconds
         nack_called = True
 
     msg = AckableMessage(payload={"trace_id": "tr_2"}, ack=ack, nack=nack)
@@ -154,8 +156,8 @@ async def test_sqs_consumer_manager_delegates_to_error_handler_on_exception() ->
     async def ack() -> None:
         pass
 
-    async def nack() -> None:
-        pass
+    async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
+        _ = visibility_timeout_seconds
 
     msg = AckableMessage(payload={"trace_id": "tr_3"}, ack=ack, nack=nack)
     consumer = FakeQueueConsumer([msg])
@@ -186,8 +188,9 @@ async def test_default_consumer_error_handler_nacks_and_sleeps() -> None:
     async def ack() -> None:
         pass
 
-    async def nack() -> None:
+    async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
         nonlocal nack_called
+        _ = visibility_timeout_seconds
         nack_called = True
 
     msg = AckableMessage(payload={"trace_id": "tr_4"}, ack=ack, nack=nack)
@@ -196,6 +199,40 @@ async def test_default_consumer_error_handler_nacks_and_sleeps() -> None:
     await handler.handle_error(RuntimeError("Unexpected error"), msg, "test-queue")
 
     assert nack_called is True
+
+
+@pytest.mark.asyncio
+async def test_sqs_consumer_manager_propagates_consumer_decision_visibility_timeout() -> None:
+    observed_timeouts: list[int | None] = []
+
+    async def ack() -> None:
+        pass
+
+    async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
+        observed_timeouts.append(visibility_timeout_seconds)
+
+    msg = AckableMessage(payload={"trace_id": "tr_rl"}, ack=ack, nack=nack)
+    consumer = FakeQueueConsumer([msg])
+    processed = asyncio.Event()
+
+    async def handler(payload: JsonDict) -> ConsumerDecision:
+        _ = payload
+        processed.set()
+        return ConsumerDecision(action=ConsumerAction.NACK, visibility_timeout_seconds=35)
+
+    manager = SqsConsumerManager(
+        consumer=consumer,
+        handler=handler,
+        poll_sleep_seconds=0.01,
+        queue_name="test-queue",
+    )
+    manager.start()
+
+    await asyncio.wait_for(processed.wait(), timeout=1.0)
+    await asyncio.sleep(0.05)
+    await manager.stop()
+
+    assert observed_timeouts == [35]
 
 
 def test_sqs_consumer_manager_background_tasks_and_properties() -> None:

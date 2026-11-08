@@ -11,11 +11,13 @@ from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchem
 from ip.engine.adapters.outbound.database.data_plane.mappers import replica_record_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import ReplicaRecordModel
 from ip.engine.domain.constants import IpIdPrefix
+from ip.engine.domain.normalization.event_policies import STANDALONE_OUTBOX_EVENT_POLICY
 from ip.engine.domain.replication.enums import (
     CursorKind,
     MergeOutcome,
 )
 from ip.engine.domain.replication.replica_record import ReplicaMergePolicy, ReplicaRecord
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
     ReplicaMergeCandidate,
@@ -263,6 +265,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 outcome=MergeOutcome.INSERT,
                 version=domain_record.version,
                 data_hash=c.data_hash,
+                replica=domain_record,
             )
 
         if outcome == MergeOutcome.TOMBSTONE:
@@ -291,6 +294,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                     outcome=MergeOutcome.TOMBSTONE,
                     version=domain_record.version,
                     data_hash=c.data_hash,
+                    replica=domain_record,
                 )
 
             existing_domain.tombstone(
@@ -308,6 +312,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 outcome=MergeOutcome.TOMBSTONE,
                 version=existing_domain.version,
                 data_hash=existing_domain.data_hash,
+                replica=existing_domain,
             )
 
         assert existing_domain is not None
@@ -330,11 +335,13 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 outcome=MergeOutcome.UPDATE,
                 version=existing_domain.version,
                 data_hash=c.data_hash,
+                replica=existing_domain,
             )
 
         if outcome == MergeOutcome.NOOP:
             existing_domain.last_seen_generation = c.generation_id
             existing_domain.extracted_at = now
+            existing_domain.updated_at = now
             upsert_rows[map_key] = self._domain_to_row_dict(existing_domain)
             return MergeResult(
                 record_id=existing_domain.id,
@@ -343,6 +350,7 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 outcome=MergeOutcome.NOOP,
                 version=existing_domain.version,
                 data_hash=existing_domain.data_hash,
+                replica=existing_domain,
             )
 
         logger.info(
@@ -361,11 +369,69 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             outcome=MergeOutcome.STALE,
             version=existing_domain.version,
             data_hash=existing_domain.data_hash,
+            replica=existing_domain,
         )
+
+    @staticmethod
+    def _reconcile_persisted_results(
+        persisted_map: dict[tuple[str, str], tuple[str, int]],
+        changed_aggregates: dict[tuple[str, str], ReplicaRecord],
+        results: list[MergeResult],
+    ) -> list[MergeResult]:
+        for map_key, (persisted_id, persisted_version) in persisted_map.items():
+            if map_key in changed_aggregates:
+                agg = changed_aggregates[map_key]
+                if agg.id != persisted_id:
+                    agg.id = persisted_id
+                agg.version = persisted_version
+
+        reconciled: list[MergeResult] = []
+        for r in results:
+            map_key = (r.stream, r.record_key)
+            if map_key in persisted_map:
+                p_id, p_ver = persisted_map[map_key]
+                if r.record_id != p_id or r.version != p_ver:
+                    r = MergeResult(
+                        record_id=p_id,
+                        stream=r.stream,
+                        record_key=r.record_key,
+                        outcome=r.outcome,
+                        version=p_ver,
+                        data_hash=r.data_hash,
+                        replica=r.replica,
+                    )
+            reconciled.append(r)
+        return reconciled
+
+    def _publish_outbox_events(
+        self,
+        changed_list: list[ReplicaRecord],
+        event_policy: ReplicationEventPolicyPort | None,
+    ) -> None:
+        for agg in changed_list:
+            self._drain_trace_events(agg)
+
+        effective_policy = (
+            event_policy if event_policy is not None else STANDALONE_OUTBOX_EVENT_POLICY
+        )
+        outbox_replicas = effective_policy.select_outbox_replicas(changed_list)
+        if len(outbox_replicas) == 1:
+            self._drain_events(outbox_replicas[0], default_tenant_id=outbox_replicas[0].tenant_id)
+        elif len(outbox_replicas) > 1:
+            for agg in outbox_replicas:
+                agg.clear_domain_events()
+            chunk_size = 250
+            for idx in range(0, len(outbox_replicas), chunk_size):
+                chunk_aggs = outbox_replicas[idx : idx + chunk_size]
+                first = chunk_aggs[0]
+                first.record_batch_upsert_chunk(chunk_record_ids=tuple(a.id for a in chunk_aggs))
+                self._drain_events(first, default_tenant_id=first.tenant_id)
 
     async def merge_batch(
         self,
         candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
     ) -> list[MergeResult]:
         """Merges a batch of candidate records using one atomic PostgreSQL INSERT ... ON CONFLICT DO UPDATE."""
         if not candidates:
@@ -378,17 +444,18 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
 
         results: list[MergeResult] = []
         for c in candidates:
-            res = self._evaluate_candidate(
+            candidate_res = self._evaluate_candidate(
                 c=c,
                 existing_map=existing_map,
                 upsert_rows=upsert_rows,
                 changed_aggregates=changed_aggregates,
                 now=now,
             )
-            results.append(res)
+            results.append(candidate_res)
 
         if upsert_rows:
-            insert_stmt = pg_insert(ReplicaRecordModel).values(list(upsert_rows.values()))
+            sorted_rows = [upsert_rows[k] for k in sorted(upsert_rows.keys())]
+            insert_stmt = pg_insert(ReplicaRecordModel).values(sorted_rows)
             upsert_stmt = insert_stmt.on_conflict_do_update(
                 constraint="uq_ip_replica_record_identity",
                 set_={
@@ -406,25 +473,23 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                     "trace_id": insert_stmt.excluded.trace_id,
                     "correlation_id": insert_stmt.excluded.correlation_id,
                 },
+            ).returning(
+                ReplicaRecordModel.stream,
+                ReplicaRecordModel.record_key,
+                ReplicaRecordModel.id,
+                ReplicaRecordModel.version,
             )
-            await self._session.execute(upsert_stmt)
+            db_res = await self._session.execute(upsert_stmt)
+            persisted_map = {
+                (row.stream, row.record_key): (row.id, row.version) for row in db_res.all()
+            }
+            results = self._reconcile_persisted_results(
+                persisted_map=persisted_map,
+                changed_aggregates=changed_aggregates,
+                results=results,
+            )
 
-        changed_list = list(changed_aggregates.values())
-        for agg in changed_list:
-            self._drain_trace_events(agg)
-
-        if len(changed_list) == 1:
-            self._drain_events(changed_list[0], default_tenant_id=changed_list[0].tenant_id)
-        elif len(changed_list) > 1:
-            for agg in changed_list:
-                agg.clear_domain_events()
-            chunk_size = 250
-            for idx in range(0, len(changed_list), chunk_size):
-                chunk_aggs = changed_list[idx : idx + chunk_size]
-                first = chunk_aggs[0]
-                first.record_batch_upsert_chunk(chunk_record_ids=tuple(a.id for a in chunk_aggs))
-                self._drain_events(first, default_tenant_id=first.tenant_id)
-
+        self._publish_outbox_events(list(changed_aggregates.values()), event_policy)
         await self._session.flush()
         return results
 

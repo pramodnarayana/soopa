@@ -32,6 +32,10 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordResultDTO,
 )
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    ProcessInboundRangeCommand,
+    ProcessInboundRangeResultDTO,
+)
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
     DispatchCanonicalEventToStitchesCommand,
@@ -42,6 +46,14 @@ from ip.engine.application.use_cases.stitch.execute_stitch_worker_tick_use_case 
 )
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.ports.inbound.worker_ports import IpStreamDefinitionResolver
+
+
+class IpProcessInboundRangeExecutorPort(Protocol):
+    """Port for executing fused Layer-2 replication + Layer-3 normalization for an L1 range."""
+
+    async def execute(
+        self, command: ProcessInboundRangeCommand
+    ) -> Result[ProcessInboundRangeResultDTO, IpError]: ...
 
 
 class IpNormalizeReplicaExecutorPort(Protocol):
@@ -101,6 +113,7 @@ __all__ = [
     "IpFetchRecordExecutorPort",
     "IpNormalizeReplicaExecutorPort",
     "IpOutboundDeliveryExecutorPort",
+    "IpProcessInboundRangeExecutorPort",
     "IpRunSyncExecutorPort",
     "IpStitchCanonicalDispatcherPort",
     "IpStitchWorkerTickExecutorPort",

@@ -64,9 +64,11 @@ class SqlAlchemyOutboundRecordRepository(TenantSqlAlchemyRepository, OutboundRec
             response_s3_key=domain.response_s3_key,
             duration_ms=domain.duration_ms,
             attempt_number=domain.attempt_number,
+            conflict_strategy=domain.conflict_strategy,
             failure_category=domain.failure_category,
             retry_after_seconds=domain.retry_after_seconds,
             error_message=domain.error_message,
+            causation_depth=domain.causation_depth,
             sent_at=domain.sent_at,
         )
 

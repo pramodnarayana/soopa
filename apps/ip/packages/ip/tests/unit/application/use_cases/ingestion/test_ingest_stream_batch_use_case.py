@@ -24,6 +24,9 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecordRepositoryPort
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
@@ -59,6 +62,23 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
         all_recs = {**self.records, **self._uncommitted}
         rec = all_recs.get(record_id)
         return rec if rec and rec.tenant_id == tenant_id else None
+
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        all_recs = {**self.records, **self._uncommitted}
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            all_recs[rec_id]
+            for rec_id in target_ids
+            if rec_id in all_recs and all_recs[rec_id].tenant_id == tenant_id
+        ]
 
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         all_recs = {**self.records, **self._uncommitted}
@@ -124,6 +144,10 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
 
     @property
     def outbound_records(self) -> OutboundRecordRepositoryPort:
+        raise NotImplementedError
+
+    @property
+    def quarantine_records(self) -> QuarantineRecordRepositoryPort:
         raise NotImplementedError
 
     async def __aenter__(self) -> FakeDataPlaneUnitOfWork:
@@ -429,3 +453,39 @@ async def test_ingest_stream_batch_partial_failure_isolates_corrupt_messages() -
     persisted_event_ids = [r.external_event_id for r in uow.inbound_records.records.values()]
     assert persisted_event_ids.count("msg_valid") == 1
     assert uow.committed is True
+
+
+@pytest.mark.asyncio
+async def test_ingest_stream_batch_emits_single_range_claim_check_event() -> None:
+    uow = FakeDataPlaneUnitOfWork()
+    storage = FakeTieredStorageAdapter()
+    decoder = FakeDecoder()
+    use_case = IngestStreamBatchUseCase(uow=uow, tiered_storage=storage, decoder=decoder)
+
+    messages = [
+        RawMessageDTO(
+            message_id=f"msg_range_{idx}",
+            raw_payload=json.dumps({"order_id": f"ORD-{idx}", "amount": 10 * idx}).encode("utf-8"),
+        )
+        for idx in range(3)
+    ]
+    cmd = IngestStreamBatchCommand(
+        tenant_id="tenant_range",
+        connection_id="conn_broker",
+        app_id="partner_broker",
+        stream_name="orders",
+        batch=RawMessageBatchDTO(stream_name="orders", messages=messages),
+    )
+
+    result = await use_case.execute(cmd)
+
+    assert result.verdict == AckVerdict.ACK
+    assert result.records_ingested == 3
+    assert result.batch_id.startswith("ip_bch_")
+    assert result.range_start == result.record_ids[0]
+    assert result.range_end == result.record_ids[-1]
+
+    saved_records = sorted(uow.inbound_records.records.values(), key=lambda r: r.batch_seq)
+    assert len(saved_records) == 3
+    emitted_events = [evt for rec in saved_records for evt in rec.domain_events]
+    assert len(emitted_events) == 1

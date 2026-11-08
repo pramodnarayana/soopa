@@ -24,6 +24,7 @@ ENGINE_CORE = DomainMigrationModule(
         "pending_references",
         "global_entity_map",
         "outbound_records",
+        "quarantine_records",
         "ip_trace_events",
         "ip_outbox",
         "ip_processed_events",

@@ -14,7 +14,7 @@ from ip.engine.domain.dispatch.enums import (
     OutboundDispatchStatus,
 )
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
-from pubsub.enums import ConsumerAction
+from pubsub.enums import ConsumerAction, ConsumerDecision, ConsumerOutcome
 from seedwork.events import EventEnvelope
 
 logger = structlog.get_logger(__name__)
@@ -117,13 +117,46 @@ class IpWorkerResultDispositionHandler:
         return ConsumerAction.ACK
 
     @staticmethod
+    def to_chunk_consumer_decision(
+        envelope: EventEnvelope,
+        results: Sequence[Result[T, IpError]],
+    ) -> ConsumerOutcome:
+        """Translates chunked `Result[T, IpError]` outcomes into `ConsumerAction` or `ConsumerDecision`."""
+        action = IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, results)
+        if action is not ConsumerAction.NACK:
+            return action
+
+        retry_delays = [
+            err.details.get("retry_after_seconds")
+            for res in results
+            if res.is_err
+            and res.error is not None
+            and res.error.disposition is FailureDisposition.RETRY
+            for err in (res.error,)
+        ]
+        numeric_delays = [
+            int(delay)
+            for delay in retry_delays
+            if isinstance(delay, int) and not isinstance(delay, bool)
+        ]
+        if numeric_delays:
+            return ConsumerDecision(
+                action=ConsumerAction.NACK,
+                visibility_timeout_seconds=max(numeric_delays),
+            )
+        return ConsumerAction.NACK
+
+    @staticmethod
     def map_outbound_response(
         response: DeliverOutboundRecordResponse,
     ) -> Result[DeliverOutboundRecordResponse, IpError]:
         """Maps a `DeliverOutboundRecordResponse` status to a `Result` with appropriate `FailureDisposition`."""
         if response.status is OutboundDispatchStatus.DELIVERED:
             return Result.ok(response)
-        if response.status is OutboundDispatchStatus.RETRY_SCHEDULED:
+        if response.status in (
+            OutboundDispatchStatus.RETRY_SCHEDULED,
+            OutboundDispatchStatus.RATE_LIMITED,
+        ):
             return Result.err(
                 IpError(
                     code=IpErrorCode.EXTERNAL_API_ERROR,
@@ -135,6 +168,8 @@ class IpWorkerResultDispositionHandler:
                     disposition=FailureDisposition.RETRY,
                 )
             )
+        if response.was_quarantined:
+            return Result.ok(response)
         return Result.err(
             IpError(
                 code=IpErrorCode.EXTERNAL_API_ERROR,

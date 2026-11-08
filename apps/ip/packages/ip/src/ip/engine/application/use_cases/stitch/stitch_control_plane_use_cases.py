@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import structlog
@@ -10,9 +11,10 @@ from orchestration.domain.constants import RunStatus
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 from orchestration.domain.run import StepRun, WorkflowRun
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonPrimitive
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
+from structlog.typing import FilteringBoundLogger
 
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
@@ -75,6 +77,7 @@ class StitchSummaryDTO:
     concurrency_key_field: str | None
     resource_hint_field: str | None
     is_active: bool
+    filter_conditions: Mapping[str, JsonPrimitive] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -145,6 +148,7 @@ class RegisterStitchCommand:
     idempotency_key_field: str = "id"
     concurrency_key_field: str | None = None
     resource_hint_field: str | None = None
+    filter_conditions: Mapping[str, JsonPrimitive] = field(default_factory=dict)
     is_active: bool = True
 
 
@@ -213,6 +217,7 @@ def _to_stitch_dto(stitch: Stitch) -> StitchSummaryDTO:
         idempotency_key_field=stitch.idempotency_key_field,
         concurrency_key_field=stitch.concurrency_key_field,
         resource_hint_field=stitch.resource_hint_field,
+        filter_conditions=dict(stitch.filter_conditions),
         is_active=stitch.is_active,
     )
 
@@ -340,6 +345,67 @@ class RegisterStitchUseCase:
         self._definition_registry = definition_registry
         self._uow = uow
 
+    @staticmethod
+    def _validate_filter_conditions(conditions: Mapping[str, object]) -> Result[None, IpError]:
+        for filter_key, filter_val in conditions.items():
+            if not (isinstance(filter_val, (str, int, float, bool)) or filter_val is None):
+                return Result.err(
+                    IpError(
+                        code=IpErrorCode.INVALID_CONFIG,
+                        message=(
+                            f"filter_conditions value for key '{filter_key}' must be a primitive "
+                            f"(str, int, float, bool, None), got {type(filter_val).__name__}"
+                        ),
+                        http_status=400,
+                        details={"key": str(filter_key), "value_type": type(filter_val).__name__},
+                    )
+                )
+        return Result.ok(None)
+
+    async def _check_stitch_id_collision(
+        self, stitch_id: str, tenant_id: str, bound: FilteringBoundLogger
+    ) -> Result[None, IpError]:
+        if self._uow is not None:
+            async with self._uow:
+                existing = await self._uow.stitches.get_by_id_global(stitch_id=stitch_id)
+                if (
+                    existing is not None
+                    and existing.tenant_id != tenant_id
+                    and existing.tenant_id != "*"
+                ):
+                    bound.error(
+                        "register_stitch.cross_tenant_collision",
+                        existing_tenant_id=existing.tenant_id,
+                    )
+                    return Result.err(
+                        IpError(
+                            code=IpErrorCode.VALIDATION_FAILED,
+                            message=f"Stitch '{stitch_id}' already exists and belongs to another tenant.",
+                            http_status=409,
+                            details={"stitch_id": stitch_id, "tenant_id": tenant_id},
+                        )
+                    )
+        else:
+            existing_in_mem = self._stitch_catalog.find_any_stitch_by_id(stitch_id=stitch_id)
+            if (
+                existing_in_mem is not None
+                and existing_in_mem.tenant_id != tenant_id
+                and existing_in_mem.tenant_id != "*"
+            ):
+                bound.error(
+                    "register_stitch.cross_tenant_collision",
+                    existing_tenant_id=existing_in_mem.tenant_id,
+                )
+                return Result.err(
+                    IpError(
+                        code=IpErrorCode.VALIDATION_FAILED,
+                        message=f"Stitch '{stitch_id}' already exists and belongs to another tenant.",
+                        http_status=409,
+                        details={"stitch_id": stitch_id, "tenant_id": tenant_id},
+                    )
+                )
+        return Result.ok(None)
+
     async def execute(self, command: RegisterStitchCommand) -> Result[StitchSummaryDTO, IpError]:
         bound = logger.bind(
             tenant_id=command.tenant_id,
@@ -380,49 +446,18 @@ class RegisterStitchUseCase:
 
         if command.stitch_id and command.stitch_id.strip():
             stitch_id = command.stitch_id.strip()
-            if self._uow is not None:
-                async with self._uow:
-                    existing = await self._uow.stitches.get_by_id_global(stitch_id=stitch_id)
-                    if (
-                        existing is not None
-                        and existing.tenant_id != command.tenant_id
-                        and existing.tenant_id != "*"
-                    ):
-                        bound.error(
-                            "register_stitch.cross_tenant_collision",
-                            existing_tenant_id=existing.tenant_id,
-                        )
-                        return Result.err(
-                            IpError(
-                                code=IpErrorCode.VALIDATION_FAILED,
-                                message=f"Stitch '{stitch_id}' already exists and belongs to another tenant.",
-                                http_status=409,
-                                details={"stitch_id": stitch_id, "tenant_id": command.tenant_id},
-                            )
-                        )
-            else:
-                existing_in_mem = self._stitch_catalog.find_any_stitch_by_id(
-                    stitch_id=stitch_id,
-                )
-                if (
-                    existing_in_mem is not None
-                    and existing_in_mem.tenant_id != command.tenant_id
-                    and existing_in_mem.tenant_id != "*"
-                ):
-                    bound.error(
-                        "register_stitch.cross_tenant_collision",
-                        existing_tenant_id=existing_in_mem.tenant_id,
-                    )
-                    return Result.err(
-                        IpError(
-                            code=IpErrorCode.VALIDATION_FAILED,
-                            message=f"Stitch '{stitch_id}' already exists and belongs to another tenant.",
-                            http_status=409,
-                            details={"stitch_id": stitch_id, "tenant_id": command.tenant_id},
-                        )
-                    )
+            collision_res = await self._check_stitch_id_collision(
+                stitch_id, command.tenant_id, bound
+            )
+            if collision_res.is_err:
+                return Result.err(collision_res.unwrap_err())
         else:
             stitch_id = generate_id(IpIdPrefix.STITCH.value)
+
+        filter_res = self._validate_filter_conditions(command.filter_conditions)
+        if filter_res.is_err:
+            return Result.err(filter_res.unwrap_err())
+
         stitch = Stitch(
             id=stitch_id,
             tenant_id=command.tenant_id,
@@ -446,6 +481,7 @@ class RegisterStitchUseCase:
                 if command.resource_hint_field and command.resource_hint_field.strip()
                 else None
             ),
+            filter_conditions=dict(command.filter_conditions),
             is_active=command.is_active,
         )
         stitch.record_registered()

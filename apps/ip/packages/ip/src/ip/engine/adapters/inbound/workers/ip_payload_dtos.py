@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
@@ -73,13 +74,18 @@ def _extract_record_ids(
 
 @dataclass(frozen=True)
 class IpInboundRecordChunkPayloadDTO:
-    """Typed chunk-pointer payload for `ip.inbound_record.created` ($N=1$ realtime or $N=K$ bulk)."""
+    """Typed Range Claim-Check payload for `ip.inbound_record.created` ($K=1$ realtime or $K=N$ bulk)."""
 
     tenant_id: str
     connection_id: str
     stream_name: str
     record_ids: tuple[str, ...]
     trace_id: str
+    batch_id: str = ""
+    range_start: str = ""
+    range_end: str = ""
+    count: int = 1
+    causation_depth: int = 0
     correlation_id: str | None = None
     sync_run_id: str | None = None
     generation_id: int = 1
@@ -98,12 +104,44 @@ class IpInboundRecordChunkPayloadDTO:
         stream_name = _extract_non_empty_str(p, "stream_name") or _extract_non_empty_str(
             p, "stream"
         )
-        record_ids = _extract_record_ids(p, single_fallback_key="record_id")
+        batch_id = _extract_non_empty_str(p, "batch_id")
+        range_start = _extract_non_empty_str(p, "range_start")
+        range_end = _extract_non_empty_str(p, "range_end")
+        has_range_claim_check = bool(batch_id and range_start and range_end)
+
+        if has_range_claim_check:
+            raw_ids = p.get("record_ids")
+            if isinstance(raw_ids, (list, tuple)):
+                record_ids = tuple(
+                    str(item).strip()
+                    for item in raw_ids
+                    if isinstance(item, (str, int)) and str(item).strip()
+                )
+            else:
+                record_ids = ()
+        else:
+            record_ids = _extract_record_ids(p, single_fallback_key="record_id")
+            if not range_start and record_ids:
+                range_start = record_ids[0]
+            if not range_end and record_ids:
+                range_end = record_ids[-1]
+
+        raw_count = _extract_int(p, "count", 0)
+        resolved_count = (
+            raw_count
+            if raw_count > 0
+            else (len(record_ids) if record_ids else (1 if range_start else 0))
+        )
         trace_id = envelope.trace_id or _extract_non_empty_str(p, "trace_id") or envelope.id
-        if not tenant_id or not connection_id or not stream_name or not record_ids:
+        if (
+            not tenant_id
+            or not connection_id
+            or not stream_name
+            or (not has_range_claim_check and not record_ids)
+        ):
             return Result.err(
                 _validation_error(
-                    "Invalid ip.inbound_record.created payload: missing tenant_id, connection_id, stream_name, or record_ids.",
+                    "Invalid ip.inbound_record.created payload: missing tenant_id, connection_id, stream_name, or range/record pointers.",
                     {"event_id": envelope.id},
                 )
             )
@@ -114,6 +152,11 @@ class IpInboundRecordChunkPayloadDTO:
                 stream_name=stream_name,
                 record_ids=record_ids,
                 trace_id=trace_id,
+                batch_id=batch_id,
+                range_start=range_start,
+                range_end=range_end,
+                count=max(1, resolved_count),
+                causation_depth=max(0, _extract_int(p, "causation_depth", 0)),
                 correlation_id=envelope.correlation_id
                 or _extract_optional_str(p, "correlation_id"),
                 sync_run_id=_extract_optional_str(p, "sync_run_id"),
@@ -372,6 +415,8 @@ class IpOutboundRecordChunkPayloadDTO:
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    dispatch_headers: Mapping[str, str] = field(default_factory=dict)
+    conflict_strategy: str = "FAIL"
 
     @classmethod
     def from_envelope(
@@ -386,6 +431,13 @@ class IpOutboundRecordChunkPayloadDTO:
         record_ids = _extract_record_ids(p, single_fallback_key="record_id")
         status = _extract_non_empty_str(p, "status", OutboundDispatchStatus.PENDING.value)
         trace_id = envelope.trace_id or _extract_non_empty_str(p, "trace_id") or envelope.id
+        raw_headers = p.get("dispatch_headers")
+        dispatch_headers = (
+            {str(k): str(v) for k, v in raw_headers.items()}
+            if isinstance(raw_headers, dict)
+            else {}
+        )
+        conflict_strategy = _extract_non_empty_str(p, "conflict_strategy", "FAIL")
         if not tenant_id or not connection_id or not record_ids:
             return Result.err(
                 _validation_error(
@@ -406,6 +458,8 @@ class IpOutboundRecordChunkPayloadDTO:
                 parent_trace_id=_extract_optional_str(p, "parent_trace_id"),
                 original_trace_id=_extract_optional_str(p, "original_trace_id"),
                 replay_count=max(0, _extract_int(p, "replay_count", 0)),
+                dispatch_headers=dispatch_headers,
+                conflict_strategy=conflict_strategy,
             )
         )
 

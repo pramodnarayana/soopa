@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from observability import ObservabilityProvider
+import structlog
 from orchestration.application.use_cases import (
     ResolveMatchConditionsCommand,
     ResolveMatchConditionsUseCase,
@@ -22,7 +22,7 @@ from ip.engine.ports.outbound.stitch_catalog_registry_port import (
 )
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
-logger = ObservabilityProvider.logger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -107,6 +107,15 @@ class DispatchCanonicalEventToStitchesUseCase:
         for stitch in stitches:
             if not stitch.is_active:
                 continue
+            if not stitch.matches_payload(command.payload):
+                logger.info(
+                    "stitch_event_filtered_out",
+                    tenant_id=command.tenant_id,
+                    stitch_id=stitch.id,
+                    workflow_id=stitch.workflow_id,
+                    canonical_event_type=command.canonical_event_type,
+                )
+                continue
 
             if stitch.is_trigger:
                 idempotency_key = stitch.extract_idempotency_key(command.payload, command.event_id)
@@ -138,6 +147,7 @@ class DispatchCanonicalEventToStitchesUseCase:
                 sig_res = await self._resolve_matches_use_case.execute(
                     ResolveMatchConditionsCommand(
                         tenant_id=command.tenant_id,
+                        workflow_id=stitch.workflow_id,
                         condition_kind=ConditionKind.CANONICAL_EVENT,
                         event_key=event_key,
                         resource_hint=resource_hint,

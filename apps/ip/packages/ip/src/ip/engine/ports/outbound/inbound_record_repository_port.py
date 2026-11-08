@@ -17,9 +17,27 @@ class InboundRecordRepositoryPort(Protocol):
         """Persists the inbound record into the partition-backed storage."""
         ...
 
+    async def save_batch(self, records: Sequence[InboundRecord]) -> None:
+        """Persists an ordered batch of inbound records atomically inside the active transaction."""
+        for record in records:
+            await self.save(record)
+
     @abstractmethod
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
         """Retrieves an inbound record by primary key scoped to tenant."""
+        ...
+
+    @abstractmethod
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        """Retrieves an ordered slice of inbound records for a Range Claim-Check (`[range_start .. range_end]`)."""
         ...
 
     @abstractmethod

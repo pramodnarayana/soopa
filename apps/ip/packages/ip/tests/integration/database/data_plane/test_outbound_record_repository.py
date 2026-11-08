@@ -7,8 +7,12 @@ from database.types import TenantSession
 from ip.engine.adapters.outbound.database.data_plane.outbound_record_repository import (
     SqlAlchemyOutboundRecordRepository,
 )
+from ip.engine.adapters.outbound.database.data_plane.quarantine_record_repository import (
+    SqlAlchemyQuarantineRecordRepository,
+)
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.quarantine_record import QuarantineRecord
 
 pytestmark = pytest.mark.integration
 
@@ -106,3 +110,44 @@ async def test_l5_outbound_record_repository_persists_idempotency_key_with_redac
     assert looked_up.failure_category == "RATE_LIMITED"
     assert looked_up.retry_after_seconds == 30
     assert looked_up.request_headers["Authorization"] == "***REDACTED***"
+
+
+@pytest.mark.asyncio
+async def test_l5_quarantine_record_repository_persists_dlq_entry_on_postgres(
+    tenant_session: TenantSession,
+) -> None:
+    repo = SqlAlchemyQuarantineRecordRepository(tenant_session)
+    tenant_id = "ten_dp_l5_qrn"
+    conn_id = "ip_conn_erp_qrn"
+
+    record = QuarantineRecord.create(
+        tenant_id=tenant_id,
+        connection_id=conn_id,
+        outbound_record_id="ip_out_qrn_001",
+        stream_name="records_alpha",
+        idempotency_key="idem_qrn_001",
+        trace_id="ip_trc_qrn_001",
+        correlation_id="corr_qrn_001",
+        failure_category="VALIDATION_ERROR",
+        error_code="HTTP_422",
+        error_message="Unprocessable entity payload",
+        response_status_code=422,
+        attempt_count=1,
+        request_body={"record_id": "REC-422"},
+        response_body={"error": "invalid_schema"},
+    )
+    await repo.save(record)
+
+    fetched = await repo.get_by_id(record.id, tenant_id)
+    assert fetched is not None
+    assert fetched.id == record.id
+    assert fetched.outbound_record_id == "ip_out_qrn_001"
+    assert fetched.failure_category == "VALIDATION_ERROR"
+    assert fetched.error_code == "HTTP_422"
+    assert fetched.response_status_code == 422
+    assert fetched.request_body == {"record_id": "REC-422"}
+    assert fetched.response_body == {"error": "invalid_schema"}
+
+    listed = await repo.list_by_tenant(tenant_id, connection_id=conn_id)
+    assert len(listed) == 1
+    assert listed[0].id == record.id

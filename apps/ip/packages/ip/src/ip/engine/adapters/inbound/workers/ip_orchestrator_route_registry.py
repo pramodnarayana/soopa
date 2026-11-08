@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from decimal import Decimal
 
 import structlog
@@ -25,6 +25,10 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordResultDTO,
 )
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    CanonicalChangeItemDTO,
+    ProcessInboundRangeCommand,
+)
 from ip.engine.application.use_cases.replication.replicate_records_use_case import (
     ReplicateRecordsCommand,
     ReplicateRecordsUseCase,
@@ -45,10 +49,12 @@ from ip.engine.application.use_cases.stitch.execute_stitch_worker_tick_use_case 
 from ip.engine.application.worker_ports import (
     IpBackfillStreamNormalizationExecutorPort,
     IpNormalizeReplicaExecutorPort,
+    IpProcessInboundRangeExecutorPort,
     IpStitchCanonicalDispatcherPort,
     IpStitchWorkerTickExecutorPort,
     IpStreamDefinitionResolver,
 )
+from ip.engine.domain.constants import DEFAULT_MAX_CAUSATION_DEPTH
 from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.enums import IpEventType
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
@@ -64,7 +70,7 @@ from seedwork.events import EventEnvelope
 logger = structlog.get_logger(__name__)
 
 
-def _sanitize_json_dict(raw: dict[str, JsonValue | Decimal]) -> JsonDict:
+def _sanitize_json_dict(raw: Mapping[str, JsonValue | Decimal]) -> JsonDict:
     sanitized: JsonDict = {}
     for k, v in raw.items():
         if isinstance(v, Decimal):
@@ -98,23 +104,27 @@ class IpOrchestratorRouteRegistry:
         dp_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
         normalize_use_case: IpNormalizeReplicaExecutorPort,
         backfill_use_case: IpBackfillStreamNormalizationExecutorPort,
+        process_inbound_range_use_case: IpProcessInboundRangeExecutorPort | None = None,
         extractor_registry: RecordExtractorRegistry | None = None,
         tiered_storage: TieredStoragePort | None = None,
         stitch_dispatcher: IpStitchCanonicalDispatcherPort | None = None,
         stitch_worker_tick: IpStitchWorkerTickExecutorPort | None = None,
         stream_definition_resolver: IpStreamDefinitionResolver | None = None,
         max_chunk_concurrency: int = 20,
+        max_causation_depth: int = DEFAULT_MAX_CAUSATION_DEPTH,
         worker_id: str = "ip-orchestrator-worker",
     ) -> None:
         self._dp_uow_provider = dp_uow_provider
         self._normalize_use_case = normalize_use_case
         self._backfill_use_case = backfill_use_case
+        self._process_inbound_range_use_case = process_inbound_range_use_case
         self._extractor_registry = extractor_registry or RecordExtractorRegistry()
         self._tiered_storage = tiered_storage
         self._stitch_dispatcher = stitch_dispatcher
         self._stitch_worker_tick = stitch_worker_tick
         self._stream_definition_resolver = stream_definition_resolver
         self._max_chunk_concurrency = max(1, max_chunk_concurrency)
+        self._max_causation_depth = max(1, max_causation_depth)
         self._worker_id = worker_id
 
     def register_routes(self, dispatcher: EventEnvelopeDispatcher) -> None:
@@ -234,6 +244,58 @@ class IpOrchestratorRouteRegistry:
                 else None
             )
 
+            if self._process_inbound_range_use_case is not None:
+                range_res = await self._process_inbound_range_use_case.execute(
+                    ProcessInboundRangeCommand(
+                        tenant_id=dto.tenant_id,
+                        connection_id=dto.connection_id,
+                        stream=dto.stream_name,
+                        batch_id=dto.batch_id,
+                        range_start=dto.range_start,
+                        range_end=dto.range_end,
+                        record_ids=dto.record_ids,
+                        count=dto.count,
+                        generation_id=dto.generation_id,
+                        sync_id=dto.sync_run_id or dto.batch_id or dto.range_start,
+                        trace_id=dto.trace_id,
+                        correlation_id=dto.correlation_id,
+                        causation_depth=dto.causation_depth,
+                        stream_definition=stream_def,
+                    )
+                )
+                if range_res.is_err:
+                    return IpWorkerResultDispositionHandler.to_consumer_action(envelope, range_res)
+                range_dto = range_res.unwrap()
+                if not range_dto.canonical_changes or self._stitch_dispatcher is None:
+                    return ConsumerAction.ACK
+                if dto.causation_depth >= self._max_causation_depth:
+                    logger.info(
+                        "ip_orchestrator_stitch_dispatch_suppressed_causation_depth",
+                        event_id=envelope.id,
+                        tenant_id=dto.tenant_id,
+                        causation_depth=dto.causation_depth,
+                        max_causation_depth=self._max_causation_depth,
+                    )
+                    return ConsumerAction.ACK
+                return await self._dispatch_canonical_changes_in_memory(
+                    envelope=envelope,
+                    tenant_id=dto.tenant_id,
+                    causation_depth=dto.causation_depth,
+                    changes=range_dto.canonical_changes,
+                    sem=sem,
+                )
+
+            if not dto.record_ids:
+                logger.error(
+                    "ip_orchestrator_range_event_without_range_executor_rejected",
+                    event_id=envelope.id,
+                    tenant_id=dto.tenant_id,
+                    stream_name=dto.stream_name,
+                    batch_id=dto.batch_id,
+                    range_start=dto.range_start,
+                )
+                return ConsumerAction.DLQ
+
             async def _replicate_one(
                 inbound_record_id: str,
             ) -> Result[ReplicationSummary, IpError]:
@@ -266,6 +328,57 @@ class IpOrchestratorRouteRegistry:
             return IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
 
         return await self._run_with_idempotency(envelope, dto.tenant_id, _execute_chunk)
+
+    async def _dispatch_canonical_changes_in_memory(
+        self,
+        *,
+        envelope: EventEnvelope,
+        tenant_id: str,
+        causation_depth: int,
+        changes: tuple[CanonicalChangeItemDTO, ...],
+        sem: asyncio.Semaphore,
+    ) -> ConsumerAction:
+        dispatcher = self._stitch_dispatcher
+        assert dispatcher is not None
+
+        async def _dispatch_change(
+            change: CanonicalChangeItemDTO,
+        ) -> Result[DispatchCanonicalEventResultDTO, IpError]:
+            async with sem:
+                payload_data = _sanitize_json_dict(change.canonical_payload)
+                payload_data.setdefault("source_id", change.source_id)
+                payload_data.setdefault("canonical_type", change.canonical_type)
+                payload_data.setdefault("action", change.action)
+                payload_data["causation_depth"] = causation_depth
+                res = await dispatcher.execute(
+                    DispatchCanonicalEventToStitchesCommand(
+                        tenant_id=tenant_id,
+                        canonical_event_type=change.canonical_type,
+                        event_id=(
+                            f"{envelope.id}:{change.canonical_type}:"
+                            f"{change.source_id}:{change.replica_version}"
+                        ),
+                        payload=payload_data,
+                        trace_id=change.trace_id or envelope.trace_id or "",
+                        correlation_id=change.correlation_id or envelope.correlation_id,
+                    )
+                )
+                if res.is_err:
+                    return Result.err(_workflow_error_to_ip_error(res.unwrap_err()))
+                return Result.ok(res.unwrap())
+
+        outcomes = await asyncio.gather(*(_dispatch_change(item) for item in changes))
+        action = IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
+        if action is ConsumerAction.ACK and self._stitch_worker_tick is not None:
+            has_ready_steps = any(
+                r.is_ok
+                and r.value is not None
+                and (r.value.started_run_ids or r.value.signalled_step_ids)
+                for r in outcomes
+            )
+            if has_ready_steps:
+                await self._drain_inline_stitch_ticks()
+        return action
 
     async def handle_replica_record_changed(self, envelope: EventEnvelope) -> ConsumerAction:
         parsed_res = IpReplicaRecordChunkPayloadDTO.from_envelope(envelope)
@@ -533,6 +646,7 @@ __all__ = [
     "IpBackfillStreamNormalizationExecutorPort",
     "IpNormalizeReplicaExecutorPort",
     "IpOrchestratorRouteRegistry",
+    "IpProcessInboundRangeExecutorPort",
     "IpStitchCanonicalDispatcherPort",
     "IpStitchWorkerTickExecutorPort",
     "IpStreamDefinitionResolver",

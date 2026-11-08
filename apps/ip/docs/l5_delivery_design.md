@@ -24,45 +24,53 @@ Our Layer-5 architecture is explicitly designed to be **strictly superior** to *
 
 ---
 
-## 2. End-to-End Execution Topology (`L4 -> L5 -> Destination`)
+## 2. End-to-End Execution Topology (`L4 Pure Staging -> Egress SQS -> L5 Delivery Worker -> Return Leg`)
 
 ```mermaid
 sequenceDiagram
     participant L4 as L4 Orchestration Worker (ExecuteStitchWorkerTickUseCase)
     participant Handler as ExecuteHttpActionStepHandler (ReconcilableStepHandlerPort)
-    participant UseCase as DeliverOutboundRecordUseCase (L5 Application)
+    participant Stager as StageOutboundDeliveryUseCase (Pure DB + S3, Zero HTTP)
+    participant OutSQS as Egress SQS Queue (ip.outbound_record.created)
+    participant L5 as ip-delivery-worker (DeliverOutboundRecordUseCase)
     participant TokenMgr as TokenManagerService (Control Plane + Lock)
-    participant DP as IpDataPlaneUnitOfWork (public.outbound_records + S3)
+    participant DP as IpDataPlaneUnitOfWork (outbound_records + quarantine_records + inbound_records)
     participant Conn as DestinationConnectorPort (GenericHttp / DeclarativeHttp)
 
     L4->>Handler: execute(StepContext, step_input)
-    Handler->>UseCase: execute(DeliverOutboundRecordCommand)
-    UseCase->>DP: get_by_idempotency_key(tenant_id, connection_id, idempotency_key)
+    Handler->>Stager: execute(StageOutboundDeliveryCommand)
+    Stager->>DP: TieredStorage.store(request) + save OutboundRecord(PENDING) + Outbox + commit
+    Stager-->>Handler: StageOutboundDeliveryResponse(status=PENDING)
+    Handler-->>L4: Result.ok(ExecuteHttpActionStepOutput)
+
+    OutSQS->>L5: EventEnvelope(ip.outbound_record.created)
+    L5->>DP: get_by_idempotency_key(tenant_id, connection_id, idempotency_key)
     alt Already DELIVERED
-        DP-->>UseCase: OutboundRecord(status=DELIVERED)
-        UseCase-->>Handler: DeliverOutboundRecordResponse(was_deduplicated=True)
-        Handler-->>L4: Result.ok(ExecuteHttpActionStepOutput)
+        DP-->>L5: OutboundRecord(status=DELIVERED)
+        L5-->>OutSQS: ConsumerAction.ACK (was_deduplicated=True)
     else Not yet delivered
-        UseCase->>TokenMgr: get_valid_credentials(tenant_id, connection_id)
+        L5->>TokenMgr: get_valid_credentials(tenant_id, connection_id)
         Note over TokenMgr: Fast-path check (now < expires_at - 900s)<br/>Slow-path: Acquire TokenRefreshLockPort +<br/>SELECT FOR UPDATE double-check + OAuth2 refresh
-        TokenMgr-->>UseCase: ResolvedConnectionCredentialsDTO
-        UseCase->>DP: TieredStorage.store(request) + save OutboundRecord(PENDING) + commit
-        UseCase->>Conn: write_record(WriteRecordCommand with Idempotency-Key)
+        TokenMgr-->>L5: ResolvedConnectionCredentialsDTO
+        L5->>DP: mark_in_flight_attempt(IN_FLIGHT) + commit
+        L5->>Conn: write_record(WriteRecordCommand with Idempotency-Key)
         alt HTTP 401 on OAuth2 Connection
-            UseCase->>TokenMgr: get_valid_credentials(force_refresh=True, stale_access_token=...)
-            UseCase->>Conn: Replay write_record once with rotated token
+            L5->>TokenMgr: get_valid_credentials(FORCE_ROTATION, stale_access_token=...)
+            L5->>Conn: Replay write_record once with rotated token
         end
-        Conn-->>UseCase: WriteResultDTO (status_code, headers, body, retry_after_seconds, failure_category)
-        UseCase->>DP: TieredStorage.store(response) + mark_delivered / schedule_retry / mark_failed + commit
-        UseCase-->>Handler: DeliverOutboundRecordResponse
-        alt DELIVERED
-            Handler-->>L4: Result.ok(ExecuteHttpActionStepOutput)
-        else RETRY_SCHEDULED (429 RATE_LIMITED)
-            Handler-->>L4: Result.err(RetryableFailure(RATE_LIMITED, retry_after=..., is_app_error=False))
-        else RETRY_SCHEDULED (5xx / Network TRANSIENT)
-            Handler-->>L4: Result.err(RetryableFailure(DOWNSTREAM_5XX, is_app_error=True))
-        else FAILED (400 / 422 / Terminal)
-            Handler-->>L4: Result.err(TerminalFailure(DOWNSTREAM_4XX))
+        Conn-->>L5: WriteResultDTO (status_code, headers, body, retry_after_seconds)
+        alt HTTP 200 / 201 (DELIVERED)
+            L5->>DP: mark_delivered(DELIVERED) + optional Return-Leg InboundRecord(ResponseEventEnvelope, causation_depth+1) + commit
+            L5-->>OutSQS: ConsumerAction.ACK
+        else HTTP 429 (RATE_LIMITED)
+            L5->>DP: mark_rate_limited(RATE_LIMITED, retry_after_seconds) + commit
+            L5-->>OutSQS: ConsumerDecision(NACK, visibility_timeout_seconds=Retry-After)
+        else HTTP 5xx (< max_delivery_attempts)
+            L5->>DP: schedule_retry(RETRY_SCHEDULED, attempt+1) + commit
+            L5-->>OutSQS: ConsumerDecision(NACK, visibility_timeout_seconds=backoff)
+        else HTTP 4xx Terminal or Exhausted 5xx Retries
+            L5->>DP: mark_failed(FAILED) + QuarantineRecord.create(quarantine_records) + commit
+            L5-->>OutSQS: ConsumerAction.ACK (Quarantined in DB DLQ)
         end
     end
 ```
@@ -132,5 +140,9 @@ Both outgoing request payloads and incoming response payloads are evaluated agai
 ### 5.3 L4 Crash Reconciliation (`ExecuteHttpActionStepHandler.reconcile`)
 When a worker crashes while an `ip.stitch.execute_http_action` step is in `StepStatus.IN_FLIGHT_EFFECT`, `ReapExpiredLeasesUseCase` invokes `ExecuteHttpActionStepHandler.reconcile(context, step_input)`:
 1. Queries `OutboundRecordRepositoryPort.get_by_idempotency_key(context.tenant_id, connection_id, context.idempotency_key)`.
-2. If the record is already `OutboundDispatchStatus.DELIVERED`, returns `ReconcileOutcome.adopt(output)` so `ReapExpiredLeasesUseCase` completes the step via `CompleteStepUseCase` and advances downstream DAG nodes without re-sending the HTTP mutation.
-3. If the record is `PENDING`, `RETRY_SCHEDULED`, or not found, returns `ReconcileOutcome.not_found()` so the step is safely re-queued with the identical `context.idempotency_key`.
+2. If the record is already staged (`PENDING`, `IN_FLIGHT`, `RATE_LIMITED`, `RETRY_SCHEDULED`, or `DELIVERED`), returns `ReconcileOutcome.adopt(output)` so `ReapExpiredLeasesUseCase` completes the step via `CompleteStepUseCase` without duplicating the outbox entry.
+3. If no record was persisted before the crash, returns `ReconcileOutcome.not_found()` so the step is safely re-queued with the identical `context.idempotency_key`.
+
+### 5.4 Quarantine DLQ (`public.quarantine_records`) & Return-Leg Loopback (`ResponseEventEnvelope`)
+- **Database Quarantine DLQ:** When an outbound mutation fails with a non-retryable `4xx` (`VALIDATION_ERROR` / `TERMINAL`) or exhausts `max_delivery_attempts` on transient `5xx` errors, `DeliverOutboundRecordUseCase` atomically commits `OutboundRecord(FAILED)` and a `QuarantineRecord` row in `public.quarantine_records`, allowing `ip-delivery-worker` to `ACK` the SQS message cleanly while preserving a queryable operator DLQ for one-click replay.
+- **Return-Leg Callback Loopback & Echo Suppression:** When a destination returns `200`/`201` with a generated `destination_id` and `causation_depth < max_causation_depth`, `DeliverOutboundRecordUseCase` packages a `ResponseEventEnvelope` and atomically stages a return-leg `InboundRecord` (`IngestionMode.RETURN_LEG_CALLBACK`, `causation_depth + 1`, `<stream>__return_leg`) into `public.ip_outbox` (`ip.inbound_record.created`), feeding generated external IDs back through L1 $\to$ L2 $\to$ L3 (`ip.entity_maps`) with zero circular database locks and strict `max_causation_depth` echo-loop termination.

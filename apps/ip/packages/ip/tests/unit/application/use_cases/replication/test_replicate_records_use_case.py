@@ -35,6 +35,10 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
     ReplicaMergeCandidate,
@@ -74,7 +78,10 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
     async def merge_batch(
         self,
         candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
     ) -> list[MergeResult]:
+        _ = event_policy
         self.batch_sizes.append(len(candidates))
         results: list[MergeResult] = []
         for c in candidates:
@@ -266,6 +273,22 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
         return self.records.get((tenant_id, record_id))
 
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            self.records[(tenant_id, rec_id)]
+            for rec_id in target_ids
+            if (tenant_id, rec_id) in self.records
+        ]
+
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         return [
             r for r in self.records.values() if r.tenant_id == tenant_id and r.trace_id == trace_id
@@ -323,7 +346,11 @@ class FakeNormalizedRecordRepository(NormalizedRecordRepositoryPort):
         return []
 
     async def list_by_source(
-        self, tenant_id: str, canonical_type: str, source_id: str
+        self,
+        tenant_id: str,
+        canonical_type: str,
+        source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
         return ()
 
@@ -359,6 +386,8 @@ class FakeOutboundRecordRepository(OutboundRecordRepositoryPort):
 
 
 class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
+    quarantine_records: QuarantineRecordRepositoryPort
+
     def __init__(self) -> None:
         self.replica_records = FakeReplicaRecordRepository()
         self.replica_rejections = FakeReplicaRejectionRepository()

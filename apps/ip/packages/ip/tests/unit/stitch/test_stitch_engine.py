@@ -680,3 +680,136 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
     ).unwrap()
     assert len(tick_res.completed_step_ids) == 0
     assert len(tick_res.failed_or_retried_step_ids) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("payload_status", "payload_region"),
+    [
+        ("DRAFT", "EU"),
+        ("APPROVED", "US"),
+    ],
+)
+async def test_stitch_filter_conditions_skip_non_matching_canonical_payload(
+    payload_status: str,
+    payload_region: str,
+) -> None:
+    now = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
+    uow = InMemoryWorkflowUnitOfWork()
+    definitions = InMemoryWorkflowDefinitionRegistry()
+    sched = WorkflowStepSchedulerService()
+    start_run = StartRunUseCase(
+        uow_factory=lambda: uow,
+        definition_registry=definitions,
+        step_scheduler=sched,
+    )
+    match_resolver = ResolveMatchConditionsUseCase(
+        uow_factory=lambda: uow,
+        definition_registry=definitions,
+        step_scheduler=sched,
+    )
+    definitions.register(
+        WorkflowDefinition(
+            workflow_id="synthetic.filtered_stitch",
+            version=1,
+            nodes=(
+                NodeDefinition(
+                    node_key="step_one",
+                    step_type="ip.stitch.noop",
+                    kind=NodeKind.TASK,
+                ),
+            ),
+        )
+    )
+    stitch_catalog = InMemoryStitchCatalogRegistry()
+    stitch_catalog.register_stitch(
+        Stitch(
+            id="ip_stc_filtered_1",
+            tenant_id="ten_alpha",
+            workflow_id="synthetic.filtered_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.order.v1",
+            is_trigger=True,
+            filter_conditions={"status": "APPROVED", "region": "EU"},
+        )
+    )
+    dispatcher = DispatchCanonicalEventToStitchesUseCase(
+        stitch_catalog=stitch_catalog,
+        start_run_use_case=start_run,
+        resolve_matches_use_case=match_resolver,
+    )
+    res = await dispatcher.execute(
+        DispatchCanonicalEventToStitchesCommand(
+            tenant_id="ten_alpha",
+            canonical_event_type="canonical.order.v1",
+            event_id=f"evt_{payload_status}_{payload_region}",
+            payload={"id": "ORD-1", "status": payload_status, "region": payload_region},
+            trace_id="trc_filter_skip",
+            now=now,
+        )
+    )
+    assert res.is_ok
+    dto = res.unwrap()
+    assert dto.started_run_ids == ()
+    assert dto.deduplicated_run_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_stitch_filter_conditions_start_run_on_matching_canonical_payload() -> None:
+    now = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
+    uow = InMemoryWorkflowUnitOfWork()
+    definitions = InMemoryWorkflowDefinitionRegistry()
+    sched = WorkflowStepSchedulerService()
+    start_run = StartRunUseCase(
+        uow_factory=lambda: uow,
+        definition_registry=definitions,
+        step_scheduler=sched,
+    )
+    match_resolver = ResolveMatchConditionsUseCase(
+        uow_factory=lambda: uow,
+        definition_registry=definitions,
+        step_scheduler=sched,
+    )
+    definitions.register(
+        WorkflowDefinition(
+            workflow_id="synthetic.filtered_stitch",
+            version=1,
+            nodes=(
+                NodeDefinition(
+                    node_key="step_one",
+                    step_type="ip.stitch.noop",
+                    kind=NodeKind.TASK,
+                ),
+            ),
+        )
+    )
+    stitch_catalog = InMemoryStitchCatalogRegistry()
+    stitch_catalog.register_stitch(
+        Stitch(
+            id="ip_stc_filtered_2",
+            tenant_id="ten_alpha",
+            workflow_id="synthetic.filtered_stitch",
+            workflow_version=1,
+            canonical_event_type="canonical.order.v1",
+            is_trigger=True,
+            filter_conditions={"status": "APPROVED", "region": "EU"},
+        )
+    )
+    dispatcher = DispatchCanonicalEventToStitchesUseCase(
+        stitch_catalog=stitch_catalog,
+        start_run_use_case=start_run,
+        resolve_matches_use_case=match_resolver,
+    )
+    res = await dispatcher.execute(
+        DispatchCanonicalEventToStitchesCommand(
+            tenant_id="ten_alpha",
+            canonical_event_type="canonical.order.v1",
+            event_id="evt_approved_order",
+            payload={"id": "ORD-2", "status": "APPROVED", "region": "EU"},
+            trace_id="trc_filter_match",
+            now=now,
+        )
+    )
+    assert res.is_ok
+    dto = res.unwrap()
+    assert len(dto.started_run_ids) == 1

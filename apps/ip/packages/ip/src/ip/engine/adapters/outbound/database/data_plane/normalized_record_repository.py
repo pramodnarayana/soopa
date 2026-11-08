@@ -67,7 +67,10 @@ class SqlAlchemyNormalizedRecordRepository(
         orm = self._to_orm_model(record)
         self._session.add(orm)
         self._drain_trace_events(record)
-        self._drain_events(record, default_tenant_id=record.tenant_id)
+        if record.replay_count > 0:
+            self._drain_events(record, default_tenant_id=record.tenant_id)
+        else:
+            record.clear_domain_events()
         await self._session.flush()
 
     async def get_by_id(self, record_id: str, tenant_id: str) -> NormalizedRecord | None:
@@ -86,14 +89,18 @@ class SqlAlchemyNormalizedRecordRepository(
         tenant_id: str,
         canonical_type: str,
         source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
+        conditions = [
+            NormalizedRecordModel.tenant_id == tenant_id,
+            NormalizedRecordModel.canonical_type == str(canonical_type),
+            NormalizedRecordModel.source_id == source_id,
+        ]
+        if connection_id is not None:
+            conditions.append(NormalizedRecordModel.connection_id == connection_id)
         stmt = (
             select(NormalizedRecordModel)
-            .where(
-                NormalizedRecordModel.tenant_id == tenant_id,
-                NormalizedRecordModel.canonical_type == str(canonical_type),
-                NormalizedRecordModel.source_id == source_id,
-            )
+            .where(*conditions)
             .order_by(NormalizedRecordModel.normalized_at.desc())
         )
         result = await self._session.execute(stmt)

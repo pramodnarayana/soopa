@@ -213,6 +213,12 @@ class StitchRecord(IpGlobalBase):
     idempotency_key_field: Mapped[str] = mapped_column(String(128), nullable=False, default="id")
     concurrency_key_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
     resource_hint_field: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    filter_conditions: Mapped[JsonDict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

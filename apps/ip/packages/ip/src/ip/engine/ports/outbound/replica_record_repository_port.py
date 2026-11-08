@@ -11,6 +11,7 @@ from seedwork.domain.types import JsonDict, JsonPrimitive
 
 from ip.engine.domain.replication.enums import MergeOutcome
 from ip.engine.domain.replication.replica_record import ReplicaRecord
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ class MergeResult:
     outcome: MergeOutcome
     version: int
     data_hash: str
+    replica: ReplicaRecord | None = None
 
 
 class ReplicaRecordRepositoryPort(Protocol):
@@ -77,6 +79,8 @@ class ReplicaRecordRepositoryPort(Protocol):
     async def merge_batch(
         self,
         candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
     ) -> list[MergeResult]:
         """Bulk merges a batch of extracted records, returning per-row merge outcomes."""
         ...

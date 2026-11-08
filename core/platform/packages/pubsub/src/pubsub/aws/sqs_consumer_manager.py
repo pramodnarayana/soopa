@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 
 import structlog
 from pubsub.aws.error_handlers import DefaultConsumerErrorHandler
-from pubsub.enums import ConsumerAction
+from pubsub.enums import ConsumerAction, ConsumerDecision, ConsumerOutcome
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
 from pubsub.message import AckableMessage
 from pubsub.ports.consumer_error_handler_port import ConsumerErrorHandlerPort
@@ -45,7 +45,7 @@ class SqsConsumerManager:
     def __init__(
         self,
         consumer: MessageConsumerPort,
-        handler: Callable[[JsonDict], Awaitable[ConsumerAction | None]],
+        handler: Callable[[JsonDict], Awaitable[ConsumerOutcome | None]],
         queue_name: str = "",
         poll_sleep_seconds: float = 0.1,
         error_sleep_seconds: float = 5.0,
@@ -152,11 +152,18 @@ class SqsConsumerManager:
                         payload_keys=keys,
                     )
 
-                    action = await self.handler(ackable_msg.payload)
-                    action = action or ConsumerAction.ACK
-
-                    strategy_fn = CONSUMER_ACTION_STRATEGIES.get(action, _execute_ack)
-                    await strategy_fn(ackable_msg)
+                    outcome = await self.handler(ackable_msg.payload)
+                    if isinstance(outcome, ConsumerDecision):
+                        if outcome.action in (ConsumerAction.NACK, ConsumerAction.DLQ):
+                            await ackable_msg.nack(
+                                visibility_timeout_seconds=outcome.visibility_timeout_seconds
+                            )
+                        else:
+                            await ackable_msg.ack()
+                    else:
+                        resolved_action = outcome or ConsumerAction.ACK
+                        strategy_fn = CONSUMER_ACTION_STRATEGIES.get(resolved_action, _execute_ack)
+                        await strategy_fn(ackable_msg)
 
             except asyncio.CancelledError:
                 break

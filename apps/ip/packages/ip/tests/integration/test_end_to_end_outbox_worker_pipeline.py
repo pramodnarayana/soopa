@@ -1,10 +1,10 @@
 """End-to-End Transactional Outbox & Worker Pipeline Integration Tests on real PostgreSQL.
 
-Exercises the complete 5-Stage SEDA Pipeline (L1 -> Outbox Drain -> L2 -> Outbox Drain ->
-L3 -> Outbox Drain -> L4 -> Outbox Drain -> L5 + Trace Waterfall & Consumer Idempotency)
-for both:
-  1. Realtime Webhook (N=1 on EventProcessingLane.REALTIME)
-  2. Bulk Stream Sync Batch (N=4 on EventProcessingLane.BULK)
+Exercises the Gear-1 2-Queue Data Plane Pipeline:
+  Stage 1 (L1): `InboundRecord` / `create_range_batch` -> `ip_outbox` (`ip.inbound_record.created`)
+  Stage 2 (L2->L3): Fused `ProcessInboundRangeUseCase` in a single ACID transaction (zero internal hops)
+  Stage 3 (L4): In-memory Stitch evaluation -> `OutboundRecord(PENDING)` -> `ip_outbox` (`ip.outbound_record.created`)
+  Stage 4 (L5): `ip-delivery-worker` `DELIVERED` + Return-Leg `ResponseEventEnvelope` loopback (`causation_depth=1`)
 inside SAVEPOINT-isolated transactions (`global_session`, `tenant_session`, `transactional_router`).
 """
 
@@ -21,6 +21,7 @@ from ip.engine.adapters.inbound.workers import (
     IpNormalizeReplicaExecutorPort,
     IpOrchestratorRouteRegistry,
     IpOutboundDeliveryExecutorPort,
+    IpProcessInboundRangeExecutorPort,
     IpRunSyncExecutorPort,
     IpStitchCanonicalDispatcherPort,
 )
@@ -57,6 +58,11 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordResultDTO,
     NormalizeReplicaRecordUseCase,
 )
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    ProcessInboundRangeCommand,
+    ProcessInboundRangeResultDTO,
+    ProcessInboundRangeUseCase,
+)
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
     DispatchCanonicalEventToStitchesCommand,
@@ -75,7 +81,8 @@ from ip.engine.domain.dispatch.enums import (
     OutboundDispatchStatus,
 )
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
-from ip.engine.domain.enums import IpOutboxSource
+from ip.engine.domain.dispatch.response_envelope import ResponseEventEnvelope
+from ip.engine.domain.enums import IpEventType, IpOutboxSource
 from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.domain.normalization.enums import TransformationMode
 from ip.engine.domain.normalization.policies import (
@@ -100,7 +107,10 @@ from ip.engine.domain.replication.enums import (
     SyncRunKind,
     SyncRunStatus,
 )
-from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.inbound_record import (
+    InboundBatchItemSpec,
+    InboundRecord,
+)
 from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.domain.trace.enums import IpTraceEventType
 from ip.engine.ports.outbound.canonical_writer_port import CanonicalWriterPort
@@ -257,6 +267,18 @@ class _PipelineNormalizeExecutor(IpNormalizeReplicaExecutorPort):
         return await self._use_case.execute(command)
 
 
+class _PipelineRangeExecutor(IpProcessInboundRangeExecutorPort):
+    """Wraps ProcessInboundRangeUseCase with the test's Control Plane UoW."""
+
+    def __init__(self, use_case: ProcessInboundRangeUseCase) -> None:
+        self._use_case = use_case
+
+    async def execute(
+        self, command: ProcessInboundRangeCommand
+    ) -> Result[ProcessInboundRangeResultDTO, IpError]:
+        return await self._use_case.execute(command)
+
+
 class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
     """L4 Stitch dispatcher that stages an L5 OutboundRecord in the Data Plane outbox for each canonical event."""
 
@@ -277,6 +299,8 @@ class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
         shard_id, shard_dsn = shard_res.unwrap()
         body: JsonDict = dict(command.payload)
         raw_bytes = json.dumps(body).encode("utf-8")
+        raw_depth = command.payload.get("causation_depth", 0)
+        causation_depth = int(raw_depth) if isinstance(raw_depth, int) else 0
         out_rec = OutboundRecord.create_pending(
             tenant_id=command.tenant_id,
             connection_id=self._connection_id,
@@ -292,6 +316,7 @@ class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
             idempotency_key=f"idem_l5_{command.event_id}",
             external_record_id=str(command.payload.get("source_id", command.event_id)),
             request_body=body,
+            causation_depth=causation_depth,
         )
         async with self._dp_uow_provider.get_data_plane_uow(
             command.tenant_id, shard_id, shard_dsn
@@ -308,16 +333,24 @@ class _PipelineStitchDispatcher(IpStitchCanonicalDispatcherPort):
 
 
 class _PipelineOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
-    """L5 Outbound Delivery executor that marks staged OutboundRecords as DELIVERED in the DB."""
+    """L5 Outbound Delivery executor that marks staged OutboundRecords DELIVERED and loops back Return-Leg."""
 
-    def __init__(self, dp_uow_provider: SqlAlchemyIpTenantUoWProvider) -> None:
+    def __init__(
+        self,
+        dp_uow_provider: SqlAlchemyIpTenantUoWProvider,
+        *,
+        max_causation_depth: int = 3,
+    ) -> None:
         self._dp_uow_provider = dp_uow_provider
+        self._max_causation_depth = max_causation_depth
         self.delivered_commands: list[DeliverOutboundRecordCommand] = []
 
     async def execute(
         self, command: DeliverOutboundRecordCommand
     ) -> Result[DeliverOutboundRecordResponse, IpError]:
         self.delivered_commands.append(command)
+        dest_id = f"sink_{command.record_id}"
+        return_leg_id: str | None = None
         if command.idempotency_key:
             shard_res = await self._dp_uow_provider.resolve_shard_info(command.tenant_id)
             shard_id, shard_dsn = shard_res.unwrap()
@@ -331,12 +364,50 @@ class _PipelineOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
                 )
                 if staged is not None:
                     staged.mark_delivered(
-                        response_status_code=200,
-                        response_body={"status": "OK", "id": command.record_id},
+                        response_status_code=201,
+                        response_body={"status": "OK", "external_id": dest_id},
                         duration_ms=11,
-                        external_record_id=command.record_id,
+                        external_record_id=dest_id,
                     )
                     await uow.outbound_records.save(staged)
+                    if command.causation_depth < self._max_causation_depth:
+                        env_vo = ResponseEventEnvelope(
+                            outbound_record_id=staged.id,
+                            source_record_id=command.record_id or staged.id,
+                            destination_id=dest_id,
+                            connection_id=command.connection_id,
+                            app_id=staged.app_id,
+                            stream_name=command.stream_name,
+                            operation=command.operation,
+                            status_code=201,
+                            originating_trace_id=command.original_trace_id or staged.trace_id,
+                            causation_depth=command.causation_depth + 1,
+                            correlation_id=command.correlation_id,
+                            response_body={"status": "OK", "external_id": dest_id},
+                        )
+                        env_payload = env_vo.to_payload()
+                        env_bytes = json.dumps(env_payload).encode("utf-8")
+                        ret_records = InboundRecord.create_range_batch(
+                            tenant_id=command.tenant_id,
+                            connection_id=command.connection_id,
+                            app_id=staged.app_id,
+                            stream_name=f"{command.stream_name}__return_leg",
+                            items=(
+                                InboundBatchItemSpec(
+                                    payload_bytes=env_bytes,
+                                    is_inlined=True,
+                                    request_body=env_payload,
+                                    external_event_id=f"retleg:{staged.id}",
+                                ),
+                            ),
+                            causation_depth=command.causation_depth + 1,
+                            parent_trace_id=staged.trace_id,
+                            original_trace_id=command.original_trace_id or staged.trace_id,
+                            correlation_id=command.correlation_id,
+                            ingestion_mode=IngestionMode.RETURN_LEG_CALLBACK,
+                        )
+                        await uow.inbound_records.save_batch(ret_records)
+                        return_leg_id = ret_records[0].id
                     await uow.commit()
         return Result.ok(
             DeliverOutboundRecordResponse(
@@ -345,9 +416,10 @@ class _PipelineOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
                 trace_id=command.trace_id or "tr_1",
                 idempotency_key=command.idempotency_key or "idem_1",
                 record_id=command.record_id or "rec_1",
-                destination_id=f"sink_{command.record_id}",
-                response_status_code=200,
+                destination_id=dest_id,
+                response_status_code=201,
                 duration_ms=11,
+                return_leg_inbound_record_id=return_leg_id,
             )
         )
 
@@ -440,6 +512,11 @@ async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
         entity_registry=entity_registry,
         error_policy=DefaultNormalizationErrorPolicy(),
     )
+    range_uc = ProcessInboundRangeUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow_provider=dp_uow_provider,
+        normalize_use_case=normalize_uc,
+    )
     backfill_uc = BackfillStreamNormalizationUseCase(
         data_plane_uow_provider=dp_uow_provider,
         normalize_use_case=normalize_uc,
@@ -450,19 +527,26 @@ async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
     orch_dispatcher = EventEnvelopeDispatcher()
     deliv_dispatcher = EventEnvelopeDispatcher()
 
-    stream_def = StreamDefinition(
-        stream="records_alpha",
-        primary_key=(("record_id",),),
-        cursor_field=("observed_at",),
-        cursor_kind=CursorKind.STRING,
-        sync_mode=SyncMode.INCREMENTAL,
-    )
+    def _resolve_stream_def(
+        _tenant_id: str,
+        _connection_id: str,
+        stream_name: str,
+    ) -> StreamDefinition:
+        return StreamDefinition(
+            stream=stream_name,
+            primary_key=(("record_id",),),
+            cursor_field=("observed_at",),
+            cursor_kind=CursorKind.STRING,
+            sync_mode=SyncMode.INCREMENTAL,
+        )
+
     orch_registry = IpOrchestratorRouteRegistry(
         dp_uow_provider=dp_uow_provider,
         normalize_use_case=_PipelineNormalizeExecutor(normalize_uc),
         backfill_use_case=backfill_uc,
+        process_inbound_range_use_case=_PipelineRangeExecutor(range_uc),
         stitch_dispatcher=stitch_dispatcher,
-        stream_definition_resolver=lambda t, c, s: stream_def,
+        stream_definition_resolver=_resolve_stream_def,
         max_chunk_concurrency=4,
     )
     orch_registry.register_routes(orch_dispatcher)
@@ -533,42 +617,54 @@ async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
 
     assert "REC-RT-01" in canonical_writer.rows
     assert canonical_writer.rows["REC-RT-01"]["amount"] == 42.5
-    assert any(c.record_id == "REC-RT-01" for c in delivery_executor.delivered_commands)
-    assert len(orch_rt_bridge.published_envelopes) >= 3
-    assert len(deliv_rt_bridge.published_envelopes) >= 1
-
-    bulk_records_payload: JsonDict = {
-        "records": [
-            {"record_id": "REC-BLK-01", "amount": 100.0, "observed_at": "2026-10-27T11:00:00Z"},
-            {"record_id": "REC-BLK-02", "amount": 200.0, "observed_at": "2026-10-27T11:00:00Z"},
-            {"record_id": "REC-BLK-03", "amount": 300.0, "observed_at": "2026-10-27T11:00:00Z"},
-            {"record_id": "REC-BLK-04", "amount": 400.0, "observed_at": "2026-10-27T11:00:00Z"},
-        ]
-    }
-    stream_def_bulk = StreamDefinition(
-        stream="records_alpha",
-        record_path=("records",),
-        primary_key=(("record_id",),),
-        cursor_field=("observed_at",),
-        cursor_kind=CursorKind.STRING,
-        sync_mode=SyncMode.INCREMENTAL,
+    assert any(
+        c.record_id == "REC-RT-01"
+        and c.payload.get("amount") == 42.5
+        and c.payload.get("status") == "ACTIVE"
+        for c in delivery_executor.delivered_commands
     )
-    orch_registry._stream_definition_resolver = lambda t, c, s: stream_def_bulk
+    # 2-Queue Boundary invariant: zero internal replica/canonical hops on orchestrator queues;
+    # only initial L1 ingress + L5->L1 return-leg callback (`causation_depth=1`) hit ingress queue!
+    orch_rt_types = [e.event_type for e in orch_rt_bridge.published_envelopes]
+    assert orch_rt_types == [
+        IpEventType.INBOUND_RECORD_CREATED.value,
+        IpEventType.INBOUND_RECORD_CREATED.value,
+    ]
+    assert orch_rt_bridge.published_envelopes[1].payload.get("causation_depth") == 1
+    assert [e.event_type for e in deliv_rt_bridge.published_envelopes] == [
+        IpEventType.OUTBOUND_RECORD_CREATED.value
+    ]
 
-    bulk_inb = InboundRecord.create(
+    bulk_specs = tuple(
+        InboundBatchItemSpec(
+            payload_bytes=json.dumps(
+                {
+                    "record_id": f"REC-BLK-0{idx}",
+                    "amount": float(idx * 100),
+                    "observed_at": "2026-10-27T11:00:00Z",
+                }
+            ).encode("utf-8"),
+            is_inlined=True,
+            request_body={
+                "record_id": f"REC-BLK-0{idx}",
+                "amount": float(idx * 100),
+                "observed_at": "2026-10-27T11:00:00Z",
+            },
+        )
+        for idx in range(1, 5)
+    )
+    bulk_range_records = InboundRecord.create_range_batch(
         tenant_id=seeded_ip_tenant,
         connection_id=connection.id,
         app_id="acme_source",
         stream_name="records_alpha",
-        payload_bytes=json.dumps(bulk_records_payload).encode("utf-8"),
-        is_inlined=True,
-        request_body=bulk_records_payload,
+        items=bulk_specs,
         trace_id="ip_trc_bulk_001",
         correlation_id="BATCH-BLK-01",
         ingestion_mode=IngestionMode.PULL_INCREMENTAL,
     )
     async with dp_uow_provider.get_data_plane_uow(seeded_ip_tenant, shard_id, shard_dsn) as uow:
-        await uow.inbound_records.save(bulk_inb)
+        await uow.inbound_records.save_batch(bulk_range_records)
         await uow.commit()
 
     for _ in range(6):
@@ -580,18 +676,28 @@ async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
         rec_key = f"REC-BLK-0{idx}"
         assert rec_key in canonical_writer.rows
         assert canonical_writer.rows[rec_key]["amount"] == float(idx * 100)
-        assert any(c.record_id == rec_key for c in delivery_executor.delivered_commands)
+        assert any(
+            c.record_id == rec_key
+            and c.payload.get("amount") == float(idx * 100)
+            and c.payload.get("status") == "ACTIVE"
+            for c in delivery_executor.delivered_commands
+        )
 
-    rep_bulk_envelopes = [
+    inb_bulk_envelopes = [
         env
         for env in orch_bulk_bridge.published_envelopes
-        if env.event_type == "ip.replica_record.changed"
+        if env.event_type == IpEventType.INBOUND_RECORD_CREATED.value
     ]
-    assert len(rep_bulk_envelopes) == 1
-    rep_bulk_env = rep_bulk_envelopes[0]
-    assert rep_bulk_env.lane is EventProcessingLane.BULK
-    raw_bulk_ids = rep_bulk_env.payload.get("record_ids")
-    assert isinstance(raw_bulk_ids, list) and len(raw_bulk_ids) == 4
+    assert len(inb_bulk_envelopes) == 1
+    inb_bulk_env = inb_bulk_envelopes[0]
+    assert inb_bulk_env.lane is EventProcessingLane.BULK
+    assert inb_bulk_env.payload.get("count") == 4
+    assert inb_bulk_env.payload.get("range_start") == bulk_range_records[0].id
+    assert inb_bulk_env.payload.get("range_end") == bulk_range_records[-1].id
+    assert all(
+        env.event_type == IpEventType.INBOUND_RECORD_CREATED.value
+        for env in orch_bulk_bridge.published_envelopes
+    )
 
     session_yielded = False
     async for verify_session in transactional_router.get_tenant_session(

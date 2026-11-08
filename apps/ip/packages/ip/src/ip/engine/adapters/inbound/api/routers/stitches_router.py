@@ -94,6 +94,7 @@ def _to_stitch_response(dto: StitchSummaryDTO) -> StitchHttpResponse:
         idempotency_key_field=dto.idempotency_key_field,
         concurrency_key_field=dto.concurrency_key_field,
         resource_hint_field=dto.resource_hint_field,
+        filter_conditions=dict(dto.filter_conditions),
         is_active=dto.is_active,
     )
 
@@ -257,6 +258,7 @@ async def register_stitch(
             idempotency_key_field=body.idempotency_key_field,
             concurrency_key_field=body.concurrency_key_field,
             resource_hint_field=body.resource_hint_field,
+            filter_conditions=body.filter_conditions,
             is_active=body.is_active,
         )
     )

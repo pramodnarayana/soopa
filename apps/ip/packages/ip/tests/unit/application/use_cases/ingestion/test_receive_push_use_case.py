@@ -30,6 +30,9 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecordRepositoryPort
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
@@ -54,6 +57,38 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
         if rec and rec.tenant_id == tenant_id:
             return rec
         return None
+
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        if batch_id and range_start and range_end:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id
+                and r.batch_id == batch_id
+                and range_start <= r.id <= range_end
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        if batch_id:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id and r.batch_id == batch_id
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            self.records[rec_id]
+            for rec_id in target_ids
+            if rec_id in self.records and self.records[rec_id].tenant_id == tenant_id
+        ]
 
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         return [
@@ -116,6 +151,10 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
 
     @property
     def outbound_records(self) -> OutboundRecordRepositoryPort:
+        raise NotImplementedError
+
+    @property
+    def quarantine_records(self) -> QuarantineRecordRepositoryPort:
         raise NotImplementedError
 
     async def __aenter__(self) -> FakeDataPlaneUnitOfWork:

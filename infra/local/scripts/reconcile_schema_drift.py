@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 
 import structlog
 from database.provider import DatabaseProvider
@@ -19,6 +20,156 @@ from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 
 logger = structlog.get_logger(__name__)
+
+
+async def _reconcile_ip_shard(shard_url: str) -> None:
+    """Applies idempotent Gear-1 Data Plane DDL and RLS policies on the IP tenant shard."""
+    shard_provider = DatabaseProvider.from_url(shard_url)
+    try:
+        async with shard_provider.session() as shard_session:
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.inbound_records ADD COLUMN IF NOT EXISTS batch_id VARCHAR(64);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.inbound_records ADD COLUMN IF NOT EXISTS batch_seq INTEGER;"
+                )
+            )
+            await shard_session.execute(
+                text("UPDATE public.inbound_records SET batch_id = id WHERE batch_id IS NULL;")
+            )
+            await shard_session.execute(
+                text("UPDATE public.inbound_records SET batch_seq = 0 WHERE batch_seq IS NULL;")
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.inbound_records ADD COLUMN IF NOT EXISTS causation_depth INTEGER NOT NULL DEFAULT 0;"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_inbound_records_batch_range ON public.inbound_records (tenant_id, batch_id, id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.outbound_records ADD COLUMN IF NOT EXISTS conflict_strategy VARCHAR(32) NOT NULL DEFAULT 'FAIL';"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.outbound_records ADD COLUMN IF NOT EXISTS causation_depth INTEGER NOT NULL DEFAULT 0;"
+                )
+            )
+            await shard_session.execute(
+                text("""
+                CREATE TABLE IF NOT EXISTS public.quarantine_records (
+                    id VARCHAR(64) NOT NULL PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    connection_id VARCHAR(64) NOT NULL,
+                    outbound_record_id VARCHAR(64) NOT NULL,
+                    stream_name VARCHAR(128) NOT NULL,
+                    idempotency_key VARCHAR(255),
+                    trace_id VARCHAR(64) NOT NULL,
+                    correlation_id VARCHAR(255),
+                    failure_category VARCHAR(64) NOT NULL,
+                    error_code VARCHAR(64),
+                    error_message TEXT NOT NULL,
+                    response_status_code INTEGER,
+                    attempt_count INTEGER NOT NULL DEFAULT 1,
+                    request_body JSONB,
+                    request_s3_key VARCHAR(512),
+                    response_body JSONB,
+                    response_s3_key VARCHAR(512),
+                    quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                );
+                """)
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.quarantine_records ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(255);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.quarantine_records ADD COLUMN IF NOT EXISTS error_code VARCHAR(64);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.quarantine_records ADD COLUMN IF NOT EXISTS attempt_count INTEGER NOT NULL DEFAULT 1;"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.quarantine_records ADD COLUMN IF NOT EXISTS request_s3_key VARCHAR(512);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.quarantine_records ADD COLUMN IF NOT EXISTS response_body JSONB;"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.quarantine_records ADD COLUMN IF NOT EXISTS response_s3_key VARCHAR(512);"
+                )
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.quarantine_records DROP COLUMN IF EXISTS operation;")
+            )
+            await shard_session.execute(
+                text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                        AND table_name = 'quarantine_records'
+                        AND column_name = 'attempts'
+                    ) THEN
+                        UPDATE public.quarantine_records
+                        SET attempt_count = attempts
+                        WHERE attempts IS NOT NULL AND (attempt_count IS NULL OR attempt_count = 1);
+                        ALTER TABLE public.quarantine_records DROP COLUMN attempts;
+                    END IF;
+                END $$;
+                """)
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_quarantine_tenant_time ON public.quarantine_records (tenant_id, quarantined_at);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_quarantine_outbound ON public.quarantine_records (tenant_id, outbound_record_id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_quarantine_trace ON public.quarantine_records (tenant_id, trace_id);"
+                )
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.quarantine_records ENABLE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text(
+                    "DROP POLICY IF EXISTS tenant_isolation_quarantine_records ON public.quarantine_records;"
+                )
+            )
+            await shard_session.execute(
+                text("""
+                CREATE POLICY tenant_isolation_quarantine_records ON public.quarantine_records
+                    USING (tenant_id = current_setting('platform.current_tenant_id', true));
+                """)
+            )
+            await shard_session.commit()
+    finally:
+        await shard_provider.close()
 
 
 async def reconcile(domain: str = "all") -> None:
@@ -84,6 +235,12 @@ async def reconcile(domain: str = "all") -> None:
                 )
                 if conn_res.rowcount and conn_res.rowcount > 0:
                     logger.info("reconciled_no_auth_connections", activated_count=conn_res.rowcount)
+
+                await session.execute(
+                    text(
+                        "ALTER TABLE ip.stitches ADD COLUMN IF NOT EXISTS filter_conditions JSONB NOT NULL DEFAULT '{}'::jsonb;"
+                    )
+                )
 
             # 2. Platform Domain: Identity capabilities & RBAC
             if target in ("all", "platform", "identity"):
@@ -167,6 +324,13 @@ async def reconcile(domain: str = "all") -> None:
 
             await session.commit()
             if target in ("all", "ip"):
+                shard_url = (
+                    os.environ.get("IP_DATABASE_URL")
+                    or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
+                    or settings.shard_overrides.get("ip_shard_1")
+                )
+                if shard_url:
+                    await _reconcile_ip_shard(shard_url)
                 logger.info("ip_schema_reconciled")
             if target in ("all", "platform", "identity"):
                 logger.info("platform_schema_reconciled")

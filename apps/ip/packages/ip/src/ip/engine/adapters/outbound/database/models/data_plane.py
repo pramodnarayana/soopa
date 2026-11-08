@@ -31,6 +31,7 @@ class InboundRecordModel(IpTenantBase, TenantTraceableOrmModel):
     __tablename__ = "inbound_records"
     __table_args__ = (
         PrimaryKeyConstraint("id", "received_at"),
+        Index("idx_inbound_batch_range", "tenant_id", "batch_id", "batch_seq", "id"),
         Index("idx_inbound_trace", "tenant_id", "trace_id"),
         Index("idx_inbound_corr", "tenant_id", "correlation_id"),
         Index("idx_inbound_conn", "tenant_id", "connection_id"),
@@ -50,6 +51,9 @@ class InboundRecordModel(IpTenantBase, TenantTraceableOrmModel):
     connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
     app_id: Mapped[str] = mapped_column(String(64), nullable=False, server_default="")
     stream_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    batch_id: Mapped[str] = mapped_column(String(64), nullable=False, server_default="")
+    batch_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    causation_depth: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     ingestion_mode: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default="PUSH_FULL"
     )
@@ -215,10 +219,12 @@ class OutboundRecordModel(IpTenantBase, TenantTraceableOrmModel):
     response_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    conflict_strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="FAIL")
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     failure_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     retry_after_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    causation_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
@@ -365,6 +371,36 @@ class IpDataPlaneOutboxRecord(IpTenantBase, OutboxMixin):
     )
 
 
+class QuarantineRecordModel(IpTenantBase):
+    """Database record representation of the quarantine_records DLQ table in tenant shards."""
+
+    __tablename__ = "quarantine_records"
+    __table_args__ = (
+        Index("idx_quarantine_tenant_time", "tenant_id", "quarantined_at"),
+        Index("idx_quarantine_outbound", "tenant_id", "outbound_record_id"),
+        Index("idx_quarantine_trace", "tenant_id", "trace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    outbound_record_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    stream_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    trace_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    correlation_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    failure_category: Mapped[str] = mapped_column(String(64), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False)
+    response_status_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    request_body: Mapped[JsonDict | None] = mapped_column(JSONB, nullable=True)
+    request_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    response_body: Mapped[JsonDict | None] = mapped_column(JSONB, nullable=True)
+    response_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    quarantined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class IpProcessedEventModel(IpTenantBase, ProcessedEventMixin):
     """Consumer idempotency ledger in tenant shards (public.ip_processed_events)."""
 
@@ -384,6 +420,7 @@ __all__ = [
     "NormalizedRecordModel",
     "OutboundRecordModel",
     "PendingReferenceModel",
+    "QuarantineRecordModel",
     "ReplicaRecordModel",
     "ReplicaRejectionModel",
     "TimelineEntryModel",

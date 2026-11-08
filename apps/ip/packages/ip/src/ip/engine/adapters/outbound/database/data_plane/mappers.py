@@ -9,12 +9,14 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     NormalizationRejectionModel,
     NormalizedRecordModel,
     OutboundRecordModel,
+    QuarantineRecordModel,
     ReplicaRecordModel,
     ReplicaRejectionModel,
 )
 from ip.engine.domain.dispatch.classifier import redact_sensitive_headers
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.quarantine_record import QuarantineRecord
 from ip.engine.domain.normalization.ledger import NormalizationRejectionEntry
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap, NormalizedRecord
 from ip.engine.domain.replication.enums import IngestionMode
@@ -36,6 +38,9 @@ def inbound_record_to_domain(orm: InboundRecordModel) -> InboundRecord:
         connection_id=orm.connection_id,
         app_id=orm.app_id,
         stream_name=orm.stream_name,
+        batch_id=orm.batch_id,
+        batch_seq=orm.batch_seq,
+        causation_depth=orm.causation_depth,
         ingestion_mode=IngestionMode(orm.ingestion_mode),
         sync_run_id=orm.sync_run_id,
         generation_id=orm.generation_id,
@@ -192,10 +197,36 @@ def outbound_record_to_domain(orm: OutboundRecordModel) -> OutboundRecord:
         response_s3_key=orm.response_s3_key,
         duration_ms=orm.duration_ms,
         attempt_number=orm.attempt_number,
+        conflict_strategy=orm.conflict_strategy,
         failure_category=orm.failure_category,
         retry_after_seconds=orm.retry_after_seconds,
         error_message=orm.error_message,
+        causation_depth=orm.causation_depth,
         sent_at=orm.sent_at,
+    )
+
+
+def quarantine_record_to_domain(orm: QuarantineRecordModel) -> QuarantineRecord:
+    """Maps a QuarantineRecordModel ORM row to a QuarantineRecord domain value object."""
+    return QuarantineRecord(
+        id=orm.id,
+        tenant_id=orm.tenant_id,
+        connection_id=orm.connection_id,
+        outbound_record_id=orm.outbound_record_id,
+        stream_name=orm.stream_name,
+        idempotency_key=orm.idempotency_key,
+        trace_id=orm.trace_id,
+        correlation_id=orm.correlation_id,
+        failure_category=orm.failure_category,
+        error_code=orm.error_code,
+        error_message=orm.error_message,
+        response_status_code=orm.response_status_code,
+        attempt_count=orm.attempt_count,
+        request_body=dict(orm.request_body) if orm.request_body is not None else None,
+        request_s3_key=orm.request_s3_key,
+        response_body=dict(orm.response_body) if orm.response_body is not None else None,
+        response_s3_key=orm.response_s3_key,
+        quarantined_at=orm.quarantined_at,
     )
 
 
@@ -219,6 +250,7 @@ __all__ = [
     "normalization_rejection_to_domain",
     "normalized_record_to_domain",
     "outbound_record_to_domain",
+    "quarantine_record_to_domain",
     "replica_record_to_domain",
     "replica_rejection_to_domain",
     "trace_event_to_domain",

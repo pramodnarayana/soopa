@@ -13,10 +13,13 @@ from ip.engine.domain.enums import IpIdPrefix
 __all__ = [
     "DEFAULT_IDEMPOTENCY_HEADER",
     "DEFAULT_INLINE_THRESHOLD_BYTES",
+    "DEFAULT_MAX_CAUSATION_DEPTH",
+    "DEFAULT_MAX_DELIVERY_ATTEMPTS",
     "DEFAULT_TOKEN_REFRESH_BUFFER_SECONDS",
     "MAX_RETRY_AFTER_SECONDS",
     "REDACTED_SECRET_VALUE",
     "RESERVED_RAW_BYTES_KEY",
+    "RETURN_LEG_STREAM_SUFFIX",
     "SENSITIVE_HTTP_HEADERS",
     "WRAPPED_SCALAR_KEY",
     "IpIdPrefix",
@@ -32,6 +35,9 @@ WRAPPED_SCALAR_KEY: Final[str] = "__wrapped_scalar__"
 DEFAULT_IDEMPOTENCY_HEADER: Final[str] = "Idempotency-Key"
 DEFAULT_TOKEN_REFRESH_BUFFER_SECONDS: Final[int] = 900  # 15 minutes proactive refresh window
 MAX_RETRY_AFTER_SECONDS: Final[int] = 3600  # Cap Retry-After delay to 1 hour
+DEFAULT_MAX_DELIVERY_ATTEMPTS: Final[int] = 5  # Quarantine outbound record after 5 attempts
+DEFAULT_MAX_CAUSATION_DEPTH: Final[int] = 3  # Echo-loop suppression guard for return-leg callbacks
+RETURN_LEG_STREAM_SUFFIX: Final[str] = "__return_leg"
 REDACTED_SECRET_VALUE: Final[str] = "***REDACTED***"  # noqa: S105 - Redaction mask sentinel, not a secret credential
 SENSITIVE_HTTP_HEADERS: Final[frozenset[str]] = frozenset(
     {

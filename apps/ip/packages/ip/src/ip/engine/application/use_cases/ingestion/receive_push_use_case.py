@@ -46,6 +46,7 @@ class ReceivePushCommand:
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    causation_depth: int = 0
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,10 @@ class ReceivePushResultDTO:
     body: str | bytes | JsonDict
     trace_id: str
     record_id: str | None = None
+    batch_id: str = ""
+    range_start: str = ""
+    range_end: str = ""
+    count: int = 1
     is_duplicate: bool = False
     is_verified: bool = True
     payload_size_bytes: int = 0
@@ -152,11 +157,28 @@ class ReceivePushUseCase:
                         payload={},
                         headers=str_headers,
                     )
+                    batch_count = 1
+                    range_start = existing.id
+                    range_end = existing.id
+                    if existing.batch_id:
+                        batch_records = await self._uow.inbound_records.list_by_range(
+                            tenant_id=command.tenant_id,
+                            batch_id=existing.batch_id,
+                        )
+                        if batch_records:
+                            batch_count = len(batch_records)
+                            range_start = batch_records[0].id
+                            range_end = batch_records[-1].id
+
                     return ReceivePushResultDTO(
                         status_code=ack_response.status_code,
                         headers=ack_response.headers,
                         body=ack_response.body,
                         record_id=existing.id,
+                        batch_id=existing.batch_id,
+                        range_start=range_start,
+                        range_end=range_end,
+                        count=batch_count,
                         trace_id=trace_id,
                         is_duplicate=True,
                         is_verified=True,
@@ -171,6 +193,10 @@ class ReceivePushUseCase:
                 parsed_payload=parsed_payload,
             )
 
+            batch_record_count = (
+                max(1, len(decoded_payload)) if isinstance(decoded_payload, list) else 1
+            )
+
             # 5. Create immutable InboundRecord aggregate root
             record = InboundRecord.create(
                 tenant_id=command.tenant_id,
@@ -179,6 +205,8 @@ class ReceivePushUseCase:
                 stream_name=command.stream_name,
                 payload_bytes=command.raw_payload,
                 is_inlined=storage_result.is_inlined,
+                batch_record_count=batch_record_count,
+                causation_depth=command.causation_depth,
                 request_body=storage_result.raw_payload,
                 request_s3_key=storage_result.s3_key,
                 request_headers=dict(command.headers),
@@ -213,6 +241,8 @@ class ReceivePushUseCase:
         logger.info(
             "inbound_push_received",
             record_id=record.id,
+            batch_id=record.batch_id,
+            count=batch_record_count,
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
             stream_name=command.stream_name,
@@ -225,6 +255,10 @@ class ReceivePushUseCase:
             headers=ack_response.headers,
             body=ack_response.body,
             record_id=record.id,
+            batch_id=record.batch_id,
+            range_start=record.id,
+            range_end=record.id,
+            count=batch_record_count,
             trace_id=trace_id,
             is_duplicate=False,
             is_verified=True,

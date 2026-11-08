@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
@@ -15,7 +16,9 @@ from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.dispatch.classifier import redact_sensitive_headers
 from ip.engine.domain.dispatch.enums import (
     HttpWriteOperation,
+    OutboundConflictStrategy,
     OutboundDispatchStatus,
+    OutboundFailureCategory,
 )
 from ip.engine.domain.dispatch.events import OutboundRecordCreatedEvent
 from ip.engine.domain.trace.enums import IpTraceEventType, PipelineStage, TraceEventStatus
@@ -57,9 +60,11 @@ class OutboundRecord(TracedAggregateRoot):
     response_s3_key: str | None = None
     duration_ms: int | None = None
     attempt_number: int = 1
+    conflict_strategy: str = OutboundConflictStrategy.FAIL.value
     failure_category: str | None = None
     retry_after_seconds: int | None = None
     error_message: str | None = None
+    causation_depth: int = 0
     sent_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @classmethod
@@ -86,6 +91,9 @@ class OutboundRecord(TracedAggregateRoot):
         request_body: JsonDict | None = None,
         request_s3_key: str | None = None,
         attempt_number: int = 1,
+        conflict_strategy: str = OutboundConflictStrategy.FAIL.value,
+        dispatch_headers: Mapping[str, str] | None = None,
+        causation_depth: int = 0,
         status: OutboundDispatchStatus = OutboundDispatchStatus.PENDING,
     ) -> OutboundRecord:
         record_id = generate_id(cls.ID_PREFIX)
@@ -114,6 +122,8 @@ class OutboundRecord(TracedAggregateRoot):
             request_size_bytes=size_bytes,
             request_sha256=sha256_hash,
             attempt_number=attempt_number,
+            conflict_strategy=conflict_strategy,
+            causation_depth=causation_depth,
             status=status,
             sent_at=datetime.now(UTC),
         )
@@ -144,6 +154,12 @@ class OutboundRecord(TracedAggregateRoot):
                 stream_name=stream_name,
                 status=str(status),
                 response_status_code=None,
+                dispatch_headers=(
+                    {str(k): str(v) for k, v in dispatch_headers.items()}
+                    if dispatch_headers is not None
+                    else {str(k): str(v) for k, v in (request_headers or {}).items()}
+                ),
+                conflict_strategy=conflict_strategy,
             )
         )
         return record
@@ -168,9 +184,52 @@ class OutboundRecord(TracedAggregateRoot):
         *,
         attempt_number: int,
     ) -> None:
-        """Marks an existing retryable OutboundRecord as PENDING in-flight prior to wire dispatch."""
-        self.status = OutboundDispatchStatus.PENDING
+        """Marks an existing OutboundRecord as IN_FLIGHT prior to wire dispatch without re-emitting outbox events."""
+        self.status = OutboundDispatchStatus.IN_FLIGHT
         self.attempt_number = max(attempt_number, self.attempt_number)
+
+    def mark_rate_limited(
+        self,
+        *,
+        error_message: str,
+        retry_after_seconds: int | None = None,
+        response_status_code: int | None = 429,
+        response_headers: JsonDict | None = None,
+        response_body: JsonDict | None = None,
+        response_s3_key: str | None = None,
+        duration_ms: int | None = None,
+    ) -> None:
+        """Transitions state to RATE_LIMITED without burning the terminal 5xx attempt budget."""
+        self.status = OutboundDispatchStatus.RATE_LIMITED
+        self.error_message = error_message
+        self.response_status_code = response_status_code
+        if response_headers is not None:
+            self.response_headers = redact_sensitive_headers(response_headers)
+        if response_body is not None:
+            self.response_body = response_body
+        if response_s3_key is not None:
+            self.response_s3_key = response_s3_key
+        if duration_ms is not None:
+            self.duration_ms = duration_ms
+        self.failure_category = OutboundFailureCategory.RATE_LIMITED.value
+        self.retry_after_seconds = retry_after_seconds
+        self.add_trace_event(
+            IpTraceEvent.create(
+                tenant_id=self.tenant_id,
+                trace_id=self.trace_id,
+                correlation_id=self.correlation_id,
+                event_type=IpTraceEventType.DISPATCH_RETRY_SCHEDULED.value,
+                stage=PipelineStage.DELIVER,
+                status=TraceEventStatus.RETRIED,
+                summary_message=f"Rate limited (HTTP {response_status_code}): {error_message}",
+                error_details=TraceErrorDetails(
+                    next_attempt=self.attempt_number,
+                    response_status_code=response_status_code,
+                    failure_category=OutboundFailureCategory.RATE_LIMITED.value,
+                    retry_after_seconds=retry_after_seconds,
+                ),
+            )
+        )
 
     def mark_delivered(
         self,
@@ -333,6 +392,8 @@ class OutboundRecord(TracedAggregateRoot):
             request_size_bytes=self.request_size_bytes,
             request_sha256=self.request_sha256,
             attempt_number=1,
+            conflict_strategy=self.conflict_strategy,
+            causation_depth=self.causation_depth,
             status=OutboundDispatchStatus.PENDING,
             sent_at=datetime.now(UTC),
         )
@@ -370,6 +431,8 @@ class OutboundRecord(TracedAggregateRoot):
                 stream_name=self.stream_name,
                 status=OutboundDispatchStatus.PENDING.value,
                 response_status_code=None,
+                dispatch_headers={str(k): str(v) for k, v in self.request_headers.items()},
+                conflict_strategy=self.conflict_strategy,
             )
         )
         return cloned

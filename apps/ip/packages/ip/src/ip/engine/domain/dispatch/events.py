@@ -1,6 +1,7 @@
 """Domain events for Outbound delivery aggregates."""
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from seedwork.events import DomainEvent, EventProcessingLane
 
@@ -25,6 +26,8 @@ class OutboundRecordCreatedEvent(DomainEvent):
     replay_count: int = 0
     record_ids: tuple[str, ...] = ()
     lane: EventProcessingLane | None = None
+    dispatch_headers: Mapping[str, str] = field(default_factory=dict)
+    conflict_strategy: str = "FAIL"
 
     def __post_init__(self) -> None:
         if not self.record_ids and self.record_id:
