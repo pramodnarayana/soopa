@@ -21,6 +21,7 @@ class IngestionMode(StrEnum):
     PUSH_THIN = "PUSH_THIN"
     FETCH_ON_NOTIFY = "FETCH_ON_NOTIFY"
     STREAM_SUBSCRIBE = "STREAM_SUBSCRIBE"
+    RETURN_LEG_CALLBACK = "RETURN_LEG_CALLBACK"
 
 
 class SyncRunKind(StrEnum):

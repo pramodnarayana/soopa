@@ -73,6 +73,35 @@ def test_inbound_chunk_payload_dto_parses_chunk_pointers_with_single_id_fallback
     assert inbound_invalid.unwrap_err().code == IpErrorCode.VALIDATION_FAILED
 
 
+def test_inbound_chunk_payload_dto_parses_range_claim_check_without_record_ids() -> None:
+    range_env = EventEnvelope(
+        id="evt_range_1",
+        source="ip.data_plane",
+        event_type=IpEventType.INBOUND_RECORD_CREATED.value,
+        tenant_id="t_01",
+        idempotency_key="k_range_1",
+        trace_id="tr_range_1",
+        payload={
+            "connection_id": "conn_1",
+            "stream_name": "orders",
+            "batch_id": "ip_bch_abc123",
+            "range_start": "ip_inb_abc123_00000000",
+            "range_end": "ip_inb_abc123_00000499",
+            "count": 500,
+            "causation_depth": 1,
+        },
+    )
+    parsed_res = IpInboundRecordChunkPayloadDTO.from_envelope(range_env)
+    assert parsed_res.is_ok
+    dto = parsed_res.unwrap()
+    assert dto.batch_id == "ip_bch_abc123"
+    assert dto.range_start == "ip_inb_abc123_00000000"
+    assert dto.range_end == "ip_inb_abc123_00000499"
+    assert dto.count == 500
+    assert dto.causation_depth == 1
+    assert dto.record_ids == ()
+
+
 def test_pipeline_stage_payload_dtos_parse_valid_envelopes() -> None:
     replica_res = IpReplicaRecordChunkPayloadDTO.from_envelope(
         EventEnvelope(

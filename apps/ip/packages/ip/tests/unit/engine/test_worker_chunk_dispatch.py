@@ -15,6 +15,7 @@ from helpers.worker_fakes import (
     FakeOutboundDeliveryExecutor,
     FakeOutboxPublisher,
     FakeOutboxRepository,
+    FakeProcessInboundRangeExecutor,
     FakeRunSyncExecutor,
     FakeStitchDispatcher,
     FakeStitchTickExecutor,
@@ -28,6 +29,9 @@ from ip.engine.adapters.inbound.workers import (
     IpMultiShardStitchTickLoop,
     IpOrchestratorRouteRegistry,
 )
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    CanonicalChangeItemDTO,
+)
 from ip.engine.bootstrap.publisher_factory import (
     build_ip_cp_outbox_router,
     build_ip_dp_outbox_router,
@@ -40,13 +44,14 @@ from ip.engine.bootstrap.workers import (
 )
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.enums import IpEventType, IpJobName
+from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 from ip.engine.domain.replication.enums import IngestionMode, SyncRunStatus
 from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.settings import IpEngineSettings
 from outbox.application.outbox_cleaner_use_case import OutboxCleanerUseCase
 from outbox.application.outbox_sweeper_use_case import OutboxSweeperUseCase
-from pubsub.enums import ConsumerAction
+from pubsub.enums import ConsumerAction, ConsumerDecision
 from pubsub.envelope_dispatcher import EventEnvelopeDispatcher
 from seedwork.domain.types import JsonDict, JsonValue
 from seedwork.events import EventEnvelope, EventProcessingLane
@@ -770,3 +775,198 @@ async def test_multi_shard_stitch_tick_loop_manages_background_lifecycle() -> No
     assert loop.is_running is False
     assert loop.background_tasks() == []
     assert len(tick_exec.commands) >= 2
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_route_registry_executes_fused_range_with_in_memory_stitch_dispatch() -> (
+    None
+):
+    uow = FakeDataPlaneUoW()
+    range_exec = FakeProcessInboundRangeExecutor(
+        canonical_changes=(
+            CanonicalChangeItemDTO(
+                canonical_type="canonical.record_alpha.v1",
+                source_id="REC-501",
+                action="UPSERT",
+                outcome=NormalizationOutcome.NORMALIZED,
+                canonical_payload={"record_id": "REC-501", "amount": 75.0},
+                replica_id="rep_501",
+                replica_version=1,
+                transformation_id="map_alpha",
+                transformation_version=1,
+                trace_id="tr_range_501",
+                correlation_id="REC-501",
+            ),
+        )
+    )
+    stitch_disp = FakeStitchDispatcher(started_run_ids=("wf_run_501",))
+    stitch_tick = FakeStitchTickExecutor()
+
+    registry = IpOrchestratorRouteRegistry(
+        dp_uow_provider=FakeDataPlaneUoWProvider(uow),
+        normalize_use_case=FakeNormalizeExecutor(),
+        backfill_use_case=FakeBackfillExecutor(),
+        process_inbound_range_use_case=range_exec,
+        stitch_dispatcher=stitch_disp,
+        stitch_worker_tick=stitch_tick,
+        max_causation_depth=3,
+    )
+    dispatcher = EventEnvelopeDispatcher()
+    registry.register_routes(dispatcher)
+
+    envelope = EventEnvelope(
+        id="evt_range_501",
+        source="ip.data_plane",
+        event_type=IpEventType.INBOUND_RECORD_CREATED.value,
+        tenant_id="t_01",
+        idempotency_key="idem_range_501",
+        trace_id="tr_range_501",
+        lane=EventProcessingLane.REALTIME,
+        payload={
+            "connection_id": "conn_01",
+            "stream_name": "records_alpha",
+            "batch_id": "ip_bch_501",
+            "range_start": "ip_inb_501_00000000",
+            "range_end": "ip_inb_501_00000001",
+            "count": 2,
+            "causation_depth": 1,
+            "record_ids": ["ip_inb_501_00000000", "ip_inb_501_00000001"],
+        },
+    )
+    outcome = await dispatcher.dispatch_envelope(envelope)
+    assert outcome == ConsumerAction.ACK
+    assert len(range_exec.commands) == 1
+    assert range_exec.commands[0].batch_id == "ip_bch_501"
+    assert range_exec.commands[0].count == 2
+    assert len(stitch_disp.commands) == 1
+    assert stitch_disp.commands[0].payload["causation_depth"] == 1
+    assert len(stitch_tick.commands) >= 1
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_route_registry_suppresses_stitch_dispatch_at_max_causation_depth() -> (
+    None
+):
+    uow = FakeDataPlaneUoW()
+    range_exec = FakeProcessInboundRangeExecutor(
+        canonical_changes=(
+            CanonicalChangeItemDTO(
+                canonical_type="canonical.record_alpha.v1",
+                source_id="REC-502",
+                action="UPSERT",
+                outcome=NormalizationOutcome.NORMALIZED,
+                canonical_payload={"record_id": "REC-502", "amount": 50.0},
+                replica_id="rep_502",
+                replica_version=1,
+                transformation_id="map_alpha",
+                transformation_version=1,
+                trace_id="tr_range_502",
+                correlation_id="REC-502",
+            ),
+        )
+    )
+    stitch_disp = FakeStitchDispatcher()
+    stitch_tick = FakeStitchTickExecutor()
+
+    registry = IpOrchestratorRouteRegistry(
+        dp_uow_provider=FakeDataPlaneUoWProvider(uow),
+        normalize_use_case=FakeNormalizeExecutor(),
+        backfill_use_case=FakeBackfillExecutor(),
+        process_inbound_range_use_case=range_exec,
+        stitch_dispatcher=stitch_disp,
+        stitch_worker_tick=stitch_tick,
+        max_causation_depth=2,
+    )
+    dispatcher = EventEnvelopeDispatcher()
+    registry.register_routes(dispatcher)
+
+    envelope = EventEnvelope(
+        id="evt_range_502",
+        source="ip.data_plane",
+        event_type=IpEventType.INBOUND_RECORD_CREATED.value,
+        tenant_id="t_01",
+        idempotency_key="idem_range_502",
+        trace_id="tr_range_502",
+        lane=EventProcessingLane.REALTIME,
+        payload={
+            "connection_id": "conn_01",
+            "stream_name": "records_alpha__return_leg",
+            "batch_id": "ip_bch_502",
+            "range_start": "ip_inb_502_00000000",
+            "range_end": "ip_inb_502_00000000",
+            "count": 1,
+            "causation_depth": 2,
+            "record_ids": ["ip_inb_502_00000000"],
+        },
+    )
+    outcome = await dispatcher.dispatch_envelope(envelope)
+    assert outcome == ConsumerAction.ACK
+    assert len(range_exec.commands) == 1
+    assert len(stitch_disp.commands) == 0
+
+
+@pytest.mark.asyncio
+async def test_delivery_route_registry_propagates_causation_depth_with_dynamic_rate_limit_nack() -> (
+    None
+):
+    uow = FakeDataPlaneUoW()
+    uow.outbound_records.records["out_429"] = make_outbound_record(
+        "out_429",
+        causation_depth=2,
+    )
+    uow.outbound_records.records["out_quarantined"] = make_outbound_record(
+        "out_quarantined",
+        causation_depth=1,
+    )
+    deliv_exec = FakeOutboundDeliveryExecutor(
+        status_by_key={
+            "idem_out_429": OutboundDispatchStatus.RATE_LIMITED,
+            "idem_out_quarantined": OutboundDispatchStatus.FAILED,
+        },
+        retry_after_by_key={"idem_out_429": 25},
+        quarantined_keys={"idem_out_quarantined"},
+    )
+    deliv_reg = IpDeliveryRouteRegistry(
+        dp_uow_provider=FakeDataPlaneUoWProvider(uow),
+        deliver_outbound_use_case=deliv_exec,
+        fetch_record_use_case=FakeFetchRecordExecutor(),
+        run_sync_use_case=FakeRunSyncExecutor(),
+        tiered_storage=FakeTieredStorage(),
+    )
+    deliv_disp = EventEnvelopeDispatcher()
+    deliv_reg.register_routes(deliv_disp)
+
+    rl_env = EventEnvelope(
+        id="evt_out_429",
+        source="ip.data_plane",
+        event_type=IpEventType.OUTBOUND_RECORD_CREATED.value,
+        tenant_id="t_01",
+        idempotency_key="idem_evt_out_429",
+        payload={
+            "connection_id": "conn_01",
+            "stream_name": "erp_invoices",
+            "record_ids": ["out_429"],
+        },
+    )
+    rl_outcome = await deliv_disp.dispatch_envelope(rl_env)
+    assert rl_outcome == ConsumerDecision(
+        action=ConsumerAction.NACK,
+        visibility_timeout_seconds=25,
+    )
+    assert deliv_exec.commands[0].causation_depth == 2
+    assert ("t_01", "idem_evt_out_429") not in uow.committed_idempotency_keys
+
+    qrn_env = EventEnvelope(
+        id="evt_out_qrn",
+        source="ip.data_plane",
+        event_type=IpEventType.OUTBOUND_RECORD_CREATED.value,
+        tenant_id="t_01",
+        idempotency_key="idem_evt_out_qrn",
+        payload={
+            "connection_id": "conn_01",
+            "stream_name": "erp_invoices",
+            "record_ids": ["out_quarantined"],
+        },
+    )
+    qrn_outcome = await deliv_disp.dispatch_envelope(qrn_env)
+    assert qrn_outcome == ConsumerAction.ACK

@@ -119,6 +119,8 @@ class IpDeliveryWorkerModule(LaunchableWorker):
         resolver = create_ip_tenant_resolver(self.db_router)
         container = Container()
         container.config.allow_private_ips.from_value(self.settings.allow_private_ips)
+        container.config.max_delivery_attempts.from_value(self.settings.max_delivery_attempts)
+        container.config.max_causation_depth.from_value(self.settings.max_causation_depth)
         container.db_router.override(providers.Object(self.db_router))
         container.tenant_resolver.override(providers.Object(resolver))
         if self._container_configurator is not None:

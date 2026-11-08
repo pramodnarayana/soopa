@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator, Sequence
 
 from ip.engine.application.responses import IpTraceLineageItemDTO
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.quarantine_record import QuarantineRecord
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
 from ip.engine.domain.normalization.ledger import (
     NormalizationLedgerEntry,
@@ -33,6 +34,10 @@ from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRec
 from ip.engine.ports.outbound.pending_reference_repository_port import (
     PendingReferenceRepositoryPort,
 )
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
     ReplicaMergeCandidate,
@@ -57,9 +62,38 @@ class InMemoryInboundRecordRepo(InboundRecordRepositoryPort):
     async def save(self, record: InboundRecord) -> None:
         self.records[record.id] = record
 
+    async def save_batch(self, records: Sequence[InboundRecord]) -> None:
+        for record in records:
+            self.records[record.id] = record
+
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
         rec = self.records.get(record_id)
         return rec if rec and rec.tenant_id == tenant_id else None
+
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        if batch_id and range_start and range_end:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id
+                and r.batch_id == batch_id
+                and range_start <= r.id <= range_end
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            self.records[rec_id]
+            for rec_id in target_ids
+            if rec_id in self.records and self.records[rec_id].tenant_id == tenant_id
+        ]
 
     async def get_by_trace_id(
         self,
@@ -115,7 +149,13 @@ class InMemoryReplicaRecordRepo(ReplicaRecordRepositoryPort):
     ) -> ReplicaRecord | None:
         return None
 
-    async def merge_batch(self, candidates: Sequence[ReplicaMergeCandidate]) -> list[MergeResult]:
+    async def merge_batch(
+        self,
+        candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
+    ) -> list[MergeResult]:
+        _ = (candidates, event_policy)
         return []
 
     async def tombstone_unseen_generations(
@@ -349,6 +389,34 @@ class DummyPendingRefRepo(PendingReferenceRepositoryPort):
         return []
 
 
+class InMemoryQuarantineRecordRepo(QuarantineRecordRepositoryPort):
+    def __init__(self) -> None:
+        self.records: dict[str, QuarantineRecord] = {}
+
+    async def save(self, record: QuarantineRecord) -> None:
+        self.records[record.id] = record
+
+    async def get_by_id(self, record_id: str, tenant_id: str) -> QuarantineRecord | None:
+        rec = self.records.get(record_id)
+        return rec if rec and rec.tenant_id == tenant_id else None
+
+    async def list_by_tenant(
+        self,
+        tenant_id: str,
+        *,
+        connection_id: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> Sequence[QuarantineRecord]:
+        items = [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and (connection_id is None or r.connection_id == connection_id)
+        ]
+        return items[offset : offset + limit]
+
+
 class InMemoryDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     def __init__(self) -> None:
         self.inbound_records = InMemoryInboundRecordRepo()
@@ -357,6 +425,7 @@ class InMemoryDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
         self.normalized_records = InMemoryNormalizedRecordRepo()
         self.entity_maps = DummyEntityMapRepo()
         self.outbound_records = InMemoryOutboundRecordRepo()
+        self.quarantine_records = InMemoryQuarantineRecordRepo()
         self.normalization_ledger = DummyLedgerRepo()
         self.normalization_rejections = DummyNormRejectionRepo()
         self.pending_references = DummyPendingRefRepo()

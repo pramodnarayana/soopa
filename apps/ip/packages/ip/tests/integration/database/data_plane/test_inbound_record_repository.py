@@ -12,7 +12,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
     IpTraceEventModel,
 )
 from ip.engine.domain.enums import IpEventType
-from ip.engine.domain.replication.inbound_record import InboundRecord
+from ip.engine.domain.replication.inbound_record import InboundBatchItemSpec, InboundRecord
 from ip.engine.domain.trace.enums import IpTraceEventType
 from sqlalchemy import select
 
@@ -79,3 +79,71 @@ async def test_l1_inbound_record_repository_persists_record_with_trace_outbox(
         .all()
     )
     assert len(outbox_rows) == 1
+
+
+@pytest.mark.asyncio
+async def test_l1_inbound_record_repository_persists_range_batch_with_single_outbox_event(
+    tenant_session: TenantSession,
+) -> None:
+    repo = SqlAlchemyInboundRecordRepository(tenant_session)
+    tenant_id = "ten_dp_l1_range"
+    trace_id = "ip_trc_l1_range_001"
+
+    records = InboundRecord.create_range_batch(
+        tenant_id=tenant_id,
+        connection_id="ip_conn_l1_range",
+        app_id="acme_source",
+        stream_name="records_alpha",
+        trace_id=trace_id,
+        causation_depth=1,
+        items=(
+            InboundBatchItemSpec(
+                payload_bytes=b'{"id": "rec_1"}',
+                is_inlined=True,
+                request_body={"id": "rec_1"},
+            ),
+            InboundBatchItemSpec(
+                payload_bytes=b'{"id": "rec_2"}',
+                is_inlined=True,
+                request_body={"id": "rec_2"},
+            ),
+            InboundBatchItemSpec(
+                payload_bytes=b'{"id": "rec_3"}',
+                is_inlined=True,
+                request_body={"id": "rec_3"},
+            ),
+        ),
+    )
+    await repo.save_batch(records)
+
+    batch_id = records[0].batch_id or ""
+    assert batch_id != ""
+
+    fetched_slice = await repo.list_by_range(
+        tenant_id,
+        batch_id=batch_id,
+        range_start=records[0].id,
+        range_end=records[-1].id,
+    )
+    assert [r.id for r in fetched_slice] == [r.id for r in records]
+    assert [r.batch_seq for r in fetched_slice] == [0, 1, 2]
+    assert all(r.causation_depth == 1 for r in fetched_slice)
+
+    outbox_rows = (
+        (
+            await tenant_session.execute(
+                select(IpDataPlaneOutboxRecord).where(
+                    IpDataPlaneOutboxRecord.tenant_id == tenant_id,
+                    IpDataPlaneOutboxRecord.event_type == IpEventType.INBOUND_RECORD_CREATED.value,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(outbox_rows) == 1
+    assert outbox_rows[0].payload["batch_id"] == batch_id
+    assert outbox_rows[0].payload["range_start"] == records[0].id
+    assert outbox_rows[0].payload["range_end"] == records[-1].id
+    assert outbox_rows[0].payload["count"] == 3
+    assert outbox_rows[0].payload["causation_depth"] == 1

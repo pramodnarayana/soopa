@@ -25,6 +25,9 @@ from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRec
 from ip.engine.ports.outbound.pending_reference_repository_port import (
     PendingReferenceRepositoryPort,
 )
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecordRepositoryPort
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
@@ -75,6 +78,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
     normalized_records: NormalizedRecordRepositoryPort
     entity_maps: GlobalEntityMapRepositoryPort
     outbound_records: OutboundRecordRepositoryPort
+    quarantine_records: QuarantineRecordRepositoryPort
     normalization_ledger: NormalizationLedgerRepositoryPort
     normalization_rejections: NormalizationRejectionRepositoryPort
     pending_references: PendingReferenceRepositoryPort
@@ -90,6 +94,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         normalized_records: NormalizedRecordRepositoryPort,
         entity_maps: GlobalEntityMapRepositoryPort,
         outbound_records: OutboundRecordRepositoryPort,
+        quarantine_records: QuarantineRecordRepositoryPort,
         normalization_ledger: NormalizationLedgerRepositoryPort,
         normalization_rejections: NormalizationRejectionRepositoryPort,
         pending_references: PendingReferenceRepositoryPort,
@@ -104,6 +109,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         self.normalized_records = normalized_records
         self.entity_maps = entity_maps
         self.outbound_records = outbound_records
+        self.quarantine_records = quarantine_records
         self.normalization_ledger = normalization_ledger
         self.normalization_rejections = normalization_rejections
         self.pending_references = pending_references

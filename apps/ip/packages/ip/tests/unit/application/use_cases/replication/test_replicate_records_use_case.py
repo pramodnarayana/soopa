@@ -35,6 +35,10 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
     ReplicaMergeCandidate,
@@ -74,7 +78,10 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
     async def merge_batch(
         self,
         candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
     ) -> list[MergeResult]:
+        _ = event_policy
         self.batch_sizes.append(len(candidates))
         results: list[MergeResult] = []
         for c in candidates:
@@ -359,6 +366,8 @@ class FakeOutboundRecordRepository(OutboundRecordRepositoryPort):
 
 
 class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
+    quarantine_records: QuarantineRecordRepositoryPort
+
     def __init__(self) -> None:
         self.replica_records = FakeReplicaRecordRepository()
         self.replica_rejections = FakeReplicaRejectionRepository()

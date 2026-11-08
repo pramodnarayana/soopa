@@ -22,6 +22,7 @@ depends_on: str | Sequence[str] | None = None
 _ENGINE_TABLES: tuple[str, ...] = (
     "inbound_records",
     "outbound_records",
+    "quarantine_records",
     "replica_records",
     "replica_rejections",
     "normalized_records",
@@ -51,6 +52,9 @@ def upgrade() -> None:
         sa.Column("original_trace_id", sa.String(length=64), nullable=True),
         sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column("batch_id", sa.String(length=64), server_default="", nullable=False),
+        sa.Column("batch_seq", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("causation_depth", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column(
             "ingestion_mode",
             sa.String(length=32),
@@ -77,6 +81,11 @@ def upgrade() -> None:
         sa.Column("duration_ms", sa.Integer(), nullable=True),
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", "received_at"),
+    )
+    op.create_index(
+        "idx_inbound_batch_range",
+        "inbound_records",
+        ["tenant_id", "batch_id", "batch_seq", "id"],
     )
     op.create_index("idx_inbound_trace", "inbound_records", ["tenant_id", "trace_id"])
     op.create_index("idx_inbound_corr", "inbound_records", ["tenant_id", "correlation_id"])
@@ -128,6 +137,7 @@ def upgrade() -> None:
         sa.Column("failure_category", sa.String(length=64), nullable=True),
         sa.Column("retry_after_seconds", sa.Integer(), nullable=True),
         sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("causation_depth", sa.Integer(), server_default=sa.text("0"), nullable=False),
         sa.Column("sent_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id", "sent_at"),
     )
@@ -141,6 +151,40 @@ def upgrade() -> None:
         "outbound_records",
         ["tenant_id", "connection_id", "idempotency_key"],
     )
+
+    op.create_table(
+        "quarantine_records",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("outbound_record_id", sa.String(length=64), nullable=False),
+        sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column("idempotency_key", sa.String(length=255), nullable=True),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("failure_category", sa.String(length=64), nullable=False),
+        sa.Column("error_code", sa.String(length=64), nullable=True),
+        sa.Column("error_message", sa.Text(), nullable=False),
+        sa.Column("response_status_code", sa.Integer(), nullable=True),
+        sa.Column("attempt_count", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column("request_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("request_s3_key", sa.String(length=512), nullable=True),
+        sa.Column("response_body", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("response_s3_key", sa.String(length=512), nullable=True),
+        sa.Column("quarantined_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "idx_quarantine_tenant_time",
+        "quarantine_records",
+        ["tenant_id", "quarantined_at"],
+    )
+    op.create_index(
+        "idx_quarantine_outbound",
+        "quarantine_records",
+        ["tenant_id", "outbound_record_id"],
+    )
+    op.create_index("idx_quarantine_trace", "quarantine_records", ["tenant_id", "trace_id"])
 
     # 3. Layer 2: replica_records & replica_rejections
     op.create_table(

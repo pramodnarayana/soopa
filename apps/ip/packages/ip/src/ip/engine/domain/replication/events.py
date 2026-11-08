@@ -9,9 +9,14 @@ from ip.engine.domain.enums import IpEventType
 
 @dataclass(frozen=True)
 class InboundRecordCreatedEvent(DomainEvent):
-    """Domain event emitted when one or more external inbound records are durably stored in L1."""
+    """Domain event emitted when a Range Claim-Check (`1..K`) of inbound records is durably stored in L1."""
 
     record_id: str = ""
+    batch_id: str = ""
+    range_start: str = ""
+    range_end: str = ""
+    count: int = 1
+    causation_depth: int = 0
     tenant_id: str = ""
     connection_id: str = ""
     trace_id: str = ""
@@ -33,17 +38,40 @@ class InboundRecordCreatedEvent(DomainEvent):
     lane: EventProcessingLane | None = None
 
     def __post_init__(self) -> None:
-        if not self.record_ids and self.record_id:
-            object.__setattr__(self, "record_ids", (self.record_id,))
-        elif self.record_ids and not self.record_id:
-            object.__setattr__(self, "record_id", self.record_ids[0])
+        self._normalize_record_identifiers()
+        self._normalize_range_bounds()
         if self.lane is None:
-            resolved_lane = (
-                EventProcessingLane.BULK
-                if (len(self.record_ids) > 1 or self.ingestion_mode.startswith("PULL_"))
-                else EventProcessingLane.REALTIME
+            object.__setattr__(self, "lane", self._derive_default_lane())
+
+    def _normalize_record_identifiers(self) -> None:
+        is_multi_range_claim_check = bool(self.batch_id) and self.count > 1
+        if not is_multi_range_claim_check:
+            if not self.record_ids and self.record_id:
+                object.__setattr__(self, "record_ids", (self.record_id,))
+            elif self.record_ids and not self.record_id:
+                object.__setattr__(self, "record_id", self.record_ids[0])
+        elif not self.record_id and self.range_start:
+            object.__setattr__(self, "record_id", self.range_start)
+
+    def _normalize_range_bounds(self) -> None:
+        if not self.range_start:
+            fallback_start = self.record_ids[0] if self.record_ids else self.record_id
+            if fallback_start:
+                object.__setattr__(self, "range_start", fallback_start)
+        if not self.range_end:
+            fallback_end = (
+                self.record_ids[-1] if self.record_ids else (self.range_start or self.record_id)
             )
-            object.__setattr__(self, "lane", resolved_lane)
+            if fallback_end:
+                object.__setattr__(self, "range_end", fallback_end)
+        if self.count <= 1 and len(self.record_ids) > 1:
+            object.__setattr__(self, "count", len(self.record_ids))
+
+    def _derive_default_lane(self) -> EventProcessingLane:
+        is_bulk = (
+            self.count > 1 or len(self.record_ids) > 1 or self.ingestion_mode.startswith("PULL_")
+        )
+        return EventProcessingLane.BULK if is_bulk else EventProcessingLane.REALTIME
 
     @property
     def event_name(self) -> str:

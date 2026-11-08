@@ -244,6 +244,10 @@ async def ingest_record(
     )
     return IngressRecordHttpResponse(
         record_id=result.record_id or "",
+        batch_id=result.batch_id,
+        range_start=result.range_start,
+        range_end=result.range_end,
+        count=result.count,
         trace_id=result.trace_id,
         status="ACCEPTED",
         payload_size_bytes=result.payload_size_bytes,

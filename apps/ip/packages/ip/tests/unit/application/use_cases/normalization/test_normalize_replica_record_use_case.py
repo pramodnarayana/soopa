@@ -73,6 +73,10 @@ from ip.engine.ports.outbound.outbound_record_repository_port import (
 from ip.engine.ports.outbound.pending_reference_repository_port import (
     PendingReferenceRepositoryPort,
 )
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
     ReplicaMergeCandidate,
@@ -163,7 +167,13 @@ class FakeReplicaRecordRepository(ReplicaRecordRepositoryPort):
                 return r
         return None
 
-    async def merge_batch(self, candidates: Sequence[ReplicaMergeCandidate]) -> list[MergeResult]:
+    async def merge_batch(
+        self,
+        candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
+    ) -> list[MergeResult]:
+        _ = (candidates, event_policy)
         return []
 
     async def tombstone_unseen_generations(
@@ -378,6 +388,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     replica_rejections: ReplicaRejectionRepositoryPort
     entity_maps: GlobalEntityMapRepositoryPort
     outbound_records: OutboundRecordRepositoryPort
+    quarantine_records: QuarantineRecordRepositoryPort
     normalization_ledger: FakeNormalizationLedgerRepository
     normalization_rejections: FakeNormalizationRejectionRepository
     pending_references: FakePendingReferenceRepository

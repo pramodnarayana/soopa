@@ -67,6 +67,7 @@ class SqlAlchemyOutboundRecordRepository(TenantSqlAlchemyRepository, OutboundRec
             failure_category=domain.failure_category,
             retry_after_seconds=domain.retry_after_seconds,
             error_message=domain.error_message,
+            causation_depth=domain.causation_depth,
             sent_at=domain.sent_at,
         )
 

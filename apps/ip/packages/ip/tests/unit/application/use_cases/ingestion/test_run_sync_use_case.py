@@ -45,6 +45,9 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
     NormalizedRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
+)
 from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecordRepositoryPort
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
@@ -251,6 +254,10 @@ class FakeDataPlaneUnitOfWork(IpDataPlaneUnitOfWorkPort):
 
     @property
     def outbound_records(self) -> OutboundRecordRepositoryPort:
+        raise NotImplementedError
+
+    @property
+    def quarantine_records(self) -> QuarantineRecordRepositoryPort:
         raise NotImplementedError
 
     async def __aenter__(self) -> FakeDataPlaneUnitOfWork:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from pydantic import BaseModel, Field
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonPrimitive
 
 
 class StitchNodeHttpResponse(BaseModel):
@@ -43,6 +43,7 @@ class RegisterStitchHttpRequest(BaseModel):
     idempotency_key_field: str = Field(default="id", min_length=1)
     concurrency_key_field: str | None = None
     resource_hint_field: str | None = None
+    filter_conditions: dict[str, JsonPrimitive] = Field(default_factory=dict)
     is_active: bool = True
 
 
@@ -59,6 +60,7 @@ class StitchHttpResponse(BaseModel):
     idempotency_key_field: str
     concurrency_key_field: str | None = None
     resource_hint_field: str | None = None
+    filter_conditions: dict[str, JsonPrimitive] = Field(default_factory=dict)
     is_active: bool
 
 

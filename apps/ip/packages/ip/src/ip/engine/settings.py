@@ -166,6 +166,14 @@ class IpEngineSettings(BaseSettings):
         default=2.0,
         validation_alias="IP_STITCH_TICK_INTERVAL_SEC",
     )
+    max_delivery_attempts: int = Field(
+        default=5,
+        validation_alias="IP_MAX_DELIVERY_ATTEMPTS",
+    )
+    max_causation_depth: int = Field(
+        default=3,
+        validation_alias="IP_MAX_CAUSATION_DEPTH",
+    )
     allow_private_ips: bool = Field(
         default=False,
         validation_alias=AliasChoices(

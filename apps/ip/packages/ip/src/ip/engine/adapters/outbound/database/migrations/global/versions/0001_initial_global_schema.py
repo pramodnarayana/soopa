@@ -301,6 +301,12 @@ def upgrade() -> None:
         sa.Column("concurrency_key_field", sa.String(length=128), nullable=True),
         sa.Column("resource_hint_field", sa.String(length=128), nullable=True),
         sa.Column(
+            "filter_conditions",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'{}'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column(
             "is_active",
             sa.Boolean(),
             server_default=sa.text("true"),

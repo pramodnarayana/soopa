@@ -7,6 +7,7 @@ from typing import Any, Protocol, cast
 import aioboto3
 import structlog
 from botocore.exceptions import BotoCoreError, ClientError
+from pubsub.enums import DEFAULT_SQS_NACK_VISIBILITY_SEC, MAX_SQS_VISIBILITY_TIMEOUT_SEC
 from pubsub.exceptions import ConsumerTerminalError, ConsumerTransientError
 from pubsub.message import AckableMessage
 from seedwork.domain.types import JsonDict
@@ -178,15 +179,24 @@ class AwsSqsConsumer:
             async def ack() -> None:
                 await self._delete_message(sqs_client, receipt_handle)
 
-            async def nack() -> None:
+            async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
+                resolved_timeout = (
+                    DEFAULT_SQS_NACK_VISIBILITY_SEC
+                    if visibility_timeout_seconds is None
+                    else max(0, min(MAX_SQS_VISIBILITY_TIMEOUT_SEC, visibility_timeout_seconds))
+                )
                 try:
                     await sqs_client.change_message_visibility(
                         QueueUrl=self.queue_url,
                         ReceiptHandle=receipt_handle,
-                        VisibilityTimeout=5,  # 5-second backoff
+                        VisibilityTimeout=resolved_timeout,
                     )
                 except (ClientError, BotoCoreError) as e:
-                    logger.warning("failed_to_reset_visibility_timeout", error=str(e))
+                    logger.error(
+                        "failed_to_reset_visibility_timeout",
+                        error=str(e),
+                        visibility_timeout_seconds=resolved_timeout,
+                    )
 
             payload_dto = event_data
 

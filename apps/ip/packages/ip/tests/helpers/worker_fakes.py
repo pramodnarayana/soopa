@@ -12,6 +12,7 @@ from ip.engine.adapters.inbound.workers import (
     IpFetchRecordExecutorPort,
     IpNormalizeReplicaExecutorPort,
     IpOutboundDeliveryExecutorPort,
+    IpProcessInboundRangeExecutorPort,
     IpRunSyncExecutorPort,
     IpStitchCanonicalDispatcherPort,
     IpStitchWorkerTickExecutorPort,
@@ -35,6 +36,14 @@ from ip.engine.application.use_cases.normalization.backfill_stream_normalization
 from ip.engine.application.use_cases.normalization.normalize_replica_record_use_case import (
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordResultDTO,
+)
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    CanonicalChangeItemDTO,
+    ProcessInboundRangeCommand,
+    ProcessInboundRangeResultDTO,
+)
+from ip.engine.application.use_cases.replication.replicate_records_use_case import (
+    ReplicationSummary,
 )
 from ip.engine.application.use_cases.stitch.dispatch_canonical_event_to_stitches_use_case import (
     DispatchCanonicalEventResultDTO,
@@ -67,7 +76,11 @@ from ip.engine.domain.replication.enums import (
     SyncRunStatus,
 )
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
+from ip.engine.domain.replication.replica_record import (
+    ReplicaMergePolicy,
+    ReplicaRecord,
+    ReplicaRejection,
+)
 from ip.engine.domain.replication.stream_definition import StreamDefinition
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
@@ -83,6 +96,10 @@ from ip.engine.ports.outbound.normalized_record_repository_port import (
 from ip.engine.ports.outbound.outbound_record_repository_port import OutboundRecordRepositoryPort
 from ip.engine.ports.outbound.pending_reference_repository_port import (
     PendingReferenceRepositoryPort,
+)
+from ip.engine.ports.outbound.pipeline_event_policy_port import ReplicationEventPolicyPort
+from ip.engine.ports.outbound.quarantine_record_repository_port import (
+    QuarantineRecordRepositoryPort,
 )
 from ip.engine.ports.outbound.replica_record_repository_port import (
     MergeResult,
@@ -115,6 +132,7 @@ from helpers.trace_fakes import (
     DummyLedgerRepo,
     DummyNormRejectionRepo,
     DummyPendingRefRepo,
+    InMemoryQuarantineRecordRepo,
     InMemoryTraceRepo,
 )
 
@@ -237,11 +255,53 @@ class FakeInboundRecordRepo(InboundRecordRepositoryPort):
     async def save(self, record: InboundRecord) -> None:
         self.records[record.id] = record
 
+    async def save_batch(self, records: Sequence[InboundRecord]) -> None:
+        for record in records:
+            self.records[record.id] = record
+
     async def get_by_id(self, record_id: str, tenant_id: str | None = None) -> InboundRecord | None:
         rec = self.records.get(record_id)
         if rec and (tenant_id is None or rec.tenant_id == tenant_id):
             return rec
         return None
+
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        if batch_id and range_start and range_end:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id
+                and r.batch_id == batch_id
+                and range_start <= r.id <= range_end
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        if batch_id:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id and r.batch_id == batch_id
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        target_ids = list(record_ids)
+        if not target_ids and range_start:
+            target_ids = (
+                [range_start]
+                if not range_end or range_end == range_start
+                else [range_start, range_end]
+            )
+        return [
+            self.records[rec_id]
+            for rec_id in target_ids
+            if rec_id in self.records and self.records[rec_id].tenant_id == tenant_id
+        ]
 
     async def get_by_external_event_id(
         self,
@@ -320,21 +380,104 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
     async def merge_batch(
         self,
         candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
     ) -> list[MergeResult]:
         self.merged_candidates.extend(candidates)
         results: list[MergeResult] = []
+        changed: list[ReplicaRecord] = []
         for cand in candidates:
-            rec_id = f"ip_rep_{cand.record_key}"
-            results.append(
-                MergeResult(
-                    record_id=rec_id,
+            existing = await self.get_by_key(
+                cand.tenant_id,
+                cand.connection_id,
+                cand.stream,
+                cand.record_key,
+            )
+            cursor_kind = (
+                CursorKind(cand.cursor_kind)
+                if cand.cursor_kind in CursorKind.__members__.values()
+                else CursorKind.STRING
+            )
+            outcome = ReplicaMergePolicy.evaluate(
+                existing=existing,
+                incoming_data_hash=cand.data_hash,
+                incoming_cursor=cand.cursor_value,
+                cursor_kind=cursor_kind,
+                is_deleted=cand.is_deleted,
+            )
+            if outcome == MergeOutcome.INSERT:
+                rec = ReplicaRecord.create(
+                    tenant_id=cand.tenant_id,
+                    connection_id=cand.connection_id,
                     stream=cand.stream,
                     record_key=cand.record_key,
-                    outcome=MergeOutcome.INSERT,
-                    version=1,
-                    data_hash=cand.data_hash,
+                    primary_key_values=cand.primary_key_values,
+                    cursor_value=cand.cursor_value,
+                    cursor_kind=cand.cursor_kind,
+                    data=cand.data,
+                    generation_id=cand.generation_id,
+                    source_inbound_record_id=cand.source_inbound_record_id,
+                    trace_id=cand.trace_id,
+                    correlation_id=cand.correlation_id,
                 )
-            )
+                self.records[rec.id] = rec
+                changed.append(rec)
+                results.append(
+                    MergeResult(
+                        record_id=rec.id,
+                        stream=cand.stream,
+                        record_key=cand.record_key,
+                        outcome=MergeOutcome.INSERT,
+                        version=rec.version,
+                        data_hash=rec.data_hash,
+                        replica=rec,
+                    )
+                )
+            elif outcome == MergeOutcome.UPDATE and existing is not None:
+                existing.update_snapshot(
+                    new_data=cand.data,
+                    trace_id=cand.trace_id,
+                    correlation_id=cand.correlation_id,
+                    cursor_value=cand.cursor_value,
+                    generation_id=cand.generation_id,
+                    source_inbound_record_id=cand.source_inbound_record_id,
+                )
+                changed.append(existing)
+                results.append(
+                    MergeResult(
+                        record_id=existing.id,
+                        stream=cand.stream,
+                        record_key=cand.record_key,
+                        outcome=MergeOutcome.UPDATE,
+                        version=existing.version,
+                        data_hash=existing.data_hash,
+                        replica=existing,
+                    )
+                )
+            else:
+                assert existing is not None
+                if outcome == MergeOutcome.NOOP:
+                    existing.last_seen_generation = cand.generation_id
+                results.append(
+                    MergeResult(
+                        record_id=existing.id,
+                        stream=cand.stream,
+                        record_key=cand.record_key,
+                        outcome=outcome,
+                        version=existing.version,
+                        data_hash=existing.data_hash,
+                        replica=existing,
+                    )
+                )
+
+        to_emit = (
+            event_policy.select_outbox_replicas(changed)
+            if event_policy is not None
+            else tuple(changed)
+        )
+        for agg in to_emit:
+            self.events.extend(agg.domain_events)
+            agg.clear_domain_events()
         return results
 
     async def tombstone_unseen_generations(
@@ -475,6 +618,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
         self.replica_rejections = replica_rejections or FakeReplicaRejectionRepo()
         self.normalized_records = normalized_records or FakeNormalizedRecordRepo()
         self.outbound_records = outbound_records or FakeOutboundRecordRepo()
+        self.quarantine_records: QuarantineRecordRepositoryPort = InMemoryQuarantineRecordRepo()
         self.traces: TraceRepositoryPort = InMemoryTraceRepo()
         self.entity_maps: GlobalEntityMapRepositoryPort = DummyEntityMapRepo()
         self.normalization_ledger: NormalizationLedgerRepositoryPort = DummyLedgerRepo()
@@ -664,6 +808,37 @@ class FakeStitchTickExecutor(IpStitchWorkerTickExecutorPort):
         )
 
 
+class FakeProcessInboundRangeExecutor(IpProcessInboundRangeExecutorPort):
+    """In-memory IpProcessInboundRangeExecutorPort returning canonical changes for fused L2->L3."""
+
+    def __init__(
+        self,
+        *,
+        canonical_changes: tuple[CanonicalChangeItemDTO, ...] = (),
+    ) -> None:
+        self.commands: list[ProcessInboundRangeCommand] = []
+        self.canonical_changes = canonical_changes
+
+    async def execute(
+        self, command: ProcessInboundRangeCommand
+    ) -> Result[ProcessInboundRangeResultDTO, IpError]:
+        self.commands.append(command)
+        return Result.ok(
+            ProcessInboundRangeResultDTO(
+                replication_summary=ReplicationSummary(
+                    inserted_count=command.count,
+                    updated_count=0,
+                    noop_count=0,
+                    stale_count=0,
+                    tombstone_count=0,
+                    rejected_count=0,
+                ),
+                canonical_changes=self.canonical_changes,
+                inbound_records_processed=command.count,
+            )
+        )
+
+
 class FakeOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
     """In-memory IpOutboundDeliveryExecutorPort tracking concurrency."""
 
@@ -671,10 +846,14 @@ class FakeOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
         self,
         *,
         status_by_key: dict[str, OutboundDispatchStatus] | None = None,
+        retry_after_by_key: dict[str, int] | None = None,
+        quarantined_keys: set[str] | None = None,
         delay_seconds: float = 0.01,
     ) -> None:
         self.commands: list[DeliverOutboundRecordCommand] = []
         self.status_by_key = status_by_key or {}
+        self.retry_after_by_key = retry_after_by_key or {}
+        self.quarantined_keys = quarantined_keys or set()
         self.delay_seconds = delay_seconds
         self.current_in_flight = 0
         self.max_observed_in_flight = 0
@@ -700,6 +879,8 @@ class FakeOutboundDeliveryExecutor(IpOutboundDeliveryExecutorPort):
                     destination_id=f"dest_{idem}",
                     response_status_code=200 if status is OutboundDispatchStatus.DELIVERED else 503,
                     duration_ms=10,
+                    was_quarantined=idem in self.quarantined_keys,
+                    retry_after_seconds=self.retry_after_by_key.get(idem),
                     error_message=None
                     if status is OutboundDispatchStatus.DELIVERED
                     else "Downstream failure",
@@ -773,6 +954,7 @@ def make_outbound_record(
     is_inlined: bool = True,
     request_body: JsonDict | None = None,
     request_s3_key: str | None = None,
+    causation_depth: int = 0,
 ) -> OutboundRecord:
     body: JsonDict = request_body if request_body is not None else {"invoice_id": record_id}
     raw_bytes = json.dumps(body).encode("utf-8")
@@ -791,6 +973,7 @@ def make_outbound_record(
         external_record_id=record_id,
         request_body=body if is_inlined else None,
         request_s3_key=request_s3_key,
+        causation_depth=causation_depth,
         status=status,
     )
     rec.id = record_id

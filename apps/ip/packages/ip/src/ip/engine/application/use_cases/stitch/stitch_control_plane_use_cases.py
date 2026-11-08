@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime
 
 import structlog
@@ -10,7 +11,7 @@ from orchestration.domain.constants import RunStatus
 from orchestration.domain.definition import NodeDefinition, WorkflowDefinition
 from orchestration.domain.run import StepRun, WorkflowRun
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonPrimitive
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
@@ -75,6 +76,7 @@ class StitchSummaryDTO:
     concurrency_key_field: str | None
     resource_hint_field: str | None
     is_active: bool
+    filter_conditions: Mapping[str, JsonPrimitive] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -145,6 +147,7 @@ class RegisterStitchCommand:
     idempotency_key_field: str = "id"
     concurrency_key_field: str | None = None
     resource_hint_field: str | None = None
+    filter_conditions: Mapping[str, JsonPrimitive] = field(default_factory=dict)
     is_active: bool = True
 
 
@@ -213,6 +216,7 @@ def _to_stitch_dto(stitch: Stitch) -> StitchSummaryDTO:
         idempotency_key_field=stitch.idempotency_key_field,
         concurrency_key_field=stitch.concurrency_key_field,
         resource_hint_field=stitch.resource_hint_field,
+        filter_conditions=dict(stitch.filter_conditions),
         is_active=stitch.is_active,
     )
 
@@ -446,6 +450,7 @@ class RegisterStitchUseCase:
                 if command.resource_hint_field and command.resource_hint_field.strip()
                 else None
             ),
+            filter_conditions=dict(command.filter_conditions),
             is_active=command.is_active,
         )
         stitch.record_registered()

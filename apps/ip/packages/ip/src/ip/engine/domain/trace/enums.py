@@ -79,6 +79,8 @@ def map_outbound_status_to_trace_status(status: OutboundDispatchStatus | str) ->
     )
     if resolved is OutboundDispatchStatus.IN_FLIGHT:
         return IpTraceStatus.PENDING
+    if resolved is OutboundDispatchStatus.RATE_LIMITED:
+        return IpTraceStatus.RETRY_SCHEDULED
     return IpTraceStatus(resolved.value)
 
 

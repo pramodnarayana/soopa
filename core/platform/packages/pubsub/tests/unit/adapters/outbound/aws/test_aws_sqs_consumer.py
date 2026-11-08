@@ -234,6 +234,39 @@ async def test_nack_handles_client_error_without_raising() -> None:
 
 
 @pytest.mark.asyncio
+async def test_poll_raw_message_nack_applies_custom_visibility_timeout() -> None:
+    consumer = AwsSqsConsumer(queue_url="https://sqs.us-east-1.amazonaws.com/123/q")
+    fake_client = FakeSqsClient(
+        messages=[
+            {
+                "MessageId": "msg-vis-1",
+                "ReceiptHandle": "rcpt-vis-1",
+                "Body": json.dumps({"action": "rate_limit"}),
+            },
+            {
+                "MessageId": "msg-vis-2",
+                "ReceiptHandle": "rcpt-vis-2",
+                "Body": json.dumps({"action": "clamp_max"}),
+            },
+        ]
+    )
+    consumer._client = fake_client
+
+    async with consumer.poll_raw_message() as ackable:
+        assert ackable is not None
+        await ackable.nack(visibility_timeout_seconds=42)
+
+    async with consumer.poll_raw_message() as ackable:
+        assert ackable is not None
+        await ackable.nack(visibility_timeout_seconds=99999)
+
+    assert fake_client.visibility_changes == [
+        ("https://sqs.us-east-1.amazonaws.com/123/q", "rcpt-vis-1", 42),
+        ("https://sqs.us-east-1.amazonaws.com/123/q", "rcpt-vis-2", 43200),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_context_manager_reuse() -> None:
     consumer = AwsSqsConsumer(queue_url="https://sqs.us-east-1.amazonaws.com/123/q")
 

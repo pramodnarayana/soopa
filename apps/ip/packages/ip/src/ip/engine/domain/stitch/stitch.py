@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import ClassVar
 
 from orchestration.domain.constants import WorkflowErrorCode
 from orchestration.domain.exceptions import Result, WorkflowError
 from seedwork.domain.aggregate import AggregateRoot
-from seedwork.domain.types import JsonDict
+from seedwork.domain.types import JsonDict, JsonPrimitive
 
 from ip.engine.domain.dispatch.enums import (
     HttpWriteOperation,
@@ -37,7 +38,14 @@ class Stitch(AggregateRoot):
     idempotency_key_field: str = "id"
     concurrency_key_field: str | None = None
     resource_hint_field: str | None = None
+    filter_conditions: Mapping[str, JsonPrimitive] = field(default_factory=dict)
     is_active: bool = True
+
+    def matches_payload(self, payload: JsonDict) -> bool:
+        """Evaluates declarative equality predicates against the canonical event payload."""
+        if not self.filter_conditions:
+            return True
+        return all(payload.get(key) == expected for key, expected in self.filter_conditions.items())
 
     def record_registered(self) -> None:
         """Records a StitchRegisteredEvent domain event on this aggregate."""
@@ -195,6 +203,7 @@ class ExecuteHttpActionStepInput:
     record_id: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
     conflict_strategy: OutboundConflictStrategy = OutboundConflictStrategy.FAIL
+    causation_depth: int = 0
 
     @classmethod
     def from_payload(cls, data: JsonDict) -> Result[ExecuteHttpActionStepInput, WorkflowError]:
@@ -205,6 +214,7 @@ class ExecuteHttpActionStepInput:
         raw_record_id = data.get("record_id")
         raw_headers = data.get("headers")
         raw_conflict = data.get("conflict_strategy", OutboundConflictStrategy.FAIL.value)
+        raw_causation_depth = data.get("causation_depth", 0)
 
         if (
             not isinstance(conn_id, str)
@@ -257,6 +267,12 @@ class ExecuteHttpActionStepInput:
                 else None,
                 headers=headers_dict,
                 conflict_strategy=conflict_strat,
+                causation_depth=(
+                    raw_causation_depth
+                    if isinstance(raw_causation_depth, int)
+                    and not isinstance(raw_causation_depth, bool)
+                    else 0
+                ),
             )
         )
 

@@ -1,19 +1,14 @@
-"""Built-in IP Stitch StepHandlerPort adapters for L2 Replica queries, Stage-1 Notifications, and L5 Outbound Delivery."""
+"""Built-in IP Stitch StepHandlerPort adapters for L2 Replica queries, Stage-1 Notifications, and L4->L5 Egress Staging."""
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import Protocol
 
-from ip.engine.application.use_cases.delivery.deliver_outbound_record_use_case import (
-    DeliverOutboundRecordCommand,
-    DeliverOutboundRecordResponse,
+from ip.engine.application.use_cases.delivery.stage_outbound_delivery_use_case import (
+    StageOutboundDeliveryCommand,
+    StageOutboundDeliveryResponse,
 )
-from ip.engine.domain.dispatch.enums import (
-    FailureDisposition,
-    OutboundDispatchStatus,
-    OutboundFailureCategory,
-)
+from ip.engine.domain.dispatch.enums import FailureDisposition
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
 from ip.engine.domain.exceptions import IpError
 from ip.engine.domain.exceptions import Result as IpResult
@@ -64,13 +59,13 @@ class NotificationOutboxPort(Protocol):
     async def publish_envelope(self, envelope: EventEnvelope) -> None: ...
 
 
-class OutboundDeliveryExecutorPort(Protocol):
-    """Interface-segregated port for executing a Layer-5 outbound delivery command."""
+class OutboundDeliveryStagerPort(Protocol):
+    """Interface-segregated port for staging an L5 OutboundRecord(PENDING) onto the Egress Queue."""
 
     async def execute(
         self,
-        command: DeliverOutboundRecordCommand,
-    ) -> IpResult[DeliverOutboundRecordResponse, IpError]: ...
+        command: StageOutboundDeliveryCommand,
+    ) -> IpResult[StageOutboundDeliveryResponse, IpError]: ...
 
 
 class OutboundRecordLookupPort(Protocol):
@@ -264,20 +259,20 @@ class EmitNotificationStepHandler(StepHandlerPort[JsonDict, JsonDict]):
 
 
 class ExecuteHttpActionStepHandler(ReconcilableStepHandlerPort[JsonDict, JsonDict]):
-    """Layer-4 to Layer-5 Reconcilable Stitch Step Handler (`EffectPolicy.RECONCILABLE_EFFECT`).
+    """Layer-4 to Layer-5 Reconcilable Stitch Egress Stager (`EffectPolicy.RECONCILABLE_EFFECT`).
 
-    Dispatches outbound mutations via `DeliverOutboundRecordUseCase` using `context.idempotency_key`,
-    propagates `429 Retry-After` backpressure to `orchestration` without burning user retry budget,
-    and reconciles `IN_FLIGHT_EFFECT` steps after worker crashes by inspecting the L5 `OutboundRecord` ledger.
+    Stages an `OutboundRecord(PENDING)` + `OutboundRecordCreatedEvent` into `public.ip_outbox`
+    using `context.idempotency_key` with zero external HTTP calls inside `ip-orchestrator-worker`,
+    preserving strict bulkhead isolation between compute orchestration and L5 external I/O.
     """
 
     def __init__(
         self,
         *,
-        delivery_executor: OutboundDeliveryExecutorPort,
+        delivery_stager: OutboundDeliveryStagerPort,
         outbound_lookup: OutboundRecordLookupPort,
     ) -> None:
-        self._delivery_executor = delivery_executor
+        self._delivery_stager = delivery_stager
         self._outbound_lookup = outbound_lookup
 
     @property
@@ -301,8 +296,8 @@ class ExecuteHttpActionStepHandler(ReconcilableStepHandlerPort[JsonDict, JsonDic
             )
         req = parsed_res.unwrap()
 
-        delivery_res = await self._delivery_executor.execute(
-            DeliverOutboundRecordCommand(
+        staged_res = await self._delivery_stager.execute(
+            StageOutboundDeliveryCommand(
                 tenant_id=context.tenant_id,
                 connection_id=req.connection_id,
                 stream_name=req.stream_name,
@@ -314,87 +309,35 @@ class ExecuteHttpActionStepHandler(ReconcilableStepHandlerPort[JsonDict, JsonDic
                 conflict_strategy=req.conflict_strategy,
                 trace_id=context.trace_id,
                 correlation_id=context.correlation_id,
-                attempt_number=context.retry_count + 1,
+                causation_depth=req.causation_depth,
             )
         )
-        if delivery_res.is_err or delivery_res.value is None:
-            err = delivery_res.error
-            detail = err.message if err is not None else "Outbound delivery failed."
+        if staged_res.is_err or staged_res.value is None:
+            err = staged_res.error
+            detail = err.message if err is not None else "Outbound egress staging failed."
             if err is not None and err.disposition is FailureDisposition.RETRY:
                 return Result.err(
                     RetryableFailure(
                         code=StepFailureCode.UPSTREAM_5XX,
                         detail=detail,
-                        is_app_error=True,
+                        is_app_error=False,
                     )
                 )
             return Result.err(
                 TerminalFailure(
-                    code=StepFailureCode.UPSTREAM_4XX,
+                    code=StepFailureCode.VALIDATION_REJECTED,
                     detail=detail,
                 )
             )
 
-        outcome = delivery_res.value
-        if outcome.status is OutboundDispatchStatus.DELIVERED:
-            return Result.ok(
-                ExecuteHttpActionStepOutput(
-                    outbound_record_id=outcome.outbound_record_id,
-                    status=outcome.status.value,
-                    record_id=outcome.record_id,
-                    destination_id=outcome.destination_id,
-                    response_status_code=outcome.response_status_code,
-                    response_body=outcome.response_body,
-                    response_s3_key=outcome.response_s3_key,
-                    was_deduplicated=outcome.was_deduplicated,
-                    was_token_refreshed=outcome.was_token_refreshed,
-                ).to_payload()
-            )
-
-        if outcome.status is OutboundDispatchStatus.RETRY_SCHEDULED:
-            if outcome.failure_category is OutboundFailureCategory.RATE_LIMITED:
-                wait_sec = outcome.retry_after_seconds or 5
-                return Result.err(
-                    RetryableFailure(
-                        code=StepFailureCode.RATE_LIMITED,
-                        detail=outcome.error_message
-                        or "Destination rate limit exceeded (HTTP 429).",
-                        retry_after=timedelta(seconds=wait_sec),
-                        is_app_error=False,
-                        metadata={
-                            "outbound_record_id": outcome.outbound_record_id,
-                            "retry_after_seconds": wait_sec,
-                        },
-                    )
-                )
-            return Result.err(
-                RetryableFailure(
-                    code=StepFailureCode.UPSTREAM_5XX,
-                    detail=outcome.error_message or "Transient destination error.",
-                    retry_after=(
-                        timedelta(seconds=outcome.retry_after_seconds)
-                        if outcome.retry_after_seconds is not None
-                        else None
-                    ),
-                    is_app_error=True,
-                    metadata={"outbound_record_id": outcome.outbound_record_id},
-                )
-            )
-
-        failure_code = (
-            StepFailureCode.VALIDATION_REJECTED
-            if outcome.failure_category is OutboundFailureCategory.VALIDATION_ERROR
-            else StepFailureCode.UPSTREAM_4XX
-        )
-        return Result.err(
-            TerminalFailure(
-                code=failure_code,
-                detail=outcome.error_message or "Terminal outbound delivery failure.",
-                metadata={
-                    "outbound_record_id": outcome.outbound_record_id,
-                    "response_status_code": outcome.response_status_code,
-                },
-            )
+        outcome = staged_res.value
+        return Result.ok(
+            ExecuteHttpActionStepOutput(
+                outbound_record_id=outcome.outbound_record_id,
+                status=outcome.status.value,
+                record_id=outcome.record_id,
+                was_deduplicated=outcome.was_deduplicated,
+            ).to_payload()
         )
 
     async def reconcile(
@@ -415,7 +358,7 @@ class ExecuteHttpActionStepHandler(ReconcilableStepHandlerPort[JsonDict, JsonDic
             connection_id=req.connection_id,
             idempotency_key=context.idempotency_key,
         )
-        if existing is not None and existing.status is OutboundDispatchStatus.DELIVERED:
+        if existing is not None:
             adopted = ExecuteHttpActionStepOutput(
                 outbound_record_id=existing.id,
                 status=existing.status.value,
@@ -436,7 +379,7 @@ __all__ = [
     "EmitNotificationStepHandler",
     "ExecuteHttpActionStepHandler",
     "NotificationOutboxPort",
-    "OutboundDeliveryExecutorPort",
+    "OutboundDeliveryStagerPort",
     "OutboundRecordLookupPort",
     "QueryReplicaStepHandler",
     "ReplicaLookupPort",

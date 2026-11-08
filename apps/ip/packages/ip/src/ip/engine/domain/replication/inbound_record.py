@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
 
 from seedwork.domain.types import JsonDict
-from seedwork.utils import generate_id
+from seedwork.utils import generate_id, generate_random_hex
 from strace.domain import TracedAggregateRoot, TraceReplayMetadata
 
 from ip.engine.domain.constants import IpIdPrefix
@@ -27,6 +28,23 @@ def compute_payload_sha256(payload_bytes: bytes) -> str:
     return hashlib.sha256(payload_bytes).hexdigest()
 
 
+@dataclass(frozen=True)
+class InboundBatchItemSpec:
+    """Immutable specification for an individual item inside an L1 Range Claim-Check batch."""
+
+    payload_bytes: bytes
+    is_inlined: bool
+    request_body: JsonDict | None = None
+    request_s3_key: str | None = None
+    external_event_id: str | None = None
+    request_headers: JsonDict = field(default_factory=dict)
+    response_status_code: int | None = None
+    response_headers: JsonDict | None = None
+    response_body: JsonDict | None = None
+    response_s3_key: str | None = None
+    duration_ms: int | None = None
+
+
 @dataclass(kw_only=True, eq=False)
 class InboundRecord(TracedAggregateRoot):
     """Traced Aggregate Root representing an immutable external raw record in Layer 1 Inbound Gateway."""
@@ -37,6 +55,9 @@ class InboundRecord(TracedAggregateRoot):
     connection_id: str
     app_id: str
     stream_name: str
+    batch_id: str = ""
+    batch_seq: int = 0
+    causation_depth: int = 0
     ingestion_mode: IngestionMode = IngestionMode.PUSH_FULL
     sync_run_id: str | None = None
     generation_id: int | None = None
@@ -63,6 +84,10 @@ class InboundRecord(TracedAggregateRoot):
         stream_name: str,
         payload_bytes: bytes,
         is_inlined: bool,
+        batch_id: str | None = None,
+        batch_seq: int = 0,
+        batch_record_count: int = 1,
+        causation_depth: int = 0,
         trace_id: str | None = None,
         correlation_id: str | None = None,
         parent_trace_id: str | None = None,
@@ -82,6 +107,7 @@ class InboundRecord(TracedAggregateRoot):
         duration_ms: int | None = None,
     ) -> InboundRecord:
         record_id = generate_id(cls.ID_PREFIX)
+        resolved_batch_id = batch_id or generate_id(IpIdPrefix.BATCH.value)
         resolved_trace_id = trace_id or generate_id(IpIdPrefix.TRACE.value)
         size_bytes = len(payload_bytes)
         sha256_hash = compute_payload_sha256(payload_bytes)
@@ -97,6 +123,9 @@ class InboundRecord(TracedAggregateRoot):
             connection_id=connection_id,
             app_id=app_id,
             stream_name=stream_name,
+            batch_id=resolved_batch_id,
+            batch_seq=batch_seq,
+            causation_depth=causation_depth,
             ingestion_mode=ingestion_mode,
             sync_run_id=sync_run_id,
             generation_id=generation_id,
@@ -129,6 +158,12 @@ class InboundRecord(TracedAggregateRoot):
         record.add_domain_event(
             InboundRecordCreatedEvent(
                 record_id=record_id,
+                batch_id=resolved_batch_id,
+                range_start=record_id,
+                range_end=record_id,
+                count=max(1, batch_record_count),
+                causation_depth=causation_depth,
+                record_ids=(record_id,),
                 tenant_id=tenant_id,
                 connection_id=connection_id,
                 app_id=app_id,
@@ -149,6 +184,120 @@ class InboundRecord(TracedAggregateRoot):
             )
         )
         return record
+
+    @classmethod
+    def create_range_batch(
+        cls,
+        *,
+        tenant_id: str,
+        connection_id: str,
+        app_id: str,
+        stream_name: str,
+        items: Sequence[InboundBatchItemSpec],
+        batch_id: str | None = None,
+        causation_depth: int = 0,
+        trace_id: str | None = None,
+        correlation_id: str | None = None,
+        parent_trace_id: str | None = None,
+        original_trace_id: str | None = None,
+        replay_count: int = 0,
+        ingestion_mode: IngestionMode = IngestionMode.PUSH_FULL,
+        sync_run_id: str | None = None,
+        generation_id: int | None = None,
+    ) -> tuple[InboundRecord, ...]:
+        """Creates `1..K` ordered InboundRecords and emits a single Range Claim-Check event on the anchor record."""
+        if not items:
+            return ()
+
+        batch_token = generate_random_hex(12)
+        resolved_batch_id = batch_id or f"{IpIdPrefix.BATCH.value}_{batch_token}"
+        resolved_trace_id = trace_id or generate_id(IpIdPrefix.TRACE.value)
+        received_ts = datetime.now(UTC)
+        total_bytes = 0
+        built: list[InboundRecord] = []
+
+        for seq, spec in enumerate(items):
+            rec_id = f"{cls.ID_PREFIX}_{batch_token}_{seq:08d}"
+            size_bytes = len(spec.payload_bytes)
+            total_bytes += size_bytes
+            sha256_hash = compute_payload_sha256(spec.payload_bytes)
+            rec = cls(
+                id=rec_id,
+                tenant_id=tenant_id,
+                trace_id=resolved_trace_id,
+                correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
+                connection_id=connection_id,
+                app_id=app_id,
+                stream_name=stream_name,
+                batch_id=resolved_batch_id,
+                batch_seq=seq,
+                causation_depth=causation_depth,
+                ingestion_mode=ingestion_mode,
+                sync_run_id=sync_run_id,
+                generation_id=generation_id,
+                external_event_id=spec.external_event_id,
+                request_headers=dict(spec.request_headers),
+                request_body=spec.request_body if spec.is_inlined else None,
+                request_s3_key=spec.request_s3_key if not spec.is_inlined else None,
+                request_size_bytes=size_bytes,
+                request_sha256=sha256_hash,
+                response_status_code=spec.response_status_code,
+                response_headers=spec.response_headers,
+                response_body=spec.response_body,
+                response_s3_key=spec.response_s3_key,
+                duration_ms=spec.duration_ms,
+                received_at=received_ts,
+            )
+            rec.add_trace_event(
+                IpTraceEvent.create(
+                    tenant_id=tenant_id,
+                    trace_id=resolved_trace_id,
+                    correlation_id=correlation_id,
+                    event_type=IpTraceEventType.INGEST_RECEIVED.value,
+                    stage=PipelineStage.INGEST,
+                    status=TraceEventStatus.SUCCESS,
+                    summary_message=(
+                        f"Ingested inbound stream '{stream_name}' batch item {seq + 1}/{len(items)} "
+                        f"via {ingestion_mode.value} ({size_bytes} bytes)."
+                    ),
+                )
+            )
+            built.append(rec)
+
+        anchor = built[0]
+        last = built[-1]
+        anchor.add_domain_event(
+            InboundRecordCreatedEvent(
+                record_id=anchor.id,
+                batch_id=resolved_batch_id,
+                range_start=anchor.id,
+                range_end=last.id,
+                count=len(built),
+                causation_depth=causation_depth,
+                record_ids=(anchor.id,) if len(built) == 1 else (),
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                app_id=app_id,
+                trace_id=resolved_trace_id,
+                correlation_id=correlation_id,
+                parent_trace_id=parent_trace_id,
+                original_trace_id=original_trace_id,
+                replay_count=replay_count,
+                stream_name=stream_name,
+                payload_size_bytes=total_bytes,
+                payload_sha256=anchor.request_sha256,
+                is_inlined=all(item.is_inlined for item in items),
+                s3_key=anchor.request_s3_key if len(built) == 1 else None,
+                ingestion_mode=ingestion_mode.value,
+                sync_run_id=sync_run_id,
+                generation_id=generation_id,
+                external_event_id=anchor.external_event_id if len(built) == 1 else None,
+            )
+        )
+        return tuple(built)
 
     def request_thin_record_fetch(self, *, record_id: str) -> InboundRecord:
         """Records FetchRecordRequestedEvent when a PUSH_THIN notice requires async full-record retrieval."""
@@ -211,6 +360,7 @@ class InboundRecord(TracedAggregateRoot):
             sha256_hash = self.request_sha256
             is_inlined = req_s3_key is None
 
+        cloned_batch_id = generate_id(IpIdPrefix.BATCH.value)
         cloned = InboundRecord(
             id=resolved_id,
             tenant_id=self.tenant_id,
@@ -222,6 +372,9 @@ class InboundRecord(TracedAggregateRoot):
             connection_id=self.connection_id,
             app_id=self.app_id,
             stream_name=self.stream_name,
+            batch_id=cloned_batch_id,
+            batch_seq=0,
+            causation_depth=0,
             ingestion_mode=self.ingestion_mode,
             sync_run_id=self.sync_run_id,
             generation_id=self.generation_id,
@@ -271,6 +424,12 @@ class InboundRecord(TracedAggregateRoot):
         cloned.add_domain_event(
             InboundRecordCreatedEvent(
                 record_id=resolved_id,
+                batch_id=cloned_batch_id,
+                range_start=resolved_id,
+                range_end=resolved_id,
+                count=1,
+                causation_depth=0,
+                record_ids=(resolved_id,),
                 tenant_id=self.tenant_id,
                 connection_id=self.connection_id,
                 app_id=self.app_id,

@@ -8,6 +8,7 @@ from ip.engine.adapters.outbound.database.base_repository import GlobalSqlAlchem
 from ip.engine.adapters.outbound.database.models.control_plane import StitchRecord
 from ip.engine.domain.stitch.stitch import Stitch
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
+from seedwork.domain.types import JsonPrimitive
 from sqlalchemy import case, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +18,16 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
 
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
+
+    @staticmethod
+    def _sanitize_filter_conditions(raw: object) -> dict[str, JsonPrimitive]:
+        if not isinstance(raw, dict):
+            return {}
+        cleaned: dict[str, JsonPrimitive] = {}
+        for k, v in raw.items():
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                cleaned[str(k)] = v
+        return cleaned
 
     @staticmethod
     def _to_domain_model(record: StitchRecord) -> Stitch:
@@ -31,6 +42,9 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             idempotency_key_field=record.idempotency_key_field,
             concurrency_key_field=record.concurrency_key_field,
             resource_hint_field=record.resource_hint_field,
+            filter_conditions=SqlAlchemyStitchRepository._sanitize_filter_conditions(
+                record.filter_conditions
+            ),
             is_active=record.is_active,
         )
 
@@ -47,6 +61,7 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
             idempotency_key_field=stitch.idempotency_key_field,
             concurrency_key_field=stitch.concurrency_key_field,
             resource_hint_field=stitch.resource_hint_field,
+            filter_conditions=dict(stitch.filter_conditions),
             is_active=stitch.is_active,
             created_at=now,
             updated_at=now,
@@ -67,6 +82,7 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
         record.idempotency_key_field = stitch.idempotency_key_field
         record.concurrency_key_field = stitch.concurrency_key_field
         record.resource_hint_field = stitch.resource_hint_field
+        record.filter_conditions = dict(stitch.filter_conditions)
         record.is_active = stitch.is_active
         record.updated_at = now
 

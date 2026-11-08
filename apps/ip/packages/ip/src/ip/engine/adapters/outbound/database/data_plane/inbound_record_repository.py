@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine, Sequence
-from typing import Any
+from collections.abc import Awaitable, Sequence
 
 from ip.engine.adapters.outbound.database.base_repository import TenantSqlAlchemyRepository
 from ip.engine.adapters.outbound.database.data_plane.mappers import inbound_record_to_domain
@@ -49,6 +48,9 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
             connection_id=domain.connection_id,
             app_id=domain.app_id,
             stream_name=domain.stream_name,
+            batch_id=domain.batch_id,
+            batch_seq=domain.batch_seq,
+            causation_depth=domain.causation_depth,
             ingestion_mode=domain.ingestion_mode.value,
             sync_run_id=domain.sync_run_id,
             generation_id=domain.generation_id,
@@ -73,6 +75,15 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
         self._drain_events(record, default_tenant_id=record.tenant_id)
         await self._session.flush()
 
+    async def save_batch(self, records: Sequence[InboundRecord]) -> None:
+        if not records:
+            return
+        self._session.add_all([self._to_orm_model(record) for record in records])
+        for record in records:
+            self._drain_trace_events(record)
+            self._drain_events(record, default_tenant_id=record.tenant_id)
+        await self._session.flush()
+
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
         stmt = select(InboundRecordModel).where(
             InboundRecordModel.id == record_id,
@@ -83,6 +94,59 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
         if orm is None:
             return None
         return self._to_domain_model(orm)
+
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        if batch_id and range_start and range_end:
+            stmt = (
+                select(InboundRecordModel)
+                .where(
+                    InboundRecordModel.tenant_id == tenant_id,
+                    InboundRecordModel.batch_id == batch_id,
+                    InboundRecordModel.id >= range_start,
+                    InboundRecordModel.id <= range_end,
+                )
+                .order_by(InboundRecordModel.batch_seq.asc(), InboundRecordModel.id.asc())
+            )
+            result = await self._session.execute(stmt)
+            return [self._to_domain_model(orm) for orm in result.scalars().all()]
+
+        if batch_id:
+            stmt = (
+                select(InboundRecordModel)
+                .where(
+                    InboundRecordModel.tenant_id == tenant_id,
+                    InboundRecordModel.batch_id == batch_id,
+                )
+                .order_by(InboundRecordModel.batch_seq.asc(), InboundRecordModel.id.asc())
+            )
+            result = await self._session.execute(stmt)
+            return [self._to_domain_model(orm) for orm in result.scalars().all()]
+
+        target_ids = list(record_ids)
+        if not target_ids and range_start:
+            target_ids = (
+                [range_start]
+                if not range_end or range_end == range_start
+                else [range_start, range_end]
+            )
+        if not target_ids:
+            return ()
+
+        stmt = select(InboundRecordModel).where(
+            InboundRecordModel.tenant_id == tenant_id,
+            InboundRecordModel.id.in_(target_ids),
+        )
+        result = await self._session.execute(stmt)
+        by_id = {orm.id: self._to_domain_model(orm) for orm in result.scalars().all()}
+        return [by_id[rec_id] for rec_id in target_ids if rec_id in by_id]
 
     async def _hydrate_single_request(
         self,
@@ -124,7 +188,7 @@ class SqlAlchemyInboundRecordRepository(TenantSqlAlchemyRepository, InboundRecor
         sem = asyncio.Semaphore(max_concurrent_downloads)
         total_hydrated_bytes = 0
 
-        tasks: list[Coroutine[Any, Any, None]] = []
+        tasks: list[Awaitable[None]] = []
         for r in records:
             if r.request_s3_key and (
                 total_hydrated_bytes + r.request_size_bytes <= max_aggregate_bytes

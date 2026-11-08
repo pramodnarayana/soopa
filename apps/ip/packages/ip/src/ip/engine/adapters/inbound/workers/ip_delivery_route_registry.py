@@ -47,7 +47,7 @@ from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStorageResultDTO,
 )
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
-from pubsub.enums import ConsumerAction
+from pubsub.enums import ConsumerAction, ConsumerDecision, ConsumerOutcome
 from pubsub.envelope_dispatcher import EventEnvelopeDispatcher
 from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
@@ -97,7 +97,7 @@ class IpDeliveryRouteRegistry:
             self.handle_sync_run_requested,
         )
 
-    async def handle_outbound_record_created(self, envelope: EventEnvelope) -> ConsumerAction:
+    async def handle_outbound_record_created(self, envelope: EventEnvelope) -> ConsumerOutcome:
         parsed_res = IpOutboundRecordChunkPayloadDTO.from_envelope(envelope)
         if parsed_res.is_err:
             return IpWorkerResultDispositionHandler.to_consumer_action(envelope, parsed_res)
@@ -148,7 +148,9 @@ class IpDeliveryRouteRegistry:
                     for rec_id in dto.record_ids
                 )
             )
-            action = IpWorkerResultDispositionHandler.to_chunk_consumer_action(envelope, outcomes)
+            decision = IpWorkerResultDispositionHandler.to_chunk_consumer_decision(
+                envelope, outcomes
+            )
         except (Exception, asyncio.CancelledError):
             if envelope.idempotency_key:
                 async with self._dp_uow_provider.get_data_plane_uow(
@@ -165,7 +167,10 @@ class IpDeliveryRouteRegistry:
                 )
             raise
 
-        if action is ConsumerAction.NACK and envelope.idempotency_key:
+        is_nack = decision is ConsumerAction.NACK or (
+            isinstance(decision, ConsumerDecision) and decision.action is ConsumerAction.NACK
+        )
+        if is_nack and envelope.idempotency_key:
             async with self._dp_uow_provider.get_data_plane_uow(
                 dto.tenant_id, shard_id, shard_dsn
             ) as release_uow:
@@ -178,7 +183,7 @@ class IpDeliveryRouteRegistry:
                 idempotency_key=envelope.idempotency_key,
                 tenant_id=dto.tenant_id,
             )
-        return action
+        return decision
 
     async def _deliver_single_record(
         self,
@@ -252,6 +257,7 @@ class IpDeliveryRouteRegistry:
                     original_trace_id=staged.original_trace_id,
                     replay_count=staged.replay_count,
                     attempt_number=staged.attempt_number,
+                    causation_depth=staged.causation_depth,
                 )
             )
             if delivery_res.is_err:

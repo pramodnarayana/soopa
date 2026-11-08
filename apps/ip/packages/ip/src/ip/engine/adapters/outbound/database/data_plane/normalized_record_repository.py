@@ -67,7 +67,10 @@ class SqlAlchemyNormalizedRecordRepository(
         orm = self._to_orm_model(record)
         self._session.add(orm)
         self._drain_trace_events(record)
-        self._drain_events(record, default_tenant_id=record.tenant_id)
+        if record.replay_count > 0:
+            self._drain_events(record, default_tenant_id=record.tenant_id)
+        else:
+            record.clear_domain_events()
         await self._session.flush()
 
     async def get_by_id(self, record_id: str, tenant_id: str) -> NormalizedRecord | None:

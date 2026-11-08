@@ -14,8 +14,15 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
 from ip.engine.domain.connection.enums import AuthType
-from ip.engine.domain.constants import DEFAULT_IDEMPOTENCY_HEADER, IpIdPrefix
+from ip.engine.domain.constants import (
+    DEFAULT_IDEMPOTENCY_HEADER,
+    DEFAULT_MAX_CAUSATION_DEPTH,
+    DEFAULT_MAX_DELIVERY_ATTEMPTS,
+    RETURN_LEG_STREAM_SUFFIX,
+    IpIdPrefix,
+)
 from ip.engine.domain.dispatch.classifier import (
+    OutboundHttpClassification,
     classify_outbound_http_outcome,
     redact_sensitive_headers,
 )
@@ -29,12 +36,19 @@ from ip.engine.domain.dispatch.enums import (
     TokenRefreshPolicy,
 )
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
+from ip.engine.domain.dispatch.quarantine_record import QuarantineRecord
+from ip.engine.domain.dispatch.response_envelope import ResponseEventEnvelope
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
     ConnectorNotFoundError,
     IpError,
     Result,
     TenantShardNotFoundError,
+)
+from ip.engine.domain.replication.enums import IngestionMode
+from ip.engine.domain.replication.inbound_record import (
+    InboundBatchItemSpec,
+    InboundRecord,
 )
 from ip.engine.ports.outbound.connector_port import (
     DestinationConnectorPort,
@@ -62,7 +76,7 @@ class DeliverOutboundRecordCommand:
     record_id: str | None = None
     idempotency_key: str | None = None
     idempotency_header_name: str = DEFAULT_IDEMPOTENCY_HEADER
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: Mapping[str, str] = field(default_factory=dict)
     conflict_strategy: OutboundConflictStrategy = OutboundConflictStrategy.FAIL
     trace_id: str | None = None
     correlation_id: str | None = None
@@ -70,6 +84,8 @@ class DeliverOutboundRecordCommand:
     original_trace_id: str | None = None
     replay_count: int = 0
     attempt_number: int = 1
+    causation_depth: int = 0
+    return_leg_stream_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -88,6 +104,8 @@ class DeliverOutboundRecordResponse:
     duration_ms: int | None = None
     was_deduplicated: bool = False
     was_token_refreshed: bool = False
+    was_quarantined: bool = False
+    return_leg_inbound_record_id: str | None = None
     failure_category: OutboundFailureCategory | None = None
     retry_after_seconds: int | None = None
     error_code: str | None = None
@@ -151,6 +169,8 @@ class DeliverOutboundRecordUseCase:
         connectors: Mapping[str, DestinationConnectorPort],
         data_plane_uow: IpDataPlaneUnitOfWorkPort | None = None,
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort | None = None,
+        max_delivery_attempts: int = DEFAULT_MAX_DELIVERY_ATTEMPTS,
+        max_causation_depth: int = DEFAULT_MAX_CAUSATION_DEPTH,
     ) -> None:
         if data_plane_uow is None and data_plane_uow_provider is None:
             raise ValueError("Either data_plane_uow or data_plane_uow_provider must be provided.")
@@ -159,6 +179,8 @@ class DeliverOutboundRecordUseCase:
         self._connectors = connectors
         self._data_plane_uow = data_plane_uow
         self._data_plane_uow_provider = data_plane_uow_provider
+        self._max_delivery_attempts = max(1, max_delivery_attempts)
+        self._max_causation_depth = max(1, max_causation_depth)
 
     @contextlib.asynccontextmanager
     async def _open_uow(
@@ -220,6 +242,89 @@ class DeliverOutboundRecordUseCase:
                 )
             )
         return Result.ok(shard_info_res.unwrap())
+
+    async def _build_return_leg_records(
+        self,
+        *,
+        command: DeliverOutboundRecordCommand,
+        outbound_record: OutboundRecord,
+        app_id: str,
+        write_result: WriteResultDTO,
+        status_code: int,
+        trace_id: str,
+        resp_inline_body: JsonDict | None,
+        resp_s3_key: str | None,
+    ) -> tuple[InboundRecord, ...]:
+        destination_id = (write_result.destination_id or "").strip()
+        if not destination_id:
+            return ()
+        if command.causation_depth >= self._max_causation_depth:
+            logger.info(
+                "outbound_return_leg_suppressed_causation_depth",
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+                outbound_record_id=outbound_record.id,
+                causation_depth=command.causation_depth,
+                max_causation_depth=self._max_causation_depth,
+                trace_id=trace_id,
+            )
+            return ()
+
+        next_causation_depth = command.causation_depth + 1
+        originating_trace = command.original_trace_id or trace_id
+        return_leg_trace_id = generate_id(IpIdPrefix.TRACE.value)
+        envelope_vo = ResponseEventEnvelope(
+            outbound_record_id=outbound_record.id,
+            source_record_id=write_result.record_id or command.record_id or outbound_record.id,
+            destination_id=destination_id,
+            connection_id=command.connection_id,
+            app_id=app_id,
+            stream_name=command.stream_name,
+            operation=command.operation,
+            status_code=status_code,
+            originating_trace_id=originating_trace,
+            causation_depth=next_causation_depth,
+            correlation_id=command.correlation_id,
+            response_body=resp_inline_body,
+            response_s3_key=resp_s3_key,
+        )
+        envelope_payload = envelope_vo.to_payload()
+        envelope_bytes = json.dumps(
+            envelope_payload,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+        return_leg_storage = await self._tiered_storage.store(
+            tenant_id=command.tenant_id,
+            trace_id=return_leg_trace_id,
+            payload_bytes=envelope_bytes,
+            parsed_payload=envelope_payload,
+        )
+        target_stream = (
+            command.return_leg_stream_name or f"{command.stream_name}{RETURN_LEG_STREAM_SUFFIX}"
+        )
+        return InboundRecord.create_range_batch(
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
+            app_id=app_id,
+            stream_name=target_stream,
+            items=(
+                InboundBatchItemSpec(
+                    payload_bytes=envelope_bytes,
+                    is_inlined=return_leg_storage.is_inlined,
+                    request_body=return_leg_storage.raw_payload,
+                    request_s3_key=return_leg_storage.s3_key,
+                    external_event_id=f"retleg:{outbound_record.id}",
+                ),
+            ),
+            causation_depth=next_causation_depth,
+            trace_id=return_leg_trace_id,
+            correlation_id=command.correlation_id or command.record_id,
+            parent_trace_id=trace_id,
+            original_trace_id=originating_trace,
+            replay_count=command.replay_count,
+            ingestion_mode=IngestionMode.RETURN_LEG_CALLBACK,
+        )
 
     async def execute(
         self,
@@ -346,6 +451,7 @@ class DeliverOutboundRecordUseCase:
                     request_body=req_storage.raw_payload,
                     request_s3_key=req_storage.s3_key,
                     attempt_number=command.attempt_number,
+                    causation_depth=command.causation_depth,
                 )
             await uow.outbound_records.save(outbound_record)
             await uow.commit()
@@ -425,8 +531,21 @@ class DeliverOutboundRecordUseCase:
                 duration_ms=write_result.duration_ms,
                 external_record_id=external_id,
             )
+            return_leg_records = await self._build_return_leg_records(
+                command=command,
+                outbound_record=outbound_record,
+                app_id=resolved_creds.app_id,
+                write_result=write_result,
+                status_code=status_code,
+                trace_id=trace_id,
+                resp_inline_body=resp_inline_body,
+                resp_s3_key=resp_s3_key,
+            )
+            return_leg_id = return_leg_records[0].id if return_leg_records else None
             async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
                 await uow.outbound_records.save(outbound_record)
+                if return_leg_records:
+                    await uow.inbound_records.save_batch(return_leg_records)
                 await uow.commit()
 
             logger.info(
@@ -437,6 +556,7 @@ class DeliverOutboundRecordUseCase:
                 idempotency_key=idempotency_key,
                 status_code=status_code,
                 duration_ms=write_result.duration_ms,
+                return_leg_inbound_record_id=return_leg_id,
                 trace_id=trace_id,
             )
             return Result.ok(
@@ -453,62 +573,144 @@ class DeliverOutboundRecordUseCase:
                     duration_ms=write_result.duration_ms,
                     was_deduplicated=False,
                     was_token_refreshed=was_token_refreshed,
+                    return_leg_inbound_record_id=return_leg_id,
                     failure_category=classification.failure_category,
                 )
             )
 
+        return await self._persist_failed_outcome(
+            command=command,
+            outbound_record=outbound_record,
+            write_result=write_result,
+            classification=classification,
+            shard_info=shard_info,
+            idempotency_key=idempotency_key,
+            trace_id=trace_id,
+            external_id=external_id,
+            resp_inline_body=resp_inline_body,
+            resp_s3_key=resp_s3_key,
+            was_token_refreshed=was_token_refreshed,
+        )
+
+    async def _persist_failed_outcome(
+        self,
+        *,
+        command: DeliverOutboundRecordCommand,
+        outbound_record: OutboundRecord,
+        write_result: WriteResultDTO,
+        classification: OutboundHttpClassification,
+        shard_info: tuple[str, str] | None,
+        idempotency_key: str,
+        trace_id: str,
+        external_id: str | None,
+        resp_inline_body: JsonDict | None,
+        resp_s3_key: str | None,
+        was_token_refreshed: bool,
+    ) -> Result[DeliverOutboundRecordResponse, IpError]:
         error_msg = write_result.error_message or "Outbound delivery failed."
         retry_after = write_result.retry_after_seconds or classification.retry_after_seconds
         failure_cat = classification.failure_category or OutboundFailureCategory.TERMINAL
 
         if classification.disposition is FailureDisposition.RETRY:
-            next_attempt = outbound_record.attempt_number + 1
-            outbound_record.schedule_retry(
-                error_message=error_msg,
-                next_attempt=next_attempt,
-                response_status_code=write_result.response_status_code,
-                response_headers=write_result.response_headers,
-                response_body=resp_inline_body,
-                response_s3_key=resp_s3_key,
-                duration_ms=write_result.duration_ms,
-                failure_category=failure_cat.value,
-                retry_after_seconds=retry_after,
-            )
-            async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
-                await uow.outbound_records.save(outbound_record)
-                await uow.commit()
-
-            logger.warning(
-                "outbound_delivery_retry_scheduled",
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                outbound_record_id=outbound_record.id,
-                idempotency_key=idempotency_key,
-                failure_category=failure_cat.value,
-                retry_after_seconds=retry_after,
-                next_attempt=next_attempt,
-                trace_id=trace_id,
-            )
-            return Result.ok(
-                DeliverOutboundRecordResponse(
-                    outbound_record_id=outbound_record.id,
-                    status=OutboundDispatchStatus.RETRY_SCHEDULED,
-                    trace_id=trace_id,
-                    idempotency_key=idempotency_key,
-                    record_id=write_result.record_id or (command.record_id or ""),
-                    destination_id=external_id,
+            if failure_cat is OutboundFailureCategory.RATE_LIMITED:
+                rate_limit_delay = retry_after if retry_after is not None else 5
+                outbound_record.mark_rate_limited(
+                    error_message=error_msg,
+                    retry_after_seconds=rate_limit_delay,
                     response_status_code=write_result.response_status_code,
+                    response_headers=write_result.response_headers,
                     response_body=resp_inline_body,
                     response_s3_key=resp_s3_key,
                     duration_ms=write_result.duration_ms,
-                    was_deduplicated=False,
-                    was_token_refreshed=was_token_refreshed,
-                    failure_category=failure_cat,
-                    retry_after_seconds=retry_after,
-                    error_code=write_result.error_code,
-                    error_message=error_msg,
                 )
-            )
+                async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+                    await uow.outbound_records.save(outbound_record)
+                    await uow.commit()
+
+                logger.warning(
+                    "outbound_delivery_rate_limited",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    outbound_record_id=outbound_record.id,
+                    idempotency_key=idempotency_key,
+                    retry_after_seconds=rate_limit_delay,
+                    attempt_number=outbound_record.attempt_number,
+                    trace_id=trace_id,
+                )
+                return Result.ok(
+                    DeliverOutboundRecordResponse(
+                        outbound_record_id=outbound_record.id,
+                        status=OutboundDispatchStatus.RATE_LIMITED,
+                        trace_id=trace_id,
+                        idempotency_key=idempotency_key,
+                        record_id=write_result.record_id or (command.record_id or ""),
+                        destination_id=external_id,
+                        response_status_code=write_result.response_status_code,
+                        response_body=resp_inline_body,
+                        response_s3_key=resp_s3_key,
+                        duration_ms=write_result.duration_ms,
+                        was_deduplicated=False,
+                        was_token_refreshed=was_token_refreshed,
+                        failure_category=failure_cat,
+                        retry_after_seconds=rate_limit_delay,
+                        error_code=write_result.error_code,
+                        error_message=error_msg,
+                    )
+                )
+
+            if outbound_record.attempt_number < self._max_delivery_attempts:
+                next_attempt = outbound_record.attempt_number + 1
+                backoff_seconds = (
+                    retry_after
+                    if retry_after is not None
+                    else min(300, 5 * (2 ** max(0, outbound_record.attempt_number - 1)))
+                )
+                outbound_record.schedule_retry(
+                    error_message=error_msg,
+                    next_attempt=next_attempt,
+                    response_status_code=write_result.response_status_code,
+                    response_headers=write_result.response_headers,
+                    response_body=resp_inline_body,
+                    response_s3_key=resp_s3_key,
+                    duration_ms=write_result.duration_ms,
+                    failure_category=failure_cat.value,
+                    retry_after_seconds=backoff_seconds,
+                )
+                async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+                    await uow.outbound_records.save(outbound_record)
+                    await uow.commit()
+
+                logger.warning(
+                    "outbound_delivery_retry_scheduled",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    outbound_record_id=outbound_record.id,
+                    idempotency_key=idempotency_key,
+                    failure_category=failure_cat.value,
+                    retry_after_seconds=backoff_seconds,
+                    next_attempt=next_attempt,
+                    trace_id=trace_id,
+                )
+                return Result.ok(
+                    DeliverOutboundRecordResponse(
+                        outbound_record_id=outbound_record.id,
+                        status=OutboundDispatchStatus.RETRY_SCHEDULED,
+                        trace_id=trace_id,
+                        idempotency_key=idempotency_key,
+                        record_id=write_result.record_id or (command.record_id or ""),
+                        destination_id=external_id,
+                        response_status_code=write_result.response_status_code,
+                        response_body=resp_inline_body,
+                        response_s3_key=resp_s3_key,
+                        duration_ms=write_result.duration_ms,
+                        was_deduplicated=False,
+                        was_token_refreshed=was_token_refreshed,
+                        failure_category=failure_cat,
+                        retry_after_seconds=backoff_seconds,
+                        error_code=write_result.error_code,
+                        error_message=error_msg,
+                    )
+                )
 
         outbound_record.mark_failed(
             error_message=error_msg,
@@ -519,18 +721,39 @@ class DeliverOutboundRecordUseCase:
             duration_ms=write_result.duration_ms,
             failure_category=failure_cat.value,
         )
-        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
-            await uow.outbound_records.save(outbound_record)
-            await uow.commit()
-
-        logger.error(
-            "outbound_delivery_terminal_failure",
+        quarantine_record = QuarantineRecord.create(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
             outbound_record_id=outbound_record.id,
+            stream_name=command.stream_name,
+            idempotency_key=idempotency_key,
+            trace_id=trace_id,
+            correlation_id=command.correlation_id,
+            failure_category=failure_cat.value,
+            error_code=write_result.error_code,
+            error_message=error_msg,
+            response_status_code=write_result.response_status_code,
+            attempt_count=outbound_record.attempt_number,
+            request_body=outbound_record.request_body,
+            request_s3_key=outbound_record.request_s3_key,
+            response_body=resp_inline_body,
+            response_s3_key=resp_s3_key,
+        )
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+            await uow.outbound_records.save(outbound_record)
+            await uow.quarantine_records.save(quarantine_record)
+            await uow.commit()
+
+        logger.error(
+            "outbound_delivery_quarantined",
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
+            outbound_record_id=outbound_record.id,
+            quarantine_record_id=quarantine_record.id,
             idempotency_key=idempotency_key,
             failure_category=failure_cat.value,
             status_code=write_result.response_status_code,
+            attempt_count=outbound_record.attempt_number,
             error_message=error_msg,
             trace_id=trace_id,
         )
@@ -548,6 +771,7 @@ class DeliverOutboundRecordUseCase:
                 duration_ms=write_result.duration_ms,
                 was_deduplicated=False,
                 was_token_refreshed=was_token_refreshed,
+                was_quarantined=True,
                 failure_category=failure_cat,
                 error_code=write_result.error_code,
                 error_message=error_msg,
@@ -605,7 +829,10 @@ class DeliverOutboundRecordUseCase:
                 delivered_count += 1
                 if outcome.was_deduplicated:
                     deduplicated_count += 1
-            elif outcome.status is OutboundDispatchStatus.RETRY_SCHEDULED:
+            elif outcome.status in (
+                OutboundDispatchStatus.RETRY_SCHEDULED,
+                OutboundDispatchStatus.RATE_LIMITED,
+            ):
                 retry_scheduled_count += 1
             else:
                 failed_count += 1

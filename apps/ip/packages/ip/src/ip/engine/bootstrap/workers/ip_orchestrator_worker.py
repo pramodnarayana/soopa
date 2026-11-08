@@ -29,9 +29,15 @@ from ip.engine.application.use_cases.normalization.normalize_replica_record_use_
     NormalizeReplicaRecordCommand,
     NormalizeReplicaRecordResultDTO,
 )
+from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
+    ProcessInboundRangeCommand,
+    ProcessInboundRangeResultDTO,
+    ProcessInboundRangeUseCase,
+)
 from ip.engine.application.worker_ports import (
     IpBackfillStreamNormalizationExecutorPort,
     IpNormalizeReplicaExecutorPort,
+    IpProcessInboundRangeExecutorPort,
 )
 from ip.engine.bootstrap.container import (
     Container,
@@ -44,6 +50,31 @@ from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.settings import IpEngineSettings, get_ip_engine_settings
 
 logger = structlog.get_logger(__name__)
+
+
+class _SessionScopedIpRangeExecutor(IpProcessInboundRangeExecutorPort):
+    """Opens an isolated Control Plane GlobalSession per fused L2->L3 range execution."""
+
+    def __init__(self, db_router: DatabaseRouterPort, container: Container) -> None:
+        self._db_router = db_router
+        self._container = container
+
+    async def execute(
+        self, command: ProcessInboundRangeCommand
+    ) -> Result[ProcessInboundRangeResultDTO, IpError]:
+        async with self._db_router.global_session_scope() as global_session:
+            cp_uow = create_ip_control_plane_uow(global_session)
+            norm_uc = self._container.normalize_replica_record_use_case(
+                control_plane_uow=cp_uow,
+            )
+            range_uc = ProcessInboundRangeUseCase(
+                control_plane_uow=cp_uow,
+                data_plane_uow_provider=self._container.dp_uow_provider(),
+                normalize_use_case=norm_uc,
+                extractor_registry=self._container.extractor_registry(),
+                tiered_storage=self._container.tiered_storage(),
+            )
+            return await range_uc.execute(command)
 
 
 class _SessionScopedIpNormalizeExecutor(IpNormalizeReplicaExecutorPort):
@@ -133,6 +164,8 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
         resolver = create_ip_tenant_resolver(self.db_router)
         container = Container()
         container.config.allow_private_ips.from_value(self.settings.allow_private_ips)
+        container.config.max_delivery_attempts.from_value(self.settings.max_delivery_attempts)
+        container.config.max_causation_depth.from_value(self.settings.max_causation_depth)
         container.db_router.override(providers.Object(self.db_router))
         container.tenant_resolver.override(providers.Object(resolver))
         if self._container_configurator is not None:
@@ -156,11 +189,13 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             dp_uow_provider=dp_uow_provider,
             normalize_use_case=_SessionScopedIpNormalizeExecutor(self.db_router, container),
             backfill_use_case=_SessionScopedIpBackfillExecutor(self.db_router, container),
+            process_inbound_range_use_case=_SessionScopedIpRangeExecutor(self.db_router, container),
             extractor_registry=container.extractor_registry(),
             tiered_storage=container.tiered_storage(),
             stitch_dispatcher=stitch_dispatcher,
             stitch_worker_tick=stitch_tick_adapter,
             max_chunk_concurrency=self.settings.orchestrator_chunk_concurrency,
+            max_causation_depth=self.settings.max_causation_depth,
         )
         self.dispatcher = EventEnvelopeDispatcher()
         self.route_registry.register_routes(self.dispatcher)

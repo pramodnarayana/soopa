@@ -7,6 +7,7 @@ import json
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.dispatch.events import OutboundRecordCreatedEvent
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord, compute_request_sha256
+from ip.engine.domain.dispatch.quarantine_record import QuarantineRecord
 from seedwork.domain.types import JsonDict
 from strace.domain import TracedAggregateRoot
 
@@ -98,3 +99,75 @@ def test_outbound_record_state_transitions() -> None:
     assert record.error_message == "401 Unauthorized"
     assert record.response_status_code == 401
     assert len(record.trace_events) == 4
+
+
+def test_outbound_record_mark_in_flight_attempt_sets_in_flight_without_domain_event() -> None:
+    record = OutboundRecord.create_pending(
+        tenant_id="ten_1",
+        connection_id="ip_conn_1",
+        app_id="acme_source",
+        stream_name="records_alpha",
+        target_url="https://api.partner.example.com/api/v1/records_alpha",
+        http_method="POST",
+        payload_bytes=b'{"id": "1"}',
+        is_inlined=True,
+        trace_id="ip_trc_in_flight",
+    )
+    record.clear_domain_events()
+
+    record.mark_in_flight_attempt(attempt_number=2)
+
+    assert record.status is OutboundDispatchStatus.IN_FLIGHT
+    assert record.attempt_number == 2
+    assert len(record.domain_events) == 0
+
+
+def test_outbound_record_mark_rate_limited_preserves_attempt_budget() -> None:
+    record = OutboundRecord.create_pending(
+        tenant_id="ten_1",
+        connection_id="ip_conn_1",
+        app_id="acme_source",
+        stream_name="records_alpha",
+        target_url="https://api.partner.example.com/api/v1/records_alpha",
+        http_method="POST",
+        payload_bytes=b'{"id": "1"}',
+        is_inlined=True,
+        trace_id="ip_trc_rl",
+    )
+    record.mark_in_flight_attempt(attempt_number=1)
+
+    record.mark_rate_limited(
+        error_message="HTTP 429 Too Many Requests",
+        retry_after_seconds=30,
+        response_status_code=429,
+    )
+
+    assert record.status is OutboundDispatchStatus.RATE_LIMITED
+    assert record.attempt_number == 1
+    assert record.retry_after_seconds == 30
+
+
+def test_quarantine_record_create_captures_terminal_failure_metadata() -> None:
+    qrn = QuarantineRecord.create(
+        tenant_id="ten_1",
+        connection_id="ip_conn_1",
+        outbound_record_id="ip_out_1",
+        stream_name="records_alpha",
+        idempotency_key="idem_1",
+        trace_id="ip_trc_qrn",
+        correlation_id="REC-1",
+        failure_category="VALIDATION_ERROR",
+        error_code="HTTP_ERROR",
+        error_message="Invalid schema",
+        response_status_code=422,
+        attempt_count=1,
+        request_body={"id": "REC-1"},
+        response_body={"detail": "Invalid schema"},
+    )
+
+    assert qrn.id.startswith("ip_qrn_")
+    assert qrn.tenant_id == "ten_1"
+    assert qrn.outbound_record_id == "ip_out_1"
+    assert qrn.failure_category == "VALIDATION_ERROR"
+    assert qrn.response_status_code == 422
+    assert qrn.attempt_count == 1
