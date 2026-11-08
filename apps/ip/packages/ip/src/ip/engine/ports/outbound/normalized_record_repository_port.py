@@ -28,6 +28,7 @@ class NormalizedRecordRepositoryPort(Protocol):
         tenant_id: str,
         canonical_type: str,
         source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
         """Lists normalized audit records for a given canonical entity type and source ID."""
         ...

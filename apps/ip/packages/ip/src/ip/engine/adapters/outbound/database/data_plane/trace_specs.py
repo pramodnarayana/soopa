@@ -51,6 +51,10 @@ _OUTBOUND_TRACE_STATUS_COL = case(
         OutboundRecordModel.status == OutboundDispatchStatus.IN_FLIGHT.value,
         IpTraceStatus.PENDING.value,
     ),
+    (
+        OutboundRecordModel.status == OutboundDispatchStatus.RATE_LIMITED.value,
+        IpTraceStatus.RETRY_SCHEDULED.value,
+    ),
     else_=OutboundRecordModel.status,
 )
 

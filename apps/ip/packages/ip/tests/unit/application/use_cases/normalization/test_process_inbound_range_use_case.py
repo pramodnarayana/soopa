@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import copy
 import json
 from collections.abc import AsyncIterator, Sequence
 from datetime import UTC, datetime
@@ -184,28 +185,74 @@ class _TransactionalReplicaRepo(ReplicaRecordRepositoryPort):
     ) -> ReplicaRecord | None:
         return self._effective_by_key(tenant_id, connection_id, stream, record_key)
 
-    async def merge_batch(
-        self,
-        candidates: Sequence[ReplicaMergeCandidate],
-        *,
-        event_policy: ReplicationEventPolicyPort | None = None,
-    ) -> list[MergeResult]:
-        now = datetime.now(UTC)
-        results: list[MergeResult] = []
-        changed: list[ReplicaRecord] = []
+    def _merge_single_candidate(
+        self, c: ReplicaMergeCandidate, now: datetime
+    ) -> tuple[MergeResult, ReplicaRecord | None]:
+        existing = self._effective_by_key(c.tenant_id, c.connection_id, c.stream, c.record_key)
+        cursor_kind = CursorKind(c.cursor_kind) if c.cursor_kind else CursorKind.STRING
+        outcome = ReplicaMergePolicy.evaluate(
+            existing=existing,
+            incoming_data_hash=c.data_hash,
+            incoming_cursor=c.cursor_value,
+            cursor_kind=cursor_kind,
+            is_deleted=c.is_deleted,
+        )
+        if existing is not None:
+            existing = copy.deepcopy(existing)
 
-        for c in candidates:
-            existing = self._effective_by_key(c.tenant_id, c.connection_id, c.stream, c.record_key)
-            cursor_kind = CursorKind(c.cursor_kind) if c.cursor_kind else CursorKind.STRING
-            outcome = ReplicaMergePolicy.evaluate(
-                existing=existing,
-                incoming_data_hash=c.data_hash,
-                incoming_cursor=c.cursor_value,
-                cursor_kind=cursor_kind,
-                is_deleted=c.is_deleted,
+        if outcome == MergeOutcome.INSERT:
+            rec = ReplicaRecord.create(
+                tenant_id=c.tenant_id,
+                connection_id=c.connection_id,
+                stream=c.stream,
+                record_key=c.record_key,
+                primary_key_values=c.primary_key_values,
+                cursor_value=c.cursor_value,
+                cursor_kind=c.cursor_kind,
+                data=c.data,
+                generation_id=c.generation_id,
+                source_inbound_record_id=c.source_inbound_record_id,
+                trace_id=c.trace_id,
+                correlation_id=c.correlation_id,
             )
-            if outcome == MergeOutcome.INSERT:
-                rec = ReplicaRecord.create(
+            self.staged[rec.id] = rec
+            return (
+                MergeResult(
+                    record_id=rec.id,
+                    stream=c.stream,
+                    record_key=c.record_key,
+                    outcome=MergeOutcome.INSERT,
+                    version=rec.version,
+                    data_hash=rec.data_hash,
+                    replica=rec,
+                ),
+                rec,
+            )
+        if outcome == MergeOutcome.UPDATE and existing is not None:
+            existing.update_snapshot(
+                new_data=c.data,
+                trace_id=c.trace_id,
+                correlation_id=c.correlation_id,
+                cursor_value=c.cursor_value,
+                generation_id=c.generation_id,
+                source_inbound_record_id=c.source_inbound_record_id,
+            )
+            self.staged[existing.id] = existing
+            return (
+                MergeResult(
+                    record_id=existing.id,
+                    stream=c.stream,
+                    record_key=c.record_key,
+                    outcome=MergeOutcome.UPDATE,
+                    version=existing.version,
+                    data_hash=existing.data_hash,
+                    replica=existing,
+                ),
+                existing,
+            )
+        if outcome == MergeOutcome.TOMBSTONE:
+            if existing is None:
+                rec = ReplicaRecord.create_tombstone(
                     tenant_id=c.tenant_id,
                     connection_id=c.connection_id,
                     stream=c.stream,
@@ -219,59 +266,73 @@ class _TransactionalReplicaRepo(ReplicaRecordRepositoryPort):
                     trace_id=c.trace_id,
                     correlation_id=c.correlation_id,
                 )
-                self.staged[rec.id] = rec
-                changed.append(rec)
-                results.append(
-                    MergeResult(
-                        record_id=rec.id,
-                        stream=c.stream,
-                        record_key=c.record_key,
-                        outcome=MergeOutcome.INSERT,
-                        version=rec.version,
-                        data_hash=rec.data_hash,
-                        replica=rec,
-                    )
-                )
-            elif outcome == MergeOutcome.UPDATE and existing is not None:
-                existing.update_snapshot(
-                    new_data=c.data,
+            else:
+                rec = existing
+                rec.tombstone(
                     trace_id=c.trace_id,
                     correlation_id=c.correlation_id,
-                    cursor_value=c.cursor_value,
                     generation_id=c.generation_id,
                     source_inbound_record_id=c.source_inbound_record_id,
                 )
-                self.staged[existing.id] = existing
-                changed.append(existing)
-                results.append(
-                    MergeResult(
-                        record_id=existing.id,
-                        stream=c.stream,
-                        record_key=c.record_key,
-                        outcome=MergeOutcome.UPDATE,
-                        version=existing.version,
-                        data_hash=existing.data_hash,
-                        replica=existing,
-                    )
-                )
-            else:
-                assert existing is not None
-                if outcome == MergeOutcome.NOOP:
-                    existing.last_seen_generation = c.generation_id
-                    existing.extracted_at = now
-                    existing.updated_at = now
-                    self.staged[existing.id] = existing
-                results.append(
-                    MergeResult(
-                        record_id=existing.id,
-                        stream=c.stream,
-                        record_key=c.record_key,
-                        outcome=outcome,
-                        version=existing.version,
-                        data_hash=existing.data_hash,
-                        replica=existing,
-                    )
-                )
+            self.staged[rec.id] = rec
+            return (
+                MergeResult(
+                    record_id=rec.id,
+                    stream=c.stream,
+                    record_key=c.record_key,
+                    outcome=MergeOutcome.TOMBSTONE,
+                    version=rec.version,
+                    data_hash=c.data_hash,
+                    replica=rec,
+                ),
+                rec,
+            )
+        if existing is not None:
+            if outcome == MergeOutcome.NOOP:
+                existing.last_seen_generation = c.generation_id
+                existing.extracted_at = now
+                existing.updated_at = now
+            self.staged[existing.id] = existing
+            return (
+                MergeResult(
+                    record_id=existing.id,
+                    stream=c.stream,
+                    record_key=c.record_key,
+                    outcome=outcome,
+                    version=existing.version,
+                    data_hash=existing.data_hash,
+                    replica=existing,
+                ),
+                None,
+            )
+        return (
+            MergeResult(
+                record_id="",
+                stream=c.stream,
+                record_key=c.record_key,
+                outcome=outcome,
+                version=0,
+                data_hash=c.data_hash,
+                replica=None,
+            ),
+            None,
+        )
+
+    async def merge_batch(
+        self,
+        candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
+    ) -> list[MergeResult]:
+        now = datetime.now(UTC)
+        results: list[MergeResult] = []
+        changed: list[ReplicaRecord] = []
+
+        for c in candidates:
+            res, changed_rec = self._merge_single_candidate(c, now)
+            results.append(res)
+            if changed_rec is not None:
+                changed.append(changed_rec)
 
         for agg in changed:
             self._traces.extend(agg.trace_events)
@@ -345,7 +406,11 @@ class _FakeNormalizedRepo(NormalizedRecordRepositoryPort):
         return rec if rec and rec.tenant_id == tenant_id else None
 
     async def list_by_source(
-        self, tenant_id: str, canonical_type: str, source_id: str
+        self,
+        tenant_id: str,
+        canonical_type: str,
+        source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
         merged = {**self.committed, **self.staged}
         return [
@@ -354,6 +419,7 @@ class _FakeNormalizedRepo(NormalizedRecordRepositoryPort):
             if r.tenant_id == tenant_id
             and r.canonical_type == canonical_type
             and r.source_id == source_id
+            and (connection_id is None or r.connection_id == connection_id)
         ]
 
     def commit(self) -> None:
@@ -623,9 +689,10 @@ class _FakeControlPlaneUoW(IpControlPlaneUnitOfWorkPort):
 
 
 class _OrderTransformer(TransformerPort):
-    def __init__(self, *, fail_transient: bool = False) -> None:
+    def __init__(self, *, fail_transient: bool = False, fail_on_call: int | None = None) -> None:
         self.call_count = 0
         self._fail_transient = fail_transient
+        self._fail_on_call = fail_on_call
 
     @property
     def transformation_id(self) -> str:
@@ -644,7 +711,9 @@ class _OrderTransformer(TransformerPort):
     ) -> TransformationResult:
         _ = context
         self.call_count += 1
-        if self._fail_transient:
+        if self._fail_transient or (
+            self._fail_on_call is not None and self.call_count == self._fail_on_call
+        ):
             raise TimeoutError("Transient lookup failure during L3 normalization")
         order_id = str(replica.data["id"])
         return TransformationResult(
@@ -734,7 +803,7 @@ class _OrderCanonicalWriter(CanonicalWriterPort):
 
 
 def _build_fused_harness(
-    *, fail_transient: bool = False
+    *, fail_transient: bool = False, fail_on_call: int | None = None
 ) -> tuple[
     _TransactionalDataPlaneUoW,
     _OrderTransformer,
@@ -753,7 +822,7 @@ def _build_fused_harness(
     )
     cp_uow = _FakeControlPlaneUoW({("ten_01", "conn_01", "orders"): transformation})
 
-    transformer = _OrderTransformer(fail_transient=fail_transient)
+    transformer = _OrderTransformer(fail_transient=fail_transient, fail_on_call=fail_on_call)
     transformer_reg = TransformerRegistry()
     transformer_reg.register(transformer)
 
@@ -978,3 +1047,210 @@ async def test_process_inbound_range_processes_bulk_range_in_single_commit() -> 
     assert dp_uow.commit_count == 1
     assert transformer.call_count == 3
     assert [c.source_id for c in dto.canonical_changes] == ["ORD-B1", "ORD-B2", "ORD-B3"]
+
+
+@pytest.mark.asyncio
+async def test_process_inbound_range_rolls_back_all_items_when_later_item_fails_transiently() -> (
+    None
+):
+    dp_uow, _, _, fused_uc = _build_fused_harness(fail_on_call=2)
+
+    specs = [
+        InboundBatchItemSpec(
+            payload_bytes=json.dumps({"id": "ORD-OK", "total": 100.0}).encode("utf-8"),
+            is_inlined=True,
+            request_body={"id": "ORD-OK", "total": 100.0},
+        ),
+        InboundBatchItemSpec(
+            payload_bytes=json.dumps({"id": "ORD-FAIL", "total": 200.0}).encode("utf-8"),
+            is_inlined=True,
+            request_body={"id": "ORD-FAIL", "total": 200.0},
+        ),
+    ]
+    records = InboundRecord.create_range_batch(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        app_id="crm_source",
+        stream_name="orders",
+        items=specs,
+        trace_id="ip_trc_multi_fail",
+    )
+    await dp_uow.inbound_records.save_batch(records)
+
+    res = await fused_uc.execute(
+        ProcessInboundRangeCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="orders",
+            batch_id=records[0].batch_id,
+            range_start=records[0].id,
+            range_end=records[-1].id,
+            count=2,
+            generation_id=1,
+            trace_id="ip_trc_multi_fail",
+        )
+    )
+
+    assert res.is_err
+    assert dp_uow.commit_count == 0
+    assert dp_uow.rollback_count >= 1
+    assert dp_uow.replica_records.committed == {}
+
+
+@pytest.mark.asyncio
+async def test_process_inbound_range_rolls_back_with_preexisting_replica() -> None:
+    dp_uow, _, _, fused_uc = _build_fused_harness(fail_transient=True)
+    initial_replica = ReplicaRecord.create(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="orders",
+        record_key="ORD-500",
+        primary_key_values={"id": "ORD-500"},
+        cursor_value=None,
+        cursor_kind=None,
+        data={"id": "ORD-500", "total": 100.0},
+        generation_id=1,
+        source_inbound_record_id="in_0",
+        trace_id="trc_0",
+    )
+    dp_uow.replica_records.committed[initial_replica.id] = initial_replica
+
+    updated_payload: JsonDict = {"id": "ORD-500", "total": 500.0}
+    inbound = InboundRecord.create(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        app_id="crm_source",
+        stream_name="orders",
+        payload_bytes=json.dumps(updated_payload).encode("utf-8"),
+        is_inlined=True,
+        request_body=updated_payload,
+        trace_id="ip_trc_fail_update",
+    )
+    await dp_uow.inbound_records.save(inbound)
+
+    res = await fused_uc.execute(
+        ProcessInboundRangeCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="orders",
+            batch_id=inbound.batch_id,
+            range_start=inbound.id,
+            range_end=inbound.id,
+            count=1,
+            generation_id=2,
+            trace_id="ip_trc_fail_update",
+        )
+    )
+
+    assert res.is_err
+    assert dp_uow.commit_count == 0
+    assert dp_uow.rollback_count >= 1
+    committed_rep = dp_uow.replica_records.committed[initial_replica.id]
+    assert committed_rep.version == 1
+    assert committed_rep.data["total"] == 100.0
+    assert dp_uow.normalized_records.committed == {}
+    assert dp_uow.normalization_ledger.committed == {}
+
+
+@pytest.mark.asyncio
+async def test_process_inbound_range_rolls_back_two_items_when_later_item_fails() -> None:
+    dp_uow, _, _, fused_uc = _build_fused_harness(fail_on_call=2)
+    specs = [
+        InboundBatchItemSpec(
+            payload_bytes=json.dumps({"id": f"ORD-ROLL-{i}", "total": 50.0 * i}).encode("utf-8"),
+            is_inlined=True,
+            request_body={"id": f"ORD-ROLL-{i}", "total": 50.0 * i},
+        )
+        for i in (1, 2)
+    ]
+    records = InboundRecord.create_range_batch(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        app_id="crm_source",
+        stream_name="orders",
+        items=specs,
+        trace_id="ip_trc_two_item_rollback",
+    )
+    await dp_uow.inbound_records.save_batch(records)
+
+    res = await fused_uc.execute(
+        ProcessInboundRangeCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="orders",
+            batch_id=records[0].batch_id,
+            range_start=records[0].id,
+            range_end=records[1].id,
+            count=2,
+            generation_id=1,
+            trace_id="ip_trc_two_item_rollback",
+        )
+    )
+
+    assert res.is_err
+    assert dp_uow.commit_count == 0
+    assert dp_uow.rollback_count >= 1
+    assert dp_uow.replica_records.committed == {}
+    assert dp_uow.normalized_records.committed == {}
+    assert dp_uow.normalization_ledger.committed == {}
+    assert dp_uow.committed_outbox == []
+    assert dp_uow.normalization_ledger.committed == {}
+    assert dp_uow.normalized_records.committed == {}
+
+
+@pytest.mark.asyncio
+async def test_process_inbound_range_rolls_back_preserves_existing_replica_state() -> None:
+    dp_uow, _, _, fused_uc = _build_fused_harness(fail_transient=True)
+
+    # Pre-seed committed replica
+    initial_replica = ReplicaRecord.create(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        stream="orders",
+        record_key="key_ORD-500",
+        primary_key_values=("ORD-500",),
+        cursor_value="100",
+        cursor_kind="STRING",
+        data={"id": "ORD-500", "total": 100.0},
+        generation_id=1,
+        source_inbound_record_id="inb_init",
+        trace_id="ip_trc_init",
+    )
+    dp_uow.replica_records.committed[initial_replica.id] = initial_replica
+    initial_version = initial_replica.version
+    initial_data = dict(initial_replica.data)
+
+    payload: JsonDict = {"id": "ORD-500", "total": 999.0}
+    inbound = InboundRecord.create(
+        tenant_id="ten_01",
+        connection_id="conn_01",
+        app_id="crm_source",
+        stream_name="orders",
+        payload_bytes=json.dumps(payload).encode("utf-8"),
+        is_inlined=True,
+        request_body=payload,
+        trace_id="ip_trc_update_fail",
+    )
+    await dp_uow.inbound_records.save(inbound)
+
+    res = await fused_uc.execute(
+        ProcessInboundRangeCommand(
+            tenant_id="ten_01",
+            connection_id="conn_01",
+            stream="orders",
+            batch_id=inbound.batch_id,
+            range_start=inbound.id,
+            range_end=inbound.id,
+            count=1,
+            generation_id=2,
+            trace_id="ip_trc_update_fail",
+        )
+    )
+
+    assert res.is_err
+    assert dp_uow.commit_count == 0
+    assert dp_uow.rollback_count >= 1
+    # Verify pre-existing replica in committed state was completely preserved
+    surviving = dp_uow.replica_records.committed[initial_replica.id]
+    assert surviving.version == initial_version
+    assert surviving.data == initial_data

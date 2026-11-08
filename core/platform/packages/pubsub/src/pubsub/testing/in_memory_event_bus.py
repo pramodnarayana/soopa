@@ -84,7 +84,8 @@ class InMemoryEventBus(OutboxPublisherPort, MessageConsumerPort):
 
         async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
             nonlocal acknowledged
-            _ = visibility_timeout_seconds
+            if visibility_timeout_seconds is not None and visibility_timeout_seconds > 0:
+                await asyncio.sleep(visibility_timeout_seconds)
             # Re-enqueue an isolated broker copy to simulate SQS redelivery after visibility timeout
             await self.queue.put(copy.deepcopy(stored_payload))
             self.queue.task_done()

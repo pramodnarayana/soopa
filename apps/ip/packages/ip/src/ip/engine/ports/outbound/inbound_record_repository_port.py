@@ -27,6 +27,7 @@ class InboundRecordRepositoryPort(Protocol):
         """Retrieves an inbound record by primary key scoped to tenant."""
         ...
 
+    @abstractmethod
     async def list_by_range(
         self,
         tenant_id: str,
@@ -37,7 +38,7 @@ class InboundRecordRepositoryPort(Protocol):
         record_ids: Sequence[str] = (),
     ) -> Sequence[InboundRecord]:
         """Retrieves an ordered slice of inbound records for a Range Claim-Check (`[range_start .. range_end]`)."""
-        return ()
+        ...
 
     @abstractmethod
     async def get_by_trace_id(

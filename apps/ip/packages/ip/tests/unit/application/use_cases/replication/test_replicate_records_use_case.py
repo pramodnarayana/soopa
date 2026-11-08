@@ -273,6 +273,22 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
     async def get_by_id(self, record_id: str, tenant_id: str) -> InboundRecord | None:
         return self.records.get((tenant_id, record_id))
 
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            self.records[(tenant_id, rec_id)]
+            for rec_id in target_ids
+            if (tenant_id, rec_id) in self.records
+        ]
+
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         return [
             r for r in self.records.values() if r.tenant_id == tenant_id and r.trace_id == trace_id
@@ -330,7 +346,11 @@ class FakeNormalizedRecordRepository(NormalizedRecordRepositoryPort):
         return []
 
     async def list_by_source(
-        self, tenant_id: str, canonical_type: str, source_id: str
+        self,
+        tenant_id: str,
+        canonical_type: str,
+        source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
         return ()
 

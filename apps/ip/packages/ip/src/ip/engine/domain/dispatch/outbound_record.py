@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import ClassVar
@@ -15,6 +16,7 @@ from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.dispatch.classifier import redact_sensitive_headers
 from ip.engine.domain.dispatch.enums import (
     HttpWriteOperation,
+    OutboundConflictStrategy,
     OutboundDispatchStatus,
     OutboundFailureCategory,
 )
@@ -58,6 +60,7 @@ class OutboundRecord(TracedAggregateRoot):
     response_s3_key: str | None = None
     duration_ms: int | None = None
     attempt_number: int = 1
+    conflict_strategy: str = OutboundConflictStrategy.FAIL.value
     failure_category: str | None = None
     retry_after_seconds: int | None = None
     error_message: str | None = None
@@ -88,6 +91,8 @@ class OutboundRecord(TracedAggregateRoot):
         request_body: JsonDict | None = None,
         request_s3_key: str | None = None,
         attempt_number: int = 1,
+        conflict_strategy: str = OutboundConflictStrategy.FAIL.value,
+        dispatch_headers: Mapping[str, str] | None = None,
         causation_depth: int = 0,
         status: OutboundDispatchStatus = OutboundDispatchStatus.PENDING,
     ) -> OutboundRecord:
@@ -117,6 +122,7 @@ class OutboundRecord(TracedAggregateRoot):
             request_size_bytes=size_bytes,
             request_sha256=sha256_hash,
             attempt_number=attempt_number,
+            conflict_strategy=conflict_strategy,
             causation_depth=causation_depth,
             status=status,
             sent_at=datetime.now(UTC),
@@ -148,6 +154,12 @@ class OutboundRecord(TracedAggregateRoot):
                 stream_name=stream_name,
                 status=str(status),
                 response_status_code=None,
+                dispatch_headers=(
+                    {str(k): str(v) for k, v in dispatch_headers.items()}
+                    if dispatch_headers is not None
+                    else {str(k): str(v) for k, v in (request_headers or {}).items()}
+                ),
+                conflict_strategy=conflict_strategy,
             )
         )
         return record
@@ -380,6 +392,7 @@ class OutboundRecord(TracedAggregateRoot):
             request_size_bytes=self.request_size_bytes,
             request_sha256=self.request_sha256,
             attempt_number=1,
+            conflict_strategy=self.conflict_strategy,
             causation_depth=self.causation_depth,
             status=OutboundDispatchStatus.PENDING,
             sent_at=datetime.now(UTC),
@@ -418,6 +431,8 @@ class OutboundRecord(TracedAggregateRoot):
                 stream_name=self.stream_name,
                 status=OutboundDispatchStatus.PENDING.value,
                 response_status_code=None,
+                dispatch_headers={str(k): str(v) for k, v in self.request_headers.items()},
+                conflict_strategy=self.conflict_strategy,
             )
         )
         return cloned

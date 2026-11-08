@@ -21,12 +21,19 @@ class SqlAlchemyStitchRepository(GlobalSqlAlchemyRepository, StitchRepositoryPor
 
     @staticmethod
     def _sanitize_filter_conditions(raw: object) -> dict[str, JsonPrimitive]:
-        if not isinstance(raw, dict):
+        if raw is None:
             return {}
+        if not isinstance(raw, dict):
+            raise TypeError(f"filter_conditions must be a dictionary, got {type(raw).__name__}")
         cleaned: dict[str, JsonPrimitive] = {}
         for k, v in raw.items():
             if isinstance(v, (str, int, float, bool)) or v is None:
                 cleaned[str(k)] = v
+            else:
+                raise ValueError(
+                    f"filter_conditions value for key '{k}' must be a primitive (str, int, float, bool, None), "
+                    f"got {type(v).__name__}"
+                )
         return cleaned
 
     @staticmethod

@@ -26,7 +26,13 @@ from ip.engine.application.use_cases.replication.replicate_records_use_case impo
     ReplicateRecordsUseCase,
     ReplicationSummary,
 )
-from ip.engine.domain.exceptions import IpError, PayloadNotFoundError, Result
+from ip.engine.domain.dispatch.enums import FailureDisposition
+from ip.engine.domain.exceptions import (
+    IpError,
+    IpErrorCode,
+    PayloadNotFoundError,
+    Result,
+)
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.event_policies import FUSED_IN_MEMORY_EVENT_POLICY
 from ip.engine.domain.replication.enums import MergeOutcome
@@ -257,9 +263,13 @@ class ProcessInboundRangeUseCase:
                 command.tenant_id,
                 evt.canonical_type,
                 evt.source_id,
+                connection_id=evt.connection_id,
             )
+            draft_payload = norm_dto.canonical_payloads.get((evt.canonical_type, evt.source_id), {})
             payload_dict: JsonDict = (
-                _coerce_canonical_json_dict(norm_rows[0].canonical_data) if norm_rows else {}
+                _coerce_canonical_json_dict(norm_rows[0].canonical_data)
+                if norm_rows
+                else _coerce_canonical_json_dict(draft_payload)
             )
             canonical_changes_sink.append(
                 CanonicalChangeItemDTO(
@@ -279,6 +289,73 @@ class ProcessInboundRangeUseCase:
             )
         return Result.ok(None)
 
+    @staticmethod
+    def _validate_inbound_records(
+        command: ProcessInboundRangeCommand,
+        inbound_records: Sequence[InboundRecord],
+        bound_logger: FilteringBoundLogger,
+    ) -> Result[None, IpError]:
+        if not inbound_records and (command.batch_id or command.range_start or command.record_ids):
+            bound_logger.error("inbound_range_records_not_found")
+            return Result.err(
+                PayloadNotFoundError(
+                    message=(
+                        f"No inbound records found for tenant '{command.tenant_id}' "
+                        f"(batch_id='{command.batch_id}', range_start='{command.range_start}')."
+                    )
+                )
+            )
+
+        if command.record_ids:
+            found_ids = {r.id for r in inbound_records}
+            missing_ids = set(command.record_ids) - found_ids
+            if missing_ids:
+                bound_logger.error(
+                    "inbound_range_explicit_record_ids_missing",
+                    missing_ids=sorted(missing_ids),
+                )
+                return Result.err(
+                    PayloadNotFoundError(
+                        message=(
+                            f"Explicit record_ids missing for tenant '{command.tenant_id}': "
+                            f"{sorted(missing_ids)}"
+                        )
+                    )
+                )
+        return Result.ok(None)
+
+    @staticmethod
+    async def _recover_noop_canonical_changes(
+        uow: IpDataPlaneUnitOfWorkPort,
+        command: ProcessInboundRangeCommand,
+        merge_results: list[MergeResult],
+        canonical_changes: list[CanonicalChangeItemDTO],
+    ) -> None:
+        for merge_res in merge_results:
+            if merge_res.outcome is MergeOutcome.NOOP and merge_res.replica is not None:
+                norm_rows = await uow.normalized_records.list_records(
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                )
+                matching = [r for r in norm_rows if r.source_id == merge_res.replica.record_key]
+                for nr in matching:
+                    canonical_changes.append(
+                        CanonicalChangeItemDTO(
+                            canonical_type=nr.canonical_type,
+                            source_id=nr.source_id,
+                            action="UPSERT",
+                            outcome=NormalizationOutcome.NORMALIZED,
+                            replica_id=merge_res.record_id,
+                            replica_version=merge_res.version,
+                            transformation_id="",
+                            transformation_version=1,
+                            trace_id=nr.trace_id,
+                            correlation_id=nr.correlation_id,
+                            changed_fields=(),
+                            canonical_payload=_coerce_canonical_json_dict(nr.canonical_data),
+                        )
+                    )
+
     async def _extract_range_candidates(
         self,
         *,
@@ -292,6 +369,22 @@ class ProcessInboundRangeUseCase:
         now = datetime.now(UTC)
 
         for inbound in inbound_records:
+            if (
+                inbound.connection_id != command.connection_id
+                or inbound.stream_name != command.stream
+            ):
+                return Result.err(
+                    IpError(
+                        code=IpErrorCode.VALIDATION_FAILED,
+                        message=(
+                            f"InboundRecord '{inbound.id}' connection/stream "
+                            f"('{inbound.connection_id}'/'{inbound.stream_name}') does not match "
+                            f"range command ('{command.connection_id}'/'{command.stream}')."
+                        ),
+                        disposition=FailureDisposition.FAIL,
+                    )
+                )
+
             payload_res = await self._resolve_inbound_payload(inbound)
             if payload_res.is_err:
                 return Result.err(payload_res.unwrap_err())
@@ -388,18 +481,9 @@ class ProcessInboundRangeUseCase:
                 range_end=command.range_end,
                 record_ids=command.record_ids,
             )
-            if not inbound_records and (
-                command.batch_id or command.range_start or command.record_ids
-            ):
-                bound_logger.error("inbound_range_records_not_found")
-                return Result.err(
-                    PayloadNotFoundError(
-                        message=(
-                            f"No inbound records found for tenant '{command.tenant_id}' "
-                            f"(batch_id='{command.batch_id}', range_start='{command.range_start}')."
-                        )
-                    )
-                )
+            val_res = self._validate_inbound_records(command, inbound_records, bound_logger)
+            if val_res.is_err:
+                return Result.err(val_res.unwrap_err())
 
             extracted_res = await self._extract_range_candidates(
                 inbound_records=inbound_records,
@@ -423,6 +507,13 @@ class ProcessInboundRangeUseCase:
                 await uow.replica_rejections.save_batch(rejections)
 
             mutated_results = self._deduplicate_mutated_results(merge_results)
+            if not mutated_results and merge_results:
+                await self._recover_noop_canonical_changes(
+                    uow=uow,
+                    command=command,
+                    merge_results=merge_results,
+                    canonical_changes=canonical_changes,
+                )
             for merge_res in mutated_results:
                 step_res = await self._collect_canonical_changes_for_replica(
                     uow=uow,

@@ -157,15 +157,28 @@ class ReceivePushUseCase:
                         payload={},
                         headers=str_headers,
                     )
+                    batch_count = 1
+                    range_start = existing.id
+                    range_end = existing.id
+                    if existing.batch_id:
+                        batch_records = await self._uow.inbound_records.list_by_range(
+                            tenant_id=command.tenant_id,
+                            batch_id=existing.batch_id,
+                        )
+                        if batch_records:
+                            batch_count = len(batch_records)
+                            range_start = batch_records[0].id
+                            range_end = batch_records[-1].id
+
                     return ReceivePushResultDTO(
                         status_code=ack_response.status_code,
                         headers=ack_response.headers,
                         body=ack_response.body,
                         record_id=existing.id,
                         batch_id=existing.batch_id,
-                        range_start=existing.id,
-                        range_end=existing.id,
-                        count=1,
+                        range_start=range_start,
+                        range_end=range_end,
+                        count=batch_count,
                         trace_id=trace_id,
                         is_duplicate=True,
                         is_verified=True,

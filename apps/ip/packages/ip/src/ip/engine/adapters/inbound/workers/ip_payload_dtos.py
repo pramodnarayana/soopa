@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 
 from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
@@ -414,6 +415,8 @@ class IpOutboundRecordChunkPayloadDTO:
     parent_trace_id: str | None = None
     original_trace_id: str | None = None
     replay_count: int = 0
+    dispatch_headers: Mapping[str, str] = field(default_factory=dict)
+    conflict_strategy: str = "FAIL"
 
     @classmethod
     def from_envelope(
@@ -428,6 +431,13 @@ class IpOutboundRecordChunkPayloadDTO:
         record_ids = _extract_record_ids(p, single_fallback_key="record_id")
         status = _extract_non_empty_str(p, "status", OutboundDispatchStatus.PENDING.value)
         trace_id = envelope.trace_id or _extract_non_empty_str(p, "trace_id") or envelope.id
+        raw_headers = p.get("dispatch_headers")
+        dispatch_headers = (
+            {str(k): str(v) for k, v in raw_headers.items()}
+            if isinstance(raw_headers, dict)
+            else {}
+        )
+        conflict_strategy = _extract_non_empty_str(p, "conflict_strategy", "FAIL")
         if not tenant_id or not connection_id or not record_ids:
             return Result.err(
                 _validation_error(
@@ -448,6 +458,8 @@ class IpOutboundRecordChunkPayloadDTO:
                 parent_trace_id=_extract_optional_str(p, "parent_trace_id"),
                 original_trace_id=_extract_optional_str(p, "original_trace_id"),
                 replay_count=max(0, _extract_int(p, "replay_count", 0)),
+                dispatch_headers=dispatch_headers,
+                conflict_strategy=conflict_strategy,
             )
         )
 

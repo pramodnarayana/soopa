@@ -89,14 +89,18 @@ class SqlAlchemyNormalizedRecordRepository(
         tenant_id: str,
         canonical_type: str,
         source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
+        conditions = [
+            NormalizedRecordModel.tenant_id == tenant_id,
+            NormalizedRecordModel.canonical_type == str(canonical_type),
+            NormalizedRecordModel.source_id == source_id,
+        ]
+        if connection_id is not None:
+            conditions.append(NormalizedRecordModel.connection_id == connection_id)
         stmt = (
             select(NormalizedRecordModel)
-            .where(
-                NormalizedRecordModel.tenant_id == tenant_id,
-                NormalizedRecordModel.canonical_type == str(canonical_type),
-                NormalizedRecordModel.source_id == source_id,
-            )
+            .where(*conditions)
             .order_by(NormalizedRecordModel.normalized_at.desc())
         )
         result = await self._session.execute(stmt)

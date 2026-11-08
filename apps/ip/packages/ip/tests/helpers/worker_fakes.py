@@ -454,21 +454,59 @@ class FakeReplicaRecordRepo(ReplicaRecordRepositoryPort):
                         replica=existing,
                     )
                 )
-            else:
-                assert existing is not None
-                if outcome == MergeOutcome.NOOP:
-                    existing.last_seen_generation = cand.generation_id
+            elif outcome == MergeOutcome.TOMBSTONE:
+                if existing is None:
+                    existing = ReplicaRecord.create_tombstone(
+                        tenant_id=cand.tenant_id,
+                        connection_id=cand.connection_id,
+                        stream=cand.stream,
+                        record_key=cand.record_key,
+                        primary_key_values=cand.primary_key_values,
+                        cursor_value=str(cand.cursor_value)
+                        if cand.cursor_value is not None
+                        else None,
+                        cursor_kind=cand.cursor_kind,
+                        data=cand.data,
+                        generation_id=cand.generation_id,
+                        source_inbound_record_id=cand.source_inbound_record_id,
+                        trace_id=cand.trace_id,
+                        correlation_id=cand.correlation_id,
+                    )
+                    self.records[existing.id] = existing
+                else:
+                    existing.tombstone(
+                        trace_id=cand.trace_id,
+                        correlation_id=cand.correlation_id,
+                        generation_id=cand.generation_id,
+                        source_inbound_record_id=cand.source_inbound_record_id,
+                    )
+                changed.append(existing)
                 results.append(
                     MergeResult(
                         record_id=existing.id,
                         stream=cand.stream,
                         record_key=cand.record_key,
-                        outcome=outcome,
+                        outcome=MergeOutcome.TOMBSTONE,
                         version=existing.version,
-                        data_hash=existing.data_hash,
+                        data_hash=cand.data_hash,
                         replica=existing,
                     )
                 )
+            else:
+                if existing is not None:
+                    if outcome == MergeOutcome.NOOP:
+                        existing.last_seen_generation = cand.generation_id
+                    results.append(
+                        MergeResult(
+                            record_id=existing.id,
+                            stream=cand.stream,
+                            record_key=cand.record_key,
+                            outcome=outcome,
+                            version=existing.version,
+                            data_hash=existing.data_hash,
+                            replica=existing,
+                        )
+                    )
 
         to_emit = (
             event_policy.select_outbox_replicas(changed)
@@ -591,6 +629,7 @@ class FakeNormalizedRecordRepo(NormalizedRecordRepositoryPort):
         tenant_id: str,
         canonical_type: str,
         source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
         return [
             r
@@ -598,6 +637,7 @@ class FakeNormalizedRecordRepo(NormalizedRecordRepositoryPort):
             if r.tenant_id == tenant_id
             and r.canonical_type == canonical_type
             and r.source_id == source_id
+            and (connection_id is None or r.connection_id == connection_id)
         ]
 
 

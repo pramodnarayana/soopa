@@ -617,7 +617,12 @@ async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
 
     assert "REC-RT-01" in canonical_writer.rows
     assert canonical_writer.rows["REC-RT-01"]["amount"] == 42.5
-    assert any(c.record_id == "REC-RT-01" for c in delivery_executor.delivered_commands)
+    assert any(
+        c.record_id == "REC-RT-01"
+        and c.payload.get("amount") == 42.5
+        and c.payload.get("status") == "ACTIVE"
+        for c in delivery_executor.delivered_commands
+    )
     # 2-Queue Boundary invariant: zero internal replica/canonical hops on orchestrator queues;
     # only initial L1 ingress + L5->L1 return-leg callback (`causation_depth=1`) hit ingress queue!
     orch_rt_types = [e.event_type for e in orch_rt_bridge.published_envelopes]
@@ -671,7 +676,12 @@ async def test_end_to_end_pipeline_across_all_5_layers_across_lanes(
         rec_key = f"REC-BLK-0{idx}"
         assert rec_key in canonical_writer.rows
         assert canonical_writer.rows[rec_key]["amount"] == float(idx * 100)
-        assert any(c.record_id == rec_key for c in delivery_executor.delivered_commands)
+        assert any(
+            c.record_id == rec_key
+            and c.payload.get("amount") == float(idx * 100)
+            and c.payload.get("status") == "ACTIVE"
+            for c in delivery_executor.delivered_commands
+        )
 
     inb_bulk_envelopes = [
         env

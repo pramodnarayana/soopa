@@ -45,7 +45,17 @@ class Stitch(AggregateRoot):
         """Evaluates declarative equality predicates against the canonical event payload."""
         if not self.filter_conditions:
             return True
-        return all(payload.get(key) == expected for key, expected in self.filter_conditions.items())
+        for key, expected in self.filter_conditions.items():
+            actual = payload.get(key)
+            if isinstance(expected, bool):
+                if not isinstance(actual, bool) or actual != expected:
+                    return False
+            elif isinstance(expected, (int, float)):
+                if isinstance(actual, bool) or actual != expected:
+                    return False
+            elif actual != expected:
+                return False
+        return True
 
     def record_registered(self) -> None:
         """Records a StitchRegisteredEvent domain event on this aggregate."""
@@ -256,6 +266,18 @@ class ExecuteHttpActionStepInput:
         except ValueError:
             conflict_strat = OutboundConflictStrategy.FAIL
 
+        if isinstance(raw_causation_depth, int) and not isinstance(raw_causation_depth, bool):
+            if raw_causation_depth < 0:
+                return Result.err(
+                    WorkflowError(
+                        code=WorkflowErrorCode.CODEC_ERROR,
+                        message=f"causation_depth cannot be negative, got {raw_causation_depth}",
+                    )
+                )
+            resolved_depth = raw_causation_depth
+        else:
+            resolved_depth = 0
+
         return Result.ok(
             cls(
                 connection_id=conn_id.strip(),
@@ -267,12 +289,7 @@ class ExecuteHttpActionStepInput:
                 else None,
                 headers=headers_dict,
                 conflict_strategy=conflict_strat,
-                causation_depth=(
-                    raw_causation_depth
-                    if isinstance(raw_causation_depth, int)
-                    and not isinstance(raw_causation_depth, bool)
-                    else 0
-                ),
+                causation_depth=resolved_depth,
             )
         )
 

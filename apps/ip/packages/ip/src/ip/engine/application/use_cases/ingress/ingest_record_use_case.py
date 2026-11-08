@@ -76,6 +76,7 @@ class IngestRecordUseCase:
         # 1. Normalize payload to raw bytes and optional parsed dict
         payload_bytes: bytes
         parsed_payload: JsonDict | None = None
+        decoded_array_len: int | None = None
 
         if isinstance(command.payload, bytes):
             payload_bytes = command.payload
@@ -83,6 +84,8 @@ class IngestRecordUseCase:
                 decoded = json.loads(payload_bytes.decode("utf-8"))
                 if isinstance(decoded, dict):
                     parsed_payload = decoded
+                elif isinstance(decoded, list):
+                    decoded_array_len = len(decoded)
             except (json.JSONDecodeError, UnicodeDecodeError):
                 parsed_payload = None
         else:
@@ -98,12 +101,14 @@ class IngestRecordUseCase:
             parsed_payload=parsed_payload,
         )
 
-        batch_record_count = (
-            max(1, len(command.payload))
-            if isinstance(command.payload, Sequence)
-            and not isinstance(command.payload, (bytes, str, dict))
-            else 1
-        )
+        if decoded_array_len is not None:
+            batch_record_count = max(1, decoded_array_len)
+        elif isinstance(command.payload, Sequence) and not isinstance(
+            command.payload, (bytes, str, dict)
+        ):
+            batch_record_count = max(1, len(command.payload))
+        else:
+            batch_record_count = 1
 
         # 3. Create InboundRecord traced aggregate root (emits InboundRecordCreatedEvent & IpTraceEvent)
         record = InboundRecord.create(

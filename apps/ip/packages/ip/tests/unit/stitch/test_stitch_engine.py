@@ -683,7 +683,17 @@ async def test_stitch_worker_tick_catches_unhandled_handler_exception() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stitch_filter_conditions_skip_non_matching_canonical_payload() -> None:
+@pytest.mark.parametrize(
+    ("payload_status", "payload_region"),
+    [
+        ("DRAFT", "EU"),
+        ("APPROVED", "US"),
+    ],
+)
+async def test_stitch_filter_conditions_skip_non_matching_canonical_payload(
+    payload_status: str,
+    payload_region: str,
+) -> None:
     now = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
     uow = InMemoryWorkflowUnitOfWork()
     definitions = InMemoryWorkflowDefinitionRegistry()
@@ -732,8 +742,8 @@ async def test_stitch_filter_conditions_skip_non_matching_canonical_payload() ->
         DispatchCanonicalEventToStitchesCommand(
             tenant_id="ten_alpha",
             canonical_event_type="canonical.order.v1",
-            event_id="evt_draft_order",
-            payload={"id": "ORD-1", "status": "DRAFT", "region": "EU"},
+            event_id=f"evt_{payload_status}_{payload_region}",
+            payload={"id": "ORD-1", "status": payload_status, "region": payload_region},
             trace_id="trc_filter_skip",
             now=now,
         )

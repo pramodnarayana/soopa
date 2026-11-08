@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
 import json
+from collections.abc import Mapping
 
 import structlog
 from ip.engine.adapters.inbound.workers.ip_disposition import (
@@ -30,8 +33,10 @@ from ip.engine.application.worker_ports import (
     IpOutboundDeliveryExecutorPort,
     IpRunSyncExecutorPort,
 )
+from ip.engine.domain.constants import RESERVED_RAW_BYTES_KEY, WRAPPED_SCALAR_KEY
 from ip.engine.domain.dispatch.enums import (
     FailureDisposition,
+    OutboundConflictStrategy,
     OutboundDispatchStatus,
 )
 from ip.engine.domain.dispatch.outbound_record import OutboundRecord
@@ -144,6 +149,8 @@ class IpDeliveryRouteRegistry:
                         shard_id=shard_id,
                         shard_dsn=shard_dsn,
                         outbound_record_id=rec_id,
+                        dispatch_headers=dto.dispatch_headers,
+                        conflict_strategy=dto.conflict_strategy,
                     )
                     for rec_id in dto.record_ids
                 )
@@ -193,6 +200,8 @@ class IpDeliveryRouteRegistry:
         shard_id: str,
         shard_dsn: str,
         outbound_record_id: str,
+        dispatch_headers: Mapping[str, str] | None = None,
+        conflict_strategy: str | None = None,
     ) -> Result[DeliverOutboundRecordResponse, IpError]:
         async with sem:
             async with self._dp_uow_provider.get_data_plane_uow(
@@ -238,9 +247,16 @@ class IpDeliveryRouteRegistry:
             if payload_res.is_err:
                 return Result.err(payload_res.unwrap_err())
 
-            headers_map: dict[str, str] = {
-                str(k): str(v) for k, v in staged.request_headers.items()
-            }
+            effective_headers: dict[str, str] = (
+                {str(k): str(v) for k, v in dispatch_headers.items()}
+                if dispatch_headers
+                else {str(k): str(v) for k, v in staged.request_headers.items()}
+            )
+            resolved_conflict = (
+                OutboundConflictStrategy(conflict_strategy)
+                if conflict_strategy
+                else OutboundConflictStrategy(staged.conflict_strategy)
+            )
             delivery_res = await self._deliver_outbound.execute(
                 DeliverOutboundRecordCommand(
                     tenant_id=staged.tenant_id,
@@ -250,7 +266,8 @@ class IpDeliveryRouteRegistry:
                     payload=payload_res.unwrap(),
                     record_id=staged.external_record_id,
                     idempotency_key=staged.idempotency_key or staged.id,
-                    headers=headers_map,
+                    headers=effective_headers,
+                    conflict_strategy=resolved_conflict,
                     trace_id=staged.trace_id,
                     correlation_id=staged.correlation_id,
                     parent_trace_id=staged.parent_trace_id,
@@ -264,9 +281,27 @@ class IpDeliveryRouteRegistry:
                 return delivery_res
             return IpWorkerResultDispositionHandler.map_outbound_response(delivery_res.unwrap())
 
+    @staticmethod
+    def _decode_inline_body(body: JsonDict) -> JsonDict:
+        if RESERVED_RAW_BYTES_KEY in body:
+            raw_b64_val = body[RESERVED_RAW_BYTES_KEY]
+            try:
+                raw_bytes = base64.b64decode(str(raw_b64_val), validate=True)
+                decoded_text = raw_bytes.decode("utf-8")
+                parsed = json.loads(decoded_text)
+                if isinstance(parsed, dict):
+                    return parsed
+                return {WRAPPED_SCALAR_KEY: parsed}
+            except (binascii.Error, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                logger.warning("failed_to_decode_raw_b64_payload", error=str(exc))
+        cleaned = {k: v for k, v in body.items() if k != RESERVED_RAW_BYTES_KEY}
+        if f"_escaped_{RESERVED_RAW_BYTES_KEY}" in cleaned:
+            cleaned[RESERVED_RAW_BYTES_KEY] = cleaned.pop(f"_escaped_{RESERVED_RAW_BYTES_KEY}")
+        return cleaned
+
     async def _hydrate_outbound_payload(self, staged: OutboundRecord) -> Result[JsonDict, IpError]:
         if staged.request_body is not None:
-            return Result.ok(dict(staged.request_body))
+            return Result.ok(self._decode_inline_body(dict(staged.request_body)))
         if staged.request_s3_key is not None:
             if self._tiered_storage is None:
                 return Result.err(

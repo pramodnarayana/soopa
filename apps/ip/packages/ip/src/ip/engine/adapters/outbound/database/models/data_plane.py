@@ -219,6 +219,7 @@ class OutboundRecordModel(IpTenantBase, TenantTraceableOrmModel):
     response_s3_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    conflict_strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="FAIL")
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     failure_category: Mapped[str | None] = mapped_column(String(64), nullable=True)
     retry_after_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)

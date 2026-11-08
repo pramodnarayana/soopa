@@ -209,16 +209,11 @@ class StageOutboundDeliveryUseCase:
                 or f"https://{connection.app_id}.local"
             ).rstrip("/")
             initial_target_url = f"{base_url}/{command.stream_name.lstrip('/')}"
-            extra_sensitive = [
-                k for k in command.headers if k.lower() != command.idempotency_header_name.lower()
-            ]
-            initial_headers: JsonDict = redact_sensitive_headers(
-                {
-                    **command.headers,
-                    command.idempotency_header_name: idempotency_key,
-                },
-                extra_sensitive_names=extra_sensitive,
-            )
+            raw_dispatch_headers = {
+                **command.headers,
+                command.idempotency_header_name: idempotency_key,
+            }
+            initial_headers: JsonDict = redact_sensitive_headers(raw_dispatch_headers)
 
             outbound_record = OutboundRecord.create_pending(
                 tenant_id=command.tenant_id,
@@ -241,6 +236,8 @@ class StageOutboundDeliveryUseCase:
                 request_body=req_storage.raw_payload,
                 request_s3_key=req_storage.s3_key,
                 attempt_number=1,
+                conflict_strategy=command.conflict_strategy.value,
+                dispatch_headers=raw_dispatch_headers,
                 causation_depth=command.causation_depth,
             )
             await uow.outbound_records.save(outbound_record)

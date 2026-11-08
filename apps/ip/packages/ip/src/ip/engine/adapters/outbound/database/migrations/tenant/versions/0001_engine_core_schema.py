@@ -133,6 +133,12 @@ def upgrade() -> None:
         sa.Column("response_s3_key", sa.String(length=512), nullable=True),
         sa.Column("duration_ms", sa.Integer(), nullable=True),
         sa.Column("attempt_number", sa.Integer(), server_default=sa.text("1"), nullable=False),
+        sa.Column(
+            "conflict_strategy",
+            sa.String(length=32),
+            server_default="FAIL",
+            nullable=False,
+        ),
         sa.Column("status", sa.String(length=32), server_default="PENDING", nullable=False),
         sa.Column("failure_category", sa.String(length=64), nullable=True),
         sa.Column("retry_after_seconds", sa.Integer(), nullable=True),

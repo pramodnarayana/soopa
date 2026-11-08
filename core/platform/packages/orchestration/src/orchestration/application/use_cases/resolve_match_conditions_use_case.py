@@ -48,6 +48,7 @@ class ResolveMatchConditionsCommand:
     resource_hint: str | None = None
     payload: JsonDict = field(default_factory=dict)
     now: datetime = field(default_factory=lambda: datetime.now(UTC))
+    workflow_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -100,6 +101,7 @@ class ResolveMatchConditionsUseCase:
             resource_hint=command.resource_hint,
             payload=command.payload,
             occurred_at=command.now,
+            workflow_id=command.workflow_id,
         )
         async with self._uow_factory() as uow:
             res = await self.resolve_in_uow(
@@ -176,6 +178,18 @@ class ResolveMatchConditionsUseCase:
         acc: _ResolutionAccumulator,
         now: datetime,
     ) -> WorkflowError | None:
+        if event.workflow_id is not None:
+            run_check_res = await self._get_or_load_run(
+                uow=uow,
+                tenant_id=match.tenant_id,
+                run_id=match.run_id,
+                affected_runs=acc.affected_runs,
+            )
+            if run_check_res.is_err:
+                return run_check_res.unwrap_err()
+            if run_check_res.unwrap().workflow_id != event.workflow_id:
+                return None
+
         updated_match = match.apply_event(event, self._predicate_evaluator)
         if updated_match == match:
             return None

@@ -372,55 +372,42 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
             replica=existing_domain,
         )
 
-    async def merge_batch(
-        self,
-        candidates: Sequence[ReplicaMergeCandidate],
-        *,
-        event_policy: ReplicationEventPolicyPort | None = None,
+    @staticmethod
+    def _reconcile_persisted_results(
+        persisted_map: dict[tuple[str, str], tuple[str, int]],
+        changed_aggregates: dict[tuple[str, str], ReplicaRecord],
+        results: list[MergeResult],
     ) -> list[MergeResult]:
-        """Merges a batch of candidate records using one atomic PostgreSQL INSERT ... ON CONFLICT DO UPDATE."""
-        if not candidates:
-            return []
+        for map_key, (persisted_id, persisted_version) in persisted_map.items():
+            if map_key in changed_aggregates:
+                agg = changed_aggregates[map_key]
+                if agg.id != persisted_id:
+                    agg.id = persisted_id
+                agg.version = persisted_version
 
-        now = datetime.now(UTC)
-        existing_map = await self._fetch_existing_domain_map(candidates)
-        upsert_rows: dict[tuple[str, str], ReplicaRecordRowDict] = {}
-        changed_aggregates: dict[tuple[str, str], ReplicaRecord] = {}
+        reconciled: list[MergeResult] = []
+        for r in results:
+            map_key = (r.stream, r.record_key)
+            if map_key in persisted_map:
+                p_id, p_ver = persisted_map[map_key]
+                if r.record_id != p_id or r.version != p_ver:
+                    r = MergeResult(
+                        record_id=p_id,
+                        stream=r.stream,
+                        record_key=r.record_key,
+                        outcome=r.outcome,
+                        version=p_ver,
+                        data_hash=r.data_hash,
+                        replica=r.replica,
+                    )
+            reconciled.append(r)
+        return reconciled
 
-        results: list[MergeResult] = []
-        for c in candidates:
-            res = self._evaluate_candidate(
-                c=c,
-                existing_map=existing_map,
-                upsert_rows=upsert_rows,
-                changed_aggregates=changed_aggregates,
-                now=now,
-            )
-            results.append(res)
-
-        if upsert_rows:
-            insert_stmt = pg_insert(ReplicaRecordModel).values(list(upsert_rows.values()))
-            upsert_stmt = insert_stmt.on_conflict_do_update(
-                constraint="uq_ip_replica_record_identity",
-                set_={
-                    "primary_key_values": insert_stmt.excluded.primary_key_values,
-                    "cursor_value": insert_stmt.excluded.cursor_value,
-                    "cursor_kind": insert_stmt.excluded.cursor_kind,
-                    "data": insert_stmt.excluded.data,
-                    "data_hash": insert_stmt.excluded.data_hash,
-                    "version": insert_stmt.excluded.version,
-                    "last_seen_generation": insert_stmt.excluded.last_seen_generation,
-                    "extracted_at": insert_stmt.excluded.extracted_at,
-                    "updated_at": insert_stmt.excluded.updated_at,
-                    "deleted_at": insert_stmt.excluded.deleted_at,
-                    "source_inbound_record_id": insert_stmt.excluded.source_inbound_record_id,
-                    "trace_id": insert_stmt.excluded.trace_id,
-                    "correlation_id": insert_stmt.excluded.correlation_id,
-                },
-            )
-            await self._session.execute(upsert_stmt)
-
-        changed_list = list(changed_aggregates.values())
+    def _publish_outbox_events(
+        self,
+        changed_list: list[ReplicaRecord],
+        event_policy: ReplicationEventPolicyPort | None,
+    ) -> None:
         for agg in changed_list:
             self._drain_trace_events(agg)
 
@@ -440,6 +427,69 @@ class SqlAlchemyReplicaRecordRepository(TenantSqlAlchemyRepository, ReplicaRecor
                 first.record_batch_upsert_chunk(chunk_record_ids=tuple(a.id for a in chunk_aggs))
                 self._drain_events(first, default_tenant_id=first.tenant_id)
 
+    async def merge_batch(
+        self,
+        candidates: Sequence[ReplicaMergeCandidate],
+        *,
+        event_policy: ReplicationEventPolicyPort | None = None,
+    ) -> list[MergeResult]:
+        """Merges a batch of candidate records using one atomic PostgreSQL INSERT ... ON CONFLICT DO UPDATE."""
+        if not candidates:
+            return []
+
+        now = datetime.now(UTC)
+        existing_map = await self._fetch_existing_domain_map(candidates)
+        upsert_rows: dict[tuple[str, str], ReplicaRecordRowDict] = {}
+        changed_aggregates: dict[tuple[str, str], ReplicaRecord] = {}
+
+        results: list[MergeResult] = []
+        for c in candidates:
+            candidate_res = self._evaluate_candidate(
+                c=c,
+                existing_map=existing_map,
+                upsert_rows=upsert_rows,
+                changed_aggregates=changed_aggregates,
+                now=now,
+            )
+            results.append(candidate_res)
+
+        if upsert_rows:
+            sorted_rows = [upsert_rows[k] for k in sorted(upsert_rows.keys())]
+            insert_stmt = pg_insert(ReplicaRecordModel).values(sorted_rows)
+            upsert_stmt = insert_stmt.on_conflict_do_update(
+                constraint="uq_ip_replica_record_identity",
+                set_={
+                    "primary_key_values": insert_stmt.excluded.primary_key_values,
+                    "cursor_value": insert_stmt.excluded.cursor_value,
+                    "cursor_kind": insert_stmt.excluded.cursor_kind,
+                    "data": insert_stmt.excluded.data,
+                    "data_hash": insert_stmt.excluded.data_hash,
+                    "version": insert_stmt.excluded.version,
+                    "last_seen_generation": insert_stmt.excluded.last_seen_generation,
+                    "extracted_at": insert_stmt.excluded.extracted_at,
+                    "updated_at": insert_stmt.excluded.updated_at,
+                    "deleted_at": insert_stmt.excluded.deleted_at,
+                    "source_inbound_record_id": insert_stmt.excluded.source_inbound_record_id,
+                    "trace_id": insert_stmt.excluded.trace_id,
+                    "correlation_id": insert_stmt.excluded.correlation_id,
+                },
+            ).returning(
+                ReplicaRecordModel.stream,
+                ReplicaRecordModel.record_key,
+                ReplicaRecordModel.id,
+                ReplicaRecordModel.version,
+            )
+            db_res = await self._session.execute(upsert_stmt)
+            persisted_map = {
+                (row.stream, row.record_key): (row.id, row.version) for row in db_res.all()
+            }
+            results = self._reconcile_persisted_results(
+                persisted_map=persisted_map,
+                changed_aggregates=changed_aggregates,
+                results=results,
+            )
+
+        self._publish_outbox_events(list(changed_aggregates.values()), event_policy)
         await self._session.flush()
         return results
 

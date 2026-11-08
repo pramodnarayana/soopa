@@ -197,6 +197,7 @@ def outbound_record_to_domain(orm: OutboundRecordModel) -> OutboundRecord:
         response_s3_key=orm.response_s3_key,
         duration_ms=orm.duration_ms,
         attempt_number=orm.attempt_number,
+        conflict_strategy=orm.conflict_strategy,
         failure_category=orm.failure_category,
         retry_after_seconds=orm.retry_after_seconds,
         error_message=orm.error_message,

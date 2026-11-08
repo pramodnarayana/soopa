@@ -182,6 +182,13 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
                 and range_start <= r.id <= range_end
             ]
             return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        if batch_id:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id and r.batch_id == batch_id
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
         target_ids = list(record_ids) or ([range_start] if range_start else [])
         return [
             self.records[rec_id]

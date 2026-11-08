@@ -285,6 +285,17 @@ class IpOrchestratorRouteRegistry:
                     sem=sem,
                 )
 
+            if not dto.record_ids:
+                logger.error(
+                    "ip_orchestrator_range_event_without_range_executor_rejected",
+                    event_id=envelope.id,
+                    tenant_id=dto.tenant_id,
+                    stream_name=dto.stream_name,
+                    batch_id=dto.batch_id,
+                    range_start=dto.range_start,
+                )
+                return ConsumerAction.DLQ
+
             async def _replicate_one(
                 inbound_record_id: str,
             ) -> Result[ReplicationSummary, IpError]:

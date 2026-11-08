@@ -300,9 +300,17 @@ class DeliverOutboundRecordUseCase:
             payload_bytes=envelope_bytes,
             parsed_payload=envelope_payload,
         )
-        target_stream = (
-            command.return_leg_stream_name or f"{command.stream_name}{RETURN_LEG_STREAM_SUFFIX}"
-        )
+        if command.return_leg_stream_name:
+            target_stream = command.return_leg_stream_name
+        else:
+            base_name = command.stream_name
+            max_base = 128 - len(RETURN_LEG_STREAM_SUFFIX)
+            if len(base_name) > max_base:
+                hash_suffix = hashlib.sha256(base_name.encode("utf-8")).hexdigest()[:8]
+                prefix_len = max_base - 9
+                target_stream = f"{base_name[:prefix_len]}_{hash_suffix}{RETURN_LEG_STREAM_SUFFIX}"
+            else:
+                target_stream = f"{base_name}{RETURN_LEG_STREAM_SUFFIX}"
         return InboundRecord.create_range_batch(
             tenant_id=command.tenant_id,
             connection_id=command.connection_id,
@@ -326,6 +334,280 @@ class DeliverOutboundRecordUseCase:
             ingestion_mode=IngestionMode.RETURN_LEG_CALLBACK,
         )
 
+    async def _check_idempotency_short_circuit(
+        self,
+        command: DeliverOutboundRecordCommand,
+        shard_info: tuple[str, str] | None,
+        idempotency_key: str,
+    ) -> tuple[DeliverOutboundRecordResponse | None, OutboundRecord | None]:
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+            existing = await uow.outbound_records.get_by_idempotency_key(
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+                idempotency_key=idempotency_key,
+            )
+            if existing is None:
+                return None, None
+            if existing.status is OutboundDispatchStatus.DELIVERED:
+                logger.info(
+                    "outbound_delivery_deduplicated",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    outbound_record_id=existing.id,
+                    idempotency_key=idempotency_key,
+                    trace_id=existing.trace_id,
+                )
+                return (
+                    DeliverOutboundRecordResponse(
+                        outbound_record_id=existing.id,
+                        status=OutboundDispatchStatus.DELIVERED,
+                        trace_id=existing.trace_id,
+                        idempotency_key=idempotency_key,
+                        record_id=existing.external_record_id or command.record_id or "",
+                        destination_id=existing.external_record_id,
+                        response_status_code=existing.response_status_code,
+                        response_body=existing.response_body,
+                        response_s3_key=existing.response_s3_key,
+                        duration_ms=existing.duration_ms,
+                        was_deduplicated=True,
+                    ),
+                    existing,
+                )
+            if existing.status is OutboundDispatchStatus.FAILED:
+                logger.info(
+                    "outbound_delivery_quarantined_terminal_skipped",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    outbound_record_id=existing.id,
+                    idempotency_key=idempotency_key,
+                    trace_id=existing.trace_id,
+                )
+                return (
+                    DeliverOutboundRecordResponse(
+                        outbound_record_id=existing.id,
+                        status=OutboundDispatchStatus.FAILED,
+                        trace_id=existing.trace_id,
+                        idempotency_key=idempotency_key,
+                        record_id=existing.external_record_id or command.record_id or "",
+                        destination_id=existing.external_record_id,
+                        response_status_code=existing.response_status_code,
+                        response_body=existing.response_body,
+                        response_s3_key=existing.response_s3_key,
+                        duration_ms=existing.duration_ms,
+                        was_deduplicated=True,
+                        was_quarantined=True,
+                        error_message=existing.error_message,
+                    ),
+                    existing,
+                )
+            return None, existing
+
+    async def _stage_in_flight_record(
+        self,
+        *,
+        command: DeliverOutboundRecordCommand,
+        existing: OutboundRecord | None,
+        resolved_creds: ResolvedConnectionCredentialsDTO,
+        shard_info: tuple[str, str] | None,
+        idempotency_key: str,
+        initial_target_url: str,
+        initial_headers: JsonDict,
+        payload_bytes: bytes,
+        req_storage_inlined: bool,
+        req_storage_body: JsonDict | None,
+        req_storage_s3_key: str | None,
+        trace_id: str,
+    ) -> OutboundRecord:
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+            if existing is not None:
+                outbound_record = existing
+                outbound_record.mark_in_flight_attempt(attempt_number=command.attempt_number)
+            else:
+                outbound_record = OutboundRecord.create_pending(
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    app_id=resolved_creds.app_id,
+                    stream_name=command.stream_name,
+                    operation=command.operation,
+                    idempotency_key=idempotency_key,
+                    external_record_id=command.record_id,
+                    target_url=initial_target_url,
+                    http_method="POST",
+                    payload_bytes=payload_bytes,
+                    is_inlined=req_storage_inlined,
+                    trace_id=trace_id,
+                    correlation_id=command.correlation_id,
+                    parent_trace_id=command.parent_trace_id,
+                    original_trace_id=command.original_trace_id,
+                    replay_count=command.replay_count,
+                    request_headers=initial_headers,
+                    request_body=req_storage_body,
+                    request_s3_key=req_storage_s3_key,
+                    attempt_number=command.attempt_number,
+                    causation_depth=command.causation_depth,
+                )
+            await uow.outbound_records.save(outbound_record)
+            await uow.commit()
+            return outbound_record
+
+    async def _execute_connector_write(
+        self,
+        *,
+        command: DeliverOutboundRecordCommand,
+        connector: DestinationConnectorPort,
+        resolved_creds: ResolvedConnectionCredentialsDTO,
+        idempotency_key: str,
+    ) -> tuple[WriteResultDTO, bool]:
+        write_cmd = WriteRecordCommand(
+            stream_name=command.stream_name,
+            operation=command.operation,
+            payload=command.payload,
+            record_id=command.record_id,
+            idempotency_key=idempotency_key,
+            idempotency_header_name=command.idempotency_header_name,
+            headers=dict(command.headers),
+            correlation_id=command.correlation_id,
+        )
+        write_result = await connector.write_record(
+            stream_name=command.stream_name,
+            command=write_cmd,
+            public_config=resolved_creds.public_config,
+            credentials=resolved_creds.credentials,
+        )
+        was_token_refreshed = resolved_creds.was_refreshed
+        if write_result.response_status_code == 401 and resolved_creds.auth_type in (
+            AuthType.OAUTH2,
+            AuthType.OAUTH2_CLIENT_CREDENTIALS,
+        ):
+            stale_token = str(resolved_creds.credentials.get("access_token") or "")
+            reactive_refresh = await self._token_manager.get_valid_credentials(
+                GetValidCredentialsCommand(
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    refresh_policy=TokenRefreshPolicy.FORCE_ROTATION,
+                    stale_access_token=stale_token,
+                )
+            )
+            if reactive_refresh.is_ok and reactive_refresh.value is not None:
+                was_token_refreshed = True
+                refreshed_dto = reactive_refresh.value
+                write_result = await connector.write_record(
+                    stream_name=command.stream_name,
+                    command=write_cmd,
+                    public_config=refreshed_dto.public_config,
+                    credentials=refreshed_dto.credentials,
+                )
+        return write_result, was_token_refreshed
+
+    async def _bind_destination_entity_maps(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        command: DeliverOutboundRecordCommand,
+        external_id: str,
+    ) -> None:
+        if not command.record_id:
+            return
+        entity_maps = await uow.entity_maps.get_by_canonical_id(
+            tenant_id=command.tenant_id,
+            canonical_id=command.record_id,
+        )
+        if entity_maps:
+            for em in entity_maps:
+                em.bind_destination(
+                    dest_connection_id=command.connection_id,
+                    dest_entity_id=external_id,
+                )
+                await uow.entity_maps.save(em)
+            return
+        gem = await uow.entity_maps.get_by_source(
+            tenant_id=command.tenant_id,
+            entity_domain=command.stream_name,
+            source_connection_id=command.connection_id,
+            source_entity_id=command.record_id,
+        )
+        if gem is not None:
+            gem.bind_destination(
+                dest_connection_id=command.connection_id,
+                dest_entity_id=external_id,
+            )
+            await uow.entity_maps.save(gem)
+
+    async def _persist_delivered_outcome(
+        self,
+        *,
+        command: DeliverOutboundRecordCommand,
+        outbound_record: OutboundRecord,
+        resolved_creds: ResolvedConnectionCredentialsDTO,
+        write_result: WriteResultDTO,
+        classification: OutboundHttpClassification,
+        shard_info: tuple[str, str] | None,
+        idempotency_key: str,
+        trace_id: str,
+        external_id: str | None,
+        resp_inline_body: JsonDict | None,
+        resp_s3_key: str | None,
+        was_token_refreshed: bool,
+    ) -> DeliverOutboundRecordResponse:
+        status_code = write_result.response_status_code or 200
+        outbound_record.mark_delivered(
+            response_status_code=status_code,
+            response_headers=write_result.response_headers,
+            response_body=resp_inline_body,
+            response_s3_key=resp_s3_key,
+            duration_ms=write_result.duration_ms,
+            external_record_id=external_id,
+        )
+        return_leg_records = (
+            await self._build_return_leg_records(
+                command=command,
+                outbound_record=outbound_record,
+                app_id=resolved_creds.app_id,
+                write_result=write_result,
+                status_code=status_code,
+                trace_id=trace_id,
+                resp_inline_body=resp_inline_body,
+                resp_s3_key=resp_s3_key,
+            )
+            if status_code in (200, 201)
+            else ()
+        )
+        return_leg_id = return_leg_records[0].id if return_leg_records else None
+        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
+            await uow.outbound_records.save(outbound_record)
+            if return_leg_records:
+                await uow.inbound_records.save_batch(return_leg_records)
+            if external_id:
+                await self._bind_destination_entity_maps(uow, command, external_id)
+            await uow.commit()
+
+        logger.info(
+            "outbound_delivery_succeeded",
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
+            outbound_record_id=outbound_record.id,
+            idempotency_key=idempotency_key,
+            status_code=status_code,
+            duration_ms=write_result.duration_ms,
+            return_leg_inbound_record_id=return_leg_id,
+            trace_id=trace_id,
+        )
+        return DeliverOutboundRecordResponse(
+            outbound_record_id=outbound_record.id,
+            status=OutboundDispatchStatus.DELIVERED,
+            trace_id=trace_id,
+            idempotency_key=idempotency_key,
+            record_id=write_result.record_id or (command.record_id or ""),
+            destination_id=external_id,
+            response_status_code=status_code,
+            response_body=resp_inline_body,
+            response_s3_key=resp_s3_key,
+            duration_ms=write_result.duration_ms,
+            was_deduplicated=False,
+            was_token_refreshed=was_token_refreshed,
+            return_leg_inbound_record_id=return_leg_id,
+            failure_category=classification.failure_category,
+        )
+
     async def execute(
         self,
         command: DeliverOutboundRecordCommand,
@@ -339,36 +621,11 @@ class DeliverOutboundRecordUseCase:
         shard_info = shard_res.value
 
         # ── Phase 1A: Idempotency Short-Circuit Check ────────────────────────
-        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
-            existing = await uow.outbound_records.get_by_idempotency_key(
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                idempotency_key=idempotency_key,
-            )
-            if existing is not None and existing.status is OutboundDispatchStatus.DELIVERED:
-                logger.info(
-                    "outbound_delivery_deduplicated",
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    outbound_record_id=existing.id,
-                    idempotency_key=idempotency_key,
-                    trace_id=existing.trace_id,
-                )
-                return Result.ok(
-                    DeliverOutboundRecordResponse(
-                        outbound_record_id=existing.id,
-                        status=OutboundDispatchStatus.DELIVERED,
-                        trace_id=existing.trace_id,
-                        idempotency_key=idempotency_key,
-                        record_id=existing.external_record_id or command.record_id or "",
-                        destination_id=existing.external_record_id,
-                        response_status_code=existing.response_status_code,
-                        response_body=existing.response_body,
-                        response_s3_key=existing.response_s3_key,
-                        duration_ms=existing.duration_ms,
-                        was_deduplicated=True,
-                    )
-                )
+        short_circuit_resp, existing = await self._check_idempotency_short_circuit(
+            command, shard_info, idempotency_key
+        )
+        if short_circuit_resp is not None:
+            return Result.ok(short_circuit_resp)
 
         # ── Phase 1B: Resolve & Proactively Refresh Credentials ──────────────
         creds_res = await self._token_manager.get_valid_credentials(
@@ -382,7 +639,6 @@ class DeliverOutboundRecordUseCase:
                 creds_res.error or ConnectionNotFoundError.for_id(command.connection_id)
             )
         resolved_creds: ResolvedConnectionCredentialsDTO = creds_res.value
-        was_token_refreshed = resolved_creds.was_refreshed
 
         connector = self._connectors.get(resolved_creds.app_id)
         if connector is None:
@@ -425,77 +681,28 @@ class DeliverOutboundRecordUseCase:
             extra_sensitive_names=extra_sensitive,
         )
 
-        async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
-            if existing is not None:
-                outbound_record = existing
-                outbound_record.mark_in_flight_attempt(attempt_number=command.attempt_number)
-            else:
-                outbound_record = OutboundRecord.create_pending(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    app_id=resolved_creds.app_id,
-                    stream_name=command.stream_name,
-                    operation=command.operation,
-                    idempotency_key=idempotency_key,
-                    external_record_id=command.record_id,
-                    target_url=initial_target_url,
-                    http_method="POST",
-                    payload_bytes=payload_bytes,
-                    is_inlined=req_storage.is_inlined,
-                    trace_id=trace_id,
-                    correlation_id=command.correlation_id,
-                    parent_trace_id=command.parent_trace_id,
-                    original_trace_id=command.original_trace_id,
-                    replay_count=command.replay_count,
-                    request_headers=initial_headers,
-                    request_body=req_storage.raw_payload,
-                    request_s3_key=req_storage.s3_key,
-                    attempt_number=command.attempt_number,
-                    causation_depth=command.causation_depth,
-                )
-            await uow.outbound_records.save(outbound_record)
-            await uow.commit()
+        outbound_record = await self._stage_in_flight_record(
+            command=command,
+            existing=existing,
+            resolved_creds=resolved_creds,
+            shard_info=shard_info,
+            idempotency_key=idempotency_key,
+            initial_target_url=initial_target_url,
+            initial_headers=initial_headers,
+            payload_bytes=payload_bytes,
+            req_storage_inlined=req_storage.is_inlined,
+            req_storage_body=req_storage.raw_payload,
+            req_storage_s3_key=req_storage.s3_key,
+            trace_id=trace_id,
+        )
 
         # ── Phase 2A: Execute Outbound Write & Reactive 401 Single-Replay ────
-        write_cmd = WriteRecordCommand(
-            stream_name=command.stream_name,
-            operation=command.operation,
-            payload=command.payload,
-            record_id=command.record_id,
+        write_result, was_token_refreshed = await self._execute_connector_write(
+            command=command,
+            connector=connector,
+            resolved_creds=resolved_creds,
             idempotency_key=idempotency_key,
-            idempotency_header_name=command.idempotency_header_name,
-            headers=dict(command.headers),
-            correlation_id=command.correlation_id,
         )
-        write_result = await connector.write_record(
-            stream_name=command.stream_name,
-            command=write_cmd,
-            public_config=resolved_creds.public_config,
-            credentials=resolved_creds.credentials,
-        )
-
-        if write_result.response_status_code == 401 and resolved_creds.auth_type in (
-            AuthType.OAUTH2,
-            AuthType.OAUTH2_CLIENT_CREDENTIALS,
-        ):
-            stale_token = str(resolved_creds.credentials.get("access_token") or "")
-            reactive_refresh = await self._token_manager.get_valid_credentials(
-                GetValidCredentialsCommand(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    refresh_policy=TokenRefreshPolicy.FORCE_ROTATION,
-                    stale_access_token=stale_token,
-                )
-            )
-            if reactive_refresh.is_ok and reactive_refresh.value is not None:
-                was_token_refreshed = True
-                refreshed_dto = reactive_refresh.value
-                write_result = await connector.write_record(
-                    stream_name=command.stream_name,
-                    command=write_cmd,
-                    public_config=refreshed_dto.public_config,
-                    credentials=refreshed_dto.credentials,
-                )
 
         # ── Phase 2B: Offload Response (>= 64 KB) & Commit Final Audit State ─
         resp_inline_body, resp_s3_key = await self._store_response_tier(
@@ -522,61 +729,21 @@ class DeliverOutboundRecordUseCase:
         external_id = write_result.destination_id or write_result.record_id or command.record_id
 
         if write_result.success or classification.is_success:
-            status_code = write_result.response_status_code or 200
-            outbound_record.mark_delivered(
-                response_status_code=status_code,
-                response_headers=write_result.response_headers,
-                response_body=resp_inline_body,
-                response_s3_key=resp_s3_key,
-                duration_ms=write_result.duration_ms,
-                external_record_id=external_id,
-            )
-            return_leg_records = await self._build_return_leg_records(
+            delivered_resp = await self._persist_delivered_outcome(
                 command=command,
                 outbound_record=outbound_record,
-                app_id=resolved_creds.app_id,
+                resolved_creds=resolved_creds,
                 write_result=write_result,
-                status_code=status_code,
+                classification=classification,
+                shard_info=shard_info,
+                idempotency_key=idempotency_key,
                 trace_id=trace_id,
+                external_id=external_id,
                 resp_inline_body=resp_inline_body,
                 resp_s3_key=resp_s3_key,
+                was_token_refreshed=was_token_refreshed,
             )
-            return_leg_id = return_leg_records[0].id if return_leg_records else None
-            async with self._open_uow(command.tenant_id, shard_info=shard_info) as uow:
-                await uow.outbound_records.save(outbound_record)
-                if return_leg_records:
-                    await uow.inbound_records.save_batch(return_leg_records)
-                await uow.commit()
-
-            logger.info(
-                "outbound_delivery_succeeded",
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                outbound_record_id=outbound_record.id,
-                idempotency_key=idempotency_key,
-                status_code=status_code,
-                duration_ms=write_result.duration_ms,
-                return_leg_inbound_record_id=return_leg_id,
-                trace_id=trace_id,
-            )
-            return Result.ok(
-                DeliverOutboundRecordResponse(
-                    outbound_record_id=outbound_record.id,
-                    status=OutboundDispatchStatus.DELIVERED,
-                    trace_id=trace_id,
-                    idempotency_key=idempotency_key,
-                    record_id=write_result.record_id or (command.record_id or ""),
-                    destination_id=external_id,
-                    response_status_code=status_code,
-                    response_body=resp_inline_body,
-                    response_s3_key=resp_s3_key,
-                    duration_ms=write_result.duration_ms,
-                    was_deduplicated=False,
-                    was_token_refreshed=was_token_refreshed,
-                    return_leg_inbound_record_id=return_leg_id,
-                    failure_category=classification.failure_category,
-                )
-            )
+            return Result.ok(delivered_resp)
 
         return await self._persist_failed_outcome(
             command=command,
@@ -816,6 +983,8 @@ class DeliverOutboundRecordUseCase:
                 original_trace_id=item.original_trace_id,
                 replay_count=item.replay_count,
                 attempt_number=item.attempt_number,
+                causation_depth=item.causation_depth,
+                return_leg_stream_name=item.return_leg_stream_name,
             )
             res = await self.execute(scoped_item)
             if res.is_err or res.value is None:

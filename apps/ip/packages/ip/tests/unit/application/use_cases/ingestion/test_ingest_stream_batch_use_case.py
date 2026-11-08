@@ -63,6 +63,23 @@ class FakeInboundRecordRepository(InboundRecordRepositoryPort):
         rec = all_recs.get(record_id)
         return rec if rec and rec.tenant_id == tenant_id else None
 
+    async def list_by_range(
+        self,
+        tenant_id: str,
+        *,
+        batch_id: str = "",
+        range_start: str = "",
+        range_end: str = "",
+        record_ids: Sequence[str] = (),
+    ) -> Sequence[InboundRecord]:
+        all_recs = {**self.records, **self._uncommitted}
+        target_ids = list(record_ids) or ([range_start] if range_start else [])
+        return [
+            all_recs[rec_id]
+            for rec_id in target_ids
+            if rec_id in all_recs and all_recs[rec_id].tenant_id == tenant_id
+        ]
+
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[InboundRecord]:
         all_recs = {**self.records, **self._uncommitted}
         return [r for r in all_recs.values() if r.trace_id == trace_id and r.tenant_id == tenant_id]

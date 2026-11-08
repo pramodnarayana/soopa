@@ -28,6 +28,7 @@ class ResponseEventEnvelope:
     def to_payload(self) -> JsonDict:
         """Serializes the return-leg envelope into a canonical JsonDict for InboundRecord persistence."""
         payload: JsonDict = {
+            "id": self.destination_id or self.source_record_id,
             "record_id": self.source_record_id,
             "outbound_record_id": self.outbound_record_id,
             "source_record_id": self.source_record_id,

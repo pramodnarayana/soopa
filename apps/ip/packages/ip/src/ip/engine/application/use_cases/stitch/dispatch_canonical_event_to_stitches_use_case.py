@@ -147,6 +147,7 @@ class DispatchCanonicalEventToStitchesUseCase:
                 sig_res = await self._resolve_matches_use_case.execute(
                     ResolveMatchConditionsCommand(
                         tenant_id=command.tenant_id,
+                        workflow_id=stitch.workflow_id,
                         condition_kind=ConditionKind.CANONICAL_EVENT,
                         event_key=event_key,
                         resource_hint=resource_hint,

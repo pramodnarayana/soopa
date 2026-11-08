@@ -88,6 +88,13 @@ class InMemoryInboundRecordRepo(InboundRecordRepositoryPort):
                 and range_start <= r.id <= range_end
             ]
             return sorted(matched, key=lambda r: (r.batch_seq, r.id))
+        if batch_id:
+            matched = [
+                r
+                for r in self.records.values()
+                if r.tenant_id == tenant_id and r.batch_id == batch_id
+            ]
+            return sorted(matched, key=lambda r: (r.batch_seq, r.id))
         target_ids = list(record_ids) or ([range_start] if range_start else [])
         return [
             self.records[rec_id]
@@ -198,9 +205,20 @@ class InMemoryNormalizedRecordRepo(NormalizedRecordRepositoryPort):
         return rec if rec and rec.tenant_id == tenant_id else None
 
     async def list_by_source(
-        self, tenant_id: str, canonical_type: str, source_id: str
+        self,
+        tenant_id: str,
+        canonical_type: str,
+        source_id: str,
+        connection_id: str | None = None,
     ) -> Sequence[NormalizedRecord]:
-        return []
+        return [
+            r
+            for r in self.records.values()
+            if r.tenant_id == tenant_id
+            and r.canonical_type == canonical_type
+            and r.source_id == source_id
+            and (connection_id is None or r.connection_id == connection_id)
+        ]
 
     async def get_by_trace_id(self, trace_id: str, tenant_id: str) -> Sequence[NormalizedRecord]:
         return [

@@ -8,7 +8,8 @@ without raising exceptions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Protocol
 
 import structlog
@@ -96,6 +97,7 @@ class NormalizeReplicaRecordResultDTO:
     shadow_diff_count: int = 0
     resolved_references_count: int = 0
     error_detail: str | None = None
+    canonical_payloads: Mapping[tuple[str, str], JsonDict] = field(default_factory=dict)
 
 
 class _RejectionPersistenceStrategy(Protocol):
@@ -452,6 +454,10 @@ class NormalizeReplicaRecordUseCase:
                 rejections_count=rejections_count,
                 shadow_diff_count=shadow_diff_count,
                 resolved_references_count=resolved_count,
+                canonical_payloads={
+                    (d.canonical_type, d.source_id): dict(d.fields)
+                    for d in transformation_result.drafts
+                },
             )
         )
 

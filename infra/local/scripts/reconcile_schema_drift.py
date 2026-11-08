@@ -38,6 +38,12 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
                 )
             )
             await shard_session.execute(
+                text("UPDATE public.inbound_records SET batch_id = id WHERE batch_id IS NULL;")
+            )
+            await shard_session.execute(
+                text("UPDATE public.inbound_records SET batch_seq = 0 WHERE batch_seq IS NULL;")
+            )
+            await shard_session.execute(
                 text(
                     "ALTER TABLE public.inbound_records ADD COLUMN IF NOT EXISTS causation_depth INTEGER NOT NULL DEFAULT 0;"
                 )
@@ -45,6 +51,11 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
             await shard_session.execute(
                 text(
                     "CREATE INDEX IF NOT EXISTS ix_inbound_records_batch_range ON public.inbound_records (tenant_id, batch_id, id);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "ALTER TABLE public.outbound_records ADD COLUMN IF NOT EXISTS conflict_strategy VARCHAR(32) NOT NULL DEFAULT 'FAIL';"
                 )
             )
             await shard_session.execute(
@@ -110,7 +121,22 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
                 text("ALTER TABLE public.quarantine_records DROP COLUMN IF EXISTS operation;")
             )
             await shard_session.execute(
-                text("ALTER TABLE public.quarantine_records DROP COLUMN IF EXISTS attempts;")
+                text("""
+                DO $$
+                BEGIN
+                    IF EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public'
+                        AND table_name = 'quarantine_records'
+                        AND column_name = 'attempts'
+                    ) THEN
+                        UPDATE public.quarantine_records
+                        SET attempt_count = attempts
+                        WHERE attempts IS NOT NULL AND (attempt_count IS NULL OR attempt_count = 1);
+                        ALTER TABLE public.quarantine_records DROP COLUMN attempts;
+                    END IF;
+                END $$;
+                """)
             )
             await shard_session.execute(
                 text(

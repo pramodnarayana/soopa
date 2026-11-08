@@ -45,6 +45,7 @@ class MatchEvent:
     resource_hint: str | None = None
     payload: JsonDict = field(default_factory=dict)
     occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    workflow_id: str | None = None
 
 
 @dataclass(frozen=True)

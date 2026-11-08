@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import TracebackType
@@ -173,6 +174,8 @@ class AwsSqsConsumer:
             body_length=len(body_str),
         )
 
+        received_at = time.monotonic()
+
         try:
             event_data = self._extract_event_payload(body_str)
 
@@ -180,10 +183,24 @@ class AwsSqsConsumer:
                 await self._delete_message(sqs_client, receipt_handle)
 
             async def nack(*, visibility_timeout_seconds: int | None = None) -> None:
-                resolved_timeout = (
+                elapsed_sec = int(time.monotonic() - received_at)
+                remaining_allowance = max(0, MAX_SQS_VISIBILITY_TIMEOUT_SEC - elapsed_sec)
+                if remaining_allowance <= 0:
+                    logger.error(
+                        "sqs_visibility_timeout_allowance_exhausted",
+                        queue_url=self.queue_url,
+                        message_id=message_id,
+                        elapsed_seconds=elapsed_sec,
+                    )
+                    return
+
+                target_timeout = (
                     DEFAULT_SQS_NACK_VISIBILITY_SEC
                     if visibility_timeout_seconds is None
-                    else max(0, min(MAX_SQS_VISIBILITY_TIMEOUT_SEC, visibility_timeout_seconds))
+                    else max(0, visibility_timeout_seconds)
+                )
+                resolved_timeout = min(
+                    remaining_allowance, min(MAX_SQS_VISIBILITY_TIMEOUT_SEC, target_timeout)
                 )
                 try:
                     await sqs_client.change_message_visibility(
