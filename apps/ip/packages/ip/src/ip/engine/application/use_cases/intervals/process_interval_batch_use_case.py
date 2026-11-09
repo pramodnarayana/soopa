@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 import structlog
@@ -97,7 +98,7 @@ class ProcessIntervalBatchUseCase:
         uow: IpDataPlaneUnitOfWorkPort,
         tenant_id: str,
         connection_id: str,
-    ) -> dict[str, str]:
+    ) -> Mapping[str, str]:
         gem_entries: list[GlobalEntityMap] = []
         page_limit = 1000
         current_offset = 0
