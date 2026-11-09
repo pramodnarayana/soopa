@@ -24,6 +24,10 @@ from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
     RunSyncCommand,
     RunSyncResultDTO,
 )
+from ip.engine.application.use_cases.intervals.process_interval_batch_use_case import (
+    ProcessIntervalBatchCommand,
+    ProcessIntervalBatchResponse,
+)
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
     BackfillStreamNormalizationResultDTO,
@@ -108,12 +112,21 @@ class IpRunSyncExecutorPort(Protocol):
     async def execute(self, command: RunSyncCommand) -> RunSyncResultDTO: ...
 
 
+class IpProcessIntervalBatchExecutorPort(Protocol):
+    """Port for executing vectorized interval batch normalization and L4 rollup commit."""
+
+    async def execute(
+        self, command: ProcessIntervalBatchCommand
+    ) -> Result[ProcessIntervalBatchResponse, IpError]: ...
+
+
 __all__ = [
     "IpBackfillStreamNormalizationExecutorPort",
     "IpFetchRecordExecutorPort",
     "IpNormalizeReplicaExecutorPort",
     "IpOutboundDeliveryExecutorPort",
     "IpProcessInboundRangeExecutorPort",
+    "IpProcessIntervalBatchExecutorPort",
     "IpRunSyncExecutorPort",
     "IpStitchCanonicalDispatcherPort",
     "IpStitchWorkerTickExecutorPort",

@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   HttpCatalogRepository,
   HttpConnectionRepository,
+  HttpIntervalRepository,
   HttpStitchRepository,
   HttpSyncRunRepository,
   HttpTraceRepository,
@@ -766,5 +767,173 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       'GET /api/v1/tenants/ten_01/ip/catalog/apps',
     );
     expect(logger.entries[0]?.attributes.tenant_id).toBe('ten_01');
+  });
+
+  it('maps HttpIntervalRepository wire responses across all 5 methods', async () => {
+    const logger = new RecordingLoggerFake();
+    const wireBatch = {
+      batch_id: 'ip_bch_01',
+      connection_id: 'conn_01',
+      stream_name: 'interval_readings',
+      priority_lane: 'P1_LIVE',
+      status: 'COMPLETED',
+      l1_raw_uri: 's3://ip/l1/ip_bch_01.json',
+      l2_replica_uri: 's3://ip/l2/ip_bch_01.parquet',
+      l3_canonical_uri: 's3://ip/l3/ip_bch_01.parquet',
+      payload_sha256: 'sha256_01',
+      raw_ingested_count: 96,
+      duplicates_dropped_count: 0,
+      valid_canonical_count: 96,
+      quarantined_held_count: 0,
+      promoted_outage_clusters_count: 0,
+      delivery_receipt_id: 'rcpt_01',
+      trace_id: 'trc_01',
+      created_at: '2026-10-29T08:00:00Z',
+      completed_at: '2026-10-29T08:00:05Z',
+    };
+    const { fetchImpl, calls } = createRouteFetch({
+      'GET /api/v1/tenants/ten_01/ip/intervals/reconciliation': {
+        tenant_id: 'ten_01',
+        connection_id: 'conn_01',
+        total_batches: 1,
+        completed_batches: 1,
+        in_flight_batches: 0,
+        failed_batches: 0,
+        raw_ingested_total: 96,
+        duplicates_dropped_total: 0,
+        valid_canonical_total: 96,
+        quarantined_held_total: 0,
+        in_flight_readings_total: 0,
+        is_zero_loss_balanced: true,
+        recent_batches: [wireBatch],
+      },
+      'GET /api/v1/tenants/ten_01/ip/intervals/completeness/conn_01': [
+        {
+          tenant_id: 'ten_01',
+          connection_id: 'conn_01',
+          stream_name: 'interval_readings',
+          service_date: '2026-10-29',
+          feeder_id: 'FDR-ALPHA-01',
+          expected_intervals_per_meter: 96,
+          active_meter_count: 1,
+          expected_intervals_total: 96,
+          received_intervals_total: 96,
+          valid_intervals_total: 96,
+          quarantined_intervals_total: 0,
+          completeness_percentage: 100.0,
+        },
+      ],
+      'GET /api/v1/tenants/ten_01/ip/intervals/tou-rollups': [
+        {
+          tenant_id: 'ten_01',
+          gem_device_id: 'gem_dev_01',
+          source_meter_id: 'DEV-ALPHA-01',
+          service_date: '2026-10-29',
+          feeder_id: 'FDR-ALPHA-01',
+          kwh_peak: '40.0000',
+          kwh_shoulder: '20.0000',
+          kwh_off_peak: '10.0000',
+          kwh_net_export: '0.0000',
+          max_kw_demand: '12.5000',
+          valid_intervals: 96,
+          quarantined_intervals: 0,
+          latest_batch_id: 'ip_bch_01',
+          delivery_receipt_id: 'rcpt_01',
+        },
+      ],
+      'GET /api/v1/tenants/ten_01/ip/intervals/devices/DEV-ALPHA-01/trace': {
+        tenant_id: 'ten_01',
+        source_meter_id: 'DEV-ALPHA-01',
+        service_date: '2026-10-29',
+        total_intervals: 1,
+        valid_intervals: 1,
+        quarantined_intervals: 0,
+        intervals: [
+          {
+            interval_end_utc: '2026-10-29T00:15:00Z',
+            gem_device_id: 'gem_dev_01',
+            source_meter_id: 'DEV-ALPHA-01',
+            endpoint_location_id: 'LOC-01',
+            feeder_id: 'FDR-ALPHA-01',
+            substation_id: 'SUB-01',
+            tariff_bucket: 'PEAK',
+            quality_status: 'VALID',
+            scaled_kwh_delivered: '1.2500',
+            scaled_kwh_received: '0.0000',
+            reactive_kvarh: '0.1000',
+            voltage_v: 240.0,
+            quarantine_reason: null,
+            source_batch_id: 'ip_bch_01',
+            parquet_row_offset: 0,
+            batch_status: 'COMPLETED',
+            priority_lane: 'P1_LIVE',
+            l1_raw_uri: 's3://ip/l1/ip_bch_01.json',
+            l2_replica_uri: 's3://ip/l2/ip_bch_01.parquet',
+            l3_canonical_uri: 's3://ip/l3/ip_bch_01.parquet',
+            payload_sha256: 'sha256_01',
+            delivery_receipt_id: 'rcpt_01',
+            trace_id: 'trc_01',
+          },
+        ],
+      },
+      'POST /api/v1/tenants/ten_01/ip/intervals/batches/ip_bch_01/receipt': wireBatch,
+    });
+
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local',
+      fetchImpl,
+      logger,
+    });
+    const intervalRepo = new HttpIntervalRepository(client, logger);
+
+    const recon = expectOk(
+      await intervalRepo.getReconciliationOverview('ten_01', { connectionId: 'conn_01' }),
+    );
+    expect(recon.isZeroLossBalanced).toBe(true);
+    expect(recon.recentBatches[0]?.batchId).toBe('ip_bch_01');
+
+    const comp = expectOk(
+      await intervalRepo.getDailyCompleteness('ten_01', {
+        connectionId: 'conn_01',
+        serviceDate: '2026-10-29',
+      }),
+    );
+    expect(comp[0]?.activeDeviceCount).toBe(1);
+
+    const rollups = expectOk(
+      await intervalRepo.getDailyTouRollups('ten_01', {
+        serviceDate: '2026-10-29',
+        feederId: 'FDR-ALPHA-01',
+      }),
+    );
+    expect(rollups[0]?.sourceDeviceId).toBe('DEV-ALPHA-01');
+    expect(rollups[0]?.peakVolume).toBe('40.0000');
+
+    const lineage = expectOk(
+      await intervalRepo.traceDeviceIntervals('ten_01', 'DEV-ALPHA-01', '2026-10-29'),
+    );
+    expect(lineage.intervals[0]?.deliveredVolume).toBe('1.2500');
+
+    const receiptRes = expectOk(
+      await intervalRepo.recordSettlementReceipt('ten_01', 'ip_bch_01', 'rcpt_01'),
+    );
+    expect(receiptRes.deliveryReceiptId).toBe('rcpt_01');
+    expect(calls).toHaveLength(5);
+
+    const url0 = new URL(calls[0]?.url ?? '');
+    expect(url0.searchParams.get('connection_id')).toBe('conn_01');
+
+    const url1 = new URL(calls[1]?.url ?? '');
+    expect(url1.searchParams.get('service_date')).toBe('2026-10-29');
+
+    const url2 = new URL(calls[2]?.url ?? '');
+    expect(url2.searchParams.get('service_date')).toBe('2026-10-29');
+    expect(url2.searchParams.get('feeder_id')).toBe('FDR-ALPHA-01');
+
+    const url3 = new URL(calls[3]?.url ?? '');
+    expect(url3.searchParams.get('service_date')).toBe('2026-10-29');
+
+    expect(calls[4]?.method).toBe('POST');
+    expect(JSON.parse(calls[4]?.bodyText ?? '{}')).toEqual({ delivery_receipt_id: 'rcpt_01' });
   });
 });

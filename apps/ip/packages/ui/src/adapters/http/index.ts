@@ -1,5 +1,6 @@
 export { HttpCatalogRepository } from './repositories/http-catalog.repository';
 export { HttpConnectionRepository } from './repositories/http-connection.repository';
+export { HttpIntervalRepository } from './repositories/http-interval.repository';
 export { HttpRecordRepository } from './repositories/http-record.repository';
 export { HttpStitchRepository } from './repositories/http-stitch.repository';
 export { HttpSyncRunRepository } from './repositories/http-sync-run.repository';

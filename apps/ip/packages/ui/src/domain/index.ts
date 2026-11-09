@@ -3,6 +3,7 @@ export * from './catalog-auth';
 export * from './connection';
 export * from './dag/compute-dag-layout';
 export * from './enums';
+export * from './intervals';
 export * from './replay/derive-replay-eligibility';
 export * from './replay/parse-json-object';
 export * from './role';

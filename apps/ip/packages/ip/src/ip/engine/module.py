@@ -11,6 +11,9 @@ from fastapi import FastAPI
 from ip.engine.adapters.inbound.api.routers.catalog_router import router as catalog_router
 from ip.engine.adapters.inbound.api.routers.connections_router import router as connections_router
 from ip.engine.adapters.inbound.api.routers.ingress_router import router as ingress_router
+from ip.engine.adapters.inbound.api.routers.interval_streams_router import (
+    router as interval_streams_router,
+)
 from ip.engine.adapters.inbound.api.routers.records_router import router as records_router
 from ip.engine.adapters.inbound.api.routers.replay_router import router as replay_router
 from ip.engine.adapters.inbound.api.routers.stitches_router import router as stitches_router
@@ -57,6 +60,7 @@ class IpApiModule:
         app.include_router(trace_router)
         app.include_router(replay_router)
         app.include_router(records_router)
+        app.include_router(interval_streams_router)
         logger.info("ip_api_module_routes_registered")
 
     async def startup(self, app: FastAPI, db_router: DatabaseRouterPort) -> None:

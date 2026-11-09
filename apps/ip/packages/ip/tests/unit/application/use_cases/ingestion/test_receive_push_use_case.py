@@ -221,7 +221,7 @@ async def test_receive_push_full_success() -> None:
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
         connection_id="conn_source",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         raw_payload=b'{"device_id":"dev_01","value":42}',
         headers={"Content-Type": "application/json"},
         external_event_id="evt_001",
@@ -239,7 +239,7 @@ async def test_receive_push_full_success() -> None:
     assert stored is not None
     assert stored.ingestion_mode == IngestionMode.PUSH_FULL
     assert stored.external_event_id == "evt_001"
-    assert stored.stream_name == "telemetry"
+    assert stored.stream_name == "interval_readings"
 
     event_types = [type(e) for e in stored.domain_events]
     assert InboundRecordCreatedEvent in event_types
@@ -266,7 +266,7 @@ async def test_receive_push_verification_failure_rejects() -> None:
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
         connection_id="conn_source",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         raw_payload=b'{"device_id":"dev_01","value":42}',
         headers={"X-Signature": "invalid_sig"},
         secret="valid_secret",
@@ -299,7 +299,7 @@ async def test_receive_push_deduplication() -> None:
     cmd = ReceivePushCommand(
         tenant_id="tenant_alpha",
         connection_id="conn_source",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         raw_payload=b'{"device_id":"dev_01","value":42}',
         headers={},
         external_event_id="evt_002",

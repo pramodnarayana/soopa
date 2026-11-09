@@ -160,7 +160,7 @@ async def test_amqp_subscribe_transport_ack_verdict() -> None:
     msg = RawMessageDTO(message_id="a1", raw_payload=b"{}")
     h1 = FakeAmqpHandle(msg)
     client = FakeAmqpClient([h1])
-    transport = AmqpSubscribeTransport(client=client, queue_name="telemetry_q")
+    transport = AmqpSubscribeTransport(client=client, queue_name="readings_q")
 
     stop_signal = asyncio.Event()
 
@@ -168,7 +168,7 @@ async def test_amqp_subscribe_transport_ack_verdict() -> None:
         stop_signal.set()
         return AckVerdict.ACK
 
-    stream = StreamDefinition(stream="telemetry")
+    stream = StreamDefinition(stream="readings")
     await transport.start_consumer(stream, handler, stop_signal)
 
     assert h1.acked is True
@@ -219,7 +219,7 @@ async def test_mqtt_subscribe_transport_puback() -> None:
     msg = RawMessageDTO(message_id="m1", raw_payload=b'{"reading":42}')
     h1 = FakeMqttHandle(msg)
     client = FakeMqttClient([h1])
-    transport = MqttSubscribeTransport(client=client, topic_filter="acme/sensors/+/telemetry")
+    transport = MqttSubscribeTransport(client=client, topic_filter="acme/sensors/+/readings")
 
     stop_signal = asyncio.Event()
 
@@ -230,7 +230,7 @@ async def test_mqtt_subscribe_transport_puback() -> None:
     stream = StreamDefinition(stream="readings")
     await transport.start_consumer(stream, handler, stop_signal)
 
-    assert client.subscribed_topic == "acme/sensors/+/telemetry"
+    assert client.subscribed_topic == "acme/sensors/+/readings"
     assert h1.pubacked is True
     assert client.reconnected is False
 
@@ -240,7 +240,7 @@ async def test_mqtt_subscribe_transport_nack_triggers_reconnect() -> None:
     msg = RawMessageDTO(message_id="m1", raw_payload=b'{"reading":42}')
     h1 = FakeMqttHandle(msg)
     client = FakeMqttClient([h1])
-    transport = MqttSubscribeTransport(client=client, topic_filter="acme/sensors/+/telemetry")
+    transport = MqttSubscribeTransport(client=client, topic_filter="acme/sensors/+/readings")
 
     stop_signal = asyncio.Event()
 
@@ -260,7 +260,7 @@ async def test_mqtt_subscribe_transport_reject_pubacks() -> None:
     msg = RawMessageDTO(message_id="m1", raw_payload=b"INVALID")
     h1 = FakeMqttHandle(msg)
     client = FakeMqttClient([h1])
-    transport = MqttSubscribeTransport(client=client, topic_filter="acme/sensors/+/telemetry")
+    transport = MqttSubscribeTransport(client=client, topic_filter="acme/sensors/+/readings")
 
     stop_signal = asyncio.Event()
 

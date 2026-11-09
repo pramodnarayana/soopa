@@ -9,6 +9,7 @@ from seedwork.domain.types import JsonDict, JsonPrimitive
 from seedwork.utils import generate_id
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     DateTime,
     Index,
     Integer,
@@ -408,7 +409,64 @@ class IpProcessedEventModel(IpTenantBase, ProcessedEventMixin):
     __table_args__ = (Index("idx_ip_processed_events_tenant", "tenant_id", "processed_at"),)
 
 
+class BatchManifestModel(IpTenantBase, TenantTraceableOrmModel):
+    """OLTP Macro-Batch Reconciliation Ledger for High-Frequency Interval Streams (`public.ip_batch_manifests`)."""
+
+    __tablename__ = "ip_batch_manifests"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "connection_id",
+            "payload_sha256",
+            name="uq_ip_batch_manifests_sha256",
+        ),
+        CheckConstraint(
+            "status <> 'COMPLETED' OR raw_ingested_count = (duplicates_dropped_count + valid_canonical_count + quarantined_held_count)",
+            name="chk_ip_batch_zero_loss_reconciliation",
+        ),
+        Index("idx_ip_batch_manifests_tenant_conn", "tenant_id", "connection_id", "created_at"),
+        Index("idx_ip_batch_manifests_trace", "tenant_id", "trace_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    app_id: Mapped[str] = mapped_column(String(64), nullable=False, server_default="")
+    stream_name: Mapped[str] = mapped_column(String(128), nullable=False)
+    priority_lane: Mapped[str] = mapped_column(String(32), nullable=False, server_default="P1_LIVE")
+    payload_format: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="JSON_ARRAY"
+    )
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="INGESTED")
+    l1_raw_uri: Mapped[str] = mapped_column(Text, nullable=False)
+    l2_replica_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    l3_canonical_uri: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inline_payload: Mapped[JsonDict | None] = mapped_column(JSONB, nullable=True)
+    payload_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    window_start_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    window_end_utc: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    raw_ingested_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    duplicates_dropped_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    valid_canonical_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    quarantined_held_count: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
+    promoted_outage_clusters_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    delivery_receipt_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 __all__ = [
+    "BatchManifestModel",
     "GlobalEntityMapModel",
     "InboundRecordModel",
     "IpDataPlaneOutboxRecord",

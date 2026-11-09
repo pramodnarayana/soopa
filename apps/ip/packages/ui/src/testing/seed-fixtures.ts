@@ -2,17 +2,28 @@ import type { AppSpec, CatalogAppSummary } from '../domain/catalog';
 import type { Connection, DiscoveredCatalog } from '../domain/connection';
 import {
   AuthType,
+  BatchManifestStatus,
+  CimQualityStatus,
   ConnectionStatus,
   ConnectorPropertyType,
   ConnectorRuntimeArchitecture,
   PipelineLayer,
+  PriorityLane,
   StitchNodeKind,
   StitchRunStatus,
   SyncRunKind,
   SyncRunStatus,
+  TariffBucket,
   TraceStatus,
   TransformationMode,
 } from '../domain/enums';
+import type {
+  BatchManifestSummary,
+  BatchReconciliationOverview,
+  DailyTouRollup,
+  IntervalLineageTrace,
+  IntervalWindowCompleteness,
+} from '../domain/intervals';
 import type { Stitch, StitchDefinition, StitchRun } from '../domain/stitch';
 import type { StreamState, SyncRun } from '../domain/sync-run';
 import type { IpTrace, IpTraceLineageItem } from '../domain/trace';
@@ -24,6 +35,10 @@ export const SEED_TRACE_ID = 'trc_1a2b3c4d5e6f7a8b9c0d1e2f';
 export const SEED_CHILD_TRACE_ID = 'trc_2b3c4d5e6f7a8b9c0d1e2f3a';
 export const SEED_RUN_ID = 'run_7f6e5d4c3b2a1f0e9d8c7b6a';
 export const SEED_WORKFLOW_ID = 'workflow.sync_alpha_to_sink';
+export const SEED_BATCH_ID = 'ip_bch_99887766554433221100';
+export const SEED_DEVICE_ID = 'DEV-ALPHA-9001';
+export const SEED_FEEDER_ID = 'FDR-ALPHA-01';
+export const SEED_SERVICE_DATE = '2026-10-29';
 
 export const SEED_CATALOG_APPS: readonly CatalogAppSummary[] = [
   {
@@ -444,6 +459,140 @@ export const SEED_TRACE: IpTrace = {
       correlationId: 'REC-77410',
       createdAt: '2026-10-29T08:01:05Z',
       metadata: { status_code: 502 },
+    },
+  ],
+};
+
+export const SEED_BATCH_MANIFEST: BatchManifestSummary = {
+  batchId: SEED_BATCH_ID,
+  connectionId: SEED_CONNECTION_ID,
+  streamName: 'interval_readings',
+  priorityLane: PriorityLane.P1_LIVE,
+  status: BatchManifestStatus.COMPLETED,
+  l1RawUri: 's3://ip-tiers/l1/ten_9f8e/ip_bch_99887766554433221100.json',
+  l2ReplicaUri: 's3://ip-tiers/l2/ten_9f8e/ip_bch_99887766554433221100.parquet',
+  l3CanonicalUri: 's3://ip-tiers/l3/ten_9f8e/ip_bch_99887766554433221100.parquet',
+  payloadSha256: 'sha256_bch_99887766554433221100',
+  rawIngestedCount: 96,
+  duplicatesDroppedCount: 0,
+  validCanonicalCount: 95,
+  quarantinedHeldCount: 1,
+  promotedOutageClustersCount: 0,
+  deliveryReceiptId: 'SETTLE-RCPT-20261029-01',
+  traceId: SEED_TRACE_ID,
+  createdAt: '2026-10-29T08:00:00Z',
+  completedAt: '2026-10-29T08:00:04Z',
+};
+
+export const SEED_RECONCILIATION_OVERVIEW: BatchReconciliationOverview = {
+  tenantId: SEED_TENANT_ID,
+  connectionId: SEED_CONNECTION_ID,
+  totalBatches: 1,
+  completedBatches: 1,
+  inFlightBatches: 0,
+  failedBatches: 0,
+  rawIngestedTotal: 96,
+  duplicatesDroppedTotal: 0,
+  validCanonicalTotal: 95,
+  quarantinedHeldTotal: 1,
+  inFlightReadingsTotal: 0,
+  isZeroLossBalanced: true,
+  recentBatches: [SEED_BATCH_MANIFEST],
+};
+
+export const SEED_INTERVAL_COMPLETENESS: readonly IntervalWindowCompleteness[] = [
+  {
+    tenantId: SEED_TENANT_ID,
+    connectionId: SEED_CONNECTION_ID,
+    streamName: 'interval_readings',
+    serviceDate: SEED_SERVICE_DATE,
+    feederId: SEED_FEEDER_ID,
+    expectedIntervalsPerDevice: 96,
+    activeDeviceCount: 1,
+    expectedIntervalsTotal: 96,
+    receivedIntervalsTotal: 96,
+    validIntervalsTotal: 95,
+    quarantinedIntervalsTotal: 1,
+    completenessPercentage: 100.0,
+  },
+];
+
+export const SEED_DAILY_TOU_ROLLUPS: readonly DailyTouRollup[] = [
+  {
+    tenantId: SEED_TENANT_ID,
+    gemDeviceId: 'gem_dev_9001',
+    sourceDeviceId: SEED_DEVICE_ID,
+    serviceDate: SEED_SERVICE_DATE,
+    feederId: SEED_FEEDER_ID,
+    peakVolume: '42.5000',
+    shoulderVolume: '31.2500',
+    offPeakVolume: '18.7500',
+    netExportVolume: '4.1000',
+    maxDemandKw: '14.8000',
+    validIntervals: 95,
+    quarantinedIntervals: 1,
+    latestBatchId: SEED_BATCH_ID,
+    deliveryReceiptId: 'SETTLE-RCPT-20261029-01',
+  },
+];
+
+export const SEED_INTERVAL_LINEAGE_TRACE: IntervalLineageTrace = {
+  tenantId: SEED_TENANT_ID,
+  sourceDeviceId: SEED_DEVICE_ID,
+  serviceDate: SEED_SERVICE_DATE,
+  totalIntervals: 2,
+  validIntervals: 1,
+  quarantinedIntervals: 1,
+  intervals: [
+    {
+      intervalEndUtc: '2026-10-29T00:15:00Z',
+      gemDeviceId: 'gem_dev_9001',
+      sourceDeviceId: SEED_DEVICE_ID,
+      endpointLocationId: 'LOC-ALPHA-01',
+      feederId: SEED_FEEDER_ID,
+      substationId: 'SUB-NORTH-01',
+      tariffBucket: TariffBucket.OFF_PEAK,
+      qualityStatus: CimQualityStatus.VALID,
+      deliveredVolume: '1.2500',
+      receivedVolume: '0.0000',
+      reactiveVolume: '0.1200',
+      voltageV: 240.2,
+      quarantineReason: null,
+      sourceBatchId: SEED_BATCH_ID,
+      parquetRowOffset: 0,
+      batchStatus: BatchManifestStatus.COMPLETED,
+      priorityLane: PriorityLane.P1_LIVE,
+      l1RawUri: SEED_BATCH_MANIFEST.l1RawUri,
+      l2ReplicaUri: SEED_BATCH_MANIFEST.l2ReplicaUri,
+      l3CanonicalUri: SEED_BATCH_MANIFEST.l3CanonicalUri,
+      payloadSha256: SEED_BATCH_MANIFEST.payloadSha256,
+      deliveryReceiptId: SEED_BATCH_MANIFEST.deliveryReceiptId,
+      traceId: SEED_TRACE_ID,
+    },
+    {
+      intervalEndUtc: '2026-10-29T18:00:00Z',
+      gemDeviceId: 'gem_dev_9001',
+      sourceDeviceId: SEED_DEVICE_ID,
+      endpointLocationId: 'LOC-ALPHA-01',
+      feederId: SEED_FEEDER_ID,
+      substationId: 'SUB-NORTH-01',
+      tariffBucket: TariffBucket.PEAK,
+      qualityStatus: CimQualityStatus.QUARANTINED_SPIKE,
+      deliveredVolume: '85.0000',
+      receivedVolume: '0.0000',
+      reactiveVolume: '2.4000',
+      voltageV: 239.8,
+      quarantineReason: 'Interval reading exceeds hardware threshold',
+      sourceBatchId: SEED_BATCH_ID,
+      parquetRowOffset: 1,
+      batchStatus: BatchManifestStatus.COMPLETED,
+      priorityLane: PriorityLane.P1_LIVE,
+      l1RawUri: SEED_BATCH_MANIFEST.l1RawUri,
+      l2ReplicaUri: SEED_BATCH_MANIFEST.l2ReplicaUri,
+      l3CanonicalUri: SEED_BATCH_MANIFEST.l3CanonicalUri,
+      payloadSha256: SEED_BATCH_MANIFEST.payloadSha256,
+      deliveryReceiptId: SEED_BATCH_MANIFEST.deliveryReceiptId,
+      traceId: SEED_TRACE_ID,
     },
   ],
 };

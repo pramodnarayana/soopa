@@ -75,7 +75,7 @@ async def test_stream_subscription_supervisor_lifecycle() -> None:
         transports={"conn_stream_1": transport},
     )
 
-    stream = StreamDefinition(stream="telemetry")
+    stream = StreamDefinition(stream="interval_readings")
     supervisor.start_subscription(
         tenant_id="tenant_a",
         connection_id="conn_stream_1",
@@ -86,15 +86,15 @@ async def test_stream_subscription_supervisor_lifecycle() -> None:
     # Let the event loop cycle so the background task begins
     await asyncio.sleep(0.05)
 
-    assert "conn_stream_1:telemetry" in supervisor.active_subscription_keys
+    assert "conn_stream_1:interval_readings" in supervisor.active_subscription_keys
     assert transport.started is True
     assert transport.delivered_verdict == AckVerdict.ACK
     assert len(ingest_use_case.executed_commands) == 1
-    assert ingest_use_case.executed_commands[0].stream_name == "telemetry"
+    assert ingest_use_case.executed_commands[0].stream_name == "interval_readings"
 
     # Stop subscription
-    await supervisor.stop_subscription("conn_stream_1", "telemetry")
+    await supervisor.stop_subscription("conn_stream_1", "interval_readings")
     await asyncio.sleep(0.05)
 
     assert transport.stopped is True
-    assert "conn_stream_1:telemetry" not in supervisor.active_subscription_keys
+    assert "conn_stream_1:interval_readings" not in supervisor.active_subscription_keys

@@ -2,6 +2,11 @@ import type { CatalogAppsFilter } from '../domain/catalog';
 import type { ListStitchRunsFilter } from '../domain/stitch';
 import type { ListRecentTracesFilter } from '../domain/trace';
 import type {
+  GetCompletenessParams,
+  GetDailyTouRollupsParams,
+  GetReconciliationParams,
+} from '../ports/interval-repository.port';
+import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
   ListNormalizedRecordsFilter,
@@ -159,6 +164,51 @@ export const ipQueryKeys = {
         filter?.hydratePayloads ?? false,
         filter?.limit ?? 50,
         filter?.offset ?? 0,
+      ] as const,
+  },
+  intervals: {
+    all: (tenantId: string) => ['ip', 'tenant', tenantId, 'intervals'] as const,
+    reconciliation: (tenantId: string, params?: GetReconciliationParams) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'intervals',
+        'reconciliation',
+        params?.connectionId ?? '__ALL__',
+        params?.recentLimit ?? 20,
+      ] as const,
+    completeness: (tenantId: string, params: GetCompletenessParams) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'intervals',
+        'completeness',
+        params.connectionId,
+        params.serviceDate,
+        params.streamName ?? '__ALL__',
+      ] as const,
+    touRollups: (tenantId: string, params: GetDailyTouRollupsParams) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'intervals',
+        'tou-rollups',
+        params.serviceDate,
+        params.feederId ?? '__ALL__',
+        params.sourceDeviceId ?? '__ALL__',
+      ] as const,
+    deviceLineage: (tenantId: string, sourceDeviceId: string, serviceDate: string) =>
+      [
+        'ip',
+        'tenant',
+        tenantId,
+        'intervals',
+        'device-lineage',
+        sourceDeviceId,
+        serviceDate,
       ] as const,
   },
 } as const;

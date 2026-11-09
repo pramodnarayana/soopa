@@ -21,6 +21,13 @@ import {
   TraceStatus,
 } from '../domain/enums';
 import type {
+  BatchManifestSummary,
+  BatchReconciliationOverview,
+  DailyTouRollup,
+  IntervalLineageTrace,
+  IntervalWindowCompleteness,
+} from '../domain/intervals';
+import type {
   ListStitchRunsFilter,
   RegisterStitchInput,
   Stitch,
@@ -52,6 +59,12 @@ import type {
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
 import type {
+  GetCompletenessParams,
+  GetDailyTouRollupsParams,
+  GetReconciliationParams,
+  IntervalRepositoryPort,
+} from '../ports/interval-repository.port';
+import type {
   ListGemRecordsFilter,
   ListInboundRecordsFilter,
   ListNormalizedRecordsFilter,
@@ -64,9 +77,14 @@ import type { TraceRepositoryPort } from '../ports/trace-repository.port';
 import type { TransformationRepositoryPort } from '../ports/transformation-repository.port';
 import type { IpNavigationPort, IpRepositoriesBundle } from '../provider/IpRepositoriesContext';
 import {
+  SEED_BATCH_MANIFEST,
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
+  SEED_DAILY_TOU_ROLLUPS,
   SEED_DISCOVERED_CATALOG,
+  SEED_INTERVAL_COMPLETENESS,
+  SEED_INTERVAL_LINEAGE_TRACE,
+  SEED_RECONCILIATION_OVERVIEW,
   SEED_SOURCE_APP_SPEC,
   SEED_STITCH,
   SEED_STITCH_DEFINITION,
@@ -802,6 +820,158 @@ export class InMemoryRecordRepository implements RecordRepositoryPort {
   }
 }
 
+export class InMemoryIntervalRepository implements IntervalRepositoryPort {
+  public overview: BatchReconciliationOverview;
+  public completeness: IntervalWindowCompleteness[];
+  public touRollups: DailyTouRollup[];
+  public lineageTrace: IntervalLineageTrace;
+
+  constructor(
+    overview: BatchReconciliationOverview = SEED_RECONCILIATION_OVERVIEW,
+    completeness: readonly IntervalWindowCompleteness[] = SEED_INTERVAL_COMPLETENESS,
+    touRollups: readonly DailyTouRollup[] = SEED_DAILY_TOU_ROLLUPS,
+    lineageTrace: IntervalLineageTrace = SEED_INTERVAL_LINEAGE_TRACE,
+  ) {
+    this.overview = overview;
+    this.completeness = [...completeness];
+    this.touRollups = [...touRollups];
+    this.lineageTrace = lineageTrace;
+  }
+
+  public async getReconciliationOverview(
+    tenantId: string,
+    params?: GetReconciliationParams,
+  ): Promise<Result<BatchReconciliationOverview, ApiProblem>> {
+    if (tenantId !== this.overview.tenantId) {
+      return ok({
+        tenantId,
+        connectionId: params?.connectionId ?? null,
+        totalBatches: 0,
+        completedBatches: 0,
+        inFlightBatches: 0,
+        failedBatches: 0,
+        rawIngestedTotal: 0,
+        duplicatesDroppedTotal: 0,
+        validCanonicalTotal: 0,
+        quarantinedHeldTotal: 0,
+        inFlightReadingsTotal: 0,
+        isZeroLossBalanced: true,
+        recentBatches: [],
+      });
+    }
+
+    const matchingBatches = params?.connectionId
+      ? this.overview.recentBatches.filter((b) => b.connectionId === params.connectionId)
+      : this.overview.recentBatches;
+
+    const rawIngested = matchingBatches.reduce((sum, b) => sum + b.rawIngestedCount, 0);
+    const duplicatesDropped = matchingBatches.reduce((sum, b) => sum + b.duplicatesDroppedCount, 0);
+    const validCanonical = matchingBatches.reduce((sum, b) => sum + b.validCanonicalCount, 0);
+    const quarantinedHeld = matchingBatches.reduce((sum, b) => sum + b.quarantinedHeldCount, 0);
+    const totalBatches = matchingBatches.length;
+    const completedBatches = matchingBatches.filter((b) => b.status === 'COMPLETED').length;
+    const failedBatches = matchingBatches.filter((b) => b.status === 'FAILED').length;
+    const inFlightBatches = totalBatches - completedBatches - failedBatches;
+    const isZeroLossBalanced = rawIngested === validCanonical + duplicatesDropped + quarantinedHeld;
+
+    return ok({
+      tenantId,
+      connectionId: params?.connectionId ?? this.overview.connectionId,
+      totalBatches,
+      completedBatches,
+      inFlightBatches,
+      failedBatches,
+      rawIngestedTotal: rawIngested,
+      duplicatesDroppedTotal: duplicatesDropped,
+      validCanonicalTotal: validCanonical,
+      quarantinedHeldTotal: quarantinedHeld,
+      inFlightReadingsTotal: 0,
+      isZeroLossBalanced,
+      recentBatches: matchingBatches.slice(0, params?.recentLimit ?? 20),
+    });
+  }
+
+  public async getDailyCompleteness(
+    tenantId: string,
+    params: GetCompletenessParams,
+  ): Promise<Result<readonly IntervalWindowCompleteness[], ApiProblem>> {
+    return ok(
+      this.completeness.filter(
+        (c) =>
+          c.tenantId === tenantId &&
+          c.connectionId === params.connectionId &&
+          c.serviceDate === params.serviceDate &&
+          (!params.streamName || c.streamName === params.streamName),
+      ),
+    );
+  }
+
+  public async getDailyTouRollups(
+    tenantId: string,
+    params: GetDailyTouRollupsParams,
+  ): Promise<Result<readonly DailyTouRollup[], ApiProblem>> {
+    return ok(
+      this.touRollups.filter(
+        (r) =>
+          r.tenantId === tenantId &&
+          r.serviceDate === params.serviceDate &&
+          (!params.connectionId || r.connectionId === params.connectionId) &&
+          (!params.feederId || r.feederId === params.feederId) &&
+          (!params.sourceDeviceId || r.sourceDeviceId === params.sourceDeviceId),
+      ),
+    );
+  }
+
+  public async traceDeviceIntervals(
+    tenantId: string,
+    sourceDeviceId: string,
+    serviceDate: string,
+  ): Promise<Result<IntervalLineageTrace, ApiProblem>> {
+    if (
+      this.lineageTrace.tenantId === tenantId &&
+      this.lineageTrace.sourceDeviceId === sourceDeviceId &&
+      this.lineageTrace.serviceDate === serviceDate
+    ) {
+      return ok(this.lineageTrace);
+    }
+    return err(notFoundProblem(`Interval lineage for ${sourceDeviceId} not found`));
+  }
+
+  public async recordSettlementReceipt(
+    tenantId: string,
+    batchId: string,
+    deliveryReceiptId: string,
+  ): Promise<Result<BatchManifestSummary, ApiProblem>> {
+    if (this.overview.tenantId !== tenantId) {
+      return err(notFoundProblem(`Batch ${batchId} not found in tenant ${tenantId}`));
+    }
+    const existing = this.overview.recentBatches.find((b) => b.batchId === batchId);
+    if (!existing) {
+      return err(notFoundProblem(`Batch manifest ${batchId} not found`));
+    }
+    const updated: BatchManifestSummary = {
+      ...existing,
+      deliveryReceiptId,
+    };
+    this.overview = {
+      ...this.overview,
+      recentBatches: this.overview.recentBatches.map((b) => (b.batchId === batchId ? updated : b)),
+    };
+    this.touRollups = this.touRollups.map((r) =>
+      r.latestBatchId === batchId && r.tenantId === tenantId ? { ...r, deliveryReceiptId } : r,
+    );
+    if (this.lineageTrace.tenantId === tenantId) {
+      this.lineageTrace = {
+        ...this.lineageTrace,
+        intervals: this.lineageTrace.intervals.map((pt) =>
+          pt.sourceBatchId === batchId ? { ...pt, deliveryReceiptId } : pt,
+        ),
+      };
+    }
+    return ok(updated);
+  }
+}
+
 export class InMemoryNavigationFake implements IpNavigationPort {
   public readonly visited: string[] = [];
 
@@ -846,6 +1016,12 @@ export class InMemoryNavigationFake implements IpNavigationPort {
   public readonly toStitchRun = (runId: string): void => {
     this.visited.push(`/tenant/ip/stitches/runs/${runId}`);
   };
+
+  public readonly toIntervals = (connectionId?: string): void => {
+    this.visited.push(
+      connectionId ? `/tenant/ip/intervals?connectionId=${connectionId}` : '/tenant/ip/intervals',
+    );
+  };
 }
 
 export interface InMemoryIpWorkspaceHarness {
@@ -857,6 +1033,7 @@ export interface InMemoryIpWorkspaceHarness {
   readonly stitches: InMemoryStitchRepository;
   readonly traces: InMemoryTraceRepository;
   readonly records: InMemoryRecordRepository;
+  readonly intervals: InMemoryIntervalRepository;
   readonly navigation: InMemoryNavigationFake;
 }
 
@@ -868,6 +1045,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
   const stitches = new InMemoryStitchRepository();
   const traces = new InMemoryTraceRepository();
   const records = new InMemoryRecordRepository();
+  const intervals = new InMemoryIntervalRepository();
   const navigation = new InMemoryNavigationFake();
 
   return {
@@ -879,6 +1057,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
       stitches,
       traces,
       records,
+      intervals,
     },
     catalog,
     connections,
@@ -887,6 +1066,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     stitches,
     traces,
     records,
+    intervals,
     navigation,
   };
 }

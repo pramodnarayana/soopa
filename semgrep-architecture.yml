@@ -103,3 +103,20 @@ rules:
       include:
         - "apps/ip/packages/ui/src/__tests__/**/*.ts"
         - "apps/ip/packages/ui/src/__tests__/**/*.tsx"
+
+  - id: ban-row-dict-loops-in-intervals
+    patterns:
+      - pattern-either:
+          - pattern: $DF.iter_rows(...)
+          - pattern: $DF.to_dicts(...)
+          - pattern: $CLIENT.executemany(...)
+    message: |
+      Enterprise Rule (Columnar Interval Invariant 1): Never materialize row-level Python dict loops
+      (`.iter_rows()`, `.to_dicts()`, `executemany()`) in the interval streams data plane.
+      Always stream contiguous Apache Arrow IPC buffers (`insert_arrow_batch`).
+    severity: ERROR
+    languages:
+      - python
+    paths:
+      include:
+        - "apps/ip/packages/ip/src/ip/engine/adapters/outbound/intervals/**/*.py"

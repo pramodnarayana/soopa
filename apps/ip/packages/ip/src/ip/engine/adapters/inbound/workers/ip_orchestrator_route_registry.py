@@ -12,11 +12,16 @@ from ip.engine.adapters.inbound.workers.ip_disposition import (
 )
 from ip.engine.adapters.inbound.workers.ip_payload_dtos import (
     IpCanonicalRecordChunkPayloadDTO,
+    IpFeederOutageDetectedPayloadDTO,
     IpGenerationCompletedPayloadDTO,
     IpInboundRecordChunkPayloadDTO,
+    IpIntervalBatchIngestedPayloadDTO,
     IpNormalizedRecordChunkPayloadDTO,
     IpReplicaRecordChunkPayloadDTO,
     IpStreamBackfillPayloadDTO,
+)
+from ip.engine.application.use_cases.intervals.process_interval_batch_use_case import (
+    ProcessIntervalBatchCommand,
 )
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
@@ -50,6 +55,7 @@ from ip.engine.application.worker_ports import (
     IpBackfillStreamNormalizationExecutorPort,
     IpNormalizeReplicaExecutorPort,
     IpProcessInboundRangeExecutorPort,
+    IpProcessIntervalBatchExecutorPort,
     IpStitchCanonicalDispatcherPort,
     IpStitchWorkerTickExecutorPort,
     IpStreamDefinitionResolver,
@@ -105,6 +111,7 @@ class IpOrchestratorRouteRegistry:
         normalize_use_case: IpNormalizeReplicaExecutorPort,
         backfill_use_case: IpBackfillStreamNormalizationExecutorPort,
         process_inbound_range_use_case: IpProcessInboundRangeExecutorPort | None = None,
+        process_interval_batch_use_case: IpProcessIntervalBatchExecutorPort | None = None,
         extractor_registry: RecordExtractorRegistry | None = None,
         tiered_storage: TieredStoragePort | None = None,
         stitch_dispatcher: IpStitchCanonicalDispatcherPort | None = None,
@@ -118,6 +125,7 @@ class IpOrchestratorRouteRegistry:
         self._normalize_use_case = normalize_use_case
         self._backfill_use_case = backfill_use_case
         self._process_inbound_range_use_case = process_inbound_range_use_case
+        self._process_interval_batch_use_case = process_interval_batch_use_case
         self._extractor_registry = extractor_registry or RecordExtractorRegistry()
         self._tiered_storage = tiered_storage
         self._stitch_dispatcher = stitch_dispatcher
@@ -156,6 +164,14 @@ class IpOrchestratorRouteRegistry:
         dispatcher.subscribe(
             IpEventType.GENERATION_COMPLETED.value,
             self.handle_generation_completed,
+        )
+        dispatcher.subscribe(
+            IpEventType.INTERVAL_BATCH_INGESTED.value,
+            self.handle_interval_batch_ingested,
+        )
+        dispatcher.subscribe(
+            IpEventType.FEEDER_OUTAGE_DETECTED.value,
+            self.handle_feeder_outage_detected,
         )
 
     async def _run_with_idempotency(
@@ -577,6 +593,88 @@ class IpOrchestratorRouteRegistry:
 
         return await self._run_with_idempotency(envelope, dto.tenant_id, _execute_sweep)
 
+    async def handle_interval_batch_ingested(self, envelope: EventEnvelope) -> ConsumerAction:
+        """Handles `ip.interval_batch.ingested` by running vectorized normalization and rollup commit."""
+        parsed_res = IpIntervalBatchIngestedPayloadDTO.from_envelope(envelope)
+        if parsed_res.is_err:
+            return IpWorkerResultDispositionHandler.to_consumer_action(envelope, parsed_res)
+        dto = parsed_res.unwrap()
+
+        if self._process_interval_batch_use_case is None:
+            logger.info(
+                "ip_orchestrator_interval_batch_skipped_no_processor",
+                event_id=envelope.id,
+                tenant_id=dto.tenant_id,
+                batch_id=dto.batch_id,
+            )
+            return ConsumerAction.ACK
+
+        processor = self._process_interval_batch_use_case
+
+        async def _execute_batch(_shard_id: str, _shard_dsn: str) -> ConsumerAction:
+            res = await processor.execute(
+                ProcessIntervalBatchCommand(
+                    tenant_id=dto.tenant_id,
+                    batch_id=dto.batch_id,
+                )
+            )
+            return IpWorkerResultDispositionHandler.to_consumer_action(envelope, res)
+
+        return await self._run_with_idempotency(envelope, dto.tenant_id, _execute_batch)
+
+    async def handle_feeder_outage_detected(self, envelope: EventEnvelope) -> ConsumerAction:
+        """Handles storm-promoted `ip.feeder_outage.detected` on the P0_CRITICAL real-time bridge lane."""
+        parsed_res = IpFeederOutageDetectedPayloadDTO.from_envelope(envelope)
+        if parsed_res.is_err:
+            return IpWorkerResultDispositionHandler.to_consumer_action(envelope, parsed_res)
+        dto = parsed_res.unwrap()
+
+        if self._stitch_dispatcher is None:
+            logger.info(
+                "ip_orchestrator_feeder_outage_acknowledged_no_stitch_dispatcher",
+                event_id=envelope.id,
+                tenant_id=dto.tenant_id,
+                cluster_id=dto.cluster_id,
+                feeder_id=dto.feeder_id,
+            )
+            return ConsumerAction.ACK
+
+        dispatcher = self._stitch_dispatcher
+
+        async def _execute_outage_stitch(_shard_id: str, _shard_dsn: str) -> ConsumerAction:
+            payload_data: JsonDict = {
+                "cluster_id": dto.cluster_id,
+                "connection_id": dto.connection_id,
+                "batch_id": dto.batch_id,
+                "feeder_id": dto.feeder_id,
+                "substation_id": dto.substation_id,
+                "outage_meter_count": dto.outage_meter_count,
+                "affected_meter_ids": list(dto.affected_meter_ids),
+                "outage_start_utc": dto.outage_start_utc,
+                "source_id": dto.cluster_id,
+                "canonical_type": IpEventType.FEEDER_OUTAGE_DETECTED.value,
+            }
+            res = await dispatcher.execute(
+                DispatchCanonicalEventToStitchesCommand(
+                    tenant_id=dto.tenant_id,
+                    canonical_event_type=IpEventType.FEEDER_OUTAGE_DETECTED.value,
+                    event_id=f"{envelope.id}:{dto.cluster_id}",
+                    payload=payload_data,
+                    trace_id=dto.trace_id,
+                    correlation_id=dto.correlation_id,
+                )
+            )
+            if res.is_err:
+                return IpWorkerResultDispositionHandler.to_consumer_action(
+                    envelope,
+                    Result.err(_workflow_error_to_ip_error(res.unwrap_err())),
+                )
+            if self._stitch_worker_tick is not None:
+                await self._drain_inline_stitch_ticks()
+            return ConsumerAction.ACK
+
+        return await self._run_with_idempotency(envelope, dto.tenant_id, _execute_outage_stitch)
+
     async def _load_canonical_payload_by_source(
         self,
         *,
@@ -647,6 +745,7 @@ __all__ = [
     "IpNormalizeReplicaExecutorPort",
     "IpOrchestratorRouteRegistry",
     "IpProcessInboundRangeExecutorPort",
+    "IpProcessIntervalBatchExecutorPort",
     "IpStitchCanonicalDispatcherPort",
     "IpStitchWorkerTickExecutorPort",
     "IpStreamDefinitionResolver",

@@ -1,6 +1,6 @@
 """End-to-End Transactional Outbox & Worker Pipeline Integration Tests on real PostgreSQL.
 
-Exercises the Gear-1 2-Queue Data Plane Pipeline:
+Exercises the 2-Queue Data Plane Pipeline:
   Stage 1 (L1): `InboundRecord` / `create_range_batch` -> `ip_outbox` (`ip.inbound_record.created`)
   Stage 2 (L2->L3): Fused `ProcessInboundRangeUseCase` in a single ACID transaction (zero internal hops)
   Stage 3 (L4): In-memory Stitch evaluation -> `OutboundRecord(PENDING)` -> `ip_outbox` (`ip.outbound_record.created`)

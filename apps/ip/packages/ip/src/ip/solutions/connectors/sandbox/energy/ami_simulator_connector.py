@@ -1,7 +1,7 @@
 """Native First-Class Sandbox Connector for Smart Grid AMI (Advanced Metering Infrastructure).
 
 Implements the Shopify Bogus Gateway pattern for the Energy sector, generating
-ANSI C12.19, CIM, and Green Button compliant smart meter telemetry and grid topology.
+ANSI C12.19, CIM, and Green Button compliant smart meter interval readings and grid topology.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ class EnergyAmiSimulatorConnector(BaseConnector):
             auth_type="NO_AUTH",
             description=(
                 "High-fidelity smart grid AMI simulator generating realistic 15-minute interval "
-                "telemetry and service point topologies without external vendor credentials."
+                "readings and service point topologies without external vendor credentials."
             ),
             connector_type="NATIVE_SIMULATOR",
         )
@@ -147,7 +147,7 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> DiscoveredCatalogDTO:
-        """Discovers Gear 1 master data entities (service_points) with default canonical L3 transformation bindings."""
+        """Discovers master data entities (service_points) with default canonical L3 transformation bindings."""
         streams = (
             StreamSchemaDTO(
                 name=self.STREAM_SERVICE_POINTS,
@@ -212,7 +212,7 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         cursor: str | None = None,
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
-        """Streams synthetic Green Button / CIM interval telemetry and topologies."""
+        """Streams synthetic Green Button / CIM interval readings and topologies."""
         meter_count = min(
             max(1, _extract_int(public_config, "meter_count", default=5)),
             self.MAX_SIMULATOR_METER_COUNT,
@@ -336,7 +336,7 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> WriteResultDTO:
-        """Write operations are rejected as this connector is a read-only telemetry source."""
+        """Write operations are rejected as this connector is a read-only interval data source."""
         return WriteResultDTO(
             success=False,
             record_id=command.record_id or "unsupported",

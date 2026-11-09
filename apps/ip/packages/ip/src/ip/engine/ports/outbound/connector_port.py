@@ -112,7 +112,7 @@ class WriteRecordCommand:
 
 @dataclass(frozen=True)
 class WriteResultDTO:
-    """Outcome of writing a record to a target external application with wire telemetry."""
+    """Outcome of writing a record to a target external application with wire diagnostics."""
 
     success: bool
     record_id: str

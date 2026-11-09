@@ -10,7 +10,7 @@ import {
 import { Check, X } from 'lucide-react';
 import * as React from 'react';
 import { Icon } from '../icon';
-import { HStack, VStack } from '../layout';
+import { HStack } from '../layout';
 import { FieldDef, FilterOperator, FilterRule } from './types';
 import { getOperatorLabel } from './utils';
 

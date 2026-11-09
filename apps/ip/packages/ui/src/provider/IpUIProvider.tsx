@@ -9,6 +9,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   HttpCatalogRepository,
   HttpConnectionRepository,
+  HttpIntervalRepository,
   HttpRecordRepository,
   HttpStitchRepository,
   HttpSyncRunRepository,
@@ -56,6 +57,7 @@ function createHttpRepositoriesBundle(
     stitches: new HttpStitchRepository(client, logger),
     traces: new HttpTraceRepository(client, logger),
     records: new HttpRecordRepository(client, logger),
+    intervals: new HttpIntervalRepository(client, logger),
   };
 }
 

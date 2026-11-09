@@ -384,7 +384,7 @@ async def test_ingest_stream_batch_use_case_on_postgres(
     )
 
     batch = RawMessageBatchDTO(
-        stream_name="telemetry",
+        stream_name="interval_readings",
         messages=[
             RawMessageDTO(
                 message_id="kafka-0-1001",
@@ -405,7 +405,7 @@ async def test_ingest_stream_batch_use_case_on_postgres(
             tenant_id=seeded_ip_tenant,
             connection_id="conn_kafka_1",
             app_id="kafka",
-            stream_name="telemetry",
+            stream_name="interval_readings",
             batch=batch,
         )
     )
@@ -419,7 +419,7 @@ async def test_ingest_stream_batch_use_case_on_postgres(
             tenant_id=seeded_ip_tenant,
             connection_id="conn_kafka_1",
             app_id="kafka",
-            stream_name="telemetry",
+            stream_name="interval_readings",
             batch=batch,
         )
     )

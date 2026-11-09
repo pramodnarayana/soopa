@@ -71,6 +71,12 @@ class IpTraceEventType(StrEnum):
     REPLAY_TRIGGERED = "REPLAY_TRIGGERED"
     MODIFIED_AND_REPLAYED = "MODIFIED_AND_REPLAYED"
 
+    # High-Frequency Interval Stage
+    INTERVAL_BATCH_INGESTED = "INTERVAL_BATCH_INGESTED"
+    INTERVAL_BATCH_NORMALIZED = "INTERVAL_BATCH_NORMALIZED"
+    FEEDER_OUTAGE_PROMOTED = "FEEDER_OUTAGE_PROMOTED"
+    SETTLEMENT_RECEIPT_RECORDED = "SETTLEMENT_RECEIPT_RECORDED"
+
 
 def map_outbound_status_to_trace_status(status: OutboundDispatchStatus | str) -> IpTraceStatus:
     """Maps an L5 OutboundDispatchStatus token to its corresponding IpTraceStatus."""
