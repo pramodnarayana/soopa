@@ -138,11 +138,7 @@ class ProcessIntervalBatchUseCase:
             if len(page) < page_limit:
                 break
             current_offset += len(page)
-        return {
-            entry.source_entity_id: entry.canonical_id
-            for entry in gem_entries
-            if not entry.entity_domain or "meter" in entry.entity_domain.lower()
-        }
+        return {entry.source_entity_id: entry.canonical_id for entry in gem_entries}
 
     async def _fail_manifest(
         self,

@@ -461,7 +461,7 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                     )
                 )
             else:
-                # Normal mode (< threshold): promote individual endpoint outage clusters, deduplicating repeated promotions per meter
+                # Normal mode (< threshold): promote individual endpoint outage clusters, deduplicating repeated promotions per endpoint
                 for m_id in sorted_endpoints:
                     if m_id in promoted_individual_meters:
                         continue
