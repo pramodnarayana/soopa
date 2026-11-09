@@ -24,7 +24,10 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>
     <div
       ref={ref}
       data-slot="card-header"
-      className={cn('flex flex-col space-y-1.5 p-5', className)}
+      className={cn(
+        'grid auto-rows-min grid-cols-1 items-start gap-1.5 p-5 has-[[data-slot=card-action]]:grid-cols-[1fr_auto]',
+        className,
+      )}
       {...props}
     />
   ),

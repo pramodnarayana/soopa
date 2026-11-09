@@ -31,10 +31,7 @@ export interface DailyTouBillingRollupsTableProps {
   readonly searchDeviceId: string;
   readonly onSearchDeviceIdChange: (value: string) => void;
   readonly onInspectDeviceCurve: (sourceDeviceId: string) => void;
-  readonly onRecordSettlementReceipt?: (
-    batchId: string,
-    receiptId: string,
-  ) => Promise<boolean> | void;
+  readonly onRecordSettlementReceipt?: (batchId: string, receiptId: string) => Promise<boolean>;
   readonly isRecordingReceipt?: boolean;
   readonly receiptProblem?: ApiProblem | null;
 }
@@ -210,7 +207,7 @@ export function DailyTouBillingRollupsTable({
       return;
     }
     const result = await onRecordSettlementReceipt(receiptModalBatchId, receiptInput.trim());
-    if (result !== false) {
+    if (result === true) {
       setReceiptModalBatchId(null);
     }
   };

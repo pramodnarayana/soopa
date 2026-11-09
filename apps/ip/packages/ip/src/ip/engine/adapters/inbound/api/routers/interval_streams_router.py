@@ -25,7 +25,6 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_tiered_storage,
     require_canonical_records_read,
     require_flows_write,
-    require_tenant_member,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ApiErrorHttpResponse,
@@ -63,7 +62,6 @@ from ip.engine.application.use_cases.intervals.process_interval_batch_use_case i
     ProcessIntervalBatchCommand,
     ProcessIntervalBatchUseCase,
 )
-from ip.engine.domain.authorization import IpPermission, has_ip_permission
 from ip.engine.domain.intervals.enums import (
     IntervalPayloadFormat,
     PriorityLane,
@@ -120,7 +118,7 @@ async def ingest_interval_batch(
     tenant_id: str,
     connection_id: str,
     request: Request,
-    _context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    _context: Annotated[IdentityContext, Depends(require_flows_write)],
     cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     dp_uow_provider: Annotated[
         IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
@@ -205,7 +203,7 @@ async def ingest_interval_batch(
 async def process_interval_batch(
     tenant_id: str,
     batch_id: str,
-    _context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    _context: Annotated[IdentityContext, Depends(require_flows_write)],
     dp_uow_provider: Annotated[
         IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
     ],
@@ -217,14 +215,6 @@ async def process_interval_batch(
     delivery_receipt_id: Annotated[str | None, Query()] = None,
 ) -> IntervalBatchProcessHttpResponse | Response:
     """Executes vectorized L2/L3 normalization, zero-copy Arrow IPC commit, and storm promotion."""
-    if delivery_receipt_id is not None and not has_ip_permission(
-        _context, IpPermission.IP_FLOWS_WRITE, tenant_id=tenant_id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="FORBIDDEN: Missing required permission 'ip.flows.write' to specify delivery_receipt_id.",
-        )
-
     use_case = ProcessIntervalBatchUseCase(
         dp_uow_provider=dp_uow_provider,
         storage=tiered_storage,

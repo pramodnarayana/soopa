@@ -168,7 +168,7 @@ def _inspect_raw_batch_metadata(
             )
         return Result.ok((len(lines) - 1, resolved_start, resolved_end))
 
-    return Result.ok((declared_count or 1, resolved_start, resolved_end))
+    return Result.ok((declared_count or 0, resolved_start, resolved_end))
 
 
 def _build_batch_response(

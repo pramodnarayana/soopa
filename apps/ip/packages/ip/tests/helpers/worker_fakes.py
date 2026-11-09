@@ -66,6 +66,7 @@ from ip.engine.domain.exceptions import (
     Result,
     TenantShardNotFoundError,
 )
+from ip.engine.domain.intervals.enums import BatchManifestStatus
 from ip.engine.domain.intervals.models import BatchManifest, BatchReconciliationSummary
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
@@ -693,18 +694,43 @@ class InMemoryBatchManifestRepo(BatchManifestRepositoryPort):
             if m.tenant_id == tenant_id
             and (connection_id is None or m.connection_id == connection_id)
         ]
+        total_batches = len(matching)
+        completed_batches = sum(1 for m in matching if m.status is BatchManifestStatus.COMPLETED)
+        in_flight_batches = sum(
+            1
+            for m in matching
+            if m.status in (BatchManifestStatus.INGESTED, BatchManifestStatus.PROCESSING)
+        )
+        failed_batches = sum(
+            1
+            for m in matching
+            if m.status in (BatchManifestStatus.FAILED, BatchManifestStatus.QUARANTINED)
+        )
         raw_total = sum(m.raw_ingested_count for m in matching)
         valid_total = sum(m.valid_canonical_count for m in matching)
         dups_total = sum(m.duplicates_dropped_count for m in matching)
         quar_total = sum(m.quarantined_held_count for m in matching)
+        in_flight_readings = sum(
+            m.raw_ingested_count
+            for m in matching
+            if m.status in (BatchManifestStatus.INGESTED, BatchManifestStatus.PROCESSING)
+        )
+        accounted_plus_inflight = dups_total + valid_total + quar_total + in_flight_readings
+        is_balanced = failed_batches == 0 and raw_total == accounted_plus_inflight
+
         return BatchReconciliationSummary(
             tenant_id=tenant_id,
-            connection_id=connection_id or "",
+            connection_id=connection_id,
+            total_batches=total_batches,
+            completed_batches=completed_batches,
+            in_flight_batches=in_flight_batches,
+            failed_batches=failed_batches,
             raw_ingested_total=raw_total,
-            valid_canonical_total=valid_total,
             duplicates_dropped_total=dups_total,
+            valid_canonical_total=valid_total,
             quarantined_held_total=quar_total,
-            is_zero_loss_balanced=(raw_total == valid_total + dups_total + quar_total),
+            in_flight_readings_total=in_flight_readings,
+            is_zero_loss_balanced=is_balanced,
         )
 
 

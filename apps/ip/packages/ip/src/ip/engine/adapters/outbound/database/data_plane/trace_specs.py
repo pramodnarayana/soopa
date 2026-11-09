@@ -74,6 +74,10 @@ _MANIFEST_TRACE_STATUS_COL = case(
         IpTraceStatus.FAILED.value,
     ),
     (
+        BatchManifestModel.status == BatchManifestStatus.QUARANTINED.value,
+        IpTraceStatus.DEAD_LETTERED.value,
+    ),
+    (
         BatchManifestModel.status == BatchManifestStatus.INGESTED.value,
         IpTraceStatus.INGESTED.value,
     ),
@@ -89,6 +93,8 @@ def map_manifest_status_to_trace_status(status: BatchManifestStatus | str) -> Ip
         return IpTraceStatus.PROCESSED
     if resolved is BatchManifestStatus.FAILED:
         return IpTraceStatus.FAILED
+    if resolved is BatchManifestStatus.QUARANTINED:
+        return IpTraceStatus.DEAD_LETTERED
     return IpTraceStatus.INGESTED
 
 
@@ -104,9 +110,9 @@ IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
             status=map_manifest_status_to_trace_status(bch.status),
             primary_layer=PipelineStage.NORMALIZE,
             created_at=bch.created_at,
-            replay_count=0,
-            parent_trace_id=None,
-            original_trace_id=None,
+            replay_count=bch.replay_count,
+            parent_trace_id=bch.parent_trace_id,
+            original_trace_id=bch.original_trace_id,
         ),
     ),
     TraceStageSpec(

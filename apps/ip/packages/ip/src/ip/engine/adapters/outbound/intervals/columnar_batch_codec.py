@@ -26,6 +26,14 @@ _SCALE_FACTOR = Decimal("10000")
 MAX_DECOMPRESSED_BYTES = 50 * 1024 * 1024  # 50 MB decompression limit (zip-bomb guard)
 
 
+def _ensure_utc_datetime(raw: object) -> datetime:
+    """Normalizes naive and timezone-aware timestamps to UTC-aware datetime objects."""
+    dt = raw if isinstance(raw, datetime) else datetime.fromisoformat(str(raw))
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 def _try_decode_pyarrow_stream(buffer: bytes) -> tuple[IntervalReading, ...] | None:
     try:
         pa_ipc = importlib.import_module("pyarrow.ipc")
@@ -46,11 +54,7 @@ def _try_decode_pyarrow_stream(buffer: bytes) -> tuple[IntervalReading, ...] | N
                     substation_id=str(pydict["substation_id"][i]),
                     tariff_bucket=TariffBucket(str(pydict["tariff_bucket"][i])),
                     quality_status=CimQualityStatus(str(pydict["quality_status"][i])),
-                    interval_end_utc=(
-                        pydict["interval_end_utc"][i]
-                        if isinstance(pydict["interval_end_utc"][i], datetime)
-                        else datetime.fromisoformat(str(pydict["interval_end_utc"][i]))
-                    ),
+                    interval_end_utc=_ensure_utc_datetime(pydict["interval_end_utc"][i]),
                     scaled_kwh_delivered=Decimal(str(pydict["scaled_kwh_delivered"][i])),
                     scaled_kwh_received=Decimal(str(pydict["scaled_kwh_received"][i])),
                     reactive_kvarh=Decimal(str(pydict["reactive_kvarh"][i])),
@@ -58,11 +62,7 @@ def _try_decode_pyarrow_stream(buffer: bytes) -> tuple[IntervalReading, ...] | N
                     source_batch_id=str(pydict["source_batch_id"][i]),
                     parquet_row_offset=int(pydict["parquet_row_offset"][i]),
                     trace_id=str(pydict["trace_id"][i]),
-                    updated_at_utc=(
-                        pydict["updated_at_utc"][i]
-                        if isinstance(pydict["updated_at_utc"][i], datetime)
-                        else datetime.fromisoformat(str(pydict["updated_at_utc"][i]))
-                    ),
+                    updated_at_utc=_ensure_utc_datetime(pydict["updated_at_utc"][i]),
                     quarantine_reason=pydict.get("quarantine_reason", [None] * num_rows)[i],
                     delivery_receipt_id=pydict.get("delivery_receipt_id", [None] * num_rows)[i],
                 )

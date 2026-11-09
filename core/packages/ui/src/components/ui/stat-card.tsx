@@ -14,6 +14,9 @@ export interface StatCardProps {
 export function StatCard({ title, value, subtitle, icon, onClick, className }: StatCardProps) {
   const handleKeyDown = onClick
     ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.target !== e.currentTarget) {
+          return;
+        }
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick();
@@ -21,11 +24,25 @@ export function StatCard({ title, value, subtitle, icon, onClick, className }: S
       }
     : undefined;
 
+  const handleClick = onClick
+    ? (e: React.MouseEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement | null;
+        if (
+          target &&
+          target.closest('button, a, input, select, textarea, [role="button"]') &&
+          target.closest('button, a, input, select, textarea, [role="button"]') !== e.currentTarget
+        ) {
+          return;
+        }
+        onClick();
+      }
+    : undefined;
+
   return (
     <Card
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
-      onClick={onClick}
+      onClick={handleClick}
       onKeyDown={handleKeyDown}
       className={cn(
         'group relative overflow-hidden transition-colors hover:border-foreground/20',

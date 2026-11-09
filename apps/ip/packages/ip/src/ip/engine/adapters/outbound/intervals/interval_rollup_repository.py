@@ -137,6 +137,10 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
         self._driver = driver
         # Primary ReplacingMergeTree storage keyed by (tenant_id, gem_device_id, interval_end_utc)
         self._replacing_tree: dict[tuple[str, str, datetime], IntervalReading] = {}
+        # Bucket index for fast hourly queries: (tenant_id, gem_device_id, h_start, tariff) -> {interval_end_utc: reading}
+        self._hourly_index: dict[
+            tuple[str, str, datetime, TariffBucket], dict[datetime, IntervalReading]
+        ] = {}
         # Stream name index per (tenant_id, batch_id)
         self._stream_by_batch: dict[tuple[str, str], str] = {}
         # Pre-aggregated Materialized View state tables (Invariant 3)
@@ -193,15 +197,44 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
             tree_key = (reading.tenant_id, reading.gem_device_id, reading.interval_end_utc)
             existing = self._replacing_tree.get(tree_key)
             if existing is None or reading.updated_at_utc >= existing.updated_at_utc:
+                if existing is not None:
+                    # Invalidate affected keys for the replaced reading
+                    old_start = existing.interval_end_utc - timedelta(milliseconds=1)
+                    old_h_start = old_start.replace(minute=0, second=0, microsecond=0)
+                    old_s_date = old_start.date()
+                    old_hourly_key = (
+                        existing.tenant_id,
+                        existing.gem_device_id,
+                        old_h_start,
+                        existing.tariff_bucket,
+                    )
+                    affected_hourly_keys.add(old_hourly_key)
+                    affected_tou_keys.add((existing.tenant_id, existing.gem_device_id, old_s_date))
+                    affected_comp_keys.add(
+                        (
+                            existing.tenant_id,
+                            existing.connection_id,
+                            stream_name,
+                            old_s_date,
+                            existing.feeder_id,
+                        )
+                    )
+                    if old_hourly_key in self._hourly_index:
+                        self._hourly_index[old_hourly_key].pop(existing.interval_end_utc, None)
+
                 self._replacing_tree[tree_key] = reading
 
                 period_start = reading.interval_end_utc - timedelta(milliseconds=1)
                 h_start = period_start.replace(minute=0, second=0, microsecond=0)
                 s_date = period_start.date()
-
-                affected_hourly_keys.add(
-                    (reading.tenant_id, reading.gem_device_id, h_start, reading.tariff_bucket)
+                new_hourly_key = (
+                    reading.tenant_id,
+                    reading.gem_device_id,
+                    h_start,
+                    reading.tariff_bucket,
                 )
+
+                affected_hourly_keys.add(new_hourly_key)
                 affected_tou_keys.add((reading.tenant_id, reading.gem_device_id, s_date))
                 affected_comp_keys.add(
                     (
@@ -212,6 +245,9 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
                         reading.feeder_id,
                     )
                 )
+
+                hourly_bucket = self._hourly_index.setdefault(new_hourly_key, {})
+                hourly_bucket[reading.interval_end_utc] = reading
 
         # Invariant 3: Incrementally update pre-aggregated Materialized View states for affected buckets
         self._update_materialized_views_incrementally(
@@ -261,20 +297,15 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
         kw_multiplier = Decimal(str(3600 // max(1, duration_sec)))
 
         for t_id, gem_id, h_start, tariff in affected_hourly_keys:
+            key = (t_id, gem_id, h_start, tariff)
+            bucket_readings = self._hourly_index.get(key, {})
             rows = [
                 r
-                for (rt_id, rgem_id, _), r in self._replacing_tree.items()
-                if rt_id == t_id
-                and rgem_id == gem_id
-                and r.tariff_bucket is tariff
-                and (r.interval_end_utc - timedelta(milliseconds=1)).replace(
-                    minute=0, second=0, microsecond=0
-                )
-                == h_start
-                and r.quality_status is not CimQualityStatus.QUARANTINED_SPIKE
+                for r in bucket_readings.values()
+                if r.quality_status is not CimQualityStatus.QUARANTINED_SPIKE
             ]
             if not rows:
-                self._mv_hourly.pop((t_id, gem_id, h_start, tariff), None)
+                self._mv_hourly.pop(key, None)
                 continue
 
             total_del = sum((x.scaled_kwh_delivered for x in rows), Decimal("0.0000"))

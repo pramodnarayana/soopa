@@ -96,6 +96,10 @@ def _parse_decimal(raw_val: object, default: str = "0.0000") -> Decimal:
 
 
 def _parse_timestamp(raw_ts: object) -> datetime:
+    if isinstance(raw_ts, datetime):
+        if raw_ts.tzinfo is None:
+            return raw_ts.replace(tzinfo=UTC)
+        return raw_ts.astimezone(UTC)
     if not isinstance(raw_ts, str) or not raw_ts.strip():
         raise ValueError("Missing interval_end_utc timestamp.")
     normalized = raw_ts.strip().replace("Z", "+00:00")
@@ -189,6 +193,7 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                 trace_id=trace_id,
                 raw_payload_bytes=raw_payload_bytes,
                 storm_policy=effective_storm,
+                gem_crosswalk=crosswalk,
             )
 
         parsed_res = self._parse_raw_rows(raw_payload_bytes, payload_format)
@@ -321,13 +326,15 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
         trace_id: str,
         raw_payload_bytes: bytes,
         storm_policy: StormAggregationPolicy,
+        gem_crosswalk: Mapping[str, str] | None = None,
     ) -> Result[ColumnarNormalizedBatchDTO, IpError]:
         decoded_res = decode_arrow_ipc_stream(raw_payload_bytes)
         if decoded_res.is_err:
             return Result.fail(decoded_res.unwrap_err())
         existing_readings = decoded_res.unwrap()
+        crosswalk = gem_crosswalk or {}
 
-        # Strict tenant boundary verification
+        # Strict tenant and connection boundary verification
         for r in existing_readings:
             if r.tenant_id != tenant_id:
                 return Result.fail(
@@ -335,10 +342,27 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                         f"Mismatched tenant_id in Arrow IPC payload: expected '{tenant_id}', got '{r.tenant_id}'."
                     )
                 )
+            if r.connection_id and r.connection_id != connection_id:
+                return Result.fail(
+                    IntervalMalformedBatchError.with_reason(
+                        f"Mismatched connection_id in Arrow IPC payload: expected '{connection_id}', got '{r.connection_id}'."
+                    )
+                )
 
-        # Stamp the provenance of the manifest being created
+        # Stamp the server-side provenance, GEM mapping, and revision timestamp
+        now_utc = datetime.now(UTC)
         updated_readings = tuple(
-            replace(r, source_batch_id=batch_id, connection_id=connection_id)
+            replace(
+                r,
+                source_batch_id=batch_id,
+                connection_id=connection_id,
+                gem_device_id=(
+                    crosswalk.get(r.source_meter_id)
+                    or r.gem_device_id
+                    or _deterministic_gem_id(tenant_id, connection_id, r.source_meter_id)
+                ),
+                updated_at_utc=now_utc,
+            )
             for r in existing_readings
         )
         updated_bytes = encode_arrow_ipc_stream(updated_readings)
@@ -412,6 +436,7 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                     endpoint_map[r.source_meter_id] = r.interval_end_utc
 
         clusters: list[FeederOutageCluster] = []
+        promoted_individual_meters: set[str] = set()
         for (feeder_id, substation_id, _bucket), endpoint_map in sorted(
             endpoints_by_feeder_window.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2])
         ):
@@ -436,8 +461,11 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                     )
                 )
             else:
-                # Normal mode (< threshold): promote individual endpoint outage clusters
+                # Normal mode (< threshold): promote individual endpoint outage clusters, deduplicating repeated promotions per meter
                 for m_id in sorted_endpoints:
+                    if m_id in promoted_individual_meters:
+                        continue
+                    promoted_individual_meters.add(m_id)
                     clusters.append(
                         FeederOutageCluster(
                             cluster_id=generate_id(IpIdPrefix.OUTAGE_CLUSTER.value),
@@ -470,28 +498,83 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
             pydict = table.to_pydict()
             row_count = table.num_rows
 
+            col_meter = pydict.get("source_meter_id")
+            col_end = pydict.get("interval_end_utc")
+            col_kwh_del = pydict.get("kwh_delivered")
+            col_kwh_rec = pydict.get("kwh_received")
+            col_multiplier = pydict.get("multiplier")
+            col_reactive = pydict.get("reactive_kvarh")
+            col_voltage = pydict.get("voltage_v")
+            col_tariff = pydict.get("tariff_bucket")
+            col_endpoint = pydict.get("endpoint_location_id")
+            col_feeder = pydict.get("feeder_id")
+            col_substation = pydict.get("substation_id")
+
             parsed_rows: list[_ParsedRawInterval] = []
             for idx in range(row_count):
-                source_meter_id = str(pydict.get("source_meter_id", [""])[idx]).strip()
+                raw_meter_id = (
+                    col_meter[idx] if col_meter is not None and idx < len(col_meter) else None
+                )
+                if raw_meter_id is None:
+                    return Result.fail(
+                        IntervalMalformedBatchError.with_reason(
+                            f"Parquet reading at row index {idx} is missing source_meter_id."
+                        )
+                    )
+                source_meter_id = str(raw_meter_id).strip()
                 if not source_meter_id:
                     return Result.fail(
                         IntervalMalformedBatchError.with_reason(
                             f"Parquet reading at row index {idx} is missing source_meter_id."
                         )
                     )
-                interval_end_utc = _parse_timestamp(pydict.get("interval_end_utc", [""])[idx])
-                kwh_del = _parse_decimal(pydict.get("kwh_delivered", ["0.0000"])[idx])
-                kwh_rec = _parse_decimal(pydict.get("kwh_received", ["0.0000"])[idx])
-                multiplier = _parse_decimal(
-                    pydict.get("multiplier", ["1.0000"])[idx], default="1.0000"
+
+                raw_end = col_end[idx] if col_end is not None and idx < len(col_end) else ""
+                interval_end_utc = _parse_timestamp(raw_end)
+
+                raw_del = (
+                    col_kwh_del[idx]
+                    if col_kwh_del is not None and idx < len(col_kwh_del)
+                    else "0.0000"
                 )
-                reactive = _parse_decimal(pydict.get("reactive_kvarh", ["0.0000"])[idx])
-                voltage_val = float(pydict.get("voltage_v", [240.0])[idx])
+                kwh_del = _parse_decimal(raw_del)
+
+                raw_rec = (
+                    col_kwh_rec[idx]
+                    if col_kwh_rec is not None and idx < len(col_kwh_rec)
+                    else "0.0000"
+                )
+                kwh_rec = _parse_decimal(raw_rec)
+
+                raw_mult = (
+                    col_multiplier[idx]
+                    if col_multiplier is not None and idx < len(col_multiplier)
+                    else "1.0000"
+                )
+                multiplier = _parse_decimal(raw_mult, default="1.0000")
+
+                raw_reactive = (
+                    col_reactive[idx]
+                    if col_reactive is not None and idx < len(col_reactive)
+                    else "0.0000"
+                )
+                reactive = _parse_decimal(raw_reactive)
+
+                raw_volt = (
+                    col_voltage[idx]
+                    if col_voltage is not None and idx < len(col_voltage)
+                    else 240.0
+                )
+                voltage_val = float(raw_volt)
                 if not Decimal(str(voltage_val)).is_finite():
                     raise ValueError(f"Non-finite voltage at row {idx}")
 
                 raw_tariff_val = (
-                    str(pydict.get("tariff_bucket", [""])[idx]) if "tariff_bucket" in pydict else ""
+                    str(col_tariff[idx])
+                    if col_tariff is not None
+                    and idx < len(col_tariff)
+                    and col_tariff[idx] is not None
+                    else ""
                 )
                 explicit_tariff: TariffBucket | None = None
                 if raw_tariff_val:
@@ -500,13 +583,35 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                     except ValueError:
                         explicit_tariff = None
 
+                raw_endpoint = (
+                    col_endpoint[idx]
+                    if col_endpoint is not None
+                    and idx < len(col_endpoint)
+                    and col_endpoint[idx] is not None
+                    else ""
+                )
+                raw_feeder = (
+                    col_feeder[idx]
+                    if col_feeder is not None
+                    and idx < len(col_feeder)
+                    and col_feeder[idx] is not None
+                    else ""
+                )
+                raw_substation = (
+                    col_substation[idx]
+                    if col_substation is not None
+                    and idx < len(col_substation)
+                    and col_substation[idx] is not None
+                    else ""
+                )
+
                 parsed_rows.append(
                     _ParsedRawInterval(
                         row_offset=idx,
                         source_meter_id=source_meter_id,
-                        endpoint_location_id=str(pydict.get("endpoint_location_id", [""])[idx]),
-                        feeder_id=str(pydict.get("feeder_id", [""])[idx]),
-                        substation_id=str(pydict.get("substation_id", [""])[idx]),
+                        endpoint_location_id=str(raw_endpoint),
+                        feeder_id=str(raw_feeder),
+                        substation_id=str(raw_substation),
                         interval_end_utc=interval_end_utc,
                         kwh_delivered=kwh_del,
                         kwh_received=kwh_rec,

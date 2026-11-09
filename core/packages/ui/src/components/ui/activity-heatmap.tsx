@@ -95,7 +95,7 @@ export function ActivityHeatmap({
           </div>
           <div className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-[2px] bg-warning" />
-            <span>{thresholdLabels?.warning ?? '95-99% (Warning)'}</span>
+            <span>{thresholdLabels?.warning ?? '95% – <100% (Warning)'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="h-2.5 w-2.5 rounded-[2px] bg-success" />

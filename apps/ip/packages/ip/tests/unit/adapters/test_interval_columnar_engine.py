@@ -13,6 +13,9 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
+from ip.engine.adapters.outbound.database.data_plane.trace_specs import (
+    map_manifest_status_to_trace_status,
+)
 from ip.engine.adapters.outbound.intervals import (
     ARROW_IPC_STREAM_MAGIC,
     ColumnarIntervalRollupRepositoryAdapter,
@@ -20,12 +23,20 @@ from ip.engine.adapters.outbound.intervals import (
     decode_arrow_ipc_stream,
     encode_arrow_ipc_stream,
 )
+from ip.engine.adapters.outbound.intervals.interval_batch_normalizer import _parse_timestamp
+from ip.engine.application.use_cases.intervals.process_interval_batch_use_case import (
+    _BATCH_LOCKS,
+    _acquire_manifest_lock,
+)
 from ip.engine.domain.intervals.enums import (
+    BatchManifestStatus,
     CimQualityStatus,
     IntervalPayloadFormat,
     TariffBucket,
 )
-from ip.engine.domain.intervals.models import IntervalReading
+from ip.engine.domain.intervals.models import BatchManifest, IntervalReading
+from ip.engine.domain.trace import IpTraceStatus
+from tests.helpers.worker_fakes import InMemoryBatchManifestRepo
 
 
 def test_arrow_ipc_stream_codec_binary_roundtrip() -> None:
@@ -339,3 +350,74 @@ async def test_interval_rollup_repo_materialized_views_compute_tou_completeness(
     assert completeness[0].expected_intervals_total == 96
     assert completeness[0].valid_intervals_total == 3
     assert completeness[0].completeness_percentage == round((3 / 96) * 100.0, 2)
+
+
+def test_parse_timestamp_supports_native_datetime() -> None:
+    now_utc = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+    assert _parse_timestamp(now_utc) == now_utc
+
+    naive_dt = datetime(2026, 11, 9, 12, 0)
+    assert _parse_timestamp(naive_dt) == now_utc
+
+
+def test_parse_timestamp_supports_iso_strings() -> None:
+    now_utc = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+    iso_str = "2026-11-09T12:00:00Z"
+    assert _parse_timestamp(iso_str) == now_utc
+
+
+def test_map_manifest_status_quarantined_maps_to_dead_lettered() -> None:
+    assert (
+        map_manifest_status_to_trace_status(BatchManifestStatus.QUARANTINED)
+        is IpTraceStatus.DEAD_LETTERED
+    )
+    assert (
+        map_manifest_status_to_trace_status(BatchManifestStatus.COMPLETED)
+        is IpTraceStatus.PROCESSED
+    )
+    assert map_manifest_status_to_trace_status(BatchManifestStatus.FAILED) is IpTraceStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_acquire_manifest_lock_evicts_after_release() -> None:
+    t_id = "test_ten_lock"
+    b_id = "batch_lock_01"
+    key = (t_id, b_id)
+
+    assert key not in _BATCH_LOCKS
+    async with _acquire_manifest_lock(t_id, b_id):
+        assert key in _BATCH_LOCKS
+        assert _BATCH_LOCKS[key].ref_count == 1
+    assert key not in _BATCH_LOCKS
+
+
+@pytest.mark.asyncio
+async def test_in_memory_batch_manifest_repo_reconciliation_summary() -> None:
+    now = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+    repo = InMemoryBatchManifestRepo()
+    m1 = BatchManifest.create_ingested(
+        tenant_id="ten_recon_test",
+        connection_id="conn_recon_01",
+        app_id="app_ami",
+        stream_name="interval_readings_15m",
+        l1_raw_uri="s3://vault/raw1.parquet",
+        payload_sha256="sha1",
+        payload_size_bytes=1000,
+        raw_ingested_count=10,
+        window_start_utc=now,
+        window_end_utc=now,
+    )
+    m1.status = BatchManifestStatus.COMPLETED
+    m1.valid_canonical_count = 10
+    m1.duplicates_dropped_count = 0
+    m1.quarantined_held_count = 0
+    await repo.save(m1)
+
+    summary = await repo.get_reconciliation_summary("ten_recon_test", connection_id="conn_recon_01")
+    assert summary.total_batches == 1
+    assert summary.completed_batches == 1
+    assert summary.in_flight_batches == 0
+    assert summary.failed_batches == 0
+    assert summary.raw_ingested_total == 10
+    assert summary.valid_canonical_total == 10
+    assert summary.is_zero_loss_balanced is True

@@ -231,6 +231,7 @@ SELECT
     max((3600 / interval_duration_sec) * scaled_kwh_delivered) AS max_kw_demand,
     avgState(voltage_v) AS avg_voltage_v
 FROM ip_intervals.interval_readings_15m_local
+WHERE quality_status != 'QUARANTINED_SPIKE'
 GROUP BY tenant_id, gem_device_id, hour_start_utc, feeder_id, tariff_bucket, interval_duration_sec;
 ```
 
@@ -490,20 +491,20 @@ sequenceDiagram
     else Checksum Verified
         Worker->>Worker: Arrow GEM Rosetta Join (50K IDs mapped in ~4ms)
         Worker->>Worker: Polars SIMD VEE Validation (Delta kWh, spike quarantine)
-    end
 
-    alt Emergency Grid Outage Detected (Voltage == 0.0V)
-        Note over Worker,Gear1: EXCEPTION PROMOTION BRIDGE (<2s E2E SLA)
-        Worker->>Worker: Storm-Group >= 25 adjacent 0V meters by Feeder & Substation
-        Worker->>Gear1: Publish FeederOutageClusterDetected to P0_CRITICAL Queue
-        Note right of Gear1: Gear-1 Worker claims P0 immediately & creates OMS Trouble Ticket
-    end
+        alt Emergency Grid Outage Detected (Voltage == 0.0V)
+            Note over Worker,Gear1: EXCEPTION PROMOTION BRIDGE (<2s E2E SLA)
+            Worker->>Worker: Storm-Group >= 25 adjacent 0V meters by Feeder & Substation
+            Worker->>Gear1: Publish FeederOutageClusterDetected to P0_CRITICAL Queue
+            Note right of Gear1: Gear-1 Worker claims P0 immediately & creates OMS Trouble Ticket
+        end
 
-    Note over Worker,CH: ── STAGE 3: High-Throughput Columnar Persistence ──
-    Worker->>CH: Zero-Copy Binary Insert (49,997 valid rows into meter_interval_readings)
-    CH->>CH: Real-Time Materialized Views compute Hourly, TOU & 96-Slot Aggregates
-    Worker->>PG: Commit Manifest Reconciled: 50,000 = 49,997 Valid + 3 Quarantined
-    Worker-->>SQS: Delete Batch Manifest ticket (ACK)
+        Note over Worker,CH: ── STAGE 3: High-Throughput Columnar Persistence ──
+        Worker->>CH: Zero-Copy Binary Insert (49,997 valid rows into meter_interval_readings)
+        CH->>CH: Real-Time Materialized Views compute Hourly, TOU & 96-Slot Aggregates
+        Worker->>PG: Commit Manifest Reconciled: 50,000 = 49,997 Valid + 3 Quarantined
+        Worker-->>SQS: Delete Batch Manifest ticket (ACK)
+    end
 
     Note over CH,UI: ── STAGE 4: Analytics, Visibility & Billing Egress ──
     UI->>CH: Cmd+K Search "MTR-700" / 96-Slot Daily Load Curve
@@ -522,7 +523,7 @@ The following ClickHouse DDL represents the production schema deployed across th
 
 ```sql
 -- 1. Physical Replicated Storage Table (Per Shard)
-CREATE TABLE telemetry.meter_interval_readings_local ON CLUSTER '{cluster}' (
+CREATE TABLE ip_intervals.interval_readings_15m_local ON CLUSTER '{cluster}' (
     tenant_id UUID,
     connection_id UUID,
     gem_device_id UUID,
@@ -544,7 +545,7 @@ CREATE TABLE telemetry.meter_interval_readings_local ON CLUSTER '{cluster}' (
 )
 ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/interval_readings_15m_local', '{replica}', revision_version)
 PARTITION BY toYYYYMM(interval_end_utc)
-ORDER BY (tenant_id, gem_device_id, interval_end_utc)
+ORDER BY (tenant_id, gem_device_id, feeder_id, tariff_bucket, interval_duration_sec, interval_end_utc)
 TTL toDateTime(interval_end_utc) + INTERVAL 90 DAY DELETE;
 
 -- 2. Distributed Router (Hash Partitioning across Cluster to Prevent Whale Hotspots)
@@ -602,6 +603,7 @@ SELECT
     max((3600 / interval_duration_sec) * scaled_kwh_delivered) AS max_kw_demand,
     avgState(voltage_v) AS avg_voltage_v
 FROM ip_intervals.interval_readings_15m_local
+WHERE quality_status != 'QUARANTINED_SPIKE'
 GROUP BY tenant_id, gem_device_id, hour_start_utc, feeder_id, tariff_bucket, interval_duration_sec;
 ```
 
@@ -646,10 +648,9 @@ GROUP BY tenant_id, connection_id, service_date, feeder_id, interval_duration_se
 
 #### Inventory-Backed Completeness Queries
 To guarantee zero false positives when an active meter transmits zero readings for an entire calendar day, API and dashboard readers must not query `daily_completeness_mv` in isolation. Instead, consumers must execute an **Inventory-Backed Left-Join**:
-1. Derive active provisioned device counts per connection and feeder from the PostgreSQL / GEM device registry.
+1. Derive active provisioned device counts per connection and feeder from the PostgreSQL / GEM device registry (expected inventory dimension with one row per requested service date).
 2. Left-join `ip_intervals.daily_completeness_mv` against that expected inventory dimension.
-3. Days with zero arriving batches cleanly resolve to `received_intervals = 0`, `valid_intervals = 0`, and `completeness_percentage = 0.0%`, surfacing total-loss feeder dropouts immediately on the Command Center ribbon.
-```
+3. Days or feeders with zero arriving batches cleanly default missing counts to zero (`received_intervals = 0`, `valid_intervals = 0`, `completeness_percentage = 0.0%`), surfacing total-loss feeder dropouts immediately on the Command Center ribbon.
 
 ---
 
@@ -714,7 +715,8 @@ def detect_feeder_outage_clusters(
         & (pl.col("interval_end_utc").dt.epoch(time_unit="s") >= freshness_threshold)
     )
 
-    # 2. Truncate timestamp to common time window (e.g. 15-min bucketing)
+    # 2. Window timestamp into overlapping sliding windows (e.g. 15-min rolling window with 5-min step)
+    # to prevent boundary fragmentation between adjacent reports (e.g. 12:10 and 12:15)
     windowed = zero_v.with_columns(
         pl.col("interval_end_utc")
         .dt.truncate(f"{time_window_minutes}m")

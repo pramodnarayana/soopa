@@ -72,13 +72,22 @@ export function DeviceLoadCurveLineageDrawer({
   const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
 
   const slots = useMemo(() => {
-    const arr: Array<{ slotIndex: number; point: IntervalLineagePoint | null }> = Array.from(
-      { length: 96 },
-      (_, i) => ({ slotIndex: i, point: null }),
-    );
+    const arr: Array<{
+      slotIndex: number;
+      point: IntervalLineagePoint | null;
+      points: IntervalLineagePoint[];
+    }> = Array.from({ length: 96 }, (_, i) => ({
+      slotIndex: i,
+      point: null,
+      points: [],
+    }));
     for (const pt of intervals) {
       const slot = getSlotIndex(pt.intervalEndUtc);
-      arr[slot] = { slotIndex: slot, point: pt };
+      const entry = arr[slot];
+      if (entry) {
+        entry.points.push(pt);
+        entry.point = pt;
+      }
     }
     return arr;
   }, [intervals]);
@@ -95,8 +104,11 @@ export function DeviceLoadCurveLineageDrawer({
     return null;
   }, [selectedSlotIndex, slots]);
 
-  const selectedPoint =
-    effectiveSelectedSlot !== null ? (slots[effectiveSelectedSlot]?.point ?? null) : null;
+  const selectedSlot =
+    effectiveSelectedSlot !== null ? (slots[effectiveSelectedSlot] ?? null) : null;
+  const selectedPoint = selectedSlot?.point ?? null;
+
+  const populatedSlotCount = useMemo(() => slots.filter((s) => s.point !== null).length, [slots]);
 
   const maxDelivered = useMemo(() => {
     let maxVal = 0.01;
@@ -156,7 +168,8 @@ export function DeviceLoadCurveLineageDrawer({
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">
-                  15-Minute Interval Load Profile ({intervals.length} slots)
+                  15-Minute Interval Load Profile ({populatedSlotCount}/96 slots, {intervals.length}{' '}
+                  readings)
                 </span>
                 <div className="flex flex-wrap items-center gap-3 text-[11px]">
                   <span className="inline-flex items-center gap-1">
