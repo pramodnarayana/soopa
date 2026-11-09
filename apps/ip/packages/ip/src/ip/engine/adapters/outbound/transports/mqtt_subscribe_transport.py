@@ -39,7 +39,7 @@ class MqttConsumerClientPort(Protocol):
         ...
 
     async def subscribe(self, topic: str, qos: int = 1) -> None:
-        """Subscribes to hierarchical topic filter (e.g. sensors/+/telemetry)."""
+        """Subscribes to hierarchical topic filter (e.g. sensors/+/readings)."""
         ...
 
     async def fetch_messages(
@@ -54,7 +54,7 @@ class MqttConsumerClientPort(Protocol):
 
 
 class MqttSubscribeTransport(SubscribeTransportPort):
-    """MQTT subscriber transport for brokered telemetry and event streams.
+    """MQTT subscriber transport for brokered interval and event streams.
 
     In compliance with Section 6.3:
     - Library/Semantics: aiomqtt / MQTT 3.1.1 & 5.0.

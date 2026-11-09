@@ -11,9 +11,11 @@ from security.ports.cipher_port import CipherPort
 from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
 from ip.engine.domain.enums import PipelineStage
 from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
+from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
+from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
@@ -82,6 +84,10 @@ class IpApiProviderPort(Protocol):
     def get_stage_replay_processors(
         self,
     ) -> Mapping[PipelineStage, StageReplayProcessorPort]: ...
+
+    def get_columnar_batch_processor(self) -> ColumnarBatchProcessorPort: ...
+
+    def get_interval_rollup_repository(self) -> IntervalRollupRepositoryPort: ...
 
 
 __all__ = ["IpApiProviderPort"]

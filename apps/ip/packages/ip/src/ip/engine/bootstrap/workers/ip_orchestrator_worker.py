@@ -190,6 +190,7 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             normalize_use_case=_SessionScopedIpNormalizeExecutor(self.db_router, container),
             backfill_use_case=_SessionScopedIpBackfillExecutor(self.db_router, container),
             process_inbound_range_use_case=_SessionScopedIpRangeExecutor(self.db_router, container),
+            process_interval_batch_use_case=container.process_interval_batch_use_case(),
             extractor_registry=container.extractor_registry(),
             tiered_storage=container.tiered_storage(),
             stitch_dispatcher=stitch_dispatcher,

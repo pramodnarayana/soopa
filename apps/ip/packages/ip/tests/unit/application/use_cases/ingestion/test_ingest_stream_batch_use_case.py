@@ -235,12 +235,12 @@ async def test_ingest_stream_batch_success() -> None:
             broker_offset="102",
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="interval_readings", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
         app_id="partner_streamer",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         batch=batch,
     )
 
@@ -271,7 +271,7 @@ async def test_ingest_stream_batch_deduplication_skips_existing() -> None:
         tenant_id="tenant_x",
         connection_id="conn_kafka",
         app_id="partner_streamer",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         payload_bytes=b"{}",
         is_inlined=True,
         external_event_id="msg_001",
@@ -289,12 +289,12 @@ async def test_ingest_stream_batch_deduplication_skips_existing() -> None:
             raw_payload=b'{"device_id":"dev_2","quantity":12.1}',
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="interval_readings", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
         app_id="partner_streamer",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         batch=batch,
     )
 
@@ -319,12 +319,12 @@ async def test_ingest_stream_batch_failure_returns_nack() -> None:
             raw_payload=b'{"device_id":"dev_1"}',
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="interval_readings", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
         app_id="partner_streamer",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         batch=batch,
     )
 
@@ -356,12 +356,12 @@ async def test_ingest_stream_batch_deterministic_error_returns_reject() -> None:
             raw_payload=b"INVALID_PAYLOAD_2",
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="interval_readings", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
         app_id="partner_streamer",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         batch=batch,
     )
 
@@ -415,12 +415,12 @@ async def test_ingest_stream_batch_partial_failure_isolates_corrupt_messages() -
             raw_payload=b"INVALID_PAYLOAD",
         ),
     ]
-    batch = RawMessageBatchDTO(stream_name="telemetry", messages=messages)
+    batch = RawMessageBatchDTO(stream_name="interval_readings", messages=messages)
     cmd = IngestStreamBatchCommand(
         tenant_id="tenant_x",
         connection_id="conn_kafka",
         app_id="partner_streamer",
-        stream_name="telemetry",
+        stream_name="interval_readings",
         batch=batch,
     )
 

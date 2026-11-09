@@ -90,7 +90,7 @@ class SyntheticAmiDataGenerator:
     """Generates realistic diurnal electric load profiles and grid topology structures."""
 
     def __init__(self, seed: int | None = None) -> None:
-        self._rng = random.Random(seed)  # noqa: S311 - Deterministic pseudo-randomness for synthetic AMI telemetry simulation, non-cryptographic
+        self._rng = random.Random(seed)  # noqa: S311 - Deterministic pseudo-randomness for synthetic AMI interval simulation, non-cryptographic
 
     def generate_service_points(self, count: int = 5) -> list[SimulatedServicePoint]:
         """Generates a deterministic topology of electric service points and assigned meters."""
@@ -144,7 +144,7 @@ class SyntheticAmiDataGenerator:
         base_time: datetime | None = None,
         failure_rate_percent: float = 0.0,
     ) -> list[SimulatedIntervalReading]:
-        """Generates synchronized 15-minute interval telemetry for all given service points."""
+        """Generates synchronized 15-minute interval readings for all given service points."""
         readings: list[SimulatedIntervalReading] = []
         now = base_time or datetime.now(UTC)
 

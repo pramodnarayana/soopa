@@ -122,7 +122,7 @@ export function ConnectionOverviewTab({
     event.preventDefault();
     onProblem(null);
 
-    const { publicConfig, rawCredentials } = splitSpecFormValues(allProperties, formValues);
+    const { rawCredentials } = splitSpecFormValues(allProperties, formValues);
     const hasSecretPatch = Object.keys(rawCredentials).length > 0;
 
     // Preserve unexposed public config keys and omit cleared keys

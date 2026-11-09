@@ -32,7 +32,6 @@ export function TenantProvider({ children }: TenantProviderProps) {
   const { data: tenant } = useGetTenant(tenantId ?? '');
 
   if (!tenantId) {
-    // Log diagnostic details without exposing PII in the error message
     logger.error('Tenant ID resolution failed', {
       hasToken: !!token,
       hasUser: !!auth.user,
@@ -40,15 +39,16 @@ export function TenantProvider({ children }: TenantProviderProps) {
     });
 
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50/50">
-        <div className="max-w-md p-8 bg-white rounded-lg shadow-md border border-slate-200">
-          <h1 className="text-xl font-bold text-slate-900 mb-4">Configuration Error</h1>
-          <p className="text-slate-600 mb-4">
+      <div className="flex min-h-screen items-center justify-center bg-muted/40">
+        <div className="max-w-md rounded-lg border border-border bg-card p-6 shadow-xs">
+          <h1 className="mb-2 text-lg font-semibold text-foreground">Configuration Error</h1>
+          <p className="mb-4 text-sm text-muted-foreground">
             Your account is not properly configured. Please contact your administrator.
           </p>
           <button
+            type="button"
             onClick={() => void auth.signoutRedirect()}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+            className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-3.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Sign Out
           </button>
@@ -58,15 +58,15 @@ export function TenantProvider({ children }: TenantProviderProps) {
   }
 
   const sidebarHeader = (
-    <div className="flex items-center gap-4 w-full">
-      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center shadow-md shadow-indigo-500/20 shrink-0">
+    <div className="flex w-full items-center gap-2.5">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="20"
-          height="20"
+          width="15"
+          height="15"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="white"
+          stroke="currentColor"
           strokeWidth="2.5"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -74,31 +74,28 @@ export function TenantProvider({ children }: TenantProviderProps) {
           <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1-1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
         </svg>
       </div>
-      <h1 className="text-xl font-bold tracking-tight text-foreground truncate">
+      <span className="truncate text-sm font-semibold tracking-tight text-foreground">
         {tenant ? tenant.name : 'Loading...'}
-      </h1>
+      </span>
     </div>
   );
 
   const userProfile = (
-    <div className="flex items-center gap-4 p-4 rounded-xl hover:bg-accent transition-colors group">
-      <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
+    <div className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-sidebar-accent">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
         {auth.user?.profile.email?.charAt(0).toUpperCase() || 'T'}
       </div>
-      <div className="flex-1 overflow-hidden">
-        <p className="text-base font-semibold text-foreground truncate">
-          {auth.user?.profile.email}
-        </p>
-        <p className="text-xs text-muted-foreground truncate uppercase tracking-widest mt-1">
-          Tenant Admin
-        </p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-foreground">{auth.user?.profile.email}</p>
+        <p className="truncate text-[11px] text-muted-foreground">Tenant Admin</p>
       </div>
       <button
+        type="button"
         onClick={() => void auth.signoutRedirect()}
         aria-label="Sign out"
-        className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
       >
-        <LogOut className="w-5 h-5" />
+        <LogOut className="h-4 w-4" />
       </button>
     </div>
   );

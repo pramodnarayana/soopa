@@ -563,11 +563,122 @@ class IpSyncRunRequestedPayloadDTO:
         )
 
 
+@dataclass(frozen=True)
+class IpIntervalBatchIngestedPayloadDTO:
+    """Typed payload for `ip.interval_batch.ingested` (L1 Interval Batch Claim-Check Ticket)."""
+
+    tenant_id: str
+    batch_id: str
+    connection_id: str
+    stream_name: str
+    l1_raw_uri: str
+    priority_lane: str
+    trace_id: str
+    correlation_id: str | None = None
+
+    @classmethod
+    def from_envelope(
+        cls, envelope: EventEnvelope
+    ) -> Result[IpIntervalBatchIngestedPayloadDTO, IpError]:
+        p = envelope.payload
+        tenant_id = envelope.tenant_id or _extract_non_empty_str(p, "tenant_id")
+        batch_id = _extract_non_empty_str(p, "batch_id")
+        connection_id = _extract_non_empty_str(p, "connection_id")
+        stream_name = _extract_non_empty_str(p, "stream_name") or _extract_non_empty_str(
+            p, "stream"
+        )
+        l1_raw_uri = _extract_non_empty_str(p, "l1_raw_uri")
+        priority_lane = _extract_non_empty_str(p, "priority_lane", "P1_LIVE")
+        trace_id = envelope.trace_id or _extract_non_empty_str(p, "trace_id") or envelope.id
+        if not tenant_id or not batch_id:
+            return Result.err(
+                _validation_error(
+                    "Invalid ip.interval_batch.ingested payload: missing tenant_id or batch_id.",
+                    {"event_id": envelope.id},
+                )
+            )
+        return Result.ok(
+            cls(
+                tenant_id=tenant_id,
+                batch_id=batch_id,
+                connection_id=connection_id,
+                stream_name=stream_name,
+                l1_raw_uri=l1_raw_uri,
+                priority_lane=priority_lane,
+                trace_id=trace_id,
+                correlation_id=envelope.correlation_id
+                or _extract_optional_str(p, "correlation_id"),
+            )
+        )
+
+
+@dataclass(frozen=True)
+class IpFeederOutageDetectedPayloadDTO:
+    """Typed payload for `ip.feeder_outage.detected` (P0_CRITICAL real-time outage cluster bridge)."""
+
+    tenant_id: str
+    cluster_id: str
+    connection_id: str
+    batch_id: str
+    feeder_id: str
+    substation_id: str
+    outage_meter_count: int
+    affected_meter_ids: tuple[str, ...]
+    outage_start_utc: str
+    trace_id: str
+    correlation_id: str | None = None
+
+    @classmethod
+    def from_envelope(
+        cls, envelope: EventEnvelope
+    ) -> Result[IpFeederOutageDetectedPayloadDTO, IpError]:
+        p = envelope.payload
+        tenant_id = envelope.tenant_id or _extract_non_empty_str(p, "tenant_id")
+        cluster_id = _extract_non_empty_str(p, "cluster_id")
+        connection_id = _extract_non_empty_str(p, "connection_id")
+        batch_id = _extract_non_empty_str(p, "batch_id")
+        feeder_id = _extract_non_empty_str(p, "feeder_id")
+        substation_id = _extract_non_empty_str(p, "substation_id", "SUB-DEFAULT")
+        outage_meter_count = max(1, _extract_int(p, "outage_meter_count", 1))
+        raw_devices = p.get("affected_meter_ids")
+        if isinstance(raw_devices, (list, tuple)):
+            affected_meter_ids = tuple(str(m).strip() for m in raw_devices if str(m).strip())
+        else:
+            affected_meter_ids = ()
+        outage_start_utc = _extract_non_empty_str(p, "outage_start_utc")
+        trace_id = envelope.trace_id or _extract_non_empty_str(p, "trace_id") or envelope.id
+        if not tenant_id or not cluster_id or not feeder_id:
+            return Result.err(
+                _validation_error(
+                    "Invalid ip.feeder_outage.detected payload: missing tenant_id, cluster_id, or feeder_id.",
+                    {"event_id": envelope.id},
+                )
+            )
+        return Result.ok(
+            cls(
+                tenant_id=tenant_id,
+                cluster_id=cluster_id,
+                connection_id=connection_id,
+                batch_id=batch_id,
+                feeder_id=feeder_id,
+                substation_id=substation_id,
+                outage_meter_count=outage_meter_count,
+                affected_meter_ids=affected_meter_ids,
+                outage_start_utc=outage_start_utc,
+                trace_id=trace_id,
+                correlation_id=envelope.correlation_id
+                or _extract_optional_str(p, "correlation_id"),
+            )
+        )
+
+
 __all__ = [
     "IpCanonicalRecordChunkPayloadDTO",
+    "IpFeederOutageDetectedPayloadDTO",
     "IpFetchRecordChunkPayloadDTO",
     "IpGenerationCompletedPayloadDTO",
     "IpInboundRecordChunkPayloadDTO",
+    "IpIntervalBatchIngestedPayloadDTO",
     "IpNormalizedRecordChunkPayloadDTO",
     "IpOutboundRecordChunkPayloadDTO",
     "IpReplicaRecordChunkPayloadDTO",

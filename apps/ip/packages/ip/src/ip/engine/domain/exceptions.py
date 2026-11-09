@@ -60,6 +60,10 @@ class IpErrorCode(StrEnum):
     TRACE_NOT_FOUND = "TRACE_NOT_FOUND"
     REPLAY_STAGE_NOT_AVAILABLE = "REPLAY_STAGE_NOT_AVAILABLE"
     INVALID_REPLAY_PAYLOAD = "INVALID_REPLAY_PAYLOAD"
+    INTERVAL_BATCH_NOT_FOUND = "INTERVAL_BATCH_NOT_FOUND"
+    INTERVAL_RECONCILIATION_IMBALANCE = "INTERVAL_RECONCILIATION_IMBALANCE"
+    INTERVAL_MALFORMED_BATCH = "INTERVAL_MALFORMED_BATCH"
+    INTERVAL_ROLLUP_QUERY_FAILED = "INTERVAL_ROLLUP_QUERY_FAILED"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     EXTERNAL_API_ERROR = "EXTERNAL_API_ERROR"
     INTERNAL_ERROR = "INTERNAL_ERROR"
@@ -714,6 +718,103 @@ class InvalidReplayPayloadError(IpError):
         )
 
 
+@dataclass(frozen=True, kw_only=True)
+class IntervalBatchNotFoundError(IpError):
+    """Returned when a requested interval batch manifest cannot be found."""
+
+    batch_id: str = ""
+    code: IpErrorCode = IpErrorCode.INTERVAL_BATCH_NOT_FOUND
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 404
+    remediation: str | None = "Verify the batch_id exists and belongs to the active tenant."
+
+    @classmethod
+    def for_batch(cls, batch_id: str) -> IntervalBatchNotFoundError:
+        return cls(
+            batch_id=batch_id,
+            message=f"Interval batch manifest '{batch_id}' was not found.",
+            details={"batch_id": batch_id},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class IntervalReconciliationImbalanceError(IpError):
+    """Returned when an interval batch violates the Zero-Loss Accounting Equation."""
+
+    batch_id: str = ""
+    raw_ingested: int = 0
+    duplicates_dropped: int = 0
+    valid_canonical: int = 0
+    quarantined_held: int = 0
+    code: IpErrorCode = IpErrorCode.INTERVAL_RECONCILIATION_IMBALANCE
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 422
+    remediation: str | None = (
+        "Ensure raw_ingested == duplicates_dropped + valid_canonical + quarantined_held before completing batch."
+    )
+
+    @classmethod
+    def for_counts(
+        cls,
+        *,
+        batch_id: str,
+        raw_ingested: int,
+        duplicates_dropped: int,
+        valid_canonical: int,
+        quarantined_held: int,
+    ) -> IntervalReconciliationImbalanceError:
+        accounted = duplicates_dropped + valid_canonical + quarantined_held
+        return cls(
+            batch_id=batch_id,
+            raw_ingested=raw_ingested,
+            duplicates_dropped=duplicates_dropped,
+            valid_canonical=valid_canonical,
+            quarantined_held=quarantined_held,
+            message=(
+                f"Zero-loss reconciliation imbalance for batch '{batch_id}': "
+                f"raw_ingested ({raw_ingested}) != accounted ({accounted})."
+            ),
+            details={
+                "batch_id": batch_id,
+                "raw_ingested": raw_ingested,
+                "duplicates_dropped": duplicates_dropped,
+                "valid_canonical": valid_canonical,
+                "quarantined_held": quarantined_held,
+            },
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class IntervalMalformedBatchError(IpError):
+    """Returned when an incoming interval batch payload is structurally malformed."""
+
+    code: IpErrorCode = IpErrorCode.INTERVAL_MALFORMED_BATCH
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 400
+    remediation: str | None = (
+        "Ensure interval batch payload is non-empty and conforms to the expected interval schema."
+    )
+
+    @classmethod
+    def with_reason(
+        cls, reason: str, details: JsonDict | None = None
+    ) -> IntervalMalformedBatchError:
+        return cls(
+            message=reason,
+            details=details or {},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class IntervalRollupQueryError(IpError):
+    """Returned when an interval rollup repository operation or query fails."""
+
+    code: IpErrorCode = IpErrorCode.INTERVAL_ROLLUP_QUERY_FAILED
+    disposition: FailureDisposition = FailureDisposition.RETRY
+    http_status: int = 502
+    remediation: str | None = "Check interval rollup store health and query parameters."
+
+
 __all__ = [
     "ActiveSyncRunAlreadyExistsError",
     "AuthenticationFailedError",
@@ -729,6 +830,10 @@ __all__ = [
     "FailureDisposition",
     "InboundPayloadDecodeError",
     "InboundVerificationFailedError",
+    "IntervalBatchNotFoundError",
+    "IntervalMalformedBatchError",
+    "IntervalReconciliationImbalanceError",
+    "IntervalRollupQueryError",
     "InvalidConnectionConfigError",
     "InvalidConnectionStateError",
     "InvalidCredentialsError",

@@ -12,27 +12,33 @@ export const Route = createFileRoute('/_authenticated/platform')({
 
 function PlatformSidebar() {
   return (
-    <>
-      <div className="text-[18px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-4 mt-2">
-        Platform Control
+    <div className="space-y-4">
+      <div className="space-y-0.5">
+        <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+          Platform Control
+        </div>
+        <NavItem icon={LayoutDashboard} label="Overview" to="/platform" exact />
       </div>
-      <NavItem icon={LayoutDashboard} label="Overview" to="/platform" exact />
 
-      <div className="text-[18px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-4 mt-8">
-        System Admin
+      <div className="space-y-0.5">
+        <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+          System Admin
+        </div>
+        <NavItem icon={Network} label="Tenants" to="/platform/tenants" />
+        <NavItem icon={Users} label="Platform Users" to="/platform/users" />
+        <NavItem icon={Clock} label="Scheduler" to="/platform/scheduler" />
       </div>
-      <NavItem icon={Network} label="Tenants" to="/platform/tenants" />
-      <NavItem icon={Users} label="Platform Users" to="/platform/users" />
-      <NavItem icon={Clock} label="Scheduler" to="/platform/scheduler" />
 
-      <div className="text-[18px] font-bold text-slate-400 uppercase tracking-widest mb-3 px-4 mt-8">
-        Global Settings
+      <div className="space-y-0.5">
+        <div className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+          Global Settings
+        </div>
+        <NavGroup icon={Settings} label="EDI Settings" defaultExpanded={true}>
+          <NavItem icon={Users} label="AS2 Partners" to="/platform/edi/as2partners" />
+          <NavItem icon={Network} label="AS2 Partnerships" to="/platform/edi/as2partnerships" />
+        </NavGroup>
       </div>
-      <NavGroup icon={Settings} label="EDI Settings" defaultExpanded={true}>
-        <NavItem icon={Users} label="AS2 Partners" to="/platform/edi/as2partners" />
-        <NavItem icon={Network} label="AS2 Partnerships" to="/platform/edi/as2partnerships" />
-      </NavGroup>
-    </>
+    </div>
   );
 }
 
@@ -42,9 +48,9 @@ function PlatformLayoutGuard() {
 
   if (isLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-white">
-        <div className="flex flex-col items-center gap-6">
-          <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-foreground" />
         </div>
       </div>
     );
@@ -57,47 +63,46 @@ function PlatformLayoutGuard() {
   return (
     <AppLayout
       sidebarHeader={
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="24"
-              height="24"
+              width="15"
+              height="15"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="white"
+              stroke="currentColor"
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
+              <path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1-1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground">
-            Soopa <span className="font-medium text-muted-foreground">Platform</span>
-          </h1>
+          <span className="truncate text-sm font-semibold tracking-tight text-foreground">
+            Soopa <span className="font-normal text-muted-foreground">Platform</span>
+          </span>
         </div>
       }
       sidebarNavigation={<PlatformSidebar />}
       userProfile={
-        <div className="flex items-center gap-4 p-4 rounded-xl hover:bg-slate-50 transition-colors group">
-          <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg">
+        <div className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-sidebar-accent">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
             {auth.user?.profile.email?.charAt(0).toUpperCase() || 'P'}
           </div>
-          <div className="flex-1 overflow-hidden">
-            <p className="text-base font-semibold text-foreground truncate">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-medium text-foreground">
               {auth.user?.profile.email}
             </p>
-            <p className="text-xs text-muted-foreground truncate uppercase tracking-widest mt-1">
-              Platform Admin
-            </p>
+            <p className="truncate text-[11px] text-muted-foreground">Platform Admin</p>
           </div>
           <button
+            type="button"
             onClick={() => void auth.signoutRedirect()}
             aria-label="Sign out"
-            className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
       }

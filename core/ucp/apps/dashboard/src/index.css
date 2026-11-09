@@ -9,7 +9,9 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-sans: 'Plus Jakarta Sans Variable', system-ui, sans-serif;
+  --font-sans: 'Inter Variable', 'Inter', 'Plus Jakarta Sans Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -22,6 +24,11 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -37,6 +44,15 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-brand-ink: var(--brand-ink);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
 
   --color-status-healthy-bg: var(--status-healthy-bg);
   --color-status-healthy-fg: var(--status-healthy-fg);
@@ -58,161 +74,184 @@
   --color-status-replay-fg: var(--status-replay-fg);
   --color-status-replay-border: var(--status-replay-border);
 
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
 }
 
 @layer base {
-  :root {
-    color-scheme: light;
-
-    --background: #fafafa;
-    --foreground: #0f172a;
-    --card: #ffffff;
-    --card-foreground: #0f172a;
-    --popover: #ffffff;
-    --popover-foreground: #0f172a;
-
-    /* Default Core & EDI Electric Indigo Primary */
-    --primary: #4f46e5;
-    --primary-foreground: #ffffff;
-    --brand-ink: #4338ca;
-
-    --secondary: #f1f5f9;
-    --secondary-foreground: #0f172a;
-
-    --muted: #f8fafc;
-    --muted-foreground: #64748b;
-
-    --accent: #f1f5f9;
-    --accent-foreground: #0f172a;
-
-    --destructive: #ef4444;
-    --destructive-foreground: #ffffff;
-
-    --border: #e2e8f0;
-    --input: #e2e8f0;
-    --ring: #4f46e5;
-    --radius: 0.75rem;
-
-    --sidebar: #ffffff;
-    --sidebar-foreground: #0f172a;
-    --sidebar-primary: #4f46e5;
-    --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: #f1f5f9;
-    --sidebar-accent-foreground: #0f172a;
-    --sidebar-border: #e2e8f0;
-    --sidebar-ring: #4f46e5;
-
-    /* Semantic Operational Status Tokens (WCAG AA compliant) */
-    --status-healthy-bg: oklch(0.955 0.045 155);
-    --status-healthy-fg: oklch(0.37 0.105 155);
-    --status-healthy-border: oklch(0.84 0.095 155);
-
-    /* Warm Copper/Tangerine Hue 58° so warnings never collide with Solar Yellow brand buttons */
-    --status-warning-bg: oklch(0.955 0.05 62);
-    --status-warning-fg: oklch(0.41 0.125 55);
-    --status-warning-border: oklch(0.84 0.11 60);
-
-    --status-critical-bg: oklch(0.955 0.04 20);
-    --status-critical-fg: oklch(0.42 0.165 24);
-    --status-critical-border: oklch(0.84 0.1 20);
-
-    --status-shadow-bg: oklch(0.955 0.04 295);
-    --status-shadow-fg: oklch(0.41 0.155 295);
-    --status-shadow-border: oklch(0.84 0.095 295);
-
-    --status-replay-bg: oklch(0.955 0.04 220);
-    --status-replay-fg: oklch(0.4 0.115 225);
-    --status-replay-border: oklch(0.84 0.085 220);
-  }
-
-  /* Integration Platform (IP) Scoped Dual-Register Solar Yellow Theme (Light Mode) */
+  /*
+   * Casdoor Neutral Monochrome Design Tokens
+   * Chrome stays neutral so status badges, charts, and primary CTAs carry the visual hierarchy.
+   */
+  :root,
   :root[data-product-theme='ip'] {
-    --primary: oklch(0.84 0.165 88);
-    --primary-foreground: oklch(0.18 0.02 85);
-    --brand-ink: oklch(0.54 0.145 72);
-    --accent: oklch(0.965 0.055 92);
-    --accent-foreground: oklch(0.24 0.045 80);
-    --ring: oklch(0.79 0.16 86);
-    --sidebar-primary: oklch(0.84 0.165 88);
-    --sidebar-primary-foreground: oklch(0.18 0.02 85);
-    --sidebar-accent: oklch(0.965 0.055 92);
-    --sidebar-accent-foreground: oklch(0.22 0.045 80);
-    --sidebar-ring: oklch(0.79 0.16 86);
+    color-scheme: light dark;
+
+    --background: hsl(0 0% 100%);
+    --foreground: hsl(0 0% 9%);
+
+    --card: hsl(0 0% 100%);
+    --card-foreground: hsl(0 0% 9%);
+
+    --popover: hsl(0 0% 100%);
+    --popover-foreground: hsl(0 0% 9%);
+
+    --primary: hsl(0 0% 9%);
+    --primary-foreground: hsl(0 0% 98%);
+    --brand-ink: hsl(0 0% 9%);
+
+    --secondary: hsl(0 0% 96%);
+    --secondary-foreground: hsl(0 0% 9%);
+
+    --muted: hsl(0 0% 96%);
+    --muted-foreground: hsl(0 0% 44%);
+
+    --accent: hsl(0 0% 96%);
+    --accent-foreground: hsl(0 0% 9%);
+
+    --destructive: hsl(0 72% 46%);
+    --destructive-foreground: hsl(0 0% 98%);
+
+    --success: hsl(142 71% 40%);
+    --success-foreground: hsl(0 0% 98%);
+
+    --warning: hsl(32 95% 44%);
+    --warning-foreground: hsl(0 0% 98%);
+
+    --border: hsl(0 0% 90%);
+    --input: hsl(0 0% 87%);
+    --ring: hsl(0 0% 9%);
+
+    --radius: 0.5rem;
+
+    --sidebar: hsl(0 0% 98%);
+    --sidebar-background: hsl(0 0% 98%);
+    --sidebar-foreground: hsl(0 0% 26%);
+    --sidebar-primary: hsl(0 0% 10%);
+    --sidebar-primary-foreground: hsl(0 0% 98%);
+    --sidebar-accent: hsl(0 0% 93%);
+    --sidebar-accent-foreground: hsl(0 0% 10%);
+    --sidebar-border: hsl(0 0% 91%);
+    --sidebar-ring: hsl(0 0% 9%);
+
+    /* 8-Slot Categorical Chart Palette (Casdoor standard) */
+    --chart-1: hsl(215 90% 52%);
+    --chart-2: hsl(199 89% 44%);
+    --chart-3: hsl(173 58% 37%);
+    --chart-4: hsl(258 70% 58%);
+    --chart-5: hsl(322 65% 53%);
+    --chart-6: hsl(25 85% 51%);
+    --chart-7: hsl(142 60% 36%);
+    --chart-8: hsl(240 5% 45%);
+
+    /* Semantic Operational Status Tokens */
+    --status-healthy-bg: hsl(142 71% 40% / 0.14);
+    --status-healthy-fg: hsl(142 71% 28%);
+    --status-healthy-border: hsl(142 71% 40% / 0.35);
+
+    --status-warning-bg: hsl(32 95% 44% / 0.14);
+    --status-warning-fg: hsl(32 95% 30%);
+    --status-warning-border: hsl(32 95% 44% / 0.35);
+
+    --status-critical-bg: hsl(0 72% 46% / 0.14);
+    --status-critical-fg: hsl(0 72% 38%);
+    --status-critical-border: hsl(0 72% 46% / 0.35);
+
+    --status-shadow-bg: hsl(258 70% 58% / 0.14);
+    --status-shadow-fg: hsl(258 70% 42%);
+    --status-shadow-border: hsl(258 70% 58% / 0.35);
+
+    --status-replay-bg: hsl(215 90% 52% / 0.14);
+    --status-replay-fg: hsl(215 90% 38%);
+    --status-replay-border: hsl(215 90% 52% / 0.35);
   }
 
-  .dark {
+  /*
+   * Stepped Dark Surfaces (Casdoor standard):
+   * background (7%) -> sidebar (9%) -> card (10.5%) -> popover (16.5%)
+   */
+  .dark,
+  .dark[data-product-theme='ip'] {
     color-scheme: dark;
 
-    --background: oklch(0.21 0.01 260);
-    --foreground: oklch(0.94 0.005 260);
-    --card: oklch(0.26 0.01 260);
-    --card-foreground: oklch(0.94 0.005 260);
-    --popover: oklch(0.26 0.01 260);
-    --popover-foreground: oklch(0.94 0.005 260);
-    --primary: oklch(0.6487 0.1538 150.3071);
-    --primary-foreground: oklch(1 0 0);
-    --brand-ink: oklch(0.78 0.14 265);
-    --secondary: oklch(0.32 0.015 260);
-    --secondary-foreground: oklch(0.94 0.005 260);
-    --muted: oklch(0.31 0.01 260);
-    --muted-foreground: oklch(0.73 0.01 260);
-    --accent: oklch(0.33 0.02 260);
-    --accent-foreground: oklch(0.95 0.005 260);
-    --destructive: oklch(0.6368 0.2078 25.3313);
-    --destructive-foreground: oklch(1 0 0);
-    --border: oklch(0.36 0.01 260);
-    --input: oklch(0.36 0.01 260);
-    --ring: oklch(0.6487 0.1538 150.3071);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --background: hsl(0 0% 7%);
+    --foreground: hsl(0 0% 98%);
 
-    --status-healthy-bg: oklch(0.29 0.055 155);
-    --status-healthy-fg: oklch(0.86 0.12 155);
-    --status-healthy-border: oklch(0.45 0.095 155);
+    --card: hsl(0 0% 10.5%);
+    --card-foreground: hsl(0 0% 98%);
 
-    --status-warning-bg: oklch(0.3 0.06 60);
-    --status-warning-fg: oklch(0.86 0.13 65);
-    --status-warning-border: oklch(0.48 0.11 60);
+    --popover: hsl(0 0% 16.5%);
+    --popover-foreground: hsl(0 0% 98%);
 
-    --status-critical-bg: oklch(0.29 0.07 22);
-    --status-critical-fg: oklch(0.86 0.13 22);
-    --status-critical-border: oklch(0.48 0.13 22);
+    --primary: hsl(0 0% 98%);
+    --primary-foreground: hsl(0 0% 9%);
+    --brand-ink: hsl(0 0% 98%);
 
-    --status-shadow-bg: oklch(0.29 0.065 295);
-    --status-shadow-fg: oklch(0.86 0.12 295);
-    --status-shadow-border: oklch(0.47 0.11 295);
+    --secondary: hsl(0 0% 16%);
+    --secondary-foreground: hsl(0 0% 98%);
 
-    --status-replay-bg: oklch(0.29 0.055 220);
-    --status-replay-fg: oklch(0.86 0.11 220);
-    --status-replay-border: oklch(0.46 0.095 220);
-  }
+    --muted: hsl(0 0% 15%);
+    --muted-foreground: hsl(0 0% 64%);
 
-  /* Integration Platform (IP) Scoped Dual-Register Solar Yellow Theme (Dark Mode) */
-  .dark[data-product-theme='ip'] {
-    --primary: oklch(0.87 0.155 88);
-    --primary-foreground: oklch(0.17 0.02 85);
-    --brand-ink: oklch(0.87 0.155 88);
-    --accent: oklch(0.31 0.045 88);
-    --accent-foreground: oklch(0.96 0.03 90);
-    --ring: oklch(0.84 0.15 88);
-    --sidebar-primary: oklch(0.87 0.155 88);
-    --sidebar-primary-foreground: oklch(0.17 0.02 85);
-    --sidebar-accent: oklch(0.3 0.045 88);
-    --sidebar-accent-foreground: oklch(0.96 0.03 90);
-    --sidebar-ring: oklch(0.84 0.15 88);
+    --accent: hsl(0 0% 19%);
+    --accent-foreground: hsl(0 0% 98%);
+
+    --destructive: hsl(0 72% 56%);
+    --destructive-foreground: hsl(0 0% 98%);
+
+    --success: hsl(142 69% 48%);
+    --success-foreground: hsl(0 0% 9%);
+
+    --warning: hsl(38 92% 55%);
+    --warning-foreground: hsl(0 0% 9%);
+
+    --border: hsl(0 0% 19%);
+    --input: hsl(0 0% 24%);
+    --ring: hsl(0 0% 84%);
+
+    --sidebar: hsl(0 0% 9%);
+    --sidebar-background: hsl(0 0% 9%);
+    --sidebar-foreground: hsl(0 0% 88%);
+    --sidebar-primary: hsl(0 0% 98%);
+    --sidebar-primary-foreground: hsl(0 0% 9%);
+    --sidebar-accent: hsl(0 0% 17%);
+    --sidebar-accent-foreground: hsl(0 0% 98%);
+    --sidebar-border: hsl(0 0% 17%);
+    --sidebar-ring: hsl(0 0% 84%);
+
+    --chart-1: hsl(215 90% 62%);
+    --chart-2: hsl(199 90% 56%);
+    --chart-3: hsl(173 65% 48%);
+    --chart-4: hsl(258 80% 68%);
+    --chart-5: hsl(322 75% 63%);
+    --chart-6: hsl(25 90% 60%);
+    --chart-7: hsl(142 69% 50%);
+    --chart-8: hsl(240 5% 65%);
+
+    --status-healthy-bg: hsl(142 69% 48% / 0.18);
+    --status-healthy-fg: hsl(142 69% 72%);
+    --status-healthy-border: hsl(142 69% 48% / 0.4);
+
+    --status-warning-bg: hsl(38 92% 55% / 0.18);
+    --status-warning-fg: hsl(38 92% 74%);
+    --status-warning-border: hsl(38 92% 55% / 0.4);
+
+    --status-critical-bg: hsl(0 72% 56% / 0.18);
+    --status-critical-fg: hsl(0 72% 76%);
+    --status-critical-border: hsl(0 72% 56% / 0.4);
+
+    --status-shadow-bg: hsl(258 80% 68% / 0.18);
+    --status-shadow-fg: hsl(258 80% 80%);
+    --status-shadow-border: hsl(258 80% 68% / 0.4);
+
+    --status-replay-bg: hsl(215 90% 62% / 0.18);
+    --status-replay-fg: hsl(215 90% 78%);
+    --status-replay-border: hsl(215 90% 62% / 0.4);
   }
 }
 
@@ -220,10 +259,37 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    @apply font-sans antialiased;
+  }
   body {
     @apply bg-background text-foreground;
+    line-height: 1.5;
+    font-feature-settings: "rlig" 1, "calt" 1, "cv11" 1, "ss01" 1;
   }
-  html {
-    @apply font-sans;
+  code,
+  kbd,
+  samp,
+  pre {
+    @apply font-mono;
+  }
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+@supports not (scrollbar-color: auto) {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: var(--border);
+    border-radius: 9999px;
   }
 }

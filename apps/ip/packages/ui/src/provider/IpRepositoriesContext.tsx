@@ -3,6 +3,7 @@ import { createContext, useContext } from 'react';
 import type { IpUserRole } from '../domain/role';
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
+import type { IntervalRepositoryPort } from '../ports/interval-repository.port';
 import type { RecordRepositoryPort } from '../ports/record-repository.port';
 import type { StitchRepositoryPort } from '../ports/stitch-repository.port';
 import type { SyncRunRepositoryPort } from '../ports/sync-run-repository.port';
@@ -17,6 +18,7 @@ export interface IpRepositoriesBundle {
   readonly stitches: StitchRepositoryPort;
   readonly traces: TraceRepositoryPort;
   readonly records: RecordRepositoryPort;
+  readonly intervals: IntervalRepositoryPort;
 }
 
 export interface IpNavigationPort {
@@ -29,6 +31,7 @@ export interface IpNavigationPort {
   readonly toStitches: () => void;
   readonly toStitchDefinition: (workflowId: string) => void;
   readonly toStitchRun: (runId: string) => void;
+  readonly toIntervals?: (connectionId?: string) => void;
 }
 
 export interface IpWorkspaceContextValue {

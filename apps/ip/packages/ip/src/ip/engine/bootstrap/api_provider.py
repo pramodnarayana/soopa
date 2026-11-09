@@ -21,10 +21,12 @@ from ip.engine.bootstrap.container import (
     create_empty_transformer_registry,
     create_empty_workflow_definition_registry,
     create_engine_catalog_registry,
+    create_ip_columnar_batch_processor,
     create_ip_control_plane_uow,
     create_ip_inbound_ack,
     create_ip_inbound_decoder,
     create_ip_inbound_verifier,
+    create_ip_interval_rollup_repository,
     create_ip_stitch_dispatcher,
     create_ip_tenant_resolver,
     create_ip_tenant_uow_provider,
@@ -34,9 +36,11 @@ from ip.engine.bootstrap.container import (
 )
 from ip.engine.domain.enums import PipelineStage
 from ip.engine.ports.outbound.catalog_registry_port import CatalogRegistryPort
+from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
+from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
@@ -89,6 +93,8 @@ class IpApiProvider(IpApiProviderPort):
             workflow_definition_registry_factory or create_empty_workflow_definition_registry
         )
         self._domain_repository_factories = domain_repository_factories
+        self._columnar_batch_processor = create_ip_columnar_batch_processor()
+        self._interval_rollup_repository = create_ip_interval_rollup_repository()
 
     def create_control_plane_uow(self, global_session: object) -> IpControlPlaneUnitOfWorkPort:
         return create_ip_control_plane_uow(_as_async_session(global_session))
@@ -178,6 +184,12 @@ class IpApiProvider(IpApiProviderPort):
         self,
     ) -> Mapping[PipelineStage, StageReplayProcessorPort]:
         return create_default_stage_replay_processors()
+
+    def get_columnar_batch_processor(self) -> ColumnarBatchProcessorPort:
+        return self._columnar_batch_processor
+
+    def get_interval_rollup_repository(self) -> IntervalRollupRepositoryPort:
+        return self._interval_rollup_repository
 
 
 __all__ = ["IpApiProvider"]

@@ -15,7 +15,7 @@ _VERTICAL_VOCAB_PATTERN = re.compile(
     r"itron|mercurygate|mercury_gate|meter|meters|meter_id|"
     r"meter_reads?|meter_readings?|meter_serial|"
     r"service_points?|service_point_id|kwh|"
-    r"smart\s+grid|grid-utility|gridpower|sap_isu|"
+    r"smart\s+grid|grid-utility|gridpower|sap[-_]isu|"
     r"MDM_READING|MDM_SERVICE_POINT|TMS_LOAD|TMS_CARRIER"
     r")\b|"
     r"\b(?:itron|ami|mdm|tms|energy)_[a-z0-9_]+\b|"

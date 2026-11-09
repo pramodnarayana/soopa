@@ -167,6 +167,74 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
                     USING (tenant_id = current_setting('platform.current_tenant_id', true));
                 """)
             )
+            await shard_session.execute(
+                text("""
+                CREATE TABLE IF NOT EXISTS public.ip_batch_manifests (
+                    id VARCHAR(64) NOT NULL PRIMARY KEY,
+                    tenant_id VARCHAR(128) NOT NULL,
+                    connection_id VARCHAR(64) NOT NULL,
+                    app_id VARCHAR(64) NOT NULL DEFAULT '',
+                    stream_name VARCHAR(128) NOT NULL,
+                    priority_lane VARCHAR(32) NOT NULL DEFAULT 'P1_LIVE',
+                    payload_format VARCHAR(32) NOT NULL DEFAULT 'JSON_ARRAY',
+                    status VARCHAR(32) NOT NULL DEFAULT 'INGESTED',
+                    l1_raw_uri TEXT NOT NULL,
+                    l2_replica_uri TEXT,
+                    l3_canonical_uri TEXT,
+                    inline_payload JSONB,
+                    payload_sha256 VARCHAR(64) NOT NULL,
+                    payload_size_bytes BIGINT NOT NULL DEFAULT 0,
+                    window_start_utc TIMESTAMPTZ NOT NULL,
+                    window_end_utc TIMESTAMPTZ NOT NULL,
+                    raw_ingested_count BIGINT NOT NULL,
+                    duplicates_dropped_count BIGINT NOT NULL DEFAULT 0,
+                    valid_canonical_count BIGINT NOT NULL DEFAULT 0,
+                    quarantined_held_count BIGINT NOT NULL DEFAULT 0,
+                    promoted_outage_clusters_count INTEGER NOT NULL DEFAULT 0,
+                    delivery_receipt_id VARCHAR(128),
+                    error_message TEXT,
+                    trace_id VARCHAR(64) NOT NULL,
+                    correlation_id VARCHAR(255),
+                    parent_trace_id VARCHAR(64),
+                    original_trace_id VARCHAR(64),
+                    replay_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    completed_at TIMESTAMPTZ,
+                    CONSTRAINT uq_ip_batch_manifests_sha256 UNIQUE (tenant_id, connection_id, payload_sha256),
+                    CONSTRAINT chk_ip_batch_zero_loss_reconciliation CHECK (
+                        status <> 'COMPLETED'
+                        OR raw_ingested_count = (duplicates_dropped_count + valid_canonical_count + quarantined_held_count)
+                    )
+                );
+                """)
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ip_batch_manifests_tenant_conn ON public.ip_batch_manifests (tenant_id, connection_id, created_at);"
+                )
+            )
+            await shard_session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS idx_ip_batch_manifests_trace ON public.ip_batch_manifests (tenant_id, trace_id);"
+                )
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.ip_batch_manifests ENABLE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text("ALTER TABLE public.ip_batch_manifests FORCE ROW LEVEL SECURITY;")
+            )
+            await shard_session.execute(
+                text(
+                    "DROP POLICY IF EXISTS tenant_isolation_ip_batch_manifests ON public.ip_batch_manifests;"
+                )
+            )
+            await shard_session.execute(
+                text("""
+                CREATE POLICY tenant_isolation_ip_batch_manifests ON public.ip_batch_manifests
+                    USING (tenant_id = current_setting('platform.current_tenant_id', true));
+                """)
+            )
             await shard_session.commit()
     finally:
         await shard_provider.close()

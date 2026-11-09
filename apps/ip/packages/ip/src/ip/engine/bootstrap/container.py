@@ -72,6 +72,9 @@ from ip.engine.adapters.outbound.database.control_plane.transformation_repositor
 from ip.engine.adapters.outbound.database.control_plane.uow import (
     SqlAlchemyIpControlPlaneUnitOfWork,
 )
+from ip.engine.adapters.outbound.database.data_plane.batch_manifest_repository import (
+    SqlAlchemyBatchManifestRepository,
+)
 from ip.engine.adapters.outbound.database.data_plane.entity_map_repository import (
     SqlAlchemyGlobalEntityMapRepository,
 )
@@ -121,6 +124,12 @@ from ip.engine.adapters.outbound.database.tenant_uow_provider import SqlAlchemyI
 from ip.engine.adapters.outbound.inbound.ack import StandardInboundAck
 from ip.engine.adapters.outbound.inbound.decoders import StandardInboundPayloadDecoder
 from ip.engine.adapters.outbound.inbound.verifiers import NoOpVerifier
+from ip.engine.adapters.outbound.intervals.interval_batch_normalizer import (
+    VectorizedIntervalBatchNormalizerAdapter,
+)
+from ip.engine.adapters.outbound.intervals.interval_rollup_repository import (
+    ColumnarIntervalRollupRepositoryAdapter,
+)
 from ip.engine.adapters.outbound.stitches.step_handlers import (
     EmitNotificationStepHandler,
     ExecuteHttpActionStepHandler,
@@ -169,6 +178,19 @@ from ip.engine.application.use_cases.ingestion.replay_ingest_stage import (
 )
 from ip.engine.application.use_cases.ingestion.run_sync_use_case import (
     RunSyncUseCase,
+)
+from ip.engine.application.use_cases.intervals.buffer_raw_interval_batch_use_case import (
+    BufferRawIntervalBatchUseCase,
+)
+from ip.engine.application.use_cases.intervals.interval_rollup_use_cases import (
+    GetBatchReconciliationSummaryUseCase,
+    GetDailyCompletenessUseCase,
+    GetDailyTouRollupsUseCase,
+    RecordSettlementReceiptUseCase,
+    TraceIntervalLineageUseCase,
+)
+from ip.engine.application.use_cases.intervals.process_interval_batch_use_case import (
+    ProcessIntervalBatchUseCase,
 )
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationUseCase,
@@ -247,10 +269,12 @@ from ip.engine.ports.outbound.catalog_registry_port import (
     CatalogAppSummaryDTO,
     CatalogConnectorMapping,
 )
+from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
 from ip.engine.ports.outbound.connector_port import ConnectorPort, DestinationConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
+from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
 from ip.engine.ports.outbound.stitch_catalog_registry_port import StitchCatalogRegistryPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
@@ -357,6 +381,7 @@ def create_ip_data_plane_uow(
             event_spec=IP_TRACE_EVENT_SPEC,
             stage_specs=IP_TRACE_STAGE_SPECS,
         ),
+        batch_manifests=SqlAlchemyBatchManifestRepository(tenant_session),
         domain_repositories=resolved_domain_repos,
     )
 
@@ -388,6 +413,16 @@ def create_ip_tenant_uow_provider(
 def create_ip_tiered_storage() -> TieredStoragePort:
     """Composition root factory assembling TieredStorageAdapter."""
     return TieredStorageAdapter()
+
+
+def create_ip_columnar_batch_processor() -> ColumnarBatchProcessorPort:
+    """Composition root factory assembling VectorizedIntervalBatchNormalizerAdapter."""
+    return VectorizedIntervalBatchNormalizerAdapter()
+
+
+def create_ip_interval_rollup_repository() -> IntervalRollupRepositoryPort:
+    """Composition root factory assembling ColumnarIntervalRollupRepositoryAdapter."""
+    return ColumnarIntervalRollupRepositoryAdapter()
 
 
 def create_ip_inbound_verifier() -> InboundVerifierPort:
@@ -888,6 +923,48 @@ class Container(containers.DeclarativeContainer):
         stage_processors=stage_replay_processors,
     )
 
+    # -----------------------------------------------------------------------
+    # High-Frequency Columnar Interval Streams Engine
+    # -----------------------------------------------------------------------
+    columnar_batch_processor = providers.Singleton(create_ip_columnar_batch_processor)
+    interval_rollup_repository = providers.Singleton(create_ip_interval_rollup_repository)
+
+    buffer_raw_interval_batch_use_case = providers.Factory(
+        BufferRawIntervalBatchUseCase,
+        cp_uow=cp_uow,
+        dp_uow_provider=dp_uow_provider,
+        storage=tiered_storage,
+    )
+    process_interval_batch_use_case = providers.Factory(
+        ProcessIntervalBatchUseCase,
+        dp_uow_provider=dp_uow_provider,
+        storage=tiered_storage,
+        columnar_processor=columnar_batch_processor,
+        rollup_repository=interval_rollup_repository,
+    )
+    get_batch_reconciliation_summary_use_case = providers.Factory(
+        GetBatchReconciliationSummaryUseCase,
+        dp_uow_provider=dp_uow_provider,
+    )
+    get_daily_completeness_use_case = providers.Factory(
+        GetDailyCompletenessUseCase,
+        rollup_repository=interval_rollup_repository,
+    )
+    get_daily_tou_rollups_use_case = providers.Factory(
+        GetDailyTouRollupsUseCase,
+        rollup_repository=interval_rollup_repository,
+    )
+    trace_interval_lineage_use_case = providers.Factory(
+        TraceIntervalLineageUseCase,
+        dp_uow_provider=dp_uow_provider,
+        rollup_repository=interval_rollup_repository,
+    )
+    record_settlement_receipt_use_case = providers.Factory(
+        RecordSettlementReceiptUseCase,
+        dp_uow_provider=dp_uow_provider,
+        rollup_repository=interval_rollup_repository,
+    )
+
 
 __all__ = [
     "Container",
@@ -900,6 +977,7 @@ __all__ = [
     "create_empty_transformer_registry",
     "create_empty_workflow_definition_registry",
     "create_engine_catalog_registry",
+    "create_ip_columnar_batch_processor",
     "create_ip_control_plane_uow",
     "create_ip_cp_outbox_components",
     "create_ip_cp_outbox_relay",
@@ -909,6 +987,7 @@ __all__ = [
     "create_ip_inbound_ack",
     "create_ip_inbound_decoder",
     "create_ip_inbound_verifier",
+    "create_ip_interval_rollup_repository",
     "create_ip_stitch_dispatcher",
     "create_ip_stitch_worker_tick",
     "create_ip_tenant_resolver",

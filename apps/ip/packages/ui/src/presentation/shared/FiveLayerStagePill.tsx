@@ -34,19 +34,19 @@ export function FiveLayerStageStrip({
               variant={isSelected ? 'secondary' : 'outline'}
               onClick={() => onSelectLayer(item.layer)}
               className={cn(
-                'h-auto w-full flex-col items-start gap-2 rounded-xl p-3.5 text-left transition-all',
+                'h-auto w-full flex-col items-start gap-2 rounded-lg p-3.5 text-left transition-colors',
                 isSelected &&
-                  'border-primary ring-2 ring-primary/40 bg-accent text-accent-foreground',
+                  'border-foreground bg-accent text-accent-foreground ring-1 ring-foreground',
               )}
             >
               <div className="flex w-full items-center justify-between gap-2">
-                <span className="text-xs font-bold tracking-tight text-foreground">
+                <span className="text-xs font-semibold tracking-tight text-foreground">
                   {item.label}
                 </span>
                 <StatusBadge label={item.posture} tone={tone} />
               </div>
               <div className="w-full truncate text-xs text-muted-foreground">{item.subtitle}</div>
-              <div className="font-mono text-xs font-medium text-brand-ink tabular-nums">
+              <div className="font-mono text-xs font-medium text-foreground tabular-nums">
                 {item.countLabel}
               </div>
             </Button>
@@ -65,7 +65,7 @@ export function FiveLayerStageStrip({
 
 export function LayerTagBadge({ layer }: { readonly layer: string }) {
   return (
-    <span className="inline-flex items-center rounded-md border border-border bg-accent/60 px-2 py-0.5 font-mono text-xs font-medium text-accent-foreground">
+    <span className="inline-flex items-center rounded-md border border-border bg-secondary px-2 py-0.5 font-mono text-xs font-medium text-secondary-foreground">
       {formatLayerLabel(layer)}
     </span>
   );

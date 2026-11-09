@@ -9,6 +9,7 @@ import {
   DataTable,
   Input,
   ReplayBadge,
+  StatCard,
   StatusBadge,
   StatusTone,
 } from '@soopa/ui';
@@ -17,6 +18,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   Cable,
   CheckCircle2,
   GitMerge,
@@ -111,20 +113,20 @@ function HeroCorrelationBar({
   };
 
   return (
-    <Card className="border-primary/40 bg-accent/60">
-      <CardContent className="pt-4">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <Card>
+      <CardContent className="p-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
           <div className="relative flex-1">
-            <Search className="pointer-events-none absolute top-3 left-3.5 h-4 w-4 text-brand-ink" />
+            <Search className="pointer-events-none absolute top-2.5 left-3 h-4 w-4 text-muted-foreground" />
             <Input
               value={value}
               onChange={(e) => setValue(e.target.value)}
               aria-label="Search business correlation key or trace ID"
               placeholder="Instant <15ms Support Audit — enter correlation ID, order_id, external record ID, or ip_trc_..."
-              className="h-11 bg-card pl-10 font-mono text-sm"
+              className="pl-9 font-mono text-xs"
             />
           </div>
-          <Button type="submit" size="cta" className="gap-2">
+          <Button type="submit" size="default" className="gap-1.5">
             <span>Inspect Lineage</span>
             <ArrowRight className="h-4 w-4" />
           </Button>
@@ -154,53 +156,18 @@ function KpiPostureStrip({
       aria-label="Operational posture KPIs"
       className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
     >
-      <Card>
-        <CardHeader>
-          <CardDescription className="flex items-center justify-between">
-            <span>Active Connections</span>
-            <Cable className="h-4 w-4 text-brand-ink" />
-          </CardDescription>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {activeConnections} / {totalConnections}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardDescription className="flex items-center justify-between">
-            <span>Recent Trace Health</span>
-            <CheckCircle2 className="h-4 w-4 text-status-healthy-fg" />
-          </CardDescription>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {healthyTraces} / {totalTraces}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardDescription className="flex items-center justify-between">
-            <span>Active L4 Stitches</span>
-            <GitMerge className="h-4 w-4 text-brand-ink" />
-          </CardDescription>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {activeStitches}
-          </CardTitle>
-        </CardHeader>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardDescription className="flex items-center justify-between">
-            <span>In-Flight Durable Runs</span>
-            <Workflow className="h-4 w-4 text-brand-ink" />
-          </CardDescription>
-          <CardTitle className="font-mono text-2xl font-bold tabular-nums">
-            {inFlightRuns}
-          </CardTitle>
-        </CardHeader>
-      </Card>
+      <StatCard
+        title="Active Connections"
+        value={`${activeConnections} / ${totalConnections}`}
+        icon={<Cable />}
+      />
+      <StatCard
+        title="Recent Trace Health"
+        value={`${healthyTraces} / ${totalTraces}`}
+        icon={<CheckCircle2 />}
+      />
+      <StatCard title="Active L4 Stitches" value={activeStitches} icon={<GitMerge />} />
+      <StatCard title="In-Flight Durable Runs" value={inFlightRuns} icon={<Workflow />} />
     </section>
   );
 }
@@ -217,7 +184,7 @@ function ConnectionAttentionRadar({
   }
 
   return (
-    <Card className="border-status-warning-border bg-status-warning-bg/50">
+    <Card className="border-status-warning-border bg-status-warning-bg/40">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-status-warning-fg">
           <AlertTriangle className="h-4 w-4" />
@@ -232,10 +199,10 @@ function ConnectionAttentionRadar({
         {items.map((conn) => (
           <div
             key={conn.id}
-            className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
+            className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3.5 py-2.5"
           >
             <div className="min-w-0 space-y-0.5">
-              <div className="truncate font-semibold text-foreground">{conn.name}</div>
+              <div className="truncate text-sm font-medium text-foreground">{conn.name}</div>
               <div className="truncate text-xs text-muted-foreground">
                 {conn.appId} · {conn.lastErrorMessage ?? 'Credentials require refresh'}
               </div>
@@ -325,11 +292,11 @@ function RecentTracesCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle>Recent 5-Layer Support Traces</CardTitle>
-          <CardDescription>
-            Click any trace to inspect L1→L5 wire & canonical payloads.
+          <CardDescription className="mt-1">
+            Click any trace to inspect L1→L5 wire &amp; canonical payloads.
           </CardDescription>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onViewAll}>
@@ -343,7 +310,7 @@ function RecentTracesCard({
           isLoading={isLoading}
           dataLength={data.length}
           ariaLabel="Recent support traces"
-          emptyIcon={<Activity className="h-6 w-6" />}
+          emptyIcon={<Activity className="h-5 w-5" />}
           emptyTitle="No Traces Recorded Yet"
           emptyDescription="Ingest a webhook or trigger a pull sync to populate the 5-layer audit ledger."
           onRowClick={(row) => onOpenTrace(row.original.traceId)}
@@ -408,10 +375,12 @@ function RecentStitchRunsCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <div>
           <CardTitle>Recent Durable Stitch Runs</CardTitle>
-          <CardDescription>Live DAG execution runs across L4 orchestration shards.</CardDescription>
+          <CardDescription className="mt-1">
+            Live DAG execution runs across L4 orchestration shards.
+          </CardDescription>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={onViewAll}>
           Open Stitches
@@ -424,7 +393,7 @@ function RecentStitchRunsCard({
           isLoading={isLoading}
           dataLength={data.length}
           ariaLabel="Recent durable stitch runs"
-          emptyIcon={<Workflow className="h-6 w-6" />}
+          emptyIcon={<Workflow className="h-5 w-5" />}
           emptyTitle="No Durable Stitch Runs Yet"
           emptyDescription="Register a Stitch and dispatch a canonical L3 event to execute a durable DAG."
           onRowClick={(row) => onOpenRun(row.original.runId)}
@@ -468,6 +437,17 @@ export function IpCommandCenterPage() {
         subtitle="Audit every wire payload, canonical entity, GlobalEntityMap cross-reference, and durable Stitch step in under 15ms."
         actions={
           <>
+            {navigation.toIntervals ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigation.toIntervals?.()}
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                <span>Interval Streams</span>
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -501,9 +481,9 @@ export function IpCommandCenterPage() {
         className="grid grid-cols-1 gap-3 md:grid-cols-5"
       >
         {PIPELINE_STEPS.map((step) => (
-          <div key={step.code} className="rounded-xl border border-border bg-card p-3.5 shadow-2xs">
+          <div key={step.code} className="rounded-lg border border-border bg-card p-3.5 shadow-2xs">
             <div className="flex items-center gap-2">
-              <span className="inline-flex h-6 w-8 items-center justify-center rounded-md bg-primary font-mono text-xs font-bold text-primary-foreground">
+              <span className="inline-flex h-6 w-8 items-center justify-center rounded-md bg-primary font-mono text-xs font-semibold text-primary-foreground">
                 {step.code}
               </span>
               <span className="text-xs font-semibold text-foreground">{step.name}</span>

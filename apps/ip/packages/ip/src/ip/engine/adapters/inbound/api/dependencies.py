@@ -21,10 +21,12 @@ from ip.engine.ports.outbound.catalog_registry_port import (
     CatalogConnectorMapping,
     CatalogRegistryPort,
 )
+from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
 from ip.engine.ports.outbound.connector_port import ConnectorPort
 from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
 from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
 from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
+from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
 from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
@@ -326,13 +328,37 @@ def get_ip_stage_replay_processors(
     return _get_api_provider(request).get_stage_replay_processors()
 
 
+def get_columnar_batch_processor(
+    request: Request,
+) -> ColumnarBatchProcessorPort:
+    """Resolves the ColumnarBatchProcessorPort from the IP API Provider."""
+    return _get_api_provider(request).get_columnar_batch_processor()
+
+
+def get_interval_rollup_repository(
+    request: Request,
+) -> IntervalRollupRepositoryPort:
+    """Resolves the IntervalRollupRepositoryPort from the IP API Provider."""
+    state = request.app.state
+    try:
+        repo: IntervalRollupRepositoryPort | None = state.ip_interval_rollup_repository
+    except AttributeError:
+        repo = None
+    if repo is None:
+        repo = _get_api_provider(request).get_interval_rollup_repository()
+        state.ip_interval_rollup_repository = repo
+    return repo
+
+
 __all__ = [
     "get_catalog_registry",
     "get_cipher",
+    "get_columnar_batch_processor",
     "get_connectors",
     "get_inbound_ack",
     "get_inbound_decoder",
     "get_inbound_verifier",
+    "get_interval_rollup_repository",
     "get_ip_control_plane_uow",
     "get_ip_data_plane_uow_provider",
     "get_ip_global_session",

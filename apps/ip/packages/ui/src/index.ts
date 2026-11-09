@@ -16,6 +16,26 @@ export {
 } from './presentation/connections/IpConnectionDetailPage';
 export { IpConnectionsPage } from './presentation/connections/IpConnectionsPage';
 export {
+  DailyCompletenessRibbonPanel,
+  type DailyCompletenessRibbonPanelProps,
+} from './presentation/intervals/DailyCompletenessRibbonPanel';
+export {
+  DailyTouBillingRollupsTable,
+  type DailyTouBillingRollupsTableProps,
+} from './presentation/intervals/DailyTouBillingRollupsTable';
+export {
+  DeviceLoadCurveLineageDrawer,
+  type DeviceLoadCurveLineageDrawerProps,
+} from './presentation/intervals/DeviceLoadCurveLineageDrawer';
+export {
+  IpIntervalStreamsPage,
+  type IpIntervalStreamsPageProps,
+} from './presentation/intervals/IpIntervalStreamsPage';
+export {
+  ZeroLossReconciliationBanner,
+  type ZeroLossReconciliationBannerProps,
+} from './presentation/intervals/ZeroLossReconciliationBanner';
+export {
   SyncedDataInspectionPanel,
   type SyncedDataInspectionPanelProps,
 } from './presentation/records/SyncedDataInspectionPanel';

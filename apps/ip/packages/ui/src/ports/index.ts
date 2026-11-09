@@ -1,5 +1,6 @@
 export * from './catalog-repository.port';
 export * from './connection-repository.port';
+export * from './interval-repository.port';
 export * from './record-repository.port';
 export * from './stitch-repository.port';
 export * from './sync-run-repository.port';

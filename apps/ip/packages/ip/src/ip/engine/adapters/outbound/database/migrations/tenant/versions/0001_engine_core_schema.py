@@ -34,6 +34,7 @@ _ENGINE_TABLES: tuple[str, ...] = (
     "ip_trace_events",
     "ip_outbox",
     "ip_processed_events",
+    "ip_batch_manifests",
 )
 
 
@@ -510,6 +511,93 @@ def upgrade() -> None:
         "idx_ip_processed_events_tenant",
         "ip_processed_events",
         ["tenant_id", "processed_at"],
+    )
+
+    op.create_table(
+        "ip_batch_manifests",
+        sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=128), nullable=False),
+        sa.Column("connection_id", sa.String(length=64), nullable=False),
+        sa.Column("app_id", sa.String(length=64), server_default="", nullable=False),
+        sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column(
+            "priority_lane",
+            sa.String(length=32),
+            server_default="P1_LIVE",
+            nullable=False,
+        ),
+        sa.Column(
+            "payload_format",
+            sa.String(length=32),
+            server_default="JSON_ARRAY",
+            nullable=False,
+        ),
+        sa.Column("status", sa.String(length=32), server_default="INGESTED", nullable=False),
+        sa.Column("l1_raw_uri", sa.Text(), nullable=False),
+        sa.Column("l2_replica_uri", sa.Text(), nullable=True),
+        sa.Column("l3_canonical_uri", sa.Text(), nullable=True),
+        sa.Column("inline_payload", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("payload_sha256", sa.String(length=64), nullable=False),
+        sa.Column(
+            "payload_size_bytes", sa.BigInteger(), server_default=sa.text("0"), nullable=False
+        ),
+        sa.Column("window_start_utc", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("window_end_utc", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("raw_ingested_count", sa.BigInteger(), nullable=False),
+        sa.Column(
+            "duplicates_dropped_count",
+            sa.BigInteger(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column(
+            "valid_canonical_count",
+            sa.BigInteger(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column(
+            "quarantined_held_count",
+            sa.BigInteger(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column(
+            "promoted_outage_clusters_count",
+            sa.Integer(),
+            server_default=sa.text("0"),
+            nullable=False,
+        ),
+        sa.Column("delivery_receipt_id", sa.String(length=128), nullable=True),
+        sa.Column("error_message", sa.Text(), nullable=True),
+        sa.Column("trace_id", sa.String(length=64), nullable=False),
+        sa.Column("correlation_id", sa.String(length=255), nullable=True),
+        sa.Column("parent_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("original_trace_id", sa.String(length=64), nullable=True),
+        sa.Column("replay_count", sa.Integer(), server_default=sa.text("0"), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "tenant_id",
+            "connection_id",
+            "payload_sha256",
+            name="uq_ip_batch_manifests_sha256",
+        ),
+        sa.CheckConstraint(
+            "status <> 'COMPLETED' OR raw_ingested_count = (duplicates_dropped_count + valid_canonical_count + quarantined_held_count)",
+            name="chk_ip_batch_zero_loss_reconciliation",
+        ),
+    )
+    op.create_index(
+        "idx_ip_batch_manifests_tenant_conn",
+        "ip_batch_manifests",
+        ["tenant_id", "connection_id", "created_at"],
+    )
+    op.create_index(
+        "idx_ip_batch_manifests_trace",
+        "ip_batch_manifests",
+        ["tenant_id", "trace_id"],
     )
 
     # Enable Row-Level Security (RLS) across all tenant-scoped Engine Data Plane tables

@@ -196,3 +196,40 @@ export const ConnectorPropertyType = {
 export type ConnectorPropertyTypeValue =
   | (typeof ConnectorPropertyType)[keyof typeof ConnectorPropertyType]
   | (string & {});
+
+export const BatchManifestStatus = {
+  INGESTED: 'INGESTED',
+  PROCESSING: 'PROCESSING',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+  QUARANTINED: 'QUARANTINED',
+} as const;
+export type BatchManifestStatusValue =
+  | (typeof BatchManifestStatus)[keyof typeof BatchManifestStatus]
+  | (string & {});
+
+export const PriorityLane = {
+  P0_CRITICAL: 'P0_CRITICAL',
+  P1_LIVE: 'P1_LIVE',
+  P2_BULK_REPLAY: 'P2_BULK_REPLAY',
+} as const;
+export type PriorityLaneValue = (typeof PriorityLane)[keyof typeof PriorityLane] | (string & {});
+
+export const CimQualityStatus = {
+  VALID: 'VALID',
+  ESTIMATED_VEE: 'ESTIMATED_VEE',
+  ESTIMATED_MANUAL: 'ESTIMATED_MANUAL',
+  DST_AMBIGUOUS: 'DST_AMBIGUOUS',
+  POWER_DOWN: 'POWER_DOWN',
+  QUARANTINED_SPIKE: 'QUARANTINED_SPIKE',
+} as const;
+export type CimQualityStatusValue =
+  | (typeof CimQualityStatus)[keyof typeof CimQualityStatus]
+  | (string & {});
+
+export const TariffBucket = {
+  PEAK: 'PEAK',
+  SHOULDER: 'SHOULDER',
+  OFF_PEAK: 'OFF_PEAK',
+} as const;
+export type TariffBucketValue = (typeof TariffBucket)[keyof typeof TariffBucket] | (string & {});

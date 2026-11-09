@@ -28,6 +28,9 @@ class IpEventType(StrEnum):
     STITCH_REGISTERED = "ip.stitch.registered"
     OUTBOUND_RECORD_CREATED = "ip.outbound_record.created"
     STREAM_STATE_CHECKPOINTED = "ip.stream_state.checkpointed"
+    INTERVAL_BATCH_INGESTED = "ip.interval_batch.ingested"
+    INTERVAL_BATCH_PROCESSED = "ip.interval_batch.processed"
+    FEEDER_OUTAGE_DETECTED = "ip.feeder_outage.detected"
 
 
 class IpIdPrefix(StrEnum):
@@ -37,6 +40,8 @@ class IpIdPrefix(StrEnum):
     TRACE_EVENT = "ip_trace_evt"
     INBOUND_RECORD = "ip_inb"
     BATCH = "ip_bch"
+    INTERVAL_BATCH = "ip_ibatch"
+    OUTAGE_CLUSTER = "ip_outg"
     CONNECTION = "ip_conn"
     CATALOG = "ip_cat"
     STREAM = "ip_strm"

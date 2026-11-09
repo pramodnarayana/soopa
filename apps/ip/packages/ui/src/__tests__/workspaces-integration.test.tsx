@@ -13,9 +13,11 @@ import {
 } from '../domain/enums';
 import type { IpUserRole } from '../domain/role';
 import {
+  DeviceLoadCurveLineageDrawer,
   IpCommandCenterPage,
   IpConnectionDetailPage,
   IpConnectionsPage,
+  IpIntervalStreamsPage,
   IpStitchDefinitionPage,
   IpStitchesPage,
   IpStitchRunPage,
@@ -36,8 +38,15 @@ import {
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
   SEED_CONNECTION_ID,
+  SEED_DAILY_TOU_ROLLUPS,
+  SEED_DEVICE_ID,
   SEED_DISCOVERED_CATALOG,
+  SEED_FEEDER_ID,
+  SEED_INTERVAL_COMPLETENESS,
+  SEED_INTERVAL_LINEAGE_TRACE,
+  SEED_RECONCILIATION_OVERVIEW,
   SEED_RUN_ID,
+  SEED_SERVICE_DATE,
   SEED_STITCH,
   SEED_STITCH_DEFINITION,
   SEED_STITCH_RUN,
@@ -115,6 +124,31 @@ function createHydratedQueryClient(): QueryClient {
   qc.setQueryData(
     ipQueryKeys.traces.lineage(SEED_TENANT_ID, SEED_TRACE_ID),
     ok(SEED_TRACE_LINEAGE),
+  );
+  qc.setQueryData(
+    ipQueryKeys.intervals.reconciliation(SEED_TENANT_ID, {
+      connectionId: SEED_CONNECTION_ID,
+      recentLimit: 20,
+    }),
+    ok(SEED_RECONCILIATION_OVERVIEW),
+  );
+  qc.setQueryData(
+    ipQueryKeys.intervals.completeness(SEED_TENANT_ID, {
+      connectionId: SEED_CONNECTION_ID,
+      serviceDate: SEED_SERVICE_DATE,
+    }),
+    ok(SEED_INTERVAL_COMPLETENESS),
+  );
+  qc.setQueryData(
+    ipQueryKeys.intervals.touRollups(SEED_TENANT_ID, {
+      serviceDate: SEED_SERVICE_DATE,
+      feederId: undefined,
+    }),
+    ok(SEED_DAILY_TOU_ROLLUPS),
+  );
+  qc.setQueryData(
+    ipQueryKeys.intervals.deviceLineage(SEED_TENANT_ID, SEED_DEVICE_ID, SEED_SERVICE_DATE),
+    ok(SEED_INTERVAL_LINEAGE_TRACE),
   );
 
   return qc;
@@ -479,5 +513,36 @@ describe('IP Presentation Workspaces Narrow Integration', () => {
     expect(html).toContain('Universal REST Gateway');
     expect(html).toContain('SFTP Batch Gateway');
     expect(html).toContain('Synthetic Event Simulator');
+  });
+
+  it('renders Casdoor-styled interval streams workspace', () => {
+    const qc = createHydratedQueryClient();
+
+    const intervalsHtml = renderInIpWorkspace(
+      <IpIntervalStreamsPage
+        initialConnectionId={SEED_CONNECTION_ID}
+        initialServiceDate={SEED_SERVICE_DATE}
+      />,
+      qc,
+    );
+    expect(intervalsHtml).toContain('High-Frequency Interval Streams');
+    expect(intervalsHtml).toContain('ZERO-LOSS BALANCED');
+    expect(intervalsHtml).toContain(SEED_FEEDER_ID);
+    expect(intervalsHtml).toContain(SEED_DEVICE_ID);
+    expect(intervalsHtml).toContain('SETTLE-RCPT-20261029-01');
+  });
+
+  it('renders device load curve lineage drawer', () => {
+    const drawerHtml = renderToStaticMarkup(
+      <DeviceLoadCurveLineageDrawer
+        open={true}
+        onOpenChange={() => undefined}
+        trace={SEED_INTERVAL_LINEAGE_TRACE}
+        onOpenBatchTrace={() => undefined}
+      />,
+    );
+    expect(drawerHtml).toContain('Device 96-Slot Load Curve');
+    expect(drawerHtml).toContain('Two-Tier Macro-Batch Lineage');
+    expect(drawerHtml).toContain('Parquet Row #0');
   });
 });

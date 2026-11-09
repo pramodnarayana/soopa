@@ -16,30 +16,34 @@ export function AppLayout({
   children,
 }: AppLayoutProps) {
   return (
-    <div className="flex min-h-screen bg-background font-sans text-foreground selection:bg-primary/20 selection:text-primary">
-      {/* Sidebar - hidden on mobile, fixed at desktop */}
-      <aside className="hidden lg:fixed lg:inset-y-0 lg:z-50 lg:flex lg:w-[340px] lg:flex-col border-r border-border bg-card">
-        {/* Header */}
-        <div className="flex h-20 items-center border-b border-border/40 px-8">{sidebarHeader}</div>
+    <div className="flex min-h-screen flex-col bg-background font-sans text-foreground selection:bg-primary/15 selection:text-foreground">
+      <div className="flex flex-1">
+        {/* Casdoor Compact Sidebar (w-60 / 240px) */}
+        <aside className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:w-60 lg:flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+          {/* Brand Bar (h-14 / 56px) */}
+          <div className="flex h-14 items-center border-b border-sidebar-border px-3">
+            {sidebarHeader}
+          </div>
 
-        {/* Navigation */}
-        <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-4 py-8">
-          {sidebarNavigation}
-        </nav>
+          {/* Navigation */}
+          <nav className="scrollbar-thin flex flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-3">
+            {sidebarNavigation}
+          </nav>
 
-        {/* User Profile */}
-        <div className="p-6">{userProfile}</div>
-      </aside>
+          {/* User Profile Footer */}
+          <div className="border-t border-sidebar-border p-2.5">{userProfile}</div>
+        </aside>
 
-      {/* Main Content Area - no left margin on mobile */}
-      <main className="flex-1 lg:ml-[340px] bg-background flex flex-col min-h-screen">
-        {headerContent && (
-          <header className="h-20 bg-background/80 backdrop-blur-md border-b border-border/40 sticky top-0 z-40 px-8 flex items-center justify-end shadow-sm">
-            {headerContent}
-          </header>
-        )}
-        <div className="mx-auto w-full max-w-[1800px] p-8 lg:p-12 xl:p-16 flex-1">{children}</div>
-      </main>
+        {/* Main Content Area */}
+        <div className="flex min-h-screen min-w-0 flex-1 flex-col bg-background lg:ml-60">
+          {headerContent ? (
+            <header className="sticky top-0 z-30 flex h-14 items-center justify-end gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+              {headerContent}
+            </header>
+          ) : null}
+          <main className="mx-auto w-full max-w-[1600px] flex-1 p-6">{children}</main>
+        </div>
+      </div>
     </div>
   );
 }
