@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import importlib
 import io
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from statistics import median
@@ -86,9 +87,12 @@ def _parse_decimal(raw_val: object, default: str = "0.0000") -> Decimal:
     if raw_val is None or raw_val == "":
         return Decimal(default)
     try:
-        return Decimal(str(raw_val))
+        d = Decimal(str(raw_val))
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"Invalid decimal value '{raw_val}'") from exc
+    if not d.is_finite():
+        raise ValueError(f"Non-finite decimal value '{raw_val}' (NaN/Infinity not allowed)")
+    return d
 
 
 def _parse_timestamp(raw_ts: object) -> datetime:
@@ -177,7 +181,7 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
         crosswalk = gem_crosswalk or {}
 
         if payload_format is IntervalPayloadFormat.ARROW_IPC:
-            return self._normalize_arrow_ipc_passthrough(
+            return self._normalize_precompiled_stream(
                 batch_id=batch_id,
                 tenant_id=tenant_id,
                 connection_id=connection_id,
@@ -278,8 +282,8 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
             storm_policy=effective_storm,
         )
 
-        # Step 5: Encode contiguous binary Arrow IPC stream (Invariant 1)
-        arrow_ipc_bytes = encode_arrow_ipc_stream(readings_tuple)
+        # Step 5: Encode contiguous binary columnar stream buffer (Invariant 1)
+        columnar_bytes = encode_arrow_ipc_stream(readings_tuple)
 
         logger.info(
             "vectorized_interval_batch_normalized",
@@ -291,7 +295,7 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
             valid_canonical=valid_canonical_count,
             quarantined_held=quarantined_held_count,
             outage_clusters_count=len(outage_clusters),
-            arrow_ipc_bytes=len(arrow_ipc_bytes),
+            columnar_bytes=len(columnar_bytes),
         )
 
         return Result.ok(
@@ -300,14 +304,14 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                 tenant_id=tenant_id,
                 connection_id=connection_id,
                 stream_name=stream_name,
-                arrow_ipc_bytes=arrow_ipc_bytes,
+                columnar_bytes=columnar_bytes,
                 canonical_readings=readings_tuple,
                 counts=counts,
                 outage_clusters=outage_clusters,
             )
         )
 
-    def _normalize_arrow_ipc_passthrough(
+    def _normalize_precompiled_stream(
         self,
         *,
         batch_id: str,
@@ -322,10 +326,27 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
         if decoded_res.is_err:
             return Result.fail(decoded_res.unwrap_err())
         existing_readings = decoded_res.unwrap()
-        raw_count = len(existing_readings)
+
+        # Strict tenant boundary verification
+        for r in existing_readings:
+            if r.tenant_id != tenant_id:
+                return Result.fail(
+                    IntervalMalformedBatchError.with_reason(
+                        f"Mismatched tenant_id in Arrow IPC payload: expected '{tenant_id}', got '{r.tenant_id}'."
+                    )
+                )
+
+        # Stamp the provenance of the manifest being created
+        updated_readings = tuple(
+            replace(r, source_batch_id=batch_id, connection_id=connection_id)
+            for r in existing_readings
+        )
+        updated_bytes = encode_arrow_ipc_stream(updated_readings)
+
+        raw_count = len(updated_readings)
         valid_count = sum(
             1
-            for r in existing_readings
+            for r in updated_readings
             if r.quality_status is not CimQualityStatus.QUARANTINED_SPIKE
         )
         quarantined_count = raw_count - valid_count
@@ -336,7 +357,7 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
             quarantined_held=quarantined_count,
         )
         clusters = self._cluster_feeder_outages(
-            readings=existing_readings,
+            readings=updated_readings,
             tenant_id=tenant_id,
             connection_id=connection_id,
             batch_id=batch_id,
@@ -349,8 +370,8 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                 tenant_id=tenant_id,
                 connection_id=connection_id,
                 stream_name=stream_name,
-                arrow_ipc_bytes=raw_payload_bytes,
-                canonical_readings=existing_readings,
+                columnar_bytes=updated_bytes,
+                canonical_readings=updated_readings,
                 counts=counts,
                 outage_clusters=clusters,
             )
@@ -366,24 +387,40 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
         trace_id: str,
         storm_policy: StormAggregationPolicy,
     ) -> tuple[FeederOutageCluster, ...]:
-        """Groups 0.0V endpoints by (feeder_id, substation_id) and applies the Storm-Safe threshold."""
-        endpoints_by_feeder: dict[tuple[str, str], dict[str, datetime]] = {}
+        """Groups 0.0V endpoints by (feeder_id, substation_id, time_window) and applies the Storm-Safe threshold."""
+        now = datetime.now(UTC)
+        freshness_limit_sec = storm_policy.freshness_window_minutes * 60
+        window_minutes = max(1, storm_policy.time_window_minutes)
+
+        # Group zero-voltage readings by (feeder_id, substation_id, time_bucket)
+        endpoints_by_feeder_window: dict[tuple[str, str, datetime], dict[str, datetime]] = {}
         for r in readings:
             if r.voltage_v <= storm_policy.zero_voltage_threshold:
-                feeder_key = (r.feeder_id, r.substation_id)
-                endpoint_map = endpoints_by_feeder.setdefault(feeder_key, {})
+                # Freshness check: exclude historical readings from real-time outage cluster events
+                age_sec = (now - r.interval_end_utc).total_seconds()
+                if age_sec > freshness_limit_sec:
+                    continue
+
+                bucket_minute = (r.interval_end_utc.minute // window_minutes) * window_minutes
+                time_bucket = r.interval_end_utc.replace(
+                    minute=bucket_minute, second=0, microsecond=0
+                )
+                window_key = (r.feeder_id, r.substation_id, time_bucket)
+                endpoint_map = endpoints_by_feeder_window.setdefault(window_key, {})
                 existing_ts = endpoint_map.get(r.source_meter_id)
                 if existing_ts is None or r.interval_end_utc < existing_ts:
                     endpoint_map[r.source_meter_id] = r.interval_end_utc
 
         clusters: list[FeederOutageCluster] = []
-        for (feeder_id, substation_id), endpoint_map in sorted(endpoints_by_feeder.items()):
+        for (feeder_id, substation_id, _bucket), endpoint_map in sorted(
+            endpoints_by_feeder_window.items(), key=lambda kv: (kv[0][0], kv[0][1], kv[0][2])
+        ):
             sorted_endpoints = tuple(sorted(endpoint_map.keys()))
             outage_count = len(sorted_endpoints)
             earliest_utc = min(endpoint_map.values())
 
             if outage_count >= storm_policy.storm_threshold_meters:
-                # Storm mode: collapse all N endpoints on this feeder into 1 FeederOutageCluster
+                # Storm mode: collapse all distinct endpoints on this feeder within the window into 1 FeederOutageCluster
                 clusters.append(
                     FeederOutageCluster(
                         cluster_id=generate_id(IpIdPrefix.OUTAGE_CLUSTER.value),
@@ -417,11 +454,92 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
                     )
         return tuple(clusters)
 
+    def _parse_columnar_file(
+        self,
+        raw_payload_bytes: bytes,
+    ) -> Result[tuple[_ParsedRawInterval, ...], IntervalMalformedBatchError]:
+        if not raw_payload_bytes.startswith(b"PAR1"):
+            return Result.fail(
+                IntervalMalformedBatchError.with_reason(
+                    "Invalid Parquet file: missing 'PAR1' magic header."
+                )
+            )
+        try:
+            pq = importlib.import_module("pyarrow.parquet")
+            table = pq.read_table(io.BytesIO(raw_payload_bytes))
+            pydict = table.to_pydict()
+            row_count = table.num_rows
+
+            parsed_rows: list[_ParsedRawInterval] = []
+            for idx in range(row_count):
+                source_meter_id = str(pydict.get("source_meter_id", [""])[idx]).strip()
+                if not source_meter_id:
+                    return Result.fail(
+                        IntervalMalformedBatchError.with_reason(
+                            f"Parquet reading at row index {idx} is missing source_meter_id."
+                        )
+                    )
+                interval_end_utc = _parse_timestamp(pydict.get("interval_end_utc", [""])[idx])
+                kwh_del = _parse_decimal(pydict.get("kwh_delivered", ["0.0000"])[idx])
+                kwh_rec = _parse_decimal(pydict.get("kwh_received", ["0.0000"])[idx])
+                multiplier = _parse_decimal(
+                    pydict.get("multiplier", ["1.0000"])[idx], default="1.0000"
+                )
+                reactive = _parse_decimal(pydict.get("reactive_kvarh", ["0.0000"])[idx])
+                voltage_val = float(pydict.get("voltage_v", [240.0])[idx])
+                if not Decimal(str(voltage_val)).is_finite():
+                    raise ValueError(f"Non-finite voltage at row {idx}")
+
+                raw_tariff_val = (
+                    str(pydict.get("tariff_bucket", [""])[idx]) if "tariff_bucket" in pydict else ""
+                )
+                explicit_tariff: TariffBucket | None = None
+                if raw_tariff_val:
+                    try:
+                        explicit_tariff = TariffBucket(raw_tariff_val)
+                    except ValueError:
+                        explicit_tariff = None
+
+                parsed_rows.append(
+                    _ParsedRawInterval(
+                        row_offset=idx,
+                        source_meter_id=source_meter_id,
+                        endpoint_location_id=str(pydict.get("endpoint_location_id", [""])[idx]),
+                        feeder_id=str(pydict.get("feeder_id", [""])[idx]),
+                        substation_id=str(pydict.get("substation_id", [""])[idx]),
+                        interval_end_utc=interval_end_utc,
+                        kwh_delivered=kwh_del,
+                        kwh_received=kwh_rec,
+                        reactive_kvarh=reactive,
+                        voltage_v=voltage_val,
+                        multiplier=multiplier,
+                        explicit_tariff=explicit_tariff,
+                        explicit_quality=None,
+                    )
+                )
+            return Result.ok(tuple(parsed_rows))
+        except (
+            ImportError,
+            AttributeError,
+            ValueError,
+            TypeError,
+            KeyError,
+            OSError,
+            RuntimeError,
+            InvalidOperation,
+        ) as exc:
+            return Result.fail(
+                IntervalMalformedBatchError.with_reason(f"Malformed Parquet interval batch: {exc}")
+            )
+
     def _parse_raw_rows(
         self,
         raw_payload_bytes: bytes,
         payload_format: IntervalPayloadFormat,
     ) -> Result[tuple[_ParsedRawInterval, ...], IntervalMalformedBatchError]:
+        if payload_format is IntervalPayloadFormat.PARQUET:
+            return self._parse_columnar_file(raw_payload_bytes)
+
         try:
             text_payload = raw_payload_bytes.decode("utf-8")
         except UnicodeDecodeError as exc:
@@ -516,6 +634,8 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
             reactive_kvarh = _parse_decimal(item.get("reactive_kvarh", "0.0000"))
             voltage_raw = item.get("voltage_v", 240.0)
             voltage_v = float(str(voltage_raw)) if voltage_raw is not None else 240.0
+            if not Decimal(str(voltage_v)).is_finite():
+                raise ValueError(f"Non-finite voltage '{voltage_raw}'")
             multiplier = _parse_decimal(item.get("multiplier", "1.0"), default="1.0")
 
             raw_tariff = item.get("tariff_bucket")

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from ip.engine.adapters.outbound.database.data_plane.mappers import trace_event_to_domain
 from ip.engine.adapters.outbound.database.models.data_plane import (
+    BatchManifestModel,
     InboundRecordModel,
     IpDataPlaneOutboxRecord,
     IpTraceEventModel,
@@ -15,6 +16,7 @@ from ip.engine.adapters.outbound.database.models.data_plane import (
 from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.enums import PipelineStage
+from ip.engine.domain.intervals.enums import BatchManifestStatus
 from ip.engine.domain.trace import IpTraceStatus, map_outbound_status_to_trace_status
 from outbox.domain.constants import OutboxStatus
 from seedwork.domain.types import JsonDict
@@ -58,7 +60,55 @@ _OUTBOUND_TRACE_STATUS_COL = case(
     else_=OutboundRecordModel.status,
 )
 
+_MANIFEST_TRACE_STATUS_COL = case(
+    (
+        BatchManifestModel.status == BatchManifestStatus.PROCESSING.value,
+        IpTraceStatus.PENDING.value,
+    ),
+    (
+        BatchManifestModel.status == BatchManifestStatus.COMPLETED.value,
+        IpTraceStatus.PROCESSED.value,
+    ),
+    (
+        BatchManifestModel.status == BatchManifestStatus.FAILED.value,
+        IpTraceStatus.FAILED.value,
+    ),
+    (
+        BatchManifestModel.status == BatchManifestStatus.INGESTED.value,
+        IpTraceStatus.INGESTED.value,
+    ),
+    else_=IpTraceStatus.INGESTED.value,
+)
+
+
+def map_manifest_status_to_trace_status(status: BatchManifestStatus | str) -> IpTraceStatus:
+    resolved = status if isinstance(status, BatchManifestStatus) else BatchManifestStatus(status)
+    if resolved is BatchManifestStatus.PROCESSING:
+        return IpTraceStatus.PENDING
+    if resolved is BatchManifestStatus.COMPLETED:
+        return IpTraceStatus.PROCESSED
+    if resolved is BatchManifestStatus.FAILED:
+        return IpTraceStatus.FAILED
+    return IpTraceStatus.INGESTED
+
+
 IP_TRACE_STAGE_SPECS: tuple[TraceStageSpecPort, ...] = (
+    TraceStageSpec(
+        model_cls=BatchManifestModel,
+        timestamp_col=BatchManifestModel.created_at,
+        status_col=_MANIFEST_TRACE_STATUS_COL,
+        correlation_cols=(BatchManifestModel.correlation_id,),
+        to_attempt_row=lambda bch: TraceStageAttemptRow(
+            trace_id=bch.trace_id,
+            correlation_id=bch.correlation_id,
+            status=map_manifest_status_to_trace_status(bch.status),
+            primary_layer=PipelineStage.NORMALIZE,
+            created_at=bch.created_at,
+            replay_count=0,
+            parent_trace_id=None,
+            original_trace_id=None,
+        ),
+    ),
     TraceStageSpec(
         model_cls=InboundRecordModel,
         timestamp_col=InboundRecordModel.received_at,

@@ -105,6 +105,7 @@ from seedwork.domain.types import JsonDict
 from seedwork.events import DomainEvent
 from strace.domain import TraceEvent, TraceLineageItemDTO, TraceStatus
 from strace.ports import TraceRepositoryPort
+from tests.helpers.worker_fakes import InMemoryBatchManifestRepo
 
 # ---------------------------------------------------------------------------
 # In-Memory Test Fakes
@@ -393,6 +394,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     normalization_rejections: FakeNormalizationRejectionRepository
     pending_references: FakePendingReferenceRepository
     traces: FakeTraceRepository
+    batch_manifests: InMemoryBatchManifestRepo
 
     def __init__(self) -> None:
         self.traces = FakeTraceRepository()
@@ -400,6 +402,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
         self.normalization_ledger = FakeNormalizationLedgerRepository(self.traces)
         self.normalization_rejections = FakeNormalizationRejectionRepository()
         self.pending_references = FakePendingReferenceRepository()
+        self.batch_manifests = InMemoryBatchManifestRepo()
         self.committed = False
 
     async def commit(self) -> None:

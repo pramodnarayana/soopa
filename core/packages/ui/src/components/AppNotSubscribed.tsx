@@ -1,5 +1,5 @@
-import { AlertCircle, Box } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { AlertCircle } from 'lucide-react';
+import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 
 interface AppNotSubscribedProps {
   appName: string;
@@ -12,8 +12,8 @@ export function AppNotSubscribed({ appName }: AppNotSubscribedProps) {
         <Card>
           <CardHeader>
             <div className="flex justify-center mb-4">
-              <div className="p-3 bg-red-100 rounded-full">
-                <AlertCircle className="w-8 h-8 text-red-600" />
+              <div className="rounded-full bg-status-critical-bg p-3">
+                <AlertCircle className="h-8 w-8 text-status-critical-fg" />
               </div>
             </div>
             <div className="text-center">

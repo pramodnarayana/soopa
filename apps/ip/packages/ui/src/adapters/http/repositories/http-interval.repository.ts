@@ -95,6 +95,7 @@ export class HttpIntervalRepository implements IntervalRepositoryPort {
       {
         params: {
           service_date: params.serviceDate,
+          connection_id: params.connectionId,
           feeder_id: params.feederId,
           source_meter_id: params.sourceDeviceId,
         },

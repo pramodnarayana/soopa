@@ -6,9 +6,9 @@
 - **Location:** [`ip_gear2_data_plane_flow_architecture.md`](file:///Users/apple/soopa_mono/apps/ip/docs/ip_gear2_data_plane_flow_architecture.md)
 - **Bounded Context:** Integration Platform Data & Visibility Planes (`ip.engine`)
 - **Companion Specifications:**
-  - [`ip_gear1_data_plane_flow_architecture.md`](file:///Users/apple/soopa_mono/apps/ip/docs/ip_gear1_data_plane_flow_architecture.md) (Transactional Entity Plane)
-  - [`dual_gear_high_frequency_telemetry_design.md`](file:///Users/apple/soopa_mono/apps/ip/docs/dual_gear_high_frequency_telemetry_design.md) (Master Dual-Gear Vision)
-  - [`hybrid_tenancy_and_private_cloud_design.md`](file:///Users/apple/soopa_mono/apps/ip/docs/hybrid_tenancy_and_private_cloud_design.md) (Cellular & Sharding Strategy)
+  - [`ip_gear1_data_plane_flow_architecture.md`](./ip_gear1_data_plane_flow_architecture.md) (Transactional Entity Plane)
+  - [`dual_gear_high_frequency_telemetry_design.md`](./dual_gear_high_frequency_telemetry_design.md) (Master Dual-Gear Vision)
+  - [`hybrid_tenancy_and_private_cloud_design.md`](./hybrid_tenancy_and_private_cloud_design.md) (Cellular & Sharding Strategy)
 
 ---
 
@@ -100,7 +100,9 @@ async def persist_arrow_batch_zero_copy(
     2. Zero Python GIL contention (C++ compiled Arrow buffers stream over socket).
     3. Sustained throughput: > 1,500,000 rows/sec per worker thread.
     """
-    client.insert_arrow(
+    # Offload synchronous ClickHouse socket write to worker thread pool to avoid blocking asyncio event loop
+    await asyncio.to_thread(
+        client.insert_arrow,
         table=table_name,
         arrow_table=arrow_table,
     )
@@ -197,37 +199,39 @@ ClickHouse triggers internal `MATERIALIZED VIEW` pipelines automatically upon ev
 
 ```sql
 -- MANDATORY INVARIANT 3: Real-Time Pre-Aggregated Hourly View
-CREATE TABLE telemetry.hourly_interval_rollups_local ON CLUSTER '{cluster}' (
+CREATE TABLE ip_intervals.hourly_interval_rollups_local ON CLUSTER '{cluster}' (
     tenant_id UUID,
     gem_device_id UUID,
     hour_start_utc DateTime('UTC'),
     feeder_id LowCardinality(String),
     tariff_bucket Enum8('PEAK' = 1, 'SHOULDER' = 2, 'OFF_PEAK' = 3),
+    interval_duration_sec UInt16,
     interval_count SimpleAggregateFunction(sum, UInt32),
     total_kwh_delivered SimpleAggregateFunction(sum, Decimal64(6)),
     total_kwh_received SimpleAggregateFunction(sum, Decimal64(6)),
     max_kw_demand SimpleAggregateFunction(max, Decimal64(4)),
-    avg_voltage_v SimpleAggregateFunction(avg, Decimal32(3))
+    avg_voltage_v AggregateFunction(avg, Decimal32(3))
 )
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/hourly_interval_rollups_local', '{replica}')
 PARTITION BY toYYYYMM(hour_start_utc)
 ORDER BY (tenant_id, gem_device_id, hour_start_utc);
 
-CREATE MATERIALIZED VIEW telemetry.hourly_interval_rollups_mv ON CLUSTER '{cluster}'
-TO telemetry.hourly_interval_rollups_local AS
+CREATE MATERIALIZED VIEW ip_intervals.hourly_interval_rollups_mv ON CLUSTER '{cluster}'
+TO ip_intervals.hourly_interval_rollups_local AS
 SELECT
     tenant_id,
     gem_device_id,
-    toStartOfHour(interval_end_utc) AS hour_start_utc,
+    toStartOfHour(interval_end_utc - INTERVAL 1 MILLISECOND) AS hour_start_utc,
     feeder_id,
     tariff_bucket,
+    interval_duration_sec,
     count() AS interval_count,
     sum(scaled_kwh_delivered) AS total_kwh_delivered,
     sum(scaled_kwh_received) AS total_kwh_received,
-    max(scaled_kwh_delivered * 4) AS max_kw_demand, -- 15-min interval to kW multiplier
-    avg(voltage_v) AS avg_voltage_v
-FROM telemetry.meter_interval_readings_local
-GROUP BY tenant_id, gem_device_id, hour_start_utc, feeder_id, tariff_bucket;
+    max((3600 / interval_duration_sec) * scaled_kwh_delivered) AS max_kw_demand,
+    avgState(voltage_v) AS avg_voltage_v
+FROM ip_intervals.interval_readings_15m_local
+GROUP BY tenant_id, gem_device_id, hour_start_utc, feeder_id, tariff_bucket, interval_duration_sec;
 ```
 
 ---
@@ -240,7 +244,7 @@ To ensure that no developer or future pull request introduces regressions agains
 | :--- | :--- | :--- | :--- |
 | **1. Zero-Copy Arrow IPC** | **Custom Semgrep Rule** (`semgrep-arrow-zerocopy.yml`) | Forbids `.iter_rows()`, `.to_dict()`, and `cursor.executemany` on any telemetry dataframe within `apps/ip`. | **BLOCKS PR** (Build fails) |
 | **1. Zero-Copy Arrow IPC** | **Benchmark Test** (`test_arrow_memory_profile.py`) | Asserts memory allocation for 50,000 intervals is $< 10\text{ MB}$ and zero Python PyDict objects are allocated. | **BLOCKS PR** (Test fails) |
-| **2. ReplacingMergeTree** | **ClickHouse DDL Linter** | Enforces that all telemetry tables declare `ReplicatedReplacingMergeTree` with composite sort key `(tenant_id, gem_device_id, interval_end_utc)`. | **BLOCKS PR** (Migration fails) |
+| **2. ReplacingMergeTree** | **Planned Roadmap Gate** (ClickHouse DDL Validator) | Validates telemetry tables declare `ReplicatedReplacingMergeTree` with composite sort key `(tenant_id, gem_device_id, interval_end_utc)`. | **PLANNED** (Roadmap milestone) |
 | **3. AggregatingMergeTree MVs**| **Query Latency Assertion** (`test_telemetry_query_latency.py`) | Executes 96-slot completeness and monthly TOU queries against a 10M-row test fixture; asserts execution time $< 25\text{ms}$. | **BLOCKS PR** (Performance regression) |
 
 ---
@@ -341,7 +345,7 @@ Each raw 15-minute interval reading contains: `tenant_id` (UUID), `meter_id` (St
 - **Cumulative Storage Over Time:**
   - **30-Day Hot Window (ClickHouse):** $30 \times 0.46\text{ GB} = 13.8\text{ GB}$
   - **90-Day Hot Window (ClickHouse TTL):** $90 \times 0.46\text{ GB} = 41.4\text{ GB}$ (trivial footprint on NVMe/EBS!)
-  - **1-Year Storage (ClickHouse + S3 Parquet):** $365 \times 0.46\text{ GB} = 168.2\text{ GB}$
+  - **1-Year Storage (90-Day ClickHouse Hot + 365-Day S3 Parquet Cold):** $(90 \times 0.46\text{ GB}) + (365 \times 0.54\text{ GB}) \approx 41.4\text{ GB} + 197.1\text{ GB} \approx 238.5\text{ GB}$ (single ClickHouse copy; excludes ClickHouse replicas and uncompressed raw logs)
   - **7-Year Regulatory Audit Lakehouse (Cold S3 Glacier/Standard):** $7 \times 365 \times 0.54\text{ GB} \approx 1.38\text{ TB}$
 
 ### 4.4 Compute Footprint & CPU Core Utilization
@@ -479,12 +483,18 @@ sequenceDiagram
     SQS->>Worker: Lease Batch Manifest ticket (P1_LIVE)
     Worker->>PG: Record Manifest Ingested (status=PROCESSING, raw_count=50000)
     Worker->>S3: Stream Parquet chunk into RAM as Apache Arrow RecordBatch (~12ms)
-    Worker->>Worker: Arrow GEM Rosetta Join (50K IDs mapped in ~4ms)
-    Worker->>Worker: Polars SIMD VEE Validation (Delta kWh, spike quarantine)
+    Worker->>Worker: Verify object bytes against manifest.payload_sha256
+    alt SHA-256 Checksum Mismatch
+        Worker->>PG: Record Manifest FAILED (status=FAILED, reason="SHA256_MISMATCH")
+        Worker-->>SQS: NACK / drop to DLQ
+    else Checksum Verified
+        Worker->>Worker: Arrow GEM Rosetta Join (50K IDs mapped in ~4ms)
+        Worker->>Worker: Polars SIMD VEE Validation (Delta kWh, spike quarantine)
+    end
 
     alt Emergency Grid Outage Detected (Voltage == 0.0V)
         Note over Worker,Gear1: EXCEPTION PROMOTION BRIDGE (<2s E2E SLA)
-        Worker->>Worker: Storm-Group 12 adjacent 0V meters by Feeder F-12
+        Worker->>Worker: Storm-Group >= 25 adjacent 0V meters by Feeder & Substation
         Worker->>Gear1: Publish FeederOutageClusterDetected to P0_CRITICAL Queue
         Note right of Gear1: Gear-1 Worker claims P0 immediately & creates OMS Trouble Ticket
     end
@@ -522,30 +532,32 @@ CREATE TABLE telemetry.meter_interval_readings_local ON CLUSTER '{cluster}' (
     tariff_bucket Enum8('PEAK' = 1, 'SHOULDER' = 2, 'OFF_PEAK' = 3),
     quality_status Enum8('VALID' = 1, 'ESTIMATED_VEE' = 2, 'ESTIMATED_MANUAL' = 3, 'DST_AMBIGUOUS' = 4, 'POWER_DOWN' = 5, 'QUARANTINED_SPIKE' = 6),
     interval_end_utc DateTime64(3, 'UTC'),
+    interval_duration_sec UInt16 DEFAULT 900,
     scaled_kwh_delivered Decimal64(6) CODEC(ZSTD(3)),
     scaled_kwh_received Decimal64(6) CODEC(ZSTD(3)),
     reactive_kvarh Decimal64(6) CODEC(ZSTD(3)),
     voltage_v Decimal32(3) CODEC(ZSTD(3)),
     source_batch_id UUID,
     parquet_row_offset UInt32,
-    updated_at_utc DateTime64(3, 'UTC')
+    updated_at_utc DateTime64(3, 'UTC'),
+    revision_version UInt64
 )
-ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/meter_interval_readings_local', '{replica}', updated_at_utc)
+ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/interval_readings_15m_local', '{replica}', revision_version)
 PARTITION BY toYYYYMM(interval_end_utc)
 ORDER BY (tenant_id, gem_device_id, interval_end_utc)
 TTL toDateTime(interval_end_utc) + INTERVAL 90 DAY DELETE;
 
 -- 2. Distributed Router (Hash Partitioning across Cluster to Prevent Whale Hotspots)
-CREATE TABLE telemetry.meter_interval_readings ON CLUSTER '{cluster}' AS telemetry.meter_interval_readings_local
+CREATE TABLE ip_intervals.interval_readings_15m ON CLUSTER '{cluster}' AS ip_intervals.interval_readings_15m_local
 ENGINE = Distributed(
     '{cluster}',
-    currentDatabase(),
-    'meter_interval_readings_local',
+    'ip_intervals',
+    'interval_readings_15m_local',
     cityHash64(tenant_id, gem_device_id)
 );
 
 -- 3. Strict Defense-in-Depth Row Policy for Multi-Tenancy
-CREATE ROW POLICY tenant_meter_isolation_policy ON telemetry.meter_interval_readings_local ON CLUSTER '{cluster}'
+CREATE ROW POLICY tenant_meter_isolation_policy ON ip_intervals.interval_readings_15m_local ON CLUSTER '{cluster}'
     FOR SELECT USING tenant_id = getSetting('SQL_soopa_tenant_id');
 ```
 
@@ -553,71 +565,90 @@ CREATE ROW POLICY tenant_meter_isolation_policy ON telemetry.meter_interval_read
 
 ```sql
 -- Target Table for Pre-Aggregated Hourly kWh Totals
-CREATE TABLE telemetry.hourly_interval_rollups_local ON CLUSTER '{cluster}' (
+CREATE TABLE ip_intervals.hourly_interval_rollups_local ON CLUSTER '{cluster}' (
     tenant_id UUID,
     gem_device_id UUID,
     hour_start_utc DateTime('UTC'),
     feeder_id LowCardinality(String),
     tariff_bucket Enum8('PEAK' = 1, 'SHOULDER' = 2, 'OFF_PEAK' = 3),
+    interval_duration_sec UInt16,
     interval_count SimpleAggregateFunction(sum, UInt32),
     total_kwh_delivered SimpleAggregateFunction(sum, Decimal64(6)),
     total_kwh_received SimpleAggregateFunction(sum, Decimal64(6)),
     max_kw_demand SimpleAggregateFunction(max, Decimal64(4)),
-    avg_voltage_v SimpleAggregateFunction(avg, Decimal32(3))
+    avg_voltage_v AggregateFunction(avg, Decimal32(3))
 )
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/hourly_interval_rollups_local', '{replica}')
 PARTITION BY toYYYYMM(hour_start_utc)
 ORDER BY (tenant_id, gem_device_id, hour_start_utc);
 
+-- Strict Defense-in-Depth Row Policy for Hourly Rollups
+CREATE ROW POLICY tenant_hourly_rollups_isolation_policy ON ip_intervals.hourly_interval_rollups_local ON CLUSTER '{cluster}'
+    FOR SELECT USING tenant_id = getSetting('SQL_soopa_tenant_id');
+
 -- Materialized View Triggered on Every Block Commit
-CREATE MATERIALIZED VIEW telemetry.hourly_interval_rollups_mv ON CLUSTER '{cluster}'
-TO telemetry.hourly_interval_rollups_local AS
+CREATE MATERIALIZED VIEW ip_intervals.hourly_interval_rollups_mv ON CLUSTER '{cluster}'
+TO ip_intervals.hourly_interval_rollups_local AS
 SELECT
     tenant_id,
     gem_device_id,
-    toStartOfHour(interval_end_utc) AS hour_start_utc,
+    toStartOfHour(interval_end_utc - INTERVAL 1 MILLISECOND) AS hour_start_utc,
     feeder_id,
     tariff_bucket,
+    interval_duration_sec,
     count() AS interval_count,
     sum(scaled_kwh_delivered) AS total_kwh_delivered,
     sum(scaled_kwh_received) AS total_kwh_received,
-    max(scaled_kwh_delivered * 4) AS max_kw_demand, -- 15-min to kW demand multiplier
-    avg(voltage_v) AS avg_voltage_v
-FROM telemetry.meter_interval_readings_local
-GROUP BY tenant_id, gem_device_id, hour_start_utc, feeder_id, tariff_bucket;
+    max((3600 / interval_duration_sec) * scaled_kwh_delivered) AS max_kw_demand,
+    avgState(voltage_v) AS avg_voltage_v
+FROM ip_intervals.interval_readings_15m_local
+GROUP BY tenant_id, gem_device_id, hour_start_utc, feeder_id, tariff_bucket, interval_duration_sec;
 ```
 
 ### 7.3 Daily 96-Slot Completeness Heatmap View (Instant UI Rendering)
 
 ```sql
--- Target Table for 96-Slot Completeness Tracking
-CREATE TABLE telemetry.daily_completeness_local ON CLUSTER '{cluster}' (
+-- Target Table for Daily Completeness Tracking (Supporting 5-min, 15-min, and 60-min streams)
+CREATE TABLE ip_intervals.daily_completeness_local ON CLUSTER '{cluster}' (
     tenant_id UUID,
     connection_id UUID,
+    stream_name LowCardinality(String),
     service_date Date,
     feeder_id LowCardinality(String),
-    expected_intervals UInt8,
+    expected_intervals_total SimpleAggregateFunction(sum, UInt64),
     received_intervals SimpleAggregateFunction(sum, UInt32),
     valid_intervals SimpleAggregateFunction(sum, UInt32),
     quarantined_intervals SimpleAggregateFunction(sum, UInt32)
 )
 ENGINE = ReplicatedAggregatingMergeTree('/clickhouse/tables/{shard}/daily_completeness_local', '{replica}')
 PARTITION BY toYYYYMM(service_date)
-ORDER BY (tenant_id, connection_id, service_date);
+ORDER BY (tenant_id, connection_id, service_date, feeder_id);
 
-CREATE MATERIALIZED VIEW telemetry.daily_completeness_mv ON CLUSTER '{cluster}'
-TO telemetry.daily_completeness_local AS
+-- Strict Defense-in-Depth Row Policy for Daily Completeness
+CREATE ROW POLICY tenant_daily_completeness_isolation_policy ON ip_intervals.daily_completeness_local ON CLUSTER '{cluster}'
+    FOR SELECT USING tenant_id = getSetting('SQL_soopa_tenant_id');
+
+CREATE MATERIALIZED VIEW ip_intervals.daily_completeness_mv ON CLUSTER '{cluster}'
+TO ip_intervals.daily_completeness_local AS
 SELECT
     tenant_id,
     connection_id,
-    toDate(interval_end_utc) AS service_date,
+    'interval_readings' AS stream_name,
+    toDate(interval_end_utc - INTERVAL 1 MILLISECOND) AS service_date,
     feeder_id,
-    96 AS expected_intervals,
+    uniqExact(gem_device_id) * (86400 / interval_duration_sec) AS expected_intervals_total,
     count() AS received_intervals,
     countIf(quality_status = 'VALID') AS valid_intervals,
     countIf(quality_status = 'QUARANTINED_SPIKE') AS quarantined_intervals
-FROM telemetry.meter_interval_readings_local
-GROUP BY tenant_id, connection_id, service_date, feeder_id;
+FROM ip_intervals.interval_readings_15m_local
+GROUP BY tenant_id, connection_id, service_date, feeder_id, interval_duration_sec;
+```
+
+#### Inventory-Backed Completeness Queries
+To guarantee zero false positives when an active meter transmits zero readings for an entire calendar day, API and dashboard readers must not query `daily_completeness_mv` in isolation. Instead, consumers must execute an **Inventory-Backed Left-Join**:
+1. Derive active provisioned device counts per connection and feeder from the PostgreSQL / GEM device registry.
+2. Left-join `ip_intervals.daily_completeness_mv` against that expected inventory dimension.
+3. Days with zero arriving batches cleanly resolve to `received_intervals = 0`, `valid_intervals = 0`, and `completeness_percentage = 0.0%`, surfacing total-loss feeder dropouts immediately on the Command Center ribbon.
 ```
 
 ---
@@ -659,20 +690,43 @@ Stage 2 normalizes macro-batches entirely in RAM with zero per-row Python overhe
 ### 8.2 Storm-Safe Spatial Outage Grouping (Exception Bridge)
 When a severe weather event or physical tree strike severs a primary feeder line, hundreds of smart meters simultaneously emit `voltage_v == 0.0` (last-gasp outage signals).
 - **The Danger of Naive Promotion:** If the worker generated an individual outage trouble ticket for each meter, it would bombard the Outage Management System (OMS) and Gear 1 with 8,000 duplicate events, exhausting PostgreSQL connections.
-- **The Storm-Safe Solution:** The Polars worker aggregates zero-voltage reads by `(feeder_id, transformer_id)` within the batch. If $\ge 25$ meters on the same feeder report zero voltage simultaneously, the worker rolls them into a single consolidated `FeederOutageClusterDetected` domain event:
+- **The Storm-Safe Solution:** The Polars worker accumulates zero-voltage reads across batches grouped by `(feeder_id, substation_id)` within a defined simultaneous time window (e.g. 15 minutes). If $\ge 25$ distinct meters on the same feeder report zero voltage simultaneously, the worker rolls them into a single consolidated `FeederOutageClusterDetected` domain event rather than promoting individual events per meter:
 
 ```python
 # Storm-Safe Spatial Outage Aggregation in Polars
+from datetime import datetime, timezone
 import polars as pl
 
-def detect_feeder_outage_clusters(df: pl.DataFrame, storm_threshold: int = 25) -> list[dict]:
-    """Detects and clusters multi-meter power outages on shared grid infrastructure."""
+def detect_feeder_outage_clusters(
+    df: pl.DataFrame,
+    storm_threshold: int = 25,
+    time_window_minutes: int = 15,
+    freshness_window_minutes: int = 60,
+    reference_time: datetime | None = None,
+) -> list[dict]:
+    """Detects and clusters multi-meter power outages on shared grid infrastructure within a common time window."""
+    now_utc = reference_time or datetime.now(timezone.utc)
+    freshness_threshold = now_utc.timestamp() - (freshness_window_minutes * 60)
+
+    # 1. Filter zero-voltage readings and enforce freshness window
+    zero_v = df.filter(
+        (pl.col("voltage_v") == 0.0)
+        & (pl.col("interval_end_utc").dt.epoch(time_unit="s") >= freshness_threshold)
+    )
+
+    # 2. Truncate timestamp to common time window (e.g. 15-min bucketing)
+    windowed = zero_v.with_columns(
+        pl.col("interval_end_utc")
+        .dt.truncate(f"{time_window_minutes}m")
+        .alias("outage_window_utc")
+    )
+
+    # 3. Group by spatial grid coordinates and common time window, counting distinct meters
     outages = (
-        df.filter(pl.col("voltage_v") == 0.0)
-        .group_by(["feeder_id", "substation_id"])
+        windowed.group_by(["feeder_id", "substation_id", "outage_window_utc"])
         .agg([
-            pl.count().alias("outage_meter_count"),
-            pl.col("source_meter_id").alias("affected_meter_ids"),
+            pl.col("source_meter_id").n_unique().alias("outage_meter_count"),
+            pl.col("source_meter_id").unique().alias("affected_meter_ids"),
             pl.col("interval_end_utc").min().alias("outage_start_utc"),
         ])
         .filter(pl.col("outage_meter_count") >= storm_threshold)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Final, Protocol
 
@@ -103,6 +103,18 @@ TO ALL;
 EXPECTED_INTERVALS_PER_DAY: Final[int] = 96
 
 
+def _derive_stream_cadence(stream_name: str) -> tuple[int, int]:
+    """Derives (interval_duration_sec, expected_intervals_per_day) from stream cadence."""
+    lower = stream_name.lower()
+    if "15m" in lower or "900s" in lower or "15_min" in lower:
+        return 900, 96
+    if "5m" in lower or "300s" in lower or "5_min" in lower:
+        return 300, 288
+    if "60m" in lower or "hourly" in lower or "3600s" in lower or "1h" in lower:
+        return 3600, 24
+    return 900, 96
+
+
 class ColumnarArrowDriverPort(Protocol):
     """Optional remote columnar binary driver port for native Arrow IPC streaming."""
 
@@ -130,17 +142,19 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
         # Pre-aggregated Materialized View state tables (Invariant 3)
         self._mv_hourly: dict[tuple[str, str, datetime, TariffBucket], HourlyIntervalRollup] = {}
         self._mv_daily_tou: dict[tuple[str, str, date], DailyTouBillingRollup] = {}
-        self._mv_completeness: dict[tuple[str, str, date, str], IntervalWindowCompleteness] = {}
+        self._mv_completeness: dict[
+            tuple[str, str, str, date, str], IntervalWindowCompleteness
+        ] = {}
 
-    async def insert_arrow_batch(
+    async def insert_columnar_batch(
         self,
         *,
         tenant_id: str,
         batch_id: str,
         stream_name: str,
-        arrow_ipc_bytes: bytes,
+        columnar_bytes: bytes,
     ) -> Result[int, IpError]:
-        decode_res = decode_arrow_ipc_stream(arrow_ipc_bytes)
+        decode_res = decode_arrow_ipc_stream(columnar_bytes)
         if decode_res.is_err:
             return Result.fail(decode_res.unwrap_err())
 
@@ -149,7 +163,7 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
             try:
                 await self._driver.insert_arrow(
                     "ip_intervals.interval_readings_15m",
-                    arrow_ipc_bytes,
+                    columnar_bytes,
                 )
             except Exception as exc:
                 logger.exception(
@@ -166,9 +180,13 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
                 )
 
         self._stream_by_batch[(tenant_id, batch_id)] = stream_name
-        affected_tenants: set[str] = {tenant_id}
+
+        affected_hourly_keys: set[tuple[str, str, datetime, TariffBucket]] = set()
+        affected_tou_keys: set[tuple[str, str, date]] = set()
+        affected_comp_keys: set[tuple[str, str, str, date, str]] = set()
 
         # Invariant 2: ReplacingMergeTree(updated_at_utc) deduplication by (tenant_id, gem_device_id, interval_end_utc)
+        # ClickHouse ReplacingMergeTree semantics: higher updated_at_utc wins; on ties, last inserted row is kept
         for reading in readings:
             if reading.tenant_id != tenant_id:
                 continue
@@ -177,55 +195,92 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
             if existing is None or reading.updated_at_utc >= existing.updated_at_utc:
                 self._replacing_tree[tree_key] = reading
 
-        # Invariant 3: Incrementally refresh pre-aggregated Materialized View states for affected tenant
-        for affected_tenant in affected_tenants:
-            self._rebuild_materialized_views_for_tenant(affected_tenant)
+                period_start = reading.interval_end_utc - timedelta(milliseconds=1)
+                h_start = period_start.replace(minute=0, second=0, microsecond=0)
+                s_date = period_start.date()
+
+                affected_hourly_keys.add(
+                    (reading.tenant_id, reading.gem_device_id, h_start, reading.tariff_bucket)
+                )
+                affected_tou_keys.add((reading.tenant_id, reading.gem_device_id, s_date))
+                affected_comp_keys.add(
+                    (
+                        reading.tenant_id,
+                        reading.connection_id,
+                        stream_name,
+                        s_date,
+                        reading.feeder_id,
+                    )
+                )
+
+        # Invariant 3: Incrementally update pre-aggregated Materialized View states for affected buckets
+        self._update_materialized_views_incrementally(
+            tenant_id=tenant_id,
+            stream_name=stream_name,
+            affected_hourly_keys=affected_hourly_keys,
+            affected_tou_keys=affected_tou_keys,
+            affected_comp_keys=affected_comp_keys,
+        )
 
         logger.info(
             "columnar_arrow_batch_committed",
             tenant_id=tenant_id,
             batch_id=batch_id,
             rows_committed=len(readings),
-            arrow_bytes=len(arrow_ipc_bytes),
+            columnar_bytes=len(columnar_bytes),
         )
         return Result.ok(len(readings))
 
-    def _rebuild_materialized_views_for_tenant(self, tenant_id: str) -> None:
-        """Maintains pre-aggregated AggregatingMergeTree MV states for the given tenant."""
-        for k_hourly in [k for k in self._mv_hourly if k[0] == tenant_id]:
-            del self._mv_hourly[k_hourly]
-        for k_tou in [k for k in self._mv_daily_tou if k[0] == tenant_id]:
-            del self._mv_daily_tou[k_tou]
-        for k_comp in [k for k in self._mv_completeness if k[0] == tenant_id]:
-            del self._mv_completeness[k_comp]
+    async def insert_arrow_batch(
+        self,
+        *,
+        tenant_id: str,
+        batch_id: str,
+        stream_name: str,
+        arrow_ipc_bytes: bytes,
+    ) -> Result[int, IpError]:
+        """Compatibility bridge delegating to insert_columnar_batch."""
+        return await self.insert_columnar_batch(
+            tenant_id=tenant_id,
+            batch_id=batch_id,
+            stream_name=stream_name,
+            columnar_bytes=arrow_ipc_bytes,
+        )
 
-        tenant_readings = [
-            r for (t_id, _, _), r in self._replacing_tree.items() if t_id == tenant_id
-        ]
+    def _update_materialized_views_incrementally(
+        self,
+        *,
+        tenant_id: str,
+        stream_name: str,
+        affected_hourly_keys: set[tuple[str, str, datetime, TariffBucket]],
+        affected_tou_keys: set[tuple[str, str, date]],
+        affected_comp_keys: set[tuple[str, str, str, date, str]],
+    ) -> None:
+        """Incrementally maintains AggregatingMergeTree MV states only for affected buckets."""
+        duration_sec, _ = _derive_stream_cadence(stream_name)
+        kw_multiplier = Decimal(str(3600 // max(1, duration_sec)))
 
-        hourly_buckets: dict[tuple[str, str, datetime, TariffBucket], list[IntervalReading]] = {}
-        daily_tou_buckets: dict[tuple[str, str, date], list[IntervalReading]] = {}
-        completeness_buckets: dict[tuple[str, str, date, str], list[IntervalReading]] = {}
+        for t_id, gem_id, h_start, tariff in affected_hourly_keys:
+            rows = [
+                r
+                for (rt_id, rgem_id, _), r in self._replacing_tree.items()
+                if rt_id == t_id
+                and rgem_id == gem_id
+                and r.tariff_bucket is tariff
+                and (r.interval_end_utc - timedelta(milliseconds=1)).replace(
+                    minute=0, second=0, microsecond=0
+                )
+                == h_start
+                and r.quality_status is not CimQualityStatus.QUARANTINED_SPIKE
+            ]
+            if not rows:
+                self._mv_hourly.pop((t_id, gem_id, h_start, tariff), None)
+                continue
 
-        for r in tenant_readings:
-            hour_start = r.interval_end_utc.replace(minute=0, second=0, microsecond=0)
-            service_dt = r.interval_end_utc.date()
-
-            if r.quality_status is not CimQualityStatus.QUARANTINED_SPIKE:
-                h_key = (r.tenant_id, r.gem_device_id, hour_start, r.tariff_bucket)
-                hourly_buckets.setdefault(h_key, []).append(r)
-
-            tou_key = (r.tenant_id, r.gem_device_id, service_dt)
-            daily_tou_buckets.setdefault(tou_key, []).append(r)
-
-            comp_key = (r.tenant_id, r.connection_id, service_dt, r.feeder_id)
-            completeness_buckets.setdefault(comp_key, []).append(r)
-
-        for (t_id, gem_id, h_start, tariff), rows in hourly_buckets.items():
             total_del = sum((x.scaled_kwh_delivered for x in rows), Decimal("0.0000"))
             total_rec = sum((x.scaled_kwh_received for x in rows), Decimal("0.0000"))
             max_kw = max(
-                (x.scaled_kwh_delivered * Decimal("4") for x in rows),
+                (x.scaled_kwh_delivered * kw_multiplier for x in rows),
                 default=Decimal("0.0000"),
             )
             avg_v = sum(x.voltage_v for x in rows) / len(rows)
@@ -243,7 +298,18 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
                 avg_voltage_v=round(avg_v, 4),
             )
 
-        for (t_id, gem_id, s_date), rows in daily_tou_buckets.items():
+        for t_id, gem_id, s_date in affected_tou_keys:
+            rows = [
+                r
+                for (rt_id, rgem_id, _), r in self._replacing_tree.items()
+                if rt_id == t_id
+                and rgem_id == gem_id
+                and (r.interval_end_utc - timedelta(milliseconds=1)).date() == s_date
+            ]
+            if not rows:
+                self._mv_daily_tou.pop((t_id, gem_id, s_date), None)
+                continue
+
             valid_rows = [
                 x for x in rows if x.quality_status is not CimQualityStatus.QUARANTINED_SPIKE
             ]
@@ -279,7 +345,7 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
                 Decimal("0.0000"),
             )
             max_kw = max(
-                (x.scaled_kwh_delivered * Decimal("4") for x in valid_rows),
+                (x.scaled_kwh_delivered * kw_multiplier for x in valid_rows),
                 default=Decimal("0.0000"),
             )
             latest_row = max(rows, key=lambda x: x.updated_at_utc)
@@ -297,34 +363,50 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
                 valid_intervals=len(valid_rows),
                 quarantined_intervals=len(quarantined_rows),
                 latest_batch_id=latest_row.source_batch_id,
+                connection_id=latest_row.connection_id,
                 delivery_receipt_id=latest_row.delivery_receipt_id,
             )
 
-        for (t_id, conn_id, s_date, f_id), rows in completeness_buckets.items():
+        for t_id, conn_id, s_name, s_date, f_id in affected_comp_keys:
+            rows = [
+                r
+                for (rt_id, _, _), r in self._replacing_tree.items()
+                if rt_id == t_id
+                and r.connection_id == conn_id
+                and self._stream_by_batch.get((t_id, r.source_batch_id), s_name) == s_name
+                and (r.interval_end_utc - timedelta(milliseconds=1)).date() == s_date
+                and r.feeder_id == f_id
+            ]
+            if not rows:
+                self._mv_completeness.pop((t_id, conn_id, s_name, s_date, f_id), None)
+                continue
+
+            _, expected_per_meter = _derive_stream_cadence(s_name)
             active_devices = {x.source_meter_id for x in rows}
             active_device_count = len(active_devices)
-            expected_total = active_device_count * EXPECTED_INTERVALS_PER_DAY
+            expected_total = active_device_count * expected_per_meter
             received_total = len(rows)
             valid_total = sum(
                 1 for x in rows if x.quality_status is not CimQualityStatus.QUARANTINED_SPIKE
             )
             quarantined_total = received_total - valid_total
             pct = round((valid_total / expected_total) * 100.0, 2) if expected_total > 0 else 0.0
-            latest_batch = rows[-1].source_batch_id
-            stream = self._stream_by_batch.get((t_id, latest_batch), "interval_readings")
-            self._mv_completeness[(t_id, conn_id, s_date, f_id)] = IntervalWindowCompleteness(
-                tenant_id=t_id,
-                connection_id=conn_id,
-                stream_name=stream,
-                service_date=s_date,
-                feeder_id=f_id,
-                expected_intervals_per_meter=EXPECTED_INTERVALS_PER_DAY,
-                active_meter_count=active_device_count,
-                expected_intervals_total=expected_total,
-                received_intervals_total=received_total,
-                valid_intervals_total=valid_total,
-                quarantined_intervals_total=quarantined_total,
-                completeness_percentage=min(100.0, pct),
+
+            self._mv_completeness[(t_id, conn_id, s_name, s_date, f_id)] = (
+                IntervalWindowCompleteness(
+                    tenant_id=t_id,
+                    connection_id=conn_id,
+                    stream_name=s_name,
+                    service_date=s_date,
+                    feeder_id=f_id,
+                    expected_intervals_per_meter=expected_per_meter,
+                    active_meter_count=active_device_count,
+                    expected_intervals_total=expected_total,
+                    received_intervals_total=received_total,
+                    valid_intervals_total=valid_total,
+                    quarantined_intervals_total=quarantined_total,
+                    completeness_percentage=min(100.0, pct),
+                )
             )
 
     async def get_daily_completeness(
@@ -337,11 +419,11 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
     ) -> Result[tuple[IntervalWindowCompleteness, ...], IpError]:
         matched = [
             comp
-            for (t_id, c_id, s_date, _), comp in self._mv_completeness.items()
+            for (t_id, c_id, s_name, s_date, _), comp in self._mv_completeness.items()
             if t_id == tenant_id
             and c_id == connection_id
             and s_date == service_date
-            and (stream_name is None or comp.stream_name == stream_name)
+            and (stream_name is None or s_name == stream_name)
         ]
         matched.sort(key=lambda x: x.feeder_id)
         return Result.ok(tuple(matched))
@@ -369,6 +451,7 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
         *,
         tenant_id: str,
         service_date: date,
+        connection_id: str | None = None,
         feeder_id: str | None = None,
         source_meter_id: str | None = None,
     ) -> Result[tuple[DailyTouBillingRollup, ...], IpError]:
@@ -377,6 +460,7 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
             for (t_id, _, s_date), rollup in self._mv_daily_tou.items()
             if t_id == tenant_id
             and s_date == service_date
+            and (connection_id is None or rollup.connection_id == connection_id)
             and (feeder_id is None or rollup.feeder_id == feeder_id)
             and (source_meter_id is None or rollup.source_meter_id == source_meter_id)
         ]
@@ -395,7 +479,7 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
             for (t_id, _, _), r in self._replacing_tree.items()
             if t_id == tenant_id
             and r.source_meter_id == source_meter_id
-            and r.interval_end_utc.date() == service_date
+            and (r.interval_end_utc - timedelta(milliseconds=1)).date() == service_date
         ]
         matched.sort(key=lambda x: x.interval_end_utc)
         return Result.ok(tuple(matched))
@@ -405,18 +489,53 @@ class ColumnarIntervalRollupRepositoryAdapter(IntervalRollupRepositoryPort):
         *,
         tenant_id: str,
         batch_id: str,
-        delivery_receipt_id: str,
+        delivery_receipt_id: str | None,
     ) -> Result[int, IpError]:
         updated_count = 0
+        affected_hourly_keys: set[tuple[str, str, datetime, TariffBucket]] = set()
+        affected_tou_keys: set[tuple[str, str, date]] = set()
+        affected_comp_keys: set[tuple[str, str, str, date, str]] = set()
+
+        stream_name = self._stream_by_batch.get((tenant_id, batch_id), "interval_readings")
         for key, reading in list(self._replacing_tree.items()):
             if reading.tenant_id == tenant_id and reading.source_batch_id == batch_id:
-                self._replacing_tree[key] = replace(
-                    reading,
-                    delivery_receipt_id=delivery_receipt_id,
-                )
+                updated_reading = replace(reading, delivery_receipt_id=delivery_receipt_id)
+                self._replacing_tree[key] = updated_reading
                 updated_count += 1
+
+                period_start = updated_reading.interval_end_utc - timedelta(milliseconds=1)
+                h_start = period_start.replace(minute=0, second=0, microsecond=0)
+                s_date = period_start.date()
+
+                affected_hourly_keys.add(
+                    (
+                        updated_reading.tenant_id,
+                        updated_reading.gem_device_id,
+                        h_start,
+                        updated_reading.tariff_bucket,
+                    )
+                )
+                affected_tou_keys.add(
+                    (updated_reading.tenant_id, updated_reading.gem_device_id, s_date)
+                )
+                affected_comp_keys.add(
+                    (
+                        updated_reading.tenant_id,
+                        updated_reading.connection_id,
+                        stream_name,
+                        s_date,
+                        updated_reading.feeder_id,
+                    )
+                )
+
         if updated_count > 0:
-            self._rebuild_materialized_views_for_tenant(tenant_id)
+            self._update_materialized_views_incrementally(
+                tenant_id=tenant_id,
+                stream_name=stream_name,
+                affected_hourly_keys=affected_hourly_keys,
+                affected_tou_keys=affected_tou_keys,
+                affected_comp_keys=affected_comp_keys,
+            )
         return Result.ok(updated_count)
 
 

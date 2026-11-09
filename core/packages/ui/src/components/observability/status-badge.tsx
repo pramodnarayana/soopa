@@ -27,7 +27,7 @@ const TONE_CLASS_MAP: Readonly<Record<StatusToneValue, string>> = {
   critical: 'bg-status-critical-bg text-status-critical-fg border-status-critical-border',
   shadow: 'bg-status-shadow-bg text-status-shadow-fg border-status-shadow-border',
   replay: 'bg-status-replay-bg text-status-replay-fg border-status-replay-border',
-  neutral: 'bg-muted text-muted-foreground border-border',
+  neutral: 'bg-secondary text-secondary-foreground border-transparent',
 };
 
 const TONE_ICON_MAP: Readonly<
@@ -50,7 +50,7 @@ export interface StatusBadgeProps {
 }
 
 /**
- * Accessible status indicator that pairs iconography + solid border + text
+ * Accessible Casdoor-styled status badge that pairs iconography + crisp rounded-md border + text
  * so operational state is never communicated through color alone.
  */
 export function StatusBadge({
@@ -67,13 +67,13 @@ export function StatusBadge({
       variant="outline"
       title={title ?? label}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold tracking-tight tabular-nums',
+        'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium tabular-nums',
         TONE_CLASS_MAP[tone],
         className,
       )}
     >
       <span aria-hidden="true" className="inline-flex shrink-0">
-        {icon ?? <DefaultIcon className="h-3.5 w-3.5" />}
+        {icon ?? <DefaultIcon className="h-3 w-3" />}
       </span>
       <span>{label}</span>
     </Badge>

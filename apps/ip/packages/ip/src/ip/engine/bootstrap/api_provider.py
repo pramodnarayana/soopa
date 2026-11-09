@@ -83,6 +83,8 @@ class IpApiProvider(IpApiProviderPort):
         workflow_definition_registry_factory: Callable[[], WorkflowDefinitionRegistryPort]
         | None = None,
         domain_repository_factories: Mapping[str, DomainRepositoryFactory] | None = None,
+        columnar_batch_processor: ColumnarBatchProcessorPort | None = None,
+        interval_rollup_repository: IntervalRollupRepositoryPort | None = None,
     ) -> None:
         self._catalog_registry_factory = catalog_registry_factory
         self._transformer_registry_factory = (
@@ -93,8 +95,12 @@ class IpApiProvider(IpApiProviderPort):
             workflow_definition_registry_factory or create_empty_workflow_definition_registry
         )
         self._domain_repository_factories = domain_repository_factories
-        self._columnar_batch_processor = create_ip_columnar_batch_processor()
-        self._interval_rollup_repository = create_ip_interval_rollup_repository()
+        self._columnar_batch_processor = (
+            columnar_batch_processor or create_ip_columnar_batch_processor()
+        )
+        self._interval_rollup_repository = (
+            interval_rollup_repository or create_ip_interval_rollup_repository()
+        )
 
     def create_control_plane_uow(self, global_session: object) -> IpControlPlaneUnitOfWorkPort:
         return create_ip_control_plane_uow(_as_async_session(global_session))

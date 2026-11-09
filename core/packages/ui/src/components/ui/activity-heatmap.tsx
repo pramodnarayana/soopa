@@ -15,6 +15,12 @@ export interface ActivityHeatmapProps {
   readonly lessLabel?: string;
   readonly moreLabel?: string;
   readonly className?: string;
+  readonly legendType?: 'volume' | 'threshold';
+  readonly thresholdLabels?: {
+    readonly critical?: string;
+    readonly warning?: string;
+    readonly healthy?: string;
+  };
 }
 
 const LEVEL_CLASSES = [
@@ -39,6 +45,8 @@ export function ActivityHeatmap({
   lessLabel = 'Less',
   moreLabel = 'More',
   className,
+  legendType = 'volume',
+  thresholdLabels,
 }: ActivityHeatmapProps) {
   const max = React.useMemo(
     () => cells.reduce((acc, cell) => (cell.count > acc ? cell.count : acc), 0),
@@ -79,13 +87,30 @@ export function ActivityHeatmap({
           );
         })}
       </div>
-      <div className="flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
-        <span>{lessLabel}</span>
-        {LEVEL_CLASSES.map((cls) => (
-          <span key={cls} className={cn('h-2.5 w-2.5 rounded-[2px]', cls)} />
-        ))}
-        <span>{moreLabel}</span>
-      </div>
+      {legendType === 'threshold' ? (
+        <div className="flex items-center justify-end gap-3 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-destructive" />
+            <span>{thresholdLabels?.critical ?? '<95% (Critical)'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-warning" />
+            <span>{thresholdLabels?.warning ?? '95-99% (Warning)'}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-[2px] bg-success" />
+            <span>{thresholdLabels?.healthy ?? '100% (Complete)'}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-end gap-1.5 text-[10px] text-muted-foreground">
+          <span>{lessLabel}</span>
+          {LEVEL_CLASSES.map((cls) => (
+            <span key={cls} className={cn('h-2.5 w-2.5 rounded-[2px]', cls)} />
+          ))}
+          <span>{moreLabel}</span>
+        </div>
+      )}
     </div>
   );
 }

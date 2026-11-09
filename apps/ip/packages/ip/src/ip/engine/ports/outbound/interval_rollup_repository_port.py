@@ -27,6 +27,17 @@ class IntervalRollupRepositoryPort(Protocol):
     """
 
     @abstractmethod
+    async def insert_columnar_batch(
+        self,
+        *,
+        tenant_id: str,
+        batch_id: str,
+        stream_name: str,
+        columnar_bytes: bytes,
+    ) -> Result[int, IpError]:
+        """Streams a contiguous binary columnar buffer directly into the columnar store."""
+        ...
+
     async def insert_arrow_batch(
         self,
         *,
@@ -35,8 +46,13 @@ class IntervalRollupRepositoryPort(Protocol):
         stream_name: str,
         arrow_ipc_bytes: bytes,
     ) -> Result[int, IpError]:
-        """Streams a contiguous Arrow IPC binary buffer directly into the columnar table."""
-        ...
+        """Compatibility bridge delegating to insert_columnar_batch."""
+        return await self.insert_columnar_batch(
+            tenant_id=tenant_id,
+            batch_id=batch_id,
+            stream_name=stream_name,
+            columnar_bytes=arrow_ipc_bytes,
+        )
 
     @abstractmethod
     async def get_daily_completeness(
@@ -68,6 +84,7 @@ class IntervalRollupRepositoryPort(Protocol):
         *,
         tenant_id: str,
         service_date: date,
+        connection_id: str | None = None,
         feeder_id: str | None = None,
         source_meter_id: str | None = None,
     ) -> Result[tuple[DailyTouBillingRollup, ...], IpError]:
@@ -91,7 +108,7 @@ class IntervalRollupRepositoryPort(Protocol):
         *,
         tenant_id: str,
         batch_id: str,
-        delivery_receipt_id: str,
+        delivery_receipt_id: str | None,
     ) -> Result[int, IpError]:
         """Associates a downstream settlement receipt ID (e.g. CIS / billing receipt) with a batch's readings."""
         ...

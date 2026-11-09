@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 import structlog
@@ -13,18 +14,23 @@ from ip.engine.domain.exceptions import (
 )
 from ip.engine.domain.intervals.enums import BatchManifestStatus
 from ip.engine.domain.intervals.models import (
+    BatchManifest,
     BatchReconciliationCounts,
     FeederOutageCluster,
     StormAggregationPolicy,
     VeeValidationPolicy,
 )
+from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
 from ip.engine.ports.outbound.columnar_batch_processor_port import ColumnarBatchProcessorPort
 from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
     TieredStorageResultDTO,
 )
-from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
+from ip.engine.ports.outbound.uow import (
+    IpDataPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkProviderPort,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -57,6 +63,20 @@ class ProcessIntervalBatchResponse:
     is_already_processed: bool = False
 
 
+_BATCH_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
+_BATCH_LOCKS_GUARD = asyncio.Lock()
+
+
+async def _get_manifest_lock(tenant_id: str, batch_id: str) -> asyncio.Lock:
+    key = (tenant_id, batch_id)
+    async with _BATCH_LOCKS_GUARD:
+        lock = _BATCH_LOCKS.get(key)
+        if lock is None:
+            lock = asyncio.Lock()
+            _BATCH_LOCKS[key] = lock
+        return lock
+
+
 class ProcessIntervalBatchUseCase:
     """Executes vectorized columnar normalization, zero-copy rollup store ingestion, and storm promotion."""
 
@@ -71,6 +91,43 @@ class ProcessIntervalBatchUseCase:
         self._storage = storage
         self._columnar_processor = columnar_processor
         self._rollup_repository = rollup_repository
+
+    async def _load_gem_crosswalk(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        tenant_id: str,
+        connection_id: str,
+    ) -> dict[str, str]:
+        gem_entries: list[GlobalEntityMap] = []
+        page_limit = 1000
+        current_offset = 0
+        while True:
+            page = await uow.entity_maps.list_entries(
+                tenant_id,
+                source_connection_id=connection_id,
+                limit=page_limit,
+                offset=current_offset,
+            )
+            if not page:
+                break
+            gem_entries.extend(page)
+            if len(page) < page_limit:
+                break
+            current_offset += len(page)
+        return {entry.source_entity_id: entry.canonical_id for entry in gem_entries}
+
+    async def _fail_manifest(
+        self,
+        uow: IpDataPlaneUnitOfWorkPort,
+        manifest: BatchManifest,
+        error_message: str,
+        bound_log: structlog.stdlib.BoundLogger,
+        event_name: str,
+    ) -> None:
+        manifest.mark_failed(error_message)
+        await uow.batch_manifests.save(manifest)
+        await uow.commit()
+        bound_log.error(event_name, reason=error_message)
 
     async def execute(
         self,
@@ -87,9 +144,12 @@ class ProcessIntervalBatchUseCase:
             return Result.fail(shard_res.unwrap_err())
         shard_id, shard_dsn = shard_res.unwrap()
 
-        async with self._dp_uow_provider.get_data_plane_uow(
-            command.tenant_id, shard_id, shard_dsn
-        ) as uow:
+        # Coordinate manifest processing across HTTP and worker to prevent race conditions
+        manifest_lock = await _get_manifest_lock(command.tenant_id, command.batch_id)
+        async with (
+            manifest_lock,
+            self._dp_uow_provider.get_data_plane_uow(command.tenant_id, shard_id, shard_dsn) as uow,
+        ):
             manifest = await uow.batch_manifests.get_by_id(command.batch_id, command.tenant_id)
             if manifest is None:
                 bound_log.error("interval_batch_manifest_not_found")
@@ -131,21 +191,18 @@ class ProcessIntervalBatchUseCase:
             raw_bytes_res = await self._storage.retrieve(storage_dto)
             if raw_bytes_res.is_err:
                 raw_err = raw_bytes_res.unwrap_err()
-                manifest.mark_failed(raw_err.message)
-                await uow.batch_manifests.save(manifest)
-                await uow.commit()
-                bound_log.error(
+                await self._fail_manifest(
+                    uow,
+                    manifest,
+                    raw_err.message,
+                    bound_log,
                     "interval_batch_payload_retrieval_failed",
-                    reason=raw_err.message,
                 )
                 return Result.fail(raw_err)
 
-            gem_entries = await uow.entity_maps.list_entries(
-                command.tenant_id,
-                source_connection_id=manifest.connection_id,
-                limit=10000,
+            gem_crosswalk = await self._load_gem_crosswalk(
+                uow, command.tenant_id, manifest.connection_id
             )
-            gem_crosswalk = {entry.source_entity_id: entry.canonical_id for entry in gem_entries}
 
             norm_res = self._columnar_processor.normalize_batch(
                 batch_id=manifest.id,
@@ -161,32 +218,32 @@ class ProcessIntervalBatchUseCase:
             )
             if norm_res.is_err:
                 norm_err = norm_res.unwrap_err()
-                manifest.mark_failed(norm_err.message)
-                await uow.batch_manifests.save(manifest)
-                await uow.commit()
-                bound_log.error(
+                await self._fail_manifest(
+                    uow,
+                    manifest,
+                    norm_err.message,
+                    bound_log,
                     "interval_batch_normalization_failed",
-                    reason=norm_err.message,
                 )
                 return Result.fail(norm_err)
 
             normalized = norm_res.unwrap()
 
-            # Invariant 1: Stream contiguous Arrow IPC binary buffer directly to Rollup Repository
-            insert_res = await self._rollup_repository.insert_arrow_batch(
+            # Invariant 1: Stream contiguous columnar binary buffer directly to Rollup Repository
+            insert_res = await self._rollup_repository.insert_columnar_batch(
                 tenant_id=manifest.tenant_id,
                 batch_id=manifest.id,
                 stream_name=manifest.stream_name,
-                arrow_ipc_bytes=normalized.arrow_ipc_bytes,
+                columnar_bytes=normalized.columnar_bytes,
             )
             if insert_res.is_err:
                 insert_err = insert_res.unwrap_err()
-                manifest.mark_failed(insert_err.message)
-                await uow.batch_manifests.save(manifest)
-                await uow.commit()
-                bound_log.error(
+                await self._fail_manifest(
+                    uow,
+                    manifest,
+                    insert_err.message,
+                    bound_log,
                     "interval_rollup_insert_failed",
-                    reason=insert_err.message,
                 )
                 return Result.fail(insert_err)
 
@@ -198,17 +255,17 @@ class ProcessIntervalBatchUseCase:
                 )
                 if receipt_res.is_err:
                     receipt_err = receipt_res.unwrap_err()
-                    manifest.mark_failed(receipt_err.message)
-                    await uow.batch_manifests.save(manifest)
-                    await uow.commit()
-                    bound_log.error(
+                    await self._fail_manifest(
+                        uow,
+                        manifest,
+                        receipt_err.message,
+                        bound_log,
                         "interval_delivery_receipt_update_failed",
-                        reason=receipt_err.message,
                     )
                     return Result.fail(receipt_err)
 
-            l2_uri = f"columnar://l2_replica/{manifest.tenant_id}/{manifest.id}.arrow"
-            l3_uri = f"columnar://l3_canonical/{manifest.tenant_id}/{manifest.id}.arrow"
+            l2_uri = f"columnar://l2_replica/{manifest.tenant_id}/{manifest.id}.columnar"
+            l3_uri = f"columnar://l3_canonical/{manifest.tenant_id}/{manifest.id}.columnar"
 
             # Promote storm-grouped 0.0V feeder outage clusters to P0_CRITICAL real-time lane
             manifest.promote_outage_clusters(normalized.outage_clusters)
@@ -222,12 +279,12 @@ class ProcessIntervalBatchUseCase:
             )
             if reconcile_res.is_err:
                 reconcile_err = reconcile_res.unwrap_err()
-                manifest.mark_failed(reconcile_err.message)
-                await uow.batch_manifests.save(manifest)
-                await uow.commit()
-                bound_log.error(
+                await self._fail_manifest(
+                    uow,
+                    manifest,
+                    reconcile_err.message,
+                    bound_log,
                     "interval_reconciliation_imbalance",
-                    reason=reconcile_err.message,
                 )
                 return Result.fail(reconcile_err)
 

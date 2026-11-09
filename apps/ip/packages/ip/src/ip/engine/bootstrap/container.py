@@ -420,9 +420,15 @@ def create_ip_columnar_batch_processor() -> ColumnarBatchProcessorPort:
     return VectorizedIntervalBatchNormalizerAdapter()
 
 
+_shared_rollup_repository: IntervalRollupRepositoryPort | None = None
+
+
 def create_ip_interval_rollup_repository() -> IntervalRollupRepositoryPort:
     """Composition root factory assembling ColumnarIntervalRollupRepositoryAdapter."""
-    return ColumnarIntervalRollupRepositoryAdapter()
+    global _shared_rollup_repository
+    if _shared_rollup_repository is None:
+        _shared_rollup_repository = ColumnarIntervalRollupRepositoryAdapter()
+    return _shared_rollup_repository
 
 
 def create_ip_inbound_verifier() -> InboundVerifierPort:

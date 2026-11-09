@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 from dataclasses import dataclass
@@ -170,6 +171,29 @@ def _inspect_raw_batch_metadata(
     return Result.ok((declared_count or 1, resolved_start, resolved_end))
 
 
+def _build_batch_response(
+    manifest: BatchManifest,
+    *,
+    is_duplicate: bool,
+) -> BufferRawIntervalBatchResponse:
+    return BufferRawIntervalBatchResponse(
+        batch_id=manifest.id,
+        tenant_id=manifest.tenant_id,
+        connection_id=manifest.connection_id,
+        stream_name=manifest.stream_name,
+        status=manifest.status,
+        priority_lane=manifest.priority_lane,
+        l1_raw_uri=manifest.l1_raw_uri,
+        payload_sha256=manifest.payload_sha256,
+        payload_size_bytes=manifest.payload_size_bytes,
+        raw_ingested_count=manifest.raw_ingested_count,
+        window_start_utc=manifest.window_start_utc,
+        window_end_utc=manifest.window_end_utc,
+        trace_id=manifest.trace_id,
+        is_duplicate=is_duplicate,
+    )
+
+
 class BufferRawIntervalBatchUseCase:
     """Buffers an incoming interval batch to S3/tiered storage and records its BatchManifest."""
 
@@ -183,6 +207,52 @@ class BufferRawIntervalBatchUseCase:
         self._dp_uow_provider = dp_uow_provider
         self._storage = storage
 
+    async def _validate_connection(
+        self,
+        tenant_id: str,
+        connection_id: str,
+        bound_log: structlog.stdlib.BoundLogger,
+    ) -> Result[str, IpError]:
+        async with self._cp_uow as cp:
+            connection = await cp.connections.get_by_id(connection_id)
+            if connection is None or connection.tenant_id != tenant_id:
+                bound_log.error("interval_ingress_connection_not_found")
+                return Result.fail(ConnectionNotFoundError.for_id(connection_id))
+            if connection.status is ConnectionStatus.DEACTIVATED:
+                bound_log.error("interval_ingress_connection_deactivated")
+                return Result.fail(ConnectionDeactivatedError.for_id(connection_id))
+            if connection.status is ConnectionStatus.PENDING_AUTH:
+                bound_log.error("interval_ingress_connection_pending_auth")
+                return Result.fail(ConnectionPendingAuthError.for_connection(connection_id))
+            return Result.ok(connection.app_id)
+
+    async def _handle_save_conflict(
+        self,
+        command: BufferRawIntervalBatchCommand,
+        shard_id: str,
+        shard_dsn: str,
+        payload_sha256: str,
+        storage_s3_key: str | None,
+        bound_log: structlog.stdlib.BoundLogger,
+    ) -> BufferRawIntervalBatchResponse | None:
+        if storage_s3_key is not None and hasattr(self._storage, "delete"):
+            with contextlib.suppress(OSError, RuntimeError):
+                await self._storage.delete(storage_s3_key)
+        async with self._dp_uow_provider.get_data_plane_uow(
+            command.tenant_id, shard_id, shard_dsn
+        ) as recovery_uow:
+            winner = await recovery_uow.batch_manifests.get_by_sha256(
+                command.tenant_id, command.connection_id, payload_sha256
+            )
+            if winner is not None:
+                bound_log.info(
+                    "interval_batch_duplicate_recovered_on_conflict",
+                    batch_id=winner.id,
+                    payload_sha256=payload_sha256,
+                )
+                return _build_batch_response(winner, is_duplicate=True)
+        return None
+
     async def execute(
         self,
         command: BufferRawIntervalBatchCommand,
@@ -194,18 +264,12 @@ class BufferRawIntervalBatchUseCase:
             priority_lane=command.priority_lane.value,
         )
 
-        async with self._cp_uow as cp:
-            connection = await cp.connections.get_by_id(command.connection_id)
-            if connection is None or connection.tenant_id != command.tenant_id:
-                bound_log.error("interval_ingress_connection_not_found")
-                return Result.fail(ConnectionNotFoundError.for_id(command.connection_id))
-            if connection.status is ConnectionStatus.DEACTIVATED:
-                bound_log.error("interval_ingress_connection_deactivated")
-                return Result.fail(ConnectionDeactivatedError.for_id(command.connection_id))
-            if connection.status is ConnectionStatus.PENDING_AUTH:
-                bound_log.error("interval_ingress_connection_pending_auth")
-                return Result.fail(ConnectionPendingAuthError.for_connection(command.connection_id))
-            app_id = connection.app_id
+        conn_res = await self._validate_connection(
+            command.tenant_id, command.connection_id, bound_log
+        )
+        if conn_res.is_err:
+            return Result.fail(conn_res.unwrap_err())
+        app_id = conn_res.unwrap()
 
         metadata_res = _inspect_raw_batch_metadata(
             payload_bytes=command.payload_bytes,
@@ -245,24 +309,7 @@ class BufferRawIntervalBatchUseCase:
                     batch_id=existing.id,
                     payload_sha256=payload_sha256,
                 )
-                return Result.ok(
-                    BufferRawIntervalBatchResponse(
-                        batch_id=existing.id,
-                        tenant_id=existing.tenant_id,
-                        connection_id=existing.connection_id,
-                        stream_name=existing.stream_name,
-                        status=existing.status,
-                        priority_lane=existing.priority_lane,
-                        l1_raw_uri=existing.l1_raw_uri,
-                        payload_sha256=existing.payload_sha256,
-                        payload_size_bytes=existing.payload_size_bytes,
-                        raw_ingested_count=existing.raw_ingested_count,
-                        window_start_utc=existing.window_start_utc,
-                        window_end_utc=existing.window_end_utc,
-                        trace_id=existing.trace_id,
-                        is_duplicate=True,
-                    )
-                )
+                return Result.ok(_build_batch_response(existing, is_duplicate=True))
 
             resolved_trace_id = command.trace_id or generate_id(IpIdPrefix.TRACE.value)
             resolved_batch_id = generate_id(IpIdPrefix.INTERVAL_BATCH.value)
@@ -296,8 +343,25 @@ class BufferRawIntervalBatchUseCase:
                 correlation_id=command.correlation_id,
             )
 
-            await uow.batch_manifests.save(manifest)
-            await uow.commit()
+            try:
+                await uow.batch_manifests.save(manifest)
+                await uow.commit()
+            except Exception as exc:
+                is_conflict = (
+                    "unique" in str(exc).lower() or "integrity" in type(exc).__name__.lower()
+                )
+                if is_conflict:
+                    recovered = await self._handle_save_conflict(
+                        command=command,
+                        shard_id=shard_id,
+                        shard_dsn=shard_dsn,
+                        payload_sha256=payload_sha256,
+                        storage_s3_key=storage_dto.s3_key,
+                        bound_log=bound_log,
+                    )
+                    if recovered is not None:
+                        return Result.ok(recovered)
+                raise
 
         bound_log.info(
             "interval_batch_buffered",
@@ -307,24 +371,7 @@ class BufferRawIntervalBatchUseCase:
             payload_size_bytes=manifest.payload_size_bytes,
             l1_raw_uri=manifest.l1_raw_uri,
         )
-        return Result.ok(
-            BufferRawIntervalBatchResponse(
-                batch_id=manifest.id,
-                tenant_id=manifest.tenant_id,
-                connection_id=manifest.connection_id,
-                stream_name=manifest.stream_name,
-                status=manifest.status,
-                priority_lane=manifest.priority_lane,
-                l1_raw_uri=manifest.l1_raw_uri,
-                payload_sha256=manifest.payload_sha256,
-                payload_size_bytes=manifest.payload_size_bytes,
-                raw_ingested_count=manifest.raw_ingested_count,
-                window_start_utc=manifest.window_start_utc,
-                window_end_utc=manifest.window_end_utc,
-                trace_id=manifest.trace_id,
-                is_duplicate=False,
-            )
-        )
+        return Result.ok(_build_batch_response(manifest, is_duplicate=False))
 
 
 __all__ = [

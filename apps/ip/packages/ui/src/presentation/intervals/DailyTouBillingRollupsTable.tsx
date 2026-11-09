@@ -1,4 +1,5 @@
 import {
+  type ApiProblem,
   Badge,
   Button,
   Card,
@@ -21,6 +22,7 @@ import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-
 import { BarChart3, Check, Receipt, Search } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
 import type { DailyTouRollup } from '../../domain/intervals';
+import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 
 export interface DailyTouBillingRollupsTableProps {
   readonly rollups: readonly DailyTouRollup[];
@@ -29,8 +31,12 @@ export interface DailyTouBillingRollupsTableProps {
   readonly searchDeviceId: string;
   readonly onSearchDeviceIdChange: (value: string) => void;
   readonly onInspectDeviceCurve: (sourceDeviceId: string) => void;
-  readonly onRecordSettlementReceipt?: (batchId: string, receiptId: string) => void;
+  readonly onRecordSettlementReceipt?: (
+    batchId: string,
+    receiptId: string,
+  ) => Promise<boolean> | void;
   readonly isRecordingReceipt?: boolean;
+  readonly receiptProblem?: ApiProblem | null;
 }
 
 export function DailyTouBillingRollupsTable({
@@ -42,6 +48,7 @@ export function DailyTouBillingRollupsTable({
   onInspectDeviceCurve,
   onRecordSettlementReceipt,
   isRecordingReceipt = false,
+  receiptProblem = null,
 }: DailyTouBillingRollupsTableProps) {
   const [receiptModalBatchId, setReceiptModalBatchId] = useState<string | null>(null);
   const [receiptInput, setReceiptInput] = useState('');
@@ -198,12 +205,14 @@ export function DailyTouBillingRollupsTable({
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const handleConfirmReceipt = (): void => {
+  const handleConfirmReceipt = async (): Promise<void> => {
     if (!receiptModalBatchId || !receiptInput.trim() || !onRecordSettlementReceipt) {
       return;
     }
-    onRecordSettlementReceipt(receiptModalBatchId, receiptInput.trim());
-    setReceiptModalBatchId(null);
+    const result = await onRecordSettlementReceipt(receiptModalBatchId, receiptInput.trim());
+    if (result !== false) {
+      setReceiptModalBatchId(null);
+    }
   };
 
   return (
@@ -265,6 +274,7 @@ export function DailyTouBillingRollupsTable({
               <code className="font-mono text-xs text-foreground">{receiptModalBatchId}</code>.
             </DialogDescription>
           </DialogHeader>
+          <ApiProblemBanner problem={receiptProblem} />
           <FormRow label="Settlement Receipt ID" required htmlFor="settlement-receipt-input">
             <Input
               id="settlement-receipt-input"

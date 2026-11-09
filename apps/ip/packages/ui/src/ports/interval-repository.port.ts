@@ -20,6 +20,7 @@ export interface GetCompletenessParams {
 
 export interface GetDailyTouRollupsParams {
   readonly serviceDate: string;
+  readonly connectionId?: string;
   readonly feederId?: string;
   readonly sourceDeviceId?: string;
 }

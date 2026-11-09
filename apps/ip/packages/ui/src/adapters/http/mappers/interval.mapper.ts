@@ -92,6 +92,7 @@ export function mapDailyTouRollupFromWire(wire: DailyTouRollupWire): DailyTouRol
     validIntervals: wire.valid_intervals,
     quarantinedIntervals: wire.quarantined_intervals,
     latestBatchId: wire.latest_batch_id,
+    connectionId: wire.connection_id ?? '',
     deliveryReceiptId: wire.delivery_receipt_id,
   };
 }

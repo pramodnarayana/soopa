@@ -146,6 +146,7 @@ class DailyTouRollupHttpDTO(BaseModel):
     valid_intervals: int
     quarantined_intervals: int
     latest_batch_id: str
+    connection_id: str = ""
     delivery_receipt_id: str | None = None
 
 

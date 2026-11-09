@@ -12,12 +12,25 @@ export interface StatCardProps {
 }
 
 export function StatCard({ title, value, subtitle, icon, onClick, className }: StatCardProps) {
+  const handleKeyDown = onClick
+    ? (e: React.KeyboardEvent<HTMLDivElement>) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onClick();
+        }
+      }
+    : undefined;
+
   return (
     <Card
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       className={cn(
         'group relative overflow-hidden transition-colors hover:border-foreground/20',
-        onClick && 'cursor-pointer',
+        onClick &&
+          'cursor-pointer focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none',
         className,
       )}
     >

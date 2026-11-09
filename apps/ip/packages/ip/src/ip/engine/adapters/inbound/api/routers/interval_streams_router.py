@@ -10,6 +10,7 @@ from fastapi import (
     APIRouter,
     Depends,
     Header,
+    HTTPException,
     Query,
     Request,
     Response,
@@ -23,6 +24,7 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_ip_data_plane_uow_provider,
     get_tiered_storage,
     require_canonical_records_read,
+    require_flows_write,
     require_tenant_member,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
@@ -61,6 +63,7 @@ from ip.engine.application.use_cases.intervals.process_interval_batch_use_case i
     ProcessIntervalBatchCommand,
     ProcessIntervalBatchUseCase,
 )
+from ip.engine.domain.authorization import IpPermission, has_ip_permission
 from ip.engine.domain.intervals.enums import (
     IntervalPayloadFormat,
     PriorityLane,
@@ -75,6 +78,27 @@ from ip.engine.ports.outbound.uow import (
 
 logger = structlog.get_logger(__name__)
 
+MAX_INGRESS_PAYLOAD_BYTES = 50 * 1024 * 1024  # 50 MB ingress payload limit
+
+
+async def _read_request_body_with_limit(
+    request: Request,
+    max_bytes: int = MAX_INGRESS_PAYLOAD_BYTES,
+) -> bytes:
+    """Reads the request stream enforcing an absolute byte limit to avoid unbounded buffering."""
+    chunks: list[bytes] = []
+    total_bytes = 0
+    async for chunk in request.stream():
+        total_bytes += len(chunk)
+        if total_bytes > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"Payload exceeds maximum allowed size of {max_bytes} bytes.",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/intervals",
     tags=["Integration Platform - High-Frequency Interval Streams"],
@@ -88,6 +112,7 @@ router = APIRouter(
         status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
         status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
         status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
+        status.HTTP_413_CONTENT_TOO_LARGE: {"model": ApiErrorHttpResponse},
     },
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -116,7 +141,7 @@ async def ingest_interval_batch(
     correlation_id: Annotated[str | None, Header(alias="X-Correlation-ID")] = None,
 ) -> IntervalBatchIngressHttpResponse | Response:
     """L0/L1 Shock-Absorber endpoint buffering raw interval macro-batches in <10ms."""
-    raw_bytes = await request.body()
+    raw_bytes = await _read_request_body_with_limit(request)
     use_case = BufferRawIntervalBatchUseCase(
         cp_uow=cp_uow,
         dp_uow_provider=dp_uow_provider,
@@ -192,6 +217,14 @@ async def process_interval_batch(
     delivery_receipt_id: Annotated[str | None, Query()] = None,
 ) -> IntervalBatchProcessHttpResponse | Response:
     """Executes vectorized L2/L3 normalization, zero-copy Arrow IPC commit, and storm promotion."""
+    if delivery_receipt_id is not None and not has_ip_permission(
+        _context, IpPermission.IP_FLOWS_WRITE, tenant_id=tenant_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="FORBIDDEN: Missing required permission 'ip.flows.write' to specify delivery_receipt_id.",
+        )
+
     use_case = ProcessIntervalBatchUseCase(
         dp_uow_provider=dp_uow_provider,
         storage=tiered_storage,
@@ -261,7 +294,7 @@ async def record_batch_delivery_receipt(
     tenant_id: str,
     batch_id: str,
     body: RecordSettlementReceiptHttpRequest,
-    _context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    _context: Annotated[IdentityContext, Depends(require_flows_write)],
     dp_uow_provider: Annotated[
         IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
     ],
@@ -424,6 +457,7 @@ async def get_daily_tou_rollups(
     service_date: Annotated[date, Query(description="Service date (YYYY-MM-DD)")],
     _context: Annotated[IdentityContext, Depends(require_canonical_records_read)],
     rollup_repo: Annotated[IntervalRollupRepositoryPort, Depends(get_interval_rollup_repository)],
+    connection_id: Annotated[str | None, Query()] = None,
     feeder_id: Annotated[str | None, Query()] = None,
     source_meter_id: Annotated[str | None, Query()] = None,
 ) -> list[DailyTouRollupHttpDTO] | Response:
@@ -433,6 +467,7 @@ async def get_daily_tou_rollups(
         GetDailyTouRollupsQuery(
             tenant_id=tenant_id,
             service_date=service_date,
+            connection_id=connection_id,
             feeder_id=feeder_id,
             source_meter_id=source_meter_id,
         )
@@ -455,6 +490,7 @@ async def get_daily_tou_rollups(
             valid_intervals=r.valid_intervals,
             quarantined_intervals=r.quarantined_intervals,
             latest_batch_id=r.latest_batch_id,
+            connection_id=r.connection_id,
             delivery_receipt_id=r.delivery_receipt_id,
         )
         for r in res.unwrap()

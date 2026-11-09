@@ -1,6 +1,6 @@
-import { Button, Input } from '@soopa/ui';
+import { type ApiProblem, Button, Input } from '@soopa/ui';
 import { RefreshCw } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useConnectionsQuery } from '../../application/use-connection-queries';
 import {
   useDailyCompletenessQuery,
@@ -45,6 +45,7 @@ export function IpIntervalStreamsPage({
   const [selectedFeederId, setSelectedFeederId] = useState<string | null>(null);
   const [searchDeviceId, setSearchDeviceId] = useState<string>('');
   const [inspectedDeviceId, setInspectedDeviceId] = useState<string | null>(null);
+  const [receiptProblem, setReceiptProblem] = useState<ApiProblem | null>(null);
 
   const reconciliationView = useIntervalReconciliationQuery({
     connectionId: effectiveConnectionId || undefined,
@@ -59,24 +60,60 @@ export function IpIntervalStreamsPage({
     Boolean(effectiveConnectionId),
   );
 
-  const touRollupsView = useDailyTouRollupsQuery({
-    serviceDate,
-    feederId: selectedFeederId ?? undefined,
-  });
+  const touRollupsView = useDailyTouRollupsQuery(
+    {
+      serviceDate,
+      connectionId: effectiveConnectionId || undefined,
+      feederId: selectedFeederId ?? undefined,
+    },
+    Boolean(serviceDate),
+  );
+
+  const filteredRollups = useMemo(() => {
+    const raw = touRollupsView.data ?? [];
+    return raw.filter((r) => {
+      if (effectiveConnectionId && r.connectionId && r.connectionId !== effectiveConnectionId) {
+        return false;
+      }
+      if (selectedFeederId && r.feederId !== selectedFeederId) {
+        return false;
+      }
+      return true;
+    });
+  }, [touRollupsView.data, effectiveConnectionId, selectedFeederId]);
 
   const lineageView = useDeviceIntervalLineageQuery(inspectedDeviceId, serviceDate);
   const recordReceiptMutation = useRecordSettlementReceiptMutation();
 
   const firstProblem =
+    connectionsView.problem ??
     reconciliationView.problem ??
     completenessView.problem ??
     touRollupsView.problem ??
     lineageView.problem;
 
+  const handleRetryProblem = (): void => {
+    if (connectionsView.problem) {
+      void connectionsView.refetch();
+    } else if (reconciliationView.problem) {
+      void reconciliationView.refetch();
+    } else if (completenessView.problem) {
+      void completenessView.refetch();
+    } else if (touRollupsView.problem) {
+      void touRollupsView.refetch();
+    } else if (lineageView.problem) {
+      void lineageView.refetch();
+    }
+  };
+
   const handleRefreshAll = (): void => {
     void reconciliationView.refetch();
-    void completenessView.refetch();
-    void touRollupsView.refetch();
+    if (effectiveConnectionId && serviceDate) {
+      void completenessView.refetch();
+    }
+    if (serviceDate) {
+      void touRollupsView.refetch();
+    }
   };
 
   return (
@@ -111,7 +148,7 @@ export function IpIntervalStreamsPage({
             <Button
               type="button"
               variant="outline"
-              size="iconSm"
+              size="icon-sm"
               aria-label="Refresh interval metrics"
               onClick={handleRefreshAll}
             >
@@ -121,7 +158,7 @@ export function IpIntervalStreamsPage({
         }
       />
 
-      <ApiProblemBanner problem={firstProblem} />
+      <ApiProblemBanner problem={firstProblem} onRetry={handleRetryProblem} />
 
       <ZeroLossReconciliationBanner
         overview={reconciliationView.data}
@@ -137,16 +174,35 @@ export function IpIntervalStreamsPage({
       />
 
       <DailyTouBillingRollupsTable
-        rollups={touRollupsView.data ?? []}
+        rollups={filteredRollups}
         isLoading={touRollupsView.isLoading}
         selectedFeederId={selectedFeederId}
         searchDeviceId={searchDeviceId}
         onSearchDeviceIdChange={setSearchDeviceId}
         onInspectDeviceCurve={(deviceId) => setInspectedDeviceId(deviceId)}
-        onRecordSettlementReceipt={(batchId, receiptId) => {
-          recordReceiptMutation.mutate({ batchId, deliveryReceiptId: receiptId });
+        onRecordSettlementReceipt={async (batchId, receiptId): Promise<boolean> => {
+          setReceiptProblem(null);
+          try {
+            const res = await recordReceiptMutation.mutateAsync({
+              batchId,
+              deliveryReceiptId: receiptId,
+            });
+            if (res.ok) {
+              return true;
+            }
+            setReceiptProblem(res.error);
+            return false;
+          } catch (err) {
+            setReceiptProblem({
+              status: 500,
+              code: 'SERVER_ERROR',
+              message: err instanceof Error ? err.message : 'Failed to record settlement receipt.',
+            });
+            return false;
+          }
         }}
         isRecordingReceipt={recordReceiptMutation.isPending}
+        receiptProblem={receiptProblem}
       />
 
       <DeviceLoadCurveLineageDrawer

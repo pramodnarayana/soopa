@@ -59,6 +59,7 @@ class GetDailyTouRollupsQuery:
 
     tenant_id: str
     service_date: date
+    connection_id: str | None = None
     feeder_id: str | None = None
     source_meter_id: str | None = None
 
@@ -160,6 +161,7 @@ class GetDailyTouRollupsUseCase:
         return await self._rollup_repository.get_daily_tou_rollups(
             tenant_id=query.tenant_id,
             service_date=query.service_date,
+            connection_id=query.connection_id,
             feeder_id=query.feeder_id,
             source_meter_id=query.source_meter_id,
         )
@@ -220,13 +222,13 @@ class TraceIntervalLineageUseCase:
         valid_count = 0
         quarantined_count = 0
         for reading in readings:
+            manifest = manifests_by_id.get(reading.source_batch_id)
+            if manifest is None:
+                continue
             if reading.quality_status is CimQualityStatus.QUARANTINED_SPIKE:
                 quarantined_count += 1
             else:
                 valid_count += 1
-            manifest = manifests_by_id.get(reading.source_batch_id)
-            if manifest is None:
-                continue
             linked_intervals.append(
                 IntervalLineageTrace(
                     reading=reading,
@@ -284,6 +286,7 @@ class RecordSettlementReceiptUseCase:
             if manifest is None:
                 return Result.fail(IntervalBatchNotFoundError.for_batch(command.batch_id))
 
+            previous_receipt_id = manifest.delivery_receipt_id
             manifest.record_delivery_receipt(command.delivery_receipt_id)
             rollup_res = await self._rollup_repository.record_delivery_receipt(
                 tenant_id=command.tenant_id,
@@ -299,8 +302,23 @@ class RecordSettlementReceiptUseCase:
                     reason=rollup_err.message,
                 )
                 return Result.fail(rollup_err)
-            await uow.batch_manifests.save(manifest)
-            await uow.commit()
+            try:
+                await uow.batch_manifests.save(manifest)
+                await uow.commit()
+            except Exception:
+                compensation_res = await self._rollup_repository.record_delivery_receipt(
+                    tenant_id=command.tenant_id,
+                    batch_id=command.batch_id,
+                    delivery_receipt_id=previous_receipt_id,
+                )
+                if compensation_res.is_err:
+                    logger.error(
+                        "settlement_delivery_receipt_compensation_failed",
+                        tenant_id=command.tenant_id,
+                        batch_id=command.batch_id,
+                        reason=compensation_res.unwrap_err().message,
+                    )
+                raise
 
         logger.info(
             "settlement_delivery_receipt_recorded",

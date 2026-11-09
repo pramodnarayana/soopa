@@ -55,13 +55,6 @@ export function ZeroLossReconciliationBanner({
   onInspectTrace,
   showRecentBatchesTable = true,
 }: ZeroLossReconciliationBannerProps) {
-  const rawTotal = overview?.rawIngestedTotal ?? 0;
-  const validTotal = overview?.validCanonicalTotal ?? 0;
-  const duplicatesTotal = overview?.duplicatesDroppedTotal ?? 0;
-  const quarantinedTotal = overview?.quarantinedHeldTotal ?? 0;
-  const inFlightTotal = overview?.inFlightReadingsTotal ?? 0;
-  const isBalanced = overview?.isZeroLossBalanced ?? true;
-
   const recentBatches = useMemo(
     () => [...(overview?.recentBatches ?? [])],
     [overview?.recentBatches],
@@ -169,6 +162,50 @@ export function ZeroLossReconciliationBanner({
     columns,
     getCoreRowModel: getCoreRowModel(),
   });
+
+  if (isLoading) {
+    return (
+      <Card className="animate-pulse">
+        <CardHeader>
+          <div className="h-6 w-72 rounded bg-muted" />
+          <div className="h-4 w-96 rounded bg-muted/60" />
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-24 rounded-lg bg-muted/40" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!overview) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Zero-Missing-Data Batch Reconciliation Guarantee</CardTitle>
+          <CardDescription>
+            Audit ledger tracking exact batch preservation across ingestion, deduplication, and
+            canonical commit.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-lg border border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+            Reconciliation overview is currently unavailable for this connection.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const rawTotal = overview.rawIngestedTotal;
+  const validTotal = overview.validCanonicalTotal;
+  const duplicatesTotal = overview.duplicatesDroppedTotal;
+  const quarantinedTotal = overview.quarantinedHeldTotal;
+  const inFlightTotal = overview.inFlightReadingsTotal;
+  const isBalanced = overview.isZeroLossBalanced;
 
   return (
     <div className="space-y-4">

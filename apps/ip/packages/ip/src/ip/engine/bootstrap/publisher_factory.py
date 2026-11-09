@@ -159,6 +159,30 @@ def build_ip_dp_outbox_router(
             EventProcessingLane.REALTIME,
         ): delivery_realtime_publisher,
         (IpEventType.FETCH_RECORD_REQUESTED, EventProcessingLane.BULK): delivery_bulk_publisher,
+        (
+            IpEventType.INTERVAL_BATCH_INGESTED,
+            EventProcessingLane.REALTIME,
+        ): orchestrator_realtime_publisher,
+        (
+            IpEventType.INTERVAL_BATCH_INGESTED,
+            EventProcessingLane.BULK,
+        ): orchestrator_bulk_publisher,
+        (
+            IpEventType.INTERVAL_BATCH_PROCESSED,
+            EventProcessingLane.REALTIME,
+        ): orchestrator_realtime_publisher,
+        (
+            IpEventType.INTERVAL_BATCH_PROCESSED,
+            EventProcessingLane.BULK,
+        ): orchestrator_bulk_publisher,
+        (
+            IpEventType.FEEDER_OUTAGE_DETECTED,
+            EventProcessingLane.REALTIME,
+        ): orchestrator_realtime_publisher,
+        (
+            IpEventType.FEEDER_OUTAGE_DETECTED,
+            EventProcessingLane.BULK,
+        ): orchestrator_realtime_publisher,
         NOTIFICATION_REQUESTED_EVENT_TYPE: notification_publisher,
     }
     return EventTypeOutboxRouter(

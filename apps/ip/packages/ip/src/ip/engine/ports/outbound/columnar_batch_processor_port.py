@@ -23,7 +23,7 @@ class ColumnarNormalizedBatchDTO:
     """Immutable result of vectorized L2/L3 interval batch normalization.
 
     Contains:
-    - `arrow_ipc_bytes`: Contiguous zero-copy binary columnar Arrow IPC stream buffer
+    - `columnar_bytes`: Contiguous zero-copy binary columnar stream buffer
       ready for direct streaming into the columnar rollup store (Invariant 1).
     - `canonical_readings`: Validated & VEE-tagged canonical readings (including quarantined spikes
       marked with `CimQualityStatus.QUARANTINED_SPIKE` so every interval is accounted for).
@@ -35,10 +35,15 @@ class ColumnarNormalizedBatchDTO:
     tenant_id: str
     connection_id: str
     stream_name: str
-    arrow_ipc_bytes: bytes
+    columnar_bytes: bytes
     canonical_readings: tuple[IntervalReading, ...]
     counts: BatchReconciliationCounts
     outage_clusters: tuple[FeederOutageCluster, ...]
+
+    @property
+    def arrow_ipc_bytes(self) -> bytes:
+        """Capability alias preserving backward compatibility."""
+        return self.columnar_bytes
 
 
 class ColumnarBatchProcessorPort(Protocol):

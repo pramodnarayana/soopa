@@ -95,8 +95,7 @@ export function DailyCompletenessRibbonPanel({
               onSelectCell={(cell) =>
                 onSelectFeeder(selectedFeederId === cell.key ? null : cell.key)
               }
-              lessLabel="Lower Volume"
-              moreLabel="Higher Volume"
+              legendType="threshold"
             />
 
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">

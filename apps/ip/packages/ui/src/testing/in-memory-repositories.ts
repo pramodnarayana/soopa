@@ -839,16 +839,55 @@ export class InMemoryIntervalRepository implements IntervalRepositoryPort {
   }
 
   public async getReconciliationOverview(
-    _tenantId: string,
+    tenantId: string,
     params?: GetReconciliationParams,
   ): Promise<Result<BatchReconciliationOverview, ApiProblem>> {
-    const batches = params?.connectionId
+    if (tenantId !== this.overview.tenantId) {
+      return ok({
+        tenantId,
+        connectionId: params?.connectionId ?? null,
+        totalBatches: 0,
+        completedBatches: 0,
+        inFlightBatches: 0,
+        failedBatches: 0,
+        rawIngestedTotal: 0,
+        duplicatesDroppedTotal: 0,
+        validCanonicalTotal: 0,
+        quarantinedHeldTotal: 0,
+        inFlightReadingsTotal: 0,
+        isZeroLossBalanced: true,
+        recentBatches: [],
+      });
+    }
+
+    const matchingBatches = params?.connectionId
       ? this.overview.recentBatches.filter((b) => b.connectionId === params.connectionId)
       : this.overview.recentBatches;
+
+    const rawIngested = matchingBatches.reduce((sum, b) => sum + b.rawIngestedCount, 0);
+    const duplicatesDropped = matchingBatches.reduce((sum, b) => sum + b.duplicatesDroppedCount, 0);
+    const validCanonical = matchingBatches.reduce((sum, b) => sum + b.validCanonicalCount, 0);
+    const quarantinedHeld = matchingBatches.reduce((sum, b) => sum + b.quarantinedHeldCount, 0);
+    const totalBatches = matchingBatches.length;
+    const completedBatches = matchingBatches.filter((b) => b.status === 'COMPLETED').length;
+    const failedBatches = matchingBatches.filter((b) => b.status === 'FAILED').length;
+    const inFlightBatches = totalBatches - completedBatches - failedBatches;
+    const isZeroLossBalanced = rawIngested === validCanonical + duplicatesDropped + quarantinedHeld;
+
     return ok({
-      ...this.overview,
+      tenantId,
       connectionId: params?.connectionId ?? this.overview.connectionId,
-      recentBatches: batches.slice(0, params?.recentLimit ?? 20),
+      totalBatches,
+      completedBatches,
+      inFlightBatches,
+      failedBatches,
+      rawIngestedTotal: rawIngested,
+      duplicatesDroppedTotal: duplicatesDropped,
+      validCanonicalTotal: validCanonical,
+      quarantinedHeldTotal: quarantinedHeld,
+      inFlightReadingsTotal: 0,
+      isZeroLossBalanced,
+      recentBatches: matchingBatches.slice(0, params?.recentLimit ?? 20),
     });
   }
 
@@ -876,6 +915,7 @@ export class InMemoryIntervalRepository implements IntervalRepositoryPort {
         (r) =>
           r.tenantId === tenantId &&
           r.serviceDate === params.serviceDate &&
+          (!params.connectionId || r.connectionId === params.connectionId) &&
           (!params.feederId || r.feederId === params.feederId) &&
           (!params.sourceDeviceId || r.sourceDeviceId === params.sourceDeviceId),
       ),
@@ -898,15 +938,19 @@ export class InMemoryIntervalRepository implements IntervalRepositoryPort {
   }
 
   public async recordSettlementReceipt(
-    _tenantId: string,
+    tenantId: string,
     batchId: string,
     deliveryReceiptId: string,
   ): Promise<Result<BatchManifestSummary, ApiProblem>> {
-    const existing =
-      this.overview.recentBatches.find((b) => b.batchId === batchId) ?? SEED_BATCH_MANIFEST;
+    if (this.overview.tenantId !== tenantId) {
+      return err(notFoundProblem(`Batch ${batchId} not found in tenant ${tenantId}`));
+    }
+    const existing = this.overview.recentBatches.find((b) => b.batchId === batchId);
+    if (!existing) {
+      return err(notFoundProblem(`Batch manifest ${batchId} not found`));
+    }
     const updated: BatchManifestSummary = {
       ...existing,
-      batchId,
       deliveryReceiptId,
     };
     this.overview = {
@@ -914,8 +958,16 @@ export class InMemoryIntervalRepository implements IntervalRepositoryPort {
       recentBatches: this.overview.recentBatches.map((b) => (b.batchId === batchId ? updated : b)),
     };
     this.touRollups = this.touRollups.map((r) =>
-      r.latestBatchId === batchId ? { ...r, deliveryReceiptId } : r,
+      r.latestBatchId === batchId && r.tenantId === tenantId ? { ...r, deliveryReceiptId } : r,
     );
+    if (this.lineageTrace.tenantId === tenantId) {
+      this.lineageTrace = {
+        ...this.lineageTrace,
+        intervals: this.lineageTrace.intervals.map((pt) =>
+          pt.sourceBatchId === batchId ? { ...pt, deliveryReceiptId } : pt,
+        ),
+      };
+    }
     return ok(updated);
   }
 }

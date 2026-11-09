@@ -72,6 +72,7 @@ export const DailyTouRollupWireSchema = z.object({
   valid_intervals: z.number(),
   quarantined_intervals: z.number(),
   latest_batch_id: z.string(),
+  connection_id: z.string().optional().default(''),
   delivery_receipt_id: z.string().nullable(),
 });
 export const DailyTouRollupListWireSchema = z.array(DailyTouRollupWireSchema);

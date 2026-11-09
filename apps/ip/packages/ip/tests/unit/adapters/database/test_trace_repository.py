@@ -26,6 +26,7 @@ from ip.engine.adapters.outbound.database.data_plane.uow import (
 )
 from ip.engine.adapters.outbound.database.models.base import IpTenantBase
 from ip.engine.adapters.outbound.database.models.data_plane import (
+    BatchManifestModel,
     GlobalEntityMapModel,
     InboundRecordModel,
     IpDataPlaneOutboxRecord,
@@ -337,6 +338,7 @@ async def test_trace_stage_specs_map_in_flight_outbound_status_with_deduplicated
                         InboundRecordModel.__table__,
                         NormalizedRecordModel.__table__,
                         OutboundRecordModel.__table__,
+                        BatchManifestModel.__table__,
                         IpTraceEventModel.__table__,
                         IpDataPlaneOutboxRecord.__table__,
                     ],

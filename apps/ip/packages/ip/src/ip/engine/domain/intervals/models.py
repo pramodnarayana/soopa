@@ -62,11 +62,13 @@ class StormAggregationPolicy:
 
     - Below `storm_threshold_meters`: promotes individual endpoint outage clusters.
     - At or above `storm_threshold_meters`: collapses all 0.0V endpoints on the same
-      (feeder_id, substation_id) into a single FeederOutageCluster event.
+      (feeder_id, substation_id) within a common time window into a single FeederOutageCluster event.
     """
 
     storm_threshold_meters: int = 25
     zero_voltage_threshold: float = 0.01
+    time_window_minutes: int = 15
+    freshness_window_minutes: int = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,6 +156,7 @@ class DailyTouBillingRollup:
     valid_intervals: int
     quarantined_intervals: int
     latest_batch_id: str
+    connection_id: str = ""
     delivery_receipt_id: str | None = None
 
 
@@ -390,6 +393,17 @@ class BatchManifest(TracedAggregateRoot):
                 IntervalReconciliationImbalanceError.for_counts(
                     batch_id=self.id,
                     raw_ingested=counts.raw_ingested,
+                    duplicates_dropped=counts.duplicates_dropped,
+                    valid_canonical=counts.valid_canonical,
+                    quarantined_held=counts.quarantined_held,
+                )
+            )
+
+        if self.raw_ingested_count > 0 and counts.raw_ingested != self.raw_ingested_count:
+            return Result.fail(
+                IntervalReconciliationImbalanceError.for_counts(
+                    batch_id=self.id,
+                    raw_ingested=self.raw_ingested_count,
                     duplicates_dropped=counts.duplicates_dropped,
                     valid_canonical=counts.valid_canonical,
                     quarantined_held=counts.quarantined_held,

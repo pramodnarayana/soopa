@@ -66,6 +66,7 @@ from ip.engine.domain.exceptions import (
     Result,
     TenantShardNotFoundError,
 )
+from ip.engine.domain.intervals.models import BatchManifest, BatchReconciliationSummary
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 from ip.engine.domain.replication.enums import (
@@ -82,6 +83,9 @@ from ip.engine.domain.replication.replica_record import (
     ReplicaRejection,
 )
 from ip.engine.domain.replication.stream_definition import StreamDefinition
+from ip.engine.ports.outbound.batch_manifest_repository_port import (
+    BatchManifestRepositoryPort,
+)
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
 from ip.engine.ports.outbound.normalization_ledger_repository_port import (
@@ -641,6 +645,69 @@ class FakeNormalizedRecordRepo(NormalizedRecordRepositoryPort):
         ]
 
 
+class InMemoryBatchManifestRepo(BatchManifestRepositoryPort):
+    """In-memory BatchManifestRepositoryPort for testing interval macro-batch flows."""
+
+    def __init__(self, manifests: Sequence[BatchManifest] | None = None) -> None:
+        self.manifests: dict[str, BatchManifest] = {m.id: m for m in manifests} if manifests else {}
+
+    async def save(self, manifest: BatchManifest) -> None:
+        self.manifests[manifest.id] = manifest
+
+    async def get_by_id(self, batch_id: str, tenant_id: str) -> BatchManifest | None:
+        m = self.manifests.get(batch_id)
+        if m is not None and m.tenant_id == tenant_id:
+            return m
+        return None
+
+    async def get_by_sha256(
+        self, tenant_id: str, connection_id: str, payload_sha256: str
+    ) -> BatchManifest | None:
+        for m in self.manifests.values():
+            if (
+                m.tenant_id == tenant_id
+                and m.connection_id == connection_id
+                and m.payload_sha256 == payload_sha256
+            ):
+                return m
+        return None
+
+    async def list_by_connection(
+        self, tenant_id: str, *, connection_id: str | None = None, limit: int = 50
+    ) -> Sequence[BatchManifest]:
+        res = [
+            m
+            for m in self.manifests.values()
+            if m.tenant_id == tenant_id
+            and (connection_id is None or m.connection_id == connection_id)
+        ]
+        res.sort(key=lambda m: m.created_at, reverse=True)
+        return res[:limit]
+
+    async def get_reconciliation_summary(
+        self, tenant_id: str, *, connection_id: str | None = None
+    ) -> BatchReconciliationSummary:
+        matching = [
+            m
+            for m in self.manifests.values()
+            if m.tenant_id == tenant_id
+            and (connection_id is None or m.connection_id == connection_id)
+        ]
+        raw_total = sum(m.raw_ingested_count for m in matching)
+        valid_total = sum(m.valid_canonical_count for m in matching)
+        dups_total = sum(m.duplicates_dropped_count for m in matching)
+        quar_total = sum(m.quarantined_held_count for m in matching)
+        return BatchReconciliationSummary(
+            tenant_id=tenant_id,
+            connection_id=connection_id or "",
+            raw_ingested_total=raw_total,
+            valid_canonical_total=valid_total,
+            duplicates_dropped_total=dups_total,
+            quarantined_held_total=quar_total,
+            is_zero_loss_balanced=(raw_total == valid_total + dups_total + quar_total),
+        )
+
+
 class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
     """In-memory IpDataPlaneUnitOfWorkPort with idempotency tracking and commit/rollback."""
 
@@ -652,6 +719,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
         replica_rejections: FakeReplicaRejectionRepo | None = None,
         normalized_records: FakeNormalizedRecordRepo | None = None,
         outbound_records: FakeOutboundRecordRepo | None = None,
+        batch_manifests: InMemoryBatchManifestRepo | None = None,
     ) -> None:
         self.inbound_records = inbound_records or FakeInboundRecordRepo()
         self.replica_records = replica_records or FakeReplicaRecordRepo()
@@ -666,6 +734,7 @@ class FakeDataPlaneUoW(IpDataPlaneUnitOfWorkPort):
             DummyNormRejectionRepo()
         )
         self.pending_references: PendingReferenceRepositoryPort = DummyPendingRefRepo()
+        self.batch_manifests = batch_manifests or InMemoryBatchManifestRepo()
         self.committed_idempotency_keys: set[tuple[str, str]] = set()
         self._staged_idempotency_keys: set[tuple[str, str]] = set()
         self.commit_count = 0

@@ -71,6 +71,7 @@ export interface DailyTouRollup {
   readonly validIntervals: number;
   readonly quarantinedIntervals: number;
   readonly latestBatchId: string;
+  readonly connectionId?: string;
   readonly deliveryReceiptId: string | null;
 }
 

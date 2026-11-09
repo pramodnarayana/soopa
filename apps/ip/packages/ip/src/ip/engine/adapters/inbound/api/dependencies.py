@@ -177,6 +177,7 @@ def require_ip_permission(
 
 require_raw_records_read = require_ip_permission(IpPermission.IP_RECORDS_RAW_READ)
 require_canonical_records_read = require_ip_permission(IpPermission.IP_RECORDS_CANONICAL_READ)
+require_flows_write = require_ip_permission(IpPermission.IP_FLOWS_WRITE)
 
 
 def get_catalog_registry(request: Request) -> CatalogRegistryPort:
@@ -372,6 +373,7 @@ __all__ = [
     "get_transformer_registry",
     "get_workflow_definition_registry",
     "require_canonical_records_read",
+    "require_flows_write",
     "require_ip_permission",
     "require_raw_records_read",
     "require_tenant_member",

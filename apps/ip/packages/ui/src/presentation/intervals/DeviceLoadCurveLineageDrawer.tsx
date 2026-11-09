@@ -54,6 +54,13 @@ function resolveQualityBadgeVariant(status: string): 'success' | 'warning' | 'de
   return 'warning';
 }
 
+function getSlotIndex(intervalEndUtc: string): number {
+  const d = new Date(intervalEndUtc);
+  const shifted = new Date(d.getTime() - 60_000);
+  const slot = shifted.getUTCHours() * 4 + Math.floor(shifted.getUTCMinutes() / 15);
+  return Math.min(95, Math.max(0, slot));
+}
+
 export function DeviceLoadCurveLineageDrawer({
   open,
   onOpenChange,
@@ -62,11 +69,34 @@ export function DeviceLoadCurveLineageDrawer({
   onOpenBatchTrace,
 }: DeviceLoadCurveLineageDrawerProps) {
   const intervals = trace?.intervals ?? [];
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [selectedSlotIndex, setSelectedSlotIndex] = useState<number | null>(null);
 
-  const effectiveSelectedIndex =
-    selectedIndex >= 0 && selectedIndex < intervals.length ? selectedIndex : 0;
-  const selectedPoint = intervals[effectiveSelectedIndex] ?? null;
+  const slots = useMemo(() => {
+    const arr: Array<{ slotIndex: number; point: IntervalLineagePoint | null }> = Array.from(
+      { length: 96 },
+      (_, i) => ({ slotIndex: i, point: null }),
+    );
+    for (const pt of intervals) {
+      const slot = getSlotIndex(pt.intervalEndUtc);
+      arr[slot] = { slotIndex: slot, point: pt };
+    }
+    return arr;
+  }, [intervals]);
+
+  const effectiveSelectedSlot = useMemo(() => {
+    if (selectedSlotIndex !== null && slots[selectedSlotIndex]?.point) {
+      return selectedSlotIndex;
+    }
+    for (let i = 0; i < slots.length; i++) {
+      if (slots[i]?.point) {
+        return i;
+      }
+    }
+    return null;
+  }, [selectedSlotIndex, slots]);
+
+  const selectedPoint =
+    effectiveSelectedSlot !== null ? (slots[effectiveSelectedSlot]?.point ?? null) : null;
 
   const maxDelivered = useMemo(() => {
     let maxVal = 0.01;
@@ -149,12 +179,25 @@ export function DeviceLoadCurveLineageDrawer({
                 aria-label="96-slot interval bars"
                 className="flex h-32 items-end gap-0.5 border-b border-border pt-4 pb-1"
               >
-                {intervals.map((pt, idx) => {
+                {slots.map((slot) => {
+                  if (!slot.point) {
+                    const hour = Math.floor(slot.slotIndex / 4);
+                    const min = (slot.slotIndex % 4) * 15;
+                    const timeLabel = `${String(hour).padStart(2, '0')}:${String(min).padStart(2, '0')} UTC`;
+                    return (
+                      <div
+                        key={slot.slotIndex}
+                        title={`Slot ${slot.slotIndex + 1}/96 (${timeLabel}) · Missing reading`}
+                        className="h-1 flex-1 self-end rounded-t-[1px] bg-muted/40"
+                      />
+                    );
+                  }
+                  const pt = slot.point;
                   const val = Number.parseFloat(pt.deliveredVolume);
                   const heightPct = Number.isFinite(val)
                     ? Math.max(8, Math.min(100, Math.round((val / maxDelivered) * 100)))
                     : 8;
-                  const isSelected = idx === effectiveSelectedIndex;
+                  const isSelected = slot.slotIndex === effectiveSelectedSlot;
                   return (
                     <button
                       key={pt.intervalEndUtc}
@@ -162,7 +205,7 @@ export function DeviceLoadCurveLineageDrawer({
                       role="option"
                       aria-selected={isSelected}
                       title={`${pt.intervalEndUtc} · ${pt.deliveredVolume} (${pt.qualityStatus})`}
-                      onClick={() => setSelectedIndex(idx)}
+                      onClick={() => setSelectedSlotIndex(slot.slotIndex)}
                       className={cn(
                         'flex-1 rounded-t-[2px] transition-opacity hover:opacity-100 focus:outline-none',
                         resolveBarColorClass(pt),

@@ -919,5 +919,21 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     );
     expect(receiptRes.deliveryReceiptId).toBe('rcpt_01');
     expect(calls).toHaveLength(5);
+
+    const url0 = new URL(calls[0]?.url ?? '');
+    expect(url0.searchParams.get('connection_id')).toBe('conn_01');
+
+    const url1 = new URL(calls[1]?.url ?? '');
+    expect(url1.searchParams.get('service_date')).toBe('2026-10-29');
+
+    const url2 = new URL(calls[2]?.url ?? '');
+    expect(url2.searchParams.get('service_date')).toBe('2026-10-29');
+    expect(url2.searchParams.get('feeder_id')).toBe('FDR-ALPHA-01');
+
+    const url3 = new URL(calls[3]?.url ?? '');
+    expect(url3.searchParams.get('service_date')).toBe('2026-10-29');
+
+    expect(calls[4]?.method).toBe('POST');
+    expect(JSON.parse(calls[4]?.bodyText ?? '{}')).toEqual({ delivery_receipt_id: 'rcpt_01' });
   });
 });
