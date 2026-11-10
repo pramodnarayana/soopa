@@ -158,7 +158,7 @@ def test_columnar_processor_quarantines_spike_via_rolling_median() -> None:
 
 def test_columnar_processor_collapses_storm_feeder_outages() -> None:
     processor = VectorizedIntervalBatchNormalizerAdapter()
-    detected_iso = datetime(2026, 11, 9, 18, 15, tzinfo=UTC).isoformat()
+    detected_iso = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
 
     readings = []
     # 30 zero-voltage endpoints on FDR_STORM_01 (>= 25 threshold -> 1 collapsed FeederOutageCluster)
