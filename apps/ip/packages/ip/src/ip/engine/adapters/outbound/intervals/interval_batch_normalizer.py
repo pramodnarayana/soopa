@@ -166,6 +166,15 @@ def _classify_row_vee_quality(
 class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
     """In-memory vectorized L2/L3 interval batch normalizer, VEE validator, and storm clusterer."""
 
+    def __init__(
+        self,
+        *,
+        default_storm_policy: StormAggregationPolicy | None = None,
+        default_vee_policy: VeeValidationPolicy | None = None,
+    ) -> None:
+        self._default_storm_policy = default_storm_policy
+        self._default_vee_policy = default_vee_policy
+
     def normalize_batch(
         self,
         *,
@@ -180,8 +189,8 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
         storm_policy: StormAggregationPolicy | None = None,
         vee_policy: VeeValidationPolicy | None = None,
     ) -> Result[ColumnarNormalizedBatchDTO, IpError]:
-        effective_storm = storm_policy or StormAggregationPolicy()
-        effective_vee = vee_policy or VeeValidationPolicy()
+        effective_storm = storm_policy or self._default_storm_policy or StormAggregationPolicy()
+        effective_vee = vee_policy or self._default_vee_policy or VeeValidationPolicy()
         crosswalk = gem_crosswalk or {}
 
         if payload_format is IntervalPayloadFormat.ARROW_IPC:
@@ -420,10 +429,11 @@ class VectorizedIntervalBatchNormalizerAdapter(ColumnarBatchProcessorPort):
         endpoints_by_feeder_window: dict[tuple[str, str, datetime], dict[str, datetime]] = {}
         for r in readings:
             if r.voltage_v <= storm_policy.zero_voltage_threshold:
-                # Freshness check: exclude historical readings from real-time outage cluster events
-                age_sec = (now - r.interval_end_utc).total_seconds()
-                if age_sec > freshness_limit_sec:
-                    continue
+                # Freshness check: exclude historical readings from real-time outage cluster events (disabled when <= 0)
+                if freshness_limit_sec > 0:
+                    age_sec = (now - r.interval_end_utc).total_seconds()
+                    if age_sec > freshness_limit_sec:
+                        continue
 
                 bucket_minute = (r.interval_end_utc.minute // window_minutes) * window_minutes
                 time_bucket = r.interval_end_utc.replace(

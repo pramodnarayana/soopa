@@ -13,7 +13,7 @@ from .identity import ApiKey, ApiToken, Capability, Role, Tenant, TenantUser, Us
 from .notifications import NotificationOutbox, NotificationTemplate, UserNotificationPreference
 from .observability import SystemAuditLog
 from .scheduling import ScheduledJob
-from .sharding import DatabaseShard, ShardRegistry
+from .sharding import DatabaseShard, ShardRegistry, VirtualBucketAssignment
 from .subscriptions import App, AppSubscription
 from .webhooks import Webhook
 
@@ -46,5 +46,6 @@ __all__ = [
     "User",
     "UserNotificationPreference",
     "UserRole",
+    "VirtualBucketAssignment",
     "Webhook",
 ]

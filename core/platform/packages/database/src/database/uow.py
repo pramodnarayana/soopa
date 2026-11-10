@@ -6,12 +6,14 @@ from types import TracebackType
 from typing import Generic, Self, TypeVar
 
 from seedwork.uow import UnitOfWorkPort
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.interceptors import intercept_db_errors
+from database.replication_watermark import parse_postgres_lsn
 from database.router import DatabaseRouterPort
 from database.tenant_shard_resolver import TenantShardResolverPort
-from database.types import TenantSession
+from database.types import ReplicationWatermark, TenantSession
 
 TUoW = TypeVar("TUoW", bound=UnitOfWorkPort)
 
@@ -19,14 +21,18 @@ TUoW = TypeVar("TUoW", bound=UnitOfWorkPort)
 class BaseSqlAlchemyUnitOfWork:
     """
     Centralized Base Unit of Work for all domains.
-    Handles transaction lifecycle and common error translation (e.g. IntegrityError).
+
+    Handles ACID transaction lifecycle, common error translation, and optional
+    causal `ReplicationWatermark` capture for Read-Your-Own-Writes (RYOW).
     """
 
     session: AsyncSession
+    last_commit_watermark: ReplicationWatermark | None
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self._owns_transaction: bool = False
+        self.last_commit_watermark = None
 
     async def __aenter__(self) -> Self:
         if not self.session.in_transaction():
@@ -44,6 +50,19 @@ class BaseSqlAlchemyUnitOfWork:
     ) -> None:
         if self._owns_transaction and self.session.in_transaction():
             await self.rollback()
+
+    async def capture_replication_watermark(self) -> ReplicationWatermark:
+        """Sample current PostgreSQL `pg_current_wal_insert_lsn()` post-commit."""
+        if self.session.in_transaction():
+            raise RuntimeError(
+                "Cannot capture replication watermark while a transaction is active; "
+                "sampling must occur post-commit on the same writer to include the commit WAL record."
+            )
+        result = await self.session.execute(text("SELECT pg_current_wal_insert_lsn()::text"))
+        lsn_text = str(result.scalar_one())
+        watermark = parse_postgres_lsn(lsn_text)
+        self.last_commit_watermark = watermark
+        return watermark
 
     async def commit(self) -> None:
         try:

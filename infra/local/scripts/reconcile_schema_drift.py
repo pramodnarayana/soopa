@@ -18,8 +18,40 @@ from database.provider import DatabaseProvider
 from seedwork.infra.config import load_repo_env, load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
+
+
+async def _reconcile_ucp_cellular_sharding(session: AsyncSession) -> None:
+    """Idempotently reconciles Cellular CQRS columns and virtual bucket assignments in `ucp`."""
+    await session.execute(
+        text("ALTER TABLE ucp.database_shards ADD COLUMN IF NOT EXISTS reader_dsn VARCHAR(1024);")
+    )
+    await session.execute(
+        text(
+            "ALTER TABLE ucp.database_shards ADD COLUMN IF NOT EXISTS routing_strategy VARCHAR(50) NOT NULL DEFAULT 'tenant_registry';"
+        )
+    )
+    await session.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS ucp.virtual_bucket_assignments (
+                id VARCHAR(128) NOT NULL PRIMARY KEY,
+                app_id VARCHAR(128) NOT NULL REFERENCES ucp.apps(id) ON DELETE CASCADE,
+                bucket_start INTEGER NOT NULL,
+                bucket_end INTEGER NOT NULL,
+                shard_id VARCHAR(128) NOT NULL REFERENCES ucp.database_shards(id) ON DELETE CASCADE,
+                created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+                CONSTRAINT uq_virtual_bucket_app_start UNIQUE (app_id, bucket_start),
+                CONSTRAINT ck_virtual_bucket_bounds CHECK (
+                    bucket_start >= 0 AND bucket_end >= bucket_start AND bucket_end < 4096
+                )
+            );
+            """
+        )
+    )
 
 
 async def _reconcile_ip_shard(shard_url: str) -> None:
@@ -298,11 +330,13 @@ async def reconcile(domain: str = "all") -> None:
                     text("""
                     UPDATE ip.connections
                     SET status = 'ACTIVE'
-                    WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH';
+                    WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'
+                    RETURNING id;
                     """)
                 )
-                if conn_res.rowcount and conn_res.rowcount > 0:
-                    logger.info("reconciled_no_auth_connections", activated_count=conn_res.rowcount)
+                activated_count = len(conn_res.all())
+                if activated_count > 0:
+                    logger.info("reconciled_no_auth_connections", activated_count=activated_count)
 
                 await session.execute(
                     text(
@@ -389,6 +423,7 @@ async def reconcile(domain: str = "all") -> None:
                         updated_at = NOW();
                     """)
                 )
+                await _reconcile_ucp_cellular_sharding(session)
 
             await session.commit()
             if target in ("all", "ip"):

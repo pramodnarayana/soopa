@@ -244,6 +244,10 @@ def compute_schema_and_seed_fingerprint(
     if init_sql.is_file():
         tracked_files.append(init_sql)
 
+    reconcile_script = root_dir / "infra" / "local" / "scripts" / "reconcile_schema_drift.py"
+    if reconcile_script.is_file():
+        tracked_files.append(reconcile_script)
+
     migrations_dir = root_dir / "core" / "platform" / "packages" / "database" / "migrations"
     if migrations_dir.is_dir():
         tracked_files.extend(
@@ -401,6 +405,17 @@ def _run_python_module(
     subprocess.run(cmd, cwd=cwd, env=dict(env), check=True)  # noqa: S603 - Trusted internal Python module execution via sys.executable
 
 
+def _run_python_script(
+    script_path: Path,
+    args: Sequence[str],
+    *,
+    cwd: Path,
+    env: Mapping[str, str],
+) -> None:
+    cmd = [sys.executable, str(script_path), *args]
+    subprocess.run(cmd, cwd=cwd, env=dict(env), check=True)  # noqa: S603 - Trusted internal repo script execution via sys.executable
+
+
 async def ensure_test_databases_ready(
     *,
     root_dir: Path,
@@ -445,6 +460,12 @@ async def ensure_test_databases_ready(
     _run_python_module(
         "platform_migrator",
         ["migrate", "--domain", "platform"],
+        cwd=root_dir,
+        env=test_env,
+    )
+    _run_python_script(
+        root_dir / "infra" / "local" / "scripts" / "reconcile_schema_drift.py",
+        ["--domain", "platform"],
         cwd=root_dir,
         env=test_env,
     )

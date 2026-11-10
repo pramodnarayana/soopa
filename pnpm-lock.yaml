@@ -42,6 +42,9 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:apps/edi/packages/edi
+      '@soopa/cache':
+        specifier: workspace:*
+        version: link:core/platform/packages/cache
       '@soopa/database':
         specifier: workspace:*
         version: link:core/platform/packages/database
@@ -768,6 +771,8 @@ importers:
       '@soopa/ucp-worker':
         specifier: workspace:*
         version: link:../../../ucp/apps/ucp-worker
+
+  core/platform/packages/cache: {}
 
   core/platform/packages/database: {}
 

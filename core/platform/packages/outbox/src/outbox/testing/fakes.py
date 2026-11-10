@@ -1,8 +1,10 @@
 from collections.abc import Sequence
 
+from outbox.domain.models import LogicalStreamEmissionResult
 from outbox.ports.outbox_cleanup_repository_port import OutboxCleanupRepositoryPort
 from outbox.ports.outbox_publisher_port import OutboxPublisherPort
 from outbox.ports.outbox_repository_port import OutboxRepositoryPort
+from outbox.ports.transactional_stream_emitter_port import TransactionalStreamEmitterPort
 from seedwork.events import EventEnvelope
 
 
@@ -65,3 +67,25 @@ class FakeOutboxRepository(OutboxRepositoryPort):
     ) -> None:
         for event_id in event_ids:
             await self.mark_failed(event_id, worker_id, error_message)
+
+
+class FakeTransactionalStreamEmitter(TransactionalStreamEmitterPort):
+    """In-memory deterministic fake for `TransactionalStreamEmitterPort`."""
+
+    def __init__(self) -> None:
+        self.emitted_envelopes: list[EventEnvelope] = []
+        self._watermark_seq: int = 1000
+
+    async def emit_transactional_batch(
+        self,
+        envelopes: Sequence[EventEnvelope],
+    ) -> LogicalStreamEmissionResult:
+        if not envelopes:
+            return LogicalStreamEmissionResult(emitted_count=0, high_watermark=None)
+        for env in envelopes:
+            self.emitted_envelopes.append(env)
+            self._watermark_seq += 64
+        return LogicalStreamEmissionResult(
+            emitted_count=len(envelopes),
+            high_watermark=self._watermark_seq,
+        )

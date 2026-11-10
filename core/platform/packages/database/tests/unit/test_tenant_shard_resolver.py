@@ -6,6 +6,7 @@ from typing import Any, cast
 
 import pytest
 
+from database.constants import ShardResolutionStatus
 from database.router import DatabaseRouterPort
 from database.tenant_shard_resolver import TenantNotFoundError, TenantShardResolver
 from database.types import GlobalSession, TenantSession
@@ -35,6 +36,9 @@ class FakeResult:
     def scalars(self) -> FakeScalars:
         return FakeScalars(self._data if isinstance(self._data, list) else [])
 
+    def all(self) -> list[Any]:
+        return self._data if isinstance(self._data, list) else []
+
 
 class FakeScalars:
     def __init__(self, data: list[Any]) -> None:
@@ -42,6 +46,9 @@ class FakeScalars:
 
     def all(self) -> list[Any]:
         return self._data
+
+    def first(self) -> Any:
+        return self._data[0] if self._data else None
 
 
 class FakeDatabaseRouter(DatabaseRouterPort):
@@ -73,9 +80,38 @@ class FakeDatabaseRouter(DatabaseRouterPort):
 
 
 class FakeShardObj:
-    def __init__(self, shard_id: str, shard_dsn: str) -> None:
+    def __init__(
+        self,
+        shard_id: str,
+        shard_dsn: str,
+        *,
+        name: str = "shard_name",
+        reader_dsn: str | None = None,
+        status: str = "active",
+        routing_strategy: str = "tenant_registry",
+    ) -> None:
         self.id = shard_id
         self.dsn = shard_dsn
+        self.name = name
+        self.reader_dsn = reader_dsn
+        self.status = status
+        self.routing_strategy = routing_strategy
+
+
+class FakeBucketAssignmentObj:
+    def __init__(
+        self,
+        assignment_id: str,
+        app_id: str,
+        bucket_start: int,
+        bucket_end: int,
+        shard_id: str,
+    ) -> None:
+        self.id = assignment_id
+        self.app_id = app_id
+        self.bucket_start = bucket_start
+        self.bucket_end = bucket_end
+        self.shard_id = shard_id
 
 
 class FakeTenantObj:
@@ -177,3 +213,101 @@ async def test_tenant_shard_resolver_get_all_tenant_ids() -> None:
 
     tenant_ids = await resolver.get_all_tenant_ids()
     assert tenant_ids == ["ten_1", "ten_2", "ten_3"]
+
+
+@pytest.mark.asyncio
+async def test_cellular_resolver_resolves_endpoint_with_reader_dsn_and_write_fence() -> None:
+    s_active = FakeShardObj(
+        "ucp_shard_01",
+        "dsn://pod01/writer",
+        name="pod01",
+        reader_dsn="dsn://pod01/reader",
+        status="write_fenced",
+    )
+    session = FakeSession(execute_results=[[s_active]])
+    router = FakeDatabaseRouter([session])
+    resolver = TenantShardResolver(db_router=router, app_slug="edi", ttl_secs=300)
+
+    assert resolver.app_slug == "edi"
+    outcome = await resolver.resolve_tenant_endpoint("iam_ten_01")
+    assert outcome.status == ShardResolutionStatus.WRITE_FENCED
+    assert outcome.endpoint is not None
+    assert outcome.endpoint.writer_dsn == "dsn://pod01/writer"
+    assert outcome.endpoint.reader_dsn == "dsn://pod01/reader"
+
+    cached = await resolver.resolve_tenant_endpoint("iam_ten_01")
+    assert cached.status == ShardResolutionStatus.WRITE_FENCED
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_cellular_resolver_uses_virtual_bucket_ring_for_subjects() -> None:
+    cell_a = FakeShardObj(
+        "ucp_shard_cell_a",
+        "dsn://cell_a/writer",
+        reader_dsn="dsn://cell_a/reader",
+        routing_strategy="virtual_bucket_ring",
+    )
+    cell_b = FakeShardObj(
+        "ucp_shard_cell_b",
+        "dsn://cell_b/writer",
+        reader_dsn="dsn://cell_b/reader",
+        routing_strategy="virtual_bucket_ring",
+    )
+    b1 = FakeBucketAssignmentObj("ucp_bkt_1", "ucp_app_1", 0, 2047, "ucp_shard_cell_a")
+    b2 = FakeBucketAssignmentObj("ucp_bkt_2", "ucp_app_1", 2048, 4095, "ucp_shard_cell_b")
+
+    session = FakeSession(execute_results=[[(b1, cell_a), (b2, cell_b)]])
+    router = FakeDatabaseRouter([session])
+    resolver = TenantShardResolver(db_router=router, app_slug="consumer", ttl_secs=300)
+
+    out1 = await resolver.resolve_subject_endpoint("iam_ten_global", "usr_alpha_1")
+    out2 = await resolver.resolve_subject_endpoint("iam_ten_global", "usr_beta_2")
+    assert out1.status == ShardResolutionStatus.RESOLVED
+    assert out2.status == ShardResolutionStatus.RESOLVED
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_cellular_resolver_caches_empty_ring_assignments() -> None:
+    # First global session: empty bucket assignments
+    ring_session = FakeSession(execute_results=[[]])
+    # Second global session: tenant shard registry lookup
+    shard_obj = FakeShardObj(
+        "ucp_shard_01",
+        "dsn://pod01/writer",
+        name="pod01",
+        reader_dsn="dsn://pod01/reader",
+    )
+    tenant_session = FakeSession(execute_results=[[shard_obj]])
+    router = FakeDatabaseRouter([ring_session, tenant_session])
+    resolver = TenantShardResolver(db_router=router, app_slug="consumer", ttl_secs=300)
+
+    out1 = await resolver.resolve_subject_endpoint("iam_ten_01", "usr_1")
+    assert out1.status == ShardResolutionStatus.RESOLVED
+    assert out1.endpoint is not None
+    assert out1.endpoint.shard_id == "ucp_shard_01"
+
+    # Second call should use cached empty ring and cached endpoint without hitting router sessions
+    out2 = await resolver.resolve_subject_endpoint("iam_ten_01", "usr_2")
+    assert out2.status == ShardResolutionStatus.RESOLVED
+    assert len(router._sessions) == 0
+
+
+@pytest.mark.asyncio
+async def test_cellular_resolver_invalid_ring_topology_returns_not_found() -> None:
+    cell_a = FakeShardObj("ucp_shard_cell_a", "dsn://cell_a/writer")
+    # Incomplete range: 0..1000 does not cover 4096 buckets
+    b_incomplete = FakeBucketAssignmentObj("ucp_bkt_1", "ucp_app_1", 0, 1000, "ucp_shard_cell_a")
+    session = FakeSession(execute_results=[[(b_incomplete, cell_a)]])
+    router = FakeDatabaseRouter([session])
+    resolver = TenantShardResolver(db_router=router, app_slug="consumer", ttl_secs=300)
+
+    out1 = await resolver.resolve_subject_endpoint("iam_ten_global", "usr_1")
+    assert out1.status == ShardResolutionStatus.NOT_FOUND
+    assert out1.reason == "ring_topology_invalid"
+
+    # Second call within TTL should return cached outcome without raising or extra session pops
+    out2 = await resolver.resolve_subject_endpoint("iam_ten_global", "usr_2")
+    assert out2.status == ShardResolutionStatus.NOT_FOUND
+    assert out2.reason == "ring_topology_invalid"

@@ -69,6 +69,7 @@ from ip.engine.domain.intervals.enums import (
     IntervalPayloadFormat,
     PriorityLane,
 )
+from ip.engine.domain.intervals.models import StormAggregationPolicy
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from pubsub.enums import ConsumerAction
 from seedwork.events import EventEnvelope
@@ -270,7 +271,9 @@ async def test_interval_orchestrator_processes_batch_end_to_end_pipeline(
         storage=storage,
     )
     cp_uow = create_ip_control_plane_uow(global_session)
-    columnar_processor = VectorizedIntervalBatchNormalizerAdapter()
+    columnar_processor = VectorizedIntervalBatchNormalizerAdapter(
+        default_storm_policy=StormAggregationPolicy(freshness_window_minutes=0)
+    )
     rollup_repo = ColumnarIntervalRollupRepositoryAdapter()
 
     service_day = date(2026, 11, 9)

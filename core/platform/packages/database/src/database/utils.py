@@ -110,3 +110,17 @@ def shard_connect_args() -> dict[str, dict[str, str]]:
         get_async_engine(url, server_settings=shard_connect_args()["server_settings"])
     """
     return {"server_settings": {"search_path": "public"}}
+
+
+def pgbouncer_transaction_connect_args() -> dict[str, int | dict[str, str]]:
+    """
+    Returns asyncpg `connect_args` safe for PgBouncer `pool_mode = transaction`.
+
+    Disables `asyncpg` client-side prepared statement caching (`statement_cache_size=0`)
+    so rotating backend PostgreSQL server sessions never raise
+    `DuplicatePreparedStatementError` or `InvalidSQLStatementNameError`.
+    """
+    return {
+        "statement_cache_size": 0,
+        "server_settings": {"search_path": "public"},
+    }

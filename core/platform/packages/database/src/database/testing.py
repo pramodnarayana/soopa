@@ -16,8 +16,8 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession, async_sessionmaker
 
-from database.router import DatabaseRouter, DatabaseRouterPort
-from database.types import GlobalSession, TenantSession
+from database.router import DatabaseReadRouterPort, DatabaseRouter, DatabaseRouterPort
+from database.types import GlobalSession, TenantReadSession, TenantSession
 from database.utils import DEFAULT_TEST_DB_SUFFIX, is_postgres_dsn
 
 
@@ -58,7 +58,7 @@ def assert_test_database_url(url: str) -> str:
     return url
 
 
-class TransactionalTestRouter(DatabaseRouterPort):
+class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
     """
     Test implementation of the Database Router.
     Uses pre-bound connections injected via Pytest fixtures, wrapped in Savepoints.
@@ -116,6 +116,34 @@ class TransactionalTestRouter(DatabaseRouterPort):
                     )
                     session.info["session_type"] = "tenant"
                     yield cast(TenantSession, session)
+            finally:
+                await self.shard_conn.execute(
+                    text("SELECT set_config('platform.current_tenant_id', '', true)")
+                )
+
+    async def get_tenant_read_session(
+        self,
+        tenant_id: str,
+        pool_key: str,
+        target_dsn: str,
+    ) -> AsyncGenerator[TenantReadSession, None]:
+        _ = (pool_key, target_dsn)
+        async with self.shard_db_lock:
+            factory = async_sessionmaker(
+                bind=self.shard_conn,
+                expire_on_commit=False,
+                class_=AsyncSession,
+                join_transaction_mode="create_savepoint",
+            )
+            try:
+                async with factory() as session:
+                    await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
+                    await session.execute(
+                        text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
+                        {"tenant_id": tenant_id},
+                    )
+                    session.info["session_type"] = "tenant_read"
+                    yield cast(TenantReadSession, session)
             finally:
                 await self.shard_conn.execute(
                     text("SELECT set_config('platform.current_tenant_id', '', true)")

@@ -15,7 +15,40 @@ source_roots = [
     "apps/ip/packages/ip/src",
     "core/platform/packages/shttp/src",
     "core/platform/packages/orchestration/src",
-    "core/platform/packages/strace/src"
+    "core/platform/packages/strace/src",
+    "core/platform/packages/cache/src"
+]
+
+
+[[modules]]
+path = "cache.domain"
+depends_on = []
+
+[[modules]]
+path = "cache.ports"
+depends_on = [
+    "cache.domain"
+]
+
+[[modules]]
+path = "cache.application"
+depends_on = [
+    "cache.domain",
+    "cache.ports"
+]
+
+[[modules]]
+path = "cache.adapters"
+depends_on = [
+    "cache.domain",
+    "cache.ports"
+]
+
+[[modules]]
+path = "cache.testing"
+depends_on = [
+    "cache.domain",
+    "cache.ports"
 ]
 
 
