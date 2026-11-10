@@ -9,6 +9,7 @@ streams using binary-safe RESP2 framing, executing atomic Lua CAS scripts, `HMGE
 from __future__ import annotations
 
 import asyncio
+import ssl
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Final, Protocol
 
@@ -103,17 +104,41 @@ class RespSocketStoreExecutor(AtomicCacheStoreExecutorPort):
         pool_size: int = 16,
         timeout_seconds: float = 0.25,
         connection_factory: RespConnectionFactory | None = None,
+        username: str | None = None,
+        password: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
     ) -> None:
         self._host = host
         self._port = port
         self._timeout = timeout_seconds
         self._pool: asyncio.Queue[RespConnectionPair] = asyncio.Queue(maxsize=pool_size)
+        self._semaphore = asyncio.Semaphore(pool_size)
+        self._username = username
+        self._password = password
+        self._ssl_context = ssl_context
         self._factory: RespConnectionFactory = (
             connection_factory if connection_factory is not None else self._open_tcp_socket
         )
 
     async def _open_tcp_socket(self) -> RespConnectionPair:
-        reader, writer = await asyncio.open_connection(self._host, self._port)
+        reader, writer = await asyncio.open_connection(
+            self._host, self._port, ssl=self._ssl_context
+        )
+        if self._password is not None:
+            auth_cmd = (
+                ["AUTH", self._username, self._password]
+                if self._username
+                else ["AUTH", self._password]
+            )
+            encoded = RespProtocolCodec.encode_command(auth_cmd)
+            writer.write(encoded)
+            await asyncio.wait_for(writer.drain(), timeout=self._timeout)
+            resp = await asyncio.wait_for(
+                RespProtocolCodec.read_frame(reader), timeout=self._timeout
+            )
+            if not isinstance(resp, str) or not resp.startswith("OK"):
+                writer.close()
+                raise ConnectionError("Redis AUTH failed on new connection")
         return reader, writer
 
     async def _acquire(self) -> RespConnectionPair:
@@ -121,6 +146,7 @@ class RespSocketStoreExecutor(AtomicCacheStoreExecutorPort):
             reader, writer = self._pool.get_nowait()
             if not writer.is_closing() and not reader.at_eof():
                 return reader, writer
+            writer.close()
         return await self._factory()
 
     def _release(self, pair: RespConnectionPair) -> None:
@@ -133,20 +159,21 @@ class RespSocketStoreExecutor(AtomicCacheStoreExecutorPort):
             writer.close()
 
     async def _execute_raw(self, command: Sequence[str]) -> RespFrame:
-        pair = await asyncio.wait_for(self._acquire(), timeout=self._timeout)
-        reader, writer = pair
-        try:
-            encoded = RespProtocolCodec.encode_command(command)
-            writer.write(encoded)
-            await asyncio.wait_for(writer.drain(), timeout=self._timeout)
-            response = await asyncio.wait_for(
-                RespProtocolCodec.read_frame(reader), timeout=self._timeout
-            )
-            self._release(pair)
-            return response
-        except Exception:
-            writer.close()
-            raise
+        async with self._semaphore:
+            pair = await asyncio.wait_for(self._acquire(), timeout=self._timeout)
+            reader, writer = pair
+            try:
+                encoded = RespProtocolCodec.encode_command(command)
+                writer.write(encoded)
+                await asyncio.wait_for(writer.drain(), timeout=self._timeout)
+                response = await asyncio.wait_for(
+                    RespProtocolCodec.read_frame(reader), timeout=self._timeout
+                )
+                self._release(pair)
+                return response
+            except BaseException:
+                writer.close()
+                raise
 
     async def read_projection_hash(self, storage_key: str) -> StoredHashProjectionDTO:
         try:

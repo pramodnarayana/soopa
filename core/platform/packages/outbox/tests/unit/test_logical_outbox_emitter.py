@@ -69,6 +69,33 @@ async def test_sqlalchemy_logical_outbox_emitter_emits_transactional_messages() 
 
 
 @pytest.mark.asyncio
+async def test_sqlalchemy_logical_outbox_emitter_out_of_order_lsns_preserves_maximum() -> None:
+    raw_session = _FakeLogicalSession(["0/16B3890", "0/16B3748"])
+    emitter = SqlAlchemyLogicalOutboxEmitter(
+        session=cast(AsyncSession, raw_session),
+        channel=LogicalOutboxChannel.SOOPA_OUTBOX,
+    )
+    e1 = _make_envelope(1)
+    e2 = _make_envelope(2)
+    result = await emitter.emit_transactional_batch([e1, e2])
+
+    assert result.emitted_count == 2
+    assert result.high_watermark == parse_postgres_lsn("0/16B3890")
+
+
+@pytest.mark.asyncio
+async def test_sqlalchemy_logical_outbox_emitter_malformed_lsn_raises_value_error() -> None:
+    raw_session = _FakeLogicalSession(["invalid_lsn_format"])
+    emitter = SqlAlchemyLogicalOutboxEmitter(
+        session=cast(AsyncSession, raw_session),
+        channel=LogicalOutboxChannel.SOOPA_OUTBOX,
+    )
+    e1 = _make_envelope(1)
+    with pytest.raises(ValueError, match="Invalid replication watermark LSN format"):
+        await emitter.emit_transactional_batch([e1])
+
+
+@pytest.mark.asyncio
 async def test_sqlalchemy_logical_outbox_emitter_handles_empty_batch() -> None:
     raw_session = _FakeLogicalSession([])
     emitter = SqlAlchemyLogicalOutboxEmitter(session=cast(AsyncSession, raw_session))

@@ -124,3 +124,39 @@ async def test_query_provider_raises_when_pod_unresolvable() -> None:
     with pytest.raises(TenantNotFoundError, match="Unable to resolve read Pod"):
         async with provider.get_query_repository("iam_ten_missing"):
             pass
+
+
+@pytest.mark.asyncio
+async def test_query_provider_causal_read_without_probe_raises_value_error() -> None:
+    endpoint = ShardEndpointDTO(
+        shard_id="ucp_shard_01",
+        shard_name="shard_01",
+        writer_dsn="dsn://shard_01/writer",
+        reader_dsn="dsn://shard_01/reader",
+        status=DatabaseShardStatus.ACTIVE,
+        routing_strategy=ShardRoutingStrategy.TENANT_REGISTRY,
+    )
+    resolver = _FakeCellularResolver(
+        ShardResolutionOutcome(status=ShardResolutionStatus.RESOLVED, endpoint=endpoint)
+    )
+    provider = TenantDataPlaneQueryProvider(
+        resolver=resolver,
+        read_router=_FakeReadRouter(),
+        query_repo_factory=_SampleQueryRepo,
+        watermark_probe=None,
+    )
+    with pytest.raises(ValueError, match="A live ReplicaWatermarkProbePort must be supplied"):
+        async with provider.get_query_repository(
+            "iam_ten_abc123",
+            consistency_policy=CausalWatermarkPolicy(required_watermark=ReplicationWatermark(10)),
+        ):
+            pass
+
+    with pytest.raises(ValueError, match="A live ReplicaWatermarkProbePort must be supplied"):
+        TenantDataPlaneQueryProvider(
+            resolver=resolver,
+            read_router=_FakeReadRouter(),
+            query_repo_factory=_SampleQueryRepo,
+            watermark_probe=None,
+            default_policy=CausalWatermarkPolicy(required_watermark=ReplicationWatermark(10)),
+        )

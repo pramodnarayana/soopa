@@ -17,6 +17,7 @@ import structlog
 
 from database.cellular_ring import ShardResolutionOutcome
 from database.consistency import (
+    CausalWatermarkPolicy,
     EventualReplicaPolicy,
     InMemoryReplicaWatermarkStore,
     ReadConsistencyPolicyPort,
@@ -48,9 +49,7 @@ class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
         self._resolver = resolver
         self._read_router = read_router
         self._query_repo_factory = query_repo_factory
-        self._watermark_probe: ReplicaWatermarkProbePort = (
-            watermark_probe if watermark_probe is not None else InMemoryReplicaWatermarkStore()
-        )
+        self._watermark_probe: ReplicaWatermarkProbePort | None = watermark_probe
         self._fallback_bulkhead: WriterFallbackBulkheadPort = (
             fallback_bulkhead
             if fallback_bulkhead is not None
@@ -59,6 +58,13 @@ class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
         self._default_policy: ReadConsistencyPolicyPort = (
             default_policy if default_policy is not None else EventualReplicaPolicy()
         )
+        if (
+            isinstance(self._default_policy, CausalWatermarkPolicy)
+            and self._watermark_probe is None
+        ):
+            raise ValueError(
+                "A live ReplicaWatermarkProbePort must be supplied to TenantDataPlaneQueryProvider when using a CausalWatermarkPolicy default."
+            )
 
     @contextlib.asynccontextmanager
     async def _open_routed_repository(
@@ -80,9 +86,18 @@ class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
         active_policy = (
             consistency_policy if consistency_policy is not None else self._default_policy
         )
+        if isinstance(active_policy, CausalWatermarkPolicy) and self._watermark_probe is None:
+            raise ValueError(
+                "A live ReplicaWatermarkProbePort must be supplied to TenantDataPlaneQueryProvider to serve causal reads."
+            )
+        probe = (
+            self._watermark_probe
+            if self._watermark_probe is not None
+            else InMemoryReplicaWatermarkStore()
+        )
         decision = active_policy.select_route(
             endpoint=resolution.endpoint,
-            watermark_probe=self._watermark_probe,
+            watermark_probe=probe,
             fallback_bulkhead=self._fallback_bulkhead,
         )
         if decision.fallback_used:

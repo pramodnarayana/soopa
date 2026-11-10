@@ -65,7 +65,7 @@ class _InMemoryRespPairHarness:
         payload = str(cmd[5])
         soft_exp = str(cmd[6])
         cur = self._hashes.get(key, {}).get("watermark")
-        if cur is None or wm > int(cur):
+        if cur is None or wm >= int(cur):
             self._hashes[key] = {
                 "watermark": str(wm),
                 "payload": payload,

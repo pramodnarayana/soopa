@@ -9,6 +9,7 @@ Replica backfills can never overwrite fresher Outbox Relay updates.
 from __future__ import annotations
 
 import time
+import urllib.parse
 from collections.abc import Callable, Sequence
 
 import structlog
@@ -34,6 +35,10 @@ def _default_epoch_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _encode_component(component: str) -> str:
+    return urllib.parse.quote(component, safe="")
+
+
 class MonotonicCasProjectionAdapter(ReadProjectionCachePort):
     """Production `ReadProjectionCachePort` backed by atomic Lua watermark CAS."""
 
@@ -48,10 +53,16 @@ class MonotonicCasProjectionAdapter(ReadProjectionCachePort):
         self._clock_ms = clock_ms
 
     def _storage_key(self, namespace: str, tenant_id: str, projection_key: str) -> str:
-        return f"{self._prefix}:{namespace}:{tenant_id}:{projection_key}"
+        return (
+            f"{self._prefix}:data:{_encode_component(namespace)}:"
+            f"{_encode_component(tenant_id)}:{_encode_component(projection_key)}"
+        )
 
     def _lease_key(self, namespace: str, tenant_id: str, projection_key: str) -> str:
-        return f"{self._prefix}:lease:{namespace}:{tenant_id}:{projection_key}"
+        return (
+            f"{self._prefix}:lease:{_encode_component(namespace)}:"
+            f"{_encode_component(tenant_id)}:{_encode_component(projection_key)}"
+        )
 
     async def get_projection(
         self,

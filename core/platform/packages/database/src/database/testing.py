@@ -137,6 +137,7 @@ class TransactionalTestRouter(DatabaseRouterPort, DatabaseReadRouterPort):
             )
             try:
                 async with factory() as session:
+                    await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
                     await session.execute(
                         text("SELECT set_config('platform.current_tenant_id', :tenant_id, true)"),
                         {"tenant_id": tenant_id},

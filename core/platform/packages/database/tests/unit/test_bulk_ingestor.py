@@ -68,7 +68,15 @@ async def test_bulk_ingestor_sets_rls_context_before_driver_copy() -> None:
     )
     assert inserted == 2
     assert "platform.current_tenant_id" in raw_session.executed[0][0]
-    assert driver.copied_batches == [("public", "stream_events", ["id", "tenant_id", "value"], 2)]
+    assert len(driver.copied_batches) == 1
+    assert driver.copied_batches[0][0] == "pg_temp"
+    assert driver.copied_batches[0][1].startswith("_stage_stream_events_")
+    assert driver.copied_batches[0][2] == ["id", "tenant_id", "value"]
+    assert driver.copied_batches[0][3] == 2
+    # Verify staging table creation and RLS-enforcing INSERT ... SELECT statement
+    assert "CREATE TEMP TABLE" in raw_session.executed[1][0]
+    assert 'INSERT INTO "public"."stream_events"' in raw_session.executed[2][0]
+    assert "DROP TABLE IF EXISTS" in raw_session.executed[3][0]
 
 
 @pytest.mark.asyncio

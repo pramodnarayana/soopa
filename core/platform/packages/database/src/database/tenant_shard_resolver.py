@@ -117,7 +117,7 @@ class TenantShardResolver(TenantShardResolverPort, CellularShardResolverPort):
         self._max_entries = max_entries
         self._cache: dict[str, tuple[str, str, float]] = {}
         self._endpoint_cache: dict[str, tuple[ShardEndpointDTO, float]] = {}
-        self._ring_cache: tuple[VirtualBucketRing, float] | None = None
+        self._ring_cache: tuple[VirtualBucketRing | None, float, str | None] | None = None
 
     @property
     def app_slug(self) -> str:
@@ -286,9 +286,9 @@ class TenantShardResolver(TenantShardResolverPort, CellularShardResolverPort):
             reason="global_session_unavailable",
         )
 
-    async def _get_or_load_ring(self, now: float) -> VirtualBucketRing | None:
+    async def _get_or_load_ring(self, now: float) -> tuple[VirtualBucketRing | None, str | None]:
         if self._ring_cache is not None and now < self._ring_cache[1]:
-            return self._ring_cache[0]
+            return self._ring_cache[0], self._ring_cache[2]
 
         async with contextlib.aclosing(self._db_router.get_global_session()) as session_gen:
             async for session in session_gen:
@@ -302,7 +302,8 @@ class TenantShardResolver(TenantShardResolverPort, CellularShardResolverPort):
                 result = await session.execute(stmt)
                 rows = list(result.all())
                 if not rows:
-                    return None
+                    self._ring_cache = (None, now + self._ttl, None)
+                    return None, None
 
                 assignments: list[VirtualBucketAssignmentDTO] = []
                 shards_by_id: dict[str, ShardEndpointDTO] = {}
@@ -312,19 +313,29 @@ class TenantShardResolver(TenantShardResolverPort, CellularShardResolverPort):
                     if dto.shard_id not in shards_by_id:
                         shards_by_id[dto.shard_id] = _to_shard_endpoint_dto(shard_obj)
 
-                ring = VirtualBucketRing.from_assignments(
-                    assignments=assignments,
-                    shards_by_id=shards_by_id,
-                )
-                self._ring_cache = (ring, now + self._ttl)
+                try:
+                    ring = VirtualBucketRing.from_assignments(
+                        assignments=assignments,
+                        shards_by_id=shards_by_id,
+                    )
+                except ValueError as exc:
+                    logger.error(
+                        "virtual_bucket_ring_topology_invalid",
+                        app_slug=self._app_slug,
+                        error=str(exc),
+                    )
+                    self._ring_cache = (None, now + self._ttl, "ring_topology_invalid")
+                    return None, "ring_topology_invalid"
+
+                self._ring_cache = (ring, now + self._ttl, None)
                 logger.info(
                     "virtual_bucket_ring_compiled",
                     app_slug=self._app_slug,
                     range_count=len(assignments),
                     shard_count=len(shards_by_id),
                 )
-                return ring
-        return None
+                return ring, None
+        return None, None
 
     async def resolve_subject_endpoint(
         self,
@@ -333,7 +344,13 @@ class TenantShardResolver(TenantShardResolverPort, CellularShardResolverPort):
     ) -> ShardResolutionOutcome:
         """Resolve Consumer subject via 4,096-bucket ring if configured, else tenant registry."""
         now = time.monotonic()
-        ring = await self._get_or_load_ring(now)
+        ring, err = await self._get_or_load_ring(now)
+        if err is not None:
+            return ShardResolutionOutcome(
+                status=ShardResolutionStatus.NOT_FOUND,
+                endpoint=None,
+                reason=err,
+            )
         if ring is not None:
             return ring.resolve_subject(subject_key)
         return await self.resolve_tenant_endpoint(tenant_id)

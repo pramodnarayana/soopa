@@ -13,12 +13,25 @@ from database.partition_manager import (
 
 
 class _FakeDdlExecutor:
-    def __init__(self, existing_partitions: set[str] | None = None) -> None:
+    def __init__(
+        self,
+        existing_partitions: set[str] | None = None,
+        attachments: dict[str, tuple[bool, bool]] | None = None,
+    ) -> None:
         self.existing: set[str] = set(existing_partitions or set())
+        self.attachments: dict[str, tuple[bool, bool]] = dict(attachments or {})
         self.statements: list[str] = []
 
     async def partition_exists(self, schema_name: str, partition_table: str) -> bool:
         return f"{schema_name}.{partition_table}" in self.existing
+
+    async def get_partition_attachment(
+        self, schema_name: str, parent_table: str, partition_table: str
+    ) -> tuple[bool, bool]:
+        return self.attachments.get(
+            f"{schema_name}.{parent_table}->{partition_table}",
+            (True, False),
+        )
 
     async def execute_ddl(self, sql_statement: str) -> None:
         self.statements.append(sql_statement)
@@ -112,3 +125,42 @@ async def test_partition_lifecycle_detaches_concurrently_before_drop() -> None:
         partition_table="outbox_messages_p19990101",
     )
     assert missing_outcome.status == PartitionDetachStatus.NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_partition_lifecycle_finalizes_pending_detach() -> None:
+    executor = _FakeDdlExecutor(
+        existing_partitions={"public.outbox_messages_p20260901"},
+        attachments={"public.outbox_messages->outbox_messages_p20260901": (True, True)},
+    )
+    manager = RangePartitionLifecycleManager(ddl_executor=executor)
+
+    outcome = await manager.retire_partition_non_blocking(
+        schema_name="public",
+        parent_table="outbox_messages",
+        partition_table="outbox_messages_p20260901",
+    )
+    assert outcome.status == PartitionDetachStatus.DETACHED
+    assert (
+        executor.statements[0]
+        == 'ALTER TABLE "public"."outbox_messages" DETACH PARTITION "public"."outbox_messages_p20260901" FINALIZE'
+    )
+    assert executor.statements[1] == 'DROP TABLE IF EXISTS "public"."outbox_messages_p20260901"'
+
+
+@pytest.mark.asyncio
+async def test_partition_lifecycle_drops_already_detached_partition() -> None:
+    executor = _FakeDdlExecutor(
+        existing_partitions={"public.outbox_messages_p20260801"},
+        attachments={"public.outbox_messages->outbox_messages_p20260801": (False, False)},
+    )
+    manager = RangePartitionLifecycleManager(ddl_executor=executor)
+
+    outcome = await manager.retire_partition_non_blocking(
+        schema_name="public",
+        parent_table="outbox_messages",
+        partition_table="outbox_messages_p20260801",
+    )
+    assert outcome.status == PartitionDetachStatus.DETACHED
+    assert len(executor.statements) == 1
+    assert executor.statements[0] == 'DROP TABLE IF EXISTS "public"."outbox_messages_p20260801"'

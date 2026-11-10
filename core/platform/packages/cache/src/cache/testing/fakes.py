@@ -89,7 +89,7 @@ class InMemoryAtomicCacheStoreExecutor(AtomicCacheStoreExecutorPort):
             )
         now_ms = self._clock_ms()
         existing = self._evict_if_expired(storage_key, now_ms)
-        if existing is None or watermark > existing.watermark:
+        if existing is None or watermark >= existing.watermark:
             self._entries[storage_key] = _InMemoryEntry(
                 watermark=watermark,
                 payload_json=payload_json,

@@ -34,7 +34,7 @@ class CacheStoreOperationStatus(StrEnum):
 # from overwriting a projection stamped with a higher causal replication watermark.
 UPSERT_IF_NEWER_WATERMARK_LUA: Final[str] = """
 local current_wm = redis.call('HGET', KEYS[1], 'watermark')
-if (not current_wm) or (tonumber(ARGV[1]) > tonumber(current_wm)) then
+if (not current_wm) or (tonumber(ARGV[1]) >= tonumber(current_wm)) then
     redis.call('HSET', KEYS[1], 'watermark', ARGV[1], 'payload', ARGV[2], 'soft_exp_ms', ARGV[3])
     redis.call('EXPIRE', KEYS[1], tonumber(ARGV[4]))
     return 1

@@ -98,8 +98,13 @@ async def test_virtual_bucket_assignment_constraints_and_watermark_capture(
     isolated_global_session.add_all([b1, b2])
 
     uow = _TestUnitOfWork(isolated_global_session)
-    watermark = await uow.capture_replication_watermark()
+    with pytest.raises(
+        RuntimeError,
+        match="Cannot capture replication watermark while a transaction is active",
+    ):
+        await uow.capture_replication_watermark()
     await uow.commit()
+    watermark = await uow.capture_replication_watermark()
 
     assert int(watermark) > 0
     assert uow.last_commit_watermark == watermark
@@ -129,7 +134,7 @@ async def test_virtual_bucket_assignment_constraints_and_watermark_capture(
             shard_id=shard.id,
         )
         isolated_global_session.add(invalid_bucket)
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError, match="ck_virtual_bucket_bounds"):
             await isolated_global_session.flush()
 
 

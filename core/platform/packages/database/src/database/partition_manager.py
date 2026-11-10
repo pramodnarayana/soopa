@@ -51,6 +51,10 @@ class PartitionDdlExecutorPort(Protocol):
 
     async def partition_exists(self, schema_name: str, partition_table: str) -> bool: ...
 
+    async def get_partition_attachment(
+        self, schema_name: str, parent_table: str, partition_table: str
+    ) -> tuple[bool, bool]: ...
+
     async def execute_ddl(self, sql_statement: str) -> None: ...
 
 
@@ -79,6 +83,39 @@ class SqlAlchemyPartitionDdlExecutor(PartitionDdlExecutorPort):
                 stmt, {"schema_name": safe_schema, "table_name": safe_table}
             )
             return bool(result.scalar())
+
+    async def get_partition_attachment(
+        self, schema_name: str, parent_table: str, partition_table: str
+    ) -> tuple[bool, bool]:
+        """Check whether partition is attached to parent and whether detach is pending."""
+        safe_schema = validate_sql_identifier(schema_name)
+        safe_parent = validate_sql_identifier(parent_table)
+        safe_part = validate_sql_identifier(partition_table)
+        stmt = text(
+            """
+            SELECT i.inhdetachpending
+            FROM pg_catalog.pg_inherits i
+            JOIN pg_catalog.pg_class p ON p.oid = i.inhparent
+            JOIN pg_catalog.pg_namespace pn ON pn.oid = p.relnamespace
+            JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid
+            JOIN pg_catalog.pg_namespace cn ON cn.oid = c.relnamespace
+            WHERE pn.nspname = :schema_name AND p.relname = :parent_table
+              AND cn.nspname = :schema_name AND c.relname = :partition_table
+            """
+        )
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                stmt,
+                {
+                    "schema_name": safe_schema,
+                    "parent_table": safe_parent,
+                    "partition_table": safe_part,
+                },
+            )
+            row = result.first()
+            if row is None:
+                return False, False
+            return True, bool(row[0])
 
     async def execute_ddl(self, sql_statement: str) -> None:
         # PostgreSQL requires `DETACH PARTITION ... CONCURRENTLY` to run in AUTOCOMMIT mode.
@@ -183,11 +220,21 @@ class RangePartitionLifecycleManager:
                 partition_table=safe_part,
             )
 
-        detach_sql = (
-            f'ALTER TABLE "{safe_schema}"."{safe_parent}" '
-            f'DETACH PARTITION "{safe_schema}"."{safe_part}" CONCURRENTLY'
+        is_attached, is_pending = await self._ddl.get_partition_attachment(
+            safe_schema, safe_parent, safe_part
         )
-        await self._ddl.execute_ddl(detach_sql)
+        if is_attached:
+            if is_pending:
+                detach_sql = (
+                    f'ALTER TABLE "{safe_schema}"."{safe_parent}" '
+                    f'DETACH PARTITION "{safe_schema}"."{safe_part}" FINALIZE'
+                )
+            else:
+                detach_sql = (
+                    f'ALTER TABLE "{safe_schema}"."{safe_parent}" '
+                    f'DETACH PARTITION "{safe_schema}"."{safe_part}" CONCURRENTLY'
+                )
+            await self._ddl.execute_ddl(detach_sql)
 
         if archive_callback is not None:
             await archive_callback(safe_schema, safe_part)

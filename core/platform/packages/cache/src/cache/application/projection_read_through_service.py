@@ -28,7 +28,7 @@ class ProjectionReadThroughService:
 
     def __init__(self, cache: ReadProjectionCachePort) -> None:
         self._cache = cache
-        self._inflight: dict[str, asyncio.Future[StampedProjectionDTO | None]] = {}
+        self._inflight: dict[str, asyncio.Task[StampedProjectionDTO | None]] = {}
         self._background_tasks: set[asyncio.Task[None]] = set()
 
     @staticmethod
@@ -125,27 +125,31 @@ class ProjectionReadThroughService:
             )
             return await asyncio.shield(existing)
 
-        loop = asyncio.get_running_loop()
-        future: asyncio.Future[StampedProjectionDTO | None] = loop.create_future()
-        self._inflight[flight_key] = future
-        try:
-            loaded = await loader()
-            if loaded is not None:
-                await self._cache.upsert_projection_monotonic(
-                    namespace=namespace,
-                    tenant_id=tenant_id,
-                    projection_key=projection_key,
-                    projection=loaded,
-                    soft_ttl_seconds=soft_ttl_seconds,
-                    hard_ttl_seconds=hard_ttl_seconds,
-                )
-            future.set_result(loaded)
-            return loaded
-        except Exception as exc:
-            future.set_exception(exc)
-            raise
-        finally:
-            self._inflight.pop(flight_key, None)
+        async def _do_load() -> StampedProjectionDTO | None:
+            try:
+                loaded = await loader()
+                if loaded is not None:
+                    await self._cache.upsert_projection_monotonic(
+                        namespace=namespace,
+                        tenant_id=tenant_id,
+                        projection_key=projection_key,
+                        projection=loaded,
+                        soft_ttl_seconds=soft_ttl_seconds,
+                        hard_ttl_seconds=hard_ttl_seconds,
+                    )
+                return loaded
+            finally:
+                self._inflight.pop(flight_key, None)
+
+        task = asyncio.create_task(_do_load())
+        self._inflight[flight_key] = task
+
+        def _on_done(t: asyncio.Task[StampedProjectionDTO | None]) -> None:
+            if not t.cancelled():
+                _ = t.exception()
+
+        task.add_done_callback(_on_done)
+        return await asyncio.shield(task)
 
     async def _refresh_in_background(
         self,

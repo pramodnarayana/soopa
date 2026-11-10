@@ -104,3 +104,48 @@ async def test_soft_ttl_serves_stale_immediately_and_refreshes_with_single_lease
     )
     assert refreshed is not None
     assert refreshed.source_watermark == 20
+
+
+@pytest.mark.asyncio
+async def test_single_flight_leader_cancellation_preserves_follower_completion() -> None:
+    store = InMemoryAtomicCacheStoreExecutor()
+    cache_adapter = MonotonicCasProjectionAdapter(store_executor=store)
+    service = ProjectionReadThroughService(cache=cache_adapter)
+
+    loader_started = asyncio.Event()
+
+    async def _slow_loader() -> StampedProjectionDTO | None:
+        loader_started.set()
+        await asyncio.sleep(0.05)
+        return StampedProjectionDTO(
+            payload_json='{"status":"LOADED"}',
+            source_watermark=999,
+        )
+
+    t1 = asyncio.create_task(
+        service.get_or_load_projection(
+            namespace="items",
+            tenant_id="ten_01",
+            projection_key="key_1",
+            loader=_slow_loader,
+        )
+    )
+    await loader_started.wait()
+
+    t2 = asyncio.create_task(
+        service.get_or_load_projection(
+            namespace="items",
+            tenant_id="ten_01",
+            projection_key="key_1",
+            loader=_slow_loader,
+        )
+    )
+
+    t1.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await t1
+
+    result2 = await t2
+    assert result2 is not None
+    assert result2.source_watermark == 999
+    assert result2.payload_json == '{"status":"LOADED"}'

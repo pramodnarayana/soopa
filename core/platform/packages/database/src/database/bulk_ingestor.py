@@ -9,6 +9,7 @@ decoupled from underlying binary wire transport mechanics.
 from __future__ import annotations
 
 import re
+import secrets
 from collections.abc import Sequence
 from datetime import date, datetime
 from datetime import time as dt_time
@@ -95,12 +96,38 @@ class SqlAlchemyBulkRecordIngestor(BulkRecordIngestorPort):
         if driver_conn is None:
             raise RuntimeError("Underlying asyncpg driver connection is unavailable")
 
-        await driver_conn.copy_records_to_table(
-            safe_table,
-            records=records,
-            columns=safe_columns,
-            schema_name=safe_schema,
-        )
+        if safe_schema == "pg_temp":
+            await driver_conn.copy_records_to_table(
+                safe_table,
+                records=records,
+                columns=safe_columns,
+                schema_name=safe_schema,
+            )
+        else:
+            safe_base = safe_table[:47]
+            staging_table = f"_stage_{safe_base}_{secrets.token_hex(4)}"
+            await self._session.execute(
+                text(
+                    f'CREATE TEMP TABLE "{staging_table}" '
+                    f'(LIKE "{safe_schema}"."{safe_table}" INCLUDING DEFAULTS) ON COMMIT DROP'
+                )
+            )
+            try:
+                await driver_conn.copy_records_to_table(
+                    staging_table,
+                    records=records,
+                    columns=safe_columns,
+                    schema_name="pg_temp",
+                )
+                cols_clause = ", ".join(f'"{c}"' for c in safe_columns)
+                await self._session.execute(
+                    text(
+                        f'INSERT INTO "{safe_schema}"."{safe_table}" ({cols_clause}) '  # noqa: S608 - Dynamic SQL uses pre-validated identifiers to preserve RLS evaluation
+                        f'SELECT {cols_clause} FROM "{staging_table}"'
+                    )
+                )
+            finally:
+                await self._session.execute(text(f'DROP TABLE IF EXISTS "{staging_table}"'))
         row_count = len(records)
         logger.info(
             "bulk_record_batch_ingested",

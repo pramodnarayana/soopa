@@ -62,9 +62,17 @@ def serialize_event_envelope_json(envelope: EventEnvelope) -> str:
 
 def deserialize_event_envelope_json(raw_json: str) -> EventEnvelope:
     """Rehydrate a canonical JSON string back into a strongly-typed `EventEnvelope`."""
-    parsed = json.loads(raw_json)
+    try:
+        parsed = json.loads(raw_json)
+    except Exception as exc:
+        raise ValueError(f"Malformed JSON string for EventEnvelope: {exc}") from exc
+
     if not isinstance(parsed, dict):
-        raise TypeError("Serialized EventEnvelope root must be a JSON object")
+        raise ValueError("Serialized EventEnvelope root must be a JSON object")  # noqa: TRY004 - Envelope deserialization normalizes malformed payload types to ValueError
+
+    missing = [key for key in ("id", "source", "event_type") if not parsed.get(key)]
+    if missing:
+        raise ValueError(f"Missing required EventEnvelope fields: {', '.join(missing)}")
 
     raw_lane = parsed.get("lane")
     lane = (

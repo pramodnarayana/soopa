@@ -52,8 +52,12 @@ class BaseSqlAlchemyUnitOfWork:
             await self.rollback()
 
     async def capture_replication_watermark(self) -> ReplicationWatermark:
-        """Sample current PostgreSQL `pg_current_wal_insert_lsn()` prior to commit."""
-        await self.session.flush()
+        """Sample current PostgreSQL `pg_current_wal_insert_lsn()` post-commit."""
+        if self.session.in_transaction():
+            raise RuntimeError(
+                "Cannot capture replication watermark while a transaction is active; "
+                "sampling must occur post-commit on the same writer to include the commit WAL record."
+            )
         result = await self.session.execute(text("SELECT pg_current_wal_insert_lsn()::text"))
         lsn_text = str(result.scalar_one())
         watermark = parse_postgres_lsn(lsn_text)
