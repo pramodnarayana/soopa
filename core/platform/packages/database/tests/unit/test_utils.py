@@ -3,7 +3,12 @@ from __future__ import annotations
 import pytest
 
 from database.outbox_serializer import deserialize_event_envelope_json
-from database.utils import is_postgres_dsn, normalize_to_asyncpg, normalize_to_standard_postgres
+from database.utils import (
+    is_postgres_dsn,
+    normalize_to_asyncpg,
+    normalize_to_standard_postgres,
+    pgbouncer_transaction_connect_args,
+)
 
 
 def test_normalize_to_asyncpg() -> None:
@@ -77,3 +82,9 @@ def test_deserialize_event_envelope_json_normalizes_non_object() -> None:
 def test_deserialize_event_envelope_json_normalizes_missing_required_keys() -> None:
     with pytest.raises(ValueError, match="Missing required EventEnvelope fields: id, source"):
         deserialize_event_envelope_json('{"event_type": "test.event"}')
+
+
+def test_pgbouncer_transaction_connect_args_disables_statement_cache() -> None:
+    args = pgbouncer_transaction_connect_args()
+    assert args["statement_cache_size"] == 0
+    assert args["server_settings"] == {"search_path": "public"}

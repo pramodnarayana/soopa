@@ -21,7 +21,7 @@ from cache.domain.constants import (
     HASH_FIELD_WATERMARK,
     CacheStoreOperationStatus,
 )
-from cache.domain.models import StoreCasExecutionDTO, StoredHashProjectionDTO
+from cache.domain.projection import StoreCasExecutionDTO, StoredHashProjectionDTO
 from cache.ports.outbound.cache_store_executor_port import AtomicCacheStoreExecutorPort
 
 logger = structlog.get_logger(__name__)

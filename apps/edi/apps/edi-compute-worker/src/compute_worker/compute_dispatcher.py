@@ -2,7 +2,6 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import structlog
-from database.tenant_shard_resolver import TenantNotFoundError
 from edi.application.use_cases.pipeline.compute_outbound_transform_use_case import (
     ComputeOutboundTransformCommand,
     ComputeOutboundTransformUseCase,
@@ -16,6 +15,7 @@ from edi.domain.routing.enums import EdiDirection
 from edi.domain.routing.outbound_header import EdiEnvelopeHeaders
 from edi.domain.transaction.enums import EdiStandard
 from pubsub.exceptions import ConsumerTerminalError
+from sharding.domain.exceptions import TenantNotFoundError
 
 logger = structlog.get_logger(__name__)
 

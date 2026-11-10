@@ -21,6 +21,7 @@
     "@soopa/pubsub": "workspace:*",
     "@soopa/notification": "workspace:*",
     "@soopa/orchestration": "workspace:*",
-    "@soopa/identity": "workspace:*"
+    "@soopa/identity": "workspace:*",
+    "@soopa/sharding": "workspace:*"
   }
 }

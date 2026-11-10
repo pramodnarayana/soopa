@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Dedicated SQS delivery worker that executes final-mile EDI delivery commands"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database", "observability", "seedwork", "security", "secret-store", "strace"]
+dependencies = ["ucp_models", "aioboto3>=13.1.1", "sqlalchemy>=2.0.29", "edi", "boto3", "identity", "python-dotenv", "structlog", "botocore", "pydantic", "database", "observability", "seedwork", "security", "secret-store", "strace", "sharding"]
 
 [tool.uv.sources]
 ucp_models = { workspace = true }
@@ -16,6 +16,7 @@ seedwork = { workspace = true }
 security = { workspace = true }
 secret-store = { workspace = true }
 strace = { workspace = true }
+sharding = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

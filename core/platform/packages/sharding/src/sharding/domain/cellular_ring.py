@@ -11,47 +11,18 @@ from __future__ import annotations
 import hashlib
 from bisect import bisect_right
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 
-from database.constants import (
+from sharding.domain.constants import (
     VIRTUAL_BUCKET_RING_SIZE,
     DatabaseShardStatus,
+    ShardResolutionFailureReason,
     ShardResolutionStatus,
-    ShardRoutingStrategy,
 )
-
-
-@dataclass(frozen=True)
-class ShardEndpointDTO:
-    """Single-table routing DTO mapped from `ucp.database_shards`."""
-
-    shard_id: str
-    shard_name: str
-    writer_dsn: str
-    reader_dsn: str
-    status: DatabaseShardStatus
-    routing_strategy: ShardRoutingStrategy
-
-
-@dataclass(frozen=True)
-class VirtualBucketAssignmentDTO:
-    """Single-table DTO mapped from `ucp.virtual_bucket_assignments`."""
-
-    assignment_id: str
-    app_id: str
-    bucket_start: int
-    bucket_end: int
-    shard_id: str
-
-
-@dataclass(frozen=True)
-class ShardResolutionOutcome:
-    """First-class result for Pod resolution without raising exceptions on misses."""
-
-    status: ShardResolutionStatus
-    endpoint: ShardEndpointDTO | None
-    virtual_bucket: int | None = None
-    reason: str | None = None
+from sharding.domain.topology import (
+    ShardEndpointDTO,
+    ShardResolutionOutcome,
+    VirtualBucketAssignmentDTO,
+)
 
 
 def compute_virtual_bucket(
@@ -143,7 +114,7 @@ class VirtualBucketRing:
                 status=ShardResolutionStatus.NOT_FOUND,
                 endpoint=None,
                 virtual_bucket=bucket,
-                reason="bucket_unmapped_or_inactive",
+                reason=ShardResolutionFailureReason.BUCKET_UNMAPPED_OR_INACTIVE,
             )
         return ShardResolutionOutcome(
             status=ShardResolutionStatus.RESOLVED,
@@ -161,7 +132,7 @@ class VirtualBucketRing:
                 status=ShardResolutionStatus.WRITE_FENCED,
                 endpoint=outcome.endpoint,
                 virtual_bucket=bucket,
-                reason="shard_undergoing_cutover_write_fence",
+                reason=ShardResolutionFailureReason.CUTOVER_WRITE_FENCE,
             )
         return outcome
 

@@ -16,7 +16,51 @@ source_roots = [
     "core/platform/packages/shttp/src",
     "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src",
-    "core/platform/packages/cache/src"
+    "core/platform/packages/cache/src",
+    "core/platform/packages/sharding/src"
+]
+
+
+[[modules]]
+path = "sharding.domain"
+depends_on = []
+
+[[modules]]
+path = "sharding.ports"
+depends_on = [
+    "sharding.domain"
+]
+
+[[modules]]
+path = "sharding.application"
+depends_on = [
+    "sharding.domain",
+    "sharding.ports"
+]
+
+[[modules]]
+path = "sharding.adapters"
+depends_on = [
+    "sharding.domain",
+    "sharding.ports",
+    "sharding.application",
+    "database.models"
+]
+
+[[modules]]
+path = "sharding.provider"
+depends_on = [
+    "sharding.domain",
+    "sharding.ports",
+    "sharding.application",
+    "sharding.adapters"
+]
+
+[[modules]]
+path = "sharding.testing"
+depends_on = [
+    "sharding.domain",
+    "sharding.ports"
 ]
 
 
@@ -182,7 +226,10 @@ depends_on = [
     "strace.domain",
     "strace.ports",
     "strace.application",
-    "strace.orm"
+    "strace.orm",
+    "sharding.domain",
+    "sharding.application",
+    "sharding.provider"
 ]
 
 [[modules]]
@@ -343,7 +390,9 @@ depends_on = [
     "shttp",
     "strace.domain",
     "strace.ports",
-    "strace.orm"
+    "strace.orm",
+    "sharding.domain",
+    "sharding.provider"
 ]
 
 [[modules]]

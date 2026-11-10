@@ -16,6 +16,7 @@
     "@soopa/identity": "workspace:*",
     "@soopa/outbox": "workspace:*",
     "@soopa/seedwork": "workspace:*",
-    "@soopa/pubsub": "workspace:*"
+    "@soopa/pubsub": "workspace:*",
+    "@soopa/sharding": "workspace:*"
   }
 }

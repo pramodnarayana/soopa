@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
+from sharding.domain.constants import ShardResolutionStatus
+from sharding.domain.exceptions import TenantNotFoundError
+from sharding.provider import SqlAlchemyTenantShardResolver
 
 from database.router import DatabaseRouterPort
-from database.tenant_shard_resolver import TenantNotFoundError, TenantShardResolver
 
 IP_APP_SLUG = "ip"
 
 __all__ = ["IP_APP_SLUG", "SqlAlchemyIpTenantResolver", "TenantNotFoundError"]
 
 
-class SqlAlchemyIpTenantResolver(TenantShardResolver):
+class SqlAlchemyIpTenantResolver(SqlAlchemyTenantShardResolver):
     """IP-specific TenantShardResolver resolving dedicated Data Plane shards (app_slug='ip')."""
 
     def __init__(
@@ -32,9 +34,8 @@ class SqlAlchemyIpTenantResolver(TenantShardResolver):
     async def resolve_tenant_shard(
         self, tenant_id: str
     ) -> Result[tuple[str, str], TenantShardNotFoundError]:
-        """First-Class Error Handling wrapper around resolve_shard without raising exceptions."""
-        try:
-            shard_id, shard_dsn = await self.resolve_shard(tenant_id)
-            return Result.ok((shard_id, shard_dsn))
-        except TenantNotFoundError:
+        """First-Class Error Handling resolution via `resolve_tenant_endpoint` without exceptions."""
+        outcome = await self.resolve_tenant_endpoint(tenant_id)
+        if outcome.status == ShardResolutionStatus.NOT_FOUND or outcome.endpoint is None:
             return Result.fail(TenantShardNotFoundError.for_tenant(tenant_id))
+        return Result.ok((outcome.endpoint.shard_id, outcome.endpoint.writer_dsn))

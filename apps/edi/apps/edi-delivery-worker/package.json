@@ -22,6 +22,7 @@
     "@soopa/secret-store": "workspace:*",
     "@soopa/identity": "workspace:*",
     "@soopa/database": "workspace:*",
-    "@soopa/observability": "workspace:*"
+    "@soopa/observability": "workspace:*",
+    "@soopa/sharding": "workspace:*"
   }
 }

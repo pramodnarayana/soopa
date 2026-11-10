@@ -7,7 +7,6 @@ from typing import cast
 import ip.engine.adapters.outbound.database.models.control_plane as _ip_cp_models
 import ip.engine.adapters.outbound.database.models.data_plane as _ip_dp_models
 import pytest_asyncio
-from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant as TenantORM
 from database.provider import get_async_engine
 from database.testing import TransactionalTestRouter
@@ -17,6 +16,7 @@ from identity.domain.constants import IdentityIdPrefix
 from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTenantBase
 from orchestration.adapters.outbound.database.models import WorkflowBase
 from seedwork import generate_id
+from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,

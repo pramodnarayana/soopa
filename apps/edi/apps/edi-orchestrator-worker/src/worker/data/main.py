@@ -4,7 +4,6 @@ from contextlib import AbstractAsyncContextManager
 
 import structlog
 from database.router import DatabaseRouter
-from database.tenant_shard_resolver import TenantNotFoundError
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from edi.adapters.outbound.database.tenant_uow_provider import SqlAlchemyTenantUoWProvider
@@ -29,6 +28,7 @@ from pubsub.aws.sqs_consumer_manager import SqsConsumerManager
 from pubsub.exceptions import ConsumerTerminalError
 from pubsub.provider import PubSubProvider
 from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
+from sharding.domain.exceptions import TenantNotFoundError
 
 from worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,

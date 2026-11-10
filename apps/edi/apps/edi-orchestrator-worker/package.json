@@ -18,6 +18,7 @@
     "@soopa/security": "workspace:*",
     "@soopa/pubsub": "workspace:*",
     "@soopa/database": "workspace:*",
-    "@soopa/identity": "workspace:*"
+    "@soopa/identity": "workspace:*",
+    "@soopa/sharding": "workspace:*"
   }
 }

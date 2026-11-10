@@ -3,7 +3,7 @@ name = "ucp"
 version = "0.1.0"
 description = "Universal Control Plane API"
 requires-python = ">=3.12"
-dependencies = ["ucp_models", "fastapi==0.136.0", "pydantic[email] (>=2.13.4,<3.0.0)", "pydantic-settings>=2.3.4", "sqlalchemy>=2.0.31", "httpx>=0.27.0", "asyncpg>=0.29.0", "database", "identity", "outbox", "dependency-injector>=4.41.0", "structlog>=24.0.0", "python-dotenv", "aioboto3", "botocore", "seedwork"]
+dependencies = ["ucp_models", "fastapi==0.136.0", "pydantic[email] (>=2.13.4,<3.0.0)", "pydantic-settings>=2.3.4", "sqlalchemy>=2.0.31", "httpx>=0.27.0", "asyncpg>=0.29.0", "database", "identity", "outbox", "dependency-injector>=4.41.0", "structlog>=24.0.0", "python-dotenv", "aioboto3", "botocore", "seedwork", "sharding"]
 
 [project.optional-dependencies]
 dev = [
@@ -54,6 +54,7 @@ database = { workspace = true }
 identity = { workspace = true }
 outbox = { workspace = true }
 seedwork = { workspace = true }
+sharding = { workspace = true }
 pubsub = { workspace = true }
 [dependency-groups]
 dev = [

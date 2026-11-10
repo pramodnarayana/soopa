@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import pytest
 
-from database.cellular_ring import ShardEndpointDTO
-from database.consistency import (
+from sharding.application.read_consistency_policies import (
     CausalWatermarkPolicy,
     EventualReplicaPolicy,
     InMemoryReplicaWatermarkStore,
     StrictPrimaryPolicy,
     TokenBucketWriterFallbackBulkhead,
 )
-from database.constants import DatabaseShardStatus, ReadTargetRole, ShardRoutingStrategy
-from database.types import ReplicationWatermark
+from sharding.domain.constants import (
+    DatabaseShardStatus,
+    ReadRouteDisposition,
+    ReadTargetRole,
+    ShardRoutingStrategy,
+)
+from sharding.domain.topology import ReplicationWatermark, ShardEndpointDTO
 
 
 def _sample_endpoint() -> ShardEndpointDTO:
@@ -34,7 +38,7 @@ def test_eventual_policy_selects_reader_pool() -> None:
     assert ev_decision.target_role == ReadTargetRole.READER
     assert ev_decision.target_dsn == "dsn://pod_01/reader"
     assert ev_decision.pool_key == "ucp_shard_pod_01:reader"
-    assert ev_decision.fallback_used is False
+    assert ev_decision.disposition == ReadRouteDisposition.REPLICA_SELECTED
 
 
 def test_strict_primary_policy_selects_writer_pool() -> None:
@@ -46,7 +50,7 @@ def test_strict_primary_policy_selects_writer_pool() -> None:
     assert pr_decision.target_role == ReadTargetRole.WRITER
     assert pr_decision.target_dsn == "dsn://pod_01/writer"
     assert pr_decision.pool_key == "ucp_shard_pod_01:writer"
-    assert pr_decision.fallback_used is False
+    assert pr_decision.disposition == ReadRouteDisposition.PRIMARY_SELECTED
 
 
 def test_causal_watermark_policy_routes_to_reader_when_caught_up() -> None:
@@ -60,7 +64,7 @@ def test_causal_watermark_policy_routes_to_reader_when_caught_up() -> None:
     )
     assert decision.target_role == ReadTargetRole.READER
     assert decision.target_dsn == "dsn://pod_01/reader"
-    assert decision.fallback_used is False
+    assert decision.disposition == ReadRouteDisposition.REPLICA_SELECTED
     assert decision.observed_watermark == ReplicationWatermark(5000)
 
 
@@ -79,18 +83,18 @@ def test_causal_watermark_policy_throttles_writer_fallback_via_bulkhead() -> Non
     d1 = policy.select_route(endpoint, watermarks, bulkhead)
     d2 = policy.select_route(endpoint, watermarks, bulkhead)
     assert d1.target_role == ReadTargetRole.WRITER
-    assert d1.fallback_used is True
+    assert d1.disposition == ReadRouteDisposition.CAUSAL_WRITER_FALLBACK
     assert d2.target_role == ReadTargetRole.WRITER
-    assert d2.fallback_used is True
+    assert d2.disposition == ReadRouteDisposition.CAUSAL_WRITER_FALLBACK
 
     d3 = policy.select_route(endpoint, watermarks, bulkhead)
     assert d3.target_role == ReadTargetRole.READER
-    assert d3.fallback_used is False
+    assert d3.disposition == ReadRouteDisposition.CAUSAL_BULKHEAD_DEGRADED
 
     clock[0] = 101.5
     d4 = policy.select_route(endpoint, watermarks, bulkhead)
     assert d4.target_role == ReadTargetRole.WRITER
-    assert d4.fallback_used is True
+    assert d4.disposition == ReadRouteDisposition.CAUSAL_WRITER_FALLBACK
 
 
 def test_watermark_store_enforces_monotonic_advancement() -> None:

@@ -10,14 +10,15 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkProviderPort,
     IpTenantResolverPort,
 )
+from sharding.application.uow_provider import TenantDataPlaneUnitOfWorkProvider
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.router import DatabaseRouterPort
-from database.uow import TenantDataPlaneUnitOfWorkProvider
+from database.types import TenantSession
 
 
 class SqlAlchemyIpTenantUoWProvider(
-    TenantDataPlaneUnitOfWorkProvider[IpDataPlaneUnitOfWorkPort],
+    TenantDataPlaneUnitOfWorkProvider[IpDataPlaneUnitOfWorkPort, TenantSession],
     IpDataPlaneUnitOfWorkProviderPort,
 ):
     """Resolves a tenant's dedicated IP Data Plane shard and yields an RLS-scoped IpDataPlaneUnitOfWorkPort."""

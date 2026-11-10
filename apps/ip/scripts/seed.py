@@ -7,12 +7,12 @@ import os
 import sys
 
 import structlog
-from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant
 from database.provider import DatabaseProvider
 from database.utils import normalize_to_asyncpg
 from identity.domain.identity_context import PLATFORM_TENANT_ID
 from seedwork.infra.config import load_repo_env
+from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from ucp_models.sharding import DatabaseShard, ShardRegistry
