@@ -52,6 +52,7 @@ import {
   useDeleteConnectionMutation,
   useDiscoverCatalogMutation,
   useRelinkConnectionMutation,
+  useUpdateConnectionMutation,
 } from '../../application/use-connection-queries';
 import {
   useStreamStatesQuery,
@@ -59,7 +60,7 @@ import {
   useTriggerSyncRunMutation,
 } from '../../application/use-sync-run-queries';
 import type { Connection, DiscoveredCatalog, StreamSchema } from '../../domain/connection';
-import { ConnectorPropertyKey, SyncRunKind } from '../../domain/enums';
+import { ConnectionStatus, ConnectorPropertyKey, SyncRunKind } from '../../domain/enums';
 import type { StreamState, SyncRun } from '../../domain/sync-run';
 import { formatRelativeTimestamp, mapSyncRunStatusTone } from '../shared/status-mapping';
 import {
@@ -85,8 +86,11 @@ export function ConnectionOverviewTab({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const specView = useCatalogAppSpecQuery(connection.appId);
   const relinkMutation = useRelinkConnectionMutation(connection.id);
+  const updateMutation = useUpdateConnectionMutation(connection.id);
   const deactivateMutation = useDeactivateConnectionMutation(connection.id);
   const deleteMutation = useDeleteConnectionMutation(connection.id);
+  const isDeactivated = connection.status === ConnectionStatus.DEACTIVATED;
+  const isSaving = relinkMutation.isPending || updateMutation.isPending;
 
   const allProperties = specView.data?.properties ?? [];
 
@@ -143,7 +147,8 @@ export function ConnectionOverviewTab({
         formValues[ConnectorPropertyKey.AUTH_TYPE];
     }
 
-    const res = await relinkMutation.mutateAsync({
+    const mutation = isDeactivated ? relinkMutation : updateMutation;
+    const res = await mutation.mutateAsync({
       newName: name.trim() || connection.name,
       updatedRawCredentials: hasSecretPatch ? rawCredentials : null,
       updatedPublicConfig: Object.keys(mergedPublicConfig).length > 0 ? mergedPublicConfig : null,
@@ -152,7 +157,7 @@ export function ConnectionOverviewTab({
       onProblem(res.error);
       return;
     }
-    toast.success('Connection updated.');
+    toast.success(isDeactivated ? 'Connection updated and reactivated.' : 'Connection updated.');
   };
 
   const handleDeactivate = async (): Promise<void> => {
@@ -193,13 +198,8 @@ export function ConnectionOverviewTab({
             Connection Details
           </h4>
           <div className="flex items-center gap-2">
-            <Button
-              type="submit"
-              size="sm"
-              disabled={relinkMutation.isPending || !isDirty}
-              className="text-xs"
-            >
-              {relinkMutation.isPending ? 'Saving...' : 'Save Changes'}
+            <Button type="submit" size="sm" disabled={isSaving || !isDirty} className="text-xs">
+              {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
             <Button
               type="button"

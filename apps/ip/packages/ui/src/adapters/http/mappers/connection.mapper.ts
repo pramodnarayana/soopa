@@ -5,6 +5,7 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  UpdateConnectionInput,
 } from '../../../domain/connection';
 import type {
   ConnectionCheckWire,
@@ -83,6 +84,14 @@ export function mapCheckConnectionToWire(input: CheckConnectionInput): Record<st
 }
 
 export function mapRelinkConnectionToWire(input: RelinkConnectionInput): Record<string, unknown> {
+  return {
+    new_name: input.newName ?? null,
+    updated_raw_credentials: input.updatedRawCredentials ?? null,
+    updated_public_config: input.updatedPublicConfig ?? null,
+  };
+}
+
+export function mapUpdateConnectionToWire(input: UpdateConnectionInput): Record<string, unknown> {
   return {
     new_name: input.newName ?? null,
     updated_raw_credentials: input.updatedRawCredentials ?? null,

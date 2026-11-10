@@ -5,6 +5,7 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  UpdateConnectionInput,
 } from '../domain/connection';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
 import { logResultOutcome } from './mutation-telemetry';
@@ -88,6 +89,26 @@ export function useDiscoverCatalogMutation(connectionId: string) {
       });
       if (res.ok) {
         queryClient.setQueryData(ipQueryKeys.connections.catalog(tenantId, connectionId), res);
+      }
+    },
+  });
+}
+
+export function useUpdateConnectionMutation(connectionId: string) {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateConnectionInput) =>
+      repositories.connections.updateConnection(tenantId, connectionId, input),
+    onSuccess: (res) => {
+      logResultOutcome(logger, 'ip_connection.update', res, {
+        connection_id: connectionId,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });
+        void queryClient.invalidateQueries({
+          queryKey: ipQueryKeys.connections.detail(tenantId, connectionId),
+        });
       }
     },
   });

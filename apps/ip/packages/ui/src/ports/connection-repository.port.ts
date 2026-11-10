@@ -6,6 +6,7 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  UpdateConnectionInput,
 } from '../domain/connection';
 
 export interface ConnectionRepositoryPort {
@@ -36,6 +37,12 @@ export interface ConnectionRepositoryPort {
     tenantId: string,
     connectionId: string,
   ): Promise<Result<DiscoveredCatalog, ApiProblem>>;
+
+  updateConnection(
+    tenantId: string,
+    connectionId: string,
+    input: UpdateConnectionInput,
+  ): Promise<Result<Connection, ApiProblem>>;
 
   relinkConnection(
     tenantId: string,

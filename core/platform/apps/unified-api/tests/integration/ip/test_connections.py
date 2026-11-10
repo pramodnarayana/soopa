@@ -282,3 +282,90 @@ async def test_create_connection_invalid_auth_type_returns_422(
     detail = res.json()["detail"]
     assert isinstance(detail, list)
     assert any("auth_type" in str(err.get("loc", [])) for err in detail)
+
+
+@pytest.mark.asyncio
+async def test_update_connection_metadata_returns_200_ok(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+
+    create_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={
+            "app_id": "http",
+            "name": "Initial Connection Name",
+            "auth_type": "API_KEY",
+            "public_config": {"endpoint_url": "https://update-test.gridpower.com"},
+            "raw_credentials": {"api_key": "token_init"},
+            "endpoint_for_fingerprint": "https://update-test.gridpower.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    connection_id = create_res.json()["id"]
+
+    update_res = await auth_client.patch(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}",
+        json={
+            "new_name": "Updated Connection Name",
+            "updated_public_config": {"endpoint_url": "https://update-test.gridpower.com/v2"},
+            "updated_raw_credentials": {"api_key": "token_updated"},
+        },
+    )
+    assert update_res.status_code == 200, update_res.text
+    updated = update_res.json()
+    assert updated["id"] == connection_id
+    assert updated["name"] == "Updated Connection Name"
+    assert updated["public_config"] == {"endpoint_url": "https://update-test.gridpower.com/v2"}
+    assert "raw_credentials" not in updated
+
+
+@pytest.mark.asyncio
+async def test_update_deactivated_connection_returns_409_conflict(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+
+    create_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={
+            "app_id": "http",
+            "name": "Connection To Deactivate",
+            "auth_type": "API_KEY",
+            "public_config": {"endpoint_url": "https://deact-test.gridpower.com"},
+            "raw_credentials": {"api_key": "token_1"},
+            "endpoint_for_fingerprint": "https://deact-test.gridpower.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    connection_id = create_res.json()["id"]
+
+    deact_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/deactivate",
+    )
+    assert deact_res.status_code == 200, deact_res.text
+    assert deact_res.json()["status"] == "DEACTIVATED"
+
+    update_res = await auth_client.patch(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}",
+        json={"new_name": "Should Conflict"},
+    )
+    assert update_res.status_code == 409, update_res.text
+    assert update_res.json()["code"] == "INVALID_CONNECTION_STATE"
+
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_connection_returns_404_not_found(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+
+    res = await auth_client.patch(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/ip_conn_nonexistent_12345",
+        json={"new_name": "Ghost Connection"},
+    )
+    assert res.status_code == 404, res.text
+    assert res.json()["code"] == "CONNECTION_NOT_FOUND"

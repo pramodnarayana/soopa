@@ -13,6 +13,7 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  UpdateConnectionInput,
 } from '../../../domain/connection';
 import type { ConnectionRepositoryPort } from '../../../ports/connection-repository.port';
 import {
@@ -22,6 +23,7 @@ import {
   mapCreateConnectionToWire,
   mapDiscoveredCatalogFromWire,
   mapRelinkConnectionToWire,
+  mapUpdateConnectionToWire,
 } from '../mappers/connection.mapper';
 import { parseAndMapResult } from '../parse-wire';
 import {
@@ -124,6 +126,24 @@ export class HttpConnectionRepository implements ConnectionRepositoryPort {
       DiscoveredCatalogWireSchema,
       mapDiscoveredCatalogFromWire,
       `POST /ip/connections/${connectionId}/discover`,
+      this.logger,
+    );
+  }
+
+  public async updateConnection(
+    tenantId: string,
+    connectionId: string,
+    input: UpdateConnectionInput,
+  ): Promise<Result<Connection, ApiProblem>> {
+    const raw = await this.httpClient.patch<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}`,
+      mapUpdateConnectionToWire(input),
+    );
+    return parseAndMapResult(
+      raw,
+      ConnectionWireSchema,
+      mapConnectionFromWire,
+      `PATCH /ip/connections/${connectionId}`,
       this.logger,
     );
   }

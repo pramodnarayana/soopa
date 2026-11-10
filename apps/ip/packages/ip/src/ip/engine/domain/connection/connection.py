@@ -19,11 +19,13 @@ from ip.engine.domain.connection.events import (
     ConnectionDeletedEvent,
     ConnectionErrorRecordedEvent,
     ConnectionRelinkedEvent,
+    ConnectionUpdatedEvent,
 )
 from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import (
     InvalidConnectionConfigError,
     InvalidConnectionStateError,
+    IpError,
     Result,
 )
 
@@ -313,6 +315,66 @@ class Connection(AggregateRoot):
                 tenant_id=self.tenant_id,
                 app_id=self.app_id,
                 relinked_at=now,
+            )
+        )
+        return Result.ok(self)
+
+    def update_configuration(
+        self,
+        *,
+        new_name: str | None = None,
+        updated_encrypted_credentials: bytes | None = None,
+        updated_public_config: JsonDict | None = None,
+    ) -> Result[Connection, IpError]:
+        """Updates connection metadata, credentials, and/or public configuration.
+
+        Cannot be called on deactivated connections (relink must be used instead).
+        """
+        if self.status == ConnectionStatus.DEACTIVATED:
+            return Result.fail(
+                InvalidConnectionStateError(
+                    connection_id=self.id,
+                    current_status=self.status.value,
+                    attempted_action="update_configuration",
+                    message=f"Cannot update configuration of deactivated connection {self.id}. Relink first.",
+                    details={"connection_id": self.id, "current_status": self.status.value},
+                )
+            )
+
+        if new_name is not None and not new_name.strip():
+            return Result.fail(
+                InvalidConnectionConfigError(
+                    field_name="name",
+                    message="Connection name cannot be blank.",
+                    details={"connection_id": self.id},
+                )
+            )
+
+        now = datetime.now(UTC).isoformat()
+        if new_name is not None:
+            self.name = new_name.strip()
+        if updated_encrypted_credentials is not None:
+            self.encrypted_credentials = updated_encrypted_credentials
+        if updated_public_config is not None:
+            self.public_config = updated_public_config
+            new_endpoint = (
+                updated_public_config.get("endpoint_url")
+                or updated_public_config.get("base_url")
+                or updated_public_config.get("host")
+            )
+            if new_endpoint:
+                self.connection_fingerprint = compute_connection_fingerprint(
+                    self.tenant_id, self.app_id, str(new_endpoint)
+                )
+
+        self.updated_at = now
+
+        self.add_domain_event(
+            ConnectionUpdatedEvent(
+                connection_id=self.id,
+                tenant_id=self.tenant_id,
+                app_id=self.app_id,
+                updated_at=now,
             )
         )
         return Result.ok(self)

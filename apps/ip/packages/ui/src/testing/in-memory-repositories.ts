@@ -7,6 +7,7 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  UpdateConnectionInput,
 } from '../domain/connection';
 import {
   ConnectionHandshakeStatus,
@@ -248,6 +249,28 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     };
     this.catalogs.set(connectionId, generated);
     return ok(generated);
+  }
+
+  public async updateConnection(
+    tenantId: string,
+    connectionId: string,
+    input: UpdateConnectionInput,
+  ): Promise<Result<Connection, ApiProblem>> {
+    const idx = this.items.findIndex((c) => c.tenantId === tenantId && c.id === connectionId);
+    const existing = this.items[idx];
+    if (idx < 0 || !existing) {
+      return err(notFoundProblem(`Connection ${connectionId} not found`));
+    }
+    const updated: Connection = {
+      ...existing,
+      name: input.newName ?? existing.name,
+      publicConfig: input.updatedPublicConfig
+        ? { ...existing.publicConfig, ...input.updatedPublicConfig }
+        : existing.publicConfig,
+      updatedAt: '2026-10-29T09:10:00Z',
+    };
+    this.items[idx] = updated;
+    return ok(updated);
   }
 
   public async relinkConnection(
