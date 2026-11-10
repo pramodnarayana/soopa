@@ -12,7 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from cache.domain.constants import CacheStoreOperationStatus
-from cache.domain.models import StoreCasExecutionDTO, StoredHashProjectionDTO
+from cache.domain.projection import StoreCasExecutionDTO, StoredHashProjectionDTO
 from cache.ports.outbound.cache_store_executor_port import AtomicCacheStoreExecutorPort
 
 

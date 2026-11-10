@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from cache.domain.models import StoreCasExecutionDTO, StoredHashProjectionDTO
+from cache.domain.projection import StoreCasExecutionDTO, StoredHashProjectionDTO
 
 
 class AtomicCacheStoreExecutorPort(Protocol):

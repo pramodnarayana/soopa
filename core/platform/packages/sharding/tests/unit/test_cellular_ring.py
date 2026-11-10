@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import pytest
 
-from database.cellular_ring import (
-    ShardEndpointDTO,
-    VirtualBucketAssignmentDTO,
+from sharding.domain.cellular_ring import (
     VirtualBucketRing,
     compute_virtual_bucket,
 )
-from database.constants import (
+from sharding.domain.constants import (
     VIRTUAL_BUCKET_RING_SIZE,
     DatabaseShardStatus,
     ShardResolutionStatus,
     ShardRoutingStrategy,
+)
+from sharding.domain.topology import (
+    ShardEndpointDTO,
+    VirtualBucketAssignmentDTO,
 )
 
 

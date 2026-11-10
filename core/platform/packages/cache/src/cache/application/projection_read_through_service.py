@@ -15,7 +15,7 @@ from collections.abc import Awaitable, Callable
 import structlog
 
 from cache.domain.constants import CacheLookupStatus
-from cache.domain.models import StampedProjectionDTO
+from cache.domain.projection import StampedProjectionDTO
 from cache.ports.outbound.projection_cache_port import ReadProjectionCachePort
 
 logger = structlog.get_logger(__name__)

@@ -1,10 +1,10 @@
 import pytest
-from database.constants import DatabaseShardStatus
 from database.models.identity import Tenant
 from edi.adapters.outbound.database.models.control_plane import AS2Partner, InboundRoute
 from edi.domain.constants import EdiIdPrefix
 from identity.domain.constants import IdentityIdPrefix
 from seedwork import generate_id, generate_random_hex
+from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from ucp.domain.constants import LifecycleStatus

@@ -1,0 +1,17 @@
+{
+  "name": "@soopa/sharding",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "lint": "uv run ruff check .",
+    "format": "uv run ruff format . && uv run ruff check --fix .",
+    "typecheck": "MYPYPATH=src uv run mypy --explicit-package-bases src",
+    "test": "uv run pytest -m \"not integration\" --ignore=tests/integration --ignore=tests/e2e",
+    "test:integration": "uv run pytest tests/integration --cov=src",
+    "cov": "uv run pytest -m \"not integration\" --cov=src --cov-report=term-missing --ignore=tests/integration --ignore=tests/e2e"
+  },
+  "devDependencies": {
+    "@soopa/database": "workspace:*",
+    "@soopa/seedwork": "workspace:*"
+  }
+}

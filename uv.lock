@@ -43,6 +43,7 @@ members = [
     "security",
     "seedwork",
     "sftp",
+    "sharding",
     "shttp",
     "storage",
     "strace",
@@ -751,6 +752,7 @@ dependencies = [
     { name = "aioboto3" },
     { name = "dotenv" },
     { name = "edi" },
+    { name = "sharding" },
     { name = "structlog" },
 ]
 
@@ -759,6 +761,7 @@ requires-dist = [
     { name = "aioboto3", specifier = ">=12.0.0" },
     { name = "dotenv" },
     { name = "edi", editable = "apps/edi/packages/edi" },
+    { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "structlog" },
 ]
 
@@ -1101,6 +1104,7 @@ dependencies = [
     { name = "security" },
     { name = "seedwork" },
     { name = "sftp" },
+    { name = "sharding" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "strace" },
@@ -1143,6 +1147,7 @@ requires-dist = [
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sftp", editable = "core/platform/packages/sftp" },
+    { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "strace", editable = "core/platform/packages/strace" },
@@ -1222,6 +1227,7 @@ dependencies = [
     { name = "secret-store" },
     { name = "security" },
     { name = "seedwork" },
+    { name = "sharding" },
     { name = "sqlalchemy" },
     { name = "strace" },
     { name = "structlog" },
@@ -1247,6 +1253,7 @@ requires-dist = [
     { name = "secret-store", editable = "core/platform/packages/secret-store" },
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
     { name = "strace", editable = "core/platform/packages/strace" },
     { name = "structlog" },
@@ -1855,6 +1862,7 @@ dependencies = [
     { name = "security" },
     { name = "seedwork" },
     { name = "sftp" },
+    { name = "sharding" },
     { name = "shttp" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "strace" },
@@ -1893,6 +1901,7 @@ requires-dist = [
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
     { name = "sftp", editable = "core/platform/packages/sftp" },
+    { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "shttp", editable = "core/platform/packages/shttp" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "strace", editable = "core/platform/packages/strace" },
@@ -2836,6 +2845,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "security" },
     { name = "seedwork" },
+    { name = "sharding" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "ucp-models" },
@@ -2860,6 +2870,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "security", editable = "core/platform/packages/security" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "sqlalchemy", specifier = ">=2.0.29" },
     { name = "structlog" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },
@@ -3966,6 +3977,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "sharding"
+version = "0.1.0"
+source = { editable = "core/platform/packages/sharding" }
+dependencies = [
+    { name = "database" },
+    { name = "seedwork" },
+    { name = "sqlalchemy" },
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "database", editable = "core/platform/packages/database" },
+    { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sqlalchemy", specifier = ">=2.0.0" },
+    { name = "structlog", specifier = ">=24.0.0" },
+]
+
+[[package]]
 name = "shttp"
 version = "0.1.0"
 source = { editable = "core/platform/packages/shttp" }
@@ -4259,6 +4289,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "seedwork" },
+    { name = "sharding" },
     { name = "sqlalchemy" },
     { name = "structlog" },
     { name = "ucp-models" },
@@ -4303,6 +4334,7 @@ requires-dist = [
     { name = "python-dotenv" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5.0" },
     { name = "seedwork", editable = "core/platform/packages/seedwork" },
+    { name = "sharding", editable = "core/platform/packages/sharding" },
     { name = "sqlalchemy", specifier = ">=2.0.31" },
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "ucp-models", editable = "core/ucp/packages/models" },

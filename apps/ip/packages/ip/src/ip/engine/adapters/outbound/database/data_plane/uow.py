@@ -5,9 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime
 
-from ip.engine.adapters.outbound.database.data_plane.batch_manifest_repository import (
-    SqlAlchemyBatchManifestRepository,
-)
 from ip.engine.adapters.outbound.database.models.data_plane import (
     IpDataPlaneOutboxRecord,
     IpProcessedEventModel,
@@ -104,7 +101,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         normalization_rejections: NormalizationRejectionRepositoryPort,
         pending_references: PendingReferenceRepositoryPort,
         traces: TraceRepositoryPort,
-        batch_manifests: BatchManifestRepositoryPort | None = None,
+        batch_manifests: BatchManifestRepositoryPort,
         domain_repositories: Mapping[str, object] | None = None,
     ) -> None:
         super().__init__(tenant_session)
@@ -120,11 +117,7 @@ class SqlAlchemyIpDataPlaneUnitOfWork(BaseSqlAlchemyUnitOfWork, IpDataPlaneUnitO
         self.normalization_rejections = normalization_rejections
         self.pending_references = pending_references
         self.traces = traces
-        self.batch_manifests = (
-            batch_manifests
-            if batch_manifests is not None
-            else SqlAlchemyBatchManifestRepository(tenant_session)
-        )
+        self.batch_manifests = batch_manifests
         self._domain_repositories: dict[str, object] = (
             dict(domain_repositories) if domain_repositories is not None else {}
         )

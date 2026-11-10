@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+from sharding.domain.exceptions import TenantNotFoundError
+from sharding.provider import SqlAlchemyTenantShardResolver
+
 from database.router import DatabaseRouterPort
-from database.tenant_shard_resolver import TenantNotFoundError, TenantShardResolver
 
 EDI_APP_SLUG = "edi"
 
 __all__ = ["EDI_APP_SLUG", "SqlAlchemyTenantResolver", "TenantNotFoundError"]
 
 
-class SqlAlchemyTenantResolver(TenantShardResolver):
+class SqlAlchemyTenantResolver(SqlAlchemyTenantShardResolver):
     """
     EDI-specific SqlAlchemyTenantResolver inheriting from the platform TenantShardResolver.
     """

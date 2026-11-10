@@ -13,10 +13,10 @@ from typing import Protocol, TypedDict, cast
 
 import httpx
 import structlog
-from database.constants import DatabaseShardStatus
 from database.models.identity import Role, Tenant, User, UserRole
 from identity.adapters.outbound.zitadel import ZitadelMachineAuthenticationError
 from identity.domain.identity_context import PLATFORM_TENANT_ID
+from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession

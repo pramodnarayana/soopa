@@ -1,15 +1,15 @@
 from datetime import UTC, datetime
 
 from seedwork.utils import generate_id
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
-from ucp.domain.constants import UcpIdPrefix
-
-from database.constants import (
+from sharding.domain.constants import (
     VIRTUAL_BUCKET_RING_SIZE,
     DatabaseShardStatus,
     ShardRoutingStrategy,
 )
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+from ucp.domain.constants import UcpIdPrefix
+
 from database.models.core import UcpBase
 
 

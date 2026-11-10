@@ -14,7 +14,6 @@ import ip.solutions.domains.energy.models as _ip_energy_models
 import ip.solutions.domains.tms.models as _ip_tms_models
 import pytest
 import pytest_asyncio
-from database.constants import DatabaseShardStatus
 from database.models import Role as OrmRole
 from database.models.identity import ApiToken as ApiTokenORM
 from database.models.identity import Tenant as TenantORM
@@ -27,6 +26,7 @@ from ip.engine.adapters.outbound.database.models.base import IpGlobalBase, IpTen
 from orchestration.adapters.outbound.database.models import WorkflowBase
 from secret_store import AwsSecretsManagerAdapter
 from seedwork import generate_id
+from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from ucp.application.use_cases import api_key_authenticator

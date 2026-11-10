@@ -69,6 +69,9 @@ importers:
       '@soopa/schemas':
         specifier: workspace:*
         version: link:core/platform/packages/schemas
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:core/platform/packages/sharding
       '@soopa/ucp':
         specifier: workspace:*
         version: link:core/ucp/packages/ucp
@@ -162,6 +165,9 @@ importers:
       '@soopa/api':
         specifier: workspace:*
         version: link:../../packages/edi
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/sharding
 
   apps/edi/apps/edi-config-sync-worker:
     devDependencies:
@@ -222,6 +228,9 @@ importers:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/sharding
       '@soopa/ucp-models':
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/models
@@ -267,6 +276,9 @@ importers:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/sharding
       '@soopa/ucp-models':
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/models
@@ -297,6 +309,9 @@ importers:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/sharding
       '@soopa/ucp':
         specifier: workspace:*
         version: link:../../../../core/ucp/packages/ucp
@@ -439,6 +454,9 @@ importers:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../../core/platform/packages/seedwork
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:../../../../core/platform/packages/sharding
 
   apps/ip/packages/ui:
     dependencies:
@@ -868,6 +886,15 @@ importers:
         specifier: workspace:*
         version: link:../database
 
+  core/platform/packages/sharding:
+    devDependencies:
+      '@soopa/database':
+        specifier: workspace:*
+        version: link:../database
+      '@soopa/seedwork':
+        specifier: workspace:*
+        version: link:../seedwork
+
   core/ucp/apps/dashboard:
     dependencies:
       '@fontsource-variable/geist':
@@ -1027,6 +1054,9 @@ importers:
       '@soopa/seedwork':
         specifier: workspace:*
         version: link:../../../platform/packages/seedwork
+      '@soopa/sharding':
+        specifier: workspace:*
+        version: link:../../../platform/packages/sharding
       '@soopa/ucp-models':
         specifier: workspace:*
         version: link:../models

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 import structlog
 from database.provider import DatabaseProvider
@@ -45,8 +45,9 @@ async def _module_lifecycle(
             edi_app = app.state.edi_app
         except AttributeError:
             edi_app = None
-        if edi_app is not None and hasattr(edi_app.state, "tenant_resolver"):
-            app.state.tenant_resolver = edi_app.state.tenant_resolver
+        if edi_app is not None:
+            with suppress(AttributeError):
+                app.state.tenant_resolver = edi_app.state.tenant_resolver
 
         yield
     finally:

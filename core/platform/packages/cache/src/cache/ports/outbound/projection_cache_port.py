@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
-from cache.domain.models import (
+from cache.domain.projection import (
     CacheLookupResult,
     CacheUpsertResult,
     StampedProjectionDTO,

@@ -15,33 +15,35 @@ from typing import Generic, TypeVar
 
 import structlog
 
-from database.cellular_ring import ShardResolutionOutcome
-from database.consistency import (
-    CausalWatermarkPolicy,
+from sharding.application.read_consistency_policies import (
     EventualReplicaPolicy,
-    InMemoryReplicaWatermarkStore,
+    TokenBucketWriterFallbackBulkhead,
+)
+from sharding.domain.constants import ReadRouteDisposition
+from sharding.domain.exceptions import TenantNotFoundError
+from sharding.domain.topology import ShardResolutionOutcome
+from sharding.ports.outbound.read_consistency_port import (
     ReadConsistencyPolicyPort,
     ReplicaWatermarkProbePort,
-    TokenBucketWriterFallbackBulkhead,
     WriterFallbackBulkheadPort,
 )
-from database.router import DatabaseReadRouterPort
-from database.tenant_shard_resolver import CellularShardResolverPort, TenantNotFoundError
-from database.types import TenantReadSession
+from sharding.ports.outbound.session_router_port import TenantReadSessionRouterPort
+from sharding.ports.outbound.shard_resolver_port import CellularShardResolverPort
 
 logger = structlog.get_logger(__name__)
 
 TQueryRepo = TypeVar("TQueryRepo")
+TReadSession = TypeVar("TReadSession")
 
 
-class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
+class TenantDataPlaneQueryProvider(Generic[TQueryRepo, TReadSession]):
     """Generic CQRS Read Repository provider for B2B and Cellular Consumer apps."""
 
     def __init__(
         self,
         resolver: CellularShardResolverPort,
-        read_router: DatabaseReadRouterPort,
-        query_repo_factory: Callable[[TenantReadSession], TQueryRepo],
+        read_router: TenantReadSessionRouterPort[TReadSession],
+        query_repo_factory: Callable[[TReadSession], TQueryRepo],
         watermark_probe: ReplicaWatermarkProbePort | None = None,
         fallback_bulkhead: WriterFallbackBulkheadPort | None = None,
         default_policy: ReadConsistencyPolicyPort | None = None,
@@ -58,13 +60,7 @@ class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
         self._default_policy: ReadConsistencyPolicyPort = (
             default_policy if default_policy is not None else EventualReplicaPolicy()
         )
-        if (
-            isinstance(self._default_policy, CausalWatermarkPolicy)
-            and self._watermark_probe is None
-        ):
-            raise ValueError(
-                "A live ReplicaWatermarkProbePort must be supplied to TenantDataPlaneQueryProvider when using a CausalWatermarkPolicy default."
-            )
+        self._default_policy.validate_probe_configuration(self._watermark_probe)
 
     @contextlib.asynccontextmanager
     async def _open_routed_repository(
@@ -77,7 +73,7 @@ class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
             logger.error(
                 "query_provider_pod_resolution_failed",
                 tenant_id=tenant_id,
-                reason=resolution.reason,
+                reason=resolution.reason.value if resolution.reason is not None else None,
             )
             raise TenantNotFoundError(
                 f"Unable to resolve read Pod for tenant '{tenant_id}': {resolution.reason}"
@@ -86,21 +82,13 @@ class TenantDataPlaneQueryProvider(Generic[TQueryRepo]):
         active_policy = (
             consistency_policy if consistency_policy is not None else self._default_policy
         )
-        if isinstance(active_policy, CausalWatermarkPolicy) and self._watermark_probe is None:
-            raise ValueError(
-                "A live ReplicaWatermarkProbePort must be supplied to TenantDataPlaneQueryProvider to serve causal reads."
-            )
-        probe = (
-            self._watermark_probe
-            if self._watermark_probe is not None
-            else InMemoryReplicaWatermarkStore()
-        )
+        active_policy.validate_probe_configuration(self._watermark_probe)
         decision = active_policy.select_route(
             endpoint=resolution.endpoint,
-            watermark_probe=probe,
+            watermark_probe=self._watermark_probe,
             fallback_bulkhead=self._fallback_bulkhead,
         )
-        if decision.fallback_used:
+        if decision.disposition == ReadRouteDisposition.CAUSAL_WRITER_FALLBACK:
             logger.info(
                 "query_provider_routed_to_writer_fallback",
                 tenant_id=tenant_id,

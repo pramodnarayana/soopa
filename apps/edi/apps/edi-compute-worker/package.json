@@ -12,6 +12,7 @@
     "dev": "PYTHONUNBUFFERED=1 uv run python -m compute_worker.main"
   },
   "devDependencies": {
-    "@soopa/api": "workspace:*"
+    "@soopa/api": "workspace:*",
+    "@soopa/sharding": "workspace:*"
   }
 }

@@ -8,7 +8,7 @@ from cache.adapters.outbound.monotonic_cas_projection_adapter import (
     MonotonicCasProjectionAdapter,
 )
 from cache.application.projection_read_through_service import ProjectionReadThroughService
-from cache.domain.models import StampedProjectionDTO
+from cache.domain.projection import StampedProjectionDTO
 from cache.testing.fakes import InMemoryAtomicCacheStoreExecutor
 
 

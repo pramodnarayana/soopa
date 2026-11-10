@@ -20,7 +20,7 @@ from cache.domain.constants import (
     CacheStoreOperationStatus,
     CacheUpsertStatus,
 )
-from cache.domain.models import (
+from cache.domain.projection import (
     CacheLookupResult,
     CacheUpsertResult,
     StampedProjectionDTO,

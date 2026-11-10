@@ -10,50 +10,22 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Protocol
 
 import structlog
 
-from database.cellular_ring import ShardEndpointDTO
-from database.constants import ReadTargetRole
-from database.types import ReplicationWatermark
+from sharding.domain.constants import ReadRouteDisposition, ReadTargetRole
+from sharding.domain.topology import (
+    ReadRouteDecisionDTO,
+    ReplicationWatermark,
+    ShardEndpointDTO,
+)
+from sharding.ports.outbound.read_consistency_port import (
+    ReadConsistencyPolicyPort,
+    ReplicaWatermarkProbePort,
+    WriterFallbackBulkheadPort,
+)
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass(frozen=True)
-class ReadRouteDecisionDTO:
-    """Deterministic CQRS read routing decision produced by `ReadConsistencyPolicyPort`."""
-
-    target_role: ReadTargetRole
-    target_dsn: str
-    pool_key: str
-    fallback_used: bool = False
-    observed_watermark: ReplicationWatermark | None = None
-
-
-class ReplicaWatermarkProbePort(Protocol):
-    """Port exposing latest observed `ReplicationWatermark` for a Pod's Read Replica pool."""
-
-    def get_cached_watermark(self, shard_id: str) -> ReplicationWatermark | None: ...
-
-
-class WriterFallbackBulkheadPort(Protocol):
-    """Non-blocking bulkhead protecting Primary Writer pools from replica fallback storms."""
-
-    def try_acquire_writer_fallback(self, shard_id: str) -> bool: ...
-
-
-class ReadConsistencyPolicyPort(Protocol):
-    """Polymorphic Strategy Port selecting Reader vs. Writer target pools."""
-
-    def select_route(
-        self,
-        endpoint: ShardEndpointDTO,
-        watermark_probe: ReplicaWatermarkProbePort,
-        fallback_bulkhead: WriterFallbackBulkheadPort,
-    ) -> ReadRouteDecisionDTO: ...
 
 
 class InMemoryReplicaWatermarkStore(ReplicaWatermarkProbePort):
@@ -111,7 +83,7 @@ class TokenBucketWriterFallbackBulkhead(WriterFallbackBulkheadPort):
             return True
 
         self._buckets[shard_id] = (replenished, now)
-        logger.warning(
+        logger.error(
             "writer_fallback_bulkhead_throttled",
             shard_id=shard_id,
             available_tokens=replenished,
@@ -122,19 +94,29 @@ class TokenBucketWriterFallbackBulkhead(WriterFallbackBulkheadPort):
 class EventualReplicaPolicy(ReadConsistencyPolicyPort):
     """High-throughput default strategy routing queries to the Pod's Read Replica pool."""
 
+    def validate_probe_configuration(
+        self,
+        watermark_probe: ReplicaWatermarkProbePort | None,
+    ) -> None:
+        _ = watermark_probe
+
     def select_route(
         self,
         endpoint: ShardEndpointDTO,
-        watermark_probe: ReplicaWatermarkProbePort,
+        watermark_probe: ReplicaWatermarkProbePort | None,
         fallback_bulkhead: WriterFallbackBulkheadPort,
     ) -> ReadRouteDecisionDTO:
         _ = fallback_bulkhead
-        observed = watermark_probe.get_cached_watermark(endpoint.shard_id)
+        observed = (
+            watermark_probe.get_cached_watermark(endpoint.shard_id)
+            if watermark_probe is not None
+            else None
+        )
         return ReadRouteDecisionDTO(
             target_role=ReadTargetRole.READER,
             target_dsn=endpoint.reader_dsn,
             pool_key=f"{endpoint.shard_id}:{ReadTargetRole.READER.value}",
-            fallback_used=False,
+            disposition=ReadRouteDisposition.REPLICA_SELECTED,
             observed_watermark=observed,
         )
 
@@ -142,10 +124,16 @@ class EventualReplicaPolicy(ReadConsistencyPolicyPort):
 class StrictPrimaryPolicy(ReadConsistencyPolicyPort):
     """Explicit strong-consistency strategy routing directly to the Pod's Primary Writer."""
 
+    def validate_probe_configuration(
+        self,
+        watermark_probe: ReplicaWatermarkProbePort | None,
+    ) -> None:
+        _ = watermark_probe
+
     def select_route(
         self,
         endpoint: ShardEndpointDTO,
-        watermark_probe: ReplicaWatermarkProbePort,
+        watermark_probe: ReplicaWatermarkProbePort | None,
         fallback_bulkhead: WriterFallbackBulkheadPort,
     ) -> ReadRouteDecisionDTO:
         _ = (watermark_probe, fallback_bulkhead)
@@ -153,7 +141,7 @@ class StrictPrimaryPolicy(ReadConsistencyPolicyPort):
             target_role=ReadTargetRole.WRITER,
             target_dsn=endpoint.writer_dsn,
             pool_key=f"{endpoint.shard_id}:{ReadTargetRole.WRITER.value}",
-            fallback_used=False,
+            disposition=ReadRouteDisposition.PRIMARY_SELECTED,
             observed_watermark=None,
         )
 
@@ -164,19 +152,33 @@ class CausalWatermarkPolicy(ReadConsistencyPolicyPort):
     def __init__(self, required_watermark: ReplicationWatermark) -> None:
         self._required_watermark = required_watermark
 
+    def validate_probe_configuration(
+        self,
+        watermark_probe: ReplicaWatermarkProbePort | None,
+    ) -> None:
+        if watermark_probe is None:
+            raise ValueError(
+                "A live ReplicaWatermarkProbePort must be supplied to serve causal watermark reads."
+            )
+
     def select_route(
         self,
         endpoint: ShardEndpointDTO,
-        watermark_probe: ReplicaWatermarkProbePort,
+        watermark_probe: ReplicaWatermarkProbePort | None,
         fallback_bulkhead: WriterFallbackBulkheadPort,
     ) -> ReadRouteDecisionDTO:
-        replayed = watermark_probe.get_cached_watermark(endpoint.shard_id)
+        self.validate_probe_configuration(watermark_probe)
+        replayed = (
+            watermark_probe.get_cached_watermark(endpoint.shard_id)
+            if watermark_probe is not None
+            else None
+        )
         if replayed is not None and replayed >= self._required_watermark:
             return ReadRouteDecisionDTO(
                 target_role=ReadTargetRole.READER,
                 target_dsn=endpoint.reader_dsn,
                 pool_key=f"{endpoint.shard_id}:{ReadTargetRole.READER.value}",
-                fallback_used=False,
+                disposition=ReadRouteDisposition.REPLICA_SELECTED,
                 observed_watermark=replayed,
             )
 
@@ -191,11 +193,11 @@ class CausalWatermarkPolicy(ReadConsistencyPolicyPort):
                 target_role=ReadTargetRole.WRITER,
                 target_dsn=endpoint.writer_dsn,
                 pool_key=f"{endpoint.shard_id}:{ReadTargetRole.WRITER.value}",
-                fallback_used=True,
+                disposition=ReadRouteDisposition.CAUSAL_WRITER_FALLBACK,
                 observed_watermark=replayed,
             )
 
-        logger.warning(
+        logger.error(
             "causal_watermark_fallback_degraded_to_reader",
             shard_id=endpoint.shard_id,
             required_watermark=int(self._required_watermark),
@@ -205,7 +207,7 @@ class CausalWatermarkPolicy(ReadConsistencyPolicyPort):
             target_role=ReadTargetRole.READER,
             target_dsn=endpoint.reader_dsn,
             pool_key=f"{endpoint.shard_id}:{ReadTargetRole.READER.value}",
-            fallback_used=False,
+            disposition=ReadRouteDisposition.CAUSAL_BULKHEAD_DEGRADED,
             observed_watermark=replayed,
         )
 
@@ -214,10 +216,6 @@ __all__ = [
     "CausalWatermarkPolicy",
     "EventualReplicaPolicy",
     "InMemoryReplicaWatermarkStore",
-    "ReadConsistencyPolicyPort",
-    "ReadRouteDecisionDTO",
-    "ReplicaWatermarkProbePort",
     "StrictPrimaryPolicy",
     "TokenBucketWriterFallbackBulkhead",
-    "WriterFallbackBulkheadPort",
 ]

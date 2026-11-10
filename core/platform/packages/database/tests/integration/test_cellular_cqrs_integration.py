@@ -6,16 +6,15 @@ from datetime import date
 from typing import cast
 
 import pytest
+from sharding.domain.constants import DatabaseShardStatus, ShardRoutingStrategy
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from database.bulk_ingestor import SqlAlchemyBulkRecordIngestor
 from database.constants import (
-    DatabaseShardStatus,
     PartitionCadence,
     PartitionDetachStatus,
-    ShardRoutingStrategy,
 )
 from database.models.identity import Tenant
 from database.models.sharding import DatabaseShard, VirtualBucketAssignment

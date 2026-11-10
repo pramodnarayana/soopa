@@ -15,10 +15,10 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Protocol, cast, runtime_checkable
 
 import structlog
+from sharding.domain.constants import DatabaseShardStatus
 from sqlalchemy import or_, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from database.constants import DatabaseShardStatus
 from database.models.sharding import DatabaseShard, ShardRegistry
 from database.models.subscriptions import App
 from database.provider import get_async_engine

@@ -1,4 +1,4 @@
-"""Pure immutable Domain Models and Results for Read Projection Caching."""
+"""Pure Immutable Domain Value Objects and Results for Read Projection Caching."""
 
 from __future__ import annotations
 

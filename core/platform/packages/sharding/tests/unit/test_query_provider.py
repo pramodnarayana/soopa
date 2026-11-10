@@ -1,63 +1,52 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import cast
 
 import pytest
 
-from database.cellular_ring import ShardEndpointDTO, ShardResolutionOutcome
-from database.consistency import (
+from sharding.application.query_provider import TenantDataPlaneQueryProvider
+from sharding.application.read_consistency_policies import (
     CausalWatermarkPolicy,
     InMemoryReplicaWatermarkStore,
     TokenBucketWriterFallbackBulkhead,
 )
-from database.constants import (
+from sharding.domain.constants import (
     DatabaseShardStatus,
+    ShardResolutionFailureReason,
     ShardResolutionStatus,
     ShardRoutingStrategy,
 )
-from database.query_provider import TenantDataPlaneQueryProvider
-from database.router import DatabaseReadRouterPort
-from database.tenant_shard_resolver import CellularShardResolverPort, TenantNotFoundError
-from database.types import ReplicationWatermark, TenantReadSession
-from database.utils import pgbouncer_transaction_connect_args
+from sharding.domain.exceptions import TenantNotFoundError
+from sharding.domain.topology import (
+    ReplicationWatermark,
+    ShardEndpointDTO,
+    ShardResolutionOutcome,
+)
+from sharding.ports.outbound.session_router_port import TenantReadSessionRouterPort
+from sharding.testing.fakes import FakeCellularShardResolver
 
 
-class _FakeCellularResolver(CellularShardResolverPort):
-    def __init__(self, outcome: ShardResolutionOutcome) -> None:
-        self._outcome = outcome
-
-    async def resolve_tenant_endpoint(self, tenant_id: str) -> ShardResolutionOutcome:
-        _ = tenant_id
-        return self._outcome
-
-    async def resolve_subject_endpoint(
-        self, tenant_id: str, subject_key: str
-    ) -> ShardResolutionOutcome:
-        _ = (tenant_id, subject_key)
-        return self._outcome
+class _FakeReadSession:
+    pass
 
 
-class _FakeReadRouter(DatabaseReadRouterPort):
+class _FakeReadRouter(TenantReadSessionRouterPort[_FakeReadSession]):
     def __init__(self) -> None:
         self.calls: list[tuple[str, str, str]] = []
 
     async def get_tenant_read_session(
-        self, tenant_id: str, pool_key: str, target_dsn: str
-    ) -> AsyncGenerator[TenantReadSession, None]:
+        self,
+        tenant_id: str,
+        pool_key: str,
+        target_dsn: str,
+    ) -> AsyncGenerator[_FakeReadSession, None]:
         self.calls.append((tenant_id, pool_key, target_dsn))
-        yield cast(TenantReadSession, object())
+        yield _FakeReadSession()
 
 
 class _SampleQueryRepo:
-    def __init__(self, session: TenantReadSession) -> None:
+    def __init__(self, session: _FakeReadSession) -> None:
         self.session = session
-
-
-def test_pgbouncer_transaction_connect_args_disables_statement_cache() -> None:
-    args = pgbouncer_transaction_connect_args()
-    assert args["statement_cache_size"] == 0
-    assert args["server_settings"] == {"search_path": "public"}
 
 
 @pytest.mark.asyncio
@@ -70,7 +59,7 @@ async def test_query_provider_routes_queries_according_to_consistency_policy() -
         status=DatabaseShardStatus.ACTIVE,
         routing_strategy=ShardRoutingStrategy.TENANT_REGISTRY,
     )
-    resolver = _FakeCellularResolver(
+    resolver = FakeCellularShardResolver(
         ShardResolutionOutcome(status=ShardResolutionStatus.RESOLVED, endpoint=endpoint)
     )
     read_router = _FakeReadRouter()
@@ -109,11 +98,11 @@ async def test_query_provider_routes_queries_according_to_consistency_policy() -
 
 @pytest.mark.asyncio
 async def test_query_provider_raises_when_pod_unresolvable() -> None:
-    resolver = _FakeCellularResolver(
+    resolver = FakeCellularShardResolver(
         ShardResolutionOutcome(
             status=ShardResolutionStatus.NOT_FOUND,
             endpoint=None,
-            reason="tenant_unmapped",
+            reason=ShardResolutionFailureReason.TENANT_UNMAPPED,
         )
     )
     provider = TenantDataPlaneQueryProvider(
@@ -136,7 +125,7 @@ async def test_query_provider_causal_read_without_probe_raises_value_error() -> 
         status=DatabaseShardStatus.ACTIVE,
         routing_strategy=ShardRoutingStrategy.TENANT_REGISTRY,
     )
-    resolver = _FakeCellularResolver(
+    resolver = FakeCellularShardResolver(
         ShardResolutionOutcome(status=ShardResolutionStatus.RESOLVED, endpoint=endpoint)
     )
     provider = TenantDataPlaneQueryProvider(

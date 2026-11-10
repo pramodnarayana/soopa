@@ -27,6 +27,7 @@ dependencies = [
     "notification",
     "orchestration",
     "strace",
+    "sharding",
     "pyyaml>=6.0.2",
     "aioboto3>=13.1.0",
     "botocore",
@@ -48,6 +49,7 @@ sftp = { workspace = true }
 notification = { workspace = true }
 orchestration = { workspace = true }
 strace = { workspace = true }
+sharding = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

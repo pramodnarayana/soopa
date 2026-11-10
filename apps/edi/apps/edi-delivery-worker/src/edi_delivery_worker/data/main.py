@@ -7,7 +7,6 @@ from typing import Protocol
 
 import structlog
 from database.router import DatabaseRouter
-from database.tenant_shard_resolver import TenantNotFoundError
 from dotenv import load_dotenv
 from edi.adapters.outbound.database.tenant_resolver import SqlAlchemyTenantResolver
 from edi.adapters.outbound.pipeline.as2 import HttpxAS2DeliveryClient
@@ -46,6 +45,7 @@ from secret_store import SecretStorePort, SecretStoreProvider
 from security.ports.cipher_port import CipherPort
 from security.provider import SecurityProvider
 from seedwork.infra.worker import LaunchableWorker, run_worker_app, run_worker_app_async
+from sharding.domain.exceptions import TenantNotFoundError
 
 from edi_delivery_worker.adapters.inbound.workers.edi_data_plane_event_dispatcher import (
     EdiDataPlaneEventDispatcher,

@@ -13,7 +13,7 @@ from cache.adapters.outbound.resp_socket_store_executor import (
     RespSocketStoreExecutor,
 )
 from cache.domain.constants import CacheLookupStatus, CacheUpsertStatus
-from cache.domain.models import StampedProjectionDTO
+from cache.domain.projection import StampedProjectionDTO
 
 pytestmark = pytest.mark.integration
 
