@@ -10,3 +10,9 @@ class OutboxStatus(StrEnum):
     COMPLETED = "COMPLETED"
     RESERVED = "RESERVED"
     SUCCESS = "SUCCESS"
+
+
+class LogicalOutboxChannel(StrEnum):
+    """Canonical logical replication message prefixes for zero-bloat stream emission."""
+
+    SOOPA_OUTBOX = "soopa.outbox"

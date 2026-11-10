@@ -224,6 +224,13 @@ def upgrade() -> None:
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("dsn", sa.String(length=1024), nullable=False),
+        sa.Column("reader_dsn", sa.String(length=1024), nullable=True),
+        sa.Column(
+            "routing_strategy",
+            sa.String(length=50),
+            server_default="tenant_registry",
+            nullable=False,
+        ),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("status", sa.String(length=50), nullable=False),
@@ -598,6 +605,25 @@ def upgrade() -> None:
         schema="ucp",
     )
     op.create_table(
+        "virtual_bucket_assignments",
+        sa.Column("id", sa.String(length=128), nullable=False),
+        sa.Column("app_id", sa.String(length=128), nullable=False),
+        sa.Column("bucket_start", sa.Integer(), nullable=False),
+        sa.Column("bucket_end", sa.Integer(), nullable=False),
+        sa.Column("shard_id", sa.String(length=128), nullable=False),
+        sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.CheckConstraint(
+            "bucket_start >= 0 AND bucket_end >= bucket_start AND bucket_end < 4096",
+            name="ck_virtual_bucket_bounds",
+        ),
+        sa.ForeignKeyConstraint(["app_id"], ["ucp.apps.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["shard_id"], ["ucp.database_shards.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("app_id", "bucket_start", name="uq_virtual_bucket_app_start"),
+        schema="ucp",
+    )
+    op.create_table(
         "user_roles",
         sa.Column("id", sa.String(length=128), nullable=False),
         sa.Column("tenant_id", sa.String(length=128), nullable=False),
@@ -702,6 +728,7 @@ def downgrade() -> None:
         postgresql_nulls_not_distinct=True,
     )
     op.drop_table("user_roles", schema="identity")
+    op.drop_table("virtual_bucket_assignments", schema="ucp")
     op.drop_table("shard_registry", schema="ucp")
     op.drop_index("idx_app_subs_tenant_status", table_name="app_subscriptions", schema="ucp")
     op.drop_table("app_subscriptions", schema="ucp")

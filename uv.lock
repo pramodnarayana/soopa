@@ -10,6 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "as2-server",
+    "cache",
     "compute-worker",
     "config-sync-worker",
     "database",
@@ -552,6 +553,17 @@ sdist = { url = "https://files.pythonhosted.org/packages/28/a3/81d3a47c2dbfd76f1
 wheels = [
     { url = "https://files.pythonhosted.org/packages/38/c5/f6ce561004db45f0b847c2cd9b19c67c6bf348a82018a48cb718be6b58b0/botocore-1.40.61-py3-none-any.whl", hash = "sha256:17ebae412692fd4824f99cde0f08d50126dc97954008e5ba2b522eb049238aa7", size = 14055973, upload-time = "2025-10-28T19:26:42.15Z" },
 ]
+
+[[package]]
+name = "cache"
+version = "0.1.0"
+source = { editable = "core/platform/packages/cache" }
+dependencies = [
+    { name = "structlog" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "structlog", specifier = ">=24.0.0" }]
 
 [[package]]
 name = "cachecontrol"

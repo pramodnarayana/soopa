@@ -60,6 +60,7 @@ members = [
     "core/platform/packages/secret-store",
     "core/platform/packages/orchestration",
     "core/platform/packages/strace",
+    "core/platform/packages/cache",
     "apps/ip/packages/ip",
 ]
 exclude = ["apps/edi/packages/ui"]
@@ -96,6 +97,7 @@ pythonpath = [
     "core/platform/packages/orchestration/src",
     "core/platform/packages/orchestration",
     "core/platform/packages/strace/src",
+    "core/platform/packages/cache/src",
     "core/platform/packages/notification/src",
     "apps/ip/packages/ip/src",
     "apps/ip/packages/ip/tests",
@@ -186,6 +188,7 @@ mypy_path = [
     "core/platform/packages/storage/src",
     "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src",
+    "core/platform/packages/cache/src",
     "core/platform/packages/seedwork/src",
     "infra/local/scripts",
 ]
@@ -395,6 +398,7 @@ extraPaths = [
     "core/platform/packages/shttp/src",
     "core/platform/packages/orchestration/src",
     "core/platform/packages/strace/src",
+    "core/platform/packages/cache/src",
     "core/platform/packages/seedwork/src",
     "infra/local/scripts",
 ]
@@ -440,6 +444,7 @@ known_first_party = [
     "ip",
     "shttp",
     "strace",
+    "cache",
     "workflow",
 ]
 

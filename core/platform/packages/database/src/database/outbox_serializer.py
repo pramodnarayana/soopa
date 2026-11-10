@@ -53,3 +53,40 @@ def map_outbox_row_to_envelope(row: OutboxMixin, *, source: str) -> EventEnvelop
         correlation_id=str(row.correlation_id) if row.correlation_id else None,
         lane=lane,
     )
+
+
+def serialize_event_envelope_json(envelope: EventEnvelope) -> str:
+    """Deterministically serialize an `EventEnvelope` to canonical JSON string."""
+    return json.dumps(envelope.to_dict(), cls=DomainEventEncoder, separators=(",", ":"))
+
+
+def deserialize_event_envelope_json(raw_json: str) -> EventEnvelope:
+    """Rehydrate a canonical JSON string back into a strongly-typed `EventEnvelope`."""
+    parsed = json.loads(raw_json)
+    if not isinstance(parsed, dict):
+        raise TypeError("Serialized EventEnvelope root must be a JSON object")
+
+    raw_lane = parsed.get("lane")
+    lane = (
+        EventProcessingLane(raw_lane)
+        if isinstance(raw_lane, str) and raw_lane in EventProcessingLane._value2member_map_
+        else EventProcessingLane.REALTIME
+    )
+    raw_payload = parsed.get("payload")
+    payload: JsonDict = dict(raw_payload) if isinstance(raw_payload, dict) else {}
+
+    return EventEnvelope(
+        id=str(parsed["id"]),
+        source=str(parsed["source"]),
+        event_type=str(parsed["event_type"]),
+        tenant_id=str(parsed["tenant_id"]) if parsed.get("tenant_id") is not None else None,
+        idempotency_key=(
+            str(parsed["idempotency_key"]) if parsed.get("idempotency_key") is not None else None
+        ),
+        payload=payload,
+        trace_id=str(parsed["trace_id"]) if parsed.get("trace_id") is not None else None,
+        correlation_id=(
+            str(parsed["correlation_id"]) if parsed.get("correlation_id") is not None else None
+        ),
+        lane=lane,
+    )

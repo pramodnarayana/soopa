@@ -3,7 +3,7 @@ Enterprise Database Provider
 
 Centralized capability for provisioning SQLAlchemy AsyncEngines and LISTEN/NOTIFY
 connections across the monorepo. Guarantees identical infrastructure tuning,
-connection pool strategies, and URL normalization.
+connection pool strategies, PgBouncer transaction-mode safety, and URL normalization.
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ def get_async_engine(
     pool_pre_ping: bool = True,
     echo: bool = False,
     server_settings: dict[str, str] | None = None,
+    statement_cache_size: int | None = None,
 ) -> AsyncEngine:
     """
     Creates and configures an AsyncEngine.
@@ -39,14 +40,17 @@ def get_async_engine(
 
     Args:
         server_settings: Optional asyncpg server_settings passed as connect_args.
-                         Use this to explicitly enforce settings like search_path
-                         instead of relying on implicit PostgreSQL defaults.
                          Example: {"search_path": "public"}
+        statement_cache_size: Optional asyncpg prepared statement cache size.
+                              Set to `0` when connecting through PgBouncer in
+                              `transaction` pooling mode.
     """
     url = normalize_to_asyncpg(url)
-    connect_args: dict[str, dict[str, str]] = (
-        {"server_settings": server_settings} if server_settings else {}
-    )
+    connect_args: dict[str, int | dict[str, str]] = {}
+    if server_settings:
+        connect_args["server_settings"] = server_settings
+    if statement_cache_size is not None and not url.startswith("sqlite"):
+        connect_args["statement_cache_size"] = statement_cache_size
 
     if url.startswith("sqlite"):
         engine = (
@@ -82,6 +86,7 @@ def get_async_engine(
         pool_size=pool_size,
         max_overflow=max_overflow,
         pool_pre_ping=pool_pre_ping,
+        statement_cache_size=statement_cache_size,
     )
 
     return engine
@@ -112,10 +117,9 @@ class DatabaseProvider:
         pool_pre_ping: bool = True,
         echo: bool = False,
         server_settings: dict[str, str] | None = None,
+        statement_cache_size: int | None = None,
     ) -> DatabaseProvider:
-        """
-        Creates a DatabaseProvider by automatically instantiating the engine from a URL.
-        """
+        """Creates a DatabaseProvider by automatically instantiating the engine from a URL."""
         engine = get_async_engine(
             url=url,
             pool_size=pool_size,
@@ -123,6 +127,7 @@ class DatabaseProvider:
             pool_pre_ping=pool_pre_ping,
             echo=echo,
             server_settings=server_settings,
+            statement_cache_size=statement_cache_size,
         )
         return cls(engine=engine)
 
@@ -133,15 +138,11 @@ class DatabaseProvider:
 
     @contextlib.asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
-        """
-        Context manager for acquiring a database session.
-        """
+        """Context manager for acquiring a database session."""
         async with self.session_factory() as session:
             yield session
 
     async def close(self) -> None:
-        """
-        Disposes the engine connection pool. Should be called on application shutdown.
-        """
+        """Disposes the engine connection pool. Should be called on application shutdown."""
         await self.engine.dispose()
         logger.info("database_engine_disposed")

@@ -56,6 +56,7 @@ class UcpIdPrefix(StrEnum):
     UCP_APP = "ucp_app"
     SHARD = "ucp_shard"
     UCP_SHARD = "ucp_shard"
+    BUCKET_ASSIGNMENT = "ucp_bkt"
     OUTBOX = "ucp_ob"
     UCP_OUTBOX = "ucp_ob"
     WEBHOOK = "ucp_wh"
