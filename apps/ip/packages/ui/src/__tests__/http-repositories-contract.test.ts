@@ -11,12 +11,14 @@ import {
   HttpCatalogRepository,
   HttpConnectionRepository,
   HttpIntervalRepository,
+  HttpSimulatorRepository,
   HttpStitchRepository,
   HttpSyncRunRepository,
   HttpTraceRepository,
   HttpTransformationRepository,
 } from '../adapters/http';
 import { AuthType, ReplayStage, SyncRunKind, TransformationMode } from '../domain/enums';
+import { SimulatorVelocityMode } from '../domain/simulator';
 
 function expectOk<T>(result: Result<T, ApiProblem>): T {
   expect(result.ok).toBe(true);
@@ -935,5 +937,114 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
 
     expect(calls[4]?.method).toBe('POST');
     expect(JSON.parse(calls[4]?.bodyText ?? '{}')).toEqual({ delivery_receipt_id: 'rcpt_01' });
+  });
+
+  it('maps HttpSimulatorRepository wire responses across all 8 methods', async () => {
+    const logger = new RecordingLoggerFake();
+    const wireSandbox = {
+      id: 'sbx_0102030405060708090a0b0c',
+      tenant_id: 'ten_01',
+      name: 'QA Virtual Sandbox',
+      api_key_prefix: 'sbx_key_abcd',
+      created_at: '2026-11-11T09:00:00Z',
+      updated_at: '2026-11-11T09:00:00Z',
+    };
+    const wireEntity = {
+      id: 'sim_ent_0102030405060708090a0b0c',
+      tenant_id: 'ten_01',
+      sandbox_id: 'sbx_0102030405060708090a0b0c',
+      entity_name: 'orders',
+      primary_key_field: 'order_id',
+      cursor_field: 'updated_at',
+      records_per_pull: 50,
+      cursor_step_seconds: 60,
+      velocity_mode: 'TIMESERIES_COLUMNAR',
+      sample_blueprint: { order_id: 'ORD-100', total_amount: 125.0 },
+      inferred_json_schema: {
+        type: 'object',
+        properties: { order_id: { type: 'string' }, total_amount: { type: 'number' } },
+      },
+      chaos_policy: {},
+      version: 2,
+      created_at: '2026-11-11T09:05:00Z',
+      updated_at: '2026-11-11T09:10:00Z',
+    };
+
+    const { fetchImpl, calls } = createRouteFetch({
+      'POST /api/v1/tenants/ten_01/ip/simulator/sandboxes': {
+        ...wireSandbox,
+        api_key: 'sbx_key_abcd1234567890abcdef1234567890ab',
+      },
+      'GET /api/v1/tenants/ten_01/ip/simulator/sandboxes': [wireSandbox],
+      'GET /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c': wireSandbox,
+      'DELETE /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c': {},
+      'GET /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities': [
+        wireEntity,
+      ],
+      'POST /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities':
+        wireEntity,
+      'PATCH /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities/sim_ent_0102030405060708090a0b0c':
+        wireEntity,
+      'DELETE /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities/sim_ent_0102030405060708090a0b0c':
+        {},
+    });
+
+    const client = new FetchHttpClientAdapter({
+      baseUrl: 'https://api.soopa.local',
+      fetchImpl,
+      logger,
+    });
+    const simRepo = new HttpSimulatorRepository(client, logger);
+
+    const createdSbx = expectOk(
+      await simRepo.createSandbox('ten_01', { name: 'QA Virtual Sandbox' }),
+    );
+    expect(createdSbx.apiKey).toBe('sbx_key_abcd1234567890abcdef1234567890ab');
+
+    const sandboxes = expectOk(await simRepo.listSandboxes('ten_01'));
+    expect(sandboxes[0]?.apiKeyPrefix).toBe('sbx_key_abcd');
+
+    const singleSbx = expectOk(await simRepo.getSandbox('ten_01', 'sbx_0102030405060708090a0b0c'));
+    expect(singleSbx.name).toBe('QA Virtual Sandbox');
+
+    const listedEntities = expectOk(
+      await simRepo.listEntities('ten_01', 'sbx_0102030405060708090a0b0c'),
+    );
+    expect(listedEntities[0]?.entityName).toBe('orders');
+
+    const createdEntity = expectOk(
+      await simRepo.createEntity('ten_01', 'sbx_0102030405060708090a0b0c', {
+        entityName: 'orders',
+        sampleBlueprint: { order_id: 'ORD-100', total_amount: 125.0 },
+        primaryKeyField: 'order_id',
+        cursorField: 'updated_at',
+        recordsPerPull: 50,
+        velocityMode: SimulatorVelocityMode.TIMESERIES_COLUMNAR,
+      }),
+    );
+    expect(createdEntity.recordsPerPull).toBe(50);
+
+    const updatedEntity = expectOk(
+      await simRepo.updateEntity(
+        'ten_01',
+        'sbx_0102030405060708090a0b0c',
+        'sim_ent_0102030405060708090a0b0c',
+        {
+          recordsPerPull: 50,
+          velocityMode: SimulatorVelocityMode.TIMESERIES_COLUMNAR,
+        },
+      ),
+    );
+    expect(updatedEntity.version).toBe(2);
+
+    expectOk(
+      await simRepo.deleteEntity(
+        'ten_01',
+        'sbx_0102030405060708090a0b0c',
+        'sim_ent_0102030405060708090a0b0c',
+      ),
+    );
+    expectOk(await simRepo.deleteSandbox('ten_01', 'sbx_0102030405060708090a0b0c'));
+    expect(calls).toHaveLength(8);
   });
 });

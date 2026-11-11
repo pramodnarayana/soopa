@@ -556,7 +556,7 @@ async def update_connection(
     cmd = UpdateConnectionCommand(
         connection_id=connection_id,
         tenant_id=tenant_id,
-        new_name=request.new_name or request.name,
+        new_name=request.new_name if request.new_name is not None else request.name,
         updated_raw_credentials=request.updated_raw_credentials,
         updated_public_config=request.updated_public_config,
     )

@@ -6,7 +6,7 @@ export default defineConfig({
   dts: true,
   splitting: true,
   sourcemap: true,
-  external: ['react', 'react-dom', 'monaco-editor', '@monaco-editor/react'],
+  external: ['react', 'react-dom', 'monaco-editor', /^monaco-editor\//, '@monaco-editor/react'],
   esbuildOptions(options) {
     options.banner = {
       js: '"use client";',

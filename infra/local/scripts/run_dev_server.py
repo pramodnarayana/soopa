@@ -41,6 +41,12 @@ def parse_editable_package_src_dir(direct_url_json: str) -> Path | None:
 
     parsed_url = urlparse(raw_url)
     pkg_root = Path(url2pathname(parsed_url.path)).resolve()
+    subdirectory = parsed_raw.get("subdirectory")
+    if isinstance(subdirectory, str) and subdirectory.strip():
+        candidate_root = (pkg_root / subdirectory.strip()).resolve()
+        if not candidate_root.is_relative_to(pkg_root):
+            return None
+        pkg_root = candidate_root
     src_dir = pkg_root / "src"
     if src_dir.is_dir():
         return src_dir

@@ -5,6 +5,7 @@ import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
 import type { IntervalRepositoryPort } from '../ports/interval-repository.port';
 import type { RecordRepositoryPort } from '../ports/record-repository.port';
+import type { SimulatorRepositoryPort } from '../ports/simulator-repository.port';
 import type { StitchRepositoryPort } from '../ports/stitch-repository.port';
 import type { SyncRunRepositoryPort } from '../ports/sync-run-repository.port';
 import type { TraceRepositoryPort } from '../ports/trace-repository.port';
@@ -19,6 +20,7 @@ export interface IpRepositoriesBundle {
   readonly traces: TraceRepositoryPort;
   readonly records: RecordRepositoryPort;
   readonly intervals: IntervalRepositoryPort;
+  readonly simulator: SimulatorRepositoryPort;
 }
 
 export interface IpNavigationPort {

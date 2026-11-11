@@ -11,6 +11,7 @@ import {
   HttpConnectionRepository,
   HttpIntervalRepository,
   HttpRecordRepository,
+  HttpSimulatorRepository,
   HttpStitchRepository,
   HttpSyncRunRepository,
   HttpTraceRepository,
@@ -58,6 +59,7 @@ function createHttpRepositoriesBundle(
     traces: new HttpTraceRepository(client, logger),
     records: new HttpRecordRepository(client, logger),
     intervals: new HttpIntervalRepository(client, logger),
+    simulator: new HttpSimulatorRepository(client, logger),
   };
 }
 

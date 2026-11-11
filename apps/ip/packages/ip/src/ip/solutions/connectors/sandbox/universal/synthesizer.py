@@ -6,6 +6,7 @@ import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Final
 
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from ip.engine.ports.outbound.connector_port import RecordEnvelopeDTO
@@ -15,6 +16,8 @@ from seedwork.domain.types import JsonDict, JsonValue
 
 _EPOCH_ANCHOR = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
 _PATTERN_PREFIX_RE = re.compile(r"^\^?([A-Za-z0-9_-]+?)(?:\[0-9\]|\\d)\{(\d+)\}\$?$")
+MAX_SYNTHESIS_DIGITS: Final[int] = 32
+MAX_SYNTHESIS_ARRAY_ITEMS: Final[int] = 100
 
 # jsf / Faker-inspired realistic enterprise value catalogs (deterministic via SHA-256 seed)
 _FIRST_NAMES: tuple[str, ...] = (
@@ -111,26 +114,74 @@ def _format_iso_utc(dt: datetime) -> str:
     return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _synthesize_primary_key(
+def _clamp_digit_width(raw_digits: object, *, default: int = 4) -> int:
+    if isinstance(raw_digits, int) and not isinstance(raw_digits, bool):
+        if raw_digits <= 0:
+            return default
+        return min(raw_digits, MAX_SYNTHESIS_DIGITS)
+    if isinstance(raw_digits, str) and raw_digits.isdigit():
+        if len(raw_digits) > 2:
+            return MAX_SYNTHESIS_DIGITS
+        parsed = int(raw_digits)
+        return min(max(1, parsed), MAX_SYNTHESIS_DIGITS) if parsed > 0 else default
+    return default
+
+
+def _clamp_array_bounds(raw_min: object, raw_max: object) -> tuple[int, int]:
+    if isinstance(raw_min, int) and not isinstance(raw_min, bool):
+        min_items = min(max(0, raw_min), MAX_SYNTHESIS_ARRAY_ITEMS)
+    else:
+        min_items = 1
+
+    if isinstance(raw_max, int) and not isinstance(raw_max, bool):
+        max_items = min(max(min_items, raw_max), MAX_SYNTHESIS_ARRAY_ITEMS)
+    else:
+        max_items = min(max(min_items, 3), MAX_SYNTHESIS_ARRAY_ITEMS)
+    return min_items, max_items
+
+
+def _resolve_primary_key_prefix(
     spec: SimulatorStreamSpec,
     pk_prop: Mapping[str, JsonValue] | None,
-    seq_index: int,
-) -> str:
+) -> tuple[str, int]:
     if pk_prop is not None:
         raw_prefix = pk_prop.get("x_prefix")
         raw_digits = pk_prop.get("x_digits")
         if isinstance(raw_prefix, str) and raw_prefix:
-            digits = raw_digits if isinstance(raw_digits, int) and raw_digits > 0 else 4
-            return f"{raw_prefix}{seq_index:0{digits}d}"
+            return raw_prefix, _clamp_digit_width(raw_digits, default=4)
         raw_pattern = pk_prop.get("pattern")
         if isinstance(raw_pattern, str):
             match = _PATTERN_PREFIX_RE.match(raw_pattern)
             if match is not None:
                 pat_prefix, pat_digits = match.groups()
-                return f"{pat_prefix}{seq_index:0{int(pat_digits)}d}"
+                return pat_prefix, _clamp_digit_width(pat_digits, default=4)
 
-    prefix = re.sub(r"[^A-Za-z0-9]", "", spec.stream_name)[:3].upper() or "REC"
-    return f"{prefix}-{seq_index:06d}"
+    fallback = re.sub(r"[^A-Za-z0-9]", "", spec.stream_name)[:3].upper() or "REC"
+    return f"{fallback}-", 6
+
+
+def _synthesize_primary_key(
+    spec: SimulatorStreamSpec,
+    pk_prop: Mapping[str, JsonValue] | None,
+    seq_index: int,
+) -> str:
+    prefix, digits = _resolve_primary_key_prefix(spec, pk_prop)
+    return f"{prefix}{seq_index:0{digits}d}"
+
+
+def _extract_seq_num_from_record_id(
+    spec: SimulatorStreamSpec,
+    pk_prop: Mapping[str, JsonValue] | None,
+    record_id: str,
+) -> int | None:
+    prefix, _ = _resolve_primary_key_prefix(spec, pk_prop)
+    if not record_id.startswith(prefix):
+        return None
+    suffix = record_id[len(prefix) :]
+    if not suffix or len(suffix) > 64 or not suffix.isdigit():
+        return None
+    seq_num = int(suffix)
+    return seq_num if seq_num >= 1 else None
 
 
 _SEMANTIC_CATALOG_MAP: dict[str, tuple[str, ...]] = {
@@ -196,9 +247,9 @@ def _synthesize_prefixed_or_pattern_string(
 ) -> str | None:
     raw_prefix = prop_schema.get("x_prefix")
     if isinstance(raw_prefix, str) and raw_prefix:
-        raw_digits = prop_schema.get("x_digits")
-        digits = raw_digits if isinstance(raw_digits, int) and raw_digits > 0 else 4
-        num = (field_seed % (10**digits - 1)) + 1
+        digits = _clamp_digit_width(prop_schema.get("x_digits"), default=4)
+        span = max(1, (10**digits) - 1)
+        num = (field_seed % span) + 1
         return f"{raw_prefix}{num:0{digits}d}"
 
     raw_pattern = prop_schema.get("pattern")
@@ -206,8 +257,9 @@ def _synthesize_prefixed_or_pattern_string(
         match = _PATTERN_PREFIX_RE.match(raw_pattern)
         if match is not None:
             pat_prefix, pat_digits = match.groups()
-            d_len = int(pat_digits)
-            num = (field_seed % (10**d_len - 1)) + 1
+            d_len = _clamp_digit_width(pat_digits, default=4)
+            span = max(1, (10**d_len) - 1)
+            num = (field_seed % span) + 1
             return f"{pat_prefix}{num:0{d_len}d}"
     return None
 
@@ -301,10 +353,10 @@ def _synthesize_field_value(
     if prop_type == "array":
         items_schema = prop_schema.get("items")
         item_def = items_schema if isinstance(items_schema, Mapping) else {"type": "string"}
-        raw_min_items = prop_schema.get("minItems")
-        raw_max_items = prop_schema.get("maxItems")
-        min_items = int(raw_min_items) if isinstance(raw_min_items, int) else 1
-        max_items = int(raw_max_items) if isinstance(raw_max_items, int) else max(min_items, 3)
+        min_items, max_items = _clamp_array_bounds(
+            prop_schema.get("minItems"),
+            prop_schema.get("maxItems"),
+        )
         count = min_items + (field_seed % max(1, max_items - min_items + 1))
         return [
             _synthesize_field_value(
@@ -449,32 +501,51 @@ class JsonSchemaRecordSynthesizer:
         seed: int,
         record_id: str,
     ) -> RecordEnvelopeDTO:
-        """Deterministically reconstructs a single record by `record_id` (for Thin-Push Fetch-on-Notify)."""
-        rec_seed = _derive_seed_int(seed, spec.stream_name, record_id)
-        offset_seconds = (rec_seed % 86_400) + 60
-        record_dt = _EPOCH_ANCHOR + timedelta(seconds=offset_seconds)
-        iso_ts = _format_iso_utc(record_dt)
+        """Deterministically reconstructs a single record by `record_id` (for Thin-Push Fetch-on-Notify).
 
+        When `record_id` follows the stream's primary-key sequence format, derives the exact
+        same seed, timestamp, and payload fields as `synthesize_batch` so pulled and fetched
+        records for the same primary key are byte-for-byte identical.
+        """
         raw_props = spec.json_schema.get("properties")
         props = raw_props if isinstance(raw_props, Mapping) else {}
+        pk_prop = props.get(spec.primary_key_field)
+        pk_prop_map = pk_prop if isinstance(pk_prop, Mapping) else None
+        step_sec = max(1, spec.cursor_step_seconds)
+        chaos = spec.chaos_policy
 
-        payload: dict[str, JsonValue] = {}
-        for prop_name, prop_def in props.items():
-            name_str = str(prop_name)
-            if name_str == spec.primary_key_field:
-                payload[name_str] = record_id
-                continue
-            if name_str == spec.cursor_field:
-                payload[name_str] = iso_ts
-                continue
-            prop_map = prop_def if isinstance(prop_def, Mapping) else {"type": "string"}
-            f_seed = _derive_seed_int(rec_seed, name_str)
-            payload[name_str] = _synthesize_field_value(name_str, prop_map, f_seed, record_dt)
+        seq_num = _extract_seq_num_from_record_id(spec, pk_prop_map, record_id)
+        if seq_num is not None:
+            rec_seed = _derive_seed_int(seed, spec.stream_name, seq_num)
+            record_dt = _EPOCH_ANCHOR + timedelta(seconds=step_sec * seq_num)
+        else:
+            rec_seed = _derive_seed_int(seed, spec.stream_name, record_id)
+            offset_seconds = ((rec_seed % 1_440) + 1) * step_sec
+            record_dt = _EPOCH_ANCHOR + timedelta(seconds=offset_seconds)
 
-        if spec.primary_key_field not in payload:
-            payload[spec.primary_key_field] = record_id
-        if spec.cursor_field not in payload:
-            payload[spec.cursor_field] = iso_ts
+        iso_ts = _format_iso_utc(record_dt)
+        spike_roll = ((rec_seed >> 8) % 1000) / 10.0
+        inject_spike = (
+            chaos.spike_anomaly_rate_percent > 0.0 and spike_roll < chaos.spike_anomaly_rate_percent
+        )
+        violation_roll = ((rec_seed >> 16) % 1000) / 10.0
+        inject_violation = (
+            chaos.schema_violation_rate_percent > 0.0
+            and violation_roll < chaos.schema_violation_rate_percent
+        )
+
+        _, payload = _build_record_payload(
+            spec,
+            props,
+            pk_prop_map,
+            seq_num or 1,
+            rec_seed,
+            record_dt,
+            iso_ts,
+            inject_spike=inject_spike,
+            inject_violation=inject_violation,
+        )
+        payload[spec.primary_key_field] = record_id
 
         return RecordEnvelopeDTO(
             stream_name=spec.stream_name,

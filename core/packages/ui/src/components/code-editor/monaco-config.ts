@@ -28,10 +28,66 @@ export interface MonacoLoaderTarget<TMonaco> {
   config(params: { readonly monaco: TMonaco }): void;
 }
 
-export function configureMonacoEnvironment<TMonaco extends MonacoJsonDiagnosticsTarget>(
+export type MonacoWorkerConstructor<TWorker = Worker> = new () => TWorker;
+
+export interface MonacoWorkerRegistry<TWorker = Worker> {
+  readonly editor: MonacoWorkerConstructor<TWorker>;
+  readonly json: MonacoWorkerConstructor<TWorker>;
+  readonly css?: MonacoWorkerConstructor<TWorker>;
+  readonly html?: MonacoWorkerConstructor<TWorker>;
+  readonly ts?: MonacoWorkerConstructor<TWorker>;
+}
+
+export interface MonacoEnvironmentTarget<TWorker = Worker> {
+  MonacoEnvironment?:
+    | {
+        getWorker?(workerId: string, label: string): TWorker;
+      }
+    | undefined;
+}
+
+export interface ConfigureMonacoEnvironmentOptions<TWorker = Worker> {
+  readonly workers?: MonacoWorkerRegistry<TWorker>;
+  readonly environmentTarget?: MonacoEnvironmentTarget<TWorker>;
+}
+
+export function resolveMonacoWorkerByLabel<TWorker>(
+  workers: MonacoWorkerRegistry<TWorker>,
+  label: string,
+): TWorker {
+  if (label === 'json') {
+    return new workers.json();
+  }
+  if ((label === 'css' || label === 'scss' || label === 'less') && workers.css) {
+    return new workers.css();
+  }
+  if ((label === 'html' || label === 'handlebars' || label === 'razor') && workers.html) {
+    return new workers.html();
+  }
+  if ((label === 'typescript' || label === 'javascript') && workers.ts) {
+    return new workers.ts();
+  }
+  return new workers.editor();
+}
+
+export function configureMonacoEnvironment<
+  TMonaco extends MonacoJsonDiagnosticsTarget,
+  TWorker = Worker,
+>(
   monacoApi: TMonaco,
   loaderApi: MonacoLoaderTarget<TMonaco>,
+  options?: ConfigureMonacoEnvironmentOptions<TWorker>,
 ): void {
+  if (options?.workers) {
+    const workers = options.workers;
+    if (options.environmentTarget) {
+      options.environmentTarget.MonacoEnvironment = {
+        getWorker(_workerId: string, label: string): TWorker {
+          return resolveMonacoWorkerByLabel(workers, label);
+        },
+      };
+    }
+  }
   monacoApi.json.jsonDefaults.setDiagnosticsOptions(STRICT_JSON_DIAGNOSTICS_OPTIONS);
   loaderApi.config({ monaco: monacoApi });
 }

@@ -44,6 +44,58 @@ describe('Unified @soopa/ui code-editor module', () => {
     expect(capturedLoaderConfig).toEqual({ monaco: fakeMonaco });
   });
 
+  it('wires Vite-bundled MonacoEnvironment.getWorker for editor, JSON, CSS, HTML, and TypeScript labels', () => {
+    class FakeEditorWorker {
+      readonly kind = 'editor';
+    }
+    class FakeJsonWorker {
+      readonly kind = 'json';
+    }
+    class FakeCssWorker {
+      readonly kind = 'css';
+    }
+    class FakeHtmlWorker {
+      readonly kind = 'html';
+    }
+    class FakeTsWorker {
+      readonly kind = 'ts';
+    }
+
+    const fakeMonaco = {
+      json: {
+        jsonDefaults: {
+          setDiagnosticsOptions: () => undefined,
+        },
+      },
+    };
+    const fakeLoader = {
+      config: () => undefined,
+    };
+    const envTarget: {
+      MonacoEnvironment?: {
+        getWorker(workerId: string, label: string): { readonly kind: string };
+      };
+    } = {};
+
+    configureMonacoEnvironment(fakeMonaco, fakeLoader, {
+      workers: {
+        editor: FakeEditorWorker,
+        json: FakeJsonWorker,
+        css: FakeCssWorker,
+        html: FakeHtmlWorker,
+        ts: FakeTsWorker,
+      },
+      environmentTarget: envTarget,
+    });
+
+    expect(envTarget.MonacoEnvironment).toBeDefined();
+    expect(envTarget.MonacoEnvironment?.getWorker('w1', 'json').kind).toBe('json');
+    expect(envTarget.MonacoEnvironment?.getWorker('w2', 'scss').kind).toBe('css');
+    expect(envTarget.MonacoEnvironment?.getWorker('w3', 'html').kind).toBe('html');
+    expect(envTarget.MonacoEnvironment?.getWorker('w4', 'typescript').kind).toBe('ts');
+    expect(envTarget.MonacoEnvironment?.getWorker('w5', 'edi').kind).toBe('editor');
+  });
+
   it('prevents child-node dragleave flicker via containment check', () => {
     const childToken = { id: 'child' };
     const outsideToken = { id: 'outside' };

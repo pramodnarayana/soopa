@@ -1,4 +1,4 @@
-"""GenSON-inspired JSON Schema inference, multi-sample merging, and StreamSchemaDTO extraction."""
+"""GenSON-inspired JSON Schema inference, blueprint validation, and StreamSchemaDTO extraction."""
 
 from __future__ import annotations
 
@@ -6,17 +6,18 @@ import hashlib
 import json
 import re
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
 from ip.engine.ports.outbound.connector_port import StreamFieldDTO, StreamSchemaDTO
-from ip.solutions.connectors.sandbox.universal.chaos import SimulatorChaosPolicy
 from ip.solutions.connectors.sandbox.universal.spec import (
-    SimulatorManifest,
+    MAX_SAMPLE_BLUEPRINT_BYTES,
+    SimulatorConnectionConfig,
     SimulatorStreamSpec,
-    StreamVelocityMode,
 )
 from seedwork.domain.types import JsonDict, JsonValue
 
+_ENTITY_NAME_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{0,127}$")
 _ISO_DATETIME_RE = re.compile(
     r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$"
 )
@@ -53,6 +54,17 @@ _SEMANTIC_FIELD_PATTERNS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("status", "lifecycle_state", "order_status", "payment_status"), "status"),
     (("department", "category", "segment", "tier"), "category"),
 )
+
+
+@dataclass(frozen=True)
+class ValidatedEntityBlueprint:
+    """Validated entity naming, normalized blueprint, inferred JSON Schema, and resolved key fields."""
+
+    entity_name: str
+    sample_blueprint: JsonValue
+    inferred_json_schema: JsonDict
+    primary_key_field: str
+    cursor_field: str
 
 
 def infer_semantic_kind(field_name: str) -> str | None:
@@ -279,17 +291,6 @@ def _normalize_existing_json_schema(sample: Mapping[str, JsonValue]) -> JsonDict
 
 def infer_json_schema_from_sample(sample: JsonValue) -> JsonDict:
     """Infers or normalizes a JSON Schema dictionary from a sample JSON object, array of objects, or JSON Schema."""
-    if isinstance(sample, str) and sample.strip():
-        try:
-            parsed = json.loads(sample)
-        except json.JSONDecodeError:
-            return {
-                "type": "object",
-                "properties": {"value": {"type": "string"}},
-                "required": ["value"],
-            }
-        return infer_json_schema_from_sample(parsed)
-
     if isinstance(sample, Sequence) and not isinstance(sample, (str, bytes)):
         obj_items = [item for item in sample if isinstance(item, Mapping)]
         if obj_items:
@@ -393,114 +394,121 @@ def _ensure_pk_and_cursor_in_schema(
     return enriched_schema, pk_field, cursor_field
 
 
-def _parse_wrapped_stream_spec(
-    cleaned_name: str,
-    raw_spec: Mapping[str, JsonValue],
-    default_records_per_pull: int,
-) -> Result[SimulatorStreamSpec, IpError]:
-    raw_schema_source = raw_spec.get("json_schema") or raw_spec.get("sample_json") or {}
-    if isinstance(raw_schema_source, str) and raw_schema_source.strip():
-        try:
-            raw_schema_source = json.loads(raw_schema_source)
-        except json.JSONDecodeError as exc:
+def validate_entity_name(raw_name: str) -> Result[str, IpError]:
+    """Validates a simulator entity name against `^[a-zA-Z][a-zA-Z0-9_-]{0,127}$`."""
+    cleaned = raw_name.strip()
+    if not _ENTITY_NAME_RE.match(cleaned):
+        return Result.fail(
+            IpError(
+                code=IpErrorCode.VALIDATION_FAILED,
+                message=(
+                    f"Invalid simulator entity name '{raw_name}'. Must start with an ASCII letter "
+                    f"and contain only letters, digits, underscores, or hyphens (max 128 chars)."
+                ),
+                http_status=422,
+            )
+        )
+    return Result.ok(cleaned)
+
+
+def _validate_blueprint_structure(sample_blueprint: JsonValue) -> Result[JsonValue, IpError]:
+    if isinstance(sample_blueprint, Mapping):
+        if len(sample_blueprint) == 0:
             return Result.fail(
                 IpError(
-                    code=IpErrorCode.MANIFEST_PARSE_ERROR,
-                    message=f"Malformed JSON schema/sample in entity '{cleaned_name}': {exc.msg}",
+                    code=IpErrorCode.VALIDATION_FAILED,
+                    message="Simulator sample_blueprint JSON object cannot be empty.",
                     http_status=422,
                 )
             )
-    base_schema = infer_json_schema_from_sample(raw_schema_source)
-    explicit_pk = raw_spec.get("primary_key_field")
-    explicit_cursor = raw_spec.get("cursor_field")
-    schema, pk_field, cursor_field = _ensure_pk_and_cursor_in_schema(
-        cleaned_name,
-        base_schema,
-        explicit_pk if isinstance(explicit_pk, str) else None,
-        explicit_cursor if isinstance(explicit_cursor, str) else None,
-    )
-    raw_velocity = raw_spec.get("velocity_mode")
-    velocity_mode = (
-        StreamVelocityMode(raw_velocity)
-        if isinstance(raw_velocity, str) and raw_velocity in StreamVelocityMode._value2member_map_
-        else StreamVelocityMode.ENTITY_TRANSACTIONAL
-    )
-    records_per_pull = _extract_positive_int(
-        raw_spec.get("records_per_pull"), default_records_per_pull
-    )
-    cursor_step_seconds = _extract_positive_int(
-        raw_spec.get("cursor_step_seconds"), 60, maximum=86400
-    )
-    raw_chaos = raw_spec.get("chaos_policy")
-    chaos_policy = SimulatorChaosPolicy.from_mapping(
-        raw_chaos if isinstance(raw_chaos, Mapping) else None
-    )
-    return Result.ok(
-        SimulatorStreamSpec(
-            stream_name=cleaned_name,
-            json_schema=schema,
-            primary_key_field=pk_field,
-            cursor_field=cursor_field,
-            velocity_mode=velocity_mode,
-            records_per_pull=records_per_pull,
-            cursor_step_seconds=cursor_step_seconds,
-            chaos_policy=chaos_policy,
+        if _looks_like_json_schema(sample_blueprint):
+            props = sample_blueprint.get("properties")
+            if not isinstance(props, Mapping) or len(props) == 0:
+                return Result.fail(
+                    IpError(
+                        code=IpErrorCode.VALIDATION_FAILED,
+                        message="Simulator JSON Schema blueprint must define at least one property.",
+                        http_status=422,
+                    )
+                )
+        return Result.ok({str(k): v for k, v in sample_blueprint.items()})
+
+    if isinstance(sample_blueprint, Sequence) and not isinstance(sample_blueprint, (str, bytes)):
+        if len(sample_blueprint) == 0 or not all(
+            isinstance(item, Mapping) and len(item) > 0 for item in sample_blueprint
+        ):
+            return Result.fail(
+                IpError(
+                    code=IpErrorCode.VALIDATION_FAILED,
+                    message=(
+                        "Simulator sample_blueprint array must contain at least one non-empty JSON object."
+                    ),
+                    http_status=422,
+                )
+            )
+        normalized_list: list[JsonValue] = [
+            {str(k): v for k, v in item.items()}
+            for item in sample_blueprint
+            if isinstance(item, Mapping)
+        ]
+        return Result.ok(normalized_list)
+
+    return Result.fail(
+        IpError(
+            code=IpErrorCode.VALIDATION_FAILED,
+            message=(
+                "Simulator sample_blueprint must be a non-empty JSON object, JSON Schema, or array of JSON objects."
+            ),
+            http_status=422,
         )
     )
 
 
-def _parse_single_stream_spec(
-    stream_name: str,
-    raw_spec: JsonValue,
-    default_records_per_pull: int,
-) -> Result[SimulatorStreamSpec, IpError]:
-    cleaned_name = stream_name.strip()
-    if not cleaned_name:
+def build_validated_entity_blueprint(
+    *,
+    entity_name: str,
+    sample_blueprint: JsonValue,
+    primary_key_field: str | None = None,
+    cursor_field: str | None = None,
+) -> Result[ValidatedEntityBlueprint, IpError]:
+    """Validates entity name & blueprint size/shape and computes the enriched server-side JSON Schema."""
+    name_res = validate_entity_name(entity_name)
+    if name_res.is_err:
+        return Result.fail(name_res.unwrap_err())
+    cleaned_name = name_res.unwrap()
+
+    struct_res = _validate_blueprint_structure(sample_blueprint)
+    if struct_res.is_err:
+        return Result.fail(struct_res.unwrap_err())
+    normalized_blueprint = struct_res.unwrap()
+
+    serialized_bytes = len(json.dumps(normalized_blueprint).encode("utf-8"))
+    if serialized_bytes > MAX_SAMPLE_BLUEPRINT_BYTES:
         return Result.fail(
             IpError(
-                code=IpErrorCode.MANIFEST_PARSE_ERROR,
-                message="Simulator entity stream_name cannot be empty.",
+                code=IpErrorCode.VALIDATION_FAILED,
+                message=(
+                    f"Simulator sample_blueprint exceeds maximum allowed size of "
+                    f"{MAX_SAMPLE_BLUEPRINT_BYTES} bytes (received {serialized_bytes} bytes)."
+                ),
                 http_status=422,
             )
         )
 
-    if isinstance(raw_spec, str) and raw_spec.strip():
-        try:
-            raw_spec = json.loads(raw_spec)
-        except json.JSONDecodeError as exc:
-            return Result.fail(
-                IpError(
-                    code=IpErrorCode.MANIFEST_PARSE_ERROR,
-                    message=f"Invalid JSON provided for entity '{cleaned_name}': {exc.msg}",
-                    http_status=422,
-                )
-            )
-
-    if isinstance(raw_spec, Mapping):
-        wrapper_keys = (
-            "json_schema",
-            "sample_json",
-            "primary_key_field",
-            "cursor_field",
-            "records_per_pull",
-        )
-        if any(k in raw_spec for k in wrapper_keys):
-            return _parse_wrapped_stream_spec(cleaned_name, raw_spec, default_records_per_pull)
-
-    base_schema = infer_json_schema_from_sample(raw_spec)
-    schema, pk_field, cursor_field = _ensure_pk_and_cursor_in_schema(
+    base_schema = infer_json_schema_from_sample(normalized_blueprint)
+    enriched_schema, resolved_pk, resolved_cursor = _ensure_pk_and_cursor_in_schema(
         cleaned_name,
         base_schema,
-        None,
-        None,
+        primary_key_field,
+        cursor_field,
     )
     return Result.ok(
-        SimulatorStreamSpec(
-            stream_name=cleaned_name,
-            json_schema=schema,
-            primary_key_field=pk_field,
-            cursor_field=cursor_field,
-            records_per_pull=default_records_per_pull,
+        ValidatedEntityBlueprint(
+            entity_name=cleaned_name,
+            sample_blueprint=normalized_blueprint,
+            inferred_json_schema=enriched_schema,
+            primary_key_field=resolved_pk,
+            cursor_field=resolved_cursor,
         )
     )
 
@@ -517,68 +525,14 @@ def _extract_seed(public_config: JsonDict) -> int:
     return 42
 
 
-def _parse_streams_sequence(
-    raw_streams: Sequence[JsonValue],
-    default_records_per_pull: int,
-) -> Result[dict[str, SimulatorStreamSpec], IpError]:
-    parsed_streams: dict[str, SimulatorStreamSpec] = {}
-    for item in raw_streams:
-        if not isinstance(item, Mapping):
-            continue
-        raw_name = item.get("stream_name") or item.get("name")
-        if not isinstance(raw_name, str) or not raw_name.strip():
-            continue
-        spec_res = _parse_single_stream_spec(raw_name, item, default_records_per_pull)
-        if spec_res.is_err:
-            return Result.fail(spec_res.unwrap_err())
-        spec = spec_res.unwrap()
-        parsed_streams[spec.stream_name] = spec
-    return Result.ok(parsed_streams)
-
-
-def parse_simulator_manifest(public_config: JsonDict) -> Result[SimulatorManifest, IpError]:
-    """Parses `public_config` into a validated `SimulatorManifest`."""
-    seed = _extract_seed(public_config)
-    default_records_per_pull = _extract_positive_int(public_config.get("records_per_pull"), 25)
-    raw_streams = public_config.get("streams")
-
-    if not raw_streams:
-        return Result.ok(SimulatorManifest(seed=seed, streams={}))
-
-    if isinstance(raw_streams, str) and raw_streams.strip():
-        try:
-            raw_streams = json.loads(raw_streams)
-        except json.JSONDecodeError as exc:
-            return Result.fail(
-                IpError(
-                    code=IpErrorCode.MANIFEST_PARSE_ERROR,
-                    message=f"Invalid JSON in 'streams' configuration: {exc.msg}",
-                    http_status=422,
-                )
-            )
-
-    if isinstance(raw_streams, Mapping):
-        parsed_streams: dict[str, SimulatorStreamSpec] = {}
-        for name, spec_val in raw_streams.items():
-            spec_res = _parse_single_stream_spec(str(name), spec_val, default_records_per_pull)
-            if spec_res.is_err:
-                return Result.fail(spec_res.unwrap_err())
-            spec = spec_res.unwrap()
-            parsed_streams[spec.stream_name] = spec
-        return Result.ok(SimulatorManifest(seed=seed, streams=parsed_streams))
-
-    if isinstance(raw_streams, Sequence) and not isinstance(raw_streams, (str, bytes)):
-        seq_res = _parse_streams_sequence(raw_streams, default_records_per_pull)
-        if seq_res.is_err:
-            return Result.fail(seq_res.unwrap_err())
-        return Result.ok(SimulatorManifest(seed=seed, streams=seq_res.unwrap()))
-
-    return Result.fail(
-        IpError(
-            code=IpErrorCode.MANIFEST_PARSE_ERROR,
-            message="Simulator 'streams' configuration must be a JSON object or array.",
-            http_status=422,
-        )
+def parse_simulator_connection_config(public_config: JsonDict) -> SimulatorConnectionConfig:
+    """Extracts connection-level parameters (`sandbox_id`, `seed`, `records_per_pull`) from `public_config`."""
+    raw_sandbox_id = public_config.get("sandbox_id")
+    sandbox_id = str(raw_sandbox_id).strip() if isinstance(raw_sandbox_id, str) else ""
+    return SimulatorConnectionConfig(
+        sandbox_id=sandbox_id,
+        seed=_extract_seed(public_config),
+        default_records_per_pull=_extract_positive_int(public_config.get("records_per_pull"), 25),
     )
 
 
@@ -629,8 +583,11 @@ def extract_stream_schema_dto(spec: SimulatorStreamSpec) -> StreamSchemaDTO:
 
 
 __all__ = [
+    "ValidatedEntityBlueprint",
+    "build_validated_entity_blueprint",
     "extract_stream_schema_dto",
     "infer_json_schema_from_sample",
     "infer_semantic_kind",
-    "parse_simulator_manifest",
+    "parse_simulator_connection_config",
+    "validate_entity_name",
 ]

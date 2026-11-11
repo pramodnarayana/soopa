@@ -14,29 +14,36 @@ import {
 import { Braces } from 'lucide-react';
 import React, { useId, useState } from 'react';
 import { toast } from 'sonner';
-import { useUpdateConnectionMutation } from '../../application/use-connection-queries';
 import {
-  buildPublicConfigWithSimulatorStream,
-  type Connection,
+  useCreateSimulatorEntityMutation,
+  useSimulatorEntitiesQuery,
+  useUpdateSimulatorEntityMutation,
+} from '../../application/use-simulator-queries';
+import type { JsonRecord } from '../../domain/enums';
+import {
   clampSimulatorRecordsPerPull,
   SIMULATOR_STREAM_LIMITS,
   type SimulatorBlueprintJson,
-} from '../../domain/connection';
-import type { JsonRecord } from '../../domain/enums';
+  type SimulatorEntity,
+  SimulatorVelocityMode,
+  type SimulatorVelocityModeValue,
+} from '../../domain/simulator';
 
 export interface CreateSimulatorEntityModalProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly connection: Connection;
+  readonly sandboxId: string;
+  readonly editingEntity?: SimulatorEntity | null;
   readonly onProblem: (problem: ApiProblem | null) => void;
-  readonly onEntityCreated?: (entityName: string) => void;
+  readonly onEntitySaved?: (entity: SimulatorEntity) => void;
 }
 
 export interface CreateSimulatorEntityFormProps {
-  readonly connection: Connection;
+  readonly sandboxId: string;
+  readonly editingEntity?: SimulatorEntity | null;
   readonly onProblem: (problem: ApiProblem | null) => void;
   readonly onCancel: () => void;
-  readonly onEntityCreated?: (entityName: string) => void;
+  readonly onEntitySaved?: (entity: SimulatorEntity) => void;
 }
 
 export interface ParsedSimulatorBlueprintSuccess {
@@ -62,11 +69,12 @@ const DEFAULT_SAMPLE_JSON = `{
   "updated_at": "2026-11-10T10:00:00Z"
 }`;
 
-function isSimulatorBlueprintJson(value: unknown): value is SimulatorBlueprintJson {
-  if (Array.isArray(value)) {
-    return true;
-  }
-  return typeof value === 'object' && value !== null;
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isReadonlyUnknownArray(value: unknown): value is readonly unknown[] {
+  return Array.isArray(value);
 }
 
 export function inferSimulatorEntityNameFromFilename(fileName: string): string {
@@ -95,16 +103,17 @@ export function parseSimulatorBlueprint(
     };
   }
 
-  if (!isSimulatorBlueprintJson(parsed)) {
+  let normalizedBlueprint: SimulatorBlueprintJson;
+  if (isReadonlyUnknownArray(parsed)) {
+    normalizedBlueprint = parsed;
+  } else if (isJsonRecord(parsed)) {
+    normalizedBlueprint = parsed;
+  } else {
     return {
       ok: false,
       reason: 'JSON blueprint must be a JSON object or array of sample objects.',
     };
   }
-
-  const normalizedBlueprint: SimulatorBlueprintJson = Array.isArray(parsed)
-    ? (parsed as readonly unknown[])
-    : (parsed as JsonRecord);
 
   return {
     ok: true,
@@ -113,26 +122,58 @@ export function parseSimulatorBlueprint(
   };
 }
 
+export function findDuplicateSimulatorEntityError(
+  existingEntities: readonly { readonly id: string; readonly entityName: string }[],
+  candidateName: string,
+  editingEntityId?: string,
+): string | null {
+  const cleanName = candidateName.trim();
+  if (!cleanName) {
+    return null;
+  }
+  const hasDuplicate = existingEntities.some(
+    (existing) =>
+      existing.id !== editingEntityId &&
+      existing.entityName.toLowerCase() === cleanName.toLowerCase(),
+  );
+  if (!hasDuplicate) {
+    return null;
+  }
+  return `An entity named "${cleanName}" already exists in this Virtual Sandbox. Choose a unique entity name.`;
+}
+
 export function CreateSimulatorEntityForm({
-  connection,
+  sandboxId,
+  editingEntity,
   onProblem,
   onCancel,
-  onEntityCreated,
+  onEntitySaved,
 }: CreateSimulatorEntityFormProps): React.JSX.Element {
   const blueprintLabelId = useId();
-  const [entityName, setEntityName] = useState('');
-  const [primaryKeyField, setPrimaryKeyField] = useState('');
+  const isEditing = Boolean(editingEntity);
+  const [entityName, setEntityName] = useState<string>(editingEntity?.entityName ?? '');
+  const [primaryKeyField, setPrimaryKeyField] = useState<string>(
+    editingEntity?.primaryKeyField ?? '',
+  );
   const [cursorField, setCursorField] = useState<string>(
-    SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD,
+    editingEntity?.cursorField ?? SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD,
   );
   const [recordsPerPull, setRecordsPerPull] = useState<string>(
-    String(SIMULATOR_STREAM_LIMITS.DEFAULT_RECORDS_PER_PULL),
+    String(editingEntity?.recordsPerPull ?? SIMULATOR_STREAM_LIMITS.DEFAULT_RECORDS_PER_PULL),
   );
-  const [jsonContent, setJsonContent] = useState(DEFAULT_SAMPLE_JSON);
+  const [velocityMode, setVelocityMode] = useState<SimulatorVelocityModeValue>(
+    editingEntity?.velocityMode ?? SimulatorVelocityMode.ENTITY_TRANSACTIONAL,
+  );
+  const [jsonContent, setJsonContent] = useState<string>(() =>
+    editingEntity ? JSON.stringify(editingEntity.sampleBlueprint, null, 2) : DEFAULT_SAMPLE_JSON,
+  );
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const updateMutation = useUpdateConnectionMutation(connection.id);
+  const existingEntitiesView = useSimulatorEntitiesQuery(sandboxId);
+  const createMutation = useCreateSimulatorEntityMutation(sandboxId);
+  const updateMutation = useUpdateSimulatorEntityMutation(sandboxId);
+  const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   const handleFormatBlueprint = (): void => {
     const outcome = parseSimulatorBlueprint(jsonContent);
@@ -155,40 +196,66 @@ export function CreateSimulatorEntityForm({
       return;
     }
 
+    const duplicateError = findDuplicateSimulatorEntityError(
+      existingEntitiesView.data ?? [],
+      cleanName,
+      editingEntity?.id,
+    );
+    if (duplicateError) {
+      setLocalError(duplicateError);
+      return;
+    }
+
     const blueprintOutcome = parseSimulatorBlueprint(jsonContent);
     if (!blueprintOutcome.ok) {
       setLocalError(blueprintOutcome.reason);
       return;
     }
 
-    const updatedPublicConfig = buildPublicConfigWithSimulatorStream(connection.publicConfig, {
-      entityName: cleanName,
-      sampleJson: blueprintOutcome.parsed,
-      recordsPerPull: clampSimulatorRecordsPerPull(recordsPerPull),
-      cursorField,
-      primaryKeyField,
-    });
+    const normalizedBatchSize = clampSimulatorRecordsPerPull(recordsPerPull);
+    const normalizedPrimaryKey = primaryKeyField.trim() || null;
+    const normalizedCursor = cursorField.trim() || SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD;
 
-    const res = await updateMutation.mutateAsync({
-      newName: connection.name,
-      updatedPublicConfig,
-    });
+    const res = editingEntity
+      ? await updateMutation.mutateAsync({
+          entityId: editingEntity.id,
+          input: {
+            entityName: cleanName,
+            sampleBlueprint: blueprintOutcome.parsed,
+            primaryKeyField: normalizedPrimaryKey,
+            cursorField: normalizedCursor,
+            recordsPerPull: normalizedBatchSize,
+            velocityMode,
+          },
+        })
+      : await createMutation.mutateAsync({
+          entityName: cleanName,
+          sampleBlueprint: blueprintOutcome.parsed,
+          primaryKeyField: normalizedPrimaryKey,
+          cursorField: normalizedCursor,
+          recordsPerPull: normalizedBatchSize,
+          velocityMode,
+        });
+
     if (!res.ok) {
       onProblem(res.error);
       return;
     }
 
     toast.success(
-      `Entity "${cleanName}" created on Simulator. Click "Discover Entities" when ready to sync.`,
+      isEditing
+        ? `Entity "${res.value.entityName}" updated in Virtual Sandbox (v${res.value.version}).`
+        : `Entity "${res.value.entityName}" created in Virtual Sandbox. Run "Discover Entities" when ready to sync.`,
     );
-    onEntityCreated?.(cleanName);
+    onEntitySaved?.(res.value);
   };
 
   return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+    <form method="post" onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
       {localError ? (
         <div
           role="alert"
+          aria-live="polite"
           className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
         >
           {localError}
@@ -220,7 +287,10 @@ export function CreateSimulatorEntityForm({
             id="sim-entity-pk"
             name="primary_key_field"
             value={primaryKeyField}
-            onChange={(e) => setPrimaryKeyField(e.target.value)}
+            onChange={(e) => {
+              setLocalError(null);
+              setPrimaryKeyField(e.target.value);
+            }}
             placeholder="Auto-detected (e.g. order_id or id)"
             autoCorrect="off"
             autoCapitalize="off"
@@ -234,7 +304,10 @@ export function CreateSimulatorEntityForm({
             id="sim-entity-cursor"
             name="cursor_field"
             value={cursorField}
-            onChange={(e) => setCursorField(e.target.value)}
+            onChange={(e) => {
+              setLocalError(null);
+              setCursorField(e.target.value);
+            }}
             placeholder={SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD}
             autoCorrect="off"
             autoCapitalize="off"
@@ -251,10 +324,49 @@ export function CreateSimulatorEntityForm({
             min={SIMULATOR_STREAM_LIMITS.MIN_RECORDS_PER_PULL}
             max={SIMULATOR_STREAM_LIMITS.MAX_RECORDS_PER_PULL}
             value={recordsPerPull}
-            onChange={(e) => setRecordsPerPull(e.target.value)}
+            onChange={(e) => {
+              setLocalError(null);
+              setRecordsPerPull(e.target.value);
+            }}
           />
         </div>
       </div>
+
+      <fieldset className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+        <legend className="px-1 text-xs font-medium text-foreground">Stream Velocity Mode</legend>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
+            <input
+              type="radio"
+              name="velocity_mode"
+              value={SimulatorVelocityMode.ENTITY_TRANSACTIONAL}
+              checked={velocityMode === SimulatorVelocityMode.ENTITY_TRANSACTIONAL}
+              onChange={() => setVelocityMode(SimulatorVelocityMode.ENTITY_TRANSACTIONAL)}
+              className="mt-0.5 accent-primary"
+            />
+            <span>
+              <span className="block font-semibold text-foreground">Transactional Entity</span>
+              <span className="text-muted-foreground">Gear 1 OLTP records (orders, invoices)</span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
+            <input
+              type="radio"
+              name="velocity_mode"
+              value={SimulatorVelocityMode.TIMESERIES_COLUMNAR}
+              checked={velocityMode === SimulatorVelocityMode.TIMESERIES_COLUMNAR}
+              onChange={() => setVelocityMode(SimulatorVelocityMode.TIMESERIES_COLUMNAR)}
+              className="mt-0.5 accent-primary"
+            />
+            <span>
+              <span className="block font-semibold text-foreground">Time-Series Columnar</span>
+              <span className="text-muted-foreground">
+                Gear 2 columnar batches (telemetry, logs)
+              </span>
+            </span>
+          </label>
+        </div>
+      </fieldset>
 
       <div className="space-y-1.5">
         <Label id={blueprintLabelId}>Entity Blueprint (JSON) *</Label>
@@ -266,7 +378,7 @@ export function CreateSimulatorEntityForm({
             setJsonContent(nextValue);
           }}
           language="json"
-          height={280}
+          height={260}
           fileUpload={{
             accept: '.json,application/json',
             buttonLabel: uploadedFileName ? 'Replace .json' : 'Upload .json',
@@ -310,13 +422,19 @@ export function CreateSimulatorEntityForm({
           type="button"
           variant="outline"
           size="sm"
-          disabled={updateMutation.isPending}
+          disabled={isSubmitting}
           onClick={onCancel}
         >
           Cancel
         </Button>
-        <Button type="submit" size="sm" disabled={updateMutation.isPending}>
-          {updateMutation.isPending ? 'Creating Entity...' : 'Create Entity'}
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          {isSubmitting
+            ? isEditing
+              ? 'Saving Entity...'
+              : 'Creating Entity...'
+            : isEditing
+              ? 'Save Entity'
+              : 'Create Entity'}
         </Button>
       </DialogFooter>
     </form>
@@ -326,24 +444,27 @@ export function CreateSimulatorEntityForm({
 export function CreateSimulatorEntityModal({
   open,
   onOpenChange,
-  connection,
+  sandboxId,
+  editingEntity,
   onProblem,
-  onEntityCreated,
+  onEntitySaved,
 }: CreateSimulatorEntityModalProps): React.JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Entity</DialogTitle>
+          <DialogTitle>{editingEntity ? 'Edit Entity' : 'Create Entity'}</DialogTitle>
         </DialogHeader>
 
         {open ? (
           <CreateSimulatorEntityForm
-            connection={connection}
+            key={editingEntity?.id ?? 'new'}
+            sandboxId={sandboxId}
+            editingEntity={editingEntity}
             onProblem={onProblem}
             onCancel={() => onOpenChange(false)}
-            onEntityCreated={(createdName) => {
-              onEntityCreated?.(createdName);
+            onEntitySaved={(saved) => {
+              onEntitySaved?.(saved);
               onOpenChange(false);
             }}
           />

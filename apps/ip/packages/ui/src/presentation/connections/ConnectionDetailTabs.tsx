@@ -17,6 +17,7 @@ import {
   DialogTitle,
   Input,
   Label,
+  type Result,
   SearchableSelect,
   type SearchableSelectOption,
   Select,
@@ -41,13 +42,15 @@ import {
   Compass,
   Copy,
   Database,
+  Pencil,
   Play,
   Plus,
   Radio,
   Search,
   ShieldAlert,
+  Trash2,
 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import React, { useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCatalogAppSpecQuery } from '../../application/use-catalog-queries';
 import {
@@ -59,6 +62,10 @@ import {
   useSimulatePushMutation,
   useUpdateConnectionMutation,
 } from '../../application/use-connection-queries';
+import {
+  useDeleteSimulatorEntityMutation,
+  useSimulatorEntitiesQuery,
+} from '../../application/use-simulator-queries';
 import {
   useStreamStatesQuery,
   useSyncRunsQuery,
@@ -74,8 +81,10 @@ import {
   ConnectionStatus,
   ConnectorPropertyKey,
   SyncRunKind,
+  SyncRunStatus,
   UNIVERSAL_SIMULATOR_APP_ID,
 } from '../../domain/enums';
+import { extractSimulatorSandboxId, type SimulatorEntity } from '../../domain/simulator';
 import type { StreamState, SyncRun } from '../../domain/sync-run';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { formatRelativeTimestamp, mapSyncRunStatusTone } from '../shared/status-mapping';
@@ -88,8 +97,178 @@ import {
   splitSpecFormValues,
 } from './SpecFormRenderer';
 
+const EntityRowLocalStatus = {
+  UNSYNCED: 'UNSYNCED',
+  UNKNOWN: 'UNKNOWN',
+} as const;
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function VirtualSandboxEntitiesPanel({
+  sandboxId,
+  onCreateEntity,
+  onEditEntity,
+  onProblem,
+}: {
+  readonly sandboxId: string;
+  readonly onCreateEntity: () => void;
+  readonly onEditEntity: (entity: SimulatorEntity) => void;
+  readonly onProblem: (problem: ApiProblem | null) => void;
+}) {
+  const headingId = useId();
+  const entitiesView = useSimulatorEntitiesQuery(sandboxId);
+  const deleteEntityMutation = useDeleteSimulatorEntityMutation(sandboxId);
+  const entities = entitiesView.data ?? [];
+
+  React.useEffect(() => {
+    if (entitiesView.problem) {
+      onProblem(entitiesView.problem);
+    }
+  }, [entitiesView.problem, onProblem]);
+
+  const handleDeleteEntity = async (entity: SimulatorEntity): Promise<void> => {
+    onProblem(null);
+    const res = await deleteEntityMutation.mutateAsync(entity.id);
+    if (!res.ok) {
+      onProblem(res.error);
+      return;
+    }
+    toast.success(`Removed entity "${entity.entityName}" from Virtual Sandbox.`);
+  };
+
+  return (
+    <div className="mt-6 space-y-3 border-t border-border pt-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-0.5">
+          <h4
+            id={headingId}
+            className="text-xs font-semibold text-foreground uppercase tracking-wider"
+          >
+            Virtual Sandbox Entities
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            Configured inside Virtual Sandbox <span className="font-mono">{sandboxId}</span>. Run
+            Discover Entities in the Entities tab to import schema updates into the Connection
+            Catalog.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onCreateEntity}
+          className="gap-1.5 text-xs"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>Add Sandbox Entity</span>
+        </Button>
+      </div>
+
+      <div
+        tabIndex={0}
+        role="region"
+        aria-labelledby={headingId}
+        className="max-h-96 overflow-auto rounded-xl border border-border bg-card"
+      >
+        <Table>
+          <TableHeader className="sticky top-0 z-10 border-b border-border bg-muted/90 backdrop-blur-xs">
+            <TableRow className="border-0 hover:bg-transparent">
+              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
+                Entity
+              </TableHead>
+              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
+                Primary Key
+              </TableHead>
+              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
+                Cursor
+              </TableHead>
+              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
+                Batch Size
+              </TableHead>
+              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
+                Velocity
+              </TableHead>
+              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
+                Version
+              </TableHead>
+              <TableHead className="px-3 py-2 text-right text-xs font-semibold text-foreground">
+                Actions
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {entitiesView.isLoading ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-20 text-center text-xs text-muted-foreground">
+                  Loading Virtual Sandbox entities...
+                </TableCell>
+              </TableRow>
+            ) : entities.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-20 text-center text-xs text-muted-foreground">
+                  No entities configured in this Virtual Sandbox yet. Click Create Entity to define
+                  your first blueprint.
+                </TableCell>
+              </TableRow>
+            ) : (
+              entities.map((entity) => (
+                <TableRow key={entity.id}>
+                  <th
+                    scope="row"
+                    className="sticky left-0 bg-card px-3 py-2 text-left font-mono text-xs font-semibold text-foreground"
+                  >
+                    {entity.entityName}
+                  </th>
+                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {entity.primaryKeyField}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {entity.cursorField}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs tabular-nums">
+                    {entity.recordsPerPull}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-xs">
+                    <StatusBadge label={entity.velocityMode} tone={StatusTone.NEUTRAL} />
+                  </TableCell>
+                  <TableCell className="px-3 py-2 font-mono text-xs tabular-nums">
+                    v{entity.version}
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right">
+                    <div className="inline-flex items-center gap-1.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEditEntity(entity)}
+                        className="h-7 gap-1 px-2 text-xs"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        <span>Edit</span>
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={deleteEntityMutation.isPending}
+                        onClick={() => void handleDeleteEntity(entity)}
+                        className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        <span>Delete</span>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
 }
 
 export function ConnectionOverviewTab({
@@ -106,6 +285,7 @@ export function ConnectionOverviewTab({
   const [name, setName] = useState(connection.name);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [createEntityModalOpen, setCreateEntityModalOpen] = useState(false);
+  const [editingEntity, setEditingEntity] = useState<SimulatorEntity | null>(null);
   const specView = useCatalogAppSpecQuery(connection.appId);
   const relinkMutation = useRelinkConnectionMutation(connection.id);
   const updateMutation = useUpdateConnectionMutation(connection.id);
@@ -113,6 +293,7 @@ export function ConnectionOverviewTab({
   const deleteMutation = useDeleteConnectionMutation(connection.id);
   const isDeactivated = connection.status === ConnectionStatus.DEACTIVATED;
   const isSimulator = connection.appId === UNIVERSAL_SIMULATOR_APP_ID;
+  const sandboxId = isSimulator ? extractSimulatorSandboxId(connection.publicConfig) : null;
   const isSaving = relinkMutation.isPending || updateMutation.isPending;
 
   const allProperties = specView.data?.properties ?? [];
@@ -123,13 +304,8 @@ export function ConnectionOverviewTab({
   }));
 
   const visibleProperties = useMemo(
-    () =>
-      allProperties.filter(
-        (prop) =>
-          !(isSimulator && prop.name === 'streams') &&
-          isPropertyVisible(prop, formValues, allProperties),
-      ),
-    [allProperties, formValues, isSimulator],
+    () => allProperties.filter((prop) => isPropertyVisible(prop, formValues, allProperties)),
+    [allProperties, formValues],
   );
 
   const isDirty = useMemo(() => {
@@ -212,9 +388,9 @@ export function ConnectionOverviewTab({
   };
 
   const statusTone =
-    connection.status === 'ACTIVE'
+    connection.status === ConnectionStatus.ACTIVE
       ? StatusTone.HEALTHY
-      : connection.status === 'PENDING_AUTH'
+      : connection.status === ConnectionStatus.PENDING_AUTH
         ? StatusTone.WARNING
         : StatusTone.NEUTRAL;
 
@@ -226,12 +402,15 @@ export function ConnectionOverviewTab({
             Connection Details
           </h4>
           <div className="flex items-center gap-2">
-            {isSimulator ? (
+            {isSimulator && sandboxId ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => setCreateEntityModalOpen(true)}
+                onClick={() => {
+                  setEditingEntity(null);
+                  setCreateEntityModalOpen(true);
+                }}
                 className="gap-1.5 text-xs"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -272,7 +451,12 @@ export function ConnectionOverviewTab({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="space-y-2">
             <Label htmlFor="conn-name">Name</Label>
-            <Input id="conn-name" value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="conn-name"
+              name="connection_name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </div>
 
           {visibleProperties.map((prop) => {
@@ -337,13 +521,33 @@ export function ConnectionOverviewTab({
         </div>
       </form>
 
-      {isSimulator ? (
-        <CreateSimulatorEntityModal
-          open={createEntityModalOpen}
-          onOpenChange={setCreateEntityModalOpen}
-          connection={connection}
-          onProblem={onProblem}
-        />
+      {isSimulator && sandboxId ? (
+        <>
+          <VirtualSandboxEntitiesPanel
+            sandboxId={sandboxId}
+            onCreateEntity={() => {
+              setEditingEntity(null);
+              setCreateEntityModalOpen(true);
+            }}
+            onEditEntity={(entity) => {
+              setEditingEntity(entity);
+              setCreateEntityModalOpen(true);
+            }}
+            onProblem={onProblem}
+          />
+          <CreateSimulatorEntityModal
+            open={createEntityModalOpen}
+            onOpenChange={(nextOpen) => {
+              setCreateEntityModalOpen(nextOpen);
+              if (!nextOpen) {
+                setEditingEntity(null);
+              }
+            }}
+            sandboxId={sandboxId}
+            editingEntity={editingEntity}
+            onProblem={onProblem}
+          />
+        </>
       ) : null}
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -550,6 +754,45 @@ interface EntityRow {
   readonly lastSyncedAt: string | null;
 }
 
+export interface StreamScheduleMutationInput {
+  readonly newName: string;
+  readonly updatedPublicConfig: Record<string, unknown>;
+}
+
+export async function commitStreamScheduleConfigUpdate(params: {
+  readonly connection: Connection | undefined;
+  readonly nextSchedules: Record<string, string>;
+  readonly nextSyncFrom: Record<string, string>;
+  readonly mutateUpdate: (
+    input: StreamScheduleMutationInput,
+  ) => Promise<Result<Connection, ApiProblem>>;
+  readonly onProblem: (problem: ApiProblem | null) => void;
+}): Promise<boolean> {
+  const { connection, nextSchedules, nextSyncFrom, mutateUpdate, onProblem } = params;
+  if (!connection) return false;
+  onProblem(null);
+  const allKeys = new Set([...Object.keys(nextSchedules), ...Object.keys(nextSyncFrom)]);
+  const serializedSchedules: Record<string, { schedule: string; sync_from: string }> = {};
+  for (const key of allKeys) {
+    serializedSchedules[key] = {
+      schedule: nextSchedules[key] ?? '15m',
+      sync_from: nextSyncFrom[key] ?? 'all',
+    };
+  }
+  const res = await mutateUpdate({
+    newName: connection.name,
+    updatedPublicConfig: {
+      ...connection.publicConfig,
+      stream_schedules: serializedSchedules,
+    },
+  });
+  if (!res.ok) {
+    onProblem(res.error);
+    return false;
+  }
+  return true;
+}
+
 export function ConnectionEntitiesSyncTab({
   connectionId,
   connection,
@@ -567,7 +810,7 @@ export function ConnectionEntitiesSyncTab({
   const [streamSchedules, setStreamSchedules] = useState<Record<string, string>>({});
   const [expandedStreams, setExpandedStreams] = useState<Set<string>>(new Set());
 
-  const isAuthPending = connection?.status === 'PENDING_AUTH';
+  const isAuthPending = connection?.status === ConnectionStatus.PENDING_AUTH;
   const isSimulator = connection?.appId === UNIVERSAL_SIMULATOR_APP_ID;
 
   const catalogView = useConnectionCatalogQuery(connectionId, !isAuthPending);
@@ -624,12 +867,16 @@ export function ConnectionEntitiesSyncTab({
     for (const [sName, state] of statesMap.entries()) {
       seenStreams.add(sName);
       const latestRun = latestRunByStream.get(sName);
-      const status = latestRun ? latestRun.status : state.lastSyncedAt ? 'SUCCEEDED' : 'UNKNOWN';
+      const status = latestRun
+        ? latestRun.status
+        : state.lastSyncedAt
+          ? SyncRunStatus.SUCCEEDED
+          : EntityRowLocalStatus.UNKNOWN;
       rows.push({
         streamName: sName,
         canonical: 'CANONICAL_RECORD',
         status,
-        syncMode: 'INCREMENTAL',
+        syncMode: SyncRunKind.INCREMENTAL,
         cursorField: state.cursorField ?? null,
         cursorValue: state.cursorValue ?? null,
         recordsSyncedCount: state.recordsSyncedCount,
@@ -645,8 +892,8 @@ export function ConnectionEntitiesSyncTab({
         rows.push({
           streamName: sName,
           canonical: 'CANONICAL_RECORD',
-          status: 'UNSYNCED',
-          syncMode: catalogStream?.supportedSyncModes[0] ?? 'INCREMENTAL',
+          status: EntityRowLocalStatus.UNSYNCED,
+          syncMode: catalogStream?.supportedSyncModes[0] ?? SyncRunKind.INCREMENTAL,
           cursorField: catalogStream?.cursorField ?? null,
           cursorValue: null,
           recordsSyncedCount: 0,
@@ -772,37 +1019,37 @@ export function ConnectionEntitiesSyncTab({
   const persistStreamScheduleConfig = async (
     nextSchedules: Record<string, string>,
     nextSyncFrom: Record<string, string>,
-  ): Promise<void> => {
-    if (!connection) return;
-    const allKeys = new Set([...Object.keys(nextSchedules), ...Object.keys(nextSyncFrom)]);
-    const serializedSchedules: Record<string, { schedule: string; sync_from: string }> = {};
-    for (const key of allKeys) {
-      serializedSchedules[key] = {
-        schedule: nextSchedules[key] ?? '15m',
-        sync_from: nextSyncFrom[key] ?? 'all',
-      };
-    }
-    await updateConnectionMutation.mutateAsync({
-      newName: connection.name,
-      updatedPublicConfig: {
-        ...connection.publicConfig,
-        stream_schedules: serializedSchedules,
-      },
+  ): Promise<boolean> =>
+    commitStreamScheduleConfigUpdate({
+      connection,
+      nextSchedules,
+      nextSyncFrom,
+      mutateUpdate: (input) => updateConnectionMutation.mutateAsync(input),
+      onProblem,
     });
-  };
 
-  const handleSyncFromChange = (streamName: string, syncFrom: string) => {
+  const handleSyncFromChange = async (streamName: string, syncFrom: string): Promise<void> => {
+    const previousSyncFrom = streamSyncFrom;
     const nextSyncFrom = { ...streamSyncFrom, [streamName]: syncFrom };
     setStreamSyncFrom(nextSyncFrom);
-    void persistStreamScheduleConfig(streamSchedules, nextSyncFrom);
+    const saved = await persistStreamScheduleConfig(streamSchedules, nextSyncFrom);
+    if (!saved) {
+      setStreamSyncFrom(previousSyncFrom);
+      return;
+    }
     const match = SYNC_FROM_OPTIONS.find((b) => b.value === syncFrom);
     toast.success(`Sync from for "${streamName}" set to ${match?.label ?? syncFrom}.`);
   };
 
-  const handleScheduleChange = (streamName: string, schedule: string) => {
+  const handleScheduleChange = async (streamName: string, schedule: string): Promise<void> => {
+    const previousSchedules = streamSchedules;
     const nextSchedules = { ...streamSchedules, [streamName]: schedule };
     setStreamSchedules(nextSchedules);
-    void persistStreamScheduleConfig(nextSchedules, streamSyncFrom);
+    const saved = await persistStreamScheduleConfig(nextSchedules, streamSyncFrom);
+    if (!saved) {
+      setStreamSchedules(previousSchedules);
+      return;
+    }
     const match = SCHEDULE_OPTIONS.find((s) => s.value === schedule);
     toast.success(`Sync schedule for "${streamName}" set to ${match?.label ?? schedule}.`);
   };
@@ -965,7 +1212,7 @@ export function ConnectionEntitiesSyncTab({
             <div className="flex items-center gap-2">
               <Select
                 value={selectedValue}
-                onValueChange={(val) => handleSyncFromChange(row.original.streamName, val)}
+                onValueChange={(val) => void handleSyncFromChange(row.original.streamName, val)}
               >
                 <SelectTrigger className="h-7 w-32 text-xs">
                   <SelectValue />
@@ -1001,7 +1248,7 @@ export function ConnectionEntitiesSyncTab({
         cell: ({ row }) => (
           <Select
             value={streamSchedules[row.original.streamName] ?? '15m'}
-            onValueChange={(val) => handleScheduleChange(row.original.streamName, val)}
+            onValueChange={(val) => void handleScheduleChange(row.original.streamName, val)}
           >
             <SelectTrigger className="h-7 w-36 text-xs">
               <SelectValue />
@@ -1020,16 +1267,19 @@ export function ConnectionEntitiesSyncTab({
         accessorKey: 'status',
         header: 'Status',
         cell: ({ row }) => {
-          if (row.original.status === 'UNSYNCED' && row.original.recordsSyncedCount === 0) {
+          if (
+            row.original.status === EntityRowLocalStatus.UNSYNCED &&
+            row.original.recordsSyncedCount === 0
+          ) {
             return <span className="text-xs text-muted-foreground font-mono">—</span>;
           }
-          if (row.original.status === 'RUNNING') {
+          if (row.original.status === SyncRunStatus.RUNNING) {
             return <StatusBadge label="SYNCING" tone={StatusTone.WARNING} />;
           }
-          if (row.original.status === 'SUCCEEDED') {
+          if (row.original.status === SyncRunStatus.SUCCEEDED) {
             return <StatusBadge label="SUCCEEDED" tone={StatusTone.HEALTHY} />;
           }
-          if (row.original.status === 'FAILED') {
+          if (row.original.status === SyncRunStatus.FAILED) {
             return <StatusBadge label="FAILED" tone={StatusTone.CRITICAL} />;
           }
           return <StatusBadge label={row.original.status} tone={StatusTone.NEUTRAL} />;

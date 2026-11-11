@@ -7,6 +7,7 @@ export * from './intervals';
 export * from './replay/derive-replay-eligibility';
 export * from './replay/parse-json-object';
 export * from './role';
+export * from './simulator';
 export * from './stitch';
 export * from './stitch-registration';
 export * from './sync-run';

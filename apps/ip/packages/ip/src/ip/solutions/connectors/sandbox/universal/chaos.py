@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 
-from seedwork.domain.types import JsonValue
+from seedwork.domain.types import JsonDict, JsonValue
 
 
 class SimulatedFaultType(StrEnum):
@@ -71,6 +71,15 @@ class SimulatorChaosPolicy:
                 raw.get("egress_simulated_latency_ms")
             ),
         )
+
+    def to_dict(self) -> JsonDict:
+        return {
+            "duplicate_rate_percent": self.duplicate_rate_percent,
+            "schema_violation_rate_percent": self.schema_violation_rate_percent,
+            "spike_anomaly_rate_percent": self.spike_anomaly_rate_percent,
+            "egress_http_error_rate_percent": self.egress_http_error_rate_percent,
+            "egress_simulated_latency_ms": self.egress_simulated_latency_ms,
+        }
 
 
 __all__ = [

@@ -108,6 +108,7 @@ class WriteRecordCommand:
     idempotency_header_name: str = DEFAULT_IDEMPOTENCY_HEADER
     headers: Mapping[str, str] = field(default_factory=dict)
     correlation_id: str | None = None
+    attempt_number: int = 1
 
 
 @dataclass(frozen=True)

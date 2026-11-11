@@ -1,6 +1,6 @@
 import type { OnMount } from '@monaco-editor/react';
 import { FileCode2, UploadCloud, X } from 'lucide-react';
-import React, { lazy, Suspense, useId, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { Skeleton } from '../ui/skeleton';
 import {
@@ -162,12 +162,14 @@ export function MonacoCodeEditor({
     fileUpload.onFileAccepted?.(file, outcome.content);
   };
 
-  const applyFileRef = useRef(applyFile);
-  applyFileRef.current = applyFile;
-
   const hasFileUpload = fileUpload !== undefined;
+  const applyFileRef = useRef(applyFile);
   const hasFileUploadRef = useRef(hasFileUpload);
-  hasFileUploadRef.current = hasFileUpload;
+
+  useEffect(() => {
+    applyFileRef.current = applyFile;
+    hasFileUploadRef.current = hasFileUpload;
+  });
 
   const handleContainerDragOver = (event: React.DragEvent<HTMLDivElement>): void => {
     event.preventDefault();

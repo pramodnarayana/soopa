@@ -5,6 +5,9 @@ from __future__ import annotations
 from types import TracebackType
 
 import pytest
+from identity.domain.identity_context import IdentityContext
+from ip.engine.adapters.inbound.api.dtos.connection_dtos import UpdateConnectionHttpRequest
+from ip.engine.adapters.inbound.api.routers.connections_router import update_connection
 from ip.engine.application.use_cases.connections.update_connection_use_case import (
     UpdateConnectionCommand,
     UpdateConnectionUseCase,
@@ -210,3 +213,77 @@ async def test_update_connection_use_case_fails_when_tenant_mismatched(
     assert isinstance(result.error, ConnectionNotFoundError)
     assert uow.committed is False
     assert uow.rolled_back is True
+
+
+@pytest.mark.asyncio
+async def test_update_connection_preserves_stored_credentials_when_empty_dict_supplied(
+    cipher: AesGcmCipher,
+) -> None:
+    uow = _FakeControlPlaneUoW()
+    original_encrypted = cipher.encrypt({"api_key": "persisted_secret_token"})
+    conn = Connection.create(
+        tenant_id="ten_04",
+        app_id="acme_app",
+        name="Acme Existing",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.acme.example.com"},
+        encrypted_credentials=original_encrypted,
+        endpoint_for_fingerprint="https://api.acme.example.com",
+    )
+    await uow.connections.save(conn)
+
+    use_case = UpdateConnectionUseCase(uow=uow, cipher=cipher)
+    result = await use_case.execute(
+        UpdateConnectionCommand(
+            connection_id=conn.id,
+            tenant_id="ten_04",
+            new_name="Acme Renamed",
+            updated_raw_credentials={},
+        )
+    )
+
+    assert result.success is True
+    saved = await uow.connections.get_by_id(conn.id)
+    assert saved is not None
+    assert saved.encrypted_credentials == original_encrypted
+    assert cipher.decrypt(saved.encrypted_credentials) == {"api_key": "persisted_secret_token"}
+
+
+@pytest.mark.asyncio
+async def test_update_connection_router_rejects_explicit_empty_new_name_despite_fallback_name(
+    cipher: AesGcmCipher,
+) -> None:
+    uow = _FakeControlPlaneUoW()
+    conn = Connection.create(
+        tenant_id="ten_05",
+        app_id="acme_app",
+        name="Acme Valid Name",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.acme.example.com"},
+        encrypted_credentials=b"creds",
+        endpoint_for_fingerprint="https://api.acme.example.com",
+    )
+    await uow.connections.save(conn)
+
+    identity = IdentityContext(
+        subject="usr_admin",
+        claims={},
+        tenant_id="ten_05",
+        authorized_tenants={"ten_05"},
+        roles=("TenantAdmin",),
+    )
+    response = await update_connection(
+        tenant_id="ten_05",
+        connection_id=conn.id,
+        request=UpdateConnectionHttpRequest(new_name="", name="Fallback Name"),
+        context=identity,
+        ip_cp_uow=uow,
+        cipher=cipher,
+    )
+
+    assert hasattr(response, "status_code")
+    assert response.status_code == 400
+    assert b"Connection name cannot be blank." in response.body
+    unchanged = await uow.connections.get_by_id(conn.id)
+    assert unchanged is not None
+    assert unchanged.name == "Acme Valid Name"

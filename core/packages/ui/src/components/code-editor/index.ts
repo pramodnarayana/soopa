@@ -17,9 +17,11 @@ export {
   type MonacoCodeViewerProps,
 } from './monaco-code-viewer';
 export {
+  type ConfigureMonacoEnvironmentOptions,
   configureMonacoEnvironment,
   type MonacoBeforeMount,
   type MonacoBuiltinTheme,
+  type MonacoEnvironmentTarget,
   type MonacoExpandedMonarchAction,
   type MonacoInstance,
   type MonacoJsonDiagnosticsTarget,
@@ -34,6 +36,9 @@ export {
   type MonacoOnValidate,
   type MonacoStandaloneThemeData,
   type MonacoThemeRule,
+  type MonacoWorkerConstructor,
+  type MonacoWorkerRegistry,
+  resolveMonacoWorkerByLabel,
   STRICT_JSON_DIAGNOSTICS_OPTIONS,
   type StrictJsonDiagnosticsOptions,
   useEffectiveMonacoTheme,

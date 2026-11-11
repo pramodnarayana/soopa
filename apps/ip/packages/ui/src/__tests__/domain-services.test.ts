@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeConnectorPropertyType } from '../adapters/http/mappers/catalog.mapper';
 import { normalizeAuthType } from '../domain/catalog-auth';
-import {
-  buildPublicConfigWithSimulatorStream,
-  clampSimulatorRecordsPerPull,
-  groupActiveConnectionsByApp,
-  isDeactivatedConnection,
-} from '../domain/connection';
+import { groupActiveConnectionsByApp, isDeactivatedConnection } from '../domain/connection';
 import { computeDagLayout } from '../domain/dag/compute-dag-layout';
 import {
   AuthType,
@@ -28,6 +23,7 @@ import {
   extractModifiablePayloadSeed,
 } from '../domain/replay/derive-replay-eligibility';
 import { isPlainJsonRecord, parseJsonObject } from '../domain/replay/parse-json-object';
+import { clampSimulatorRecordsPerPull, extractSimulatorSandboxId } from '../domain/simulator';
 import { buildRegisterStitchInput } from '../domain/stitch-registration';
 import type { IpTrace } from '../domain/trace';
 import {
@@ -563,34 +559,14 @@ describe('IP Domain: Type Guards', () => {
     expect(clampSimulatorRecordsPerPull('120')).toBe(120);
   });
 
-  it('merges strongly-typed simulator stream into connection publicConfig', () => {
-    const updated = buildPublicConfigWithSimulatorStream(
-      {
-        chaos_rate: 0.05,
-        streams: {
-          existing_customers: { sample_json: { customer_id: 'C-1' }, records_per_pull: 10 },
-        },
-      },
-      {
-        entityName: 'orders',
-        sampleJson: { order_id: 'ORD-1001', total_amount: 99.5 },
-        recordsPerPull: 50,
-        cursorField: '  ',
-        primaryKeyField: ' order_id ',
-      },
+  it('extracts trimmed simulator sandboxId from connection publicConfig', () => {
+    expect(extractSimulatorSandboxId({ sandbox_id: '  sbx_00112233445566778899aabb  ' })).toBe(
+      'sbx_00112233445566778899aabb',
     );
-
-    expect(updated).toEqual({
-      chaos_rate: 0.05,
-      streams: {
-        existing_customers: { sample_json: { customer_id: 'C-1' }, records_per_pull: 10 },
-        orders: {
-          sample_json: { order_id: 'ORD-1001', total_amount: 99.5 },
-          records_per_pull: 50,
-          cursor_field: 'updated_at',
-          primary_key_field: 'order_id',
-        },
-      },
-    });
+    expect(extractSimulatorSandboxId({ sandbox_id: '   ' })).toBeNull();
+    expect(extractSimulatorSandboxId({ sandbox_id: 42 })).toBeNull();
+    expect(extractSimulatorSandboxId({ seed: 42 })).toBeNull();
+    expect(extractSimulatorSandboxId(null)).toBeNull();
+    expect(extractSimulatorSandboxId(undefined)).toBeNull();
   });
 });

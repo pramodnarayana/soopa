@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import AsyncIterator, Sequence
 from typing import Final
 
@@ -14,7 +15,12 @@ from ip.engine.domain.connection.enums import (
     ConnectorArchitectureType,
     PropertyType,
 )
-from ip.engine.domain.exceptions import IpError, IpErrorCode
+from ip.engine.domain.exceptions import (
+    InvalidConnectionConfigError,
+    IpError,
+    IpErrorCode,
+    Result,
+)
 from ip.engine.ports.outbound.catalog_registry_port import CatalogAppSummaryDTO
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
@@ -26,9 +32,19 @@ from ip.engine.ports.outbound.connector_port import (
     WriteRecordCommand,
     WriteResultDTO,
 )
+from ip.solutions.connectors.sandbox.universal.dto import (
+    SimulatorSandboxDTO,
+    entity_dto_to_stream_spec,
+)
 from ip.solutions.connectors.sandbox.universal.inference import (
     extract_stream_schema_dto,
-    parse_simulator_manifest,
+    parse_simulator_connection_config,
+)
+from ip.solutions.connectors.sandbox.universal.ports import SimulatorSandboxReaderPort
+from ip.solutions.connectors.sandbox.universal.spec import (
+    SimulatorConnectionConfig,
+    SimulatorSubmissionStatus,
+    SimulatorWriteFailureCategory,
 )
 from ip.solutions.connectors.sandbox.universal.synthesizer import JsonSchemaRecordSynthesizer
 from seedwork.domain.types import JsonDict
@@ -37,11 +53,17 @@ logger = structlog.get_logger(__name__)
 
 
 class UniversalSchemaSimulatorConnector(BaseConnector):
-    """Domain-agnostic JSON-Schema-driven source and destination sandbox simulator connector."""
+    """Domain-agnostic JSON-Schema-driven virtual external system connector."""
 
     APP_ID: Final[str] = "universal_simulator"
 
-    def __init__(self, synthesizer: JsonSchemaRecordSynthesizer | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        sandbox_reader: SimulatorSandboxReaderPort | None = None,
+        synthesizer: JsonSchemaRecordSynthesizer | None = None,
+    ) -> None:
+        self._sandbox_reader = sandbox_reader
         self._synthesizer = synthesizer or JsonSchemaRecordSynthesizer()
 
     @classmethod
@@ -50,10 +72,11 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             app_id=cls.APP_ID,
             display_name="Universal Sandbox Simulator",
             category=CatalogCategory.SANDBOX,
-            auth_type=AuthType.NO_AUTH,
+            auth_type=AuthType.API_KEY,
             description=(
-                "Zero-credential universal sandbox simulator. Create custom entities by uploading "
-                "any sample JSON or JSON Schema and test Pull, Push, and Hybrid reconciliation flows."
+                "Virtual external system simulator authenticated via Sandbox ID and API Key. "
+                "Configure custom JSON Schema entities inside a Virtual Sandbox and test Pull, "
+                "Push, and Outbound Delivery flows."
             ),
             connector_type=ConnectorArchitectureType.NATIVE_SIMULATOR,
         )
@@ -63,17 +86,31 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         return self.APP_ID
 
     def spec(self) -> AppSpecDTO:
-        """Exposes optional seed and pull batch size parameters for the UI Connection Modal."""
+        """Exposes `sandbox_id`, `api_key`, `seed`, and `records_per_pull` for Component 1 Connections."""
         return AppSpecDTO(
             app_id=self.APP_ID,
             display_name="Universal Sandbox Simulator",
-            auth_type=AuthType.NO_AUTH,
+            auth_type=AuthType.API_KEY,
             category=CatalogCategory.SANDBOX,
             description=(
-                "Connects immediately without credentials. After connecting, create any number of "
-                "entities by uploading sample .json files, then discover and sync via Pull or Push."
+                "Connects to an isolated Virtual Sandbox using its Sandbox ID and secret API Key. "
+                "Entities configured in the Virtual Sandbox are discovered via Component 2 Catalog Discovery."
             ),
             properties=(
+                ConnectorPropertyDTO(
+                    name="sandbox_id",
+                    label="Virtual Sandbox ID",
+                    type=PropertyType.SHORT_TEXT,
+                    required=True,
+                    description="Identifier of the Virtual Sandbox environment to connect to (e.g. sbx_...).",
+                ),
+                ConnectorPropertyDTO(
+                    name="api_key",
+                    label="Sandbox API Key",
+                    type=PropertyType.SECRET_TEXT,
+                    required=True,
+                    description="Secret API key issued when the Virtual Sandbox was provisioned (e.g. sbx_key_...).",
+                ),
                 ConnectorPropertyDTO(
                     name="seed",
                     label="Deterministic PRNG Seed",
@@ -93,15 +130,37 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             ),
         )
 
+    async def _authenticate_sandbox(
+        self,
+        public_config: JsonDict,
+        credentials: JsonDict,
+    ) -> Result[tuple[SimulatorConnectionConfig, SimulatorSandboxDTO], IpError]:
+        cfg = parse_simulator_connection_config(public_config)
+        if self._sandbox_reader is None:
+            return Result.fail(
+                InvalidConnectionConfigError(
+                    field_name="sandbox_id",
+                    message="Virtual sandbox reader is not initialized on UniversalSchemaSimulatorConnector.",
+                )
+            )
+        raw_api_key = str(credentials.get("api_key") or "")
+        auth_res = await self._sandbox_reader.authenticate_sandbox(
+            sandbox_id=cfg.sandbox_id,
+            raw_api_key=raw_api_key,
+        )
+        if auth_res.is_err:
+            return Result.fail(auth_res.unwrap_err())
+        return Result.ok((cfg, auth_res.unwrap()))
+
     async def check(
         self,
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> ConnectionCheckResultDTO:
-        """Validates `public_config` manifest syntax if entities are already present; succeeds immediately on connect."""
-        manifest_res = parse_simulator_manifest(public_config)
-        if manifest_res.is_err:
-            err = manifest_res.unwrap_err()
+        """Authenticates `(sandbox_id, api_key)` against `ip.simulator_sandboxes`."""
+        auth_res = await self._authenticate_sandbox(public_config, credentials)
+        if auth_res.is_err:
+            err = auth_res.unwrap_err()
             logger.error(
                 "universal_simulator_check_failed",
                 app_id=self.APP_ID,
@@ -110,16 +169,21 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             )
             return ConnectionCheckResultDTO.from_error(err)
 
-        manifest = manifest_res.unwrap()
-        stream_count = len(manifest.streams)
+        cfg, sandbox = auth_res.unwrap()
+        entities = (
+            await self._sandbox_reader.list_entities_by_sandbox(sandbox.id)
+            if self._sandbox_reader is not None
+            else ()
+        )
         logger.info(
             "universal_simulator_check_succeeded",
             app_id=self.APP_ID,
-            seed=manifest.seed,
-            configured_stream_count=stream_count,
+            sandbox_id=sandbox.id,
+            seed=cfg.seed,
+            configured_entity_count=len(entities),
         )
         return ConnectionCheckResultDTO.ok(
-            f"Universal Sandbox Simulator connected (seed={manifest.seed}, entities={stream_count})."
+            f"Connected to Virtual Sandbox '{sandbox.name}' ({sandbox.id}, entities={len(entities)})."
         )
 
     async def discover(
@@ -128,10 +192,10 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> DiscoveredCatalogDTO:
-        """Discovers all user-created entities in `public_config['streams']` and converts them to `StreamSchemaDTO`s."""
-        manifest_res = parse_simulator_manifest(public_config)
-        if manifest_res.is_err:
-            err = manifest_res.unwrap_err()
+        """Authenticates the Virtual Sandbox and translates its `ip.simulator_entities` into `StreamSchemaDTO`s."""
+        auth_res = await self._authenticate_sandbox(public_config, credentials)
+        if auth_res.is_err:
+            err = auth_res.unwrap_err()
             logger.error(
                 "universal_simulator_discover_failed",
                 connection_id=connection_id,
@@ -140,13 +204,19 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             )
             return DiscoveredCatalogDTO.from_error(connection_id, err)
 
-        manifest = manifest_res.unwrap()
+        _, sandbox = auth_res.unwrap()
+        entities = (
+            await self._sandbox_reader.list_entities_by_sandbox(sandbox.id)
+            if self._sandbox_reader is not None
+            else ()
+        )
         streams: list[StreamSchemaDTO] = [
-            extract_stream_schema_dto(spec) for spec in manifest.streams.values()
+            extract_stream_schema_dto(entity_dto_to_stream_spec(entity)) for entity in entities
         ]
         logger.info(
             "universal_simulator_discover_completed",
             connection_id=connection_id,
+            sandbox_id=sandbox.id,
             discovered_stream_count=len(streams),
             streams=[s.name for s in streams],
         )
@@ -160,21 +230,47 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         limit: int = 100,
         cursor: str | None = None,
     ) -> Sequence[str]:
-        """Lists synthetic object IDs for the requested entity stream."""
-        manifest_res = parse_simulator_manifest(public_config)
-        if manifest_res.is_err:
+        """Authenticates the Virtual Sandbox and lists synthetic object IDs for `stream_name`."""
+        self._last_error = None
+        auth_res = await self._authenticate_sandbox(public_config, credentials)
+        if auth_res.is_err:
+            err = auth_res.unwrap_err()
+            self._last_error = err
+            logger.error(
+                "universal_simulator_list_objects_auth_failed",
+                stream_name=stream_name,
+                error_code=err.code.value,
+                reason=err.message,
+            )
             return ()
-        manifest = manifest_res.unwrap()
-        spec = manifest.streams.get(stream_name)
-        if spec is None:
+        cfg, sandbox = auth_res.unwrap()
+        entity = (
+            await self._sandbox_reader.get_entity_by_name(sandbox.id, stream_name)
+            if self._sandbox_reader is not None
+            else None
+        )
+        if entity is None:
+            logger.error(
+                "universal_simulator_list_objects_stream_not_found",
+                sandbox_id=sandbox.id,
+                stream_name=stream_name,
+            )
             return ()
+        spec = entity_dto_to_stream_spec(entity)
         batch = self._synthesizer.synthesize_batch(
             spec,
-            seed=manifest.seed,
+            seed=cfg.seed,
             cursor=cursor,
-            limit=min(limit, spec.records_per_pull),
+            limit=min(max(1, limit), spec.records_per_pull),
         )
-        return tuple(env.record_id for env in batch)
+        object_ids = tuple(env.record_id for env in batch)
+        logger.info(
+            "universal_simulator_list_objects_completed",
+            sandbox_id=sandbox.id,
+            stream_name=stream_name,
+            object_count=len(object_ids),
+        )
+        return object_ids
 
     async def read_stream(
         self,
@@ -184,36 +280,51 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         cursor: str | None = None,
         limit: int = 100,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
-        """Pull Mode: Synthesizes records on-the-fly with timestamps strictly newer than `cursor`."""
-        manifest_res = parse_simulator_manifest(public_config)
-        if manifest_res.is_err:
-            err = manifest_res.unwrap_err()
+        """Pull Mode: Authenticates the Virtual Sandbox and synthesizes records newer than `cursor`."""
+        self._last_error = None
+        auth_res = await self._authenticate_sandbox(public_config, credentials)
+        if auth_res.is_err:
+            err = auth_res.unwrap_err()
+            self._last_error = err
             logger.error(
-                "universal_simulator_read_stream_manifest_invalid",
+                "universal_simulator_read_stream_auth_failed",
                 stream_name=stream_name,
                 error_code=err.code.value,
+                reason=err.message,
             )
             return
 
-        manifest = manifest_res.unwrap()
-        spec = manifest.streams.get(stream_name)
-        if spec is None:
+        cfg, sandbox = auth_res.unwrap()
+        entity = (
+            await self._sandbox_reader.get_entity_by_name(sandbox.id, stream_name)
+            if self._sandbox_reader is not None
+            else None
+        )
+        if entity is None:
+            not_found_err = IpError(
+                code=IpErrorCode.STREAM_NOT_FOUND,
+                message=f"Entity '{stream_name}' is not configured in Virtual Sandbox '{sandbox.id}'.",
+                http_status=404,
+            )
+            self._last_error = not_found_err
             logger.error(
                 "universal_simulator_read_stream_not_found",
+                sandbox_id=sandbox.id,
                 stream_name=stream_name,
-                available_streams=list(manifest.streams.keys()),
             )
             return
 
+        spec = entity_dto_to_stream_spec(entity)
         effective_limit = min(max(1, limit), spec.records_per_pull)
         batch = self._synthesizer.synthesize_batch(
             spec,
-            seed=manifest.seed,
+            seed=cfg.seed,
             cursor=cursor,
             limit=effective_limit,
         )
         logger.info(
             "universal_simulator_read_stream_completed",
+            sandbox_id=sandbox.id,
             stream_name=stream_name,
             cursor=cursor,
             emitted_count=len(batch),
@@ -228,19 +339,47 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> RecordEnvelopeDTO | None:
-        """Thin-Push Fetch Mode: Deterministically reconstructs the exact record for `record_id`."""
-        manifest_res = parse_simulator_manifest(public_config)
-        if manifest_res.is_err:
+        """Thin-Push Fetch Mode: Authenticates the Virtual Sandbox and reconstructs `record_id`."""
+        self._last_error = None
+        auth_res = await self._authenticate_sandbox(public_config, credentials)
+        if auth_res.is_err:
+            err = auth_res.unwrap_err()
+            self._last_error = err
+            logger.error(
+                "universal_simulator_fetch_record_auth_failed",
+                stream_name=stream_name,
+                record_id=record_id,
+                error_code=err.code.value,
+                reason=err.message,
+            )
             return None
-        manifest = manifest_res.unwrap()
-        spec = manifest.streams.get(stream_name)
-        if spec is None:
+        cfg, sandbox = auth_res.unwrap()
+        entity = (
+            await self._sandbox_reader.get_entity_by_name(sandbox.id, stream_name)
+            if self._sandbox_reader is not None
+            else None
+        )
+        if entity is None:
+            logger.error(
+                "universal_simulator_fetch_record_stream_not_found",
+                sandbox_id=sandbox.id,
+                stream_name=stream_name,
+                record_id=record_id,
+            )
             return None
-        return self._synthesizer.synthesize_record_by_id(
+        spec = entity_dto_to_stream_spec(entity)
+        record = self._synthesizer.synthesize_record_by_id(
             spec,
-            seed=manifest.seed,
+            seed=cfg.seed,
             record_id=record_id,
         )
+        logger.info(
+            "universal_simulator_fetch_record_completed",
+            sandbox_id=sandbox.id,
+            stream_name=stream_name,
+            record_id=record_id,
+        )
+        return record
 
     async def write_record(
         self,
@@ -249,38 +388,72 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
         public_config: JsonDict,
         credentials: JsonDict,
     ) -> WriteResultDTO:
-        """Destination Mode: Validates outbound payload against the stream's JSON Schema and evaluates chaos rules."""
+        """Destination Mode: Authenticates the Virtual Sandbox, evaluates chaos rules, and validates payload schema."""
         target_url = f"simulator://{self.APP_ID}/{stream_name}"
-        manifest_res = parse_simulator_manifest(public_config)
-        if manifest_res.is_err:
-            err = manifest_res.unwrap_err()
+        auth_res = await self._authenticate_sandbox(public_config, credentials)
+        if auth_res.is_err:
+            err = auth_res.unwrap_err()
+            category = (
+                SimulatorWriteFailureCategory.AUTH_ERROR
+                if err.http_status in (401, 403)
+                else SimulatorWriteFailureCategory.VALIDATION_ERROR
+            )
+            logger.error(
+                "universal_simulator_write_record_auth_failed",
+                stream_name=stream_name,
+                record_id=command.record_id,
+                error_code=err.code.value,
+                failure_category=category.value,
+            )
             return WriteResultDTO.from_error(
                 err,
-                record_id=command.record_id or "invalid",
+                record_id=command.record_id or category.value.lower(),
                 target_url=target_url,
-                response_status_code=422,
-                failure_category="VALIDATION_ERROR",
+                response_status_code=err.http_status,
+                failure_category=category.value,
             )
 
-        manifest = manifest_res.unwrap()
-        spec = manifest.streams.get(stream_name)
-        if spec is None:
+        cfg, sandbox = auth_res.unwrap()
+        target_url = f"simulator://{sandbox.id}/{stream_name}"
+        entity = (
+            await self._sandbox_reader.get_entity_by_name(sandbox.id, stream_name)
+            if self._sandbox_reader is not None
+            else None
+        )
+        if entity is None:
             not_found_err = IpError(
                 code=IpErrorCode.STREAM_NOT_FOUND,
-                message=f"Simulator destination stream '{stream_name}' is not configured.",
+                message=(
+                    f"Simulator destination stream '{stream_name}' is not configured in "
+                    f"Virtual Sandbox '{sandbox.id}'."
+                ),
                 http_status=404,
+            )
+            logger.error(
+                "universal_simulator_write_record_stream_not_found",
+                sandbox_id=sandbox.id,
+                stream_name=stream_name,
+                record_id=command.record_id,
             )
             return WriteResultDTO.from_error(
                 not_found_err,
-                record_id=command.record_id or "not_found",
+                record_id=command.record_id
+                or SimulatorWriteFailureCategory.NOT_FOUND.value.lower(),
                 target_url=target_url,
                 response_status_code=404,
-                failure_category="NOT_FOUND",
+                failure_category=SimulatorWriteFailureCategory.NOT_FOUND.value,
             )
 
-        # Evaluate Egress Chaos Policy if configured
+        spec = entity_dto_to_stream_spec(entity)
         if spec.chaos_policy.egress_http_error_rate_percent > 0.0:
-            key_material = f"{manifest.seed}|{stream_name}|{command.record_id or command.idempotency_key or ''}"
+            payload_fingerprint = hashlib.sha256(
+                json.dumps(command.payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()[:16]
+            record_identity = (
+                command.record_id or command.idempotency_key or f"payload:{payload_fingerprint}"
+            )
+            attempt = max(1, command.attempt_number)
+            key_material = f"{cfg.seed}|{stream_name}|{record_identity}|attempt:{attempt}"
             roll = (
                 int(hashlib.sha256(key_material.encode("utf-8")).hexdigest()[:8], 16) % 1000
             ) / 10.0
@@ -290,24 +463,44 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
                     message="Simulated HTTP 429 Too Many Requests from Universal Sandbox Simulator.",
                     http_status=429,
                 )
+                logger.error(
+                    "universal_simulator_write_record_chaos_rate_limited",
+                    sandbox_id=sandbox.id,
+                    stream_name=stream_name,
+                    record_id=command.record_id,
+                    configured_error_rate_percent=spec.chaos_policy.egress_http_error_rate_percent,
+                )
                 return WriteResultDTO.from_error(
                     rate_err,
-                    record_id=command.record_id or "rate_limited",
+                    record_id=(
+                        command.record_id
+                        or SimulatorWriteFailureCategory.RATE_LIMITED.value.lower()
+                    ),
                     target_url=target_url,
                     response_status_code=429,
                     retry_after_seconds=2,
-                    failure_category="RATE_LIMITED",
+                    failure_category=SimulatorWriteFailureCategory.RATE_LIMITED.value,
                 )
 
         validation_res = self._synthesizer.validate_payload_against_schema(spec, command.payload)
         if validation_res.is_err:
             val_err = validation_res.unwrap_err()
+            logger.error(
+                "universal_simulator_write_record_schema_violation",
+                sandbox_id=sandbox.id,
+                stream_name=stream_name,
+                record_id=command.record_id,
+                reason=val_err.message,
+            )
             return WriteResultDTO.from_error(
                 val_err,
-                record_id=command.record_id or "schema_violation",
+                record_id=(
+                    command.record_id
+                    or SimulatorWriteFailureCategory.SCHEMA_VIOLATION.value.lower()
+                ),
                 target_url=target_url,
                 response_status_code=422,
-                failure_category="SCHEMA_VIOLATION",
+                failure_category=SimulatorWriteFailureCategory.SCHEMA_VIOLATION.value,
             )
 
         resolved_id = str(
@@ -315,14 +508,25 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             or command.payload.get(spec.primary_key_field)
             or f"sim_{stream_name}_dest"
         )
+        destination_id = f"sim_dest_{resolved_id}"
+        logger.info(
+            "universal_simulator_write_record_completed",
+            sandbox_id=sandbox.id,
+            stream_name=stream_name,
+            record_id=resolved_id,
+            destination_id=destination_id,
+        )
         return WriteResultDTO(
             success=True,
             record_id=resolved_id,
-            destination_id=f"sim_dest_{resolved_id}",
+            destination_id=destination_id,
             target_url=target_url,
             http_method="POST",
             response_status_code=200,
-            response_body={"status": "ACCEPTED", "destination_id": f"sim_dest_{resolved_id}"},
+            response_body={
+                "status": SimulatorSubmissionStatus.ACCEPTED.value,
+                "destination_id": destination_id,
+            },
             duration_ms=max(1, spec.chaos_policy.egress_simulated_latency_ms or 5),
         )
 
