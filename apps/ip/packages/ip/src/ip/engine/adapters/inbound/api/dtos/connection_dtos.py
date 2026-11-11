@@ -48,6 +48,15 @@ class RelinkConnectionHttpRequest(BaseModel):
     updated_public_config: JsonDict | None = None
 
 
+class UpdateConnectionHttpRequest(BaseModel):
+    """Payload to update connection metadata, public configuration, or credentials."""
+
+    new_name: str | None = None
+    name: str | None = None
+    updated_raw_credentials: JsonDict | None = None
+    updated_public_config: JsonDict | None = None
+
+
 class ConnectionHttpResponse(BaseModel):
     """Safe public representation of a connection (credentials never returned)."""
 

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
+from dependency_injector import errors as di_errors
 from dependency_injector import providers
+from fastapi import FastAPI
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from shttp import HttpRequestAuthenticator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +36,14 @@ from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from ip.engine.settings import IpEngineSettings
 from ip.solutions.connectors.registry_loader import register_solution_connectors
+from ip.solutions.connectors.sandbox.universal.ports import SimulatorSandboxReaderPort
+from ip.solutions.connectors.sandbox.universal.repository import (
+    SqlAlchemySessionScopedSimulatorSandboxReader,
+    SqlAlchemySimulatorApiProvider,
+)
+from ip.solutions.connectors.sandbox.universal.router import (
+    router as universal_simulator_router,
+)
 from ip.solutions.domains.energy.ports import (
     ENERGY_DOMAIN_REPOSITORY_KEY,
     EnergyDomainRepositoryPort,
@@ -53,6 +64,41 @@ SOLUTION_DOMAIN_REPOSITORY_FACTORIES: Mapping[str, DomainRepositoryFactory] = {
 }
 
 
+class SolutionDatabaseRuntime:
+    """Instance-scoped runtime bridge resolving `DatabaseRouterPort` or `DatabaseProvider` from a host FastAPI app."""
+
+    def __init__(self, app: FastAPI | None = None) -> None:
+        self._app = app
+
+    def bind_app(self, app: FastAPI) -> None:
+        self._app = app
+
+    def get_db_router(self) -> DatabaseRouterPort | None:
+        if self._app is None:
+            return None
+        try:
+            router: DatabaseRouterPort | None = self._app.state.db_router
+        except AttributeError:
+            return None
+        return router
+
+    def get_db_provider(self) -> DatabaseProvider | None:
+        if self._app is None:
+            return None
+        try:
+            provider: DatabaseProvider | None = self._app.state.db_provider
+        except AttributeError:
+            return None
+        return provider
+
+
+def _resolve_container_db_router(container: Container) -> DatabaseRouterPort | None:
+    try:
+        return container.db_router()
+    except di_errors.Error:
+        return None
+
+
 def resolve_energy_domain_repo(
     uow: IpDataPlaneUnitOfWorkPort,
 ) -> EnergyDomainRepositoryPort | None:
@@ -64,13 +110,14 @@ def create_solution_catalog_registry(
     allow_private_ips: bool = False,
     *,
     auth_resolver: AuthStrategyResolverPort[HttpRequestAuthenticator] | None = None,
+    sandbox_reader: SimulatorSandboxReaderPort | None = None,
 ) -> ConnectorCatalogRegistry:
     """Composes the pure engine protocol catalog registry with built-in solution connectors."""
     registry = create_engine_catalog_registry(
         allow_private_ips=allow_private_ips,
         auth_resolver=auth_resolver,
     )
-    register_solution_connectors(registry)
+    register_solution_connectors(registry, sandbox_reader=sandbox_reader)
     return registry
 
 
@@ -100,6 +147,9 @@ def create_solution_data_plane_uow(
 
 def configure_solution_container(container: Container) -> Container:
     """Injects built-in SaaS connectors, vertical domains, transformers, and stitches into `Container`."""
+    sandbox_reader = SqlAlchemySessionScopedSimulatorSandboxReader(
+        db_router_getter=lambda: _resolve_container_db_router(container),
+    )
     container.domain_repository_factories.override(
         providers.Object(SOLUTION_DOMAIN_REPOSITORY_FACTORIES)
     )
@@ -108,6 +158,7 @@ def configure_solution_container(container: Container) -> Container:
             create_solution_catalog_registry,
             allow_private_ips=container.config.allow_private_ips.as_(bool),
             auth_resolver=container.auth_resolver,
+            sandbox_reader=providers.Object(sandbox_reader),
         )
     )
     container.transformer_registry.override(
@@ -123,17 +174,34 @@ def configure_solution_container(container: Container) -> Container:
     return container
 
 
-def create_solution_api_provider() -> IpApiProvider:
+def create_solution_api_provider(
+    runtime: SolutionDatabaseRuntime | None = None,
+) -> IpApiProvider:
     """Creates an IpApiProvider wired with all built-in vertical solution registries."""
+    sandbox_reader = (
+        SqlAlchemySessionScopedSimulatorSandboxReader(
+            db_router_getter=runtime.get_db_router,
+            db_provider_getter=runtime.get_db_provider,
+        )
+        if runtime is not None
+        else None
+    )
     return IpApiProvider(
         catalog_registry_factory=lambda allow_private_ips: create_solution_catalog_registry(
-            allow_private_ips=allow_private_ips
+            allow_private_ips=allow_private_ips,
+            sandbox_reader=sandbox_reader,
         ),
         transformer_registry_factory=create_default_transformer_registry,
         stitch_catalog_factory=create_solution_stitch_catalog,
         workflow_definition_registry_factory=create_default_workflow_definition_registry,
         domain_repository_factories=SOLUTION_DOMAIN_REPOSITORY_FACTORIES,
     )
+
+
+def register_solution_routes(app: FastAPI) -> None:
+    """Registers solution-layer DI providers and HTTP routers onto `app`."""
+    app.state.ip_simulator_provider = SqlAlchemySimulatorApiProvider()
+    app.include_router(universal_simulator_router)
 
 
 class IpSolutionOrchestratorWorkerModule(IpOrchestratorWorkerModule):
@@ -180,11 +248,13 @@ __all__ = [
     "SOLUTION_DOMAIN_REPOSITORY_FACTORIES",
     "IpSolutionDeliveryWorkerModule",
     "IpSolutionOrchestratorWorkerModule",
+    "SolutionDatabaseRuntime",
     "configure_solution_container",
     "create_solution_api_provider",
     "create_solution_canonical_writer_registry",
     "create_solution_catalog_registry",
     "create_solution_data_plane_uow",
     "create_solution_stitch_catalog",
+    "register_solution_routes",
     "resolve_energy_domain_repo",
 ]

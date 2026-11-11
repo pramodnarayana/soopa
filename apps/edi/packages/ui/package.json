@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
-    "@monaco-editor/react": "^4.7.0",
     "@soopa/ui": "workspace:*",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-router": "^1.170.31",
@@ -49,7 +48,6 @@
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
     "autoprefixer": "^10.5.4",
-    "monaco-editor": "^0.56.0",
     "oxlint": "^1.79.0",
     "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",

@@ -81,6 +81,21 @@ class ConnectionRelinkedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class ConnectionUpdatedEvent(DomainEvent):
+    connection_id: str
+    tenant_id: str
+    app_id: str
+    updated_at: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_UPDATED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
 class ConnectionErrorRecordedEvent(DomainEvent):
     connection_id: str
     tenant_id: str

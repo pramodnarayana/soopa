@@ -10,7 +10,7 @@ import {
   DialogTitle,
   Input,
   Label,
-  MonacoCodeViewer,
+  MonacoCodeEditor,
   Select,
   SelectContent,
   SelectItem,
@@ -252,9 +252,9 @@ export function DispatchCanonicalEventModal({
             </div>
           </div>
 
-          <MonacoCodeViewer
+          <MonacoCodeEditor
             height={200}
-            readOnly={false}
+            language="json"
             value={payloadText}
             onChange={setPayloadText}
           />

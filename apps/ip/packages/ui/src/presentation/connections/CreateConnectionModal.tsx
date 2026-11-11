@@ -13,7 +13,7 @@ import {
   StatusBadge,
   StatusTone,
 } from '@soopa/ui';
-import { CheckCircle2, PlugZap } from 'lucide-react';
+import { CheckCircle2, PlugZap, Sparkles } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCatalogAppSpecQuery, useCatalogAppsQuery } from '../../application/use-catalog-queries';
@@ -21,10 +21,12 @@ import {
   useCheckConnectionMutation,
   useCreateConnectionMutation,
 } from '../../application/use-connection-queries';
+import { useCreateSimulatorSandboxMutation } from '../../application/use-simulator-queries';
 import type { AppSpec, CatalogAppSummary } from '../../domain/catalog';
 import { normalizeAuthType } from '../../domain/catalog-auth';
 import type { ConnectionCheckResult } from '../../domain/connection';
-import { ConnectorPropertyKey } from '../../domain/enums';
+import { ConnectorPropertyKey, UNIVERSAL_SIMULATOR_APP_ID } from '../../domain/enums';
+import { extractSimulatorSandboxId, SIMULATOR_CONFIG_KEYS } from '../../domain/simulator';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { buildFailedCheckProblem, isConnectionSnapshotVerified } from './connection-preflight';
 import { isPropertyVisible, SpecFormRenderer, splitSpecFormValues } from './SpecFormRenderer';
@@ -115,9 +117,29 @@ function VerifiedSpecConfigurator({
 
   const checkMutation = useCheckConnectionMutation();
   const createMutation = useCreateConnectionMutation();
+  const createSandboxMutation = useCreateSimulatorSandboxMutation();
+  const isUniversalSimulator = spec.appId === UNIVERSAL_SIMULATOR_APP_ID;
 
   const currentSnapshot = useMemo(() => JSON.stringify(formValues), [formValues]);
   const isVerified = isConnectionSnapshotVerified(currentSnapshot, verifiedSnapshot, checkResult);
+
+  const handleProvisionSandbox = async (): Promise<void> => {
+    setProblem(null);
+    const desiredName = connectionName.trim() || `${spec.displayName} Sandbox`;
+    const res = await createSandboxMutation.mutateAsync({ name: desiredName });
+    if (!res.ok) {
+      setProblem(res.error);
+      return;
+    }
+    setFormValues((prev) => ({
+      ...prev,
+      [SIMULATOR_CONFIG_KEYS.SANDBOX_ID]: res.value.id,
+      [SIMULATOR_CONFIG_KEYS.API_KEY]: res.value.apiKey,
+    }));
+    setCheckResult(null);
+    setVerifiedSnapshot(null);
+    toast.success(`Provisioned Virtual Sandbox "${res.value.name}" (${res.value.id}).`);
+  };
 
   const hasRequiredFields = useMemo(() => {
     if (connectionName.trim().length === 0) return false;
@@ -190,12 +212,16 @@ function VerifiedSpecConfigurator({
       return;
     }
     const { publicConfig, rawCredentials } = splitSpecFormValues(spec.properties, formValues);
+    const endpointForFingerprint = isUniversalSimulator
+      ? (extractSimulatorSandboxId(publicConfig) ?? undefined)
+      : undefined;
     const res = await createMutation.mutateAsync({
       appId: spec.appId,
       name: connectionName.trim(),
       authType: normalizedAuth,
       publicConfig,
       rawCredentials,
+      endpointForFingerprint,
     });
     if (!res.ok) {
       setProblem(res.error);
@@ -213,11 +239,39 @@ function VerifiedSpecConfigurator({
           <Label htmlFor="new-connection-name">Connection Name *</Label>
           <Input
             id="new-connection-name"
+            name="connection_name"
             value={connectionName}
             onChange={(e) => setConnectionName(e.target.value)}
             placeholder={`Production ${spec.displayName}`}
           />
         </div>
+
+        {isUniversalSimulator ? (
+          <div className="flex flex-col gap-2 rounded-xl border border-border bg-muted/30 p-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-0.5">
+              <div className="text-xs font-semibold text-foreground">Virtual External Sandbox</div>
+              <p className="text-xs text-muted-foreground">
+                Provision a dedicated Virtual Sandbox to generate a Sandbox ID and secret API key,
+                or enter credentials for an existing sandbox below.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={createSandboxMutation.isPending}
+              onClick={() => void handleProvisionSandbox()}
+              className="shrink-0 gap-1.5 text-xs"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span>
+                {createSandboxMutation.isPending
+                  ? 'Provisioning...'
+                  : 'Provision New Virtual Sandbox'}
+              </span>
+            </Button>
+          </div>
+        ) : null}
 
         <SpecFormRenderer
           properties={spec.properties}

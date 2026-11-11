@@ -1,6 +1,7 @@
 import { MonacoCodeViewer } from '@soopa/ui';
-import React from 'react';
-import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
+import { useTheme } from 'next-themes';
+import type { JSX } from 'react';
+import { registerEdiLanguageAndTheme, resolveEdiMonacoTheme } from '../../utils/monaco-edi';
 
 export interface CodeViewerProps {
   readonly value: string;
@@ -14,15 +15,16 @@ export function CodeViewer({
   language = 'json',
   className = '',
   height = '100%',
-}: CodeViewerProps) {
+}: CodeViewerProps): JSX.Element {
+  const { resolvedTheme } = useTheme();
   return (
     <MonacoCodeViewer
       value={value}
       language={language}
       className={className}
       height={height}
-      customThemeName="soopa-theme"
-      beforeMount={(monaco) => registerEdiLanguageAndTheme(monaco)}
+      customThemeName={resolveEdiMonacoTheme(resolvedTheme)}
+      beforeMount={registerEdiLanguageAndTheme}
     />
   );
 }

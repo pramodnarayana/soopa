@@ -50,6 +50,16 @@ export const DiscoveredCatalogWireSchema = z.object({
   discovered_at: z.string(),
 });
 
+export const SimulatePushWireSchema = z.object({
+  connection_id: z.string(),
+  stream_name: z.string(),
+  records_pushed: z.number(),
+  record_ids: z.array(z.string()).default([]),
+  trace_ids: z.array(z.string()).default([]),
+  status: z.string().default('ACCEPTED'),
+});
+
 export type ConnectionWire = z.infer<typeof ConnectionWireSchema>;
 export type ConnectionCheckWire = z.infer<typeof ConnectionCheckWireSchema>;
 export type DiscoveredCatalogWire = z.infer<typeof DiscoveredCatalogWireSchema>;
+export type SimulatePushWire = z.infer<typeof SimulatePushWireSchema>;

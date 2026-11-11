@@ -112,7 +112,6 @@ export function ModifyAndReplayModal({
             height={380}
             originalValue={seedJson}
             modifiedValue={modifiedText}
-            readOnlyModified={false}
             onModifiedChange={setModifiedText}
           />
 

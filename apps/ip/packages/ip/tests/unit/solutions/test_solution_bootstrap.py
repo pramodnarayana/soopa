@@ -38,7 +38,13 @@ def test_solution_bootstrap_injects_vertical_plugins_into_container() -> None:
 
     catalog = container.catalog_registry()
     app_ids = {summary.app_id for summary in catalog.list_apps()}
-    assert {"http", "sftp", "salesforce", "energy_ami_simulator"}.issubset(app_ids)
+    assert {
+        "http",
+        "sftp",
+        "salesforce",
+        "energy_ami_simulator",
+        "universal_simulator",
+    }.issubset(app_ids)
     assert len(container.transformer_registry().list_transformers()) >= 6
     assert len(container.workflow_definition_registry().list_definitions()) >= 3
     assert len(container.stitch_catalog().list_stitches(tenant_id="ten_1")) >= 2
@@ -47,7 +53,13 @@ def test_solution_bootstrap_injects_vertical_plugins_into_container() -> None:
 def test_solution_api_provider_wires_builtin_solution_registries() -> None:
     provider = create_solution_api_provider()
     app_ids = {s.app_id for s in provider.get_catalog_registry().list_apps()}
-    assert {"http", "sftp", "salesforce", "energy_ami_simulator"}.issubset(app_ids)
+    assert {
+        "http",
+        "sftp",
+        "salesforce",
+        "energy_ami_simulator",
+        "universal_simulator",
+    }.issubset(app_ids)
     assert len(provider.create_transformer_registry().list_transformers()) >= 6
 
 

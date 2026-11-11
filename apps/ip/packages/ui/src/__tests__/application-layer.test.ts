@@ -41,6 +41,7 @@ import {
   useStreamStatesQuery,
   useSyncRunsQuery,
   useTriggerSyncRunMutation,
+  useUpdateConnectionMutation,
 } from '../application';
 import { AuthType, ReplayStage, SyncRunKind, TransformationMode } from '../domain/enums';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
@@ -325,6 +326,7 @@ describe('Application Layer TanStack Hooks', () => {
       checkConn: ReturnType<typeof useCheckConnectionMutation>;
       createConn: ReturnType<typeof useCreateConnectionMutation>;
       discoverCat: ReturnType<typeof useDiscoverCatalogMutation>;
+      updateConn: ReturnType<typeof useUpdateConnectionMutation>;
       relinkConn: ReturnType<typeof useRelinkConnectionMutation>;
       deactivateConn: ReturnType<typeof useDeactivateConnectionMutation>;
       triggerSync: ReturnType<typeof useTriggerSyncRunMutation>;
@@ -348,6 +350,7 @@ describe('Application Layer TanStack Hooks', () => {
         checkConn: useCheckConnectionMutation(),
         createConn: useCreateConnectionMutation(),
         discoverCat: useDiscoverCatalogMutation(SEED_CONNECTION_ID),
+        updateConn: useUpdateConnectionMutation(SEED_CONNECTION_ID),
         relinkConn: useRelinkConnectionMutation(SEED_CONNECTION_ID),
         deactivateConn: useDeactivateConnectionMutation(SEED_CONNECTION_ID),
         triggerSync: useTriggerSyncRunMutation(SEED_CONNECTION_ID),
@@ -398,6 +401,7 @@ describe('Application Layer TanStack Hooks', () => {
       rawCredentials: { api_key: 'k' },
     });
     await api.discoverCat.mutateAsync();
+    await api.updateConn.mutateAsync({ newName: 'Acme Updated' });
     await api.relinkConn.mutateAsync({ newName: 'Acme Renamed' });
     await api.triggerSync.mutateAsync({
       streamName: 'records_alpha',

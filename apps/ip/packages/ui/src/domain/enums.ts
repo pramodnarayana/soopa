@@ -6,6 +6,7 @@ export type JsonValue =
 export type JsonRecord = Readonly<Record<string, unknown>>;
 
 export const IP_PRODUCT_THEME_TOKEN = 'ip' as const;
+export const UNIVERSAL_SIMULATOR_APP_ID = 'universal_simulator' as const;
 
 export const AuthType = {
   OAUTH2: 'OAUTH2',
@@ -62,6 +63,7 @@ export type ConnectionHandshakeStatusValue =
 
 export const ConnectionStatus = {
   ACTIVE: 'ACTIVE',
+  PENDING_AUTH: 'PENDING_AUTH',
   AUTH_EXPIRED: 'AUTH_EXPIRED',
   DISCONNECTED: 'DISCONNECTED',
   DEACTIVATED: 'DEACTIVATED',

@@ -467,6 +467,7 @@ class DeliverOutboundRecordUseCase:
             idempotency_header_name=command.idempotency_header_name,
             headers=dict(command.headers),
             correlation_id=command.correlation_id,
+            attempt_number=command.attempt_number,
         )
         write_result = await connector.write_record(
             stream_name=command.stream_name,

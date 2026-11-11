@@ -76,6 +76,44 @@ export interface RelinkConnectionInput {
   readonly updatedPublicConfig?: JsonRecord | null;
 }
 
+export interface UpdateConnectionInput {
+  readonly newName?: string | null;
+  readonly updatedRawCredentials?: JsonRecord | null;
+  readonly updatedPublicConfig?: JsonRecord | null;
+}
+
+export interface SimulatePushInput {
+  readonly streamName: string;
+  readonly count?: number;
+  readonly deliveryStyle?: 'FULL_PAYLOAD' | 'THIN_PING';
+  readonly correlationId?: string | null;
+}
+
+export interface SimulatePushResult {
+  readonly connectionId: string;
+  readonly streamName: string;
+  readonly recordsPushed: number;
+  readonly recordIds: readonly string[];
+  readonly traceIds: readonly string[];
+  readonly status: string;
+}
+
+export function buildIngressWebhookUrl(
+  baseUrl: string | undefined,
+  tenantId: string,
+  connectionId: string,
+  streamName: string,
+): string {
+  const rawBase = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  const origin =
+    rawBase ||
+    (typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost:8000');
+  const path = `${origin}/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/ingress/${encodeURIComponent(connectionId)}`;
+  return `${path}?stream=${encodeURIComponent(streamName.trim())}`;
+}
+
 export function isDeactivatedConnection(connection: Pick<Connection, 'status'>): boolean {
   return connection.status === ConnectionStatus.DEACTIVATED;
 }

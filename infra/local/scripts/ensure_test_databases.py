@@ -22,8 +22,10 @@ from database.utils import (
     normalize_to_standard_postgres,
     rewrite_dsn_to_test_db,
 )
+from dotenv import dotenv_values
 from drop_schemas import DOMAIN_SHARD_ENV_VARS
-from seedwork.infra.config import load_repo_env
+from reconcile_schema_drift import RECONCILABLE_APP_DOMAINS
+from seedwork.infra.config import DEFAULT_ENV_FILE_NAME, ENV_FILE_SELECTOR_VAR, load_repo_env
 
 logger = structlog.get_logger(__name__)
 
@@ -54,6 +56,13 @@ def is_database_url_env_key(key: str) -> bool:
     return key.startswith(("SHARD_OVERRIDES__", "DATABASE__SHARD_OVERRIDES__"))
 
 
+IP_PRIMARY_SHARD_ENV_KEYS: tuple[str, ...] = (
+    "DATABASE__SHARD_OVERRIDES__IP_SHARD_1",
+    "SHARD_OVERRIDES__IP_SHARD_1",
+    "IP_DATABASE_URL",
+)
+
+
 def rewrite_database_env_vars(env: Mapping[str, str]) -> dict[str, str]:
     """Return a copy of ``env`` with all PostgreSQL DSN variables rewritten to ``*_test``."""
     rewritten = dict(env)
@@ -65,6 +74,47 @@ def rewrite_database_env_vars(env: Mapping[str, str]) -> dict[str, str]:
             continue
         if is_postgres_dsn(stripped):
             rewritten[key] = rewrite_dsn_to_test_db(stripped)
+    return rewritten
+
+
+def hydrate_database_env_from_selected_file(
+    root_dir: Path,
+    env: Mapping[str, str],
+) -> dict[str, str]:
+    """Hydrate missing DSNs from the selected env file, rewrite to ``*_test``, and sync IP shard aliases."""
+    selector = env.get(ENV_FILE_SELECTOR_VAR, "").strip() or DEFAULT_ENV_FILE_NAME
+    candidate = Path(selector)
+    env_path = candidate if candidate.is_absolute() else (root_dir / candidate)
+
+    caller_ip_shard_url = next(
+        (env.get(k, "").strip() for k in IP_PRIMARY_SHARD_ENV_KEYS if env.get(k, "").strip()),
+        "",
+    )
+
+    merged = dict(env)
+    if env_path.is_file():
+        for key, val in dotenv_values(env_path).items():
+            if val is None or not is_database_url_env_key(key):
+                continue
+            if key in IP_PRIMARY_SHARD_ENV_KEYS and caller_ip_shard_url:
+                continue
+            if not merged.get(key, "").strip():
+                merged[key] = val
+
+    rewritten = rewrite_database_env_vars(merged)
+
+    resolved_ip_shard_url = next(
+        (
+            rewritten.get(k, "").strip()
+            for k in IP_PRIMARY_SHARD_ENV_KEYS
+            if rewritten.get(k, "").strip()
+        ),
+        "",
+    )
+    if resolved_ip_shard_url:
+        for key in IP_PRIMARY_SHARD_ENV_KEYS:
+            rewritten[key] = resolved_ip_shard_url
+
     return rewritten
 
 
@@ -424,7 +474,7 @@ async def ensure_test_databases_ready(
     force_sync: bool = False,
 ) -> dict[str, str]:
     """Ensure all ``*_test`` databases exist, have RLS functions, and match current migrations/seeds."""
-    test_env = rewrite_database_env_vars(env)
+    test_env = hydrate_database_env_from_selected_file(root_dir, env)
     active_apps = resolve_active_app_domains(root_dir, domains)
     targets = filter_targets_for_active_domains(
         discover_test_database_targets(test_env),
@@ -465,7 +515,7 @@ async def ensure_test_databases_ready(
     )
     _run_python_script(
         root_dir / "infra" / "local" / "scripts" / "reconcile_schema_drift.py",
-        ["--domain", "platform"],
+        ["--domain", "platform", "--skip-dotenv"],
         cwd=root_dir,
         env=test_env,
     )
@@ -486,6 +536,16 @@ async def ensure_test_databases_ready(
 
     for migration_module in discover_app_migration_modules(root_dir, active_apps):
         _run_python_module(migration_module, [], cwd=root_dir, env=test_env)
+
+    for app_domain in active_apps:
+        if app_domain not in RECONCILABLE_APP_DOMAINS:
+            continue
+        _run_python_script(
+            root_dir / "infra" / "local" / "scripts" / "reconcile_schema_drift.py",
+            ["--domain", app_domain, "--skip-dotenv"],
+            cwd=root_dir,
+            env=test_env,
+        )
 
     if global_targets:
         await _record_sync_fingerprint(global_targets[0], fingerprint)

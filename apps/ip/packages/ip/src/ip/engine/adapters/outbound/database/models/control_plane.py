@@ -10,6 +10,7 @@ from seedwork.utils import generate_id
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -31,6 +32,10 @@ class ConnectionRecord(IpGlobalBase):
 
     __tablename__ = "connections"
     __table_args__ = (
+        CheckConstraint(
+            "NOT (auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH')",
+            name="ck_ip_connections_no_auth_not_pending",
+        ),
         Index(
             "uq_tenant_active_fingerprint",
             "tenant_id",

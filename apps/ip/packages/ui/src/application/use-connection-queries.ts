@@ -1,3 +1,4 @@
+import { ApiErrorCode, err } from '@soopa/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CheckConnectionInput,
@@ -5,6 +6,8 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  SimulatePushInput,
+  UpdateConnectionInput,
 } from '../domain/connection';
 import { useIpWorkspace } from '../provider/IpRepositoriesContext';
 import { logResultOutcome } from './mutation-telemetry';
@@ -93,6 +96,29 @@ export function useDiscoverCatalogMutation(connectionId: string) {
   });
 }
 
+export function useUpdateConnectionMutation(connectionId: string) {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateConnectionInput) =>
+      repositories.connections.updateConnection(tenantId, connectionId, input),
+    onSuccess: (res) => {
+      logResultOutcome(logger, 'ip_connection.update', res, {
+        connection_id: connectionId,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });
+        void queryClient.invalidateQueries({
+          queryKey: ipQueryKeys.connections.detail(tenantId, connectionId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: ipQueryKeys.connections.catalog(tenantId, connectionId),
+        });
+      }
+    },
+  });
+}
+
 export function useRelinkConnectionMutation(connectionId: string) {
   const { tenantId, repositories, logger } = useIpWorkspace();
   const queryClient = useQueryClient();
@@ -144,6 +170,35 @@ export function useDeleteConnectionMutation(defaultConnectionId?: string) {
       });
       if (res.ok) {
         void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });
+      }
+    },
+  });
+}
+
+export function useSimulatePushMutation(connectionId: string) {
+  const { tenantId, repositories, logger } = useIpWorkspace();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: SimulatePushInput) => {
+      if (!repositories.connections.simulatePush) {
+        return err({
+          code: ApiErrorCode.VALIDATION_ERROR,
+          status: 501,
+          message: 'Simulated push is not supported by the current repository adapter.',
+        });
+      }
+      return repositories.connections.simulatePush(tenantId, connectionId, input);
+    },
+    onSuccess: (res, variables) => {
+      logResultOutcome(logger, 'ip_connection.simulate_push', res, {
+        connection_id: connectionId,
+        stream_name: variables.streamName,
+        count: variables.count ?? 5,
+      });
+      if (res.ok) {
+        void queryClient.invalidateQueries({
+          queryKey: ['ip', 'tenant', tenantId, 'records'],
+        });
       }
     },
   });

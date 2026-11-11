@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 import structlog
@@ -10,38 +11,97 @@ from alembic.config import Config
 from seedwork.infra.config import load_repo_env, load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 
 from database.provider import DatabaseProvider
+from database.shard_discovery import (
+    collect_prefixed_shard_overrides,
+    fetch_prefixed_shard_urls,
+)
 
 logger = structlog.get_logger(__name__)
 
+IP_SHARD_PREFIX = "ip_"
+IP_DEFAULT_SHARD_ID = "ip_shard_1"
+IP_DEFAULT_DSN_ENV_VAR = "IP_DATABASE_URL"
 
-async def fetch_tenant_shard_urls(global_url: str, overrides: dict[str, str]) -> list[str]:
-    """Connect to the global DB and fetch all registered IP shard URLs."""
+
+def collect_ip_shard_overrides(
+    environ: Mapping[str, str],
+    base_overrides: Mapping[str, str],
+) -> dict[str, str]:
+    """Resolve IP shard DSN overrides from settings and explicit environment variables."""
+    return collect_prefixed_shard_overrides(
+        environ,
+        base_overrides,
+        shard_prefix=IP_SHARD_PREFIX,
+        default_shard_id=IP_DEFAULT_SHARD_ID,
+        default_dsn_env_var=IP_DEFAULT_DSN_ENV_VAR,
+    )
+
+
+async def reconcile_global_no_auth_connection_constraint(global_url: str) -> None:
+    """Backfill legacy NO_AUTH connections in PENDING_AUTH and ensure check constraint exists.
+
+    Preserves the single-migration file invariant (`0001_initial_global_schema.py`) while
+    making direct invocations of `run_migrations` safe on databases already stamped at 0001.
+    """
     provider = DatabaseProvider.from_url(global_url)
-    shard_map: dict[str, str] = {}
     try:
         async with provider.session() as session:
-            result = await session.execute(text("SELECT id, dsn FROM ucp.database_shards"))
-            for row in result.fetchall():
-                shard_id, dsn = row
-                if str(shard_id).lower().startswith("ip_"):
-                    shard_map[str(shard_id).lower()] = str(dsn)
-    except DBAPIError as err:
-        if not overrides:
-            logger.error("ucp_database_shards_query_failed_no_overrides", error=str(err))
-            raise
-        logger.warning("ucp_database_shards_unavailable_using_overrides", error=str(err))
+            table_exists = await session.execute(text("SELECT to_regclass('ip.connections')"))
+            if table_exists.scalar() is None:
+                return
+
+            updated = await session.execute(
+                text(
+                    """
+                    UPDATE ip.connections
+                    SET status = 'ACTIVE', updated_at = NOW()
+                    WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'
+                    RETURNING id;
+                    """
+                )
+            )
+            reconciled_count = len(updated.all())
+            if reconciled_count > 0:
+                logger.info(
+                    "ip_global_migrations_reconciled_no_auth_connections",
+                    activated_count=reconciled_count,
+                )
+
+            await session.execute(
+                text(
+                    """
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1
+                            FROM pg_constraint c
+                            JOIN pg_namespace n ON n.oid = c.connamespace
+                            WHERE n.nspname = 'ip'
+                              AND c.conname = 'ck_ip_connections_no_auth_not_pending'
+                        ) THEN
+                            ALTER TABLE ip.connections
+                            ADD CONSTRAINT ck_ip_connections_no_auth_not_pending
+                            CHECK (NOT (auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'));
+                        END IF;
+                    END
+                    $$;
+                    """
+                )
+            )
+            await session.commit()
     finally:
         await provider.close()
 
-    if overrides:
-        for shard_id, dsn in overrides.items():
-            if shard_id.lower().startswith("ip_"):
-                shard_map[shard_id.lower()] = dsn
 
-    return list(set(shard_map.values()))
+async def fetch_tenant_shard_urls(global_url: str, overrides: Mapping[str, str]) -> list[str]:
+    """Connect to the global DB and fetch all registered IP shard URLs."""
+    return await fetch_prefixed_shard_urls(
+        global_url,
+        overrides,
+        shard_prefix=IP_SHARD_PREFIX,
+    )
 
 
 def find_ip_ini_path(ini_name: str) -> Path:
@@ -77,13 +137,7 @@ def run_migrations() -> None:
     """Execute Integration Platform Control Plane (global) and Data Plane (tenant shard) migrations."""
     load_repo_env(override=False)
     settings = load_settings_safely(PlatformDatabaseSettings)
-    ip_db_url = (
-        os.environ.get("IP_DATABASE_URL")
-        or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
-        or settings.shard_overrides.get("ip_shard_1")
-    )
-    if ip_db_url:
-        settings.shard_overrides["ip_shard_1"] = ip_db_url
+    effective_overrides = collect_ip_shard_overrides(os.environ, settings.shard_overrides)
 
     # 1. Global Control Plane migrations
     logger.info("ip_global_migrations_starting")
@@ -93,10 +147,11 @@ def run_migrations() -> None:
     global_cfg.set_main_option("script_location", str(global_script_loc))
     global_cfg.set_main_option("sqlalchemy.url", settings.global_url.replace("%", "%%"))
     command.upgrade(global_cfg, "head")
+    asyncio.run(reconcile_global_no_auth_connection_constraint(settings.global_url))
     logger.info("ip_global_migrations_completed")
 
     # 2. Tenant Data Plane shard migrations
-    shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.global_url, settings.shard_overrides))
+    shard_urls = asyncio.run(fetch_tenant_shard_urls(settings.global_url, effective_overrides))
     tenant_ini = find_ip_ini_path("alembic.tenant.ini")
     tenant_script_loc = find_ip_script_location("tenant")
     for url in shard_urls:

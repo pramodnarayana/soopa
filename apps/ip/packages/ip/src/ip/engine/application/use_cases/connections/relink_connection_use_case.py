@@ -53,7 +53,7 @@ class RelinkConnectionUseCase:
 
             updated_creds = (
                 self._cipher.encrypt(command.updated_raw_credentials)
-                if command.updated_raw_credentials is not None
+                if command.updated_raw_credentials
                 else None
             )
 

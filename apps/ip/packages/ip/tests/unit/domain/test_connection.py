@@ -12,6 +12,7 @@ from ip.engine.domain.connection.events import (
     ConnectionDeletedEvent,
     ConnectionErrorRecordedEvent,
     ConnectionRelinkedEvent,
+    ConnectionUpdatedEvent,
 )
 from ip.engine.domain.constants import IpIdPrefix
 from ip.engine.domain.exceptions import (
@@ -54,6 +55,21 @@ def test_connection_creation_initializes_pending_aggregate_with_created_event() 
     assert events[0].connection_id == connection.id
     assert events[0].event_name == "ip.connection.created"
     assert events[0].get_routing_tenant_id() == tenant_id
+
+
+def test_no_auth_connection_creation_initializes_active_status() -> None:
+    connection = Connection.create(
+        tenant_id="ten_12345",
+        app_id="universal_simulator",
+        name="Universal Sandbox Simulator Primary",
+        auth_type=AuthType.NO_AUTH,
+        public_config={"seed": 42},
+        encrypted_credentials=None,
+        endpoint_for_fingerprint="Universal Sandbox Simulator Primary",
+    )
+
+    assert connection.auth_type == AuthType.NO_AUTH
+    assert connection.status == ConnectionStatus.ACTIVE
 
 
 def test_connection_try_create_returns_typed_error_for_empty_parameters() -> None:
@@ -332,3 +348,87 @@ def test_connection_mark_deleted_emits_deleted_event() -> None:
     assert events[0].tenant_id == "ten_delete_1"
     assert events[0].app_id == "acme_source"
     assert events[0].event_name == "ip.connection.deleted"
+
+
+def test_connection_update_configuration_success() -> None:
+    connection = Connection.create(
+        tenant_id="ten_update_1",
+        app_id="acme_source",
+        name="Original Name",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.original.example.com"},
+        encrypted_credentials=b"original_secret",
+        endpoint_for_fingerprint="https://api.original.example.com",
+    )
+    connection.clear_domain_events()
+
+    res = connection.update_configuration(
+        new_name="Updated Name",
+        updated_encrypted_credentials=b"new_secret",
+        updated_public_config={"endpoint_url": "https://api.updated.example.com"},
+    )
+    assert res.is_ok is True
+    assert connection.name == "Updated Name"
+    assert connection.encrypted_credentials == b"new_secret"
+    assert connection.public_config == {"endpoint_url": "https://api.updated.example.com"}
+
+    events = connection.domain_events
+    assert len(events) == 1
+    assert isinstance(events[0], ConnectionUpdatedEvent)
+    assert events[0].connection_id == connection.id
+    assert events[0].tenant_id == "ten_update_1"
+    assert events[0].event_name == "ip.connection.updated"
+
+
+def test_connection_update_configuration_fails_when_deactivated() -> None:
+    connection = Connection.create(
+        tenant_id="ten_update_2",
+        app_id="acme_source",
+        name="Deactivated Connection",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.example.com"},
+        encrypted_credentials=b"secret",
+        endpoint_for_fingerprint="https://api.example.com",
+    )
+    connection.deactivate()
+
+    res = connection.update_configuration(new_name="New Name")
+    assert res.is_err is True
+    assert isinstance(res.error, InvalidConnectionStateError)
+    assert res.error.attempted_action == "update_configuration"
+
+
+def test_connection_update_configuration_fails_when_name_blank() -> None:
+    connection = Connection.create(
+        tenant_id="ten_update_3",
+        app_id="acme_source",
+        name="Active Connection",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.example.com"},
+        encrypted_credentials=b"secret",
+        endpoint_for_fingerprint="https://api.example.com",
+    )
+
+    res = connection.update_configuration(new_name="   ")
+    assert res.is_err is True
+    assert isinstance(res.error, InvalidConnectionConfigError)
+    assert res.error.field_name == "name"
+
+
+def test_connection_update_configuration_updates_fingerprint_when_endpoint_changes() -> None:
+    connection = Connection.create(
+        tenant_id="ten_update_4",
+        app_id="acme_source",
+        name="Active Connection",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.example.com/v1"},
+        encrypted_credentials=None,
+        endpoint_for_fingerprint="https://api.example.com/v1",
+    )
+    res = connection.update_configuration(
+        updated_public_config={"base_url": "https://base.example.com"},
+    )
+    assert res.is_ok is True
+    assert connection.connection_fingerprint == compute_connection_fingerprint(
+        "ten_update_4", "acme_source", "https://base.example.com"
+    )

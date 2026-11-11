@@ -2,6 +2,42 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
+## [Architecture] IP Solutions Directory Refactor: Eliminate Horizontal Layering & Unify Vertical Slices
+
+- **Date Added**: 2026-11-10
+- **Status**: TO DO
+- **Description**: The `apps/ip/packages/ip/src/ip/solutions` bounded context currently suffers from an architectural anti-pattern of horizontal technical layering rather than cohesive vertical domain slicing. Specifically, vertical business solutions (such as `energy` and `tms`) are fragmented across four disjoint horizontal folders:
+  1. `solutions/domains/{energy,tms}/` (which mixes canonical schemas `canonical.py`, SQLAlchemy ORM `models.py`, Alembic `migrations/`, `repository.py`, domain `ports.py`, `writers.py`, `transformers.py`, shared `solutions/domains/numeric.py`, and branch registry `solutions/domains/registry.py`)
+  2. `solutions/transformers/{energy,tms}/` (field mapping transformations split across a second location)
+  3. `solutions/stitches/{energy,tms}/` (Hatchet-inspired workflow DAG definitions)
+  4. `solutions/connectors/sandbox/{energy}/` (domain-specific simulators)
+  
+  This naming causes significant cognitive friction: `solutions` conceptually represents business domains, yet contains an internal `domains/` subfolder mixing persistence models (`models.py`, which itself is an outdated pattern) with ports, writers, transformers, and shared helpers. Developers modifying a single business capability (e.g. Energy AMI Service Orders) must hop between four separate top-level folders.
+- **Action Item**: Refactor `apps/ip/packages/ip/src/ip/solutions/` from horizontal technical buckets into clean, cohesive Domain-Driven Design (DDD) Vertical Slices:
+  1. Restructure by vertical domain and relocate every module currently inside `solutions/domains/`:
+     ```text
+     apps/ip/packages/ip/src/ip/solutions/
+     ├── energy/
+     │   ├── canonical/       # canonical.py, repository.py, writers.py, migrations/, ubiquitous ORM files (topology.py, service_points.py)
+     │   ├── ports.py         # Relocated from solutions/domains/energy/ports.py
+     │   ├── transformers/    # Unified from solutions/domains/energy/transformers.py + solutions/transformers/energy/
+     │   ├── stitches/        # Workflows & step definitions
+     │   └── connectors/      # Energy-specific connectors and AMI sandbox simulator
+     ├── tms/
+     │   ├── canonical/       # canonical.py, repository.py, writers.py (if added), migrations/, ubiquitous ORM files (loads.py, carriers.py)
+     │   ├── ports.py         # Relocated from solutions/domains/tms/ports.py
+     │   ├── transformers/    # Unified from solutions/domains/tms/transformers.py + solutions/transformers/tms/
+     │   └── stitches/
+     ├── shared/
+     │   └── numeric.py       # Relocated pure numeric helpers from solutions/domains/numeric.py
+     ├── bootstrap.py         # Absorbs vertical migration registration from solutions/domains/registry.py
+     └── connectors/          # Universal / SaaS connectors (Salesforce, Stripe, ServiceNow, Universal Simulator)
+     ```
+  2. Consolidate `solutions/domains/registry.py` (`DOMAIN_MIGRATION_MODULES`) into `solutions/bootstrap.py` (or `solutions/migrations_registry.py`) and move `solutions/domains/numeric.py` to `solutions/shared/numeric.py` before deleting `solutions/domains/`.
+  3. Eliminate the redundant `solutions/domains/` folder only after all `canonical.py`, `models.py`, `migrations/`, `repository.py`, `ports.py`, `writers.py`, `transformers.py`, `numeric.py`, and `registry.py` modules are relocated and imports updated.
+  4. Eliminate all `models.py` files in favor of ubiquitous language files (`topology.py`, `records.py`, `service_points.py`, `loads.py`, `carriers.py`).
+  5. Update `tach.toml` modules and import paths to enforce vertical domain boundaries.
+
 ## [Architecture] Unified Domain Lifecycle & Sub-App Consolidation (Eradicate Mounted Sub-Apps)
 
 - **Date Added**: 2026-10-21

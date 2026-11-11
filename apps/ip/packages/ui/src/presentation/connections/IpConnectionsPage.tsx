@@ -10,20 +10,12 @@ import {
   Skeleton,
   StatusBadge,
   StatusTone,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
   Tabs,
   TabsList,
   TabsTrigger,
 } from '@soopa/ui';
-import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
   Cable,
-  ChevronRight,
   Cloud,
   CreditCard,
   Globe,
@@ -32,7 +24,6 @@ import {
   Plus,
   Search,
   Server,
-  Trash2,
   Zap,
 } from 'lucide-react';
 import React, { useMemo, useState } from 'react';
@@ -48,7 +39,7 @@ import { CatalogAppCategory, ConnectorRuntimeArchitecture } from '../../domain/e
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
-import { formatRelativeTimestamp, mapConnectionStatusTone } from '../shared/status-mapping';
+import { ActiveConnectionCard } from './ActiveConnectionCard';
 import { CreateConnectionModal } from './CreateConnectionModal';
 
 const MAIN_TAB_DIRECTORY = 'directory';
@@ -116,7 +107,7 @@ export interface IpConnectionsPageProps {
 export function IpConnectionsPage({
   initialTab = MAIN_TAB_DIRECTORY,
 }: IpConnectionsPageProps = {}) {
-  const { navigation } = useIpWorkspace();
+  const { navigation, tenantId, baseUrl } = useIpWorkspace();
   const [mainTab, setMainTab] = useState<string>(initialTab);
   const [activeSearch, setActiveSearch] = useState('');
   const [search, setSearch] = useState('');
@@ -126,19 +117,27 @@ export function IpConnectionsPage({
   const [connectionToDelete, setConnectionToDelete] = useState<Connection | null>(null);
   const deleteMutation = useDeleteConnectionMutation();
 
-  // 1. Fetch catalog apps for the OpenAI-style plugin directory
+  // 1. Fetch catalog apps for the plugin directory and active connection metadata lookup
   const allCatalogView = useCatalogAppsQuery();
   const catalogView = useCatalogAppsQuery({
     category: selectedCategory || undefined,
     search: search.trim() || undefined,
   });
   const apps = catalogView.data ?? [];
+  const catalogAppsById = useMemo(() => {
+    const map = new Map<string, CatalogAppSummary>();
+    for (const app of allCatalogView.data ?? apps) {
+      map.set(app.appId, app);
+    }
+    return map;
+  }, [allCatalogView.data, apps]);
+
   const categoryPills = useMemo(
     () => deriveCategoryPills(allCatalogView.data ?? apps),
     [allCatalogView.data, apps],
   );
 
-  // 2. Fetch all connections for badge count and active apps table
+  // 2. Fetch all connections for badge count and Active Apps card grid
   const allConnectionsView = useConnectionsQuery();
   const connections = allConnectionsView.data ?? [];
   const connectionsByApp = useMemo(() => groupActiveConnectionsByApp(connections), [connections]);
@@ -161,97 +160,6 @@ export function IpConnectionsPage({
     setCreateOpen(true);
   };
 
-  const columns = useMemo<ColumnDef<Connection>[]>(
-    () => [
-      {
-        accessorKey: 'name',
-        header: 'Connection',
-        cell: ({ row }) => (
-          <div>
-            <div className="font-semibold text-foreground">{row.original.name}</div>
-            <div className="font-mono text-xs text-muted-foreground">{row.original.appId}</div>
-          </div>
-        ),
-      },
-      {
-        accessorKey: 'status',
-        header: 'Status',
-        cell: ({ row }) => (
-          <StatusBadge
-            label={row.original.status}
-            tone={mapConnectionStatusTone(row.original.status)}
-          />
-        ),
-      },
-      {
-        accessorKey: 'authType',
-        header: 'Auth Strategy',
-        cell: ({ row }) => <StatusBadge label={row.original.authType} tone={StatusTone.NEUTRAL} />,
-      },
-      {
-        accessorKey: 'tokenExpiresAt',
-        header: 'Token Expiry',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-muted-foreground tabular-nums">
-            {row.original.tokenExpiresAt
-              ? formatRelativeTimestamp(row.original.tokenExpiresAt)
-              : 'Non-expiring'}
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'updatedAt',
-        header: 'Updated',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs text-muted-foreground tabular-nums">
-            {formatRelativeTimestamp(row.original.updatedAt)}
-          </span>
-        ),
-      },
-      {
-        id: 'actions',
-        size: 80,
-        header: () => <span className="sr-only">Actions</span>,
-        cell: ({ row }) => (
-          <div
-            className="flex items-center justify-end gap-1 pr-1"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={(e) => {
-                e.stopPropagation();
-                navigation.toConnectionDetail(row.original.id);
-              }}
-              title={`View ${row.original.name} details`}
-              aria-label={`View ${row.original.name} details`}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              onClick={(e) => {
-                e.stopPropagation();
-                setConnectionToDelete(row.original);
-              }}
-              title={`Delete ${row.original.name}`}
-              aria-label={`Delete ${row.original.name}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        ),
-      },
-    ],
-    [navigation],
-  );
-
   const handleConfirmDelete = async () => {
     if (!connectionToDelete) return;
     const res = await deleteMutation.mutateAsync(connectionToDelete.id);
@@ -264,12 +172,6 @@ export function IpConnectionsPage({
       toast.error(res.error.message || 'Failed to delete connection.');
     }
   };
-
-  const table = useReactTable({
-    data: filteredConnections,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-  });
 
   return (
     <div className="space-y-6">
@@ -407,21 +309,21 @@ export function IpConnectionsPage({
           )}
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <ApiProblemBanner
             problem={allConnectionsView.problem}
             onRetry={() => void allConnectionsView.refetch()}
           />
 
-          {/* Search and Action Toolbar */}
+          {/* Search and Count Toolbar */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="relative w-full max-w-sm">
+            <div className="relative w-full max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={activeSearch}
                 onChange={(e) => setActiveSearch(e.target.value)}
                 placeholder="Search active apps by name, connector, or status..."
-                className="h-9 pl-9 text-xs"
+                className="pl-9"
               />
             </div>
             <span className="text-xs text-muted-foreground tabular-nums">
@@ -429,78 +331,49 @@ export function IpConnectionsPage({
             </span>
           </div>
 
-          {/* EDI-Style Single-Border TanStack Table with Permanent TableHeader */}
-          <div className="rounded-xl border border-border bg-card overflow-hidden">
-            <Table>
-              <TableHeader className="bg-muted/50 border-b border-border">
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id} className="hover:bg-transparent border-0">
-                    {headerGroup.headers.map((header) => (
-                      <TableHead
-                        key={header.id}
-                        style={header.id === 'actions' ? { width: 56 } : undefined}
-                        className={`font-semibold text-foreground text-xs py-2.5 px-3 ${
-                          header.id === 'actions' ? 'w-14 text-right' : ''
-                        }`}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(header.column.columnDef.header, header.getContext())}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {allConnectionsView.isLoading ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-32 text-center text-xs text-muted-foreground"
-                    >
-                      Loading active apps...
-                    </TableCell>
-                  </TableRow>
-                ) : filteredConnections.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-32 text-center text-xs text-muted-foreground"
-                    >
-                      No active apps configured. Explore All Apps to connect your first integration.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      tabIndex={0}
-                      role="button"
-                      className="cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          navigation.toConnectionDetail(row.original.id);
-                        }
-                      }}
-                      onClick={() => navigation.toConnectionDetail(row.original.id)}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell
-                          key={cell.id}
-                          className={`py-2.5 px-3 align-middle ${
-                            cell.column.id === 'actions' ? 'w-14 text-right' : ''
-                          }`}
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          {allConnectionsView.isLoading ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-48 w-full rounded-2xl" />
+              ))}
+            </div>
+          ) : filteredConnections.length === 0 ? (
+            <div className="flex min-h-[240px] flex-col items-center justify-center rounded-2xl border border-dashed border-border p-8 text-center">
+              <Cable className="h-8 w-8 text-muted-foreground" />
+              <h3 className="mt-3 font-semibold text-foreground">No Active Apps</h3>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                No active connections matched your search. Explore All Apps to connect your first
+                integration.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setMainTab(MAIN_TAB_DIRECTORY)}
+                className="mt-4"
+              >
+                Browse All Apps
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredConnections.map((conn) => {
+                const catalogApp = catalogAppsById.get(conn.appId);
+                return (
+                  <ActiveConnectionCard
+                    key={conn.id}
+                    connection={conn}
+                    catalogApp={catalogApp}
+                    appIcon={getAppIcon(catalogApp?.category, catalogApp?.runtimeArchitecture)}
+                    baseUrl={baseUrl}
+                    tenantId={tenantId}
+                    onOpenDetail={(id) => navigation.toConnectionDetail(id)}
+                    onRequestDelete={(c) => setConnectionToDelete(c)}
+                  />
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

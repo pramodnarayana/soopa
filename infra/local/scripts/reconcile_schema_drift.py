@@ -12,15 +12,65 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from collections.abc import Mapping, Sequence
 
 import structlog
 from database.provider import DatabaseProvider
+from database.shard_discovery import (
+    collect_prefixed_shard_overrides,
+    fetch_prefixed_shard_urls,
+)
 from seedwork.infra.config import load_repo_env, load_settings_safely
 from seedwork.infra.config_models import PlatformDatabaseSettings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
+
+SUPPORTED_RECONCILE_DOMAINS: tuple[str, ...] = ("all", "platform", "identity", "ip")
+RECONCILABLE_APP_DOMAINS: frozenset[str] = frozenset({"ip"})
+IP_SHARD_PREFIX = "ip_"
+IP_DEFAULT_SHARD_ID = "ip_shard_1"
+IP_DEFAULT_DSN_ENV_VAR = "IP_DATABASE_URL"
+
+
+def validate_reconcile_domain(domain: str) -> str:
+    """Normalize and validate ``domain`` against supported reconciliation targets."""
+    normalized = domain.strip().lower()
+    if normalized not in SUPPORTED_RECONCILE_DOMAINS:
+        supported_csv = ", ".join(SUPPORTED_RECONCILE_DOMAINS)
+        raise ValueError(
+            f"Unsupported reconciliation domain {domain!r}. Supported domains: {supported_csv}"
+        )
+    return normalized
+
+
+def _load_database_settings(*, skip_dotenv: bool) -> PlatformDatabaseSettings:
+    """Load database settings from process environment, optionally skipping ``.env`` hydration."""
+    if skip_dotenv:
+        return PlatformDatabaseSettings()
+    load_repo_env(override=False)
+    return load_settings_safely(PlatformDatabaseSettings)
+
+
+async def resolve_ip_shard_urls(
+    global_url: str,
+    settings: PlatformDatabaseSettings,
+    environ: Mapping[str, str],
+) -> list[str]:
+    """Discover and deduplicate all IP shard URLs using the migration runner's override logic."""
+    overrides = collect_prefixed_shard_overrides(
+        environ,
+        settings.shard_overrides,
+        shard_prefix=IP_SHARD_PREFIX,
+        default_shard_id=IP_DEFAULT_SHARD_ID,
+        default_dsn_env_var=IP_DEFAULT_DSN_ENV_VAR,
+    )
+    return await fetch_prefixed_shard_urls(
+        global_url,
+        overrides,
+        shard_prefix=IP_SHARD_PREFIX,
+    )
 
 
 async def _reconcile_ucp_cellular_sharding(session: AsyncSession) -> None:
@@ -272,12 +322,11 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
         await shard_provider.close()
 
 
-async def reconcile(domain: str = "all") -> None:
+async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
     """Applies missing DDL and initial reference data to eliminate schema drift."""
-    load_repo_env(override=False)
-    settings = load_settings_safely(PlatformDatabaseSettings)
+    target = validate_reconcile_domain(domain)
+    settings = _load_database_settings(skip_dotenv=skip_dotenv)
     provider = DatabaseProvider.from_url(settings.global_url)
-    target = domain.strip().lower()
 
     try:
         async with provider.session() as session:
@@ -325,11 +374,11 @@ async def reconcile(domain: str = "all") -> None:
                             )
                         )
 
-                # Reconcile NO_AUTH connections to ACTIVE status
+                # Reconcile NO_AUTH connections to ACTIVE status and enforce DB CheckConstraint
                 conn_res = await session.execute(
                     text("""
                     UPDATE ip.connections
-                    SET status = 'ACTIVE'
+                    SET status = 'ACTIVE', updated_at = NOW()
                     WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'
                     RETURNING id;
                     """)
@@ -339,9 +388,147 @@ async def reconcile(domain: str = "all") -> None:
                     logger.info("reconciled_no_auth_connections", activated_count=activated_count)
 
                 await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1
+                            FROM pg_constraint c
+                            JOIN pg_namespace n ON n.oid = c.connamespace
+                            WHERE n.nspname = 'ip'
+                              AND c.conname = 'ck_ip_connections_no_auth_not_pending'
+                        ) THEN
+                            ALTER TABLE ip.connections
+                            ADD CONSTRAINT ck_ip_connections_no_auth_not_pending
+                            CHECK (NOT (auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'));
+                        END IF;
+                    END
+                    $$;
+                    """)
+                )
+
+                await session.execute(
                     text(
                         "ALTER TABLE ip.stitches ADD COLUMN IF NOT EXISTS filter_conditions JSONB NOT NULL DEFAULT '{}'::jsonb;"
                     )
+                )
+
+                await session.execute(
+                    text("""
+                    CREATE TABLE IF NOT EXISTS ip.simulator_sandboxes (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        api_key_hash VARCHAR(64) NOT NULL,
+                        api_key_prefix VARCHAR(24) NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_ip_simulator_sandbox_tenant_name UNIQUE (tenant_id, name)
+                    );
+                    """)
+                )
+                await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM pg_constraint
+                            WHERE conname = 'uq_ip_simulator_sandboxes_tenant_name'
+                        ) THEN
+                            ALTER TABLE ip.simulator_sandboxes
+                            RENAME CONSTRAINT uq_ip_simulator_sandboxes_tenant_name
+                            TO uq_ip_simulator_sandbox_tenant_name;
+                        END IF;
+                    END $$;
+                    """)
+                )
+                await session.execute(
+                    text(
+                        "ALTER TABLE ip.simulator_sandboxes ALTER COLUMN api_key_hash TYPE VARCHAR(64);"
+                    )
+                )
+                await session.execute(
+                    text("DROP INDEX IF EXISTS ip.ix_ip_simulator_sandboxes_tenant_id;")
+                )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_sandboxes_tenant ON ip.simulator_sandboxes (tenant_id);"
+                    )
+                )
+                await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'simulator_entities'
+                        ) AND NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_schema = 'ip'
+                              AND table_name = 'simulator_entities'
+                              AND column_name = 'sandbox_id'
+                        ) THEN
+                            DROP TABLE ip.simulator_entities CASCADE;
+                        END IF;
+                    END $$;
+                    """)
+                )
+                await session.execute(
+                    text("""
+                    CREATE TABLE IF NOT EXISTS ip.simulator_entities (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        sandbox_id VARCHAR(64) NOT NULL REFERENCES ip.simulator_sandboxes(id) ON DELETE CASCADE,
+                        entity_name VARCHAR(128) NOT NULL,
+                        primary_key_field VARCHAR(128) NOT NULL,
+                        cursor_field VARCHAR(128) NOT NULL,
+                        records_per_pull INTEGER NOT NULL DEFAULT 25,
+                        cursor_step_seconds INTEGER NOT NULL DEFAULT 60,
+                        velocity_mode VARCHAR(32) NOT NULL DEFAULT 'ENTITY_TRANSACTIONAL',
+                        sample_blueprint JSONB NOT NULL,
+                        inferred_json_schema JSONB NOT NULL,
+                        chaos_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        version INTEGER NOT NULL DEFAULT 1,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_ip_simulator_entity_sandbox_name UNIQUE (sandbox_id, entity_name)
+                    );
+                    """)
+                )
+                await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM pg_constraint
+                            WHERE conname = 'uq_ip_simulator_entities_sandbox_name'
+                        ) THEN
+                            ALTER TABLE ip.simulator_entities
+                            RENAME CONSTRAINT uq_ip_simulator_entities_sandbox_name
+                            TO uq_ip_simulator_entity_sandbox_name;
+                        END IF;
+                    END $$;
+                    """)
+                )
+                await session.execute(
+                    text(
+                        "ALTER TABLE ip.simulator_entities ALTER COLUMN cursor_field DROP DEFAULT;"
+                    )
+                )
+                await session.execute(
+                    text("DROP INDEX IF EXISTS ip.ix_ip_simulator_entities_tenant_sandbox;")
+                )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_entities_tenant_sandbox ON ip.simulator_entities (tenant_id, sandbox_id);"
+                    )
+                )
+                await session.execute(
+                    text("""
+                    UPDATE ip.connections
+                    SET public_config = public_config - 'streams'
+                    WHERE public_config ? 'streams';
+                    """)
                 )
 
             # 2. Platform Domain: Identity capabilities & RBAC
@@ -427,14 +614,14 @@ async def reconcile(domain: str = "all") -> None:
 
             await session.commit()
             if target in ("all", "ip"):
-                shard_url = (
-                    os.environ.get("IP_DATABASE_URL")
-                    or os.environ.get("SHARD_OVERRIDES__IP_SHARD_1")
-                    or settings.shard_overrides.get("ip_shard_1")
+                shard_urls = await resolve_ip_shard_urls(
+                    settings.global_url,
+                    settings,
+                    os.environ,
                 )
-                if shard_url:
+                for shard_url in shard_urls:
                     await _reconcile_ip_shard(shard_url)
-                logger.info("ip_schema_reconciled")
+                logger.info("ip_schema_reconciled", shards_reconciled=len(shard_urls))
             if target in ("all", "platform", "identity"):
                 logger.info("platform_schema_reconciled")
             logger.info("reconcile_schema_drift_completed_successfully", domain=target)
@@ -442,18 +629,28 @@ async def reconcile(domain: str = "all") -> None:
         await provider.close()
 
 
-def main() -> None:
+def _parse_cli_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Reconcile database schema drift for amended single migrations."
     )
     parser.add_argument(
         "--domain",
         default="all",
-        choices=["all", "platform", "ip", "identity"],
+        type=lambda raw: raw.strip().lower(),
+        choices=SUPPORTED_RECONCILE_DOMAINS,
         help="Target bounded context to reconcile (default: all)",
     )
-    args = parser.parse_args()
-    asyncio.run(reconcile(domain=args.domain))
+    parser.add_argument(
+        "--skip-dotenv",
+        action="store_true",
+        help="Do not load .env / SOOPA_ENV_FILE from disk; rely strictly on process environment",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    args = _parse_cli_args(argv)
+    asyncio.run(reconcile(domain=args.domain, skip_dotenv=args.skip_dotenv))
 
 
 if __name__ == "__main__":

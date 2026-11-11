@@ -24,6 +24,7 @@ from ip.engine.adapters.inbound.api.dtos.connection_dtos import (
     RelinkConnectionHttpRequest,
     StreamFieldHttpResponse,
     StreamSchemaHttpResponse,
+    UpdateConnectionHttpRequest,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ApiErrorHttpResponse,
@@ -64,6 +65,10 @@ from ip.engine.application.use_cases.connections.relink_connection_use_case impo
 )
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
+)
+from ip.engine.application.use_cases.connections.update_connection_use_case import (
+    UpdateConnectionCommand,
+    UpdateConnectionUseCase,
 )
 from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
 from ip.engine.domain.exceptions import (
@@ -521,4 +526,63 @@ async def relink_connection(
             message="Connection relinked but payload was omitted.",
         )
     log.info("ip_relink_connection.completed")
+    return _map_connection_dto_to_response(result.connection)
+
+
+@router.patch(
+    "/{connection_id}",
+    response_model=ConnectionHttpResponse,
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ApiErrorHttpResponse},
+    },
+    status_code=status.HTTP_200_OK,
+)
+async def update_connection(
+    tenant_id: str,
+    connection_id: str,
+    request: UpdateConnectionHttpRequest,
+    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    cipher: Annotated[CipherPort, Depends(get_cipher)],
+) -> ConnectionHttpResponse | Response:
+    """Updates configuration, credentials, or metadata of an existing active connection."""
+    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    log.info("ip_update_connection.received")
+
+    use_case = UpdateConnectionUseCase(uow=ip_cp_uow, cipher=cipher)
+    cmd = UpdateConnectionCommand(
+        connection_id=connection_id,
+        tenant_id=tenant_id,
+        new_name=request.new_name if request.new_name is not None else request.name,
+        updated_raw_credentials=request.updated_raw_credentials,
+        updated_public_config=request.updated_public_config,
+    )
+    result = await use_case.execute(cmd)
+    if not result.success:
+        if result.error is not None:
+            log.error("ip_update_connection.failed", error_code=result.error.code.value)
+            return from_ip_error(result.error)
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if result.error_code == IpErrorCode.CONNECTION_NOT_FOUND.value
+            else status.HTTP_422_UNPROCESSABLE_CONTENT
+        )
+        error_code = result.error_code or IpErrorCode.INVALID_CONNECTION_STATE.value
+        log.error("ip_update_connection.failed", error_code=error_code)
+        return to_error_response(
+            status_code=status_code,
+            code=error_code,
+            message=result.error_message or "Connection update failed",
+        )
+    if result.connection is None:
+        log.error("ip_update_connection.missing_payload")
+        return to_error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="INTERNAL_ERROR",
+            message="Connection updated but payload was omitted.",
+        )
+    log.info("ip_update_connection.completed")
     return _map_connection_dto_to_response(result.connection)

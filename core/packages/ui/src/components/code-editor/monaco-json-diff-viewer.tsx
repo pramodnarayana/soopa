@@ -1,10 +1,10 @@
-import { useTheme } from 'next-themes';
 import React, { lazy, Suspense } from 'react';
 import { cn } from '../../lib/utils';
 import { Skeleton } from '../ui/skeleton';
+import { useEffectiveMonacoTheme } from './monaco-config';
 
 const LazyDiffEditor = lazy(() =>
-  import('@monaco-editor/react').then((mod) => ({ default: mod.DiffEditor })),
+  import('./monaco-runtime').then((mod) => ({ default: mod.SelfHostedMonacoDiffEditor })),
 );
 
 export interface MonacoJsonDiffViewerProps {
@@ -12,7 +12,6 @@ export interface MonacoJsonDiffViewerProps {
   readonly modifiedValue: string;
   readonly language?: string;
   readonly height?: string | number;
-  readonly readOnlyModified?: boolean;
   readonly onModifiedChange?: (nextModified: string) => void;
   readonly className?: string;
 }
@@ -22,12 +21,11 @@ export function MonacoJsonDiffViewer({
   modifiedValue,
   language = 'json',
   height = 380,
-  readOnlyModified = true,
   onModifiedChange,
   className,
-}: MonacoJsonDiffViewerProps) {
-  const { resolvedTheme } = useTheme();
-  const effectiveTheme = resolvedTheme === 'dark' ? 'vs-dark' : 'vs';
+}: MonacoJsonDiffViewerProps): React.JSX.Element {
+  const effectiveTheme = useEffectiveMonacoTheme();
+  const isModifiedEditable = onModifiedChange !== undefined;
 
   return (
     <div
@@ -42,7 +40,7 @@ export function MonacoJsonDiffViewer({
           modified={modifiedValue}
           theme={effectiveTheme}
           onMount={(editor) => {
-            if (!onModifiedChange || readOnlyModified) {
+            if (!onModifiedChange) {
               return;
             }
             const modifiedEditor = editor.getModifiedEditor();
@@ -51,7 +49,8 @@ export function MonacoJsonDiffViewer({
             });
           }}
           options={{
-            readOnly: readOnlyModified,
+            automaticLayout: true,
+            readOnly: !isModifiedEditable,
             originalEditable: false,
             renderSideBySide: true,
             minimap: { enabled: false },
