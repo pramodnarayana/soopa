@@ -105,8 +105,9 @@ async def test_discover_catalog_use_case(
     assert catalog_dto.connection_id == conn_dto.id
     assert len(catalog_dto.streams) == 3
 
-    persisted_catalog = await cat_repo.get_active_by_connection_id(conn_dto.id)
+    persisted_catalog = await cat_repo.get_active_by_connection_id(tenant_id, conn_dto.id)
     assert persisted_catalog is not None
+    assert persisted_catalog.tenant_id == tenant_id
     assert persisted_catalog.catalog_version == 1
     assert persisted_catalog.catalog_hash == catalog_dto.catalog_hash
 
@@ -178,8 +179,9 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
     assert catalog_dto.streams[0].name == "supported_stream"
     assert list(catalog_dto.streams[0].supported_sync_modes) == ["INCREMENTAL"]
 
-    persisted = await cat_repo.get_active_by_connection_id(conn_dto.id)
+    persisted = await cat_repo.get_active_by_connection_id(tenant_id, conn_dto.id)
     assert persisted is not None
+    assert persisted.tenant_id == tenant_id
     assert len(persisted.streams) == 1
     assert persisted.streams[0].name == "supported_stream"
 

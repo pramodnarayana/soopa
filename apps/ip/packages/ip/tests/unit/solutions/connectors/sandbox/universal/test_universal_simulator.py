@@ -1,12 +1,14 @@
-"""Unit tests for the Universal Schema Simulator under Design A (Virtual Sandboxes + API_KEY auth + UoW)."""
+"""Unit tests for the connection-scoped Universal Schema Simulator (`NO_AUTH`, `ip.simulator_entities`)."""
 
 from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncIterator
 
+import pytest
 from helpers.delivery_fakes import (
     FakeCipher,
+    FakeConnectionRepository,
     FakeControlPlaneUnitOfWork,
     FakeDataPlaneUnitOfWork,
     FakeTieredStorage,
@@ -24,21 +26,13 @@ from ip.engine.ports.outbound.uow import (
     IpDataPlaneUnitOfWorkProviderPort,
 )
 from ip.solutions.connectors.sandbox.universal import (
-    MAX_SIMULATOR_ENTITIES_PER_SANDBOX,
+    MAX_SIMULATOR_ENTITIES_PER_CONNECTION,
     CreateSimulatorEntityCommand,
     CreateSimulatorEntityUseCase,
-    CreateSimulatorSandboxCommand,
-    CreateSimulatorSandboxUseCase,
     DeleteSimulatorEntityCommand,
     DeleteSimulatorEntityUseCase,
-    DeleteSimulatorSandboxCommand,
-    DeleteSimulatorSandboxUseCase,
-    GetSimulatorSandboxQuery,
-    GetSimulatorSandboxUseCase,
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
-    ListSimulatorSandboxesQuery,
-    ListSimulatorSandboxesUseCase,
     SimulatedPushDeliveryStyle,
     SimulatorChaosPolicy,
     SimulatorStreamSpec,
@@ -51,6 +45,9 @@ from ip.solutions.connectors.sandbox.universal import (
     UpdateSimulatorEntityCommand,
     UpdateSimulatorEntityUseCase,
     infer_json_schema_from_sample,
+)
+from ip.solutions.connectors.sandbox.universal.repository import (
+    SqlAlchemySessionScopedSimulatorEntityReader,
 )
 from ip.solutions.connectors.sandbox.universal.synthesizer import (
     MAX_SYNTHESIS_ARRAY_ITEMS,
@@ -70,7 +67,7 @@ class _StaticDataPlaneUoWProvider(IpDataPlaneUnitOfWorkProviderPort):
 
     async def resolve_shard_info(self, tenant_id: str) -> Result[tuple[str, str], IpError]:
         _ = tenant_id
-        return Result.ok(("ip_shard_1", "postgresql+asyncpg://localhost/ip_shard"))
+        return Result.ok(("ip_shard_1", "in-memory://ip-shard-1"))
 
     @contextlib.asynccontextmanager
     async def get_data_plane_uow(
@@ -83,6 +80,27 @@ class _StaticDataPlaneUoWProvider(IpDataPlaneUnitOfWorkProviderPort):
         _ = (tenant_id, shard_id, shard_dsn)
         self.checkouts += 1
         yield self._uow
+
+
+async def _seed_simulator_connection(
+    connections: FakeConnectionRepository,
+    *,
+    tenant_id: str = "tnt_alpha",
+    name: str = "Order Simulator",
+    app_id: str = UniversalSchemaSimulatorConnector.APP_ID,
+) -> Connection:
+    conn = Connection.create(
+        tenant_id=tenant_id,
+        app_id=app_id,
+        name=name,
+        auth_type=AuthType.NO_AUTH,
+        public_config={"seed": 42, "records_per_pull": 25},
+        encrypted_credentials=b"",
+        endpoint_for_fingerprint=name,
+    )
+    conn.activate()
+    await connections.save(conn)
+    return conn
 
 
 def test_infer_schema_from_single_sample_json_detects_formats() -> None:
@@ -106,74 +124,45 @@ def test_infer_schema_from_single_sample_json_detects_formats() -> None:
     assert props["updated_at"]["format"] == "date-time"
 
 
-async def test_create_sandbox_issues_prefixed_id_with_hashed_api_key_committing_uow() -> None:
+async def test_entity_use_cases_enforce_tenant_connection_ownership() -> None:
     uow = FakeSimulatorUnitOfWork()
-    create_uc = CreateSimulatorSandboxUseCase(uow=uow)
-
-    res = await create_uc.execute(
-        CreateSimulatorSandboxCommand(
-            tenant_id="tnt_alpha",
-            name="ERP Staging Sandbox",
-        )
+    connections = FakeConnectionRepository()
+    alpha_conn = await _seed_simulator_connection(connections, tenant_id="tnt_alpha")
+    non_sim_conn = await _seed_simulator_connection(
+        connections,
+        tenant_id="tnt_alpha",
+        name="QuickBooks Prod",
+        app_id="quickbooks",
     )
-    assert res.is_ok
-    assert uow.commits == 1
-    created = res.unwrap()
-    assert created.sandbox.id.startswith("sbx_")
-    assert created.api_key.startswith("sbx_key_")
-    assert created.sandbox.api_key_prefix == created.api_key[:16]
 
-    list_uc = ListSimulatorSandboxesUseCase(uow=uow)
-    listed = await list_uc.execute(ListSimulatorSandboxesQuery(tenant_id="tnt_alpha"))
-    assert len(listed) == 1
-    assert listed[0].id == created.sandbox.id
-
-    dup_res = await create_uc.execute(
-        CreateSimulatorSandboxCommand(
-            tenant_id="tnt_alpha",
-            name="ERP Staging Sandbox",
-        )
-    )
-    assert dup_res.is_err
-    assert dup_res.unwrap_err().http_status == 409
-    assert uow.commits == 1
-
-
-async def test_sandbox_get_enforces_tenant_isolation() -> None:
-    uow = FakeSimulatorUnitOfWork()
-    created = (
-        await CreateSimulatorSandboxUseCase(uow=uow).execute(
-            CreateSimulatorSandboxCommand(tenant_id="tnt_alpha", name="Private Sandbox")
-        )
-    ).unwrap()
-
-    wrong_tenant_res = await GetSimulatorSandboxUseCase(uow=uow).execute(
-        GetSimulatorSandboxQuery(tenant_id="tnt_bravo", sandbox_id=created.sandbox.id)
+    wrong_tenant_res = await ListSimulatorEntitiesUseCase(uow=uow, connections=connections).execute(
+        ListSimulatorEntitiesQuery(tenant_id="tnt_bravo", connection_id=alpha_conn.id)
     )
     assert wrong_tenant_res.is_err
     assert wrong_tenant_res.unwrap_err().http_status == 404
 
-    wrong_delete_res = await DeleteSimulatorSandboxUseCase(uow=uow).execute(
-        DeleteSimulatorSandboxCommand(tenant_id="tnt_bravo", sandbox_id=created.sandbox.id)
-    )
-    assert wrong_delete_res.is_err
-    assert wrong_delete_res.unwrap_err().http_status == 404
-
-
-async def test_entity_crud_lifecycle_with_timeseries_velocity_scoped_to_sandbox() -> None:
-    uow = FakeSimulatorUnitOfWork()
-    created_sbx = (
-        await CreateSimulatorSandboxUseCase(uow=uow).execute(
-            CreateSimulatorSandboxCommand(tenant_id="tnt_alpha", name="CRM Sandbox")
+    wrong_app_res = await CreateSimulatorEntityUseCase(uow=uow, connections=connections).execute(
+        CreateSimulatorEntityCommand(
+            tenant_id="tnt_alpha",
+            connection_id=non_sim_conn.id,
+            entity_name="orders",
+            sample_blueprint={"order_id": "ORD-1001"},
         )
-    ).unwrap()
-    sandbox_id = created_sbx.sandbox.id
+    )
+    assert wrong_app_res.is_err
+    assert wrong_app_res.unwrap_err().http_status == 400
 
-    create_ent = CreateSimulatorEntityUseCase(uow=uow)
+
+async def test_entity_crud_lifecycle_scoped_to_connection() -> None:
+    uow = FakeSimulatorUnitOfWork()
+    connections = FakeConnectionRepository()
+    conn = await _seed_simulator_connection(connections, tenant_id="tnt_alpha")
+
+    create_ent = CreateSimulatorEntityUseCase(uow=uow, connections=connections)
     ent_res = await create_ent.execute(
         CreateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=sandbox_id,
+            connection_id=conn.id,
             entity_name="orders",
             sample_blueprint={
                 "order_id": "ORD-1001",
@@ -187,7 +176,7 @@ async def test_entity_crud_lifecycle_with_timeseries_velocity_scoped_to_sandbox(
     assert ent_res.is_ok
     entity = ent_res.unwrap()
     assert entity.id.startswith("sim_ent_")
-    assert entity.sandbox_id == sandbox_id
+    assert entity.connection_id == conn.id
     assert entity.primary_key_field == "order_id"
     assert entity.cursor_field == "updated_at"
     assert entity.velocity_mode == StreamVelocityMode.TIMESERIES_COLUMNAR
@@ -196,7 +185,7 @@ async def test_entity_crud_lifecycle_with_timeseries_velocity_scoped_to_sandbox(
     dup_res = await create_ent.execute(
         CreateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=sandbox_id,
+            connection_id=conn.id,
             entity_name="orders",
             sample_blueprint={"order_id": "ORD-1002"},
         )
@@ -204,10 +193,10 @@ async def test_entity_crud_lifecycle_with_timeseries_velocity_scoped_to_sandbox(
     assert dup_res.is_err
     assert dup_res.unwrap_err().http_status == 409
 
-    upd_res = await UpdateSimulatorEntityUseCase(uow=uow).execute(
+    upd_res = await UpdateSimulatorEntityUseCase(uow=uow, connections=connections).execute(
         UpdateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=sandbox_id,
+            connection_id=conn.id,
             entity_id=entity.id,
             records_per_pull=40,
             velocity_mode=StreamVelocityMode.ENTITY_TRANSACTIONAL,
@@ -218,16 +207,16 @@ async def test_entity_crud_lifecycle_with_timeseries_velocity_scoped_to_sandbox(
     assert upd_res.unwrap().records_per_pull == 40
     assert upd_res.unwrap().velocity_mode == StreamVelocityMode.ENTITY_TRANSACTIONAL
 
-    listed_res = await ListSimulatorEntitiesUseCase(uow=uow).execute(
-        ListSimulatorEntitiesQuery(tenant_id="tnt_alpha", sandbox_id=sandbox_id)
+    listed_res = await ListSimulatorEntitiesUseCase(uow=uow, connections=connections).execute(
+        ListSimulatorEntitiesQuery(tenant_id="tnt_alpha", connection_id=conn.id)
     )
     assert listed_res.is_ok
     assert len(listed_res.unwrap()) == 1
 
-    del_res = await DeleteSimulatorEntityUseCase(uow=uow).execute(
+    del_res = await DeleteSimulatorEntityUseCase(uow=uow, connections=connections).execute(
         DeleteSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=sandbox_id,
+            connection_id=conn.id,
             entity_id=entity.id,
         )
     )
@@ -236,18 +225,15 @@ async def test_entity_crud_lifecycle_with_timeseries_velocity_scoped_to_sandbox(
 
 async def test_entity_quota_exceeded_returns_422() -> None:
     uow = FakeSimulatorUnitOfWork()
-    created_sbx = (
-        await CreateSimulatorSandboxUseCase(uow=uow).execute(
-            CreateSimulatorSandboxCommand(tenant_id="tnt_alpha", name="Quota Sandbox")
-        )
-    ).unwrap()
-    create_ent = CreateSimulatorEntityUseCase(uow=uow)
+    connections = FakeConnectionRepository()
+    conn = await _seed_simulator_connection(connections, tenant_id="tnt_alpha")
+    create_ent = CreateSimulatorEntityUseCase(uow=uow, connections=connections)
 
-    for idx in range(MAX_SIMULATOR_ENTITIES_PER_SANDBOX):
+    for idx in range(MAX_SIMULATOR_ENTITIES_PER_CONNECTION):
         res = await create_ent.execute(
             CreateSimulatorEntityCommand(
                 tenant_id="tnt_alpha",
-                sandbox_id=created_sbx.sandbox.id,
+                connection_id=conn.id,
                 entity_name=f"entity_{idx:03d}",
                 sample_blueprint={"id": f"REC-{idx}"},
             )
@@ -257,7 +243,7 @@ async def test_entity_quota_exceeded_returns_422() -> None:
     overflow = await create_ent.execute(
         CreateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=created_sbx.sandbox.id,
+            connection_id=conn.id,
             entity_name="entity_overflow",
             sample_blueprint={"id": "REC-OVER"},
         )
@@ -266,21 +252,16 @@ async def test_entity_quota_exceeded_returns_422() -> None:
     assert overflow.unwrap_err().http_status == 422
 
 
-async def test_connector_authenticates_sandbox_api_key_for_discover_pull_fetch_write() -> None:
+async def test_connector_executes_no_auth_discover_pull_fetch_write_with_typed_scope() -> None:
     repo = InMemorySimulatorRepository()
     uow = FakeSimulatorUnitOfWork(repo)
-    created_sbx = (
-        await CreateSimulatorSandboxUseCase(uow=uow).execute(
-            CreateSimulatorSandboxCommand(tenant_id="tnt_alpha", name="Billing Sandbox")
-        )
-    ).unwrap()
-    sandbox_id = created_sbx.sandbox.id
-    api_key = created_sbx.api_key
+    connections = FakeConnectionRepository()
+    conn = await _seed_simulator_connection(connections, tenant_id="tnt_alpha")
 
-    await CreateSimulatorEntityUseCase(uow=uow).execute(
+    await CreateSimulatorEntityUseCase(uow=uow, connections=connections).execute(
         CreateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=sandbox_id,
+            connection_id=conn.id,
             entity_name="invoices",
             sample_blueprint={
                 "invoice_id": "INV-0001",
@@ -292,32 +273,25 @@ async def test_connector_authenticates_sandbox_api_key_for_discover_pull_fetch_w
         )
     )
 
-    connector = UniversalSchemaSimulatorConnector(sandbox_reader=repo)
+    connector = UniversalSchemaSimulatorConnector(entity_reader=repo)
     spec = connector.spec()
-    assert spec.auth_type == AuthType.API_KEY
+    assert spec.auth_type == AuthType.NO_AUTH
     prop_map = {p.name: p for p in spec.properties}
-    assert prop_map["sandbox_id"].type == PropertyType.SHORT_TEXT
-    assert prop_map["sandbox_id"].required is True
-    assert prop_map["api_key"].type == PropertyType.SECRET_TEXT
-    assert prop_map["api_key"].required is True
-
-    bad_check = await connector.check(
-        public_config={"sandbox_id": sandbox_id},
-        credentials={"api_key": "sbx_key_wrong"},
-    )
-    assert bad_check.success is False
-    assert bad_check.error_code == IpErrorCode.INVALID_CREDENTIALS.value
+    assert set(prop_map.keys()) == {"seed", "records_per_pull"}
+    assert prop_map["seed"].type == PropertyType.NUMBER
+    assert prop_map["seed"].required is False
 
     good_check = await connector.check(
-        public_config={"sandbox_id": sandbox_id, "seed": 77},
-        credentials={"api_key": api_key},
+        public_config={"seed": 77, "records_per_pull": 25},
+        credentials={},
     )
     assert good_check.success is True
 
     catalog = await connector.discover(
-        connection_id="conn_sim_1",
-        public_config={"sandbox_id": sandbox_id, "seed": 77},
-        credentials={"api_key": api_key},
+        connection_id=conn.id,
+        public_config={"seed": 77},
+        credentials={},
+        tenant_id="tnt_alpha",
     )
     assert catalog.success is True
     assert [s.name for s in catalog.streams] == ["invoices"]
@@ -326,32 +300,38 @@ async def test_connector_authenticates_sandbox_api_key_for_discover_pull_fetch_w
         rec
         async for rec in connector.read_stream(
             "invoices",
-            public_config={"sandbox_id": sandbox_id, "seed": 77},
-            credentials={"api_key": api_key},
+            public_config={"seed": 77},
+            credentials={},
             limit=3,
+            tenant_id="tnt_alpha",
+            connection_id=conn.id,
         )
     ]
     assert len(pulled) == 3
     assert pulled[0].record_id.startswith("INV-")
 
-    unauthorized_pulled = [
+    missing_scope_pulled = [
         rec
         async for rec in connector.read_stream(
             "invoices",
-            public_config={"sandbox_id": sandbox_id, "seed": 77},
-            credentials={"api_key": "sbx_key_tampered"},
+            public_config={"seed": 77},
+            credentials={},
             limit=3,
+            tenant_id="",
+            connection_id="",
         )
     ]
-    assert len(unauthorized_pulled) == 0
+    assert len(missing_scope_pulled) == 0
     assert connector.last_error is not None
-    assert connector.last_error.code == IpErrorCode.INVALID_CREDENTIALS
+    assert connector.last_error.code == IpErrorCode.INVALID_CONFIG
 
     fetched = await connector.fetch_record(
         "invoices",
         pulled[0].record_id,
-        public_config={"sandbox_id": sandbox_id, "seed": 77},
-        credentials={"api_key": api_key},
+        public_config={"seed": 77},
+        credentials={},
+        tenant_id="tnt_alpha",
+        connection_id=conn.id,
     )
     assert fetched is not None
     assert fetched == pulled[0]
@@ -368,8 +348,10 @@ async def test_connector_authenticates_sandbox_api_key_for_discover_pull_fetch_w
             },
             record_id="INV-9001",
         ),
-        public_config={"sandbox_id": sandbox_id, "seed": 77},
-        credentials={"api_key": api_key},
+        public_config={"seed": 77},
+        credentials={},
+        tenant_id="tnt_alpha",
+        connection_id=conn.id,
     )
     assert write_ok.success is True
     assert write_ok.response_status_code == 200
@@ -384,8 +366,10 @@ async def test_connector_authenticates_sandbox_api_key_for_discover_pull_fetch_w
             payload={"invoice_id": "INV-9002", "total": "not_a_number"},
             record_id="INV-9002",
         ),
-        public_config={"sandbox_id": sandbox_id, "seed": 77},
-        credentials={"api_key": api_key},
+        public_config={"seed": 77},
+        credentials={},
+        tenant_id="tnt_alpha",
+        connection_id=conn.id,
     )
     assert write_bad_schema.success is False
     assert write_bad_schema.failure_category == SimulatorWriteFailureCategory.SCHEMA_VIOLATION.value
@@ -394,16 +378,25 @@ async def test_connector_authenticates_sandbox_api_key_for_discover_pull_fetch_w
 async def test_simulated_push_emits_l1_records_within_single_data_plane_uow() -> None:
     repo = InMemorySimulatorRepository()
     uow = FakeSimulatorUnitOfWork(repo)
-    created_sbx = (
-        await CreateSimulatorSandboxUseCase(uow=uow).execute(
-            CreateSimulatorSandboxCommand(tenant_id="tnt_alpha", name="Webhook Sandbox")
-        )
-    ).unwrap()
+    cipher = FakeCipher()
+    cp_uow = FakeControlPlaneUnitOfWork()
 
-    await CreateSimulatorEntityUseCase(uow=uow).execute(
+    conn = Connection.create(
+        tenant_id="tnt_alpha",
+        app_id=UniversalSchemaSimulatorConnector.APP_ID,
+        name="Simulator Connection",
+        auth_type=AuthType.NO_AUTH,
+        public_config={"seed": 42},
+        encrypted_credentials=b"",
+        endpoint_for_fingerprint="Simulator Connection",
+    )
+    conn.activate()
+    await cp_uow.connections.save(conn)
+
+    await CreateSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections).execute(
         CreateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=created_sbx.sandbox.id,
+            connection_id=conn.id,
             entity_name="shipments",
             sample_blueprint={
                 "shipment_id": "SHP-100",
@@ -412,20 +405,6 @@ async def test_simulated_push_emits_l1_records_within_single_data_plane_uow() ->
             },
         )
     )
-
-    cipher = FakeCipher()
-    cp_uow = FakeControlPlaneUnitOfWork()
-    conn = Connection.create(
-        tenant_id="tnt_alpha",
-        app_id=UniversalSchemaSimulatorConnector.APP_ID,
-        name="Sandbox Connection",
-        auth_type=AuthType.API_KEY,
-        public_config={"sandbox_id": created_sbx.sandbox.id, "seed": 42},
-        encrypted_credentials=cipher.encrypt_dict({"api_key": created_sbx.api_key}),
-        endpoint_for_fingerprint=created_sbx.sandbox.id,
-    )
-    conn.activate()
-    await cp_uow.connections.save(conn)
 
     dp_uow = FakeDataPlaneUnitOfWork()
     dp_provider = _StaticDataPlaneUoWProvider(dp_uow)
@@ -439,7 +418,7 @@ async def test_simulated_push_emits_l1_records_within_single_data_plane_uow() ->
         decoder=StandardInboundPayloadDecoder(),
         ack=StandardInboundAck(),
         token_manager=token_manager,
-        sandbox_reader=repo,
+        entity_reader=repo,
     )
     res = await push_uc.execute(
         TriggerSimulatedPushCommand(
@@ -505,21 +484,19 @@ def test_synthesizer_bounds_tenant_schema_digit_widths_with_array_caps() -> None
 async def test_connector_write_chaos_varies_across_retry_attempts() -> None:
     repo = InMemorySimulatorRepository()
     uow = FakeSimulatorUnitOfWork(repo)
-    created_sbx = (
-        await CreateSimulatorSandboxUseCase(uow=uow).execute(
-            CreateSimulatorSandboxCommand(tenant_id="tnt_alpha", name="Chaos Retry Sandbox")
-        )
-    ).unwrap()
-    await CreateSimulatorEntityUseCase(uow=uow).execute(
+    connections = FakeConnectionRepository()
+    conn = await _seed_simulator_connection(connections, tenant_id="tnt_alpha")
+
+    await CreateSimulatorEntityUseCase(uow=uow, connections=connections).execute(
         CreateSimulatorEntityCommand(
             tenant_id="tnt_alpha",
-            sandbox_id=created_sbx.sandbox.id,
+            connection_id=conn.id,
             entity_name="events",
             sample_blueprint={"event_id": "EVT-1", "updated_at": "2026-05-01T00:00:00Z"},
             chaos_policy=SimulatorChaosPolicy(egress_http_error_rate_percent=50.0).to_dict(),
         )
     )
-    connector = UniversalSchemaSimulatorConnector(sandbox_reader=repo)
+    connector = UniversalSchemaSimulatorConnector(entity_reader=repo)
 
     attempt_outcomes: set[bool] = set()
     for attempt in range(1, 12):
@@ -531,8 +508,10 @@ async def test_connector_write_chaos_varies_across_retry_attempts() -> None:
                 payload={"event_id": "EVT-RETRY", "updated_at": "2026-05-01T00:00:00Z"},
                 attempt_number=attempt,
             ),
-            public_config={"sandbox_id": created_sbx.sandbox.id, "seed": 11},
-            credentials={"api_key": created_sbx.api_key},
+            public_config={"seed": 11},
+            credentials={},
+            tenant_id="tnt_alpha",
+            connection_id=conn.id,
         )
         attempt_outcomes.add(res.success)
     assert attempt_outcomes == {True, False}
@@ -546,8 +525,100 @@ async def test_connector_write_chaos_varies_across_retry_attempts() -> None:
                 operation="CREATE",
                 payload={"event_id": f"EVT-ANON-{idx}", "updated_at": "2026-05-01T00:00:00Z"},
             ),
-            public_config={"sandbox_id": created_sbx.sandbox.id, "seed": 11},
-            credentials={"api_key": created_sbx.api_key},
+            public_config={"seed": 11},
+            credentials={},
+            tenant_id="tnt_alpha",
+            connection_id=conn.id,
         )
         anon_outcomes.add(res.success)
     assert anon_outcomes == {True, False}
+
+
+async def test_connector_discover_returns_empty_streams_when_zero_entities_exist() -> None:
+    repo = InMemorySimulatorRepository()
+    connector = UniversalSchemaSimulatorConnector(entity_reader=repo)
+
+    catalog = await connector.discover(
+        connection_id="conn_empty_sim",
+        public_config={"seed": 42, "records_per_pull": 25},
+        credentials={},
+        tenant_id="tnt_alpha",
+    )
+
+    assert catalog.success is True
+    assert catalog.error is None
+    assert tuple(catalog.streams) == ()
+
+
+async def test_connector_discover_returns_error_when_runtime_scope_is_invalid() -> None:
+    unbound_connector = UniversalSchemaSimulatorConnector(entity_reader=None)
+    no_reader_catalog = await unbound_connector.discover(
+        connection_id="conn_sim_1",
+        public_config={"seed": 42},
+        credentials={},
+        tenant_id="tnt_alpha",
+    )
+    assert no_reader_catalog.success is False
+    assert no_reader_catalog.error is not None
+    assert no_reader_catalog.error.code == IpErrorCode.INVALID_CONFIG
+
+    repo = InMemorySimulatorRepository()
+    connector = UniversalSchemaSimulatorConnector(entity_reader=repo)
+    missing_tenant_catalog = await connector.discover(
+        connection_id="conn_sim_1",
+        public_config={"seed": 42},
+        credentials={},
+        tenant_id="",
+    )
+    assert missing_tenant_catalog.success is False
+    assert missing_tenant_catalog.error is not None
+    assert missing_tenant_catalog.error.code == IpErrorCode.INVALID_CONFIG
+
+
+async def test_session_scoped_reader_raises_runtime_error_without_database_binding() -> None:
+    reader = SqlAlchemySessionScopedSimulatorEntityReader()
+
+    with pytest.raises(RuntimeError, match="no bound DatabaseRouterPort or DatabaseProvider"):
+        await reader.list_entities_by_connection("tnt_alpha", "conn_sim_1")
+
+    with pytest.raises(RuntimeError, match="no bound DatabaseRouterPort or DatabaseProvider"):
+        await reader.get_entity_by_name("tnt_alpha", "conn_sim_1", "orders")
+
+
+async def test_simulated_push_rejects_non_simulator_connection_with_400() -> None:
+    repo = InMemorySimulatorRepository()
+    cipher = FakeCipher()
+    cp_uow = FakeControlPlaneUnitOfWork()
+    non_sim_conn = Connection.create(
+        tenant_id="tnt_alpha",
+        app_id="quickbooks",
+        name="QuickBooks Prod",
+        auth_type=AuthType.NO_AUTH,
+        public_config={},
+        encrypted_credentials=b"",
+        endpoint_for_fingerprint="QuickBooks Prod",
+    )
+    non_sim_conn.activate()
+    await cp_uow.connections.save(non_sim_conn)
+
+    push_uc = TriggerSimulatedPushUseCase(
+        data_plane_uow_provider=_StaticDataPlaneUoWProvider(FakeDataPlaneUnitOfWork()),
+        tiered_storage=FakeTieredStorage(),
+        verifier=NoOpVerifier(),
+        decoder=StandardInboundPayloadDecoder(),
+        ack=StandardInboundAck(),
+        token_manager=TokenManagerService(control_plane_uow=cp_uow, cipher=cipher),
+        entity_reader=repo,
+    )
+    res = await push_uc.execute(
+        TriggerSimulatedPushCommand(
+            tenant_id="tnt_alpha",
+            connection_id=non_sim_conn.id,
+            stream_name="orders",
+            count=2,
+        )
+    )
+    assert res.is_err
+    err = res.unwrap_err()
+    assert err.code == IpErrorCode.INVALID_CONFIG
+    assert err.http_status == 400

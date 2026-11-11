@@ -414,6 +414,8 @@ class RunSyncUseCase:
             credentials=credentials,
             cursor=read_cursor,
             limit=command.page_batch_size,
+            tenant_id=connection.tenant_id,
+            connection_id=connection.id,
         ):
             if page_index >= command.max_pages:
                 logger.info(

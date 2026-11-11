@@ -346,7 +346,12 @@ class FakePagingConnector(SourceConnectorPort):
         raise NotImplementedError
 
     async def discover(
-        self, connection_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         raise NotImplementedError
 
@@ -357,6 +362,9 @@ class FakePagingConnector(SourceConnectorPort):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         return []
 
@@ -367,7 +375,11 @@ class FakePagingConnector(SourceConnectorPort):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (tenant_id, connection_id)
         self.read_called_cursor = cursor
         for batch in self._record_batches:
             for item in batch:
@@ -380,7 +392,14 @@ class FakePagingConnector(SourceConnectorPort):
                 )
 
     async def fetch_record(
-        self, stream_name: str, record_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        stream_name: str,
+        record_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
         return None
 

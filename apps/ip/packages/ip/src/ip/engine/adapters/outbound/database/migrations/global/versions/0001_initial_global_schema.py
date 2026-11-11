@@ -75,6 +75,7 @@ def upgrade() -> None:
     op.create_table(
         "connection_catalogs",
         sa.Column("id", sa.String(length=64), nullable=False),
+        sa.Column("tenant_id", sa.String(length=64), nullable=False),
         sa.Column("connection_id", sa.String(length=64), nullable=False),
         sa.Column(
             "catalog_version",
@@ -87,15 +88,24 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
         sa.Column("discovered_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["connection_id"],
+            ["ip.connections.id"],
+            name="fk_ip_connection_catalogs_connection_id",
+            ondelete="CASCADE",
+        ),
         sa.UniqueConstraint(
-            "connection_id", "catalog_version", name="uq_ip_catalog_connection_version"
+            "tenant_id",
+            "connection_id",
+            "catalog_version",
+            name="uq_ip_catalog_connection_version",
         ),
         schema="ip",
     )
     op.create_index(
-        op.f("ix_ip_connection_catalogs_connection_id"),
+        "idx_ip_connection_catalogs_tenant_conn",
         "connection_catalogs",
-        ["connection_id"],
+        ["tenant_id", "connection_id"],
         unique=False,
         schema="ip",
     )
@@ -412,7 +422,7 @@ def downgrade() -> None:
     )
     op.drop_table("outbox", schema="ip", if_exists=True)
     op.drop_index(
-        op.f("ix_ip_connection_catalogs_connection_id"),
+        "idx_ip_connection_catalogs_tenant_conn",
         table_name="connection_catalogs",
         schema="ip",
         if_exists=True,

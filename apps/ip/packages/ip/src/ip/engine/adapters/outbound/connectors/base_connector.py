@@ -227,8 +227,12 @@ class BaseConnector(ConnectorPort, ABC):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str,
+        connection_id: str,
     ) -> RecordEnvelopeDTO | None:
         """Default fetch_record implementation returning None when unsupported."""
+        _ = (tenant_id, connection_id)
         return None
 
     @staticmethod

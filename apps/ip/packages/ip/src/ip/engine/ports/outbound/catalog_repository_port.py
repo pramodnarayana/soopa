@@ -17,16 +17,18 @@ class CatalogRepositoryPort(Protocol):
     @abstractmethod
     async def get_active_by_connection_id(
         self,
+        tenant_id: str,
         connection_id: str,
     ) -> ConnectionCatalog | None:
-        """Retrieves the active catalog schema for a given connection."""
+        """Retrieves the active catalog schema for a tenant's connection."""
         ...
 
     @abstractmethod
     async def get_by_version(
         self,
+        tenant_id: str,
         connection_id: str,
         version: int,
     ) -> ConnectionCatalog | None:
-        """Retrieves a specific historical version of a connection's catalog."""
+        """Retrieves a specific historical version of a tenant connection's catalog."""
         ...

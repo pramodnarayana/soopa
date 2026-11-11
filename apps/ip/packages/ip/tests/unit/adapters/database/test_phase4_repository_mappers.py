@@ -148,6 +148,7 @@ def test_control_plane_repository_bidirectional_mappers() -> None:
 
     catalog = ConnectionCatalog(
         id=generate_id(IpIdPrefix.CATALOG.value),
+        tenant_id=tenant_id,
         connection_id=connection_id,
         catalog_version=1,
         catalog_hash="sha256_catalog_digest",
@@ -164,7 +165,9 @@ def test_control_plane_repository_bidirectional_mappers() -> None:
         discovered_at=now.isoformat(),
     )
     cat_orm = SqlAlchemyCatalogRepository._to_orm_model(catalog)
-    assert SqlAlchemyCatalogRepository._to_domain_model(cat_orm).streams[0].name == "records_alpha"
+    restored_cat = SqlAlchemyCatalogRepository._to_domain_model(cat_orm)
+    assert restored_cat.tenant_id == tenant_id
+    assert restored_cat.streams[0].name == "records_alpha"
 
     connection = Connection(
         id=connection_id,

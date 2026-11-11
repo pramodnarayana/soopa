@@ -340,7 +340,11 @@ async def discover_connection_catalog(
                 else (
                     status.HTTP_409_CONFLICT
                     if dto.error.code == IpErrorCode.CONNECTION_PENDING_AUTH
-                    else status.HTTP_502_BAD_GATEWAY
+                    else (
+                        dto.error.http_status
+                        if 400 <= dto.error.http_status < 500
+                        else status.HTTP_502_BAD_GATEWAY
+                    )
                 )
             )
             return from_ip_error(dto.error, status_code_override=status_override)

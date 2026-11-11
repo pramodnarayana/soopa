@@ -146,8 +146,11 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         connection_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         """Discovers master data entities (service_points) with default canonical L3 transformation bindings."""
+        _ = tenant_id
         streams = (
             StreamSchemaDTO(
                 name=self.STREAM_SERVICE_POINTS,
@@ -185,8 +188,12 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         """Lists discrete record keys from the simulated feeder."""
+        _ = (tenant_id, connection_id)
         meter_count = min(
             max(1, _extract_int(public_config, "meter_count", default=5)),
             self.MAX_SIMULATOR_METER_COUNT,
@@ -211,8 +218,12 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         """Streams synthetic Green Button / CIM interval readings and topologies."""
+        _ = (tenant_id, connection_id)
         meter_count = min(
             max(1, _extract_int(public_config, "meter_count", default=5)),
             self.MAX_SIMULATOR_METER_COUNT,
@@ -290,8 +301,12 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
         """Fetches a single synthetic record by its primary key."""
+        _ = (tenant_id, connection_id)
         meter_count = _extract_int(public_config, "meter_count", default=5)
         gen = self._resolve_generator(public_config)
         service_points = gen.generate_service_points(count=meter_count)
@@ -335,8 +350,12 @@ class EnergyAmiSimulatorConnector(BaseConnector):
         command: WriteRecordCommand,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> WriteResultDTO:
         """Write operations are rejected as this connector is a read-only interval data source."""
+        _ = (tenant_id, connection_id)
         return WriteResultDTO(
             success=False,
             record_id=command.record_id or "unsupported",

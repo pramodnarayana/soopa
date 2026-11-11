@@ -42,15 +42,12 @@ import {
   Compass,
   Copy,
   Database,
-  Pencil,
   Play,
-  Plus,
   Radio,
   Search,
   ShieldAlert,
-  Trash2,
 } from 'lucide-react';
-import React, { useId, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useCatalogAppSpecQuery } from '../../application/use-catalog-queries';
 import {
@@ -62,10 +59,7 @@ import {
   useSimulatePushMutation,
   useUpdateConnectionMutation,
 } from '../../application/use-connection-queries';
-import {
-  useDeleteSimulatorEntityMutation,
-  useSimulatorEntitiesQuery,
-} from '../../application/use-simulator-queries';
+import { useSimulatorEntitiesQuery } from '../../application/use-simulator-queries';
 import {
   useStreamStatesQuery,
   useSyncRunsQuery,
@@ -84,11 +78,9 @@ import {
   SyncRunStatus,
   UNIVERSAL_SIMULATOR_APP_ID,
 } from '../../domain/enums';
-import { extractSimulatorSandboxId, type SimulatorEntity } from '../../domain/simulator';
 import type { StreamState, SyncRun } from '../../domain/sync-run';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { formatRelativeTimestamp, mapSyncRunStatusTone } from '../shared/status-mapping';
-import { CreateSimulatorEntityModal } from './CreateSimulatorEntityModal';
 import {
   isPropertyVisible,
   isSecretConnectorProperty,
@@ -106,171 +98,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function VirtualSandboxEntitiesPanel({
-  sandboxId,
-  onCreateEntity,
-  onEditEntity,
-  onProblem,
-}: {
-  readonly sandboxId: string;
-  readonly onCreateEntity: () => void;
-  readonly onEditEntity: (entity: SimulatorEntity) => void;
-  readonly onProblem: (problem: ApiProblem | null) => void;
-}) {
-  const headingId = useId();
-  const entitiesView = useSimulatorEntitiesQuery(sandboxId);
-  const deleteEntityMutation = useDeleteSimulatorEntityMutation(sandboxId);
-  const entities = entitiesView.data ?? [];
-
-  React.useEffect(() => {
-    if (entitiesView.problem) {
-      onProblem(entitiesView.problem);
-    }
-  }, [entitiesView.problem, onProblem]);
-
-  const handleDeleteEntity = async (entity: SimulatorEntity): Promise<void> => {
-    onProblem(null);
-    const res = await deleteEntityMutation.mutateAsync(entity.id);
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    toast.success(`Removed entity "${entity.entityName}" from Virtual Sandbox.`);
-  };
-
-  return (
-    <div className="mt-6 space-y-3 border-t border-border pt-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="space-y-0.5">
-          <h4
-            id={headingId}
-            className="text-xs font-semibold text-foreground uppercase tracking-wider"
-          >
-            Virtual Sandbox Entities
-          </h4>
-          <p className="text-xs text-muted-foreground">
-            Configured inside Virtual Sandbox <span className="font-mono">{sandboxId}</span>. Run
-            Discover Entities in the Entities tab to import schema updates into the Connection
-            Catalog.
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={onCreateEntity}
-          className="gap-1.5 text-xs"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          <span>Add Sandbox Entity</span>
-        </Button>
-      </div>
-
-      <div
-        tabIndex={0}
-        role="region"
-        aria-labelledby={headingId}
-        className="max-h-96 overflow-auto rounded-xl border border-border bg-card"
-      >
-        <Table>
-          <TableHeader className="sticky top-0 z-10 border-b border-border bg-muted/90 backdrop-blur-xs">
-            <TableRow className="border-0 hover:bg-transparent">
-              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
-                Entity
-              </TableHead>
-              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
-                Primary Key
-              </TableHead>
-              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
-                Cursor
-              </TableHead>
-              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
-                Batch Size
-              </TableHead>
-              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
-                Velocity
-              </TableHead>
-              <TableHead className="px-3 py-2 text-xs font-semibold text-foreground">
-                Version
-              </TableHead>
-              <TableHead className="px-3 py-2 text-right text-xs font-semibold text-foreground">
-                Actions
-              </TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {entitiesView.isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-20 text-center text-xs text-muted-foreground">
-                  Loading Virtual Sandbox entities...
-                </TableCell>
-              </TableRow>
-            ) : entities.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-20 text-center text-xs text-muted-foreground">
-                  No entities configured in this Virtual Sandbox yet. Click Create Entity to define
-                  your first blueprint.
-                </TableCell>
-              </TableRow>
-            ) : (
-              entities.map((entity) => (
-                <TableRow key={entity.id}>
-                  <th
-                    scope="row"
-                    className="sticky left-0 bg-card px-3 py-2 text-left font-mono text-xs font-semibold text-foreground"
-                  >
-                    {entity.entityName}
-                  </th>
-                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                    {entity.primaryKeyField}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                    {entity.cursorField}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 font-mono text-xs tabular-nums">
-                    {entity.recordsPerPull}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 text-xs">
-                    <StatusBadge label={entity.velocityMode} tone={StatusTone.NEUTRAL} />
-                  </TableCell>
-                  <TableCell className="px-3 py-2 font-mono text-xs tabular-nums">
-                    v{entity.version}
-                  </TableCell>
-                  <TableCell className="px-3 py-2 text-right">
-                    <div className="inline-flex items-center gap-1.5">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => onEditEntity(entity)}
-                        className="h-7 gap-1 px-2 text-xs"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        <span>Edit</span>
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={deleteEntityMutation.isPending}
-                        onClick={() => void handleDeleteEntity(entity)}
-                        className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        <span>Delete</span>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
 export function ConnectionOverviewTab({
   connection,
   onProblem,
@@ -284,16 +111,12 @@ export function ConnectionOverviewTab({
 }) {
   const [name, setName] = useState(connection.name);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [createEntityModalOpen, setCreateEntityModalOpen] = useState(false);
-  const [editingEntity, setEditingEntity] = useState<SimulatorEntity | null>(null);
   const specView = useCatalogAppSpecQuery(connection.appId);
   const relinkMutation = useRelinkConnectionMutation(connection.id);
   const updateMutation = useUpdateConnectionMutation(connection.id);
   const deactivateMutation = useDeactivateConnectionMutation(connection.id);
   const deleteMutation = useDeleteConnectionMutation(connection.id);
   const isDeactivated = connection.status === ConnectionStatus.DEACTIVATED;
-  const isSimulator = connection.appId === UNIVERSAL_SIMULATOR_APP_ID;
-  const sandboxId = isSimulator ? extractSimulatorSandboxId(connection.publicConfig) : null;
   const isSaving = relinkMutation.isPending || updateMutation.isPending;
 
   const allProperties = specView.data?.properties ?? [];
@@ -402,21 +225,6 @@ export function ConnectionOverviewTab({
             Connection Details
           </h4>
           <div className="flex items-center gap-2">
-            {isSimulator && sandboxId ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setEditingEntity(null);
-                  setCreateEntityModalOpen(true);
-                }}
-                className="gap-1.5 text-xs"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span>Create Entity</span>
-              </Button>
-            ) : null}
             <Button type="submit" size="sm" disabled={isSaving || !isDirty} className="text-xs">
               {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
@@ -520,35 +328,6 @@ export function ConnectionOverviewTab({
           ) : null}
         </div>
       </form>
-
-      {isSimulator && sandboxId ? (
-        <>
-          <VirtualSandboxEntitiesPanel
-            sandboxId={sandboxId}
-            onCreateEntity={() => {
-              setEditingEntity(null);
-              setCreateEntityModalOpen(true);
-            }}
-            onEditEntity={(entity) => {
-              setEditingEntity(entity);
-              setCreateEntityModalOpen(true);
-            }}
-            onProblem={onProblem}
-          />
-          <CreateSimulatorEntityModal
-            open={createEntityModalOpen}
-            onOpenChange={(nextOpen) => {
-              setCreateEntityModalOpen(nextOpen);
-              if (!nextOpen) {
-                setEditingEntity(null);
-              }
-            }}
-            sandboxId={sandboxId}
-            editingEntity={editingEntity}
-            onProblem={onProblem}
-          />
-        </>
-      ) : null}
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -793,6 +572,29 @@ export async function commitStreamScheduleConfigUpdate(params: {
   return true;
 }
 
+export function reconcileSelectedStreamNames(
+  previous: Set<string>,
+  validStreamNames: ReadonlySet<string>,
+  newlyAddedStreams: readonly string[],
+): Set<string> {
+  let mutated = false;
+  const next = new Set<string>();
+  for (const name of previous) {
+    if (validStreamNames.has(name)) {
+      next.add(name);
+    } else {
+      mutated = true;
+    }
+  }
+  for (const added of newlyAddedStreams) {
+    if (validStreamNames.has(added) && !next.has(added)) {
+      next.add(added);
+      mutated = true;
+    }
+  }
+  return mutated ? next : previous;
+}
+
 export function ConnectionEntitiesSyncTab({
   connectionId,
   connection,
@@ -809,11 +611,13 @@ export function ConnectionEntitiesSyncTab({
   const [streamCustomDates, setStreamCustomDates] = useState<Record<string, string>>({});
   const [streamSchedules, setStreamSchedules] = useState<Record<string, string>>({});
   const [expandedStreams, setExpandedStreams] = useState<Set<string>>(new Set());
+  const [hasDiscoveredEmpty, setHasDiscoveredEmpty] = useState(false);
 
   const isAuthPending = connection?.status === ConnectionStatus.PENDING_AUTH;
   const isSimulator = connection?.appId === UNIVERSAL_SIMULATOR_APP_ID;
 
-  const catalogView = useConnectionCatalogQuery(connectionId, !isAuthPending);
+  const catalogView = useConnectionCatalogQuery(connectionId, false);
+  const simulatorEntitiesView = useSimulatorEntitiesQuery(connectionId, Boolean(isSimulator));
   const statesView = useStreamStatesQuery(connectionId);
   const runsView = useSyncRunsQuery(connectionId, 40);
   const triggerMutation = useTriggerSyncRunMutation(connectionId);
@@ -840,13 +644,7 @@ export function ConnectionEntitiesSyncTab({
     }
   }, [connection?.publicConfig?.stream_schedules]);
 
-  React.useEffect(() => {
-    if (catalogView.problem) {
-      onProblem(catalogView.problem);
-    }
-  }, [catalogView.problem, onProblem]);
-
-  // Build entity rows strictly from recorded stream states and user-selected entities
+  // Build entity rows from recorded stream states, simulator entities, and user-selected entities
   const entityRows = useMemo<EntityRow[]>(() => {
     const statesMap = new Map<string, StreamState>();
     for (const st of statesView.data ?? []) {
@@ -884,7 +682,26 @@ export function ConnectionEntitiesSyncTab({
       });
     }
 
-    // 2. Add user-selected entities (explicitly added from discovered catalog or picker)
+    // 2. For Simulator connections, display configured simulator entities immediately
+    if (isSimulator) {
+      for (const simEnt of simulatorEntitiesView.data ?? []) {
+        if (!seenStreams.has(simEnt.entityName)) {
+          seenStreams.add(simEnt.entityName);
+          rows.push({
+            streamName: simEnt.entityName,
+            canonical: 'CANONICAL_RECORD',
+            status: EntityRowLocalStatus.UNSYNCED,
+            syncMode: SyncRunKind.INCREMENTAL,
+            cursorField: simEnt.cursorField,
+            cursorValue: null,
+            recordsSyncedCount: 0,
+            lastSyncedAt: null,
+          });
+        }
+      }
+    }
+
+    // 3. Add user-selected entities (explicitly added from discovered catalog or picker)
     for (const sName of userSelectedStreams) {
       if (!seenStreams.has(sName)) {
         seenStreams.add(sName);
@@ -903,7 +720,14 @@ export function ConnectionEntitiesSyncTab({
     }
 
     return rows;
-  }, [statesView.data, runsView.data, userSelectedStreams, catalogView.data?.streams]);
+  }, [
+    statesView.data,
+    runsView.data,
+    isSimulator,
+    simulatorEntitiesView.data,
+    userSelectedStreams,
+    catalogView.data?.streams,
+  ]);
 
   // Active stream names (already in the table)
   const activeStreamNames = useMemo(() => {
@@ -937,7 +761,7 @@ export function ConnectionEntitiesSyncTab({
   const [selectedStreams, setSelectedStreams] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     for (const row of entityRows) {
-      if (row.recordsSyncedCount > 0) {
+      if (row.recordsSyncedCount > 0 || isSimulator) {
         initial.add(row.streamName);
       }
     }
@@ -957,6 +781,23 @@ export function ConnectionEntitiesSyncTab({
       });
     }
   }, [statesView.data]);
+
+  const seenSimulatorStreamsRef = React.useRef<Set<string>>(
+    new Set(isSimulator ? (simulatorEntitiesView.data ?? []).map((e) => e.entityName) : []),
+  );
+  React.useEffect(() => {
+    const currentSimNames = isSimulator
+      ? (simulatorEntitiesView.data ?? []).map((e) => e.entityName)
+      : [];
+    const newlyAddedSim = currentSimNames.filter((n) => !seenSimulatorStreamsRef.current.has(n));
+    seenSimulatorStreamsRef.current = new Set(currentSimNames);
+    if (newlyAddedSim.length > 0) {
+      setHasDiscoveredEmpty(false);
+    }
+    setSelectedStreams((prev) =>
+      reconcileSelectedStreamNames(prev, activeStreamNames, newlyAddedSim),
+    );
+  }, [activeStreamNames, isSimulator, simulatorEntitiesView.data]);
 
   const handleSelectDiscoveredEntity = (streamName: string) => {
     const trimmed = streamName.trim();
@@ -1062,6 +903,12 @@ export function ConnectionEntitiesSyncTab({
       return;
     }
     const discoveredNames = res.value.streams.map((s) => s.name);
+    if (discoveredNames.length === 0) {
+      setHasDiscoveredEmpty(true);
+      toast.info('No entities found.');
+      return;
+    }
+    setHasDiscoveredEmpty(false);
     setUserSelectedStreams((prev) => Array.from(new Set([...prev, ...discoveredNames])));
     setSelectedStreams((prev) => new Set([...prev, ...discoveredNames]));
     toast.success(`Discovered ${discoveredNames.length} entity stream(s).`);
@@ -1545,7 +1392,11 @@ export function ConnectionEntitiesSyncTab({
                   colSpan={entityColumns.length}
                   className="h-32 text-center text-xs text-muted-foreground"
                 >
-                  {isAuthPending ? 'Authentication Pending' : 'No entities'}
+                  {isAuthPending
+                    ? 'Authentication Pending'
+                    : hasDiscoveredEmpty
+                      ? 'No entities found'
+                      : 'No entities'}
                 </TableCell>
               </TableRow>
             ) : (
@@ -1581,7 +1432,26 @@ export function ConnectionEntitiesSyncTab({
                           const streamInfo = catalogView.data?.streams.find(
                             (s) => s.name === row.original.streamName,
                           );
-                          const fields = streamInfo?.fields ?? [];
+                          const simEntity = isSimulator
+                            ? (simulatorEntitiesView.data ?? []).find(
+                                (e) => e.entityName === row.original.streamName,
+                              )
+                            : undefined;
+                          const fields =
+                            streamInfo?.fields ??
+                            (simEntity && isPlainRecord(simEntity.inferredJsonSchema.properties)
+                              ? Object.entries(simEntity.inferredJsonSchema.properties).map(
+                                  ([fieldName, rawDef]) => ({
+                                    name: fieldName,
+                                    dataType:
+                                      isPlainRecord(rawDef) && typeof rawDef.type === 'string'
+                                        ? rawDef.type
+                                        : 'string',
+                                    nullable: fieldName !== simEntity.primaryKeyField,
+                                    description: null,
+                                  }),
+                                )
+                              : []);
                           return (
                             <div className="space-y-2">
                               <span className="font-semibold text-foreground text-xs uppercase tracking-wider">

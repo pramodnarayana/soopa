@@ -1,4 +1,4 @@
-"""Universal Schema-Driven Sandbox Simulator package (Virtual External System)."""
+"""Universal Schema-Driven Sandbox Simulator package."""
 
 from __future__ import annotations
 
@@ -10,15 +10,9 @@ from ip.solutions.connectors.sandbox.universal.connector import (
     UniversalSchemaSimulatorConnector,
 )
 from ip.solutions.connectors.sandbox.universal.dto import (
-    SIMULATOR_API_KEY_PREFIX,
     SIMULATOR_ENTITY_ID_PREFIX,
-    SIMULATOR_SANDBOX_ID_PREFIX,
     SimulatorEntityDTO,
-    SimulatorSandboxDTO,
     entity_dto_to_stream_spec,
-    generate_sandbox_api_key,
-    hash_sandbox_api_key,
-    verify_sandbox_api_key,
 )
 from ip.solutions.connectors.sandbox.universal.inference import (
     ValidatedEntityBlueprint,
@@ -30,13 +24,11 @@ from ip.solutions.connectors.sandbox.universal.inference import (
 )
 from ip.solutions.connectors.sandbox.universal.ports import (
     DuplicateSimulatorEntityError,
-    DuplicateSimulatorSandboxError,
     SimulatorApiProviderPort,
     SimulatorEntityNotFoundError,
     SimulatorEntityQuotaExceededError,
+    SimulatorEntityReaderPort,
     SimulatorRepositoryPort,
-    SimulatorSandboxNotFoundError,
-    SimulatorSandboxReaderPort,
     SimulatorUnitOfWorkPort,
 )
 from ip.solutions.connectors.sandbox.universal.simulate_push_use_case import (
@@ -47,7 +39,7 @@ from ip.solutions.connectors.sandbox.universal.simulate_push_use_case import (
 )
 from ip.solutions.connectors.sandbox.universal.spec import (
     MAX_SAMPLE_BLUEPRINT_BYTES,
-    MAX_SIMULATOR_ENTITIES_PER_SANDBOX,
+    MAX_SIMULATOR_ENTITIES_PER_CONNECTION,
     UNIVERSAL_SIMULATOR_APP_ID,
     SimulatorConnectionConfig,
     SimulatorStreamSpec,
@@ -61,48 +53,27 @@ from ip.solutions.connectors.sandbox.universal.synthesizer import (
 from ip.solutions.connectors.sandbox.universal.use_cases import (
     CreateSimulatorEntityCommand,
     CreateSimulatorEntityUseCase,
-    CreateSimulatorSandboxCommand,
-    CreateSimulatorSandboxResult,
-    CreateSimulatorSandboxUseCase,
     DeleteSimulatorEntityCommand,
     DeleteSimulatorEntityUseCase,
-    DeleteSimulatorSandboxCommand,
-    DeleteSimulatorSandboxUseCase,
-    GetSimulatorSandboxQuery,
-    GetSimulatorSandboxUseCase,
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
-    ListSimulatorSandboxesQuery,
-    ListSimulatorSandboxesUseCase,
     UpdateSimulatorEntityCommand,
     UpdateSimulatorEntityUseCase,
 )
 
 __all__ = [
     "MAX_SAMPLE_BLUEPRINT_BYTES",
-    "MAX_SIMULATOR_ENTITIES_PER_SANDBOX",
-    "SIMULATOR_API_KEY_PREFIX",
+    "MAX_SIMULATOR_ENTITIES_PER_CONNECTION",
     "SIMULATOR_ENTITY_ID_PREFIX",
-    "SIMULATOR_SANDBOX_ID_PREFIX",
     "UNIVERSAL_SIMULATOR_APP_ID",
     "CreateSimulatorEntityCommand",
     "CreateSimulatorEntityUseCase",
-    "CreateSimulatorSandboxCommand",
-    "CreateSimulatorSandboxResult",
-    "CreateSimulatorSandboxUseCase",
     "DeleteSimulatorEntityCommand",
     "DeleteSimulatorEntityUseCase",
-    "DeleteSimulatorSandboxCommand",
-    "DeleteSimulatorSandboxUseCase",
     "DuplicateSimulatorEntityError",
-    "DuplicateSimulatorSandboxError",
-    "GetSimulatorSandboxQuery",
-    "GetSimulatorSandboxUseCase",
     "JsonSchemaRecordSynthesizer",
     "ListSimulatorEntitiesQuery",
     "ListSimulatorEntitiesUseCase",
-    "ListSimulatorSandboxesQuery",
-    "ListSimulatorSandboxesUseCase",
     "SimulatePushResultDTO",
     "SimulatedFaultType",
     "SimulatedPushDeliveryStyle",
@@ -112,10 +83,8 @@ __all__ = [
     "SimulatorEntityDTO",
     "SimulatorEntityNotFoundError",
     "SimulatorEntityQuotaExceededError",
+    "SimulatorEntityReaderPort",
     "SimulatorRepositoryPort",
-    "SimulatorSandboxDTO",
-    "SimulatorSandboxNotFoundError",
-    "SimulatorSandboxReaderPort",
     "SimulatorStreamSpec",
     "SimulatorSubmissionStatus",
     "SimulatorUnitOfWorkPort",
@@ -130,10 +99,7 @@ __all__ = [
     "build_validated_entity_blueprint",
     "entity_dto_to_stream_spec",
     "extract_stream_schema_dto",
-    "generate_sandbox_api_key",
-    "hash_sandbox_api_key",
     "infer_json_schema_from_sample",
     "parse_simulator_connection_config",
     "validate_entity_name",
-    "verify_sandbox_api_key",
 ]

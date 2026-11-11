@@ -15,6 +15,7 @@ import {
   ConnectionEntitiesSyncTab,
   ConnectionOverviewTab,
   commitStreamScheduleConfigUpdate,
+  reconcileSelectedStreamNames,
 } from '../presentation/connections/ConnectionDetailTabs';
 import {
   CreateSimulatorEntityForm,
@@ -22,6 +23,8 @@ import {
   inferSimulatorEntityNameFromFilename,
   parseSimulatorBlueprint,
 } from '../presentation/connections/CreateSimulatorEntityModal';
+import { IpConnectionDetailPage } from '../presentation/connections/IpConnectionDetailPage';
+import { SimulatorEntitiesSection } from '../presentation/connections/SimulatorEntitiesSection';
 import { IpUIProvider } from '../provider/IpUIProvider';
 import {
   createInMemoryIpWorkspaceSeed,
@@ -30,7 +33,6 @@ import {
   SEED_CONNECTION_ID,
   SEED_SIMULATOR_APP_SPEC,
   SEED_SIMULATOR_ENTITY,
-  SEED_SIMULATOR_SANDBOX_ID,
   SEED_STREAM_STATE,
   SEED_SYNC_RUN,
   SEED_TENANT_ID,
@@ -47,7 +49,7 @@ function createEntitiesQueryClient(): QueryClient {
     ok(SEED_SIMULATOR_APP_SPEC),
   );
   qc.setQueryData(
-    ipQueryKeys.simulator.entities(SEED_TENANT_ID, SEED_SIMULATOR_SANDBOX_ID),
+    ipQueryKeys.simulator.entities(SEED_TENANT_ID, SEED_CONNECTION_ID),
     ok([SEED_SIMULATOR_ENTITY]),
   );
   qc.setQueryData(
@@ -205,14 +207,13 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(html).toContain('Search Entities');
   });
 
-  it('renders Virtual Sandbox Entities panel inside ConnectionOverviewTab while keeping ConnectionEntitiesSyncTab focused on discovery', () => {
+  it('keeps ConnectionOverviewTab uniform while rendering standalone SimulatorEntitiesSection for Simulator connections', () => {
     const qc = createEntitiesQueryClient();
     const simConnection = {
       ...SEED_CONNECTION,
       appId: UNIVERSAL_SIMULATOR_APP_ID,
-      authType: AuthType.API_KEY,
+      authType: AuthType.NO_AUTH,
       publicConfig: {
-        sandbox_id: SEED_SIMULATOR_SANDBOX_ID,
         seed: 42,
       },
     };
@@ -224,12 +225,21 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
       />,
       qc,
     );
-    expect(overviewHtml).toContain('Create Entity');
-    expect(overviewHtml).toContain('Virtual Sandbox Entities');
-    expect(overviewHtml).toContain(SEED_SIMULATOR_SANDBOX_ID);
-    expect(overviewHtml).toContain('orders');
-    expect(overviewHtml).toContain('role="region"');
-    expect(overviewHtml).toContain('tabindex="0"');
+    expect(overviewHtml).toContain('Connection Details');
+    expect(overviewHtml).not.toContain('Create Entity');
+    expect(overviewHtml).not.toContain('Simulator Entities');
+    expect(overviewHtml).not.toContain('Virtual Sandbox');
+
+    const simulatorSectionHtml = renderEntitiesTab(
+      <SimulatorEntitiesSection connectionId={SEED_CONNECTION_ID} onProblem={() => undefined} />,
+      qc,
+    );
+    expect(simulatorSectionHtml).toContain('Simulator Entities');
+    expect(simulatorSectionHtml).toContain('Create Entity');
+    expect(simulatorSectionHtml).toContain('Records per Pull');
+    expect(simulatorSectionHtml).toContain('orders');
+    expect(simulatorSectionHtml).toContain('role="region"');
+    expect(simulatorSectionHtml).toContain('tabindex="0"');
 
     const entitiesHtml = renderEntitiesTab(
       <ConnectionEntitiesSyncTab
@@ -242,6 +252,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     );
 
     expect(entitiesHtml).not.toContain('Create Entity');
+    expect(entitiesHtml).toContain('orders');
     expect(entitiesHtml).toContain('Discover Entities');
     expect(entitiesHtml).toContain('Webhook');
     expect(entitiesHtml).toContain('Simulate Push');
@@ -304,14 +315,14 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     ).toBe(false);
   });
 
-  it('rejects duplicate Virtual Sandbox entity names while permitting edits on the same entity record', () => {
+  it('rejects duplicate Simulator entity names while permitting edits on the same entity record', () => {
     const existing = [
       { id: 'siment_1', entityName: 'orders' },
       { id: 'siment_2', entityName: 'invoices' },
     ];
 
     expect(findDuplicateSimulatorEntityError(existing, 'Orders')).toContain(
-      'already exists in this Virtual Sandbox',
+      'already exists in this Simulator connection',
     );
     expect(findDuplicateSimulatorEntityError(existing, 'orders', 'siment_1')).toBeNull();
     expect(findDuplicateSimulatorEntityError(existing, 'customers')).toBeNull();
@@ -360,7 +371,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     const qc = createEntitiesQueryClient();
     const html = renderEntitiesTab(
       <CreateSimulatorEntityForm
-        sandboxId={SEED_SIMULATOR_SANDBOX_ID}
+        connectionId={SEED_CONNECTION_ID}
         onProblem={() => undefined}
         onCancel={() => undefined}
       />,
@@ -369,6 +380,9 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
 
     expect(html).toContain('Entity Name *');
     expect(html).toContain('Entity Blueprint (JSON) *');
+    expect(html).toContain('Primary Key');
+    expect(html).toContain('Cursor');
+    expect(html).toContain('Records per Pull');
     expect(html).toContain('Stream Velocity Mode');
     expect(html).toContain('name="velocity_mode"');
     expect(html).toContain('Upload .json');
@@ -376,6 +390,19 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(html).toContain('aria-labelledby=');
     expect(html.toLowerCase()).toContain('autocorrect="off"');
     expect(html).not.toContain('<textarea');
+    expect(html).not.toContain('Gear 1 OLTP records');
+    expect(html).not.toContain('Gear 2 columnar batches');
+  });
+
+  it('prunes removed Simulator stream names from batch sync selection while auto-selecting newly created streams', () => {
+    const initial = new Set(['orders', 'deleted_stream']);
+    const validAfterDelete = new Set(['orders', 'invoices']);
+
+    const reconciled = reconcileSelectedStreamNames(initial, validAfterDelete, ['invoices']);
+    expect([...reconciled]).toEqual(['orders', 'invoices']);
+
+    const unchanged = reconcileSelectedStreamNames(reconciled, validAfterDelete, []);
+    expect(unchanged).toBe(reconciled);
   });
 
   it('parses valid simulator JSON blueprints in a single pass while rejecting non-object payloads', () => {
@@ -391,42 +418,29 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(parseSimulatorBlueprint('{broken').ok).toBe(false);
   });
 
-  it('enforces authenticated Virtual Sandbox lifecycle across InMemorySimulatorRepository without polluting publicConfig', async () => {
+  it('scopes Simulator entity lifecycle directly to connectionId without polluting publicConfig', async () => {
     const harness = createInMemoryIpWorkspaceSeed();
-    const sbxRes = await harness.simulator.createSandbox(SEED_TENANT_ID, {
-      name: 'Orders Virtual Sandbox',
-    });
-    expect(sbxRes.ok).toBe(true);
-    if (!sbxRes.ok) return;
 
-    const badCheck = await harness.connections.checkConnection(SEED_TENANT_ID, {
+    const checkRes = await harness.connections.checkConnection(SEED_TENANT_ID, {
       appId: UNIVERSAL_SIMULATOR_APP_ID,
-      authType: AuthType.API_KEY,
-      publicConfig: { sandbox_id: sbxRes.value.id },
-      rawCredentials: { api_key: 'sbx_key_invalid' },
+      authType: AuthType.NO_AUTH,
+      publicConfig: { seed: 7 },
+      rawCredentials: {},
     });
-    expect(badCheck.ok && badCheck.value.status).toBe(ConnectionHandshakeStatus.AUTH_FAILED);
-
-    const goodCheck = await harness.connections.checkConnection(SEED_TENANT_ID, {
-      appId: UNIVERSAL_SIMULATOR_APP_ID,
-      authType: AuthType.API_KEY,
-      publicConfig: { sandbox_id: sbxRes.value.id },
-      rawCredentials: { api_key: sbxRes.value.apiKey },
-    });
-    expect(goodCheck.ok && goodCheck.value.status).toBe(ConnectionHandshakeStatus.VERIFIED);
+    expect(checkRes.ok && checkRes.value.status).toBe(ConnectionHandshakeStatus.VERIFIED);
 
     const connRes = await harness.connections.createConnection(SEED_TENANT_ID, {
       appId: UNIVERSAL_SIMULATOR_APP_ID,
-      name: 'Orders Sandbox Connection',
-      authType: AuthType.API_KEY,
-      publicConfig: { sandbox_id: sbxRes.value.id, seed: 7 },
-      rawCredentials: { api_key: sbxRes.value.apiKey },
-      endpointForFingerprint: sbxRes.value.id,
+      name: 'Orders Simulator Connection',
+      authType: AuthType.NO_AUTH,
+      publicConfig: { seed: 7 },
+      rawCredentials: {},
+      endpointForFingerprint: 'Orders Simulator Connection',
     });
     expect(connRes.ok).toBe(true);
     if (!connRes.ok) return;
 
-    const entRes = await harness.simulator.createEntity(SEED_TENANT_ID, sbxRes.value.id, {
+    const entRes = await harness.simulator.createEntity(SEED_TENANT_ID, connRes.value.id, {
       entityName: 'invoices',
       sampleBlueprint: { invoice_id: 'INV-1', amount: 300 },
       primaryKeyField: 'invoice_id',
@@ -438,7 +452,7 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
 
     const updatedEntRes = await harness.simulator.updateEntity(
       SEED_TENANT_ID,
-      sbxRes.value.id,
+      connRes.value.id,
       entRes.value.id,
       { recordsPerPull: 80 },
     );
@@ -449,5 +463,132 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     if (!catalogRes.ok) return;
     expect(catalogRes.value.streams.map((s) => s.name)).toEqual(['invoices']);
     expect('streams' in connRes.value.publicConfig).toBe(false);
+    expect('sandbox_id' in connRes.value.publicConfig).toBe(false);
+  });
+
+  it('renders SimulatorEntitiesSection inside Connection tab exclusively for NO_AUTH simulator connections without adding extra tabs', () => {
+    const qc = createEntitiesQueryClient();
+    const freshSimConnection = {
+      ...SEED_CONNECTION,
+      id: 'ip_conn_orders_sim_fresh',
+      name: 'Order Simulator',
+      appId: UNIVERSAL_SIMULATOR_APP_ID,
+      authType: AuthType.NO_AUTH,
+      publicConfig: {
+        seed: 42,
+        records_per_pull: 25,
+      },
+    };
+    qc.setQueryData(
+      ipQueryKeys.connections.detail(SEED_TENANT_ID, SEED_CONNECTION.id),
+      ok(SEED_CONNECTION),
+    );
+    qc.setQueryData(
+      ipQueryKeys.connections.detail(SEED_TENANT_ID, freshSimConnection.id),
+      ok(freshSimConnection),
+    );
+    qc.setQueryData(ipQueryKeys.simulator.entities(SEED_TENANT_ID, freshSimConnection.id), ok([]));
+
+    const standardDetailHtml = renderEntitiesTab(
+      <IpConnectionDetailPage connectionId={SEED_CONNECTION.id} />,
+      qc,
+    );
+    expect(standardDetailHtml).toContain('Connection');
+    expect(standardDetailHtml).toContain('Entities');
+    expect(standardDetailHtml).not.toContain('Simulator Entities');
+
+    const simulatorDetailHtml = renderEntitiesTab(
+      <IpConnectionDetailPage connectionId={freshSimConnection.id} />,
+      qc,
+    );
+    expect(simulatorDetailHtml.match(/role="tab"/g)?.length).toBe(3);
+    expect(simulatorDetailHtml).toContain('Connection Details');
+    expect(simulatorDetailHtml).toContain('Simulator Entities');
+    expect(simulatorDetailHtml).toContain('Create Entity');
+    expect(simulatorDetailHtml).toContain('No entities');
+    expect(simulatorDetailHtml).not.toContain('Configured directly on this Simulator connection');
+    expect(simulatorDetailHtml).not.toContain('No entities configured in this Simulator yet');
+    expect(simulatorDetailHtml).not.toContain('Virtual Sandbox');
+  });
+
+  it('displays newly created Simulator entity in SimulatorEntitiesSection plus ConnectionEntitiesSyncTab', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
+    const createdConnRes = await harness.connections.createConnection(SEED_TENANT_ID, {
+      appId: UNIVERSAL_SIMULATOR_APP_ID,
+      name: 'Order Simulator',
+      authType: AuthType.NO_AUTH,
+      publicConfig: { seed: 42, records_per_pull: 25 },
+      rawCredentials: {},
+    });
+    expect(createdConnRes.ok).toBe(true);
+    if (!createdConnRes.ok) return;
+
+    const entityRes = await harness.simulator.createEntity(
+      SEED_TENANT_ID,
+      createdConnRes.value.id,
+      {
+        entityName: 'invoices',
+        sampleBlueprint: { invoice_id: 'INV-1001', amount: 42.5 },
+        primaryKeyField: 'invoice_id',
+        cursorField: 'updated_at',
+        recordsPerPull: 25,
+      },
+    );
+    expect(entityRes.ok).toBe(true);
+    if (!entityRes.ok) return;
+
+    const qc = createEntitiesQueryClient();
+    qc.setQueryData(
+      ipQueryKeys.simulator.entities(SEED_TENANT_ID, createdConnRes.value.id),
+      ok([entityRes.value]),
+    );
+    qc.setQueryData(
+      ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, createdConnRes.value.id),
+      ok([]),
+    );
+    qc.setQueryData(ipQueryKeys.syncRuns.list(SEED_TENANT_ID, createdConnRes.value.id, 40), ok([]));
+
+    const simulatorSectionHtml = renderEntitiesTab(
+      <SimulatorEntitiesSection
+        connectionId={createdConnRes.value.id}
+        onProblem={() => undefined}
+      />,
+      qc,
+    );
+    expect(simulatorSectionHtml).toContain('invoices');
+
+    const entitiesHtml = renderEntitiesTab(
+      <ConnectionEntitiesSyncTab
+        connectionId={createdConnRes.value.id}
+        connection={createdConnRes.value}
+        onOpenTrace={() => undefined}
+        onProblem={() => undefined}
+      />,
+      qc,
+    );
+    expect(entitiesHtml).toContain('invoices');
+    expect(entitiesHtml).toContain('Sync Selected (1)');
+    expect(entitiesHtml).toContain('Simulate Push');
+  });
+
+  it('returns empty discovered catalog without error when simulator connection has zero entities configured', async () => {
+    const harness = createInMemoryIpWorkspaceSeed();
+    const createdConnRes = await harness.connections.createConnection(SEED_TENANT_ID, {
+      appId: UNIVERSAL_SIMULATOR_APP_ID,
+      name: 'Empty Order Simulator',
+      authType: AuthType.NO_AUTH,
+      publicConfig: { seed: 42, records_per_pull: 25 },
+      rawCredentials: {},
+    });
+    expect(createdConnRes.ok).toBe(true);
+    if (!createdConnRes.ok) return;
+
+    const discoverRes = await harness.connections.discoverCatalog(
+      SEED_TENANT_ID,
+      createdConnRes.value.id,
+    );
+    expect(discoverRes.ok).toBe(true);
+    if (!discoverRes.ok) return;
+    expect(discoverRes.value.streams).toEqual([]);
   });
 });

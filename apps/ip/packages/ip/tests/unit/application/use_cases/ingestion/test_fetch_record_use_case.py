@@ -279,7 +279,12 @@ class FakeSourceConnector(SourceConnectorPort):
         raise NotImplementedError
 
     async def discover(
-        self, connection_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         raise NotImplementedError
 
@@ -290,6 +295,9 @@ class FakeSourceConnector(SourceConnectorPort):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         return list(self._records.keys())
 
@@ -300,6 +308,9 @@ class FakeSourceConnector(SourceConnectorPort):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         for k, v in self._records.items():
             yield RecordEnvelopeDTO(
@@ -311,8 +322,16 @@ class FakeSourceConnector(SourceConnectorPort):
             )
 
     async def fetch_record(
-        self, stream_name: str, record_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        stream_name: str,
+        record_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
+        _ = (tenant_id, connection_id)
         if record_id in self._records:
             return RecordEnvelopeDTO(
                 stream_name=stream_name,

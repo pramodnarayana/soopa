@@ -95,7 +95,12 @@ class StubPullConnector(SourceConnectorPort):
         return ConnectionCheckResultDTO.ok("ok")
 
     async def discover(
-        self, connection_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         return DiscoveredCatalogDTO(connection_id=connection_id)
 
@@ -106,6 +111,9 @@ class StubPullConnector(SourceConnectorPort):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         return [str(r.get("id", "")) for r in self._records]
 
@@ -116,7 +124,11 @@ class StubPullConnector(SourceConnectorPort):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (tenant_id, connection_id)
         self.received_cursor = cursor
         for rec in self._records:
             yield RecordEnvelopeDTO(
@@ -133,7 +145,11 @@ class StubPullConnector(SourceConnectorPort):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
+        _ = (tenant_id, connection_id)
         for rec in self._records:
             if str(rec.get("id")) == record_id:
                 return RecordEnvelopeDTO(

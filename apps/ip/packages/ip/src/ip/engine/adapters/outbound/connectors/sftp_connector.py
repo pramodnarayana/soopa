@@ -197,7 +197,10 @@ class SftpConnector(BaseConnector):
         connection_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
+        _ = tenant_id
         streams = [
             StreamSchemaDTO(
                 name="files",
@@ -222,6 +225,9 @@ class SftpConnector(BaseConnector):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         ids: list[str] = []
         async for rec in self.read_stream(
@@ -230,6 +236,8 @@ class SftpConnector(BaseConnector):
             credentials=credentials,
             cursor=cursor,
             limit=limit,
+            tenant_id=tenant_id,
+            connection_id=connection_id,
         ):
             ids.append(rec.record_id)
         return ids
@@ -241,7 +249,11 @@ class SftpConnector(BaseConnector):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (tenant_id, connection_id)
         host = str(public_config.get("host", ""))
         self._last_error = None
         client_res = await asyncio.to_thread(self._create_client, public_config, credentials)
@@ -312,7 +324,11 @@ class SftpConnector(BaseConnector):
         command: WriteRecordCommand,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> WriteResultDTO:
+        _ = (tenant_id, connection_id)
         host = str(public_config.get("host", ""))
         filename = command.record_id or str(command.payload.get("filename", "upload.dat"))
         if not filename or filename in (".", "..") or "/" in filename or "\\" in filename:

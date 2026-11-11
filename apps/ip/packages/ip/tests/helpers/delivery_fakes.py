@@ -283,12 +283,16 @@ class DummyCatalogRepo(CatalogRepositoryPort):
     async def save(self, catalog: ConnectionCatalog) -> None:
         _ = catalog
 
-    async def get_active_by_connection_id(self, connection_id: str) -> ConnectionCatalog | None:
-        _ = connection_id
+    async def get_active_by_connection_id(
+        self, tenant_id: str, connection_id: str
+    ) -> ConnectionCatalog | None:
+        _ = (tenant_id, connection_id)
         return None
 
-    async def get_by_version(self, connection_id: str, version: int) -> ConnectionCatalog | None:
-        _ = (connection_id, version)
+    async def get_by_version(
+        self, tenant_id: str, connection_id: str, version: int
+    ) -> ConnectionCatalog | None:
+        _ = (tenant_id, connection_id, version)
         return None
 
 
@@ -566,8 +570,14 @@ class FakeBidirectionalConnector(ConnectorPort):
         return ConnectionCheckResultDTO.ok("OK")
 
     async def discover(
-        self, connection_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
+        _ = tenant_id
         return DiscoveredCatalogDTO(connection_id=connection_id)
 
     async def list_objects(
@@ -577,7 +587,11 @@ class FakeBidirectionalConnector(ConnectorPort):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
+        _ = (tenant_id, connection_id)
         return []
 
     async def read_stream(
@@ -587,7 +601,11 @@ class FakeBidirectionalConnector(ConnectorPort):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (tenant_id, connection_id)
         if False:
             yield RecordEnvelopeDTO(stream_name=stream_name, record_id="1", data={}, emitted_at="")
 
@@ -597,7 +615,11 @@ class FakeBidirectionalConnector(ConnectorPort):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
+        _ = (tenant_id, connection_id)
         self.fetch_calls.append((record_id, dict(credentials)))
         return RecordEnvelopeDTO(
             stream_name=stream_name,
@@ -612,7 +634,11 @@ class FakeBidirectionalConnector(ConnectorPort):
         command: WriteRecordCommand,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> WriteResultDTO:
+        _ = (tenant_id, connection_id)
         self.write_calls.append((command, dict(credentials)))
         if self.queued_write_results:
             return self.queued_write_results.pop(0)

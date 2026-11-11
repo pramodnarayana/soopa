@@ -33,6 +33,7 @@ class ConnectionCatalog(AggregateRoot):
     ID_PREFIX: ClassVar[str] = IpIdPrefix.CATALOG.value
 
     id: str
+    tenant_id: str
     connection_id: str
     catalog_version: int
     catalog_hash: str
@@ -44,10 +45,19 @@ class ConnectionCatalog(AggregateRoot):
     def try_create(
         cls,
         *,
+        tenant_id: str,
         connection_id: str,
         catalog_version: int,
         streams: Sequence[StreamSchema],
     ) -> Result[ConnectionCatalog, InvalidConnectionConfigError]:
+        if not tenant_id.strip():
+            return Result.fail(
+                InvalidConnectionConfigError(
+                    field_name="tenant_id",
+                    message="tenant_id cannot be empty",
+                    details={"field": "tenant_id"},
+                )
+            )
         if not connection_id.strip():
             return Result.fail(
                 InvalidConnectionConfigError(
@@ -58,6 +68,7 @@ class ConnectionCatalog(AggregateRoot):
             )
         return Result.ok(
             cls.create(
+                tenant_id=tenant_id,
                 connection_id=connection_id,
                 catalog_version=catalog_version,
                 streams=streams,
@@ -68,6 +79,7 @@ class ConnectionCatalog(AggregateRoot):
     def create(
         cls,
         *,
+        tenant_id: str,
         connection_id: str,
         catalog_version: int,
         streams: Sequence[StreamSchema],
@@ -98,6 +110,7 @@ class ConnectionCatalog(AggregateRoot):
 
         return cls(
             id=cls.new_id(),
+            tenant_id=tenant_id,
             connection_id=connection_id,
             catalog_version=catalog_version,
             catalog_hash=catalog_hash,

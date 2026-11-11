@@ -9,7 +9,7 @@ from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
 from ip.engine.domain.replication.enums import SyncMode
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from seedwork.domain.types import JsonDict
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -72,6 +72,7 @@ class SqlAlchemyCatalogRepository(GlobalSqlAlchemyRepository, CatalogRepositoryP
 
         return ConnectionCatalog(
             id=record.id,
+            tenant_id=record.tenant_id,
             connection_id=record.connection_id,
             catalog_version=record.catalog_version,
             catalog_hash=record.catalog_hash,
@@ -107,6 +108,7 @@ class SqlAlchemyCatalogRepository(GlobalSqlAlchemyRepository, CatalogRepositoryP
     def _to_orm_model(cls, catalog: ConnectionCatalog) -> ConnectionCatalogRecord:
         return ConnectionCatalogRecord(
             id=catalog.id,
+            tenant_id=catalog.tenant_id,
             connection_id=catalog.connection_id,
             catalog_version=catalog.catalog_version,
             catalog_hash=catalog.catalog_hash,
@@ -116,7 +118,16 @@ class SqlAlchemyCatalogRepository(GlobalSqlAlchemyRepository, CatalogRepositoryP
         )
 
     async def save(self, catalog: ConnectionCatalog) -> None:
-        """Saves a new catalog version into the repository."""
+        """Saves a new catalog version into the repository and deactivates prior active versions."""
+        await self._session.execute(
+            update(ConnectionCatalogRecord)
+            .where(
+                ConnectionCatalogRecord.tenant_id == catalog.tenant_id,
+                ConnectionCatalogRecord.connection_id == catalog.connection_id,
+                ConnectionCatalogRecord.is_active.is_(True),
+            )
+            .values(is_active=False)
+        )
         record = self._to_orm_model(catalog)
         self._session.add(record)
         self._drain_events(catalog)
@@ -124,11 +135,13 @@ class SqlAlchemyCatalogRepository(GlobalSqlAlchemyRepository, CatalogRepositoryP
 
     async def get_active_by_connection_id(
         self,
+        tenant_id: str,
         connection_id: str,
     ) -> ConnectionCatalog | None:
         stmt = (
             select(ConnectionCatalogRecord)
             .where(
+                ConnectionCatalogRecord.tenant_id == tenant_id,
                 ConnectionCatalogRecord.connection_id == connection_id,
                 ConnectionCatalogRecord.is_active.is_(True),
             )
@@ -142,10 +155,12 @@ class SqlAlchemyCatalogRepository(GlobalSqlAlchemyRepository, CatalogRepositoryP
 
     async def get_by_version(
         self,
+        tenant_id: str,
         connection_id: str,
         version: int,
     ) -> ConnectionCatalog | None:
         stmt = select(ConnectionCatalogRecord).where(
+            ConnectionCatalogRecord.tenant_id == tenant_id,
             ConnectionCatalogRecord.connection_id == connection_id,
             ConnectionCatalogRecord.catalog_version == version,
         )

@@ -721,7 +721,12 @@ class _InMemoryPagingConnector(SourceConnectorPort):
         raise NotImplementedError
 
     async def discover(
-        self, connection_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         raise NotImplementedError
 
@@ -732,6 +737,9 @@ class _InMemoryPagingConnector(SourceConnectorPort):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         return []
 
@@ -742,7 +750,11 @@ class _InMemoryPagingConnector(SourceConnectorPort):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (tenant_id, connection_id)
         for batch in self._record_batches:
             for item in batch:
                 yield RecordEnvelopeDTO(
@@ -759,6 +771,9 @@ class _InMemoryPagingConnector(SourceConnectorPort):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
         return None
 
@@ -1315,7 +1330,7 @@ class _StaticDpUowProvider(IpDataPlaneUnitOfWorkProviderPort):
     ) -> Result[tuple[str, str], TenantShardNotFoundError]:
         if target_tenant_id == self._missing_tenant_id:
             return Result.err(TenantShardNotFoundError.for_tenant(target_tenant_id))
-        return Result.ok(("shard-01", "postgresql+asyncpg://localhost/shard01"))
+        return Result.ok(("shard-01", "in-memory://shard-01"))
 
     @contextlib.asynccontextmanager
     async def get_data_plane_uow(

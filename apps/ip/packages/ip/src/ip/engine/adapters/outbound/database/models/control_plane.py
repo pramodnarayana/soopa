@@ -76,14 +76,26 @@ class ConnectionCatalogRecord(IpGlobalBase):
     __tablename__ = "connection_catalogs"
     __table_args__ = (
         UniqueConstraint(
-            "connection_id", "catalog_version", name="uq_ip_catalog_connection_version"
+            "tenant_id",
+            "connection_id",
+            "catalog_version",
+            name="uq_ip_catalog_connection_version",
         ),
-        Index("ix_ip_connection_catalogs_connection_id", "connection_id"),
+        Index(
+            "idx_ip_connection_catalogs_tenant_conn",
+            "tenant_id",
+            "connection_id",
+        ),
         {"schema": "ip"},
     )
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("ip.connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     catalog_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     catalog_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     schema_definition: Mapped[JsonDict] = mapped_column(JSONB, nullable=False)
@@ -178,7 +190,11 @@ class TransformationRecord(IpGlobalBase):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
-    connection_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    connection_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("ip.connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     stream: Mapped[str] = mapped_column(String(128), nullable=False)
     transformation_id: Mapped[str] = mapped_column(String(128), nullable=False)
     transformation_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)

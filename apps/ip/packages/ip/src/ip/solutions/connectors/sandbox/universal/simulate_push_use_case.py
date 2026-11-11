@@ -32,12 +32,17 @@ from ip.solutions.connectors.sandbox.universal.dto import entity_dto_to_stream_s
 from ip.solutions.connectors.sandbox.universal.inference import (
     parse_simulator_connection_config,
 )
-from ip.solutions.connectors.sandbox.universal.ports import SimulatorSandboxReaderPort
+from ip.solutions.connectors.sandbox.universal.ports import SimulatorEntityReaderPort
 from ip.solutions.connectors.sandbox.universal.spec import (
-    UNIVERSAL_SIMULATOR_APP_ID,
+    DEFAULT_SIMULATED_PUSH_COUNT,
+    MAX_SIMULATED_PUSH_COUNT,
+    MIN_SIMULATED_PUSH_COUNT,
     SimulatorStreamSpec,
 )
 from ip.solutions.connectors.sandbox.universal.synthesizer import JsonSchemaRecordSynthesizer
+from ip.solutions.connectors.sandbox.universal.use_cases.connection_guard import (
+    validate_simulator_app_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -56,7 +61,7 @@ class TriggerSimulatedPushCommand:
     tenant_id: str
     connection_id: str
     stream_name: str
-    count: int = 5
+    count: int = DEFAULT_SIMULATED_PUSH_COUNT
     delivery_style: SimulatedPushDeliveryStyle = SimulatedPushDeliveryStyle.FULL_PAYLOAD
     correlation_id: str | None = None
 
@@ -73,7 +78,7 @@ class SimulatePushResultDTO:
 
 
 class TriggerSimulatedPushUseCase:
-    """Authenticates a Virtual Sandbox connection, synthesizes fake records, and emits them into L1 `ReceivePushUseCase`."""
+    """Verifies a Simulator connection, synthesizes fake records from `ip.simulator_entities`, and emits them into L1 `ReceivePushUseCase`."""
 
     def __init__(
         self,
@@ -83,7 +88,7 @@ class TriggerSimulatedPushUseCase:
         verifier: InboundVerifierPort,
         decoder: InboundPayloadDecoderPort,
         ack: InboundAckPort,
-        sandbox_reader: SimulatorSandboxReaderPort,
+        entity_reader: SimulatorEntityReaderPort,
         token_manager: TokenManagerService,
         synthesizer: JsonSchemaRecordSynthesizer | None = None,
     ) -> None:
@@ -92,7 +97,7 @@ class TriggerSimulatedPushUseCase:
         self._verifier = verifier
         self._decoder = decoder
         self._ack = ack
-        self._sandbox_reader = sandbox_reader
+        self._entity_reader = entity_reader
         self._token_manager = token_manager
         self._synthesizer = synthesizer or JsonSchemaRecordSynthesizer()
 
@@ -109,36 +114,24 @@ class TriggerSimulatedPushUseCase:
             return Result.fail(creds_res.unwrap_err())
 
         resolved = creds_res.unwrap()
-        if resolved.app_id != UNIVERSAL_SIMULATOR_APP_ID:
-            return Result.fail(
-                IpError(
-                    code=IpErrorCode.INVALID_CONFIGURATION,
-                    message=(
-                        f"Connection '{command.connection_id}' (app_id='{resolved.app_id}') is not a "
-                        f"Universal Sandbox Simulator connection."
-                    ),
-                    http_status=422,
-                )
-            )
+        app_err = validate_simulator_app_id(
+            connection_id=command.connection_id,
+            app_id=resolved.app_id,
+        )
+        if app_err is not None:
+            return Result.fail(app_err)
 
         cfg = parse_simulator_connection_config(dict(resolved.public_config))
-        raw_api_key = str(resolved.credentials.get("api_key") or "")
-        auth_res = await self._sandbox_reader.authenticate_sandbox(
-            sandbox_id=cfg.sandbox_id,
-            raw_api_key=raw_api_key,
+        entity = await self._entity_reader.get_entity_by_name(
+            command.tenant_id, command.connection_id, command.stream_name
         )
-        if auth_res.is_err:
-            return Result.fail(auth_res.unwrap_err())
-
-        sandbox = auth_res.unwrap()
-        entity = await self._sandbox_reader.get_entity_by_name(sandbox.id, command.stream_name)
         if entity is None:
             return Result.fail(
                 IpError(
                     code=IpErrorCode.STREAM_NOT_FOUND,
                     message=(
-                        f"Entity '{command.stream_name}' is not configured in Virtual Sandbox "
-                        f"'{sandbox.id}'."
+                        f"Entity '{command.stream_name}' is not configured in Simulator connection "
+                        f"'{command.connection_id}'."
                     ),
                     http_status=404,
                 )
@@ -161,7 +154,7 @@ class TriggerSimulatedPushUseCase:
             return Result.fail(err)
         app_id, seed, spec = resolved_res.unwrap()
 
-        bounded_count = max(1, min(command.count, 100))
+        bounded_count = max(MIN_SIMULATED_PUSH_COUNT, min(command.count, MAX_SIMULATED_PUSH_COUNT))
         now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         nonce_offset = (int.from_bytes(os.urandom(2), "big") % 50_000) + 1
         synthesized = self._synthesizer.synthesize_batch(

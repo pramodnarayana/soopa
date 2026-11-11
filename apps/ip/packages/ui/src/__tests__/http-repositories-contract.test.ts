@@ -939,20 +939,12 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     expect(JSON.parse(calls[4]?.bodyText ?? '{}')).toEqual({ delivery_receipt_id: 'rcpt_01' });
   });
 
-  it('maps HttpSimulatorRepository wire responses across all 8 methods', async () => {
+  it('maps HttpSimulatorRepository wire responses across entity endpoints', async () => {
     const logger = new RecordingLoggerFake();
-    const wireSandbox = {
-      id: 'sbx_0102030405060708090a0b0c',
-      tenant_id: 'ten_01',
-      name: 'QA Virtual Sandbox',
-      api_key_prefix: 'sbx_key_abcd',
-      created_at: '2026-11-11T09:00:00Z',
-      updated_at: '2026-11-11T09:00:00Z',
-    };
     const wireEntity = {
       id: 'sim_ent_0102030405060708090a0b0c',
       tenant_id: 'ten_01',
-      sandbox_id: 'sbx_0102030405060708090a0b0c',
+      connection_id: 'conn_0102030405060708090a0b0c',
       entity_name: 'orders',
       primary_key_field: 'order_id',
       cursor_field: 'updated_at',
@@ -971,21 +963,13 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     };
 
     const { fetchImpl, calls } = createRouteFetch({
-      'POST /api/v1/tenants/ten_01/ip/simulator/sandboxes': {
-        ...wireSandbox,
-        api_key: 'sbx_key_abcd1234567890abcdef1234567890ab',
-      },
-      'GET /api/v1/tenants/ten_01/ip/simulator/sandboxes': [wireSandbox],
-      'GET /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c': wireSandbox,
-      'DELETE /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c': {},
-      'GET /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities': [
+      'GET /api/v1/tenants/ten_01/ip/connections/conn_0102030405060708090a0b0c/simulator/entities':
+        [wireEntity],
+      'POST /api/v1/tenants/ten_01/ip/connections/conn_0102030405060708090a0b0c/simulator/entities':
         wireEntity,
-      ],
-      'POST /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities':
+      'PATCH /api/v1/tenants/ten_01/ip/connections/conn_0102030405060708090a0b0c/simulator/entities/sim_ent_0102030405060708090a0b0c':
         wireEntity,
-      'PATCH /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities/sim_ent_0102030405060708090a0b0c':
-        wireEntity,
-      'DELETE /api/v1/tenants/ten_01/ip/simulator/sandboxes/sbx_0102030405060708090a0b0c/entities/sim_ent_0102030405060708090a0b0c':
+      'DELETE /api/v1/tenants/ten_01/ip/connections/conn_0102030405060708090a0b0c/simulator/entities/sim_ent_0102030405060708090a0b0c':
         {},
     });
 
@@ -996,24 +980,14 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     });
     const simRepo = new HttpSimulatorRepository(client, logger);
 
-    const createdSbx = expectOk(
-      await simRepo.createSandbox('ten_01', { name: 'QA Virtual Sandbox' }),
-    );
-    expect(createdSbx.apiKey).toBe('sbx_key_abcd1234567890abcdef1234567890ab');
-
-    const sandboxes = expectOk(await simRepo.listSandboxes('ten_01'));
-    expect(sandboxes[0]?.apiKeyPrefix).toBe('sbx_key_abcd');
-
-    const singleSbx = expectOk(await simRepo.getSandbox('ten_01', 'sbx_0102030405060708090a0b0c'));
-    expect(singleSbx.name).toBe('QA Virtual Sandbox');
-
     const listedEntities = expectOk(
-      await simRepo.listEntities('ten_01', 'sbx_0102030405060708090a0b0c'),
+      await simRepo.listEntities('ten_01', 'conn_0102030405060708090a0b0c'),
     );
     expect(listedEntities[0]?.entityName).toBe('orders');
+    expect(listedEntities[0]?.connectionId).toBe('conn_0102030405060708090a0b0c');
 
     const createdEntity = expectOk(
-      await simRepo.createEntity('ten_01', 'sbx_0102030405060708090a0b0c', {
+      await simRepo.createEntity('ten_01', 'conn_0102030405060708090a0b0c', {
         entityName: 'orders',
         sampleBlueprint: { order_id: 'ORD-100', total_amount: 125.0 },
         primaryKeyField: 'order_id',
@@ -1027,7 +1001,7 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     const updatedEntity = expectOk(
       await simRepo.updateEntity(
         'ten_01',
-        'sbx_0102030405060708090a0b0c',
+        'conn_0102030405060708090a0b0c',
         'sim_ent_0102030405060708090a0b0c',
         {
           recordsPerPull: 50,
@@ -1040,11 +1014,10 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     expectOk(
       await simRepo.deleteEntity(
         'ten_01',
-        'sbx_0102030405060708090a0b0c',
+        'conn_0102030405060708090a0b0c',
         'sim_ent_0102030405060708090a0b0c',
       ),
     );
-    expectOk(await simRepo.deleteSandbox('ten_01', 'sbx_0102030405060708090a0b0c'));
-    expect(calls).toHaveLength(8);
+    expect(calls).toHaveLength(4);
   });
 });

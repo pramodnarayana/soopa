@@ -107,6 +107,7 @@ export function useUpdateConnectionMutation(connectionId: string) {
         connection_id: connectionId,
       });
       if (res.ok) {
+        queryClient.setQueryData(ipQueryKeys.connections.detail(tenantId, connectionId), res);
         void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });
         void queryClient.invalidateQueries({
           queryKey: ipQueryKeys.connections.detail(tenantId, connectionId),
@@ -130,6 +131,7 @@ export function useRelinkConnectionMutation(connectionId: string) {
         connection_id: connectionId,
       });
       if (res.ok) {
+        queryClient.setQueryData(ipQueryKeys.connections.detail(tenantId, connectionId), res);
         void queryClient.invalidateQueries({ queryKey: ipQueryKeys.connections.all(tenantId) });
       }
     },

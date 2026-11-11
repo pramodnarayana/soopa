@@ -213,10 +213,7 @@ export const ipQueryKeys = {
   },
   simulator: {
     all: (tenantId: string) => ['ip', 'tenant', tenantId, 'simulator'] as const,
-    sandboxes: (tenantId: string) => ['ip', 'tenant', tenantId, 'simulator', 'sandboxes'] as const,
-    sandboxDetail: (tenantId: string, sandboxId: string) =>
-      ['ip', 'tenant', tenantId, 'simulator', 'sandboxes', sandboxId] as const,
-    entities: (tenantId: string, sandboxId: string) =>
-      ['ip', 'tenant', tenantId, 'simulator', 'sandboxes', sandboxId, 'entities'] as const,
+    entities: (tenantId: string, connectionId: string) =>
+      ['ip', 'tenant', tenantId, 'connections', connectionId, 'simulator-entities'] as const,
   },
 } as const;

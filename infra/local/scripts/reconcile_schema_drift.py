@@ -415,15 +415,38 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
 
                 await session.execute(
                     text("""
-                    CREATE TABLE IF NOT EXISTS ip.simulator_sandboxes (
-                        id VARCHAR(64) NOT NULL PRIMARY KEY,
-                        tenant_id VARCHAR(64) NOT NULL,
-                        name VARCHAR(255) NOT NULL,
-                        api_key_hash VARCHAR(64) NOT NULL,
-                        api_key_prefix VARCHAR(24) NOT NULL,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        CONSTRAINT uq_ip_simulator_sandbox_tenant_name UNIQUE (tenant_id, name)
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_catalogs'
+                        ) AND NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_schema = 'ip'
+                              AND table_name = 'connection_catalogs'
+                              AND column_name = 'tenant_id'
+                        ) THEN
+                            ALTER TABLE ip.connection_catalogs ADD COLUMN tenant_id VARCHAR(64);
+                            UPDATE ip.connection_catalogs c
+                            SET tenant_id = conn.tenant_id
+                            FROM ip.connections conn
+                            WHERE c.connection_id = conn.id;
+                            DELETE FROM ip.connection_catalogs WHERE tenant_id IS NULL;
+                            ALTER TABLE ip.connection_catalogs ALTER COLUMN tenant_id SET NOT NULL;
+                            ALTER TABLE ip.connection_catalogs
+                                DROP CONSTRAINT IF EXISTS uq_ip_catalog_connection_version;
+                            ALTER TABLE ip.connection_catalogs
+                                ADD CONSTRAINT uq_ip_catalog_connection_version
+                                UNIQUE (tenant_id, connection_id, catalog_version);
+                        END IF;
+                    END $$;
+                    """)
+                )
+                await session.execute(
+                    text("""
+                    DELETE FROM ip.connection_catalogs c
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM ip.connections conn WHERE conn.id = c.connection_id
                     );
                     """)
                 )
@@ -431,30 +454,33 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     text("""
                     DO $$
                     BEGIN
-                        IF EXISTS (
-                            SELECT 1 FROM pg_constraint
-                            WHERE conname = 'uq_ip_simulator_sandboxes_tenant_name'
+                        IF NOT EXISTS (
+                            SELECT 1
+                            FROM pg_constraint c
+                            JOIN pg_class rel ON rel.oid = c.conrelid
+                            JOIN pg_namespace n ON n.oid = rel.relnamespace
+                            WHERE n.nspname = 'ip'
+                              AND rel.relname = 'connection_catalogs'
+                              AND c.contype = 'f'
                         ) THEN
-                            ALTER TABLE ip.simulator_sandboxes
-                            RENAME CONSTRAINT uq_ip_simulator_sandboxes_tenant_name
-                            TO uq_ip_simulator_sandbox_tenant_name;
+                            ALTER TABLE ip.connection_catalogs
+                                ADD CONSTRAINT fk_ip_connection_catalogs_connection_id
+                                FOREIGN KEY (connection_id)
+                                REFERENCES ip.connections(id)
+                                ON DELETE CASCADE;
                         END IF;
                     END $$;
                     """)
                 )
                 await session.execute(
-                    text(
-                        "ALTER TABLE ip.simulator_sandboxes ALTER COLUMN api_key_hash TYPE VARCHAR(64);"
-                    )
-                )
-                await session.execute(
-                    text("DROP INDEX IF EXISTS ip.ix_ip_simulator_sandboxes_tenant_id;")
+                    text("DROP INDEX IF EXISTS ip.ix_ip_connection_catalogs_connection_id;")
                 )
                 await session.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_sandboxes_tenant ON ip.simulator_sandboxes (tenant_id);"
+                        "CREATE INDEX IF NOT EXISTS idx_ip_connection_catalogs_tenant_conn ON ip.connection_catalogs (tenant_id, connection_id);"
                     )
                 )
+                await session.execute(text("DROP TABLE IF EXISTS ip.simulator_sandboxes CASCADE;"))
                 await session.execute(
                     text("""
                     DO $$
@@ -466,7 +492,7 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                             SELECT 1 FROM information_schema.columns
                             WHERE table_schema = 'ip'
                               AND table_name = 'simulator_entities'
-                              AND column_name = 'sandbox_id'
+                              AND column_name = 'connection_id'
                         ) THEN
                             DROP TABLE ip.simulator_entities CASCADE;
                         END IF;
@@ -478,7 +504,7 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     CREATE TABLE IF NOT EXISTS ip.simulator_entities (
                         id VARCHAR(64) NOT NULL PRIMARY KEY,
                         tenant_id VARCHAR(64) NOT NULL,
-                        sandbox_id VARCHAR(64) NOT NULL REFERENCES ip.simulator_sandboxes(id) ON DELETE CASCADE,
+                        connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id) ON DELETE CASCADE,
                         entity_name VARCHAR(128) NOT NULL,
                         primary_key_field VARCHAR(128) NOT NULL,
                         cursor_field VARCHAR(128) NOT NULL,
@@ -491,7 +517,15 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                         version INTEGER NOT NULL DEFAULT 1,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        CONSTRAINT uq_ip_simulator_entity_sandbox_name UNIQUE (sandbox_id, entity_name)
+                        CONSTRAINT uq_ip_simulator_entity_conn_name UNIQUE (tenant_id, connection_id, entity_name)
+                    );
+                    """)
+                )
+                await session.execute(
+                    text("""
+                    DELETE FROM ip.simulator_entities se
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM ip.connections c WHERE c.id = se.connection_id
                     );
                     """)
                 )
@@ -499,13 +533,20 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     text("""
                     DO $$
                     BEGIN
-                        IF EXISTS (
-                            SELECT 1 FROM pg_constraint
-                            WHERE conname = 'uq_ip_simulator_entities_sandbox_name'
+                        IF NOT EXISTS (
+                            SELECT 1
+                            FROM pg_constraint c
+                            JOIN pg_class rel ON rel.oid = c.conrelid
+                            JOIN pg_namespace n ON n.oid = rel.relnamespace
+                            WHERE n.nspname = 'ip'
+                              AND rel.relname = 'simulator_entities'
+                              AND c.contype = 'f'
                         ) THEN
                             ALTER TABLE ip.simulator_entities
-                            RENAME CONSTRAINT uq_ip_simulator_entities_sandbox_name
-                            TO uq_ip_simulator_entity_sandbox_name;
+                                ADD CONSTRAINT fk_ip_simulator_entities_connection_id
+                                FOREIGN KEY (connection_id)
+                                REFERENCES ip.connections(id)
+                                ON DELETE CASCADE;
                         END IF;
                     END $$;
                     """)
@@ -516,11 +557,11 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     )
                 )
                 await session.execute(
-                    text("DROP INDEX IF EXISTS ip.ix_ip_simulator_entities_tenant_sandbox;")
+                    text("DROP INDEX IF EXISTS ip.idx_ip_simulator_entities_tenant_sandbox;")
                 )
                 await session.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_entities_tenant_sandbox ON ip.simulator_entities (tenant_id, sandbox_id);"
+                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_entities_tenant_conn ON ip.simulator_entities (tenant_id, connection_id);"
                     )
                 )
                 await session.execute(

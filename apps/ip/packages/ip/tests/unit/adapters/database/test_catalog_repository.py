@@ -16,6 +16,7 @@ from ip.engine.domain.replication.enums import SyncMode
 def test_catalog_schema_roundtrip_mapping() -> None:
     now = datetime.now(UTC)
     catalog = ConnectionCatalog.create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_12345",
         catalog_version=3,
         streams=[
@@ -45,6 +46,7 @@ def test_catalog_schema_roundtrip_mapping() -> None:
     serialized = SqlAlchemyCatalogRepository._serialize_schema_definition(catalog)
     record = ConnectionCatalogRecord(
         id=catalog.id,
+        tenant_id=catalog.tenant_id,
         connection_id=catalog.connection_id,
         catalog_version=catalog.catalog_version,
         catalog_hash=catalog.catalog_hash,
@@ -56,6 +58,7 @@ def test_catalog_schema_roundtrip_mapping() -> None:
     restored = SqlAlchemyCatalogRepository._to_domain_model(record)
 
     assert restored.id == catalog.id
+    assert restored.tenant_id == "tnt_alpha"
     assert restored.connection_id == "ip_conn_12345"
     assert restored.catalog_version == 3
     assert restored.catalog_hash == catalog.catalog_hash

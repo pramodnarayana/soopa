@@ -9,8 +9,17 @@ from ip.solutions.connectors.sandbox.universal.chaos import SimulatorChaosPolicy
 from seedwork.domain.types import JsonDict
 
 UNIVERSAL_SIMULATOR_APP_ID = "universal_simulator"
-MAX_SIMULATOR_ENTITIES_PER_SANDBOX = 100
+MAX_SIMULATOR_ENTITIES_PER_CONNECTION = 100
 MAX_SAMPLE_BLUEPRINT_BYTES = 262_144
+MIN_SIMULATOR_RECORDS_PER_PULL = 1
+MAX_SIMULATOR_RECORDS_PER_PULL = 5000
+DEFAULT_SIMULATOR_RECORDS_PER_PULL = 25
+MIN_SIMULATOR_CURSOR_STEP_SECONDS = 1
+MAX_SIMULATOR_CURSOR_STEP_SECONDS = 86400
+DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS = 60
+MIN_SIMULATED_PUSH_COUNT = 1
+MAX_SIMULATED_PUSH_COUNT = 100
+DEFAULT_SIMULATED_PUSH_COUNT = 5
 
 
 class StreamVelocityMode(StrEnum):
@@ -29,7 +38,6 @@ class SimulatorSubmissionStatus(StrEnum):
 class SimulatorWriteFailureCategory(StrEnum):
     """Strongly-typed failure category classification for simulated L5 destination writes."""
 
-    AUTH_ERROR = "AUTH_ERROR"
     VALIDATION_ERROR = "VALIDATION_ERROR"
     NOT_FOUND = "NOT_FOUND"
     RATE_LIMITED = "RATE_LIMITED"
@@ -45,23 +53,31 @@ class SimulatorStreamSpec:
     primary_key_field: str = "id"
     cursor_field: str = "updated_at"
     velocity_mode: StreamVelocityMode = StreamVelocityMode.ENTITY_TRANSACTIONAL
-    records_per_pull: int = 25
-    cursor_step_seconds: int = 60
+    records_per_pull: int = DEFAULT_SIMULATOR_RECORDS_PER_PULL
+    cursor_step_seconds: int = DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS
     chaos_policy: SimulatorChaosPolicy = field(default_factory=SimulatorChaosPolicy)
 
 
 @dataclass(frozen=True)
 class SimulatorConnectionConfig:
-    """Connection-level parameters stored in `ip.connections.public_config`."""
+    """Connection-level scalar synthesis parameters parsed from `Connection.public_config`."""
 
-    sandbox_id: str
     seed: int = 42
-    default_records_per_pull: int = 25
+    default_records_per_pull: int = DEFAULT_SIMULATOR_RECORDS_PER_PULL
 
 
 __all__ = [
+    "DEFAULT_SIMULATED_PUSH_COUNT",
+    "DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS",
+    "DEFAULT_SIMULATOR_RECORDS_PER_PULL",
     "MAX_SAMPLE_BLUEPRINT_BYTES",
-    "MAX_SIMULATOR_ENTITIES_PER_SANDBOX",
+    "MAX_SIMULATED_PUSH_COUNT",
+    "MAX_SIMULATOR_CURSOR_STEP_SECONDS",
+    "MAX_SIMULATOR_ENTITIES_PER_CONNECTION",
+    "MAX_SIMULATOR_RECORDS_PER_PULL",
+    "MIN_SIMULATED_PUSH_COUNT",
+    "MIN_SIMULATOR_CURSOR_STEP_SECONDS",
+    "MIN_SIMULATOR_RECORDS_PER_PULL",
     "UNIVERSAL_SIMULATOR_APP_ID",
     "SimulatorConnectionConfig",
     "SimulatorStreamSpec",

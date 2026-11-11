@@ -755,8 +755,11 @@ class GenericHttpConnector(BaseConnector):
         connection_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         """Introspects configured streams and samples data to infer schemas."""
+        _ = tenant_id
         spec_res = self._build_source_spec(public_config)
         if spec_res.is_err or spec_res.value is None:
             assert spec_res.error is not None
@@ -802,6 +805,9 @@ class GenericHttpConnector(BaseConnector):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         """Lists discrete object identifiers from a stream."""
         identifiers: list[str] = []
@@ -811,6 +817,8 @@ class GenericHttpConnector(BaseConnector):
             credentials=credentials,
             cursor=cursor,
             limit=limit,
+            tenant_id=tenant_id,
+            connection_id=connection_id,
         ):
             record_id = envelope.record_id or envelope.data.get("id") or str(len(identifiers))
             identifiers.append(str(record_id))
@@ -925,8 +933,12 @@ class GenericHttpConnector(BaseConnector):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         """Streams records asynchronously from the target HTTP stream."""
+        _ = (tenant_id, connection_id)
         self._last_error = None
         spec_res = self._build_source_spec(public_config)
         if spec_res.is_err or spec_res.value is None:
@@ -999,8 +1011,12 @@ class GenericHttpConnector(BaseConnector):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
         """Fetches a single record by primary key via fetch_one specification."""
+        _ = (tenant_id, connection_id)
         self._last_error = None
         spec_res = self._build_source_spec(public_config)
         if spec_res.is_err or spec_res.value is None:
@@ -1097,8 +1113,12 @@ class GenericHttpConnector(BaseConnector):
         command: WriteRecordCommand,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> WriteResultDTO:
         """Writes/mutates an individual record in the destination HTTP system."""
+        _ = (tenant_id, connection_id)
         target_record_id = command.record_id or ""
         spec_res = self._build_source_spec(public_config)
         if spec_res.is_err or spec_res.value is None:

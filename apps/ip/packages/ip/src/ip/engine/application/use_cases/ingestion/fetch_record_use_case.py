@@ -159,6 +159,8 @@ class FetchRecordUseCase:
             record_id=command.record_id,
             public_config=public_config,
             credentials=credentials,
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
         )
 
         if record_envelope is None:

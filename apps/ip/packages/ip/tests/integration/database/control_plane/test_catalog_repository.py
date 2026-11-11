@@ -39,6 +39,7 @@ async def test_catalog_repository_resolves_latest_active_version(
     await conn_repo.save(conn)
 
     cat_v1 = ConnectionCatalog.create(
+        tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
         catalog_version=1,
         streams=[
@@ -54,6 +55,7 @@ async def test_catalog_repository_resolves_latest_active_version(
     await cat_repo.save(cat_v1)
 
     cat_v2 = ConnectionCatalog.create(
+        tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
         catalog_version=2,
         streams=[
@@ -71,12 +73,18 @@ async def test_catalog_repository_resolves_latest_active_version(
     )
     await cat_repo.save(cat_v2)
 
-    latest_active = await cat_repo.get_active_by_connection_id(conn.id)
+    latest_active = await cat_repo.get_active_by_connection_id(seeded_ip_tenant, conn.id)
     assert latest_active is not None
+    assert latest_active.tenant_id == seeded_ip_tenant
     assert latest_active.catalog_version == 2
+    assert latest_active.is_active is True
     assert len(latest_active.streams[0].fields) == 2
 
-    v1_fetched = await cat_repo.get_by_version(conn.id, 1)
+    v1_fetched = await cat_repo.get_by_version(seeded_ip_tenant, conn.id, 1)
     assert v1_fetched is not None
     assert v1_fetched.catalog_version == 1
+    assert v1_fetched.is_active is False
     assert len(v1_fetched.streams[0].fields) == 1
+
+    other_tenant_active = await cat_repo.get_active_by_connection_id("tnt_foreign_other", conn.id)
+    assert other_tenant_active is None

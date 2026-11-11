@@ -36,9 +36,9 @@ from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from ip.engine.settings import IpEngineSettings
 from ip.solutions.connectors.registry_loader import register_solution_connectors
-from ip.solutions.connectors.sandbox.universal.ports import SimulatorSandboxReaderPort
+from ip.solutions.connectors.sandbox.universal.ports import SimulatorEntityReaderPort
 from ip.solutions.connectors.sandbox.universal.repository import (
-    SqlAlchemySessionScopedSimulatorSandboxReader,
+    SqlAlchemySessionScopedSimulatorEntityReader,
     SqlAlchemySimulatorApiProvider,
 )
 from ip.solutions.connectors.sandbox.universal.router import (
@@ -110,14 +110,14 @@ def create_solution_catalog_registry(
     allow_private_ips: bool = False,
     *,
     auth_resolver: AuthStrategyResolverPort[HttpRequestAuthenticator] | None = None,
-    sandbox_reader: SimulatorSandboxReaderPort | None = None,
+    entity_reader: SimulatorEntityReaderPort | None = None,
 ) -> ConnectorCatalogRegistry:
     """Composes the pure engine protocol catalog registry with built-in solution connectors."""
     registry = create_engine_catalog_registry(
         allow_private_ips=allow_private_ips,
         auth_resolver=auth_resolver,
     )
-    register_solution_connectors(registry, sandbox_reader=sandbox_reader)
+    register_solution_connectors(registry, entity_reader=entity_reader)
     return registry
 
 
@@ -147,7 +147,7 @@ def create_solution_data_plane_uow(
 
 def configure_solution_container(container: Container) -> Container:
     """Injects built-in SaaS connectors, vertical domains, transformers, and stitches into `Container`."""
-    sandbox_reader = SqlAlchemySessionScopedSimulatorSandboxReader(
+    entity_reader = SqlAlchemySessionScopedSimulatorEntityReader(
         db_router_getter=lambda: _resolve_container_db_router(container),
     )
     container.domain_repository_factories.override(
@@ -158,7 +158,7 @@ def configure_solution_container(container: Container) -> Container:
             create_solution_catalog_registry,
             allow_private_ips=container.config.allow_private_ips.as_(bool),
             auth_resolver=container.auth_resolver,
-            sandbox_reader=providers.Object(sandbox_reader),
+            entity_reader=providers.Object(entity_reader),
         )
     )
     container.transformer_registry.override(
@@ -178,8 +178,8 @@ def create_solution_api_provider(
     runtime: SolutionDatabaseRuntime | None = None,
 ) -> IpApiProvider:
     """Creates an IpApiProvider wired with all built-in vertical solution registries."""
-    sandbox_reader = (
-        SqlAlchemySessionScopedSimulatorSandboxReader(
+    entity_reader = (
+        SqlAlchemySessionScopedSimulatorEntityReader(
             db_router_getter=runtime.get_db_router,
             db_provider_getter=runtime.get_db_provider,
         )
@@ -189,7 +189,7 @@ def create_solution_api_provider(
     return IpApiProvider(
         catalog_registry_factory=lambda allow_private_ips: create_solution_catalog_registry(
             allow_private_ips=allow_private_ips,
-            sandbox_reader=sandbox_reader,
+            entity_reader=entity_reader,
         ),
         transformer_registry_factory=create_default_transformer_registry,
         stitch_catalog_factory=create_solution_stitch_catalog,

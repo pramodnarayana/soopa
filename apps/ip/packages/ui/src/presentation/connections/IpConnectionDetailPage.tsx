@@ -10,28 +10,47 @@ import {
 import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useConnectionDetailQuery } from '../../application/use-connection-queries';
+import { UNIVERSAL_SIMULATOR_APP_ID } from '../../domain/enums';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { SyncedDataInspectionPanel } from '../records/SyncedDataInspectionPanel';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
 import { ConnectionEntitiesSyncTab, ConnectionOverviewTab } from './ConnectionDetailTabs';
+import { SimulatorEntitiesSection } from './SimulatorEntitiesSection';
+
+export const ConnectionDetailTab = {
+  CONNECTION: 'connection',
+  ENTITIES: 'entities',
+  DATA: 'data',
+} as const;
+
+export type ConnectionDetailTabValue =
+  (typeof ConnectionDetailTab)[keyof typeof ConnectionDetailTab];
+
+const DETAIL_TAB_TRIGGER_CLASS =
+  'rounded-none border-b-2 border-transparent bg-transparent px-1 py-2.5 text-sm font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none -mb-px';
 
 export interface IpConnectionDetailPageProps {
   readonly connectionId: string;
+  readonly initialTab?: ConnectionDetailTabValue;
 }
 
-export function IpConnectionDetailPage({ connectionId }: IpConnectionDetailPageProps) {
+export function IpConnectionDetailPage({
+  connectionId,
+  initialTab = ConnectionDetailTab.CONNECTION,
+}: IpConnectionDetailPageProps) {
   const { navigation } = useIpWorkspace();
   const [actionProblem, setActionProblem] = useState<ApiProblem | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('connection');
+  const [activeTab, setActiveTab] = useState<string>(initialTab);
   const [inspectEntityFilter, setInspectEntityFilter] = useState<string | null>(null);
 
   const detailView = useConnectionDetailQuery(connectionId);
   const connection = detailView.data;
+  const isSimulator = connection?.appId === UNIVERSAL_SIMULATOR_APP_ID;
 
   const handleInspectEntity = (entityName: string) => {
     setInspectEntityFilter(entityName);
-    setActiveTab('data');
+    setActiveTab(ConnectionDetailTab.DATA);
   };
 
   return (
@@ -60,38 +79,41 @@ export function IpConnectionDetailPage({ connectionId }: IpConnectionDetailPageP
       {detailView.isLoading || !connection ? (
         <Skeleton className="h-72 w-full rounded-xl" />
       ) : (
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs
+          value={activeTab}
+          onValueChange={(nextTab) => {
+            setActionProblem(null);
+            setActiveTab(nextTab);
+          }}
+        >
           <TabsList className="w-full justify-start rounded-none border-b border-border bg-transparent p-0 h-auto gap-8">
             <TabsTrigger
-              value="connection"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-1 py-2.5 text-sm font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none -mb-px"
+              value={ConnectionDetailTab.CONNECTION}
+              className={DETAIL_TAB_TRIGGER_CLASS}
             >
               Connection
             </TabsTrigger>
-            <TabsTrigger
-              value="entities"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-1 py-2.5 text-sm font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none -mb-px"
-            >
+            <TabsTrigger value={ConnectionDetailTab.ENTITIES} className={DETAIL_TAB_TRIGGER_CLASS}>
               Entities
             </TabsTrigger>
-            <TabsTrigger
-              value="data"
-              className="rounded-none border-b-2 border-transparent bg-transparent px-1 py-2.5 text-sm font-medium text-muted-foreground shadow-none hover:text-foreground data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none -mb-px"
-            >
+            <TabsTrigger value={ConnectionDetailTab.DATA} className={DETAIL_TAB_TRIGGER_CLASS}>
               Data
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="connection" className="pt-4">
+          <TabsContent value={ConnectionDetailTab.CONNECTION} className="space-y-6 pt-4">
             <ConnectionOverviewTab
               connection={connection}
               onProblem={setActionProblem}
               onDeactivated={() => navigation.toConnections()}
               onDeleted={() => navigation.toConnections()}
             />
+            {isSimulator ? (
+              <SimulatorEntitiesSection connectionId={connection.id} onProblem={setActionProblem} />
+            ) : null}
           </TabsContent>
 
-          <TabsContent value="entities" className="pt-4">
+          <TabsContent value={ConnectionDetailTab.ENTITIES} className="pt-4">
             <ConnectionEntitiesSyncTab
               connectionId={connection.id}
               connection={connection}
@@ -101,7 +123,7 @@ export function IpConnectionDetailPage({ connectionId }: IpConnectionDetailPageP
             />
           </TabsContent>
 
-          <TabsContent value="data" className="pt-4">
+          <TabsContent value={ConnectionDetailTab.DATA} className="pt-4">
             <SyncedDataInspectionPanel
               connectionId={connection.id}
               initialEntityFilter={inspectEntityFilter}

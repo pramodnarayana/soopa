@@ -19,10 +19,16 @@ export {
   type CreateSimulatorEntityModalProps,
 } from './presentation/connections/CreateSimulatorEntityModal';
 export {
+  ConnectionDetailTab,
+  type ConnectionDetailTabValue,
   IpConnectionDetailPage,
   type IpConnectionDetailPageProps,
 } from './presentation/connections/IpConnectionDetailPage';
 export { IpConnectionsPage } from './presentation/connections/IpConnectionsPage';
+export {
+  SimulatorEntitiesSection,
+  type SimulatorEntitiesSectionProps,
+} from './presentation/connections/SimulatorEntitiesSection';
 export {
   DailyCompletenessRibbonPanel,
   type DailyCompletenessRibbonPanelProps,

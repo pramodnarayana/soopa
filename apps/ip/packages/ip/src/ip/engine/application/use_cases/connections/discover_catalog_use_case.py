@@ -126,6 +126,7 @@ class DiscoverCatalogUseCase:
                 connection_id=resolved.connection_id,
                 public_config=resolved.public_config,
                 credentials=resolved.credentials,
+                tenant_id=resolved.tenant_id,
             )
             if not catalog_dto.success:
                 await self._uow.rollback()
@@ -155,10 +156,13 @@ class DiscoverCatalogUseCase:
                     )
                 )
 
-            active_catalog = await self._uow.catalogs.get_active_by_connection_id(connection_id)
+            active_catalog = await self._uow.catalogs.get_active_by_connection_id(
+                resolved.tenant_id, connection_id
+            )
             next_version = (active_catalog.catalog_version + 1) if active_catalog else 1
 
             catalog_res = ConnectionCatalog.try_create(
+                tenant_id=resolved.tenant_id,
                 connection_id=resolved.connection_id,
                 catalog_version=next_version,
                 streams=domain_streams,

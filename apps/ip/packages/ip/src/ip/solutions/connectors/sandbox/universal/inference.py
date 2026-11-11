@@ -526,11 +526,8 @@ def _extract_seed(public_config: JsonDict) -> int:
 
 
 def parse_simulator_connection_config(public_config: JsonDict) -> SimulatorConnectionConfig:
-    """Extracts connection-level parameters (`sandbox_id`, `seed`, `records_per_pull`) from `public_config`."""
-    raw_sandbox_id = public_config.get("sandbox_id")
-    sandbox_id = str(raw_sandbox_id).strip() if isinstance(raw_sandbox_id, str) else ""
+    """Extracts connection-level scalar parameters (`seed`, `records_per_pull`) from `public_config`."""
     return SimulatorConnectionConfig(
-        sandbox_id=sandbox_id,
         seed=_extract_seed(public_config),
         default_records_per_pull=_extract_positive_int(public_config.get("records_per_pull"), 25),
     )

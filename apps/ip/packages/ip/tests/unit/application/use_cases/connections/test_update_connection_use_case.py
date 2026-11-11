@@ -2,32 +2,53 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
 from types import TracebackType
 
 import pytest
 from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dtos.connection_dtos import UpdateConnectionHttpRequest
-from ip.engine.adapters.inbound.api.routers.connections_router import update_connection
+from ip.engine.adapters.inbound.api.routers.connections_router import (
+    discover_connection_catalog,
+    update_connection,
+)
+from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
+from ip.engine.application.use_cases.connections.token_manager_service import TokenManagerService
 from ip.engine.application.use_cases.connections.update_connection_use_case import (
     UpdateConnectionCommand,
     UpdateConnectionUseCase,
 )
 from ip.engine.domain.connection.connection import Connection
-from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
+from ip.engine.domain.connection.enums import (
+    AuthType,
+    CatalogCategory,
+    ConnectionStatus,
+)
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
     DuplicateConnectionFingerprintError,
     InvalidConnectionStateError,
+    IpError,
+    IpErrorCode,
     Result,
 )
 from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
+from ip.engine.ports.outbound.connector_port import (
+    AppSpecDTO,
+    ConnectionCheckResultDTO,
+    DiscoveredCatalogDTO,
+    RecordEnvelopeDTO,
+    WriteRecordCommand,
+    WriteResultDTO,
+)
 from ip.engine.ports.outbound.stitch_repository_port import StitchRepositoryPort
 from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.transformation_repository_port import TransformationRepositoryPort
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
+from seedwork.domain.types import JsonDict
 from seedwork.events import EventEnvelope
 
 
@@ -287,3 +308,130 @@ async def test_update_connection_router_rejects_explicit_empty_new_name_despite_
     unchanged = await uow.connections.get_by_id(conn.id)
     assert unchanged is not None
     assert unchanged.name == "Acme Valid Name"
+
+
+class _UnauthorizedDiscoveryConnector(BaseConnector):
+    @property
+    def app_id(self) -> str:
+        return "acme_app"
+
+    def spec(self) -> AppSpecDTO:
+        return AppSpecDTO(
+            app_id="acme_app",
+            display_name="Acme App",
+            auth_type=AuthType.API_KEY,
+            category=CatalogCategory.ERP,
+            properties=(),
+        )
+
+    async def check(
+        self,
+        public_config: JsonDict,
+        credentials: JsonDict,
+    ) -> ConnectionCheckResultDTO:
+        _ = (public_config, credentials)
+        return ConnectionCheckResultDTO.ok("ok")
+
+    async def discover(
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+    ) -> DiscoveredCatalogDTO:
+        _ = (public_config, credentials, tenant_id)
+        return DiscoveredCatalogDTO.from_error(
+            connection_id,
+            IpError(
+                code=IpErrorCode.INVALID_CREDENTIALS,
+                message="Invalid API key supplied.",
+                http_status=401,
+            ),
+        )
+
+    async def list_objects(
+        self,
+        stream_name: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        limit: int = 100,
+        cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
+    ) -> Sequence[str]:
+        _ = (stream_name, public_config, credentials, limit, cursor, tenant_id, connection_id)
+        return ()
+
+    async def read_stream(
+        self,
+        stream_name: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        cursor: str | None = None,
+        limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
+    ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (stream_name, public_config, credentials, cursor, limit, tenant_id, connection_id)
+        if False:
+            yield RecordEnvelopeDTO(
+                stream_name="none",
+                record_id="none",
+                data={},
+                emitted_at="2026-01-01T00:00:00Z",
+            )
+
+    async def write_record(
+        self,
+        stream_name: str,
+        command: WriteRecordCommand,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
+    ) -> WriteResultDTO:
+        _ = (stream_name, command, public_config, credentials, tenant_id, connection_id)
+        return WriteResultDTO(success=True, record_id="ok")
+
+
+@pytest.mark.asyncio
+async def test_discover_connection_catalog_router_preserves_client_error_http_status(
+    cipher: AesGcmCipher,
+) -> None:
+    uow = _FakeControlPlaneUoW()
+    conn = Connection.create(
+        tenant_id="ten_06",
+        app_id="acme_app",
+        name="Acme Auth Connection",
+        auth_type=AuthType.API_KEY,
+        public_config={"endpoint_url": "https://api.acme.example.com"},
+        encrypted_credentials=cipher.encrypt({"api_key": "wrong_key"}),
+        endpoint_for_fingerprint="https://api.acme.example.com",
+    )
+    conn.activate()
+    await uow.connections.save(conn)
+
+    identity = IdentityContext(
+        subject="usr_admin",
+        claims={},
+        tenant_id="ten_06",
+        authorized_tenants={"ten_06"},
+        roles=("TenantAdmin",),
+    )
+    token_manager = TokenManagerService(control_plane_uow=uow, cipher=cipher)
+    response = await discover_connection_catalog(
+        tenant_id="ten_06",
+        connection_id=conn.id,
+        context=identity,
+        ip_cp_uow=uow,
+        cipher=cipher,
+        connectors={"acme_app": _UnauthorizedDiscoveryConnector()},
+        token_manager=token_manager,
+    )
+
+    assert hasattr(response, "status_code")
+    assert response.status_code == 401

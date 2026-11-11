@@ -44,17 +44,20 @@ def test_catalog_create_deterministic_hash_is_order_independent() -> None:
     )
 
     cat_1 = ConnectionCatalog.create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_123",
         catalog_version=1,
         streams=[stream_a_v1, stream_b_v1],
     )
     cat_2 = ConnectionCatalog.create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_123",
         catalog_version=2,
         streams=[stream_b_v1, stream_a_v2],
     )
 
     assert cat_1.id.startswith("ip_cat_")
+    assert cat_1.tenant_id == "tnt_alpha"
     assert cat_1.catalog_hash == cat_2.catalog_hash
     assert len(cat_1.catalog_hash) == 64
 
@@ -75,11 +78,13 @@ def test_catalog_hash_changes_when_schema_mutates() -> None:
     )
 
     cat_1 = ConnectionCatalog.create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_123",
         catalog_version=1,
         streams=[stream_v1],
     )
     cat_2 = ConnectionCatalog.create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_123",
         catalog_version=2,
         streams=[stream_v2],
@@ -95,6 +100,7 @@ def test_catalog_get_stream_lookup() -> None:
         primary_key=["id"],
     )
     cat = ConnectionCatalog.create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_123",
         catalog_version=1,
         streams=[records_stream],
@@ -106,8 +112,23 @@ def test_catalog_get_stream_lookup() -> None:
     assert cat.get_stream("non_existent_stream") is None
 
 
+def test_catalog_try_create_returns_result_error_on_blank_tenant_id() -> None:
+    result = ConnectionCatalog.try_create(
+        tenant_id="   ",
+        connection_id="ip_conn_valid",
+        catalog_version=1,
+        streams=[],
+    )
+
+    assert result.is_err is True
+    assert isinstance(result.error, InvalidConnectionConfigError)
+    assert result.error.code == IpErrorCode.INVALID_CONFIG
+    assert result.error.details["field"] == "tenant_id"
+
+
 def test_catalog_try_create_returns_result_error_on_blank_connection_id() -> None:
     result = ConnectionCatalog.try_create(
+        tenant_id="tnt_alpha",
         connection_id="   ",
         catalog_version=1,
         streams=[],
@@ -121,6 +142,7 @@ def test_catalog_try_create_returns_result_error_on_blank_connection_id() -> Non
 
 def test_catalog_try_create_succeeds_for_valid_input() -> None:
     result = ConnectionCatalog.try_create(
+        tenant_id="tnt_alpha",
         connection_id="ip_conn_valid",
         catalog_version=1,
         streams=[],
@@ -128,5 +150,6 @@ def test_catalog_try_create_succeeds_for_valid_input() -> None:
 
     assert result.is_ok is True
     assert result.value is not None
+    assert result.value.tenant_id == "tnt_alpha"
     assert result.value.connection_id == "ip_conn_valid"
     assert result.value.is_active is True

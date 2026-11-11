@@ -25,11 +25,7 @@ import type {
   IntervalLineageTrace,
   IntervalWindowCompleteness,
 } from '../domain/intervals';
-import {
-  type SimulatorEntity,
-  type SimulatorSandbox,
-  SimulatorVelocityMode,
-} from '../domain/simulator';
+import { type SimulatorEntity, SimulatorVelocityMode } from '../domain/simulator';
 import type { Stitch, StitchDefinition, StitchRun } from '../domain/stitch';
 import type { StreamState, SyncRun } from '../domain/sync-run';
 import type { IpTrace, IpTraceLineageItem } from '../domain/trace';
@@ -97,72 +93,40 @@ export const SEED_SOURCE_APP_SPEC: AppSpec = {
   ],
 };
 
-export const SEED_SIMULATOR_SANDBOX_ID = 'sbx_a1b2c3d4e5f6010203040506';
-export const SEED_SIMULATOR_API_KEY = 'sbx_key_seed0123456789abcdef0123456789ab';
-
 export const SEED_SIMULATOR_APP_SPEC: AppSpec = {
   appId: UNIVERSAL_SIMULATOR_APP_ID,
   displayName: 'Universal Schema Simulator',
-  authType: AuthType.API_KEY,
+  authType: AuthType.NO_AUTH,
   category: 'sandbox',
-  description: 'Connect to an authenticated Virtual External Sandbox.',
+  description: null,
   properties: [
     {
-      name: 'sandbox_id',
-      label: 'Virtual Sandbox ID',
-      type: ConnectorPropertyType.SHORT_TEXT,
-      required: true,
-      defaultValue: null,
-      description: 'Target Virtual Sandbox identifier (e.g. sbx_...).',
-      options: [],
-      oauthConfig: null,
-    },
-    {
-      name: 'api_key',
-      label: 'Sandbox API Key',
-      type: ConnectorPropertyType.SECRET_TEXT,
-      required: true,
-      defaultValue: null,
-      description: 'Secret API key issued when provisioning the Virtual Sandbox.',
-      options: [],
-      oauthConfig: null,
-    },
-    {
       name: 'seed',
-      label: 'Deterministic Seed',
+      label: 'Seed',
       type: ConnectorPropertyType.NUMBER,
       required: false,
       defaultValue: 42,
-      description: 'Optional deterministic seed for synthetic record generation.',
+      description: null,
       options: [],
       oauthConfig: null,
     },
     {
       name: 'records_per_pull',
-      label: 'Records per Pull Override',
+      label: 'Records per Pull',
       type: ConnectorPropertyType.NUMBER,
       required: false,
       defaultValue: 25,
-      description: 'Optional per-pull batch limit override.',
+      description: null,
       options: [],
       oauthConfig: null,
     },
   ],
 };
 
-export const SEED_SIMULATOR_SANDBOX: SimulatorSandbox = {
-  id: SEED_SIMULATOR_SANDBOX_ID,
-  tenantId: SEED_TENANT_ID,
-  name: 'Primary Virtual Sandbox',
-  apiKeyPrefix: 'sbx_key_seed',
-  createdAt: '2026-10-20T10:00:00Z',
-  updatedAt: '2026-10-20T10:00:00Z',
-};
-
 export const SEED_SIMULATOR_ENTITY: SimulatorEntity = {
   id: 'sim_ent_11223344556677889900aabb',
   tenantId: SEED_TENANT_ID,
-  sandboxId: SEED_SIMULATOR_SANDBOX_ID,
+  connectionId: SEED_CONNECTION_ID,
   entityName: 'orders',
   primaryKeyField: 'order_id',
   cursorField: 'updated_at',
