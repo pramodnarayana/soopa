@@ -1,13 +1,12 @@
-import Editor from '@monaco-editor/react';
 import { useMutation } from '@tanstack/react-query';
 import { createRoute } from '@tanstack/react-router';
 
 import { AlertTriangle, CheckCircle, Copy, FileCode, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { CodeViewer } from '../../components/ui/code-viewer';
 import { EdiEditorPane } from '../../components/ui/edi-editor-pane';
 import { useUcpNetwork } from '../../contexts/UcpNetworkContext';
 import { useToast } from '../../hooks/use-toast';
-import { registerEdiLanguageAndTheme } from '../../utils/monaco-edi';
 import { Route as appRoute } from '../tenant';
 import { EdiHumanReadableViewer } from './-components/EdiHumanReadableViewer';
 
@@ -171,12 +170,10 @@ const EdiCodeViewer = ({
   outputFormat,
   outputResult,
   validationErrors,
-  onEditorWillMount,
 }: {
   outputFormat: 'JSON' | 'EDI';
   outputResult: string;
   validationErrors: string[];
-  onEditorWillMount: (monaco: typeof import('monaco-editor')) => void;
 }) => (
   <div className="flex flex-col w-full h-full relative">
     {validationErrors.length > 0 && (
@@ -193,28 +190,11 @@ const EdiCodeViewer = ({
       </div>
     )}
     <div className="flex-1 min-h-0">
-      <Editor
+      <CodeViewer
         height="100%"
         language={outputFormat === 'EDI' ? 'edi' : 'json'}
         value={outputResult}
-        theme="soopa-theme"
-        beforeMount={onEditorWillMount}
-        options={{
-          readOnly: true,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          lineNumbersMinChars: 3,
-          wordWrap: 'on',
-          folding: true,
-          padding: { top: 16, bottom: 16 },
-          renderLineHighlight: 'none',
-          hideCursorInOverviewRuler: true,
-          overviewRulerBorder: false,
-          scrollbar: {
-            verticalScrollbarSize: 8,
-            horizontalScrollbarSize: 8,
-          },
-        }}
+        className="rounded-none border-0"
       />
     </div>
   </div>
@@ -226,14 +206,12 @@ const EdiOutputViewer = ({
   inputPayload,
   outputResult,
   validationErrors,
-  onEditorWillMount,
 }: {
   outputFormat: 'JSON' | 'Human Readable' | 'EDI';
   inputFormat: 'EDI' | 'JSON';
   inputPayload: string;
   outputResult: string;
   validationErrors: string[];
-  onEditorWillMount: (monaco: typeof import('monaco-editor')) => void;
 }) => {
   if (outputFormat === 'Human Readable') {
     return (
@@ -251,7 +229,6 @@ const EdiOutputViewer = ({
       outputFormat={outputFormat}
       outputResult={outputResult}
       validationErrors={validationErrors}
-      onEditorWillMount={onEditorWillMount}
     />
   );
 };
@@ -266,10 +243,6 @@ export function EdiToolPage() {
   const [outputResult, setOutputResult] = useState('');
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isValid, setIsValid] = useState<boolean | null>(null);
-
-  const handleEditorWillMount = (monaco: typeof import('monaco-editor')) => {
-    registerEdiLanguageAndTheme(monaco);
-  };
 
   const { toast } = useToast();
 
@@ -422,7 +395,7 @@ export function EdiToolPage() {
           </div>
           <EdiEditorPane
             value={inputPayload}
-            onChange={(value: string | undefined) => {
+            onChange={(value: string) => {
               // Auto-detect if user pasted full JSON while in EDI mode
               if (value && inputFormat === 'EDI' && value.trim().startsWith('{')) {
                 try {
@@ -433,7 +406,7 @@ export function EdiToolPage() {
                   // Not valid JSON yet, do nothing
                 }
               }
-              setInputPayload(value || '');
+              setInputPayload(value);
             }}
             language={inputFormat === 'EDI' ? 'edi' : 'json'}
           />
@@ -505,7 +478,6 @@ export function EdiToolPage() {
               inputPayload={inputPayload}
               outputResult={outputResult}
               validationErrors={validationErrors}
-              onEditorWillMount={handleEditorWillMount}
             />
           </div>
         </div>

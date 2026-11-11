@@ -325,7 +325,7 @@ async def reconcile(domain: str = "all") -> None:
                             )
                         )
 
-                # Reconcile NO_AUTH connections to ACTIVE status
+                # Reconcile NO_AUTH connections to ACTIVE status and enforce DB CheckConstraint
                 conn_res = await session.execute(
                     text("""
                     UPDATE ip.connections
@@ -337,6 +337,26 @@ async def reconcile(domain: str = "all") -> None:
                 activated_count = len(conn_res.all())
                 if activated_count > 0:
                     logger.info("reconciled_no_auth_connections", activated_count=activated_count)
+
+                await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1
+                            FROM pg_constraint c
+                            JOIN pg_namespace n ON n.oid = c.connamespace
+                            WHERE n.nspname = 'ip'
+                              AND c.conname = 'ck_ip_connections_no_auth_not_pending'
+                        ) THEN
+                            ALTER TABLE ip.connections
+                            ADD CONSTRAINT ck_ip_connections_no_auth_not_pending
+                            CHECK (NOT (auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'));
+                        END IF;
+                    END
+                    $$;
+                    """)
+                )
 
                 await session.execute(
                     text(
@@ -449,7 +469,6 @@ def main() -> None:
     parser.add_argument(
         "--domain",
         default="all",
-        choices=["all", "platform", "ip", "identity"],
         help="Target bounded context to reconcile (default: all)",
     )
     args = parser.parse_args()

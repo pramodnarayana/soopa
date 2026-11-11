@@ -7,6 +7,8 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  SimulatePushInput,
+  SimulatePushResult,
   UpdateConnectionInput,
 } from '../domain/connection';
 import {
@@ -324,6 +326,26 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     }
     this.items.splice(idx, 1);
     return ok(undefined);
+  }
+
+  public async simulatePush(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>> {
+    const existing = this.items.find((c) => c.tenantId === tenantId && c.id === connectionId);
+    if (!existing) {
+      return err(notFoundProblem(`Connection ${connectionId} not found`));
+    }
+    const count = input.count ?? 1;
+    return ok({
+      connectionId,
+      streamName: input.streamName,
+      recordsPushed: count,
+      recordIds: ['SIM-000001'],
+      traceIds: ['trc_sim_001'],
+      status: 'ACCEPTED',
+    });
   }
 }
 

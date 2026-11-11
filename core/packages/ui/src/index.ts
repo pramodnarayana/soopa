@@ -1,4 +1,5 @@
 export * from './components/AppNotSubscribed';
+export * from './components/code-editor';
 export * from './components/observability';
 export * from './components/ui/activity-heatmap';
 export * from './components/ui/alert';

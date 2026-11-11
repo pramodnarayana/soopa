@@ -35,6 +35,7 @@ export interface IpNavigationPort {
 }
 
 export interface IpWorkspaceContextValue {
+  readonly baseUrl?: string;
   readonly tenantId: string;
   readonly tenantSlug: string;
   readonly repositories: IpRepositoriesBundle;

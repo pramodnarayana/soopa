@@ -2,6 +2,36 @@
 
 This document tracks known architectural drift, quick fixes, and non-critical refactoring tasks that should be addressed in future sprints.
 
+## [Architecture] IP Solutions Directory Refactor: Eliminate Horizontal Layering & Unify Vertical Slices
+
+- **Date Added**: 2026-11-10
+- **Status**: TO DO
+- **Description**: The `apps/ip/packages/ip/src/ip/solutions` bounded context currently suffers from an architectural anti-pattern of horizontal technical layering rather than cohesive vertical domain slicing. Specifically, vertical business solutions (such as `energy` and `tms`) are fragmented across four disjoint horizontal folders:
+  1. `solutions/domains/{energy,tms}/` (which only contains canonical ORM models, migrations, and repositories)
+  2. `solutions/transformers/{energy,tms}/` (field mapping transformations)
+  3. `solutions/stitches/{energy,tms}/` (Hatchet-inspired workflow DAG definitions)
+  4. `solutions/connectors/sandbox/{energy}/` (domain-specific simulators)
+  
+  This naming causes significant cognitive friction: `solutions` conceptually represents business domains, yet contains an internal `domains/` subfolder strictly holding persistence models (`models.py`, which itself is an outdated pattern). Developers modifying a single business capability (e.g. Energy AMI Service Orders) must hop between four separate top-level folders.
+- **Action Item**: Refactor `apps/ip/packages/ip/src/ip/solutions/` from horizontal technical buckets into clean, cohesive Domain-Driven Design (DDD) Vertical Slices:
+  1. Restructure by vertical domain:
+     ```text
+     apps/ip/packages/ip/src/ip/solutions/
+     ├── energy/
+     │   ├── canonical/       # Entities, schemas, SQLAlchemy mappings (replacing models.py with ubiquitous names)
+     │   ├── transformers/    # Inbound/outbound field transformers
+     │   ├── stitches/        # Workflows & step definitions
+     │   └── connectors/      # Energy-specific connectors and AMI sandbox simulator
+     ├── tms/
+     │   ├── canonical/
+     │   ├── transformers/
+     │   └── stitches/
+     └── connectors/          # Universal / SaaS connectors (Salesforce, Stripe, ServiceNow, Universal Simulator)
+     ```
+  2. Eliminate the redundant `solutions/domains/` folder entirely.
+  3. Eliminate all `models.py` files in favor of ubiquitous language files (`topology.py`, `records.py`, `service_points.py`).
+  4. Update `tach.toml` modules and import paths to enforce vertical domain boundaries.
+
 ## [Architecture] Unified Domain Lifecycle & Sub-App Consolidation (Eradicate Mounted Sub-Apps)
 
 - **Date Added**: 2026-10-21

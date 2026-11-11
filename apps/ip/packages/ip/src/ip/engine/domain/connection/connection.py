@@ -168,6 +168,11 @@ class Connection(AggregateRoot):
         """Factory method to construct a Connection aggregate and emit ConnectionCreatedEvent."""
         fingerprint = compute_connection_fingerprint(tenant_id, app_id, endpoint_for_fingerprint)
         conn_id = cls.new_id()
+        initial_status = (
+            ConnectionStatus.ACTIVE
+            if auth_type == AuthType.NO_AUTH
+            else ConnectionStatus.PENDING_AUTH
+        )
 
         instance = cls(
             id=conn_id,
@@ -178,7 +183,7 @@ class Connection(AggregateRoot):
             public_config=public_config,
             encrypted_credentials=encrypted_credentials,
             connection_fingerprint=fingerprint,
-            status=ConnectionStatus.PENDING_AUTH,
+            status=initial_status,
         )
 
         instance.add_domain_event(

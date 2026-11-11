@@ -6,6 +6,7 @@ from collections.abc import Mapping
 
 from database.router import DatabaseRouterPort
 from dependency_injector import providers
+from fastapi import FastAPI
 from pubsub.ports.message_consumer_port import MessageConsumerPort
 from shttp import HttpRequestAuthenticator
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +34,9 @@ from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from ip.engine.settings import IpEngineSettings
 from ip.solutions.connectors.registry_loader import register_solution_connectors
+from ip.solutions.connectors.sandbox.universal.router import (
+    router as universal_simulator_router,
+)
 from ip.solutions.domains.energy.ports import (
     ENERGY_DOMAIN_REPOSITORY_KEY,
     EnergyDomainRepositoryPort,
@@ -136,6 +140,11 @@ def create_solution_api_provider() -> IpApiProvider:
     )
 
 
+def register_solution_routes(app: FastAPI) -> None:
+    """Registers solution-layer HTTP routers (such as Sandbox Simulator webhook triggers) onto `app`."""
+    app.include_router(universal_simulator_router)
+
+
 class IpSolutionOrchestratorWorkerModule(IpOrchestratorWorkerModule):
     """LaunchableWorker composition root for `ip-orchestrator-worker` wired with vertical solutions."""
 
@@ -186,5 +195,6 @@ __all__ = [
     "create_solution_catalog_registry",
     "create_solution_data_plane_uow",
     "create_solution_stitch_catalog",
+    "register_solution_routes",
     "resolve_energy_domain_repo",
 ]

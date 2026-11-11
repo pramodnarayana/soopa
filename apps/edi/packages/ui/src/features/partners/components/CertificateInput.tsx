@@ -1,28 +1,50 @@
-import React from 'react';
+import { Check } from 'lucide-react';
+import type { JSX, ReactNode } from 'react';
 import { EdiEditorPane } from '../../../components/ui/edi-editor-pane';
 
 export interface CertificateInputProps {
-  value: string;
-  onChange: (pem: string) => void;
-  extraActions?: React.ReactNode;
+  readonly value: string;
+  readonly onChange: (pem: string) => void;
+  readonly extraActions?: ReactNode;
+}
+
+function renderPemDetectedBanner(currentValue: string): ReactNode {
+  if (
+    !currentValue ||
+    !currentValue.includes('-----BEGIN CERTIFICATE-----') ||
+    !currentValue.includes('-----END CERTIFICATE-----')
+  ) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none flex items-center gap-2 border-t border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+      <Check className="h-3.5 w-3.5 shrink-0" />
+      <span>Certificate detected — ready to save</span>
+    </div>
+  );
 }
 
 /**
- * Reusable certificate input powered by Monaco Editor.
+ * Reusable certificate input powered by MonacoCodeEditor via EdiEditorPane.
  * Supports drag-and-drop, file picker, and pasting raw PEM text natively.
  */
-export function CertificateInput({ value, onChange, extraActions }: CertificateInputProps) {
+export function CertificateInput({
+  value,
+  onChange,
+  extraActions,
+}: CertificateInputProps): JSX.Element {
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden h-[440px] flex flex-col">
+    <div className="flex h-[440px] flex-col overflow-hidden rounded-xl border border-border">
       <EdiEditorPane
         value={value}
         onChange={onChange}
         language="plaintext"
         cornerPlaceholder={'-----BEGIN CERTIFICATE-----\n-----END CERTIFICATE-----'}
-        showEmptyState={false}
+        emptyPrompt={null}
         extraActions={extraActions}
         fontSize={14}
-        showCertDetected
+        renderStatusBanner={renderPemDetectedBanner}
         acceptedFileExtensions=".pem,.crt,.cer,.cert,.key,.txt"
       />
     </div>

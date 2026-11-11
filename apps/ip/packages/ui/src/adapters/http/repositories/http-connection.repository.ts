@@ -13,6 +13,8 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  SimulatePushInput,
+  SimulatePushResult,
   UpdateConnectionInput,
 } from '../../../domain/connection';
 import type { ConnectionRepositoryPort } from '../../../ports/connection-repository.port';
@@ -23,6 +25,8 @@ import {
   mapCreateConnectionToWire,
   mapDiscoveredCatalogFromWire,
   mapRelinkConnectionToWire,
+  mapSimulatePushFromWire,
+  mapSimulatePushToWire,
   mapUpdateConnectionToWire,
 } from '../mappers/connection.mapper';
 import { parseAndMapResult } from '../parse-wire';
@@ -31,6 +35,7 @@ import {
   ConnectionListWireSchema,
   ConnectionWireSchema,
   DiscoveredCatalogWireSchema,
+  SimulatePushWireSchema,
 } from '../schemas/connection.schema';
 
 export class HttpConnectionRepository implements ConnectionRepositoryPort {
@@ -193,5 +198,23 @@ export class HttpConnectionRepository implements ConnectionRepositoryPort {
       return err(raw.error);
     }
     return ok(undefined);
+  }
+
+  public async simulatePush(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>> {
+    const raw = await this.httpClient.post<unknown>(
+      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}/simulate-push`,
+      mapSimulatePushToWire(input),
+    );
+    return parseAndMapResult(
+      raw,
+      SimulatePushWireSchema,
+      mapSimulatePushFromWire,
+      `POST /ip/connections/${connectionId}/simulate-push`,
+      this.logger,
+    );
   }
 }

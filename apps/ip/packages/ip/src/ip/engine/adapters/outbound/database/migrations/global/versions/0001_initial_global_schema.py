@@ -50,6 +50,10 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("deactivated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "NOT (auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH')",
+            name="ck_ip_connections_no_auth_not_pending",
+        ),
         sa.PrimaryKeyConstraint("id"),
         schema="ip",
     )

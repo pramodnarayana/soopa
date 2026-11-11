@@ -4,15 +4,6 @@ export {
   type LineageTreeNode,
   type LineageTreeProps,
 } from './lineage-tree';
-export {
-  CodeViewer,
-  MonacoCodeViewer,
-  type MonacoCodeViewerProps,
-} from './monaco-code-viewer';
-export {
-  MonacoJsonDiffViewer,
-  type MonacoJsonDiffViewerProps,
-} from './monaco-json-diff-viewer';
 export { ReplayBadge, type ReplayBadgeProps } from './replay-badge';
 export {
   SplitInspectorDrawer,

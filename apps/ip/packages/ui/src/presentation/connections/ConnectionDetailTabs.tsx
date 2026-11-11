@@ -35,11 +35,15 @@ import {
 } from '@soopa/ui';
 import { type ColumnDef, flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   Compass,
+  Copy,
   Database,
   Play,
+  Plus,
+  Radio,
   Search,
   ShieldAlert,
 } from 'lucide-react';
@@ -52,6 +56,7 @@ import {
   useDeleteConnectionMutation,
   useDiscoverCatalogMutation,
   useRelinkConnectionMutation,
+  useSimulatePushMutation,
   useUpdateConnectionMutation,
 } from '../../application/use-connection-queries';
 import {
@@ -59,10 +64,22 @@ import {
   useSyncRunsQuery,
   useTriggerSyncRunMutation,
 } from '../../application/use-sync-run-queries';
-import type { Connection, DiscoveredCatalog, StreamSchema } from '../../domain/connection';
-import { ConnectionStatus, ConnectorPropertyKey, SyncRunKind } from '../../domain/enums';
+import {
+  buildIngressWebhookUrl,
+  type Connection,
+  type DiscoveredCatalog,
+  type StreamSchema,
+} from '../../domain/connection';
+import {
+  ConnectionStatus,
+  ConnectorPropertyKey,
+  SyncRunKind,
+  UNIVERSAL_SIMULATOR_APP_ID,
+} from '../../domain/enums';
 import type { StreamState, SyncRun } from '../../domain/sync-run';
+import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { formatRelativeTimestamp, mapSyncRunStatusTone } from '../shared/status-mapping';
+import { CreateSimulatorEntityModal } from './CreateSimulatorEntityModal';
 import {
   isPropertyVisible,
   isSecretConnectorProperty,
@@ -70,6 +87,10 @@ import {
   SingleSpecPropertyControl,
   splitSpecFormValues,
 } from './SpecFormRenderer';
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 export function ConnectionOverviewTab({
   connection,
@@ -84,12 +105,14 @@ export function ConnectionOverviewTab({
 }) {
   const [name, setName] = useState(connection.name);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [createEntityModalOpen, setCreateEntityModalOpen] = useState(false);
   const specView = useCatalogAppSpecQuery(connection.appId);
   const relinkMutation = useRelinkConnectionMutation(connection.id);
   const updateMutation = useUpdateConnectionMutation(connection.id);
   const deactivateMutation = useDeactivateConnectionMutation(connection.id);
   const deleteMutation = useDeleteConnectionMutation(connection.id);
   const isDeactivated = connection.status === ConnectionStatus.DEACTIVATED;
+  const isSimulator = connection.appId === UNIVERSAL_SIMULATOR_APP_ID;
   const isSaving = relinkMutation.isPending || updateMutation.isPending;
 
   const allProperties = specView.data?.properties ?? [];
@@ -100,8 +123,13 @@ export function ConnectionOverviewTab({
   }));
 
   const visibleProperties = useMemo(
-    () => allProperties.filter((prop) => isPropertyVisible(prop, formValues, allProperties)),
-    [allProperties, formValues],
+    () =>
+      allProperties.filter(
+        (prop) =>
+          !(isSimulator && prop.name === 'streams') &&
+          isPropertyVisible(prop, formValues, allProperties),
+      ),
+    [allProperties, formValues, isSimulator],
   );
 
   const isDirty = useMemo(() => {
@@ -198,6 +226,18 @@ export function ConnectionOverviewTab({
             Connection Details
           </h4>
           <div className="flex items-center gap-2">
+            {isSimulator ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCreateEntityModalOpen(true)}
+                className="gap-1.5 text-xs"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Create Entity</span>
+              </Button>
+            ) : null}
             <Button type="submit" size="sm" disabled={isSaving || !isDirty} className="text-xs">
               {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
@@ -228,37 +268,7 @@ export function ConnectionOverviewTab({
           </div>
         </div>
 
-        {/* Non-editable metadata */}
-        <div className="grid grid-cols-2 gap-4 text-xs sm:grid-cols-4 pb-6 border-b border-border">
-          <div>
-            <span className="text-muted-foreground block mb-1">Connector</span>
-            <span className="font-semibold text-foreground">
-              {specView.data?.displayName || connection.appId}
-            </span>
-          </div>
-          <div>
-            <span className="text-muted-foreground block mb-1">Status</span>
-            <StatusBadge label={connection.status} tone={statusTone} />
-          </div>
-          <div>
-            <span className="text-muted-foreground block mb-1">Auth Strategy</span>
-            <span className="font-mono text-foreground">{connection.authType}</span>
-          </div>
-          <div>
-            <span className="text-muted-foreground block mb-1">Created</span>
-            <span className="text-foreground">{formatRelativeTimestamp(connection.createdAt)}</span>
-          </div>
-          {connection.lastRefreshedAt ? (
-            <div>
-              <span className="text-muted-foreground block mb-1">Last Refreshed</span>
-              <span className="text-foreground">
-                {formatRelativeTimestamp(connection.lastRefreshedAt)}
-              </span>
-            </div>
-          ) : null}
-        </div>
-
-        {/* Editable form fields */}
+        {/* Editable form fields first, starting with Name */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <div className="space-y-2">
             <Label htmlFor="conn-name">Name</Label>
@@ -291,7 +301,50 @@ export function ConnectionOverviewTab({
             );
           })}
         </div>
+
+        {/* Readonly fields arranged after editable fields */}
+        <div className="grid grid-cols-2 gap-6 text-xs sm:grid-cols-4">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Connector</Label>
+            <div className="font-semibold text-sm text-foreground">
+              {specView.data?.displayName || connection.appId}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Status</Label>
+            <div>
+              <StatusBadge label={connection.status} tone={statusTone} />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Auth Strategy</Label>
+            <div className="font-mono text-sm text-foreground">{connection.authType}</div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Created</Label>
+            <div className="text-sm text-foreground">
+              {formatRelativeTimestamp(connection.createdAt)}
+            </div>
+          </div>
+          {connection.lastRefreshedAt ? (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Last Refreshed</Label>
+              <div className="text-sm text-foreground">
+                {formatRelativeTimestamp(connection.lastRefreshedAt)}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </form>
+
+      {isSimulator ? (
+        <CreateSimulatorEntityModal
+          open={createEntityModalOpen}
+          onOpenChange={setCreateEntityModalOpen}
+          connection={connection}
+          onProblem={onProblem}
+        />
+      ) : null}
 
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -504,21 +557,45 @@ export function ConnectionEntitiesSyncTab({
   onOpenTrace,
   onProblem,
 }: ConnectionEntitiesSyncTabProps) {
+  const { baseUrl, tenantId } = useIpWorkspace();
   const [search, setSearch] = useState('');
   const [userSelectedStreams, setUserSelectedStreams] = useState<string[]>([]);
   const [isSyncingAll, setIsSyncingAll] = useState(false);
+  const [copiedStreamWebhook, setCopiedStreamWebhook] = useState<string | null>(null);
   const [streamSyncFrom, setStreamSyncFrom] = useState<Record<string, string>>({});
   const [streamCustomDates, setStreamCustomDates] = useState<Record<string, string>>({});
   const [streamSchedules, setStreamSchedules] = useState<Record<string, string>>({});
   const [expandedStreams, setExpandedStreams] = useState<Set<string>>(new Set());
 
   const isAuthPending = connection?.status === 'PENDING_AUTH';
+  const isSimulator = connection?.appId === UNIVERSAL_SIMULATOR_APP_ID;
 
   const catalogView = useConnectionCatalogQuery(connectionId, !isAuthPending);
   const statesView = useStreamStatesQuery(connectionId);
   const runsView = useSyncRunsQuery(connectionId, 40);
   const triggerMutation = useTriggerSyncRunMutation(connectionId);
   const discoverMutation = useDiscoverCatalogMutation(connectionId);
+  const updateConnectionMutation = useUpdateConnectionMutation(connectionId);
+  const simulatePushMutation = useSimulatePushMutation(connectionId);
+
+  // Hydrate persisted stream schedules from connection.publicConfig.stream_schedules
+  React.useEffect(() => {
+    const rawSchedules = connection?.publicConfig?.stream_schedules;
+    if (isPlainRecord(rawSchedules)) {
+      const nextSchedules: Record<string, string> = {};
+      const nextSyncFrom: Record<string, string> = {};
+      for (const [sName, val] of Object.entries(rawSchedules)) {
+        if (typeof val === 'string') {
+          nextSchedules[sName] = val;
+        } else if (isPlainRecord(val)) {
+          if (typeof val.schedule === 'string') nextSchedules[sName] = val.schedule;
+          if (typeof val.sync_from === 'string') nextSyncFrom[sName] = val.sync_from;
+        }
+      }
+      setStreamSchedules((prev) => ({ ...nextSchedules, ...prev }));
+      setStreamSyncFrom((prev) => ({ ...nextSyncFrom, ...prev }));
+    }
+  }, [connection?.publicConfig?.stream_schedules]);
 
   React.useEffect(() => {
     if (catalogView.problem) {
@@ -692,16 +769,85 @@ export function ConnectionEntitiesSyncTab({
     });
   };
 
+  const persistStreamScheduleConfig = async (
+    nextSchedules: Record<string, string>,
+    nextSyncFrom: Record<string, string>,
+  ): Promise<void> => {
+    if (!connection) return;
+    const allKeys = new Set([...Object.keys(nextSchedules), ...Object.keys(nextSyncFrom)]);
+    const serializedSchedules: Record<string, { schedule: string; sync_from: string }> = {};
+    for (const key of allKeys) {
+      serializedSchedules[key] = {
+        schedule: nextSchedules[key] ?? '15m',
+        sync_from: nextSyncFrom[key] ?? 'all',
+      };
+    }
+    await updateConnectionMutation.mutateAsync({
+      newName: connection.name,
+      updatedPublicConfig: {
+        ...connection.publicConfig,
+        stream_schedules: serializedSchedules,
+      },
+    });
+  };
+
   const handleSyncFromChange = (streamName: string, syncFrom: string) => {
-    setStreamSyncFrom((prev) => ({ ...prev, [streamName]: syncFrom }));
+    const nextSyncFrom = { ...streamSyncFrom, [streamName]: syncFrom };
+    setStreamSyncFrom(nextSyncFrom);
+    void persistStreamScheduleConfig(streamSchedules, nextSyncFrom);
     const match = SYNC_FROM_OPTIONS.find((b) => b.value === syncFrom);
     toast.success(`Sync from for "${streamName}" set to ${match?.label ?? syncFrom}.`);
   };
 
   const handleScheduleChange = (streamName: string, schedule: string) => {
-    setStreamSchedules((prev) => ({ ...prev, [streamName]: schedule }));
+    const nextSchedules = { ...streamSchedules, [streamName]: schedule };
+    setStreamSchedules(nextSchedules);
+    void persistStreamScheduleConfig(nextSchedules, streamSyncFrom);
     const match = SCHEDULE_OPTIONS.find((s) => s.value === schedule);
     toast.success(`Sync schedule for "${streamName}" set to ${match?.label ?? schedule}.`);
+  };
+
+  const handleDiscoverEntities = async (): Promise<void> => {
+    onProblem(null);
+    const res = await discoverMutation.mutateAsync();
+    if (!res.ok) {
+      onProblem(res.error);
+      return;
+    }
+    const discoveredNames = res.value.streams.map((s) => s.name);
+    setUserSelectedStreams((prev) => Array.from(new Set([...prev, ...discoveredNames])));
+    setSelectedStreams((prev) => new Set([...prev, ...discoveredNames]));
+    toast.success(`Discovered ${discoveredNames.length} entity stream(s).`);
+  };
+
+  const handleCopyEntityWebhook = async (streamName: string): Promise<void> => {
+    const resolvedTenantId = connection?.tenantId ?? tenantId;
+    const url = buildIngressWebhookUrl(baseUrl, resolvedTenantId, connectionId, streamName);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedStreamWebhook(streamName);
+      toast.success(`Copied webhook URL for entity "${streamName}".`);
+      setTimeout(() => {
+        setCopiedStreamWebhook((curr) => (curr === streamName ? null : curr));
+      }, 2000);
+    } catch {
+      toast.error('Unable to copy entity webhook URL to clipboard.');
+    }
+  };
+
+  const handleSimulatePush = async (streamName: string): Promise<void> => {
+    onProblem(null);
+    const res = await simulatePushMutation.mutateAsync({
+      streamName,
+      count: 1,
+    });
+    if (!res.ok) {
+      onProblem(res.error);
+      return;
+    }
+    toast.success(
+      `Simulated push for "${streamName}" (${res.value.recordsPushed} record ingested into L1).`,
+    );
   };
 
   const handleTrigger = async (
@@ -915,6 +1061,40 @@ export function ConnectionEntitiesSyncTab({
               <Play className="h-3 w-3" />
               <span>Sync</span>
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleCopyEntityWebhook(row.original.streamName)}
+              title="Copy entity-specific webhook URL"
+              className="h-7 gap-1 text-xs"
+            >
+              {copiedStreamWebhook === row.original.streamName ? (
+                <>
+                  <Check className="h-3 w-3 text-emerald-600" />
+                  <span>Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="h-3 w-3" />
+                  <span>Webhook</span>
+                </>
+              )}
+            </Button>
+            {isSimulator ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={simulatePushMutation.isPending}
+                onClick={() => void handleSimulatePush(row.original.streamName)}
+                title="Emit synthetic push event into L1 Ingress"
+                className="h-7 gap-1 text-xs"
+              >
+                <Radio className="h-3 w-3 text-primary" />
+                <span>Simulate Push</span>
+              </Button>
+            ) : null}
             {onInspectEntity ? (
               <Button
                 type="button"
@@ -940,6 +1120,9 @@ export function ConnectionEntitiesSyncTab({
       streamSchedules,
       expandedStreams,
       triggerMutation.isPending,
+      simulatePushMutation.isPending,
+      copiedStreamWebhook,
+      isSimulator,
       isSyncingAll,
       onInspectEntity,
     ],
@@ -1004,19 +1187,33 @@ export function ConnectionEntitiesSyncTab({
   return (
     <div className="space-y-4">
       {/* Header and Sync Action */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold text-foreground">Entities</h2>
 
-        <Button
-          type="button"
-          size="sm"
-          disabled={isAuthPending || selectedStreams.size === 0 || isSyncingAll}
-          onClick={() => void handleSyncAllSelected()}
-          className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs shadow-xs"
-        >
-          <Play className="h-3.5 w-3.5 fill-current" />
-          <span>Sync Selected ({selectedStreams.size})</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isAuthPending || discoverMutation.isPending}
+            onClick={() => void handleDiscoverEntities()}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <Compass className="h-3.5 w-3.5" />
+            <span>{discoverMutation.isPending ? 'Discovering...' : 'Discover Entities'}</span>
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            disabled={isAuthPending || selectedStreams.size === 0 || isSyncingAll}
+            onClick={() => void handleSyncAllSelected()}
+            className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs shadow-xs"
+          >
+            <Play className="h-3.5 w-3.5 fill-current" />
+            <span>Sync Selected ({selectedStreams.size})</span>
+          </Button>
+        </div>
       </div>
 
       {isAuthPending ? (

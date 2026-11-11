@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeConnectorPropertyType } from '../adapters/http/mappers/catalog.mapper';
 import { normalizeAuthType } from '../domain/catalog-auth';
-import { groupActiveConnectionsByApp, isDeactivatedConnection } from '../domain/connection';
+import {
+  buildPublicConfigWithSimulatorStream,
+  clampSimulatorRecordsPerPull,
+  groupActiveConnectionsByApp,
+  isDeactivatedConnection,
+} from '../domain/connection';
 import { computeDagLayout } from '../domain/dag/compute-dag-layout';
 import {
   AuthType,
@@ -549,5 +554,43 @@ describe('IP Domain: Type Guards', () => {
     const grouped = groupActiveConnectionsByApp([base, deactivated, expired]);
     expect(grouped.get('stripe')?.map((c) => c.id)).toEqual(['conn_1']);
     expect(grouped.get('hubspot')?.map((c) => c.id)).toEqual(['conn_3']);
+  });
+
+  it('clamps simulator recordsPerPull within configured bounds', () => {
+    expect(clampSimulatorRecordsPerPull('0')).toBe(1);
+    expect(clampSimulatorRecordsPerPull('99999')).toBe(5_000);
+    expect(clampSimulatorRecordsPerPull('not-a-number')).toBe(25);
+    expect(clampSimulatorRecordsPerPull('120')).toBe(120);
+  });
+
+  it('merges strongly-typed simulator stream into connection publicConfig', () => {
+    const updated = buildPublicConfigWithSimulatorStream(
+      {
+        chaos_rate: 0.05,
+        streams: {
+          existing_customers: { sample_json: { customer_id: 'C-1' }, records_per_pull: 10 },
+        },
+      },
+      {
+        entityName: 'orders',
+        sampleJson: { order_id: 'ORD-1001', total_amount: 99.5 },
+        recordsPerPull: 50,
+        cursorField: '  ',
+        primaryKeyField: ' order_id ',
+      },
+    );
+
+    expect(updated).toEqual({
+      chaos_rate: 0.05,
+      streams: {
+        existing_customers: { sample_json: { customer_id: 'C-1' }, records_per_pull: 10 },
+        orders: {
+          sample_json: { order_id: 'ORD-1001', total_amount: 99.5 },
+          records_per_pull: 50,
+          cursor_field: 'updated_at',
+          primary_key_field: 'order_id',
+        },
+      },
+    });
   });
 });

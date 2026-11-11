@@ -6,6 +6,8 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
+  SimulatePushInput,
+  SimulatePushResult,
   UpdateConnectionInput,
 } from '../domain/connection';
 
@@ -56,4 +58,10 @@ export interface ConnectionRepositoryPort {
   ): Promise<Result<Connection, ApiProblem>>;
 
   deleteConnection(tenantId: string, connectionId: string): Promise<Result<void, ApiProblem>>;
+
+  simulatePush?(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>>;
 }

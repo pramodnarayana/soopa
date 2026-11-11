@@ -487,6 +487,14 @@ async def ensure_test_databases_ready(
     for migration_module in discover_app_migration_modules(root_dir, active_apps):
         _run_python_module(migration_module, [], cwd=root_dir, env=test_env)
 
+    for app_domain in active_apps:
+        _run_python_script(
+            root_dir / "infra" / "local" / "scripts" / "reconcile_schema_drift.py",
+            ["--domain", app_domain],
+            cwd=root_dir,
+            env=test_env,
+        )
+
     if global_targets:
         await _record_sync_fingerprint(global_targets[0], fingerprint)
 

@@ -99,6 +99,7 @@ export function IpUIProvider({
 
   const contextValue = useMemo<IpWorkspaceContextValue>(
     () => ({
+      baseUrl,
       tenantId,
       tenantSlug,
       repositories,
@@ -107,7 +108,7 @@ export function IpUIProvider({
       openCommandPalette,
       userRole,
     }),
-    [tenantId, tenantSlug, repositories, navigation, logger, openCommandPalette, userRole],
+    [baseUrl, tenantId, tenantSlug, repositories, navigation, logger, openCommandPalette, userRole],
   );
 
   return (

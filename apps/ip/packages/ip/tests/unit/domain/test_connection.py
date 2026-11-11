@@ -57,6 +57,21 @@ def test_connection_creation_initializes_pending_aggregate_with_created_event() 
     assert events[0].get_routing_tenant_id() == tenant_id
 
 
+def test_no_auth_connection_creation_initializes_active_status() -> None:
+    connection = Connection.create(
+        tenant_id="ten_12345",
+        app_id="universal_simulator",
+        name="Universal Sandbox Simulator Primary",
+        auth_type=AuthType.NO_AUTH,
+        public_config={"seed": 42},
+        encrypted_credentials=None,
+        endpoint_for_fingerprint="Universal Sandbox Simulator Primary",
+    )
+
+    assert connection.auth_type == AuthType.NO_AUTH
+    assert connection.status == ConnectionStatus.ACTIVE
+
+
 def test_connection_try_create_returns_typed_error_for_empty_parameters() -> None:
     res_tenant = Connection.try_create(
         tenant_id="",

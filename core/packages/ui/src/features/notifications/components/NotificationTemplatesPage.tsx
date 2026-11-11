@@ -9,8 +9,9 @@
 import { type ColumnDef, getCoreRowModel, useReactTable } from '@tanstack/react-table';
 import DOMPurify from 'dompurify';
 import { Bell, Eye, FileText, Mail, MessageSquare, Plus, Save, Trash2 } from 'lucide-react';
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { MonacoCodeEditor } from '../../../components/code-editor';
 import { Badge } from '../../../components/ui/badge';
 import { Button } from '../../../components/ui/button';
 import { DataTable } from '../../../components/ui/data-table';
@@ -31,8 +32,6 @@ import {
   useTemplates,
   useUpsertTemplate,
 } from '../api/useNotificationConfig';
-
-const Editor = lazy(() => import('@monaco-editor/react'));
 
 const ALL_CHANNELS = ['EMAIL', 'IN_APP', 'SLACK'] as const;
 type Channel = (typeof ALL_CHANNELS)[number];
@@ -414,28 +413,13 @@ function TemplateEditorPanel({
                 <span className="font-normal text-slate-400 normal-case">(Jinja2)</span>
               </label>
               <div className="flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <Suspense
-                  fallback={
-                    <div className="flex h-full items-center justify-center">
-                      <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600" />
-                    </div>
-                  }
-                >
-                  <Editor
-                    defaultLanguage="html"
-                    value={body}
-                    onChange={(v) => setBody(v ?? '')}
-                    theme="light"
-                    options={{
-                      fontSize: 13,
-                      lineNumbers: 'on',
-                      minimap: { enabled: false },
-                      scrollBeyondLastLine: false,
-                      wordWrap: 'on',
-                      padding: { top: 16, bottom: 16 },
-                    }}
-                  />
-                </Suspense>
+                <MonacoCodeEditor
+                  language="html"
+                  height="100%"
+                  value={body}
+                  onChange={setBody}
+                  className="rounded-none border-0"
+                />
               </div>
             </div>
 

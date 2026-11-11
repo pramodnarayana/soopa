@@ -82,6 +82,41 @@ export interface UpdateConnectionInput {
   readonly updatedPublicConfig?: JsonRecord | null;
 }
 
+export interface SimulatePushInput {
+  readonly streamName: string;
+  readonly count?: number;
+  readonly deliveryStyle?: 'FULL_PAYLOAD' | 'THIN_PING';
+  readonly correlationId?: string | null;
+}
+
+export interface SimulatePushResult {
+  readonly connectionId: string;
+  readonly streamName: string;
+  readonly recordsPushed: number;
+  readonly recordIds: readonly string[];
+  readonly traceIds: readonly string[];
+  readonly status: string;
+}
+
+export function buildIngressWebhookUrl(
+  baseUrl: string | undefined,
+  tenantId: string,
+  connectionId: string,
+  streamName?: string,
+): string {
+  const rawBase = (baseUrl ?? '').trim().replace(/\/+$/, '');
+  const origin =
+    rawBase ||
+    (typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'http://localhost:8000');
+  const path = `${origin}/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/ingress/${encodeURIComponent(connectionId)}`;
+  if (streamName && streamName.trim()) {
+    return `${path}?stream=${encodeURIComponent(streamName.trim())}`;
+  }
+  return path;
+}
+
 export function isDeactivatedConnection(connection: Pick<Connection, 'status'>): boolean {
   return connection.status === ConnectionStatus.DEACTIVATED;
 }
@@ -102,4 +137,67 @@ export function groupActiveConnectionsByApp(
     }
   }
   return map;
+}
+
+export const SIMULATOR_STREAM_LIMITS = {
+  MIN_RECORDS_PER_PULL: 1,
+  MAX_RECORDS_PER_PULL: 5_000,
+  DEFAULT_RECORDS_PER_PULL: 25,
+  DEFAULT_CURSOR_FIELD: 'updated_at',
+} as const;
+
+export type SimulatorBlueprintJson = JsonRecord | readonly unknown[];
+
+export interface SimulatorEntityStreamSpec {
+  readonly entityName: string;
+  readonly sampleJson: SimulatorBlueprintJson;
+  readonly recordsPerPull: number;
+  readonly cursorField: string;
+  readonly primaryKeyField?: string;
+}
+
+function isPlainRecordObject(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export function clampSimulatorRecordsPerPull(rawInput: string | number): number {
+  const parsed =
+    typeof rawInput === 'number' ? Math.trunc(rawInput) : Number.parseInt(rawInput, 10);
+  if (!Number.isFinite(parsed)) {
+    return SIMULATOR_STREAM_LIMITS.DEFAULT_RECORDS_PER_PULL;
+  }
+  return Math.max(
+    SIMULATOR_STREAM_LIMITS.MIN_RECORDS_PER_PULL,
+    Math.min(SIMULATOR_STREAM_LIMITS.MAX_RECORDS_PER_PULL, parsed),
+  );
+}
+
+export function buildPublicConfigWithSimulatorStream(
+  existingPublicConfig: JsonRecord,
+  spec: SimulatorEntityStreamSpec,
+): JsonRecord {
+  const existingStreamsRaw = existingPublicConfig.streams;
+  const existingStreams: Record<string, unknown> = isPlainRecordObject(existingStreamsRaw)
+    ? { ...existingStreamsRaw }
+    : {};
+
+  const cleanCursor = spec.cursorField.trim() || SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD;
+  const cleanPk = spec.primaryKeyField?.trim();
+
+  const streamEntry: Record<string, unknown> = {
+    sample_json: spec.sampleJson,
+    records_per_pull: clampSimulatorRecordsPerPull(spec.recordsPerPull),
+    cursor_field: cleanCursor,
+  };
+  if (cleanPk) {
+    streamEntry.primary_key_field = cleanPk;
+  }
+
+  return {
+    ...existingPublicConfig,
+    streams: {
+      ...existingStreams,
+      [spec.entityName.trim()]: streamEntry,
+    },
+  };
 }

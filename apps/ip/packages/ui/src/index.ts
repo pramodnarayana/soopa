@@ -4,12 +4,20 @@ export * from './domain';
 export * from './ports';
 export { IpCommandCenterPage } from './presentation/command-center/IpCommandCenterPage';
 export {
+  ActiveConnectionCard,
+  type ActiveConnectionCardProps,
+} from './presentation/connections/ActiveConnectionCard';
+export {
   ConnectionCatalogTab,
   ConnectionEntitiesSyncTab,
   type ConnectionEntitiesSyncTabProps,
   ConnectionOverviewTab,
   ConnectionStreamsSyncTab,
 } from './presentation/connections/ConnectionDetailTabs';
+export {
+  CreateSimulatorEntityModal,
+  type CreateSimulatorEntityModalProps,
+} from './presentation/connections/CreateSimulatorEntityModal';
 export {
   IpConnectionDetailPage,
   type IpConnectionDetailPageProps,

@@ -1,23 +1,22 @@
-import type { BeforeMount } from '@monaco-editor/react';
 import { Check, Copy } from 'lucide-react';
-import { useTheme } from 'next-themes';
 import React, { lazy, Suspense } from 'react';
 import { cn } from '../../lib/utils';
+import { useClipboardCopy } from '../observability/use-clipboard-copy';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
-import { useClipboardCopy } from './use-clipboard-copy';
+import { type MonacoBeforeMount, useEffectiveMonacoTheme } from './monaco-config';
 
-const LazyEditor = lazy(() => import('@monaco-editor/react'));
+const LazyEditor = lazy(() =>
+  import('./monaco-runtime').then((mod) => ({ default: mod.SelfHostedMonacoEditor })),
+);
 
 export interface MonacoCodeViewerProps {
   readonly value: string;
   readonly language?: string;
   readonly className?: string;
   readonly height?: string | number;
-  readonly readOnly?: boolean;
-  readonly onChange?: (nextValue: string) => void;
   readonly customThemeName?: string;
-  readonly beforeMount?: BeforeMount;
+  readonly beforeMount?: MonacoBeforeMount;
 }
 
 export function MonacoCodeViewer({
@@ -25,14 +24,11 @@ export function MonacoCodeViewer({
   language = 'json',
   className,
   height = 320,
-  readOnly = true,
-  onChange,
   customThemeName,
   beforeMount,
-}: MonacoCodeViewerProps) {
+}: MonacoCodeViewerProps): React.JSX.Element {
   const { copied, copyText } = useClipboardCopy(1_800);
-  const { resolvedTheme } = useTheme();
-  const effectiveTheme = customThemeName ?? (resolvedTheme === 'dark' ? 'vs-dark' : 'vs');
+  const effectiveTheme = useEffectiveMonacoTheme(customThemeName);
 
   const handleCopy = (): void => {
     void copyText(value);
@@ -73,16 +69,16 @@ export function MonacoCodeViewer({
           value={value}
           theme={effectiveTheme}
           beforeMount={beforeMount}
-          onChange={onChange ? (val) => onChange(val ?? '') : undefined}
           options={{
-            readOnly,
+            automaticLayout: true,
+            readOnly: true,
             minimap: { enabled: false },
             scrollBeyondLastLine: false,
             lineNumbersMinChars: 3,
             wordWrap: 'on',
             folding: true,
             padding: { top: 12, bottom: 12 },
-            renderLineHighlight: readOnly ? 'none' : 'line',
+            renderLineHighlight: 'none',
             hideCursorInOverviewRuler: true,
             overviewRulerBorder: false,
             scrollbar: {

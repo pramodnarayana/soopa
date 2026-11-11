@@ -8,6 +8,7 @@ import {
   CardTitle,
   Input,
   Label,
+  MonacoCodeEditor,
   MonacoCodeViewer,
   MonacoJsonDiffViewer,
   Select,
@@ -265,9 +266,9 @@ function WorkbenchEditorSplit({
             className="h-7 w-40 font-mono text-xs"
           />
         </div>
-        <MonacoCodeViewer
+        <MonacoCodeEditor
           height={280}
-          readOnly={false}
+          language="json"
           value={sampleText}
           onChange={onSampleTextChange}
         />
