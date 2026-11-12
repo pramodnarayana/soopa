@@ -23,6 +23,7 @@ class IpErrorCode(StrEnum):
 
     CONNECTION_NOT_FOUND = "CONNECTION_NOT_FOUND"
     CONNECTION_ENTITY_NOT_FOUND = "CONNECTION_ENTITY_NOT_FOUND"
+    CONNECTION_ENTITY_DISABLED = "CONNECTION_ENTITY_DISABLED"
     CONNECTION_DEACTIVATED = "CONNECTION_DEACTIVATED"
     CONNECTION_PENDING_AUTH = "CONNECTION_PENDING_AUTH"
     DUPLICATE_FINGERPRINT = "DUPLICATE_FINGERPRINT"
@@ -120,6 +121,29 @@ class ConnectionEntityNotFoundError(IpError):
             connection_id=connection_id,
             stream_name=stream_name,
             message=f"Entity '{stream_name}' was not found on connection '{connection_id}'.",
+            details={"connection_id": connection_id, "stream_name": stream_name},
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnectionEntityDisabledError(IpError):
+    """Returned when a sync run is requested or executed for a disabled connection entity."""
+
+    connection_id: str = ""
+    stream_name: str = ""
+    code: IpErrorCode = IpErrorCode.CONNECTION_ENTITY_DISABLED
+    disposition: FailureDisposition = FailureDisposition.FAIL
+    http_status: int = 409
+    remediation: str | None = (
+        "Enable synchronization on the subscribed entity before triggering or running a sync."
+    )
+
+    @classmethod
+    def for_stream(cls, connection_id: str, stream_name: str) -> ConnectionEntityDisabledError:
+        return cls(
+            connection_id=connection_id,
+            stream_name=stream_name,
+            message=f"Entity '{stream_name}' on connection '{connection_id}' is disabled.",
             details={"connection_id": connection_id, "stream_name": stream_name},
         )
 
@@ -845,6 +869,8 @@ __all__ = [
     "CatalogDiscoveryError",
     "ConnectionCheckError",
     "ConnectionDeactivatedError",
+    "ConnectionEntityDisabledError",
+    "ConnectionEntityNotFoundError",
     "ConnectionNotFoundError",
     "ConnectionPendingAuthError",
     "ConnectorNotFoundError",

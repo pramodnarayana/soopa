@@ -51,8 +51,6 @@ export function mapAddConnectionEntityToWire(
       description: field.description,
     })),
     cursor_field: input.cursorField ?? null,
-    default_transformation_id: input.defaultTransformationId ?? null,
-    default_transformation_version: input.defaultTransformationVersion ?? 1,
   };
 }
 

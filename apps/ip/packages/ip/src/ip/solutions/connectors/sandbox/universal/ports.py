@@ -86,13 +86,13 @@ class SimulatorEntityReaderPort(Protocol):
 
     async def list_entities_by_connection(
         self, tenant_id: str, connection_id: str
-    ) -> Sequence[SimulatorEntityDTO]:
+    ) -> Result[Sequence[SimulatorEntityDTO], IpError]:
         """Returns all simulator entities configured for `(tenant_id, connection_id)` ordered deterministically."""
         ...
 
     async def get_entity_by_name(
         self, tenant_id: str, connection_id: str, entity_name: str
-    ) -> SimulatorEntityDTO | None:
+    ) -> Result[SimulatorEntityDTO | None, IpError]:
         """Returns a single simulator entity by `(tenant_id, connection_id, entity_name)` or `None`."""
         ...
 

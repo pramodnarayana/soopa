@@ -42,7 +42,6 @@ def test_solution_bootstrap_injects_vertical_plugins_into_container() -> None:
         "http",
         "sftp",
         "salesforce",
-        "energy_ami_simulator",
         "universal_simulator",
     }.issubset(app_ids)
     assert len(container.transformer_registry().list_transformers()) >= 6
@@ -57,7 +56,6 @@ def test_solution_api_provider_wires_builtin_solution_registries() -> None:
         "http",
         "sftp",
         "salesforce",
-        "energy_ami_simulator",
         "universal_simulator",
     }.issubset(app_ids)
     assert len(provider.create_transformer_registry().list_transformers()) >= 6

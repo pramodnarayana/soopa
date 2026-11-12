@@ -23,6 +23,8 @@ logger = structlog.get_logger(__name__)
 IP_SHARD_PREFIX = "ip_"
 IP_DEFAULT_SHARD_ID = "ip_shard_1"
 IP_DEFAULT_DSN_ENV_VAR = "IP_DATABASE_URL"
+MIGRATION_BACKFILL_BATCH_SIZE = 500
+MIGRATION_BACKFILL_YIELD_SECONDS = 0.1
 
 
 def collect_ip_shard_overrides(
@@ -39,10 +41,58 @@ def collect_ip_shard_overrides(
     )
 
 
-async def reconcile_global_no_auth_connection_constraint(global_url: str) -> None:
-    """Backfill legacy NO_AUTH connections in PENDING_AUTH and ensure check constraint exists.
+async def reconcile_global_alembic_branch_roots(global_url: str) -> None:
+    """Reconciles `ip.alembic_version` for multi-branch `depends_on` DAG semantics."""
+    provider = DatabaseProvider.from_url(global_url)
+    try:
+        async with provider.session() as session:
+            version_reg = await session.execute(text("SELECT to_regclass('ip.alembic_version')"))
+            conn_reg = await session.execute(text("SELECT to_regclass('ip.connections')"))
+            if version_reg.scalar() is None or conn_reg.scalar() is None:
+                return
 
-    Preserves the single-migration file invariant (`0001_initial_global_schema.py`) while
+            await session.execute(
+                text(
+                    """
+                    INSERT INTO ip.alembic_version (version_num)
+                    SELECT '0001_universal_simulator_schema'
+                    WHERE EXISTS (
+                        SELECT 1 FROM ip.alembic_version
+                        WHERE version_num = '0002_universal_simulator_schema'
+                    )
+                    ON CONFLICT (version_num) DO NOTHING;
+                    """
+                )
+            )
+            await session.execute(
+                text(
+                    """
+                    DELETE FROM ip.alembic_version
+                    WHERE version_num = '0002_universal_simulator_schema';
+                    """
+                )
+            )
+            await session.execute(
+                text(
+                    """
+                    DELETE FROM ip.alembic_version
+                    WHERE version_num = '0001_initial_global_schema'
+                      AND EXISTS (
+                          SELECT 1 FROM ip.alembic_version AS v2
+                          WHERE v2.version_num = '0001_universal_simulator_schema'
+                      );
+                    """
+                )
+            )
+            await session.commit()
+    finally:
+        await provider.close()
+
+
+async def reconcile_global_no_auth_connection_constraint(global_url: str) -> None:
+    """Backfill legacy NO_AUTH connections in PENDING_AUTH in chunks and ensure check constraint exists.
+
+    Preserves the single-migration-per-branch invariant (`0001_initial_global_schema.py`) while
     making direct invocations of `run_migrations` safe on databases already stamped at 0001.
     """
     provider = DatabaseProvider.from_url(global_url)
@@ -52,17 +102,34 @@ async def reconcile_global_no_auth_connection_constraint(global_url: str) -> Non
             if table_exists.scalar() is None:
                 return
 
-            updated = await session.execute(
-                text(
-                    """
-                    UPDATE ip.connections
-                    SET status = 'ACTIVE', updated_at = NOW()
+            reconciled_count = 0
+            chunk_stmt = text(
+                """
+                WITH batch AS (
+                    SELECT id
+                    FROM ip.connections
                     WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'
-                    RETURNING id;
-                    """
+                    LIMIT :batch_size
+                    FOR UPDATE SKIP LOCKED
                 )
+                UPDATE ip.connections AS target
+                SET status = 'ACTIVE', updated_at = NOW()
+                FROM batch
+                WHERE target.id = batch.id
+                RETURNING target.id;
+                """
             )
-            reconciled_count = len(updated.all())
+            while True:
+                updated = await session.execute(
+                    chunk_stmt, {"batch_size": MIGRATION_BACKFILL_BATCH_SIZE}
+                )
+                batch_count = len(updated.all())
+                await session.commit()
+                if batch_count == 0:
+                    break
+                reconciled_count += batch_count
+                await asyncio.sleep(MIGRATION_BACKFILL_YIELD_SECONDS)
+
             if reconciled_count > 0:
                 logger.info(
                     "ip_global_migrations_reconciled_no_auth_connections",
@@ -139,14 +206,15 @@ def run_migrations() -> None:
     settings = load_settings_safely(PlatformDatabaseSettings)
     effective_overrides = collect_ip_shard_overrides(os.environ, settings.shard_overrides)
 
-    # 1. Global Control Plane migrations
+    # 1. Global Control Plane migrations (multi-branch heads: global_engine + solution extensions)
     logger.info("ip_global_migrations_starting")
+    asyncio.run(reconcile_global_alembic_branch_roots(settings.global_url))
     global_ini = find_ip_ini_path("alembic.global.ini")
     global_script_loc = find_ip_script_location("global")
     global_cfg = Config(str(global_ini))
     global_cfg.set_main_option("script_location", str(global_script_loc))
     global_cfg.set_main_option("sqlalchemy.url", settings.global_url.replace("%", "%%"))
-    command.upgrade(global_cfg, "head")
+    command.upgrade(global_cfg, "heads")
     asyncio.run(reconcile_global_no_auth_connection_constraint(settings.global_url))
     logger.info("ip_global_migrations_completed")
 

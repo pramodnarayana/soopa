@@ -13,6 +13,9 @@ from ip.engine.adapters.inbound.api.routers.connections_router import (
     update_connection,
 )
 from ip.engine.adapters.outbound.connectors.base_connector import BaseConnector
+from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
+    DiscoverCatalogUseCase,
+)
 from ip.engine.application.use_cases.connections.token_manager_service import TokenManagerService
 from ip.engine.application.use_cases.connections.update_connection_use_case import (
     UpdateConnectionCommand,
@@ -294,7 +297,7 @@ async def test_update_connection_router_rejects_explicit_empty_new_name_despite_
         roles=("TenantAdmin",),
     )
     response = await update_connection(
-        tenant_id="ten_05",
+        effective_tenant_id="ten_05",
         connection_id=conn.id,
         request=UpdateConnectionHttpRequest(new_name="", name="Fallback Name"),
         context=identity,
@@ -423,14 +426,17 @@ async def test_discover_connection_catalog_router_preserves_client_error_http_st
         roles=("TenantAdmin",),
     )
     token_manager = TokenManagerService(control_plane_uow=uow, cipher=cipher)
-    response = await discover_connection_catalog(
-        tenant_id="ten_06",
-        connection_id=conn.id,
-        context=identity,
-        ip_cp_uow=uow,
+    use_case = DiscoverCatalogUseCase(
+        uow=uow,
         cipher=cipher,
         connectors={"acme_app": _UnauthorizedDiscoveryConnector()},
         token_manager=token_manager,
+    )
+    response = await discover_connection_catalog(
+        connection_id=conn.id,
+        context=identity,
+        effective_tenant_id="ten_06",
+        use_case=use_case,
     )
 
     assert hasattr(response, "status_code")

@@ -38,6 +38,7 @@ from ip.engine.domain.connection.enums import AuthType
 from ip.engine.domain.dispatch.enums import AckVerdict
 from ip.engine.domain.enums import IpEventType
 from ip.engine.domain.exceptions import IpError, UpstreamHttpError
+from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
     IngestionMode,
     SyncRunKind,
@@ -182,8 +183,15 @@ async def test_run_sync_use_case_advances_cursor_across_runs_on_postgres(
         encrypted_credentials=cipher.encrypt({"api_key": "k1"}),
         endpoint_for_fingerprint="https://pull.partner.example.com",
     )
+    entity_res = ConnectionEntity.try_create(
+        tenant_id=seeded_ip_tenant,
+        connection_id=conn.id,
+        stream_name="records_alpha",
+    )
+    assert entity_res.is_ok and entity_res.value is not None
     async with cp_uow:
         await cp_uow.connections.save(conn)
+        await cp_uow.entities.save(entity_res.value)
         await cp_uow.commit()
 
     connector = StubPullConnector(
@@ -249,8 +257,15 @@ async def test_run_sync_use_case_marks_failed_when_connector_sets_last_error(
         encrypted_credentials=cipher.encrypt({"api_key": "k1"}),
         endpoint_for_fingerprint="https://fail-pull.partner.example.com",
     )
+    entity_res = ConnectionEntity.try_create(
+        tenant_id=seeded_ip_tenant,
+        connection_id=conn.id,
+        stream_name="records_alpha",
+    )
+    assert entity_res.is_ok and entity_res.value is not None
     async with cp_uow:
         await cp_uow.connections.save(conn)
+        await cp_uow.entities.save(entity_res.value)
         await cp_uow.commit()
 
     failing_connector = StubPullConnector(
@@ -297,8 +312,15 @@ async def test_thin_push_notification_hydrates_upstream_record_on_postgres(
         encrypted_credentials=cipher.encrypt({"api_key": "k1"}),
         endpoint_for_fingerprint="https://push.partner.example.com",
     )
+    entity_res = ConnectionEntity.try_create(
+        tenant_id=seeded_ip_tenant,
+        connection_id=conn.id,
+        stream_name="records_alpha",
+    )
+    assert entity_res.is_ok and entity_res.value is not None
     async with cp_uow:
         await cp_uow.connections.save(conn)
+        await cp_uow.entities.save(entity_res.value)
         await cp_uow.commit()
 
     secret = "whsec_partner_secret"

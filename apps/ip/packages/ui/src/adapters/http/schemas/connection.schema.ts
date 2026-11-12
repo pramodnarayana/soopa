@@ -46,7 +46,6 @@ export const StreamSchemaWireSchema = z.object({
 
 export const DiscoveredCatalogWireSchema = z.object({
   connection_id: z.string(),
-  catalog_version: z.number(),
   catalog_hash: z.string(),
   streams: z.array(StreamSchemaWireSchema).default([]),
   discovered_at: z.string(),

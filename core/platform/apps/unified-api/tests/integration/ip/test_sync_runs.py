@@ -37,6 +37,14 @@ async def test_sync_runs_trigger_conflict_list_get_and_entity_checkpoint_reset(
     tenant_id = seeded_api_token["tenant_id"]
     connection_id = await _create_sync_connection(auth_client, tenant_id, "pull-1")
 
+    # 0. Triggering a sync run on an unsubscribed stream returns 404 Not Found
+    unsub_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs",
+        json={"stream_name": "meters"},
+    )
+    assert unsub_res.status_code == 404, unsub_res.text
+    assert unsub_res.json()["code"] == "CONNECTION_ENTITY_NOT_FOUND"
+
     # Subscribe both entities on the connection
     for stream_name in ("meters", "interval_reads"):
         add_res = await auth_client.post(

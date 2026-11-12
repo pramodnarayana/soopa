@@ -22,26 +22,26 @@ class InMemorySimulatorRepository(SimulatorRepositoryPort):
 
     async def list_entities_by_connection(
         self, tenant_id: str, connection_id: str
-    ) -> Sequence[SimulatorEntityDTO]:
+    ) -> Result[Sequence[SimulatorEntityDTO], IpError]:
         matched = [
             e
             for e in self._entities.values()
             if e.tenant_id == tenant_id and e.connection_id == connection_id
         ]
         matched.sort(key=lambda e: (e.created_at, e.id))
-        return tuple(matched)
+        return Result.ok(tuple(matched))
 
     async def get_entity_by_name(
         self, tenant_id: str, connection_id: str, entity_name: str
-    ) -> SimulatorEntityDTO | None:
+    ) -> Result[SimulatorEntityDTO | None, IpError]:
         for ent in self._entities.values():
             if (
                 ent.tenant_id == tenant_id
                 and ent.connection_id == connection_id
                 and ent.entity_name == entity_name
             ):
-                return ent
-        return None
+                return Result.ok(ent)
+        return Result.ok(None)
 
     async def get_entity_by_id(
         self, tenant_id: str, connection_id: str, entity_id: str
@@ -61,12 +61,10 @@ class InMemorySimulatorRepository(SimulatorRepositoryPort):
     async def create_entity(
         self, entity: SimulatorEntityDTO
     ) -> Result[SimulatorEntityDTO, IpError]:
-        if (
-            await self.get_entity_by_name(
-                entity.tenant_id, entity.connection_id, entity.entity_name
-            )
-            is not None
-        ):
+        existing_res = await self.get_entity_by_name(
+            entity.tenant_id, entity.connection_id, entity.entity_name
+        )
+        if existing_res.is_ok and existing_res.value is not None:
             return Result.fail(
                 DuplicateSimulatorEntityError.for_name(entity.connection_id, entity.entity_name)
             )

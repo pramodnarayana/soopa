@@ -37,8 +37,6 @@ export interface AddConnectionEntityInput {
   readonly primaryKey?: readonly string[];
   readonly fields?: readonly ConnectionEntityField[];
   readonly cursorField?: string | null;
-  readonly defaultTransformationId?: string | null;
-  readonly defaultTransformationVersion?: number;
 }
 
 export interface UpdateConnectionEntityInput {

@@ -65,7 +65,6 @@ class StreamSchemaDTO:
 @dataclass(frozen=True)
 class DiscoveredCatalogDTO:
     connection_id: str
-    catalog_version: int = 1
     catalog_hash: str = ""
     streams: Sequence[StreamSchemaDTO] = ()
     discovered_at: str = ""

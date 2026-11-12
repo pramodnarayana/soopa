@@ -45,7 +45,6 @@ export function mapConnectionCheckFromWire(wire: ConnectionCheckWire): Connectio
 export function mapDiscoveredCatalogFromWire(wire: DiscoveredCatalogWire): DiscoveredCatalog {
   return {
     connectionId: wire.connection_id,
-    catalogVersion: wire.catalog_version,
     catalogHash: wire.catalog_hash,
     discoveredAt: wire.discovered_at,
     streams: wire.streams.map((stream) => ({

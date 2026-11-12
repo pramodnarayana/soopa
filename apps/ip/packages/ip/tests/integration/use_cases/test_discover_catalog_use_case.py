@@ -17,6 +17,7 @@ from ip.engine.application.use_cases.connections.discover_catalog_use_case impor
     DiscoverCatalogUseCase,
 )
 from ip.engine.bootstrap.container import create_ip_control_plane_uow
+from ip.engine.domain.exceptions import IpErrorCode
 from pytest_httpserver import HTTPServer
 from security.adapters.ciphers.aes_gcm_cipher import AesGcmCipher
 from seedwork import generate_id
@@ -96,10 +97,11 @@ async def test_discover_catalog_use_case(
         connectors={connector.app_id: connector},
     )
 
-    catalog_dto = await discover_uc.execute(conn_dto.id, tenant_id=tenant_id)
+    result = await discover_uc.execute(conn_dto.id, tenant_id=tenant_id)
+    assert result.is_ok and result.value is not None
+    catalog_dto = result.value
     assert catalog_dto.success is True
     assert catalog_dto.connection_id == conn_dto.id
-    assert catalog_dto.catalog_version == 1
     assert len(catalog_dto.catalog_hash) == 64
     assert len(catalog_dto.streams) == 3
 
@@ -169,7 +171,9 @@ async def test_discover_catalog_skips_unsupported_sync_modes(
         connectors={connector.app_id: connector},
     )
 
-    catalog_dto = await discover_uc.execute(conn_dto.id, tenant_id=tenant_id)
+    result = await discover_uc.execute(conn_dto.id, tenant_id=tenant_id)
+    assert result.is_ok and result.value is not None
+    catalog_dto = result.value
     assert catalog_dto.success is True
     assert len(catalog_dto.streams) == 1
     assert catalog_dto.streams[0].name == "supported_stream"
@@ -188,8 +192,9 @@ async def test_discover_catalog_connection_not_found_returns_failure(
         connectors={},
     )
     result = await discover_uc.execute("non_existent_id", tenant_id="ten_nonexistent")
-    assert result.success is False
-    assert result.error_code == "CONNECTION_NOT_FOUND"
+    assert result.is_err
+    assert result.error is not None
+    assert result.error.code == IpErrorCode.CONNECTION_NOT_FOUND
 
 
 @pytest.mark.asyncio
@@ -207,7 +212,7 @@ async def test_discover_catalog_connector_not_found_returns_failure(
             name="Unregistered",
             auth_type="API_KEY",
             public_config={},
-            raw_credentials={},
+            raw_credentials={"api_key": "tok"},
             endpoint_for_fingerprint="https://api.example.com",
         )
     )
@@ -220,8 +225,47 @@ async def test_discover_catalog_connector_not_found_returns_failure(
         connectors={},
     )
     result = await discover_uc.execute(conn_res.connection.id, tenant_id=tenant_id)
-    assert result.success is False
-    assert result.error_code == "CONNECTOR_NOT_FOUND"
+    assert result.is_err
+    assert result.error is not None
+    assert result.error.code == IpErrorCode.CONNECTOR_NOT_FOUND
+
+
+@pytest.mark.asyncio
+async def test_discover_catalog_pending_auth_api_key_returns_pending_auth_error(
+    global_session: GlobalSession,
+    cipher: AesGcmCipher,
+) -> None:
+    connector = GenericHttpConnector(
+        app_id="acme_source",
+        auth_resolver=AuthStrategyResolver(),
+        allow_private_ips=True,
+    )
+    uow = create_ip_control_plane_uow(global_session)
+    tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
+    create_uc = CreateConnectionUseCase(uow=uow, cipher=cipher)
+    conn_res = await create_uc.execute(
+        CreateConnectionCommand(
+            tenant_id=tenant_id,
+            app_id="acme_source",
+            name="Pending Auth Conn",
+            auth_type="API_KEY",
+            public_config={"endpoint_url": "https://api.example.com"},
+            raw_credentials={},
+            endpoint_for_fingerprint="https://api.example.com",
+        )
+    )
+    assert conn_res.success is True
+    assert conn_res.connection is not None
+
+    discover_uc = DiscoverCatalogUseCase(
+        uow=uow,
+        cipher=cipher,
+        connectors={connector.app_id: connector},
+    )
+    result = await discover_uc.execute(conn_res.connection.id, tenant_id=tenant_id)
+    assert result.is_err
+    assert result.error is not None
+    assert result.error.code == IpErrorCode.CONNECTION_PENDING_AUTH
 
 
 @pytest.mark.asyncio
@@ -259,8 +303,9 @@ async def test_discover_catalog_deactivated_connection_returns_failure(
         connectors={},
     )
     result = await discover_uc.execute(conn_res.connection.id, tenant_id=tenant_id)
-    assert result.success is False
-    assert result.error_code == "CONNECTION_DEACTIVATED"
+    assert result.is_err
+    assert result.error is not None
+    assert result.error.code == IpErrorCode.CONNECTION_DEACTIVATED
 
 
 @pytest.mark.asyncio
@@ -292,5 +337,6 @@ async def test_discover_catalog_mismatched_tenant_id_returns_not_found(
     )
     wrong_tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     result = await discover_uc.execute(conn_res.connection.id, tenant_id=wrong_tenant_id)
-    assert result.success is False
-    assert result.error_code == "CONNECTION_NOT_FOUND"
+    assert result.is_err
+    assert result.error is not None
+    assert result.error.code == IpErrorCode.CONNECTION_NOT_FOUND

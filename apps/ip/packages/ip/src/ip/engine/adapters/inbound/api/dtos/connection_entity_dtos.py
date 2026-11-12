@@ -3,9 +3,38 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 
-from ip.engine.domain.replication.enums import EntitySyncFrom, EntitySyncSchedule, SyncMode
 from pydantic import BaseModel, Field
+
+
+class ConnectionEntitySyncModeHttp(StrEnum):
+    """HTTP wire enumeration for connection entity synchronization mode."""
+
+    FULL_REFRESH = "FULL_REFRESH"
+    INCREMENTAL = "INCREMENTAL"
+
+
+class ConnectionEntityScheduleHttp(StrEnum):
+    """HTTP wire enumeration for connection entity sync cadence."""
+
+    MANUAL = "manual"
+    EVERY_5M = "5m"
+    EVERY_15M = "15m"
+    HOURLY = "1h"
+    EVERY_6H = "6h"
+    DAILY = "24h"
+
+
+class ConnectionEntitySyncFromHttp(StrEnum):
+    """HTTP wire enumeration for connection entity historical lookback boundary."""
+
+    ALL = "all"
+    LAST_24H = "24h"
+    LAST_7D = "7d"
+    LAST_30D = "30d"
+    LAST_90D = "90d"
+    CUSTOM = "custom"
 
 
 class ConnectionEntityFieldHttpDTO(BaseModel):
@@ -21,24 +50,22 @@ class AddConnectionEntityHttpRequest(BaseModel):
     """HTTP request DTO to subscribe an entity on a connection."""
 
     stream_name: str = Field(..., min_length=1, max_length=128)
-    sync_mode: SyncMode = SyncMode.INCREMENTAL
-    schedule: EntitySyncSchedule = EntitySyncSchedule.MANUAL
-    sync_from: EntitySyncFrom = EntitySyncFrom.ALL
+    sync_mode: ConnectionEntitySyncModeHttp = ConnectionEntitySyncModeHttp.INCREMENTAL
+    schedule: ConnectionEntityScheduleHttp = ConnectionEntityScheduleHttp.MANUAL
+    sync_from: ConnectionEntitySyncFromHttp = ConnectionEntitySyncFromHttp.ALL
     sync_from_at: datetime | None = None
     is_enabled: bool = True
     primary_key: list[str] = Field(default_factory=list)
     fields: list[ConnectionEntityFieldHttpDTO] = Field(default_factory=list)
     cursor_field: str | None = Field(default=None, max_length=128)
-    default_transformation_id: str | None = Field(default=None, max_length=128)
-    default_transformation_version: int = Field(default=1, ge=1)
 
 
 class UpdateConnectionEntityHttpRequest(BaseModel):
     """HTTP request DTO to update sync configuration on a subscribed connection entity."""
 
-    sync_mode: SyncMode | None = None
-    schedule: EntitySyncSchedule | None = None
-    sync_from: EntitySyncFrom | None = None
+    sync_mode: ConnectionEntitySyncModeHttp | None = None
+    schedule: ConnectionEntityScheduleHttp | None = None
+    sync_from: ConnectionEntitySyncFromHttp | None = None
     sync_from_at: datetime | None = None
     is_enabled: bool | None = None
 
@@ -69,5 +96,8 @@ __all__ = [
     "AddConnectionEntityHttpRequest",
     "ConnectionEntityFieldHttpDTO",
     "ConnectionEntityHttpResponse",
+    "ConnectionEntityScheduleHttp",
+    "ConnectionEntitySyncFromHttp",
+    "ConnectionEntitySyncModeHttp",
     "UpdateConnectionEntityHttpRequest",
 ]

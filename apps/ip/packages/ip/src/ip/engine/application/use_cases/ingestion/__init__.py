@@ -5,8 +5,14 @@ from ip.engine.application.use_cases.ingestion.fetch_record_use_case import (
     FetchRecordResultDTO,
     FetchRecordUseCase,
 )
+from ip.engine.application.use_cases.ingestion.ingest_connection_webhook_use_case import (
+    IngestConnectionWebhookCommand,
+    IngestConnectionWebhookUseCase,
+)
 from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushCommand,
+    ReceivePushExecutorFactory,
+    ReceivePushExecutorPort,
     ReceivePushResultDTO,
     ReceivePushUseCase,
 )
@@ -31,9 +37,13 @@ __all__ = [
     "FetchRecordUseCase",
     "GetSyncRunQuery",
     "GetSyncRunUseCase",
+    "IngestConnectionWebhookCommand",
+    "IngestConnectionWebhookUseCase",
     "ListSyncRunsQuery",
     "ListSyncRunsUseCase",
     "ReceivePushCommand",
+    "ReceivePushExecutorFactory",
+    "ReceivePushExecutorPort",
     "ReceivePushResultDTO",
     "ReceivePushUseCase",
     "RunSyncCommand",

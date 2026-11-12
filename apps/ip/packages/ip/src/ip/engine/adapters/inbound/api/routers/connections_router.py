@@ -11,9 +11,11 @@ from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
     get_cipher,
     get_connectors,
+    get_discover_catalog_use_case,
+    get_effective_ucp_tenant_id,
     get_ip_control_plane_uow,
-    get_token_manager,
-    require_tenant_member,
+    require_flows_read,
+    require_flows_write,
 )
 from ip.engine.adapters.inbound.api.dtos.connection_dtos import (
     CheckConnectionHttpRequest,
@@ -63,17 +65,13 @@ from ip.engine.application.use_cases.connections.relink_connection_use_case impo
     RelinkConnectionCommand,
     RelinkConnectionUseCase,
 )
-from ip.engine.application.use_cases.connections.token_manager_service import (
-    TokenManagerService,
-)
 from ip.engine.application.use_cases.connections.update_connection_use_case import (
     UpdateConnectionCommand,
     UpdateConnectionUseCase,
 )
-from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
+from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import (
     ConnectionNotFoundError,
-    ConnectionPendingAuthError,
     IpErrorCode,
 )
 from ip.engine.ports.outbound.connector_port import ConnectorPort, DiscoveredCatalogDTO
@@ -111,7 +109,6 @@ def _map_connection_dto_to_response(dto: ConnectionDTO) -> ConnectionHttpRespons
 def _map_catalog_dto_to_response(dto: DiscoveredCatalogDTO) -> DiscoveredCatalogHttpResponse:
     return DiscoveredCatalogHttpResponse(
         connection_id=dto.connection_id,
-        catalog_version=dto.catalog_version,
         catalog_hash=dto.catalog_hash,
         discovered_at=dto.discovered_at,
         streams=[
@@ -147,15 +144,16 @@ def _map_catalog_dto_to_response(dto: DiscoveredCatalogDTO) -> DiscoveredCatalog
     status_code=status.HTTP_201_CREATED,
 )
 async def create_connection(
-    tenant_id: str,
     request: CreateConnectionHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_write)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     cipher: Annotated[CipherPort, Depends(get_cipher)],
 ) -> ConnectionHttpResponse | Response:
     """Creates a new external system connection with encrypted credentials."""
+    _ = context
     log = logger.bind(
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         app_id=request.app_id,
         auth_type=request.auth_type.value,
     )
@@ -163,7 +161,7 @@ async def create_connection(
 
     use_case = CreateConnectionUseCase(uow=ip_cp_uow, cipher=cipher)
     cmd = CreateConnectionCommand(
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         app_id=request.app_id,
         name=request.name,
         auth_type=request.auth_type,
@@ -202,21 +200,22 @@ async def create_connection(
 
 @router.get("", response_model=list[ConnectionHttpResponse], status_code=status.HTTP_200_OK)
 async def list_connections(
-    tenant_id: str,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_read)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     connection_status: ConnectionStatus | None = Query(None, alias="status"),
 ) -> list[ConnectionHttpResponse]:
     """Lists connections configured for this tenant, optionally filtered by status."""
+    _ = context
     log = logger.bind(
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         status=connection_status.value if connection_status is not None else None,
     )
     log.info("ip_list_connections.received")
 
     use_case = ListConnectionsUseCase(uow=ip_cp_uow)
     dtos = await use_case.execute(
-        ListConnectionsQuery(tenant_id=tenant_id, status=connection_status)
+        ListConnectionsQuery(tenant_id=effective_tenant_id, status=connection_status)
     )
     log.info("ip_list_connections.completed", connection_count=len(dtos))
     return [_map_connection_dto_to_response(dto) for dto in dtos]
@@ -224,14 +223,15 @@ async def list_connections(
 
 @router.post("/check", response_model=ConnectionCheckHttpResponse, status_code=status.HTTP_200_OK)
 async def check_connection_credentials(
-    tenant_id: str,
     request: CheckConnectionHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_write)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     connectors: Annotated[Mapping[str, ConnectorPort], Depends(get_connectors)],
 ) -> ConnectionCheckHttpResponse:
     """Pre-flight connectivity and credential check without saving a connection."""
+    _ = context
     log = logger.bind(
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         app_id=request.app_id,
         auth_type=request.auth_type.value,
     )
@@ -266,18 +266,19 @@ async def check_connection_credentials(
     status_code=status.HTTP_200_OK,
 )
 async def get_connection(
-    tenant_id: str,
     connection_id: str,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_read)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
 ) -> ConnectionHttpResponse | Response:
     """Fetches details of a specific connection."""
-    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    _ = context
+    log = logger.bind(tenant_id=effective_tenant_id, connection_id=connection_id)
     log.info("ip_get_connection.received")
 
     use_case = GetConnectionUseCase(uow=ip_cp_uow)
     result = await use_case.execute(
-        GetConnectionQuery(tenant_id=tenant_id, connection_id=connection_id)
+        GetConnectionQuery(tenant_id=effective_tenant_id, connection_id=connection_id)
     )
     if not result.success or result.connection is None:
         err = result.error or ConnectionNotFoundError.for_id(connection_id)
@@ -299,77 +300,40 @@ async def get_connection(
     status_code=status.HTTP_200_OK,
 )
 async def discover_connection_catalog(
-    tenant_id: str,
     connection_id: str,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
-    ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
-    cipher: Annotated[CipherPort, Depends(get_cipher)],
-    connectors: Annotated[Mapping[str, ConnectorPort], Depends(get_connectors)],
-    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
+    context: Annotated[IdentityContext, Depends(require_flows_read)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[DiscoverCatalogUseCase, Depends(get_discover_catalog_use_case)],
 ) -> DiscoveredCatalogHttpResponse | Response:
-    """Introspects the external system and stores a new schema catalog version."""
-    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    """Introspects the external system live and returns its discovered stream catalog."""
+    _ = context
+    log = logger.bind(tenant_id=effective_tenant_id, connection_id=connection_id)
     log.info("ip_discover_catalog.received")
 
-    async with ip_cp_uow:
-        existing_conn = await ip_cp_uow.connections.get_by_id(connection_id)
-        if (
-            existing_conn is not None
-            and existing_conn.tenant_id == tenant_id
-            and existing_conn.status == ConnectionStatus.PENDING_AUTH
-            and existing_conn.auth_type == AuthType.API_KEY
-            and not existing_conn.encrypted_credentials
-        ):
-            pending_err = ConnectionPendingAuthError.for_connection(connection_id)
-            log.error("ip_discover_catalog.failed", error_code=pending_err.code.value)
-            return from_ip_error(pending_err, status_code_override=status.HTTP_409_CONFLICT)
-
-    use_case = DiscoverCatalogUseCase(
-        uow=ip_cp_uow,
-        cipher=cipher,
-        connectors=connectors,
-        token_manager=token_manager,
+    res = await use_case.execute(
+        connection_id=connection_id,
+        tenant_id=effective_tenant_id,
     )
-
-    dto = await use_case.execute(connection_id=connection_id, tenant_id=tenant_id)
-    if not dto.success:
-        if dto.error is not None:
-            log.error("ip_discover_catalog.failed", error_code=dto.error.code.value)
-            status_override = (
-                status.HTTP_404_NOT_FOUND
-                if dto.error.code
-                in (IpErrorCode.CONNECTION_NOT_FOUND, IpErrorCode.CONNECTOR_NOT_FOUND)
-                else (
-                    status.HTTP_409_CONFLICT
-                    if dto.error.code == IpErrorCode.CONNECTION_PENDING_AUTH
-                    else (
-                        dto.error.http_status
-                        if 400 <= dto.error.http_status < 500
-                        else status.HTTP_502_BAD_GATEWAY
-                    )
-                )
-            )
-            return from_ip_error(dto.error, status_code_override=status_override)
-        status_code = (
+    if res.is_err:
+        err = res.unwrap_err()
+        log.error("ip_discover_catalog.failed", error_code=err.code.value)
+        status_override = (
             status.HTTP_404_NOT_FOUND
-            if dto.error_code
-            in (IpErrorCode.CONNECTION_NOT_FOUND.value, IpErrorCode.CONNECTOR_NOT_FOUND.value)
+            if err.code in (IpErrorCode.CONNECTION_NOT_FOUND, IpErrorCode.CONNECTOR_NOT_FOUND)
             else (
                 status.HTTP_409_CONFLICT
-                if dto.error_code == IpErrorCode.CONNECTION_PENDING_AUTH.value
-                else status.HTTP_502_BAD_GATEWAY
+                if err.code == IpErrorCode.CONNECTION_PENDING_AUTH
+                else (
+                    err.http_status if 400 <= err.http_status < 500 else status.HTTP_502_BAD_GATEWAY
+                )
             )
         )
-        error_code = dto.error_code or IpErrorCode.CATALOG_DISCOVERY_FAILED.value
-        log.error("ip_discover_catalog.failed", error_code=error_code)
-        return to_error_response(
-            status_code=status_code,
-            code=error_code,
-            message=dto.error_message or "Catalog discovery failed",
-        )
+        return from_ip_error(err, status_code_override=status_override)
+
+    dto = res.unwrap()
     log.info(
         "ip_discover_catalog.completed",
-        catalog_version=dto.catalog_version,
+        catalog_hash=dto.catalog_hash,
         stream_count=len(dto.streams),
     )
     return _map_catalog_dto_to_response(dto)
@@ -391,17 +355,21 @@ async def discover_connection_catalog(
     include_in_schema=False,
 )
 async def deactivate_connection(
-    tenant_id: str,
     connection_id: str,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_write)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
 ) -> ConnectionHttpResponse | Response:
     """Soft-deactivates an active connection while preserving historical entities & data."""
-    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    _ = context
+    log = logger.bind(tenant_id=effective_tenant_id, connection_id=connection_id)
     log.info("ip_deactivate_connection.received")
 
     use_case = DeactivateConnectionUseCase(uow=ip_cp_uow)
-    cmd = DeactivateConnectionCommand(connection_id=connection_id, tenant_id=tenant_id)
+    cmd = DeactivateConnectionCommand(
+        connection_id=connection_id,
+        tenant_id=effective_tenant_id,
+    )
     result = await use_case.execute(cmd)
     if not result.success:
         if result.error is not None:
@@ -441,9 +409,9 @@ async def deactivate_connection(
     },
 )
 async def delete_connection(
-    tenant_id: str,
     connection_id: str,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_write)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     permanent: Annotated[
         bool, Query(description="Permanently delete instead of soft-deactivating")
@@ -452,17 +420,20 @@ async def delete_connection(
     """Soft-deactivates connection (default) or permanently deletes it when permanent=True."""
     if not permanent:
         return await deactivate_connection(
-            tenant_id=tenant_id,
             connection_id=connection_id,
             context=context,
+            effective_tenant_id=effective_tenant_id,
             ip_cp_uow=ip_cp_uow,
         )
 
-    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    log = logger.bind(tenant_id=effective_tenant_id, connection_id=connection_id)
     log.info("ip_delete_connection.received")
 
     use_case = DeleteConnectionUseCase(uow=ip_cp_uow)
-    cmd = DeleteConnectionCommand(connection_id=connection_id, tenant_id=tenant_id)
+    cmd = DeleteConnectionCommand(
+        connection_id=connection_id,
+        tenant_id=effective_tenant_id,
+    )
     result = await use_case.execute(cmd)
     if not result.success:
         if result.error is not None:
@@ -488,21 +459,22 @@ async def delete_connection(
     status_code=status.HTTP_200_OK,
 )
 async def relink_connection(
-    tenant_id: str,
     connection_id: str,
     request: RelinkConnectionHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_write)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     cipher: Annotated[CipherPort, Depends(get_cipher)],
 ) -> ConnectionHttpResponse | Response:
     """Updates credentials and reactivates a disconnected or suspended connection."""
-    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    _ = context
+    log = logger.bind(tenant_id=effective_tenant_id, connection_id=connection_id)
     log.info("ip_relink_connection.received")
 
     use_case = RelinkConnectionUseCase(uow=ip_cp_uow, cipher=cipher)
     cmd = RelinkConnectionCommand(
         connection_id=connection_id,
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         new_name=request.new_name,
         updated_raw_credentials=request.updated_raw_credentials,
         updated_public_config=request.updated_public_config,
@@ -547,21 +519,22 @@ async def relink_connection(
     status_code=status.HTTP_200_OK,
 )
 async def update_connection(
-    tenant_id: str,
     connection_id: str,
     request: UpdateConnectionHttpRequest,
-    context: Annotated[IdentityContext, Depends(require_tenant_member)],
+    context: Annotated[IdentityContext, Depends(require_flows_write)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
     ip_cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
     cipher: Annotated[CipherPort, Depends(get_cipher)],
 ) -> ConnectionHttpResponse | Response:
     """Updates configuration, credentials, or metadata of an existing active connection."""
-    log = logger.bind(tenant_id=tenant_id, connection_id=connection_id)
+    _ = context
+    log = logger.bind(tenant_id=effective_tenant_id, connection_id=connection_id)
     log.info("ip_update_connection.received")
 
     use_case = UpdateConnectionUseCase(uow=ip_cp_uow, cipher=cipher)
     cmd = UpdateConnectionCommand(
         connection_id=connection_id,
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         new_name=request.new_name if request.new_name is not None else request.name,
         updated_raw_credentials=request.updated_raw_credentials,
         updated_public_config=request.updated_public_config,

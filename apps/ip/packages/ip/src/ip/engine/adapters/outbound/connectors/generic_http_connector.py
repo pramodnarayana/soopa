@@ -27,6 +27,7 @@ from ip.engine.domain.connection.http_spec import (
 )
 from ip.engine.domain.dispatch.enums import HttpWriteOperation
 from ip.engine.domain.exceptions import (
+    AuthenticationFailedError,
     EndpointSecurityViolationError,
     InvalidConnectionConfigError,
     IpErrorCode,
@@ -620,14 +621,13 @@ class GenericHttpConnector(BaseConnector):
         try:
             resp = await self._send_request(req, timeout_seconds=spec.timeout_seconds)
             if resp.status_code in (401, 403):
-                return [], DiscoveredCatalogDTO(
+                return [], DiscoveredCatalogDTO.from_error(
                     connection_id=connection_id,
-                    catalog_version=1,
-                    catalog_hash="",
-                    streams=[],
-                    success=False,
-                    error_code="UNAUTHORIZED",
-                    error_message=f"Authentication failed: HTTP {resp.status_code}",
+                    error=AuthenticationFailedError(
+                        app_id=self._app_id,
+                        status_code=resp.status_code,
+                        message=f"Authentication failed: HTTP {resp.status_code}",
+                    ),
                 )
             if resp.status_code == 200:
                 payload = resp.json()
@@ -795,7 +795,6 @@ class GenericHttpConnector(BaseConnector):
         return self.build_catalog_dto(
             connection_id=connection_id,
             streams=discovered,
-            catalog_version=1,
         )
 
     async def list_objects(

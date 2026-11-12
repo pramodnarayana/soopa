@@ -1,3 +1,4 @@
+import { ApiErrorCode, err } from '@soopa/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CheckConnectionInput,
@@ -154,9 +155,15 @@ export function useDeleteConnectionMutation(defaultConnectionId?: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (targetId?: string) => {
-      const id = targetId ?? defaultConnectionId;
+      const id = targetId?.trim() || defaultConnectionId?.trim();
       if (!id) {
-        throw new Error('Connection ID is required to delete connection.');
+        return Promise.resolve(
+          err({
+            code: ApiErrorCode.VALIDATION_ERROR,
+            status: 400,
+            message: 'Connection ID is required to delete connection.',
+          }),
+        );
       }
       return repositories.connections.deleteConnection(tenantId, id);
     },

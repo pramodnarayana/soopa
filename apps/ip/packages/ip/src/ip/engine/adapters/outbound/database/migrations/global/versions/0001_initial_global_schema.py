@@ -15,7 +15,7 @@ from sqlalchemy.dialects import postgresql
 # revision identifiers, used by Alembic.
 revision: str = "0001_initial_global_schema"
 down_revision: str | Sequence[str] | None = None
-branch_labels: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = ("global_engine",)
 depends_on: str | Sequence[str] | None = None
 
 

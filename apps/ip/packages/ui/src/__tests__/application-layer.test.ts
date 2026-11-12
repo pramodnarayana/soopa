@@ -21,6 +21,7 @@ import {
   useConnectionTransformationsQuery,
   useCreateConnectionMutation,
   useDeactivateConnectionMutation,
+  useDeleteConnectionMutation,
   useDiscoverCatalogMutation,
   useDispatchStitchEventMutation,
   useIpTraceLineageQuery,
@@ -141,6 +142,7 @@ describe('Application Layer Query Keys', () => {
       'records_alpha',
     ]);
     expect(ipQueryKeys.traces.all('ten_1')).toEqual(['ip', 'tenant', 'ten_1', 'traces']);
+    expect(ipQueryKeys.records.all('ten_1')).toEqual(['ip', 'tenant', 'ten_1', 'records']);
     expect(ipQueryKeys.transformations.byConnection('ten_1', 'conn_1')).toEqual([
       'ip',
       'tenant',
@@ -280,17 +282,15 @@ describe('Application Layer InMemory Repository Ports', () => {
       primaryKey: ['customer_id'],
       fields: [{ name: 'customer_id', dataType: 'string', nullable: false, description: null }],
       cursorField: 'updated_at',
-      defaultTransformationId: 'acme.record_alpha.to_gem',
-      defaultTransformationVersion: 2,
     });
     expect(added.ok).toBe(true);
 
-    const autoBound = await harness.transformations.getStreamTransformation(
+    const unbound = await harness.transformations.getStreamTransformation(
       SEED_TENANT_ID,
       SEED_CONNECTION_ID,
       'customers_delta',
     );
-    expect(autoBound.ok && autoBound.value.transformationVersion).toBe(2);
+    expect(unbound.ok).toBe(false);
 
     const updated = await harness.entities.updateEntity(
       SEED_TENANT_ID,
@@ -648,6 +648,7 @@ describe('Application Layer TanStack Hooks', () => {
       discoverMissing: ReturnType<typeof useDiscoverCatalogMutation>;
       relinkMissing: ReturnType<typeof useRelinkConnectionMutation>;
       deactivateMissing: ReturnType<typeof useDeactivateConnectionMutation>;
+      deleteMissingId: ReturnType<typeof useDeleteConnectionMutation>;
       resetMissing: ReturnType<typeof useResetConnectionEntityCheckpointMutation>;
       promoteMissing: ReturnType<typeof usePromoteShadowTransformationMutation>;
       replayMissing: ReturnType<typeof useReplayTransactionMutation>;
@@ -662,6 +663,7 @@ describe('Application Layer TanStack Hooks', () => {
         discoverMissing: useDiscoverCatalogMutation('conn_missing'),
         relinkMissing: useRelinkConnectionMutation('conn_missing'),
         deactivateMissing: useDeactivateConnectionMutation('conn_missing'),
+        deleteMissingId: useDeleteConnectionMutation(),
         resetMissing: useResetConnectionEntityCheckpointMutation('conn_missing'),
         promoteMissing: usePromoteShadowTransformationMutation(),
         replayMissing: useReplayTransactionMutation(),
@@ -693,6 +695,11 @@ describe('Application Layer TanStack Hooks', () => {
     expect((await api.discoverMissing.mutateAsync()).ok).toBe(false);
     expect((await api.relinkMissing.mutateAsync({ newName: 'Nope' })).ok).toBe(false);
     expect((await api.deactivateMissing.mutateAsync()).ok).toBe(false);
+    const deleteMissingIdRes = await api.deleteMissingId.mutateAsync('');
+    expect(deleteMissingIdRes.ok).toBe(false);
+    if (!deleteMissingIdRes.ok) {
+      expect(deleteMissingIdRes.error.code).toBe(ApiErrorCode.VALIDATION_ERROR);
+    }
     expect((await api.resetMissing.mutateAsync('missing_stream')).ok).toBe(false);
     expect(
       (
@@ -720,7 +727,7 @@ describe('Application Layer TanStack Hooks', () => {
       ).ok,
     ).toBe(false);
 
-    expect(logger.entries).toHaveLength(7);
+    expect(logger.entries).toHaveLength(8);
     expect(logger.entries.every((entry) => entry.level === LogLevel.ERROR)).toBe(true);
   });
 });

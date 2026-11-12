@@ -141,6 +141,82 @@ class ReplicaRecordChangedEvent(DomainEvent):
 
 
 @dataclass(frozen=True)
+class ConnectionEntitySubscribedEvent(DomainEvent):
+    """Domain event emitted when a tenant subscribes a connection entity stream."""
+
+    entity_id: str
+    tenant_id: str
+    connection_id: str
+    stream_name: str
+    sync_mode: str
+    schedule: str
+    sync_from: str
+    is_enabled: bool
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_ENTITY_SUBSCRIBED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ConnectionEntityConfigurationUpdatedEvent(DomainEvent):
+    """Domain event emitted when a subscribed connection entity updates its sync policy."""
+
+    entity_id: str
+    tenant_id: str
+    connection_id: str
+    stream_name: str
+    sync_mode: str
+    schedule: str
+    sync_from: str
+    is_enabled: bool
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_ENTITY_CONFIGURATION_UPDATED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ConnectionEntityCheckpointResetEvent(DomainEvent):
+    """Domain event emitted when a subscribed connection entity resets its sync watermark."""
+
+    entity_id: str
+    tenant_id: str
+    connection_id: str
+    stream_name: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_ENTITY_CHECKPOINT_RESET
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
+class ConnectionEntityUnsubscribedEvent(DomainEvent):
+    """Domain event emitted when a subscribed connection entity is removed from a connection."""
+
+    entity_id: str
+    tenant_id: str
+    connection_id: str
+    stream_name: str
+
+    @property
+    def event_name(self) -> str:
+        return IpEventType.CONNECTION_ENTITY_UNSUBSCRIBED
+
+    def get_routing_tenant_id(self) -> str | None:
+        return self.tenant_id
+
+
+@dataclass(frozen=True)
 class ConnectionEntityCheckpointedEvent(DomainEvent):
     """Domain event emitted when a subscribed connection entity advances its sync checkpoint."""
 

@@ -1,7 +1,7 @@
 """Universal Schema Simulator table (`ip.simulator_entities`) in `global_db`.
 
 Revision ID: 0001_universal_simulator_schema
-Revises: 0001_initial_global_schema
+Revises:
 Create Date: 2026-11-11 00:00:00.000000
 """
 
@@ -14,9 +14,9 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "0001_universal_simulator_schema"
-down_revision: str | Sequence[str] | None = "0001_initial_global_schema"
-branch_labels: str | Sequence[str] | None = None
-depends_on: str | Sequence[str] | None = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = ("universal_simulator",)
+depends_on: str | Sequence[str] | None = "0001_initial_global_schema"
 
 
 def upgrade() -> None:

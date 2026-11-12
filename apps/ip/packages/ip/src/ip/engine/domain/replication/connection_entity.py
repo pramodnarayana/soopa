@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import ClassVar
 
 from seedwork.domain.aggregate import AggregateRoot
@@ -12,11 +12,36 @@ from seedwork.utils import generate_id
 
 from ip.engine.domain.connection.stream_schema import StreamField
 from ip.engine.domain.constants import IpIdPrefix
-from ip.engine.domain.exceptions import InvalidConnectionConfigError, Result
-from ip.engine.domain.replication.enums import EntitySyncFrom, EntitySyncSchedule, SyncMode
-from ip.engine.domain.replication.events import ConnectionEntityCheckpointedEvent
+from ip.engine.domain.exceptions import (
+    ConnectionEntityDisabledError,
+    InvalidConnectionConfigError,
+    IpError,
+    Result,
+)
+from ip.engine.domain.replication.enums import (
+    EntitySyncFrom,
+    EntitySyncSchedule,
+    SyncMode,
+    SyncRunKind,
+)
+from ip.engine.domain.replication.events import (
+    ConnectionEntityCheckpointedEvent,
+    ConnectionEntityCheckpointResetEvent,
+    ConnectionEntityConfigurationUpdatedEvent,
+    ConnectionEntitySubscribedEvent,
+    ConnectionEntityUnsubscribedEvent,
+)
 
-__all__ = ["ConnectionEntity"]
+__all__ = ["ConnectionEntity", "PlannedSyncExecution"]
+
+
+@dataclass(frozen=True)
+class PlannedSyncExecution:
+    """Immutable domain value object describing the planned parameters for a stream sync run."""
+
+    kind: SyncRunKind
+    start_checkpoint: str | None
+    generation_id: int
 
 
 @dataclass(kw_only=True, eq=False)
@@ -60,7 +85,7 @@ class ConnectionEntity(AggregateRoot):
         cursor_field: str | None = None,
         initial_cursor: str | None = None,
     ) -> Result[ConnectionEntity, InvalidConnectionConfigError]:
-        """Validates invariants and constructs a new ConnectionEntity aggregate."""
+        """Validates invariants, constructs a new ConnectionEntity aggregate, and records subscription event."""
         normalized_tenant_id = tenant_id.strip()
         if not normalized_tenant_id:
             return Result.fail(
@@ -100,67 +125,125 @@ class ConnectionEntity(AggregateRoot):
         )
         normalized_pk = tuple(pk.strip() for pk in primary_key if pk.strip())
 
-        return Result.ok(
-            cls(
-                id=generate_id(cls.ID_PREFIX),
-                tenant_id=normalized_tenant_id,
-                connection_id=normalized_connection_id,
-                stream_name=normalized_stream,
-                sync_mode=sync_mode,
-                schedule=schedule,
-                sync_from=sync_from,
-                sync_from_at=resolved_sync_from_at,
-                is_enabled=is_enabled,
-                primary_key=normalized_pk,
-                fields=tuple(fields),
-                cursor_field=normalized_cursor_field,
-                cursor_value=initial_cursor,
-                records_synced_count=0,
-                last_synced_at=None,
-                created_at=now,
-                updated_at=now,
-            )
-        )
-
-    @classmethod
-    def create(
-        cls,
-        *,
-        tenant_id: str,
-        connection_id: str,
-        stream_name: str,
-        sync_mode: SyncMode = SyncMode.INCREMENTAL,
-        schedule: EntitySyncSchedule = EntitySyncSchedule.MANUAL,
-        sync_from: EntitySyncFrom = EntitySyncFrom.ALL,
-        sync_from_at: datetime | None = None,
-        is_enabled: bool = True,
-        primary_key: Sequence[str] = (),
-        fields: Sequence[StreamField] = (),
-        cursor_field: str | None = None,
-        initial_cursor: str | None = None,
-    ) -> ConnectionEntity:
-        """Creates a validated ConnectionEntity aggregate when inputs are already trusted."""
-        res = cls.try_create(
-            tenant_id=tenant_id,
-            connection_id=connection_id,
-            stream_name=stream_name,
+        entity = cls(
+            id=generate_id(cls.ID_PREFIX),
+            tenant_id=normalized_tenant_id,
+            connection_id=normalized_connection_id,
+            stream_name=normalized_stream,
             sync_mode=sync_mode,
             schedule=schedule,
             sync_from=sync_from,
-            sync_from_at=sync_from_at,
+            sync_from_at=resolved_sync_from_at,
             is_enabled=is_enabled,
-            primary_key=primary_key,
-            fields=fields,
-            cursor_field=cursor_field,
-            initial_cursor=initial_cursor,
+            primary_key=normalized_pk,
+            fields=tuple(fields),
+            cursor_field=normalized_cursor_field,
+            cursor_value=initial_cursor,
+            records_synced_count=0,
+            last_synced_at=None,
+            created_at=now,
+            updated_at=now,
         )
-        if res.is_err or res.value is None:
-            err = res.error or InvalidConnectionConfigError(
-                field_name="stream_name",
-                message="Invalid connection entity configuration.",
+        entity.add_domain_event(
+            ConnectionEntitySubscribedEvent(
+                entity_id=entity.id,
+                tenant_id=entity.tenant_id,
+                connection_id=entity.connection_id,
+                stream_name=entity.stream_name,
+                sync_mode=entity.sync_mode.value,
+                schedule=entity.schedule.value,
+                sync_from=entity.sync_from.value,
+                is_enabled=entity.is_enabled,
             )
-            raise ValueError(err.message)
-        return res.value
+        )
+        return Result.ok(entity)
+
+    def resolve_initial_floor_cursor(self, reference_time: datetime | None = None) -> str | None:
+        """Computes the historical lookback floor cursor ISO-8601 timestamp from `sync_from` policy."""
+        now = reference_time or datetime.now(UTC)
+        utc_now = now.astimezone(UTC) if now.tzinfo is not None else now.replace(tzinfo=UTC)
+
+        if self.sync_from == EntitySyncFrom.ALL:
+            return None
+        if self.sync_from == EntitySyncFrom.LAST_24H:
+            return (utc_now - timedelta(hours=24)).isoformat()
+        if self.sync_from == EntitySyncFrom.LAST_7D:
+            return (utc_now - timedelta(days=7)).isoformat()
+        if self.sync_from == EntitySyncFrom.LAST_30D:
+            return (utc_now - timedelta(days=30)).isoformat()
+        if self.sync_from == EntitySyncFrom.LAST_90D:
+            return (utc_now - timedelta(days=90)).isoformat()
+        if self.sync_from == EntitySyncFrom.CUSTOM and self.sync_from_at is not None:
+            custom_ts = (
+                self.sync_from_at.astimezone(UTC)
+                if self.sync_from_at.tzinfo is not None
+                else self.sync_from_at.replace(tzinfo=UTC)
+            )
+            return custom_ts.isoformat()
+        return None
+
+    def plan_sync_execution(
+        self,
+        *,
+        latest_generation_id: int,
+        forced_kind: SyncRunKind | None = None,
+        now: datetime | None = None,
+    ) -> Result[PlannedSyncExecution, IpError]:
+        """Enforces subscription policy (`is_enabled`, `sync_mode`, `sync_from`, `cursor_value`) to plan a sync run."""
+        if not self.is_enabled:
+            return Result.fail(
+                ConnectionEntityDisabledError.for_stream(self.connection_id, self.stream_name)
+            )
+
+        ref_now = now or datetime.now(UTC)
+        floor_cursor = self.resolve_initial_floor_cursor(ref_now)
+
+        if forced_kind == SyncRunKind.FULL_REFRESH or (
+            forced_kind is None and self.sync_mode == SyncMode.FULL_REFRESH
+        ):
+            return Result.ok(
+                PlannedSyncExecution(
+                    kind=SyncRunKind.FULL_REFRESH,
+                    start_checkpoint=floor_cursor,
+                    generation_id=latest_generation_id + 1,
+                )
+            )
+
+        base_generation = max(1, latest_generation_id)
+        if forced_kind == SyncRunKind.RECONCILIATION:
+            return Result.ok(
+                PlannedSyncExecution(
+                    kind=SyncRunKind.RECONCILIATION,
+                    start_checkpoint=self.cursor_value if self.cursor_value else floor_cursor,
+                    generation_id=base_generation,
+                )
+            )
+
+        if forced_kind is not None:
+            return Result.ok(
+                PlannedSyncExecution(
+                    kind=forced_kind,
+                    start_checkpoint=self.cursor_value if self.cursor_value else floor_cursor,
+                    generation_id=base_generation,
+                )
+            )
+
+        if self.cursor_value:
+            return Result.ok(
+                PlannedSyncExecution(
+                    kind=SyncRunKind.INCREMENTAL,
+                    start_checkpoint=self.cursor_value,
+                    generation_id=base_generation,
+                )
+            )
+
+        return Result.ok(
+            PlannedSyncExecution(
+                kind=SyncRunKind.INITIAL,
+                start_checkpoint=floor_cursor,
+                generation_id=base_generation,
+            )
+        )
 
     def update_configuration(
         self,
@@ -197,6 +280,18 @@ class ConnectionEntity(AggregateRoot):
         if is_enabled is not None:
             self.is_enabled = is_enabled
         self.updated_at = datetime.now(UTC)
+        self.add_domain_event(
+            ConnectionEntityConfigurationUpdatedEvent(
+                entity_id=self.id,
+                tenant_id=self.tenant_id,
+                connection_id=self.connection_id,
+                stream_name=self.stream_name,
+                sync_mode=self.sync_mode.value,
+                schedule=self.schedule.value,
+                sync_from=self.sync_from.value,
+                is_enabled=self.is_enabled,
+            )
+        )
         return Result.ok(None)
 
     def refresh_schema(
@@ -249,3 +344,22 @@ class ConnectionEntity(AggregateRoot):
         self.records_synced_count = 0
         self.last_synced_at = None
         self.updated_at = datetime.now(UTC)
+        self.add_domain_event(
+            ConnectionEntityCheckpointResetEvent(
+                entity_id=self.id,
+                tenant_id=self.tenant_id,
+                connection_id=self.connection_id,
+                stream_name=self.stream_name,
+            )
+        )
+
+    def mark_unsubscribed(self) -> None:
+        """Records the unsubscribed lifecycle domain event prior to aggregate deletion."""
+        self.add_domain_event(
+            ConnectionEntityUnsubscribedEvent(
+                entity_id=self.id,
+                tenant_id=self.tenant_id,
+                connection_id=self.connection_id,
+                stream_name=self.stream_name,
+            )
+        )

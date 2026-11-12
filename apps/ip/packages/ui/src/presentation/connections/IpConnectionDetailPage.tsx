@@ -10,13 +10,13 @@ import {
 import { ArrowLeft } from 'lucide-react';
 import React, { useState } from 'react';
 import { useConnectionDetailQuery } from '../../application/use-connection-queries';
-import { UNIVERSAL_SIMULATOR_APP_ID } from '../../domain/enums';
 import { useIpWorkspace } from '../../provider/IpRepositoriesContext';
 import { SyncedDataInspectionPanel } from '../records/SyncedDataInspectionPanel';
 import { ApiProblemBanner } from '../shared/ApiProblemBanner';
 import { IpPageHeader } from '../shared/IpPageHeader';
-import { ConnectionEntitiesSyncTab, ConnectionOverviewTab } from './ConnectionDetailTabs';
-import { SimulatorEntitiesSection } from './SimulatorEntitiesSection';
+import { ConnectionEntitiesSyncTab } from './ConnectionEntitiesSyncTab';
+import { ConnectionOverviewTab } from './ConnectionOverviewTab';
+import { resolveConnectionOverviewExtension } from './connection-overview-extensions';
 
 export const ConnectionDetailTab = {
   CONNECTION: 'connection',
@@ -46,7 +46,9 @@ export function IpConnectionDetailPage({
 
   const detailView = useConnectionDetailQuery(connectionId);
   const connection = detailView.data;
-  const isSimulator = connection?.appId === UNIVERSAL_SIMULATOR_APP_ID;
+  const OverviewExtension = connection
+    ? resolveConnectionOverviewExtension(connection.appId)
+    : null;
 
   const handleInspectEntity = (entityName: string) => {
     setInspectEntityFilter(entityName);
@@ -108,8 +110,8 @@ export function IpConnectionDetailPage({
               onDeactivated={() => navigation.toConnections()}
               onDeleted={() => navigation.toConnections()}
             />
-            {isSimulator ? (
-              <SimulatorEntitiesSection connectionId={connection.id} onProblem={setActionProblem} />
+            {OverviewExtension ? (
+              <OverviewExtension connection={connection} onProblem={setActionProblem} />
             ) : null}
           </TabsContent>
 

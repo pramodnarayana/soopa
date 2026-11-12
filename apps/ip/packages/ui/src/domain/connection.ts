@@ -50,7 +50,6 @@ export interface StreamSchema {
 
 export interface DiscoveredCatalog {
   readonly connectionId: string;
-  readonly catalogVersion: number;
   readonly catalogHash: string;
   readonly streams: readonly StreamSchema[];
   readonly discoveredAt: string;

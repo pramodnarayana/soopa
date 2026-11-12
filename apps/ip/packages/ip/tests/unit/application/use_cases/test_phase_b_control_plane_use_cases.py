@@ -108,6 +108,9 @@ from ip.engine.domain.replication.enums import (
     SyncRunKind,
     SyncRunStatus,
 )
+from ip.engine.domain.replication.events import (
+    ConnectionEntitySubscribedEvent,
+)
 from ip.engine.domain.replication.inbound_record import InboundRecord
 from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.domain.stitch.enums import StitchStepType
@@ -1018,6 +1021,32 @@ async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
     await cp_uow.connections.save(conn)
 
     trigger_uc = TriggerSyncRunUseCase(control_plane_uow=cp_uow)
+    unsub_trigger_res = await trigger_uc.execute(
+        TriggerSyncRunCommand(
+            tenant_id="ten_01",
+            connection_id="conn_sync_01",
+            stream_name="records_alpha",
+            correlation_id="corr_sync_01",
+        )
+    )
+    assert unsub_trigger_res.is_err
+    assert unsub_trigger_res.unwrap_err().code == IpErrorCode.CONNECTION_ENTITY_NOT_FOUND
+
+    add_entity_uc = AddConnectionEntityUseCase(control_plane_uow=cp_uow)
+    alpha_add_res = await add_entity_uc.execute(
+        AddConnectionEntityCommand(
+            tenant_id="ten_01",
+            connection_id="conn_sync_01",
+            stream_name="records_alpha",
+            sync_mode=SyncMode.INCREMENTAL,
+            schedule=EntitySyncSchedule.MANUAL,
+            primary_key=("id",),
+            fields=(ConnectionEntityFieldDTO(name="id", data_type="string", nullable=False),),
+            cursor_field="timestamp",
+        )
+    )
+    assert alpha_add_res.is_ok
+
     trigger_res = await trigger_uc.execute(
         TriggerSyncRunCommand(
             tenant_id="ten_01",
@@ -1098,7 +1127,6 @@ async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
     assert len(entities_res.unwrap()) == 1
     assert entities_res.unwrap()[0].cursor_value == "2026-10-27T11:00:00Z"
 
-    add_entity_uc = AddConnectionEntityUseCase(control_plane_uow=cp_uow)
     added_res = await add_entity_uc.execute(
         AddConnectionEntityCommand(
             tenant_id="ten_01",
@@ -1109,19 +1137,17 @@ async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
             primary_key=("order_id",),
             fields=(ConnectionEntityFieldDTO(name="order_id", data_type="string", nullable=False),),
             cursor_field="updated_at",
-            default_transformation_id="trans.orders.v1",
-            default_transformation_version=2,
         )
     )
     assert added_res.is_ok
     assert added_res.unwrap().schedule == EntitySyncSchedule.HOURLY
-    bound_trans = await cp_uow.transformations.get_by_stream(
+    saved_orders = await cp_uow.entities.get_by_stream(
         tenant_id="ten_01",
         connection_id="conn_sync_01",
-        stream="orders",
+        stream_name="orders",
     )
-    assert bound_trans is not None
-    assert bound_trans.transformation_id == "trans.orders.v1"
+    assert saved_orders is not None
+    assert any(isinstance(ev, ConnectionEntitySubscribedEvent) for ev in saved_orders.domain_events)
 
     update_entity_uc = UpdateConnectionEntityUseCase(control_plane_uow=cp_uow)
     upd_res = await update_entity_uc.execute(
@@ -1131,11 +1157,23 @@ async def test_sync_run_control_plane_lifecycle_resumes_pending_run() -> None:
             stream_name="orders",
             schedule=EntitySyncSchedule.DAILY,
             sync_from=EntitySyncFrom.LAST_7D,
+            is_enabled=False,
         )
     )
     assert upd_res.is_ok
     assert upd_res.unwrap().schedule == EntitySyncSchedule.DAILY
     assert upd_res.unwrap().sync_from == EntitySyncFrom.LAST_7D
+    assert upd_res.unwrap().is_enabled is False
+
+    disabled_trigger_res = await trigger_uc.execute(
+        TriggerSyncRunCommand(
+            tenant_id="ten_01",
+            connection_id="conn_sync_01",
+            stream_name="orders",
+        )
+    )
+    assert disabled_trigger_res.is_err
+    assert disabled_trigger_res.unwrap_err().code == IpErrorCode.CONNECTION_ENTITY_DISABLED
 
     reset_uc = ResetConnectionEntityCheckpointUseCase(control_plane_uow=cp_uow)
     reset_res = await reset_uc.execute(

@@ -107,7 +107,6 @@ class DiscoveredCatalogHttpResponse(BaseModel):
     """Discovered stream catalog metadata."""
 
     connection_id: str
-    catalog_version: int
     catalog_hash: str
     streams: list[StreamSchemaHttpResponse]
     discovered_at: str

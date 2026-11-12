@@ -27,7 +27,6 @@ import {
   SyncRunKind,
   SyncRunStatus,
   TraceStatus,
-  TransformationMode,
   UNIVERSAL_SIMULATOR_APP_ID,
 } from '../domain/enums';
 import type {
@@ -339,19 +338,30 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
   }
 }
 
+export interface InMemoryConnectorDiscoveryPlugin {
+  checkConnection?(
+    tenantId: string,
+    input: CheckConnectionInput,
+  ): Promise<Result<ConnectionCheckResult, ApiProblem>>;
+  discoverCatalog(
+    tenantId: string,
+    connection: Connection,
+  ): Promise<Result<DiscoveredCatalog, ApiProblem>>;
+}
+
 export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
   public readonly items: Connection[];
   private readonly catalogs: Map<string, DiscoveredCatalog>;
-  private readonly simulator?: InMemorySimulatorRepository;
+  private readonly plugins: ReadonlyMap<string, InMemoryConnectorDiscoveryPlugin>;
 
   constructor(
     initial: readonly Connection[] = [SEED_CONNECTION],
     catalogs: readonly DiscoveredCatalog[] = [SEED_DISCOVERED_CATALOG],
-    simulator?: InMemorySimulatorRepository,
+    plugins: ReadonlyMap<string, InMemoryConnectorDiscoveryPlugin> = new Map(),
   ) {
     this.items = [...initial];
     this.catalogs = new Map(catalogs.map((cat) => [cat.connectionId, cat]));
-    this.simulator = simulator;
+    this.plugins = plugins;
   }
 
   public async listConnections(
@@ -374,16 +384,12 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
   }
 
   public async checkConnection(
-    _tenantId: string,
+    tenantId: string,
     input: CheckConnectionInput,
   ): Promise<Result<ConnectionCheckResult, ApiProblem>> {
-    if (input.appId === UNIVERSAL_SIMULATOR_APP_ID) {
-      return ok({
-        success: true,
-        status: ConnectionHandshakeStatus.VERIFIED,
-        message: 'Universal Schema Simulator connection ready.',
-        errorCode: null,
-      });
+    const plugin = this.plugins.get(input.appId);
+    if (plugin?.checkConnection) {
+      return plugin.checkConnection(tenantId, input);
     }
     const hasSecret = Object.keys(input.rawCredentials).length > 0;
     return ok({
@@ -432,36 +438,13 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     if (!conn) {
       return err(notFoundProblem(`Connection ${connectionId} not found`));
     }
-    if (conn.appId === UNIVERSAL_SIMULATOR_APP_ID && this.simulator) {
-      const entitiesRes = await this.simulator.listEntities(tenantId, connectionId);
-      if (!entitiesRes.ok) {
-        return err(entitiesRes.error);
+    const plugin = this.plugins.get(conn.appId);
+    if (plugin) {
+      const pluginRes = await plugin.discoverCatalog(tenantId, conn);
+      if (pluginRes.ok) {
+        this.catalogs.set(connectionId, pluginRes.value);
       }
-      const discovered: DiscoveredCatalog = {
-        connectionId,
-        catalogVersion: (this.catalogs.get(connectionId)?.catalogVersion ?? 0) + 1,
-        catalogHash: `hash_sim_${connectionId}_${entitiesRes.value.length}`,
-        discoveredAt: '2026-11-11T10:15:00Z',
-        streams: entitiesRes.value.map((ent) => {
-          const schemaProps = isPlainObject(ent.inferredJsonSchema.properties)
-            ? ent.inferredJsonSchema.properties
-            : {};
-          return {
-            name: ent.entityName,
-            primaryKey: [ent.primaryKeyField],
-            cursorField: ent.cursorField,
-            supportedSyncModes: [SyncRunKind.INCREMENTAL, SyncRunKind.FULL_REFRESH],
-            fields: Object.keys(schemaProps).map((fieldName) => ({
-              name: fieldName,
-              dataType: 'string',
-              nullable: fieldName !== ent.primaryKeyField,
-              description: null,
-            })),
-          };
-        }),
-      };
-      this.catalogs.set(connectionId, discovered);
-      return ok(discovered);
+      return pluginRes;
     }
     const catalog = this.catalogs.get(connectionId);
     if (catalog) {
@@ -477,7 +460,6 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
             : ['posts', 'users', 'comments'];
     const generated: DiscoveredCatalog = {
       connectionId,
-      catalogVersion: 1,
       catalogHash: `hash_${connectionId}`,
       discoveredAt: '2026-11-05T12:00:00Z',
       streams: sampleNames.map((name) => ({
@@ -570,18 +552,15 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
 
 export class InMemoryConnectionEntityRepository implements ConnectionEntityRepositoryPort {
   public readonly items: ConnectionEntity[];
-  private readonly connections?: InMemoryConnectionRepository;
-  private readonly transformations?: InMemoryTransformationRepository;
+  private readonly connections?: ConnectionRepositoryPort;
   private nextEntityIndex = 1;
 
   constructor(
     initial: readonly ConnectionEntity[] = [SEED_CONNECTION_ENTITY],
-    connections?: InMemoryConnectionRepository,
-    transformations?: InMemoryTransformationRepository,
+    connections?: ConnectionRepositoryPort,
   ) {
     this.items = [...initial];
     this.connections = connections;
-    this.transformations = transformations;
   }
 
   public async listEntities(
@@ -663,21 +642,6 @@ export class InMemoryConnectionEntityRepository implements ConnectionEntityRepos
         updatedAt: '2026-11-12T10:00:00Z',
       };
       this.items.push(saved);
-    }
-
-    if (input.defaultTransformationId && this.transformations) {
-      const existingBinding = await this.transformations.getStreamTransformation(
-        tenantId,
-        connectionId,
-        cleanStream,
-      );
-      if (!existingBinding.ok) {
-        await this.transformations.bindStreamTransformation(tenantId, connectionId, cleanStream, {
-          transformationId: input.defaultTransformationId,
-          transformationVersion: input.defaultTransformationVersion ?? 1,
-          mode: TransformationMode.ACTIVE,
-        });
-      }
     }
 
     return ok(saved);
@@ -1462,20 +1426,65 @@ export interface InMemoryIpWorkspaceHarness {
   readonly navigation: InMemoryNavigationFake;
 }
 
+export function createSimulatorDiscoveryPlugin(
+  simulator: SimulatorRepositoryPort,
+): InMemoryConnectorDiscoveryPlugin {
+  return {
+    async checkConnection(): Promise<Result<ConnectionCheckResult, ApiProblem>> {
+      return ok({
+        success: true,
+        status: ConnectionHandshakeStatus.VERIFIED,
+        message: 'Universal Schema Simulator connection ready.',
+        errorCode: null,
+      });
+    },
+    async discoverCatalog(
+      tenantId: string,
+      connection: Connection,
+    ): Promise<Result<DiscoveredCatalog, ApiProblem>> {
+      const entitiesRes = await simulator.listEntities(tenantId, connection.id);
+      if (!entitiesRes.ok) {
+        return err(entitiesRes.error);
+      }
+      return ok({
+        connectionId: connection.id,
+        catalogHash: `hash_sim_${connection.id}_${entitiesRes.value.length}`,
+        discoveredAt: '2026-11-11T10:15:00Z',
+        streams: entitiesRes.value.map((ent) => {
+          const schemaProps = isPlainObject(ent.inferredJsonSchema.properties)
+            ? ent.inferredJsonSchema.properties
+            : {};
+          return {
+            name: ent.entityName,
+            primaryKey: [ent.primaryKeyField],
+            cursorField: ent.cursorField,
+            supportedSyncModes: [SyncRunKind.INCREMENTAL, SyncRunKind.FULL_REFRESH],
+            fields: Object.keys(schemaProps).map((fieldName) => ({
+              name: fieldName,
+              dataType: 'string',
+              nullable: fieldName !== ent.primaryKeyField,
+              description: null,
+            })),
+          };
+        }),
+      });
+    },
+  };
+}
+
 export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
   const catalog = new InMemoryCatalogRepository();
   const simulator = new InMemorySimulatorRepository();
+  const plugins = new Map<string, InMemoryConnectorDiscoveryPlugin>([
+    [UNIVERSAL_SIMULATOR_APP_ID, createSimulatorDiscoveryPlugin(simulator)],
+  ]);
   const connections = new InMemoryConnectionRepository(
     [SEED_CONNECTION],
     [SEED_DISCOVERED_CATALOG],
-    simulator,
+    plugins,
   );
   const transformations = new InMemoryTransformationRepository();
-  const entities = new InMemoryConnectionEntityRepository(
-    [SEED_CONNECTION_ENTITY],
-    connections,
-    transformations,
-  );
+  const entities = new InMemoryConnectionEntityRepository([SEED_CONNECTION_ENTITY], connections);
   const syncRuns = new InMemorySyncRunRepository();
   const stitches = new InMemoryStitchRepository();
   const traces = new InMemoryTraceRepository();

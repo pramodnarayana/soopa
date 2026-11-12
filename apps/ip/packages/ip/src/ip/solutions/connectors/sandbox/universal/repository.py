@@ -1,13 +1,10 @@
-"""SQLAlchemy repository and session-scoped reader adapters for Simulator Entities (`ip.simulator_entities`)."""
+"""SQLAlchemy repository and Unit of Work adapters for Simulator Entities (`ip.simulator_entities`)."""
 
 from __future__ import annotations
 
-import contextlib
-from collections.abc import AsyncIterator, Callable, Sequence
+from collections.abc import Sequence
 
 import structlog
-from database.provider import DatabaseProvider
-from database.router import DatabaseRouterPort
 from database.uow import BaseSqlAlchemyUnitOfWork
 from ip.engine.domain.exceptions import (
     InvalidConnectionConfigError,
@@ -18,8 +15,6 @@ from ip.solutions.connectors.sandbox.universal.dto import SimulatorEntityDTO
 from ip.solutions.connectors.sandbox.universal.models import SimulatorEntityRecord
 from ip.solutions.connectors.sandbox.universal.ports import (
     DuplicateSimulatorEntityError,
-    SimulatorApiProviderPort,
-    SimulatorEntityReaderPort,
     SimulatorRepositoryPort,
     SimulatorUnitOfWorkPort,
 )
@@ -75,7 +70,7 @@ class SqlAlchemySimulatorRepository(SimulatorRepositoryPort):
 
     async def list_entities_by_connection(
         self, tenant_id: str, connection_id: str
-    ) -> Sequence[SimulatorEntityDTO]:
+    ) -> Result[Sequence[SimulatorEntityDTO], IpError]:
         stmt = (
             select(SimulatorEntityRecord)
             .where(
@@ -85,18 +80,18 @@ class SqlAlchemySimulatorRepository(SimulatorRepositoryPort):
             .order_by(SimulatorEntityRecord.created_at.asc(), SimulatorEntityRecord.id.asc())
         )
         rows = (await self._session.execute(stmt)).scalars().all()
-        return tuple(_entity_record_to_dto(row) for row in rows)
+        return Result.ok(tuple(_entity_record_to_dto(row) for row in rows))
 
     async def get_entity_by_name(
         self, tenant_id: str, connection_id: str, entity_name: str
-    ) -> SimulatorEntityDTO | None:
+    ) -> Result[SimulatorEntityDTO | None, IpError]:
         stmt = select(SimulatorEntityRecord).where(
             SimulatorEntityRecord.tenant_id == tenant_id,
             SimulatorEntityRecord.connection_id == connection_id,
             SimulatorEntityRecord.entity_name == entity_name,
         )
         row = (await self._session.execute(stmt)).scalar_one_or_none()
-        return _entity_record_to_dto(row) if row is not None else None
+        return Result.ok(_entity_record_to_dto(row) if row is not None else None)
 
     async def get_entity_by_id(
         self, tenant_id: str, connection_id: str, entity_id: str
@@ -211,89 +206,17 @@ class SqlAlchemySimulatorUnitOfWork(BaseSqlAlchemyUnitOfWork, SimulatorUnitOfWor
 
     entities: SimulatorRepositoryPort
 
-    def __init__(self, global_session: AsyncSession) -> None:
-        super().__init__(global_session)
-        self.entities = SqlAlchemySimulatorRepository(global_session)
-
-
-class SqlAlchemySessionScopedSimulatorEntityReader(SimulatorEntityReaderPort):
-    """Session-opening `SimulatorEntityReaderPort` backed by `DatabaseRouterPort` or `DatabaseProvider`."""
-
     def __init__(
         self,
+        global_session: AsyncSession,
         *,
-        db_router_getter: Callable[[], DatabaseRouterPort | None] | None = None,
-        db_provider_getter: Callable[[], DatabaseProvider | None] | None = None,
+        entities: SimulatorRepositoryPort,
     ) -> None:
-        self._db_router_getter = db_router_getter
-        self._db_provider_getter = db_provider_getter
-
-    @contextlib.asynccontextmanager
-    async def _open_session(self) -> AsyncIterator[AsyncSession | None]:
-        db_router = self._db_router_getter() if self._db_router_getter is not None else None
-        if db_router is not None:
-            async with contextlib.aclosing(db_router.get_global_session()) as sessions:
-                async for session in sessions:
-                    yield session
-                    return
-        db_provider = self._db_provider_getter() if self._db_provider_getter is not None else None
-        if db_provider is not None:
-            async with db_provider.session() as provider_session:
-                yield provider_session
-                return
-        yield None
-
-    async def list_entities_by_connection(
-        self, tenant_id: str, connection_id: str
-    ) -> Sequence[SimulatorEntityDTO]:
-        async with self._open_session() as session:
-            if session is None:
-                logger.error(
-                    "simulator_entity_reader_session_unavailable",
-                    tenant_id=tenant_id,
-                    connection_id=connection_id,
-                )
-                raise RuntimeError(
-                    "SqlAlchemySessionScopedSimulatorEntityReader has no bound "
-                    "DatabaseRouterPort or DatabaseProvider."
-                )
-            return await SqlAlchemySimulatorRepository(session).list_entities_by_connection(
-                tenant_id, connection_id
-            )
-
-    async def get_entity_by_name(
-        self, tenant_id: str, connection_id: str, entity_name: str
-    ) -> SimulatorEntityDTO | None:
-        async with self._open_session() as session:
-            if session is None:
-                logger.error(
-                    "simulator_entity_reader_session_unavailable",
-                    tenant_id=tenant_id,
-                    connection_id=connection_id,
-                    entity_name=entity_name,
-                )
-                raise RuntimeError(
-                    "SqlAlchemySessionScopedSimulatorEntityReader has no bound "
-                    "DatabaseRouterPort or DatabaseProvider."
-                )
-            return await SqlAlchemySimulatorRepository(session).get_entity_by_name(
-                tenant_id, connection_id, entity_name
-            )
-
-
-class SqlAlchemySimulatorApiProvider(SimulatorApiProviderPort[AsyncSession]):
-    """Production `SimulatorApiProviderPort` constructing SQLAlchemy UoW/readers from `AsyncSession`."""
-
-    def create_uow(self, global_session: AsyncSession) -> SimulatorUnitOfWorkPort:
-        return SqlAlchemySimulatorUnitOfWork(global_session)
-
-    def get_entity_reader(self, global_session: AsyncSession) -> SimulatorEntityReaderPort:
-        return SqlAlchemySimulatorRepository(global_session)
+        super().__init__(global_session)
+        self.entities = entities
 
 
 __all__ = [
-    "SqlAlchemySessionScopedSimulatorEntityReader",
-    "SqlAlchemySimulatorApiProvider",
     "SqlAlchemySimulatorRepository",
     "SqlAlchemySimulatorUnitOfWork",
 ]

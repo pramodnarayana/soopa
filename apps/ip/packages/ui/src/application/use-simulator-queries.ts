@@ -157,7 +157,7 @@ export function useSimulatePushMutation(connectionId: string) {
           queryKey: ipQueryKeys.traces.all(tenantId),
         });
         void queryClient.invalidateQueries({
-          queryKey: ['ip', 'tenant', tenantId, 'records'],
+          queryKey: ipQueryKeys.records.all(tenantId),
         });
       }
     },

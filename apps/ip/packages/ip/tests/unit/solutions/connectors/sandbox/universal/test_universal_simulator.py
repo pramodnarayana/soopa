@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 from collections.abc import AsyncIterator
 
-import pytest
 from helpers.delivery_fakes import (
     FakeCipher,
     FakeConnectionRepository,
@@ -17,6 +16,7 @@ from ip.engine.adapters.outbound.inbound.ack import StandardInboundAck
 from ip.engine.adapters.outbound.inbound.decoders import StandardInboundPayloadDecoder
 from ip.engine.adapters.outbound.inbound.verifiers import NoOpVerifier
 from ip.engine.application.use_cases.connections.token_manager_service import TokenManagerService
+from ip.engine.application.use_cases.ingestion.receive_push_use_case import ReceivePushUseCase
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType, PropertyType
 from ip.engine.domain.exceptions import IpError, IpErrorCode, Result
@@ -33,6 +33,7 @@ from ip.solutions.connectors.sandbox.universal import (
     DeleteSimulatorEntityUseCase,
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
+    SessionScopedSimulatorEntityReader,
     SimulatedPushDeliveryStyle,
     SimulatorChaosPolicy,
     SimulatorStreamSpec,
@@ -46,9 +47,7 @@ from ip.solutions.connectors.sandbox.universal import (
     UpdateSimulatorEntityUseCase,
     infer_json_schema_from_sample,
 )
-from ip.solutions.connectors.sandbox.universal.repository import (
-    SqlAlchemySessionScopedSimulatorEntityReader,
-)
+from ip.solutions.connectors.sandbox.universal.repository import SqlAlchemySimulatorRepository
 from ip.solutions.connectors.sandbox.universal.synthesizer import (
     MAX_SYNTHESIS_ARRAY_ITEMS,
     MAX_SYNTHESIS_DIGITS,
@@ -413,10 +412,13 @@ async def test_simulated_push_emits_l1_records_within_single_data_plane_uow() ->
 
     push_uc = TriggerSimulatedPushUseCase(
         data_plane_uow_provider=dp_provider,
-        tiered_storage=storage,
-        verifier=NoOpVerifier(),
-        decoder=StandardInboundPayloadDecoder(),
-        ack=StandardInboundAck(),
+        push_executor_factory=lambda data_plane_uow: ReceivePushUseCase(
+            uow=data_plane_uow,
+            tiered_storage=storage,
+            verifier=NoOpVerifier(),
+            decoder=StandardInboundPayloadDecoder(),
+            ack=StandardInboundAck(),
+        ),
         token_manager=token_manager,
         entity_reader=repo,
     )
@@ -575,14 +577,16 @@ async def test_connector_discover_returns_error_when_runtime_scope_is_invalid() 
     assert missing_tenant_catalog.error.code == IpErrorCode.INVALID_CONFIG
 
 
-async def test_session_scoped_reader_raises_runtime_error_without_database_binding() -> None:
-    reader = SqlAlchemySessionScopedSimulatorEntityReader()
+async def test_session_scoped_reader_returns_result_fail_without_database_binding() -> None:
+    reader = SessionScopedSimulatorEntityReader(reader_factory=SqlAlchemySimulatorRepository)
 
-    with pytest.raises(RuntimeError, match="no bound DatabaseRouterPort or DatabaseProvider"):
-        await reader.list_entities_by_connection("tnt_alpha", "conn_sim_1")
+    list_res = await reader.list_entities_by_connection("tnt_alpha", "conn_sim_1")
+    assert list_res.is_err
+    assert list_res.unwrap_err().code == IpErrorCode.INVALID_CONFIG
 
-    with pytest.raises(RuntimeError, match="no bound DatabaseRouterPort or DatabaseProvider"):
-        await reader.get_entity_by_name("tnt_alpha", "conn_sim_1", "orders")
+    get_res = await reader.get_entity_by_name("tnt_alpha", "conn_sim_1", "orders")
+    assert get_res.is_err
+    assert get_res.unwrap_err().code == IpErrorCode.INVALID_CONFIG
 
 
 async def test_simulated_push_rejects_non_simulator_connection_with_400() -> None:
@@ -603,10 +607,13 @@ async def test_simulated_push_rejects_non_simulator_connection_with_400() -> Non
 
     push_uc = TriggerSimulatedPushUseCase(
         data_plane_uow_provider=_StaticDataPlaneUoWProvider(FakeDataPlaneUnitOfWork()),
-        tiered_storage=FakeTieredStorage(),
-        verifier=NoOpVerifier(),
-        decoder=StandardInboundPayloadDecoder(),
-        ack=StandardInboundAck(),
+        push_executor_factory=lambda data_plane_uow: ReceivePushUseCase(
+            uow=data_plane_uow,
+            tiered_storage=FakeTieredStorage(),
+            verifier=NoOpVerifier(),
+            decoder=StandardInboundPayloadDecoder(),
+            ack=StandardInboundAck(),
+        ),
         token_manager=TokenManagerService(control_plane_uow=cp_uow, cipher=cipher),
         entity_reader=repo,
     )

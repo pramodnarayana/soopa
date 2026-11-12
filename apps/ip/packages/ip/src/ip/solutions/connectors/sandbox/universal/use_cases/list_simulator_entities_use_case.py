@@ -57,9 +57,12 @@ class ListSimulatorEntitiesUseCase:
                     error_code=err.code.value,
                 )
                 return Result.fail(err)
-            entities = await self._uow.entities.list_entities_by_connection(
+            entities_res = await self._uow.entities.list_entities_by_connection(
                 tenant_id, connection_id
             )
+            if entities_res.is_err:
+                return entities_res
+            entities = entities_res.unwrap()
         return Result.ok(entities)
 
 

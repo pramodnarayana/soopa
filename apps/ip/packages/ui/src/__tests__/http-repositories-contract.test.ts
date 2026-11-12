@@ -244,7 +244,6 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
       'POST /api/v1/tenants/ten_01/ip/connections': WIRE_CONNECTION,
       'POST /api/v1/tenants/ten_01/ip/connections/conn_01/discover': {
         connection_id: 'conn_01',
-        catalog_version: 2,
         catalog_hash: 'hash_02',
         discovered_at: '2026-10-29T08:02:00Z',
         streams: [
@@ -390,8 +389,6 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
         primaryKey: ['record_id'],
         fields: [{ name: 'record_id', dataType: 'string', nullable: false, description: null }],
         cursorField: 'captured_at',
-        defaultTransformationId: 'acme.record_alpha.to_gem',
-        defaultTransformationVersion: 2,
       }),
     );
     expect(added.streamName).toBe('records_alpha');
@@ -413,8 +410,9 @@ describe('Outbound HTTP Repositories Wire Contracts', () => {
     expect(calls).toHaveLength(5);
 
     const addBody = JSON.parse(calls[1]?.bodyText ?? '{}');
-    expect(addBody.default_transformation_id).toBe('acme.record_alpha.to_gem');
-    expect(addBody.default_transformation_version).toBe(2);
+    expect(addBody.stream_name).toBe('records_alpha');
+    expect('default_transformation_id' in addBody).toBe(false);
+    expect('default_transformation_version' in addBody).toBe(false);
   });
 
   it('maps HttpTransformationRepository wire responses across all 6 methods', async () => {

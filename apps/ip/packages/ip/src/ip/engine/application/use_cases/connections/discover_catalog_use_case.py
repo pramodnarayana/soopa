@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import Protocol
 
 import structlog
 from security.ports.cipher_port import CipherPort
@@ -13,15 +14,20 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
     ResolvedConnectionCredentialsDTO,
     TokenManagerService,
 )
+from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
 from ip.engine.domain.connection.stream_schema import (
     StreamField,
     StreamSchema,
     compute_discovered_streams_hash,
 )
 from ip.engine.domain.exceptions import (
+    CatalogDiscoveryError,
     ConnectionNotFoundError,
+    ConnectionPendingAuthError,
     ConnectorNotFoundError,
     InvalidConnectionConfigError,
+    IpError,
+    IpErrorCode,
     Result,
 )
 from ip.engine.domain.replication.enums import SyncMode
@@ -36,7 +42,17 @@ from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 logger = structlog.get_logger(__name__)
 
 
-class DiscoverCatalogUseCase:
+class DiscoverCatalogExecutorPort(Protocol):
+    """Inbound port for stateless catalog discovery."""
+
+    async def execute(
+        self,
+        connection_id: str,
+        tenant_id: str,
+    ) -> Result[DiscoveredCatalogDTO, IpError]: ...
+
+
+class DiscoverCatalogUseCase(DiscoverCatalogExecutorPort):
     """Statelessly introspects source systems on demand and returns live discovered streams and fields."""
 
     def __init__(
@@ -59,7 +75,7 @@ class DiscoverCatalogUseCase:
         self,
         connection_id: str,
         tenant_id: str,
-    ) -> Result[ResolvedConnectionCredentialsDTO, DiscoveredCatalogDTO]:
+    ) -> Result[ResolvedConnectionCredentialsDTO, IpError]:
         creds_res = await self._token_manager.get_valid_credentials(
             GetValidCredentialsCommand(
                 tenant_id=tenant_id,
@@ -68,7 +84,7 @@ class DiscoverCatalogUseCase:
         )
         if creds_res.is_err or creds_res.value is None:
             err = creds_res.error or ConnectionNotFoundError.for_id(connection_id)
-            return Result.fail(DiscoveredCatalogDTO.from_error(connection_id, err))
+            return Result.fail(err)
         return Result.ok(creds_res.value)
 
     @staticmethod
@@ -95,33 +111,38 @@ class DiscoverCatalogUseCase:
             )
         return parsed_sync_modes
 
+    @staticmethod
+    def _parse_error_code(raw_code: str | None) -> IpErrorCode:
+        if not raw_code:
+            return IpErrorCode.CATALOG_DISCOVERY_FAILED
+        try:
+            return IpErrorCode(raw_code)
+        except ValueError:
+            return IpErrorCode.CATALOG_DISCOVERY_FAILED
+
     async def execute(
         self,
         connection_id: str,
         tenant_id: str,
-    ) -> DiscoveredCatalogDTO:
+    ) -> Result[DiscoveredCatalogDTO, IpError]:
         if not connection_id.strip():
-            return DiscoveredCatalogDTO.from_error(
-                connection_id,
+            return Result.fail(
                 InvalidConnectionConfigError(
                     field_name="connection_id",
                     message="connection_id cannot be empty.",
-                ),
+                )
             )
         if not tenant_id.strip():
-            return DiscoveredCatalogDTO.from_error(
-                connection_id,
+            return Result.fail(
                 InvalidConnectionConfigError(
                     field_name="tenant_id",
                     message="tenant_id cannot be empty.",
-                ),
+                )
             )
 
         creds_res = await self._resolve_credentials(connection_id, tenant_id)
         if creds_res.is_err or creds_res.value is None:
-            return creds_res.error or DiscoveredCatalogDTO.from_error(
-                connection_id, ConnectionNotFoundError.for_id(connection_id)
-            )
+            return Result.fail(creds_res.error or ConnectionNotFoundError.for_id(connection_id))
         resolved = creds_res.value
 
         connector = self._connectors.get(resolved.app_id)
@@ -137,7 +158,21 @@ class DiscoverCatalogUseCase:
                 app_id=resolved.app_id,
                 error_code=conn_err.code.value,
             )
-            return DiscoveredCatalogDTO.from_error(connection_id, conn_err)
+            return Result.fail(conn_err)
+
+        if (
+            resolved.connection is not None
+            and resolved.connection.status == ConnectionStatus.PENDING_AUTH
+            and resolved.auth_type == AuthType.API_KEY
+            and not resolved.connection.encrypted_credentials
+        ):
+            pending_err = ConnectionPendingAuthError.for_connection(connection_id)
+            logger.error(
+                "catalog_discovery_connection_pending_auth",
+                connection_id=connection_id,
+                error_code=pending_err.code.value,
+            )
+            return Result.fail(pending_err)
 
         catalog_dto = await connector.discover(
             connection_id=resolved.connection_id,
@@ -146,7 +181,12 @@ class DiscoverCatalogUseCase:
             tenant_id=resolved.tenant_id,
         )
         if not catalog_dto.success:
-            return catalog_dto
+            err: IpError = catalog_dto.error or CatalogDiscoveryError(
+                connection_id=connection_id,
+                code=self._parse_error_code(catalog_dto.error_code),
+                message=catalog_dto.error_message or "Catalog discovery failed.",
+            )
+            return Result.fail(err)
 
         domain_streams: list[StreamSchema] = []
         for s in catalog_dto.streams:
@@ -213,11 +253,15 @@ class DiscoverCatalogUseCase:
             stream_count=len(domain_streams),
         )
 
-        return DiscoveredCatalogDTO(
-            connection_id=resolved.connection_id,
-            catalog_version=1,
-            catalog_hash=catalog_hash,
-            streams=response_streams,
-            discovered_at=discovered_at,
-            success=True,
+        return Result.ok(
+            DiscoveredCatalogDTO(
+                connection_id=resolved.connection_id,
+                catalog_hash=catalog_hash,
+                streams=response_streams,
+                discovered_at=discovered_at,
+                success=True,
+            )
         )
+
+
+__all__ = ["DiscoverCatalogExecutorPort", "DiscoverCatalogUseCase"]

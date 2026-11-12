@@ -31,6 +31,9 @@ from ip.solutions.connectors.sandbox.universal.ports import (
     SimulatorRepositoryPort,
     SimulatorUnitOfWorkPort,
 )
+from ip.solutions.connectors.sandbox.universal.session_reader import (
+    SessionScopedSimulatorEntityReader,
+)
 from ip.solutions.connectors.sandbox.universal.simulate_push_use_case import (
     SimulatedPushDeliveryStyle,
     SimulatePushResultDTO,
@@ -74,6 +77,7 @@ __all__ = [
     "JsonSchemaRecordSynthesizer",
     "ListSimulatorEntitiesQuery",
     "ListSimulatorEntitiesUseCase",
+    "SessionScopedSimulatorEntityReader",
     "SimulatePushResultDTO",
     "SimulatedFaultType",
     "SimulatedPushDeliveryStyle",

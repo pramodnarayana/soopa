@@ -26,10 +26,8 @@ import {
   IpTransformationsPage,
   IpUIProvider,
 } from '../index';
-import {
-  ConnectionEntitiesSyncTab,
-  ConnectionOverviewTab,
-} from '../presentation/connections/ConnectionDetailTabs';
+import { ConnectionEntitiesSyncTab } from '../presentation/connections/ConnectionEntitiesSyncTab';
+import { ConnectionOverviewTab } from '../presentation/connections/ConnectionOverviewTab';
 import { ApiProblemBanner } from '../presentation/shared/ApiProblemBanner';
 import { TraceWaterfallStageContent } from '../presentation/traces/TraceWaterfallStages';
 import { TransformationWorkbenchPanel } from '../presentation/transformations/TransformationWorkbenchPanel';

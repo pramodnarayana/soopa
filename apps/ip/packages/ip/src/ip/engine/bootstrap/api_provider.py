@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import AbstractAsyncContextManager
 
-from database.models.identity import Tenant as TenantORM
 from database.router import DatabaseRouterPort
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 from security.ports.cipher_port import CipherPort
 from security.provider import SecurityProvider
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ip.engine.application.api_provider_port import IpApiProviderPort
@@ -27,7 +26,9 @@ from ip.engine.bootstrap.container import (
     create_ip_inbound_decoder,
     create_ip_inbound_verifier,
     create_ip_interval_rollup_repository,
+    create_ip_scoped_tenant_repository,
     create_ip_stitch_dispatcher,
+    create_ip_tenant_repository,
     create_ip_tenant_resolver,
     create_ip_tenant_uow_provider,
     create_ip_tiered_storage,
@@ -45,6 +46,7 @@ from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
 )
+from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
@@ -59,19 +61,7 @@ from ip.engine.ports.outbound.uow import (
 from ip.engine.settings import get_ip_engine_settings
 
 
-def _as_async_session(handle: object) -> AsyncSession:
-    if not isinstance(handle, AsyncSession):
-        raise TypeError(f"Expected AsyncSession, received {type(handle).__name__}")
-    return handle
-
-
-def _as_db_router(handle: object) -> DatabaseRouterPort:
-    if not isinstance(handle, DatabaseRouterPort):
-        raise TypeError(f"Expected DatabaseRouterPort, received {type(handle).__name__}")
-    return handle
-
-
-class IpApiProvider(IpApiProviderPort):
+class IpApiProvider(IpApiProviderPort[AsyncSession, DatabaseRouterPort]):
     """Domain-agnostic Composition Root implementation of IpApiProviderPort."""
 
     def __init__(
@@ -102,52 +92,36 @@ class IpApiProvider(IpApiProviderPort):
             interval_rollup_repository or create_ip_interval_rollup_repository()
         )
 
-    def create_control_plane_uow(self, global_session: object) -> IpControlPlaneUnitOfWorkPort:
-        return create_ip_control_plane_uow(_as_async_session(global_session))
+    def create_control_plane_uow(
+        self, global_session: AsyncSession
+    ) -> IpControlPlaneUnitOfWorkPort:
+        return create_ip_control_plane_uow(global_session)
+
+    def create_tenant_repository(self, global_session: AsyncSession) -> TenantRepositoryPort:
+        return create_ip_tenant_repository(global_session)
+
+    def create_scoped_tenant_repository(
+        self,
+        session_scope: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+    ) -> TenantRepositoryPort:
+        return create_ip_scoped_tenant_repository(session_scope)
 
     def resolve_data_plane_uow_provider(
         self,
         *,
-        db_router: object,
+        db_router: DatabaseRouterPort,
         resolver: IpTenantResolverPort | None,
         storage: TieredStoragePort | None,
     ) -> tuple[IpDataPlaneUnitOfWorkProviderPort, IpTenantResolverPort, TieredStoragePort]:
-        typed_router = _as_db_router(db_router)
-        resolved_resolver = resolver or create_ip_tenant_resolver(typed_router)
+        resolved_resolver = resolver or create_ip_tenant_resolver(db_router)
         resolved_storage = storage or create_ip_tiered_storage()
         provider = create_ip_tenant_uow_provider(
             resolver=resolved_resolver,
-            db_router=typed_router,
+            db_router=db_router,
             storage=resolved_storage,
             domain_repository_factories=self._domain_repository_factories,
         )
         return provider, resolved_resolver, resolved_storage
-
-    async def resolve_canonical_tenant_id(
-        self, global_session: object, idp_tenant_id: str
-    ) -> str | None:
-        session = _as_async_session(global_session)
-        result = await session.execute(
-            select(TenantORM.id).where(TenantORM.idp_tenant_id == idp_tenant_id)
-        )
-        resolved_id = result.scalar_one_or_none()
-        return str(resolved_id) if resolved_id is not None else None
-
-    async def resolve_tenant_id_by_slug(
-        self, global_session: object, tenant_slug: str
-    ) -> str | None:
-        normalized_slug = tenant_slug.strip().lower()
-        if not normalized_slug:
-            return None
-        session = _as_async_session(global_session)
-        result = await session.execute(
-            select(TenantORM.id).where(
-                TenantORM.slug == normalized_slug,
-                TenantORM.deleted_at.is_(None),
-            )
-        )
-        resolved_id = result.scalar_one_or_none()
-        return str(resolved_id) if resolved_id is not None else None
 
     def get_catalog_registry(self) -> CatalogRegistryPort:
         settings = get_ip_engine_settings()
@@ -170,9 +144,10 @@ class IpApiProvider(IpApiProviderPort):
     def get_inbound_ack(self) -> InboundAckPort:
         return create_ip_inbound_ack()
 
-    def create_token_refresh_lock(self, db_router: object | None) -> TokenRefreshLockPort:
-        typed_router = _as_db_router(db_router) if db_router is not None else None
-        return create_ip_token_refresh_lock(db_router=typed_router)
+    def create_token_refresh_lock(
+        self, db_router: DatabaseRouterPort | None
+    ) -> TokenRefreshLockPort:
+        return create_ip_token_refresh_lock(db_router=db_router)
 
     def create_token_refresher(self) -> OAuth2TokenRefresherPort:
         settings = get_ip_engine_settings()
@@ -190,13 +165,13 @@ class IpApiProvider(IpApiProviderPort):
     def create_stitch_shard_gateway(
         self,
         *,
-        db_router: object,
+        db_router: DatabaseRouterPort,
         dp_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
         stitch_catalog: StitchCatalogRegistryPort,
         definition_registry: WorkflowDefinitionRegistryPort,
     ) -> StitchShardGatewayPort:
         return create_ip_stitch_dispatcher(
-            db_router=_as_db_router(db_router),
+            db_router=db_router,
             dp_uow_provider=dp_uow_provider,
             stitch_catalog=stitch_catalog,
             definition_registry=definition_registry,

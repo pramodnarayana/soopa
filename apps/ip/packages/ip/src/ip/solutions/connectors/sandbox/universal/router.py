@@ -8,16 +8,15 @@ import structlog
 from fastapi import APIRouter, Depends, Request, Response, status
 from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
-    get_inbound_ack,
-    get_inbound_decoder,
-    get_inbound_verifier,
+    get_effective_ucp_tenant_id,
     get_ip_control_plane_uow,
     get_ip_data_plane_uow_provider,
     get_ip_global_session,
-    get_tiered_storage,
+    get_receive_push_executor_factory,
     get_token_manager,
+    require_flows_read,
     require_flows_write,
-    require_ip_permission,
+    require_sync_trigger,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ApiErrorHttpResponse,
@@ -26,11 +25,9 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
-from ip.engine.domain.authorization import IpPermission
-from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
-from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
-from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
-from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
+from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
+    ReceivePushExecutorFactory,
+)
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
@@ -75,18 +72,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
-require_flows_read = require_ip_permission(IpPermission.IP_FLOWS_READ)
-require_sync_trigger = require_ip_permission(IpPermission.IP_SYNC_TRIGGER)
-
-
-def _resolve_ucp_tenant_id(request: Request, path_tenant_id: str) -> str:
-    """Resolves canonical `ucp_tenant_id` populated by `require_tenant_member`, falling back to `path_tenant_id`."""
-    try:
-        resolved: str = request.state.ucp_tenant_id
-    except AttributeError:
-        return path_tenant_id
-    return resolved
-
 
 def _get_simulator_provider(request: Request) -> SimulatorApiProviderPort[AsyncSession]:
     try:
@@ -117,6 +102,57 @@ def get_simulator_entity_reader(
 ) -> SimulatorEntityReaderPort:
     """Resolves a request-scoped `SimulatorEntityReaderPort` bound to `GlobalSession`."""
     return _get_simulator_provider(request).get_entity_reader(global_session)
+
+
+def get_create_simulator_entity_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> CreateSimulatorEntityUseCase:
+    """Resolves `CreateSimulatorEntityUseCase` via request-scoped DI."""
+    return CreateSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections)
+
+
+def get_list_simulator_entities_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ListSimulatorEntitiesUseCase:
+    """Resolves `ListSimulatorEntitiesUseCase` via request-scoped DI."""
+    return ListSimulatorEntitiesUseCase(uow=uow, connections=cp_uow.connections)
+
+
+def get_update_simulator_entity_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> UpdateSimulatorEntityUseCase:
+    """Resolves `UpdateSimulatorEntityUseCase` via request-scoped DI."""
+    return UpdateSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections)
+
+
+def get_delete_simulator_entity_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> DeleteSimulatorEntityUseCase:
+    """Resolves `DeleteSimulatorEntityUseCase` via request-scoped DI."""
+    return DeleteSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections)
+
+
+def get_trigger_simulated_push_use_case(
+    ip_dp_uow_provider: Annotated[
+        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
+    ],
+    push_executor_factory: Annotated[
+        ReceivePushExecutorFactory, Depends(get_receive_push_executor_factory)
+    ],
+    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
+    entity_reader: Annotated[SimulatorEntityReaderPort, Depends(get_simulator_entity_reader)],
+) -> TriggerSimulatedPushUseCase:
+    """Resolves `TriggerSimulatedPushUseCase` via request-scoped DI."""
+    return TriggerSimulatedPushUseCase(
+        data_plane_uow_provider=ip_dp_uow_provider,
+        push_executor_factory=push_executor_factory,
+        token_manager=token_manager,
+        entity_reader=entity_reader,
+    )
 
 
 class CreateSimulatorEntityHttpRequest(BaseModel):
@@ -245,27 +281,22 @@ router = APIRouter(
     },
 )
 async def create_simulator_entity(
-    tenant_id: str,
     connection_id: str,
-    request: Request,
     body: CreateSimulatorEntityHttpRequest,
     _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        CreateSimulatorEntityUseCase, Depends(get_create_simulator_entity_use_case)
+    ],
 ) -> SimulatorEntityHttpResponse | Response:
     """Creates and validates a new entity inside a Simulator connection."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
         connection_id=connection_id,
         entity_name=body.entity_name,
     )
     log.info("ip_create_simulator_entity_http.received")
-    res = await CreateSimulatorEntityUseCase(
-        uow=uow,
-        connections=cp_uow.connections,
-    ).execute(
+    res = await use_case.execute(
         CreateSimulatorEntityCommand(
             tenant_id=effective_tenant_id,
             connection_id=connection_id,
@@ -302,25 +333,20 @@ async def create_simulator_entity(
     },
 )
 async def list_simulator_entities(
-    tenant_id: str,
     connection_id: str,
-    request: Request,
     _context: Annotated[IdentityContext, Depends(require_flows_read)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        ListSimulatorEntitiesUseCase, Depends(get_list_simulator_entities_use_case)
+    ],
 ) -> list[SimulatorEntityHttpResponse] | Response:
     """Lists all entities configured inside `connection_id`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
         connection_id=connection_id,
     )
     log.info("ip_list_simulator_entities_http.received")
-    res = await ListSimulatorEntitiesUseCase(
-        uow=uow,
-        connections=cp_uow.connections,
-    ).execute(
+    res = await use_case.execute(
         ListSimulatorEntitiesQuery(tenant_id=effective_tenant_id, connection_id=connection_id)
     )
     if res.is_err:
@@ -348,28 +374,23 @@ async def list_simulator_entities(
     },
 )
 async def update_simulator_entity(
-    tenant_id: str,
     connection_id: str,
     entity_id: str,
-    request: Request,
     body: UpdateSimulatorEntityHttpRequest,
     _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        UpdateSimulatorEntityUseCase, Depends(get_update_simulator_entity_use_case)
+    ],
 ) -> SimulatorEntityHttpResponse | Response:
     """Updates an existing entity inside `connection_id` and bumps its schema version."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
         connection_id=connection_id,
         entity_id=entity_id,
     )
     log.info("ip_update_simulator_entity_http.received")
-    res = await UpdateSimulatorEntityUseCase(
-        uow=uow,
-        connections=cp_uow.connections,
-    ).execute(
+    res = await use_case.execute(
         UpdateSimulatorEntityCommand(
             tenant_id=effective_tenant_id,
             connection_id=connection_id,
@@ -406,27 +427,22 @@ async def update_simulator_entity(
     },
 )
 async def delete_simulator_entity(
-    tenant_id: str,
     connection_id: str,
     entity_id: str,
-    request: Request,
     _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        DeleteSimulatorEntityUseCase, Depends(get_delete_simulator_entity_use_case)
+    ],
 ) -> Response:
     """Deletes an entity from `connection_id`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
         connection_id=connection_id,
         entity_id=entity_id,
     )
     log.info("ip_delete_simulator_entity_http.received")
-    res = await DeleteSimulatorEntityUseCase(
-        uow=uow,
-        connections=cp_uow.connections,
-    ).execute(
+    res = await use_case.execute(
         DeleteSimulatorEntityCommand(
             tenant_id=effective_tenant_id,
             connection_id=connection_id,
@@ -457,41 +473,21 @@ async def delete_simulator_entity(
     },
 )
 async def simulate_push(
-    tenant_id: str,
     connection_id: str,
-    request: Request,
     body: SimulatePushHttpRequest,
     _context: Annotated[IdentityContext, Depends(require_sync_trigger)],
-    ip_dp_uow_provider: Annotated[
-        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
-    ],
-    tiered_storage: Annotated[TieredStoragePort, Depends(get_tiered_storage)],
-    verifier: Annotated[InboundVerifierPort, Depends(get_inbound_verifier)],
-    decoder: Annotated[InboundPayloadDecoderPort, Depends(get_inbound_decoder)],
-    ack: Annotated[InboundAckPort, Depends(get_inbound_ack)],
-    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
-    entity_reader: Annotated[SimulatorEntityReaderPort, Depends(get_simulator_entity_reader)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[TriggerSimulatedPushUseCase, Depends(get_trigger_simulated_push_use_case)],
 ) -> SimulatePushHttpResponse | Response:
     """Synthesizes N fake records from the Simulator connection entity and pushes them into L1 Ingress."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
         connection_id=connection_id,
         stream_name=body.stream_name,
         count=body.count,
         delivery_style=body.delivery_style.value,
     )
     log.info("ip_simulate_push_http.received")
-    use_case = TriggerSimulatedPushUseCase(
-        data_plane_uow_provider=ip_dp_uow_provider,
-        tiered_storage=tiered_storage,
-        verifier=verifier,
-        decoder=decoder,
-        ack=ack,
-        token_manager=token_manager,
-        entity_reader=entity_reader,
-    )
     res = await use_case.execute(
         TriggerSimulatedPushCommand(
             tenant_id=effective_tenant_id,
@@ -528,7 +524,12 @@ __all__ = [
     "SimulatePushHttpResponse",
     "SimulatorEntityHttpResponse",
     "UpdateSimulatorEntityHttpRequest",
+    "get_create_simulator_entity_use_case",
+    "get_delete_simulator_entity_use_case",
+    "get_list_simulator_entities_use_case",
     "get_simulator_entity_reader",
     "get_simulator_uow",
+    "get_trigger_simulated_push_use_case",
+    "get_update_simulator_entity_use_case",
     "router",
 ]

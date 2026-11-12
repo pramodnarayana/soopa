@@ -149,7 +149,7 @@ async def test_discover_connection_catalog(
     assert discover_response.status_code == 200, discover_response.text
     catalog_data = discover_response.json()
     assert catalog_data["connection_id"] == connection_id
-    assert catalog_data["catalog_version"] == 1
+    assert "catalog_version" not in catalog_data
     assert len(catalog_data["streams"]) == 3
     stream_names = [s["name"] for s in catalog_data["streams"]]
     assert "meters" in stream_names

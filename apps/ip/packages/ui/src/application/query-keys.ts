@@ -116,6 +116,7 @@ export const ipQueryKeys = {
       ['ip', 'tenant', tenantId, 'traces', 'lineage', traceId] as const,
   },
   records: {
+    all: (tenantId: string) => ['ip', 'tenant', tenantId, 'records'] as const,
     normalized: (tenantId: string, filter?: ListNormalizedRecordsFilter) =>
       [
         'ip',

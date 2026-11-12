@@ -188,7 +188,6 @@ export const SEED_DEACTIVATED_CONNECTION: Connection = {
 
 export const SEED_DISCOVERED_CATALOG: DiscoveredCatalog = {
   connectionId: SEED_CONNECTION_ID,
-  catalogVersion: 3,
   catalogHash: 'sha256_catalog_acme_v3',
   discoveredAt: '2026-10-29T08:05:00Z',
   streams: [

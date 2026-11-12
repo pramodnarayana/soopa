@@ -16,17 +16,13 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
 )
 from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushCommand,
-    ReceivePushUseCase,
+    ReceivePushExecutorFactory,
 )
 from ip.engine.domain.exceptions import (
     IpError,
     IpErrorCode,
     Result,
 )
-from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
-from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
-from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
-from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 from ip.solutions.connectors.sandbox.universal.dto import entity_dto_to_stream_spec
 from ip.solutions.connectors.sandbox.universal.inference import (
@@ -78,25 +74,19 @@ class SimulatePushResultDTO:
 
 
 class TriggerSimulatedPushUseCase:
-    """Verifies a Simulator connection, synthesizes fake records from `ip.simulator_entities`, and emits them into L1 `ReceivePushUseCase`."""
+    """Verifies a Simulator connection, synthesizes fake records from `ip.simulator_entities`, and emits them via `ReceivePushExecutorFactory`."""
 
     def __init__(
         self,
         *,
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
-        tiered_storage: TieredStoragePort,
-        verifier: InboundVerifierPort,
-        decoder: InboundPayloadDecoderPort,
-        ack: InboundAckPort,
+        push_executor_factory: ReceivePushExecutorFactory,
         entity_reader: SimulatorEntityReaderPort,
         token_manager: TokenManagerService,
         synthesizer: JsonSchemaRecordSynthesizer | None = None,
     ) -> None:
         self._dp_uow_provider = data_plane_uow_provider
-        self._tiered_storage = tiered_storage
-        self._verifier = verifier
-        self._decoder = decoder
-        self._ack = ack
+        self._push_executor_factory = push_executor_factory
         self._entity_reader = entity_reader
         self._token_manager = token_manager
         self._synthesizer = synthesizer or JsonSchemaRecordSynthesizer()
@@ -122,9 +112,12 @@ class TriggerSimulatedPushUseCase:
             return Result.fail(app_err)
 
         cfg = parse_simulator_connection_config(dict(resolved.public_config))
-        entity = await self._entity_reader.get_entity_by_name(
+        entity_res = await self._entity_reader.get_entity_by_name(
             command.tenant_id, command.connection_id, command.stream_name
         )
+        if entity_res.is_err:
+            return Result.fail(entity_res.unwrap_err())
+        entity = entity_res.unwrap()
         if entity is None:
             return Result.fail(
                 IpError(
@@ -186,13 +179,7 @@ class TriggerSimulatedPushUseCase:
             shard_id=shard_id,
             shard_dsn=shard_dsn,
         ) as dp_uow:
-            push_uc = ReceivePushUseCase(
-                uow=dp_uow,
-                tiered_storage=self._tiered_storage,
-                verifier=self._verifier,
-                decoder=self._decoder,
-                ack=self._ack,
-            )
+            push_executor = self._push_executor_factory(dp_uow)
             for env in synthesized:
                 wire_payload = (
                     {
@@ -204,7 +191,7 @@ class TriggerSimulatedPushUseCase:
                     else env.data
                 )
                 raw_bytes = json.dumps(wire_payload).encode("utf-8")
-                push_res = await push_uc.execute(
+                push_res = await push_executor.execute(
                     ReceivePushCommand(
                         tenant_id=command.tenant_id,
                         connection_id=command.connection_id,

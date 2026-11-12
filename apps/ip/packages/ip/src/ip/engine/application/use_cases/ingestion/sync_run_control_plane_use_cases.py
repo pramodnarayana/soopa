@@ -11,12 +11,13 @@ from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import (
     ActiveSyncRunAlreadyExistsError,
     ConnectionDeactivatedError,
+    ConnectionEntityNotFoundError,
     ConnectionNotFoundError,
     IpError,
     Result,
     SyncRunNotFoundError,
 )
-from ip.engine.domain.replication.enums import SyncMode, SyncRunKind
+from ip.engine.domain.replication.enums import SyncRunKind
 from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
@@ -146,37 +147,36 @@ class TriggerSyncRunUseCase:
                 connection_id=command.connection_id,
                 stream_name=command.stream_name,
             )
+            if entity is None:
+                bound.error("trigger_sync_run.entity_not_subscribed")
+                return Result.err(
+                    ConnectionEntityNotFoundError.for_stream(
+                        command.connection_id, command.stream_name
+                    )
+                )
+
             latest_gen = await self._cp_uow.sync_runs.get_latest_generation_id(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
             )
-
-            if command.forced_kind is not None:
-                kind = command.forced_kind
-            elif entity is not None and entity.sync_mode == SyncMode.FULL_REFRESH:
-                kind = SyncRunKind.FULL_REFRESH
-            elif entity is None or not entity.cursor_value:
-                kind = SyncRunKind.INITIAL
-            else:
-                kind = SyncRunKind.INCREMENTAL
-
-            generation_id = (
-                latest_gen + 1 if kind == SyncRunKind.FULL_REFRESH else max(1, latest_gen)
+            plan_res = entity.plan_sync_execution(
+                latest_generation_id=latest_gen,
+                forced_kind=command.forced_kind,
             )
-            start_cursor = (
-                None
-                if kind == SyncRunKind.FULL_REFRESH
-                else (entity.cursor_value if entity is not None else None)
-            )
+            if plan_res.is_err or plan_res.value is None:
+                plan_err = plan_res.unwrap_err()
+                bound.error("trigger_sync_run.policy_rejected", error_code=plan_err.code.value)
+                return Result.err(plan_err)
+            plan = plan_res.value
 
             sync_run = SyncRun.request(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
-                kind=kind,
-                generation_id=generation_id,
-                start_checkpoint=start_cursor,
+                kind=plan.kind,
+                generation_id=plan.generation_id,
+                start_checkpoint=plan.start_checkpoint,
                 correlation_id=command.correlation_id,
             )
             await self._cp_uow.sync_runs.save(sync_run)
@@ -185,8 +185,8 @@ class TriggerSyncRunUseCase:
             bound.info(
                 "trigger_sync_run.completed",
                 run_id=sync_run.id,
-                kind=kind.value,
-                generation_id=generation_id,
+                kind=plan.kind.value,
+                generation_id=plan.generation_id,
                 trace_id=sync_run.trace_id,
             )
             return Result.ok(_to_sync_run_dto(sync_run))

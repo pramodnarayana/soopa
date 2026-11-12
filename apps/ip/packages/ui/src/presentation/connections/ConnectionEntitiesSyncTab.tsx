@@ -2,16 +2,7 @@ import {
   ApiErrorCode,
   type ApiProblem,
   Button,
-  CopyableIdPill,
-  DataTable,
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   Input,
-  Label,
   SearchableSelect,
   type SearchableSelectOption,
   Select,
@@ -41,7 +32,6 @@ import {
 } from 'lucide-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { useCatalogAppSpecQuery } from '../../application/use-catalog-queries';
 import {
   useAddConnectionEntityMutation,
   useConnectionEntitiesQuery,
@@ -50,22 +40,21 @@ import {
   useUpdateConnectionEntityMutation,
 } from '../../application/use-connection-entity-queries';
 import {
-  useDeactivateConnectionMutation,
-  useDeleteConnectionMutation,
   useDiscoverCatalogMutation,
   useDiscoveredStreamsQuery,
-  useRelinkConnectionMutation,
-  useUpdateConnectionMutation,
 } from '../../application/use-connection-queries';
 import {
   useSyncRunsQuery,
   useTriggerSyncRunMutation,
 } from '../../application/use-sync-run-queries';
+import {
+  useBindStreamTransformationMutation,
+  useConnectionTransformationsQuery,
+} from '../../application/use-transformation-queries';
 import type { Connection } from '../../domain/connection';
 import type { ConnectionEntityField } from '../../domain/connection-entity';
 import {
   ConnectionStatus,
-  ConnectorPropertyKey,
   EntitySyncFrom,
   type EntitySyncFromValue,
   EntitySyncSchedule,
@@ -73,16 +62,11 @@ import {
   SyncRunKind,
   type SyncRunKindValue,
   SyncRunStatus,
+  TransformationMode,
 } from '../../domain/enums';
 import type { SyncRun } from '../../domain/sync-run';
-import { formatRelativeTimestamp, mapSyncRunStatusTone } from '../shared/status-mapping';
-import {
-  isPropertyVisible,
-  isSecretConnectorProperty,
-  resolvePropertyLabel,
-  SingleSpecPropertyControl,
-  splitSpecFormValues,
-} from './SpecFormRenderer';
+import { ConnectionSyncRunsSection } from './ConnectionSyncRunsSection';
+import { SubscribedEntitySchemaPanel } from './SubscribedEntitySchemaPanel';
 
 const EntityRowLocalStatus = {
   UNSYNCED: 'UNSYNCED',
@@ -94,273 +78,6 @@ function isEntitySyncScheduleValue(value: string): value is EntitySyncScheduleVa
 
 function isEntitySyncFromValue(value: string): value is EntitySyncFromValue {
   return Object.values(EntitySyncFrom).some((item) => item === value);
-}
-
-export function ConnectionOverviewTab({
-  connection,
-  onProblem,
-  onDeactivated,
-  onDeleted,
-}: {
-  readonly connection: Connection;
-  readonly onProblem: (problem: ApiProblem | null) => void;
-  readonly onDeactivated: () => void;
-  readonly onDeleted?: () => void;
-}) {
-  const [name, setName] = useState(connection.name);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const specView = useCatalogAppSpecQuery(connection.appId);
-  const relinkMutation = useRelinkConnectionMutation(connection.id);
-  const updateMutation = useUpdateConnectionMutation(connection.id);
-  const deactivateMutation = useDeactivateConnectionMutation(connection.id);
-  const deleteMutation = useDeleteConnectionMutation(connection.id);
-  const isDeactivated = connection.status === ConnectionStatus.DEACTIVATED;
-  const isSaving = relinkMutation.isPending || updateMutation.isPending;
-
-  const allProperties = specView.data?.properties ?? [];
-
-  const [formValues, setFormValues] = useState<Record<string, unknown>>(() => ({
-    ...connection.publicConfig,
-    [ConnectorPropertyKey.AUTH_TYPE]: connection.authType,
-  }));
-
-  const visibleProperties = useMemo(
-    () => allProperties.filter((prop) => isPropertyVisible(prop, formValues, allProperties)),
-    [allProperties, formValues],
-  );
-
-  const isDirty = useMemo(() => {
-    if (name.trim() !== connection.name) return true;
-    if (formValues[ConnectorPropertyKey.AUTH_TYPE] !== connection.authType) return true;
-    for (const [key, val] of Object.entries(formValues)) {
-      if (key === ConnectorPropertyKey.AUTH_TYPE) continue;
-      if (val !== connection.publicConfig[key]) return true;
-    }
-    for (const key of Object.keys(connection.publicConfig)) {
-      if (key === ConnectorPropertyKey.AUTH_TYPE) continue;
-      if (!(key in formValues) || formValues[key] === '' || formValues[key] === undefined) {
-        if (connection.publicConfig[key] !== undefined && connection.publicConfig[key] !== '') {
-          return true;
-        }
-      }
-    }
-    return false;
-  }, [name, formValues, connection]);
-
-  const handleSave = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    onProblem(null);
-
-    const { rawCredentials } = splitSpecFormValues(allProperties, formValues);
-    const hasSecretPatch = Object.keys(rawCredentials).length > 0;
-
-    // Preserve unexposed public config keys and omit cleared keys
-    const mergedPublicConfig: Record<string, unknown> = {
-      ...connection.publicConfig,
-    };
-    for (const prop of allProperties) {
-      if (isSecretConnectorProperty(prop)) continue;
-      const val = formValues[prop.name];
-      if (val === undefined || val === '') {
-        delete mergedPublicConfig[prop.name];
-      } else {
-        mergedPublicConfig[prop.name] = val;
-      }
-    }
-    if (formValues[ConnectorPropertyKey.AUTH_TYPE]) {
-      mergedPublicConfig[ConnectorPropertyKey.AUTH_TYPE] =
-        formValues[ConnectorPropertyKey.AUTH_TYPE];
-    }
-
-    const mutation = isDeactivated ? relinkMutation : updateMutation;
-    const res = await mutation.mutateAsync({
-      newName: name.trim() || connection.name,
-      updatedRawCredentials: hasSecretPatch ? rawCredentials : null,
-      updatedPublicConfig: Object.keys(mergedPublicConfig).length > 0 ? mergedPublicConfig : null,
-    });
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    toast.success(isDeactivated ? 'Connection updated and reactivated.' : 'Connection updated.');
-  };
-
-  const handleDeactivate = async (): Promise<void> => {
-    onProblem(null);
-    const res = await deactivateMutation.mutateAsync();
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    toast.success('Connection deactivated.');
-    onDeactivated();
-  };
-
-  const handleDelete = async (): Promise<void> => {
-    onProblem(null);
-    const res = await deleteMutation.mutateAsync(connection.id);
-    if (!res.ok) {
-      onProblem(res.error);
-      return;
-    }
-    toast.success('Connection deleted. Historical entities and synced data preserved.');
-    setDeleteDialogOpen(false);
-    onDeleted?.();
-  };
-
-  const statusTone =
-    connection.status === ConnectionStatus.ACTIVE
-      ? StatusTone.HEALTHY
-      : connection.status === ConnectionStatus.PENDING_AUTH
-        ? StatusTone.WARNING
-        : StatusTone.NEUTRAL;
-
-  return (
-    <div className="p-6 bg-muted/20 rounded-xl border border-border">
-      <form onSubmit={(e) => void handleSave(e)} className="space-y-6">
-        <div className="flex justify-between items-center pb-4 border-b border-border">
-          <h4 className="text-xs font-semibold text-foreground uppercase tracking-wider">
-            Connection Details
-          </h4>
-          <div className="flex items-center gap-2">
-            <Button type="submit" size="sm" disabled={isSaving || !isDirty} className="text-xs">
-              {isSaving ? 'Saving...' : 'Save Changes'}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={deactivateMutation.isPending || connection.deactivatedAt !== null}
-              onClick={() => void handleDeactivate()}
-              className="text-xs"
-            >
-              {connection.deactivatedAt
-                ? 'Already Deactivated'
-                : deactivateMutation.isPending
-                  ? 'Deactivating...'
-                  : 'Deactivate Connection'}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={deleteMutation.isPending}
-              onClick={() => setDeleteDialogOpen(true)}
-              className="text-xs"
-            >
-              Delete Connection
-            </Button>
-          </div>
-        </div>
-
-        {/* Editable form fields first, starting with Name */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="space-y-2">
-            <Label htmlFor="conn-name">Name</Label>
-            <Input
-              id="conn-name"
-              name="connection_name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-
-          {visibleProperties.map((prop) => {
-            const displayLabel = resolvePropertyLabel(prop, connection.authType);
-            return (
-              <div key={prop.name} className="space-y-2">
-                <Label htmlFor={`spec-${prop.name}`} className="flex items-center gap-1">
-                  <span>{displayLabel}</span>
-                  {prop.required && !isSecretConnectorProperty(prop) ? (
-                    <span className="text-status-critical-fg">*</span>
-                  ) : null}
-                  {prop.required && isSecretConnectorProperty(prop) ? (
-                    <span className="text-xs font-normal text-muted-foreground">(stored)</span>
-                  ) : null}
-                </Label>
-                <SingleSpecPropertyControl
-                  prop={prop}
-                  rawValue={formValues[prop.name]}
-                  onChange={(nextVal) =>
-                    setFormValues((prev) => ({ ...prev, [prop.name]: nextVal }))
-                  }
-                  currentAuthType={connection.authType}
-                  isEditing={true}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Readonly fields arranged after editable fields */}
-        <div className="grid grid-cols-2 gap-6 text-xs sm:grid-cols-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Connector</Label>
-            <div className="font-semibold text-sm text-foreground">
-              {specView.data?.displayName || connection.appId}
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <div>
-              <StatusBadge label={connection.status} tone={statusTone} />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Auth Strategy</Label>
-            <div className="font-mono text-sm text-foreground">{connection.authType}</div>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Created</Label>
-            <div className="text-sm text-foreground">
-              {formatRelativeTimestamp(connection.createdAt)}
-            </div>
-          </div>
-          {connection.lastRefreshedAt ? (
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Last Refreshed</Label>
-              <div className="text-sm text-foreground">
-                {formatRelativeTimestamp(connection.lastRefreshedAt)}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </form>
-
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Connection</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete{' '}
-              <span className="font-semibold text-foreground">{connection.name}</span>? Historical
-              entities and synced data will remain preserved.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4 gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={deleteMutation.isPending}
-              onClick={() => setDeleteDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={deleteMutation.isPending}
-              onClick={() => void handleDelete()}
-            >
-              {deleteMutation.isPending ? 'Deleting...' : 'Delete Connection'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
 }
 
 export interface ConnectionEntitiesSyncTabProps {
@@ -451,9 +168,11 @@ export function ConnectionEntitiesSyncTab({
   const entitiesView = useConnectionEntitiesQuery(connectionId);
   const discoveredView = useDiscoveredStreamsQuery(connectionId);
   const runsView = useSyncRunsQuery(connectionId, 40);
+  const transformationsView = useConnectionTransformationsQuery(connectionId);
 
   const discoverMutation = useDiscoverCatalogMutation(connectionId);
   const addEntityMutation = useAddConnectionEntityMutation(connectionId);
+  const bindStreamTransformationMutation = useBindStreamTransformationMutation();
   const updateEntityMutation = useUpdateConnectionEntityMutation(connectionId);
   const removeEntityMutation = useRemoveConnectionEntityMutation(connectionId);
   const resetCheckpointMutation = useResetConnectionEntityCheckpointMutation(connectionId);
@@ -578,17 +297,44 @@ export function ConnectionEntitiesSyncTab({
         primaryKey: discoveredStream?.primaryKey ?? [],
         fields: discoveredStream?.fields ?? [],
         cursorField: discoveredStream?.cursorField ?? null,
-        defaultTransformationId: discoveredStream?.defaultTransformationId ?? null,
-        defaultTransformationVersion: discoveredStream?.defaultTransformationVersion ?? 1,
       });
       if (!res.ok) {
         onProblem(res.error);
         return;
       }
+
+      if (discoveredStream?.defaultTransformationId) {
+        const alreadyBound = (transformationsView.data ?? []).some(
+          (binding) => binding.stream === res.value.streamName,
+        );
+        if (!alreadyBound) {
+          const bindRes = await bindStreamTransformationMutation.mutateAsync({
+            connectionId,
+            stream: res.value.streamName,
+            input: {
+              transformationId: discoveredStream.defaultTransformationId,
+              transformationVersion: discoveredStream.defaultTransformationVersion ?? 1,
+              mode: TransformationMode.ACTIVE,
+            },
+          });
+          if (!bindRes.ok) {
+            onProblem(bindRes.error);
+          }
+        }
+      }
+
       setSelectedStreams((prev) => new Set([...prev, res.value.streamName]));
       toast.success(`Subscribed to "${res.value.streamName}".`);
     },
-    [activeStreamNames, discoveredView.data?.streams, addEntityMutation, onProblem],
+    [
+      activeStreamNames,
+      discoveredView.data?.streams,
+      addEntityMutation,
+      bindStreamTransformationMutation,
+      connectionId,
+      transformationsView.data,
+      onProblem,
+    ],
   );
 
   const filteredEntityRows = useMemo(() => {
@@ -835,14 +581,28 @@ export function ConnectionEntitiesSyncTab({
         cell: ({ row }) => {
           const isExpanded = expandedStreams.has(row.original.streamName);
           return (
-            <div className="flex items-center gap-1.5 font-mono font-semibold">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-expanded={isExpanded}
+              aria-label={`${row.original.streamName} schema fields`}
+              onClick={() => toggleRowExpanded(row.original.streamName)}
+              className="h-7 px-1.5 -ml-1.5 gap-1.5 font-mono font-semibold text-foreground hover:bg-muted/60"
+            >
               {isExpanded ? (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <ChevronDown
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 text-muted-foreground shrink-0"
+                />
               ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <ChevronRight
+                  aria-hidden="true"
+                  className="h-3.5 w-3.5 text-muted-foreground shrink-0"
+                />
               )}
               <span>{row.original.streamName}</span>
-            </div>
+            </Button>
           );
         },
       },
@@ -863,7 +623,10 @@ export function ConnectionEntitiesSyncTab({
                 value={selectedValue}
                 onValueChange={(val) => void handleSyncFromChange(row.original, val)}
               >
-                <SelectTrigger className="h-7 w-32 text-xs">
+                <SelectTrigger
+                  aria-label={`Sync from for ${row.original.streamName}`}
+                  className="h-7 w-32 text-xs"
+                >
                   <SelectValue>{selectedLabel}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -877,6 +640,7 @@ export function ConnectionEntitiesSyncTab({
               {isCustom ? (
                 <Input
                   type="date"
+                  aria-label={`Custom sync start date for ${row.original.streamName}`}
                   value={customDateValue}
                   onChange={(e) =>
                     void handleCustomDateChange(row.original.streamName, e.target.value)
@@ -900,7 +664,10 @@ export function ConnectionEntitiesSyncTab({
               value={row.original.schedule}
               onValueChange={(val) => void handleScheduleChange(row.original.streamName, val)}
             >
-              <SelectTrigger className="h-7 w-36 text-xs">
+              <SelectTrigger
+                aria-label={`Sync schedule for ${row.original.streamName}`}
+                className="h-7 w-36 text-xs"
+              >
                 <SelectValue>{selectedScheduleLabel}</SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -956,7 +723,7 @@ export function ConnectionEntitiesSyncTab({
                 onClick={() => void handleTrigger(row.original.streamName, forcedKind)}
                 className="h-7 gap-1 text-xs"
               >
-                <Play className="h-3 w-3" />
+                <Play aria-hidden="true" className="h-3 w-3" />
                 <span>Sync</span>
               </Button>
               {onInspectEntity ? (
@@ -967,7 +734,7 @@ export function ConnectionEntitiesSyncTab({
                   onClick={() => onInspectEntity(row.original.streamName)}
                   className="h-7 gap-1 text-xs text-primary font-medium"
                 >
-                  <Database className="h-3 w-3" />
+                  <Database aria-hidden="true" className="h-3 w-3" />
                   <span>Data</span>
                 </Button>
               ) : null}
@@ -983,7 +750,7 @@ export function ConnectionEntitiesSyncTab({
                   onClick={() => void handleResetCheckpoint(row.original.streamName)}
                   className="h-7 gap-1 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  <RotateCcw className="h-3 w-3" />
+                  <RotateCcw aria-hidden="true" className="h-3 w-3" />
                   <span>Reset</span>
                 </Button>
               ) : null}
@@ -999,7 +766,7 @@ export function ConnectionEntitiesSyncTab({
                 onClick={() => void handleRemoveEntity(row.original.streamName)}
                 className="h-7 px-2 text-xs text-destructive hover:text-destructive"
               >
-                <Trash2 className="h-3 w-3" />
+                <Trash2 aria-hidden="true" className="h-3 w-3" />
               </Button>
             </div>
           );
@@ -1020,6 +787,7 @@ export function ConnectionEntitiesSyncTab({
       onInspectEntity,
       toggleSelectAll,
       toggleStream,
+      toggleRowExpanded,
       handleSyncFromChange,
       handleCustomDateChange,
       handleScheduleChange,
@@ -1029,59 +797,9 @@ export function ConnectionEntitiesSyncTab({
     ],
   );
 
-  const runRows = useMemo(() => [...(runsView.data ?? [])], [runsView.data]);
-
-  const runColumns = useMemo<ColumnDef<SyncRun>[]>(
-    () => [
-      {
-        accessorKey: 'runId',
-        header: 'Run ID',
-        cell: ({ row }) => <CopyableIdPill value={row.original.runId} truncateLength={14} />,
-      },
-      {
-        accessorKey: 'streamName',
-        header: 'Entity',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs">
-            {row.original.streamName} ({row.original.kind})
-          </span>
-        ),
-      },
-      {
-        accessorKey: 'status',
-        header: 'Status',
-        cell: ({ row }) => (
-          <StatusBadge
-            label={row.original.status}
-            tone={mapSyncRunStatusTone(row.original.status)}
-          />
-        ),
-      },
-      {
-        accessorKey: 'recordsCount',
-        header: 'Records',
-        cell: ({ row }) => (
-          <span className="font-mono text-xs tabular-nums">{row.original.recordsCount}</span>
-        ),
-      },
-      {
-        accessorKey: 'traceId',
-        header: 'Trace',
-        cell: ({ row }) => <CopyableIdPill value={row.original.traceId} truncateLength={14} />,
-      },
-    ],
-    [],
-  );
-
   const entityTable = useReactTable({
     data: filteredEntityRows,
     columns: entityColumns,
-    getCoreRowModel: getCoreRowModel(),
-  });
-
-  const runTable = useReactTable({
-    data: runRows,
-    columns: runColumns,
     getCoreRowModel: getCoreRowModel(),
   });
 
@@ -1099,7 +817,7 @@ export function ConnectionEntitiesSyncTab({
             onClick={() => void handleSyncAllSelected()}
             className="h-8 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 text-xs shadow-xs"
           >
-            <Play className="h-3.5 w-3.5 fill-current" />
+            <Play aria-hidden="true" className="h-3.5 w-3.5 fill-current" />
             <span>Sync Selected ({selectedStreams.size})</span>
           </Button>
         </div>
@@ -1107,7 +825,7 @@ export function ConnectionEntitiesSyncTab({
 
       {isAuthPending ? (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-          <ShieldAlert className="h-4 w-4 shrink-0" />
+          <ShieldAlert aria-hidden="true" className="h-4 w-4 shrink-0" />
           <span>Authentication Pending</span>
         </div>
       ) : null}
@@ -1125,7 +843,11 @@ export function ConnectionEntitiesSyncTab({
               portaled={true}
               placeholder="Discover Entities..."
               searchPlaceholder="Search entities..."
-              loading={discoverMutation.isPending || addEntityMutation.isPending}
+              loading={
+                discoverMutation.isPending ||
+                addEntityMutation.isPending ||
+                bindStreamTransformationMutation.isPending
+              }
               loadingText="Discovering entities..."
               disabled={isAuthPending}
               emptyText={
@@ -1138,8 +860,12 @@ export function ConnectionEntitiesSyncTab({
 
           {/* Search/Filter Subscribed Entities in table */}
           <div className="relative w-64">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            />
             <Input
+              aria-label="Search subscribed entities"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search Entities"
@@ -1162,6 +888,7 @@ export function ConnectionEntitiesSyncTab({
                 {headerGroup.headers.map((header) => (
                   <TableHead
                     key={header.id}
+                    scope="col"
                     className="font-semibold text-foreground text-xs py-2.5 px-3"
                   >
                     {header.isPlaceholder
@@ -1194,25 +921,9 @@ export function ConnectionEntitiesSyncTab({
             ) : (
               entityTable.getRowModel().rows.map((row) => (
                 <React.Fragment key={row.id}>
-                  <TableRow
-                    className="cursor-pointer hover:bg-muted/40 transition-colors"
-                    onClick={() => toggleRowExpanded(row.original.streamName)}
-                  >
+                  <TableRow className="hover:bg-muted/40 transition-colors">
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell
-                        key={cell.id}
-                        className="py-2 px-3 align-middle"
-                        onClick={(e) => {
-                          const target = e.target as HTMLElement;
-                          if (
-                            target.closest(
-                              'button, input, [role="combobox"], [data-radix-popper-content-wrapper]',
-                            )
-                          ) {
-                            e.stopPropagation();
-                          }
-                        }}
-                      >
+                      <TableCell key={cell.id} className="py-2 px-3 align-middle">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}
@@ -1220,57 +931,10 @@ export function ConnectionEntitiesSyncTab({
                   {expandedStreams.has(row.original.streamName) ? (
                     <TableRow className="bg-muted/30 border-b border-border hover:bg-muted/30">
                       <TableCell colSpan={entityColumns.length} className="py-3 px-8 text-xs">
-                        <div className="space-y-2">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <span className="font-semibold text-foreground text-xs uppercase tracking-wider">
-                              Schema Fields
-                            </span>
-                            {row.original.primaryKey.length > 0 ? (
-                              <span className="font-mono text-xs text-muted-foreground">
-                                Primary Key: {row.original.primaryKey.join(', ')}
-                              </span>
-                            ) : null}
-                          </div>
-                          {row.original.fields.length === 0 ? (
-                            <span className="text-muted-foreground text-xs block">
-                              No schema fields recorded for this entity.
-                            </span>
-                          ) : (
-                            <div className="rounded-lg border border-border bg-card overflow-hidden">
-                              <table className="w-full text-xs">
-                                <thead className="bg-muted/50 border-b border-border">
-                                  <tr>
-                                    <th className="text-left py-1.5 px-3 font-medium text-foreground">
-                                      Field
-                                    </th>
-                                    <th className="text-left py-1.5 px-3 font-medium text-foreground">
-                                      Type
-                                    </th>
-                                    <th className="text-left py-1.5 px-3 font-medium text-foreground">
-                                      Nullable
-                                    </th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {row.original.fields.map((f) => (
-                                    <tr
-                                      key={f.name}
-                                      className="border-b border-border/50 last:border-0"
-                                    >
-                                      <td className="py-1 px-3 font-mono">{f.name}</td>
-                                      <td className="py-1 px-3 font-mono text-muted-foreground">
-                                        {f.dataType}
-                                      </td>
-                                      <td className="py-1 px-3 text-muted-foreground">
-                                        {f.nullable ? 'Yes' : 'No'}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
+                        <SubscribedEntitySchemaPanel
+                          primaryKey={row.original.primaryKey}
+                          fields={row.original.fields}
+                        />
                       </TableCell>
                     </TableRow>
                   ) : null}
@@ -1282,22 +946,11 @@ export function ConnectionEntitiesSyncTab({
       </div>
 
       {/* Recent Sync Runs */}
-      {runRows.length > 0 ? (
-        <div className="space-y-2 pt-2">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Recent Sync Runs
-          </span>
-          <DataTable
-            table={runTable}
-            columnsLength={runColumns.length}
-            isLoading={runsView.isLoading}
-            dataLength={runRows.length}
-            ariaLabel="Recent sync runs"
-            emptyTitle="No Sync Runs Yet"
-            onRowClick={(row) => onOpenTrace(row.original.traceId)}
-          />
-        </div>
-      ) : null}
+      <ConnectionSyncRunsSection
+        runs={runsView.data ?? []}
+        isLoading={runsView.isLoading}
+        onOpenTrace={onOpenTrace}
+      />
     </div>
   );
 }

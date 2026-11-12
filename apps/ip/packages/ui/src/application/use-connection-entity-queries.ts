@@ -46,11 +46,6 @@ export function useAddConnectionEntityMutation(connectionId: string) {
         void queryClient.invalidateQueries({
           queryKey: ipQueryKeys.connections.entities(tenantId, connectionId),
         });
-        if (variables.defaultTransformationId) {
-          void queryClient.invalidateQueries({
-            queryKey: ipQueryKeys.transformations.byConnection(tenantId, connectionId),
-          });
-        }
       }
     },
   });

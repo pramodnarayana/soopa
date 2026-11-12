@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import AsyncIterator, Sequence
+from datetime import UTC, datetime
 from types import TracebackType
 
 import pytest
@@ -24,6 +25,7 @@ from ip.engine.domain.exceptions import (
 )
 from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import (
+    EntitySyncFrom,
     IngestionMode,
     SyncRunKind,
     SyncRunStatus,
@@ -415,6 +417,29 @@ def test_calculate_lookback_cursor() -> None:
     assert calculate_lookback_cursor(None) is None
 
 
+def _seed_entity(
+    *,
+    tenant_id: str = "tenant_a",
+    connection_id: str = "conn_1",
+    stream_name: str = "records_alpha",
+    sync_from: EntitySyncFrom = EntitySyncFrom.ALL,
+    sync_from_at: datetime | None = None,
+    is_enabled: bool = True,
+    initial_cursor: str | None = None,
+) -> ConnectionEntity:
+    entity_res = ConnectionEntity.try_create(
+        tenant_id=tenant_id,
+        connection_id=connection_id,
+        stream_name=stream_name,
+        sync_from=sync_from,
+        sync_from_at=sync_from_at,
+        is_enabled=is_enabled,
+        initial_cursor=initial_cursor,
+    )
+    assert entity_res.is_ok and entity_res.value is not None
+    return entity_res.value
+
+
 @pytest.mark.asyncio
 async def test_run_sync_initial_pull() -> None:
     cp_uow = FakeControlPlaneUnitOfWork()
@@ -439,6 +464,7 @@ async def test_run_sync_initial_pull() -> None:
         status=ConnectionStatus.ACTIVE,
     )
     await cp_uow.connections.save(conn)
+    await cp_uow.entities.save(_seed_entity())
 
     use_case = RunSyncUseCase(
         control_plane_uow=cp_uow,
@@ -476,6 +502,116 @@ async def test_run_sync_initial_pull() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_sync_fails_when_entity_not_subscribed() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    dp_uow = FakeDataPlaneUnitOfWork()
+    conn = Connection(
+        id="conn_unsub",
+        tenant_id="tenant_a",
+        app_id="acme_source",
+        name="Unsubscribed Endpoint",
+        auth_type=AuthType.NO_AUTH,
+        connection_fingerprint="fp_unsub",
+        status=ConnectionStatus.ACTIVE,
+    )
+    await cp_uow.connections.save(conn)
+
+    use_case = RunSyncUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=FakeTieredStorageAdapter(),
+        cipher=FakeCipher(),
+        connectors={"acme_source": FakePagingConnector([])},
+    )
+    res = await use_case.execute(
+        RunSyncCommand(
+            tenant_id="tenant_a",
+            connection_id=conn.id,
+            stream_name="records_alpha",
+        )
+    )
+    assert res.status == SyncRunStatus.FAILED.value
+    assert res.error_code == "CONNECTION_ENTITY_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_run_sync_fails_when_entity_disabled() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    dp_uow = FakeDataPlaneUnitOfWork()
+    conn = Connection(
+        id="conn_disabled",
+        tenant_id="tenant_a",
+        app_id="acme_source",
+        name="Disabled Entity Endpoint",
+        auth_type=AuthType.NO_AUTH,
+        connection_fingerprint="fp_disabled",
+        status=ConnectionStatus.ACTIVE,
+    )
+    await cp_uow.connections.save(conn)
+    await cp_uow.entities.save(_seed_entity(connection_id=conn.id, is_enabled=False))
+
+    use_case = RunSyncUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=FakeTieredStorageAdapter(),
+        cipher=FakeCipher(),
+        connectors={"acme_source": FakePagingConnector([])},
+    )
+    res = await use_case.execute(
+        RunSyncCommand(
+            tenant_id="tenant_a",
+            connection_id=conn.id,
+            stream_name="records_alpha",
+        )
+    )
+    assert res.status == "CONFLICT"
+    assert res.error_code == "CONNECTION_ENTITY_DISABLED"
+
+
+@pytest.mark.asyncio
+async def test_run_sync_initial_pull_applies_entity_sync_from_floor_cursor() -> None:
+    cp_uow = FakeControlPlaneUnitOfWork()
+    dp_uow = FakeDataPlaneUnitOfWork()
+    connector = FakePagingConnector([])
+    conn = Connection(
+        id="conn_floor",
+        tenant_id="tenant_a",
+        app_id="acme_source",
+        name="Custom Floor Endpoint",
+        auth_type=AuthType.NO_AUTH,
+        connection_fingerprint="fp_floor",
+        status=ConnectionStatus.ACTIVE,
+    )
+    custom_floor = datetime(2026, 2, 1, 0, 0, 0, tzinfo=UTC)
+    await cp_uow.connections.save(conn)
+    await cp_uow.entities.save(
+        _seed_entity(
+            connection_id=conn.id,
+            sync_from=EntitySyncFrom.CUSTOM,
+            sync_from_at=custom_floor,
+        )
+    )
+
+    use_case = RunSyncUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow=dp_uow,
+        tiered_storage=FakeTieredStorageAdapter(),
+        cipher=FakeCipher(),
+        connectors={"acme_source": connector},
+    )
+    res = await use_case.execute(
+        RunSyncCommand(
+            tenant_id="tenant_a",
+            connection_id=conn.id,
+            stream_name="records_alpha",
+        )
+    )
+    assert res.status == SyncRunStatus.SUCCEEDED.value
+    assert res.kind == SyncRunKind.INITIAL.value
+    assert connector.read_called_cursor == custom_floor.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_run_sync_incremental_with_lookback() -> None:
     cp_uow = FakeControlPlaneUnitOfWork()
     dp_uow = FakeDataPlaneUnitOfWork()
@@ -483,10 +619,7 @@ async def test_run_sync_incremental_with_lookback() -> None:
     storage = FakeTieredStorageAdapter()
 
     # Pre-seed existing subscribed entity watermark
-    existing_entity = ConnectionEntity.create(
-        tenant_id="tenant_a",
-        connection_id="conn_1",
-        stream_name="records_alpha",
+    existing_entity = _seed_entity(
         initial_cursor="2026-10-23T10:05:00+00:00",
     )
     await cp_uow.entities.save(existing_entity)
@@ -587,6 +720,7 @@ async def test_run_sync_full_refresh_fails_when_page_cap_reached() -> None:
         status=ConnectionStatus.ACTIVE,
     )
     await cp_uow.connections.save(conn)
+    await cp_uow.entities.save(_seed_entity(connection_id=conn.id))
 
     use_case = RunSyncUseCase(
         control_plane_uow=cp_uow,
@@ -632,6 +766,7 @@ async def test_run_sync_incremental_succeeds_when_page_cap_reached() -> None:
         status=ConnectionStatus.ACTIVE,
     )
     await cp_uow.connections.save(conn)
+    await cp_uow.entities.save(_seed_entity(connection_id=conn.id))
 
     use_case = RunSyncUseCase(
         control_plane_uow=cp_uow,
@@ -676,6 +811,7 @@ async def test_run_sync_full_refresh_succeeds_when_stream_ends_exactly_at_page_c
         status=ConnectionStatus.ACTIVE,
     )
     await cp_uow.connections.save(conn)
+    await cp_uow.entities.save(_seed_entity(connection_id=conn.id))
 
     use_case = RunSyncUseCase(
         control_plane_uow=cp_uow,

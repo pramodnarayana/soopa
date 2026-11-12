@@ -15,8 +15,6 @@ from ip.engine.domain.exceptions import (
     IpError,
     Result,
 )
-from ip.engine.domain.normalization.enums import TransformationMode
-from ip.engine.domain.normalization.transformation import Transformation
 from ip.engine.domain.replication.connection_entity import ConnectionEntity
 from ip.engine.domain.replication.enums import EntitySyncFrom, EntitySyncSchedule, SyncMode
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
@@ -80,8 +78,6 @@ class AddConnectionEntityCommand:
     primary_key: tuple[str, ...] = ()
     fields: tuple[ConnectionEntityFieldDTO, ...] = ()
     cursor_field: str | None = None
-    default_transformation_id: str | None = None
-    default_transformation_version: int = 1
 
 
 @dataclass(frozen=True)
@@ -237,29 +233,6 @@ class AddConnectionEntityUseCase:
                 entity = create_res.value
 
             await self._cp_uow.entities.save(entity)
-
-            if command.default_transformation_id:
-                existing_trans = await self._cp_uow.transformations.get_by_stream(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    stream=entity.stream_name,
-                )
-                if existing_trans is None:
-                    new_trans = Transformation.create(
-                        tenant_id=command.tenant_id,
-                        connection_id=command.connection_id,
-                        stream=entity.stream_name,
-                        transformation_id=command.default_transformation_id,
-                        transformation_version=command.default_transformation_version,
-                        mode=TransformationMode.ACTIVE,
-                    )
-                    await self._cp_uow.transformations.save(new_trans)
-                    bound.info(
-                        "add_connection_entity.default_transformation_bound",
-                        transformation_id=command.default_transformation_id,
-                        transformation_version=command.default_transformation_version,
-                    )
-
             await self._cp_uow.commit()
             bound.info("add_connection_entity.completed", entity_id=entity.id)
             return Result.ok(_to_entity_dto(entity))
@@ -365,6 +338,7 @@ class RemoveConnectionEntityUseCase:
                     )
                 )
 
+            entity.mark_unsubscribed()
             await self._cp_uow.entities.delete(entity)
             await self._cp_uow.commit()
             bound.info("remove_connection_entity.completed", entity_id=entity.id)

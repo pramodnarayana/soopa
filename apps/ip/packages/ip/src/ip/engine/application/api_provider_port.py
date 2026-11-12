@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Protocol
+from collections.abc import Callable, Mapping
+from contextlib import AbstractAsyncContextManager
+from typing import Protocol, TypeVar
 
 from orchestration.ports.inbound.step_handler_port import WorkflowDefinitionRegistryPort
 from security.ports.cipher_port import CipherPort
@@ -20,6 +21,7 @@ from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
 )
+from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
@@ -32,27 +34,31 @@ from ip.engine.ports.outbound.uow import (
     IpTenantResolverPort,
 )
 
+TSession_contra = TypeVar("TSession_contra", contravariant=True)
+TRouter_contra = TypeVar("TRouter_contra", contravariant=True)
 
-class IpApiProviderPort(Protocol):
+
+class IpApiProviderPort(Protocol[TSession_contra, TRouter_contra]):
     """Port attached to `app.state.ip_api_provider` by the IP Composition Root."""
 
-    def create_control_plane_uow(self, global_session: object) -> IpControlPlaneUnitOfWorkPort: ...
+    def create_control_plane_uow(
+        self, global_session: TSession_contra
+    ) -> IpControlPlaneUnitOfWorkPort: ...
+
+    def create_tenant_repository(self, global_session: TSession_contra) -> TenantRepositoryPort: ...
+
+    def create_scoped_tenant_repository(
+        self,
+        session_scope: Callable[[], AbstractAsyncContextManager[TSession_contra]],
+    ) -> TenantRepositoryPort: ...
 
     def resolve_data_plane_uow_provider(
         self,
         *,
-        db_router: object,
+        db_router: TRouter_contra,
         resolver: IpTenantResolverPort | None,
         storage: TieredStoragePort | None,
     ) -> tuple[IpDataPlaneUnitOfWorkProviderPort, IpTenantResolverPort, TieredStoragePort]: ...
-
-    async def resolve_canonical_tenant_id(
-        self, global_session: object, idp_tenant_id: str
-    ) -> str | None: ...
-
-    async def resolve_tenant_id_by_slug(
-        self, global_session: object, tenant_slug: str
-    ) -> str | None: ...
 
     def get_catalog_registry(self) -> CatalogRegistryPort: ...
 
@@ -66,7 +72,9 @@ class IpApiProviderPort(Protocol):
 
     def get_inbound_ack(self) -> InboundAckPort: ...
 
-    def create_token_refresh_lock(self, db_router: object | None) -> TokenRefreshLockPort: ...
+    def create_token_refresh_lock(
+        self, db_router: TRouter_contra | None
+    ) -> TokenRefreshLockPort: ...
 
     def create_token_refresher(self) -> OAuth2TokenRefresherPort: ...
 
@@ -79,7 +87,7 @@ class IpApiProviderPort(Protocol):
     def create_stitch_shard_gateway(
         self,
         *,
-        db_router: object,
+        db_router: TRouter_contra,
         dp_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
         stitch_catalog: StitchCatalogRegistryPort,
         definition_registry: WorkflowDefinitionRegistryPort,
@@ -94,4 +102,4 @@ class IpApiProviderPort(Protocol):
     def get_interval_rollup_repository(self) -> IntervalRollupRepositoryPort: ...
 
 
-__all__ = ["IpApiProviderPort"]
+__all__ = ["IpApiProviderPort", "TRouter_contra", "TSession_contra"]

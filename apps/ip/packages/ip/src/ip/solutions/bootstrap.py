@@ -36,13 +36,20 @@ from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkPort
 from ip.engine.settings import IpEngineSettings
 from ip.solutions.connectors.registry_loader import register_solution_connectors
-from ip.solutions.connectors.sandbox.universal.ports import SimulatorEntityReaderPort
+from ip.solutions.connectors.sandbox.universal.ports import (
+    SimulatorApiProviderPort,
+    SimulatorEntityReaderPort,
+    SimulatorUnitOfWorkPort,
+)
 from ip.solutions.connectors.sandbox.universal.repository import (
-    SqlAlchemySessionScopedSimulatorEntityReader,
-    SqlAlchemySimulatorApiProvider,
+    SqlAlchemySimulatorRepository,
+    SqlAlchemySimulatorUnitOfWork,
 )
 from ip.solutions.connectors.sandbox.universal.router import (
     router as universal_simulator_router,
+)
+from ip.solutions.connectors.sandbox.universal.session_reader import (
+    SessionScopedSimulatorEntityReader,
 )
 from ip.solutions.domains.energy.ports import (
     ENERGY_DOMAIN_REPOSITORY_KEY,
@@ -62,6 +69,19 @@ SOLUTION_DOMAIN_REPOSITORY_FACTORIES: Mapping[str, DomainRepositoryFactory] = {
     ENERGY_DOMAIN_REPOSITORY_KEY.name: SqlAlchemyEnergyDomainRepository,
     TMS_DOMAIN_REPOSITORY_KEY.name: SqlAlchemyTmsDomainRepository,
 }
+
+
+class SolutionSimulatorApiProvider(SimulatorApiProviderPort[AsyncSession]):
+    """Composition-root factory wiring SQLAlchemy Simulator UoW and Repository adapters."""
+
+    def create_uow(self, global_session: AsyncSession) -> SimulatorUnitOfWorkPort:
+        return SqlAlchemySimulatorUnitOfWork(
+            global_session,
+            entities=SqlAlchemySimulatorRepository(global_session),
+        )
+
+    def get_entity_reader(self, global_session: AsyncSession) -> SimulatorEntityReaderPort:
+        return SqlAlchemySimulatorRepository(global_session)
 
 
 class SolutionDatabaseRuntime:
@@ -147,7 +167,8 @@ def create_solution_data_plane_uow(
 
 def configure_solution_container(container: Container) -> Container:
     """Injects built-in SaaS connectors, vertical domains, transformers, and stitches into `Container`."""
-    entity_reader = SqlAlchemySessionScopedSimulatorEntityReader(
+    entity_reader = SessionScopedSimulatorEntityReader(
+        reader_factory=SqlAlchemySimulatorRepository,
         db_router_getter=lambda: _resolve_container_db_router(container),
     )
     container.domain_repository_factories.override(
@@ -179,7 +200,8 @@ def create_solution_api_provider(
 ) -> IpApiProvider:
     """Creates an IpApiProvider wired with all built-in vertical solution registries."""
     entity_reader = (
-        SqlAlchemySessionScopedSimulatorEntityReader(
+        SessionScopedSimulatorEntityReader(
+            reader_factory=SqlAlchemySimulatorRepository,
             db_router_getter=runtime.get_db_router,
             db_provider_getter=runtime.get_db_provider,
         )
@@ -200,7 +222,7 @@ def create_solution_api_provider(
 
 def register_solution_routes(app: FastAPI) -> None:
     """Registers solution-layer DI providers and HTTP routers onto `app`."""
-    app.state.ip_simulator_provider = SqlAlchemySimulatorApiProvider()
+    app.state.ip_simulator_provider = SolutionSimulatorApiProvider()
     app.include_router(universal_simulator_router)
 
 
@@ -249,6 +271,7 @@ __all__ = [
     "IpSolutionDeliveryWorkerModule",
     "IpSolutionOrchestratorWorkerModule",
     "SolutionDatabaseRuntime",
+    "SolutionSimulatorApiProvider",
     "configure_solution_container",
     "create_solution_api_provider",
     "create_solution_canonical_writer_registry",

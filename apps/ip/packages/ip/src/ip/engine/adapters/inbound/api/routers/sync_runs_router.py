@@ -9,8 +9,12 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import JSONResponse
 from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
-    get_ip_control_plane_uow,
-    require_tenant_member,
+    get_effective_ucp_tenant_id,
+    get_get_sync_run_use_case,
+    get_list_sync_runs_use_case,
+    get_trigger_sync_run_use_case,
+    require_flows_read,
+    require_sync_trigger,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import from_ip_error
 from ip.engine.adapters.inbound.api.dtos.sync_run_dtos import (
@@ -26,7 +30,6 @@ from ip.engine.application.use_cases.ingestion import (
     TriggerSyncRunCommand,
     TriggerSyncRunUseCase,
 )
-from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
 logger = structlog.get_logger(__name__)
 
@@ -66,24 +69,23 @@ def _to_sync_run_response(dto: SyncRunSummaryDTO) -> SyncRunHttpResponse:
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def trigger_sync_run(
-    tenant_id: str,
     connection_id: str,
     body: TriggerSyncRunHttpRequest,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    _identity: Annotated[IdentityContext, Depends(require_sync_trigger)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[TriggerSyncRunUseCase, Depends(get_trigger_sync_run_use_case)],
 ) -> SyncRunHttpResponse | JSONResponse:
     """Queues an asynchronous pull synchronization run via the Control Plane outbox."""
     logger.info(
         "http_trigger_sync_run.received",
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         connection_id=connection_id,
         stream_name=body.stream_name,
         forced_kind=body.forced_kind.value if body.forced_kind is not None else None,
     )
-    use_case = TriggerSyncRunUseCase(control_plane_uow=cp_uow)
     res = await use_case.execute(
         TriggerSyncRunCommand(
-            tenant_id=tenant_id,
+            tenant_id=effective_tenant_id,
             connection_id=connection_id,
             stream_name=body.stream_name,
             forced_kind=body.forced_kind,
@@ -94,7 +96,7 @@ async def trigger_sync_run(
         trigger_err = res.unwrap_err()
         logger.error(
             "http_trigger_sync_run.failed",
-            tenant_id=tenant_id,
+            tenant_id=effective_tenant_id,
             connection_id=connection_id,
             stream_name=body.stream_name,
             error_code=trigger_err.code.value,
@@ -103,7 +105,7 @@ async def trigger_sync_run(
     dto = res.unwrap()
     logger.info(
         "http_trigger_sync_run.completed",
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         connection_id=connection_id,
         run_id=dto.run_id,
         trace_id=dto.trace_id,
@@ -113,23 +115,22 @@ async def trigger_sync_run(
 
 @router.get("/sync-runs", response_model=list[SyncRunHttpResponse])
 async def list_sync_runs(
-    tenant_id: str,
     connection_id: str,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    _identity: Annotated[IdentityContext, Depends(require_flows_read)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[ListSyncRunsUseCase, Depends(get_list_sync_runs_use_case)],
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
 ) -> list[SyncRunHttpResponse] | JSONResponse:
     """Lists recent pull synchronization runs for a connection."""
     logger.info(
         "http_list_sync_runs.received",
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         connection_id=connection_id,
         limit=limit,
     )
-    use_case = ListSyncRunsUseCase(control_plane_uow=cp_uow)
     res = await use_case.execute(
         ListSyncRunsQuery(
-            tenant_id=tenant_id,
+            tenant_id=effective_tenant_id,
             connection_id=connection_id,
             limit=limit,
         )
@@ -138,7 +139,7 @@ async def list_sync_runs(
         err = res.unwrap_err()
         logger.error(
             "http_list_sync_runs.failed",
-            tenant_id=tenant_id,
+            tenant_id=effective_tenant_id,
             connection_id=connection_id,
             error_code=err.code.value,
         )
@@ -146,7 +147,7 @@ async def list_sync_runs(
     runs = res.unwrap()
     logger.info(
         "http_list_sync_runs.completed",
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         connection_id=connection_id,
         run_count=len(runs),
     )
@@ -155,23 +156,22 @@ async def list_sync_runs(
 
 @router.get("/sync-runs/{run_id}", response_model=SyncRunHttpResponse)
 async def get_sync_run(
-    tenant_id: str,
     connection_id: str,
     run_id: str,
-    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
-    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    _identity: Annotated[IdentityContext, Depends(require_flows_read)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[GetSyncRunUseCase, Depends(get_get_sync_run_use_case)],
 ) -> SyncRunHttpResponse | JSONResponse:
     """Retrieves a specific pull synchronization run by ID."""
     logger.info(
         "http_get_sync_run.received",
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         connection_id=connection_id,
         run_id=run_id,
     )
-    use_case = GetSyncRunUseCase(control_plane_uow=cp_uow)
     res = await use_case.execute(
         GetSyncRunQuery(
-            tenant_id=tenant_id,
+            tenant_id=effective_tenant_id,
             connection_id=connection_id,
             run_id=run_id,
         )
@@ -180,7 +180,7 @@ async def get_sync_run(
         err = res.unwrap_err()
         logger.error(
             "http_get_sync_run.failed",
-            tenant_id=tenant_id,
+            tenant_id=effective_tenant_id,
             connection_id=connection_id,
             run_id=run_id,
             error_code=err.code.value,
@@ -189,7 +189,7 @@ async def get_sync_run(
     run = res.unwrap()
     logger.info(
         "http_get_sync_run.completed",
-        tenant_id=tenant_id,
+        tenant_id=effective_tenant_id,
         connection_id=connection_id,
         run_id=run_id,
         status=run.status,

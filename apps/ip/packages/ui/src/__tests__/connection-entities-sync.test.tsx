@@ -20,17 +20,19 @@ import {
 } from '../presentation/connections/ActiveConnectionCard';
 import {
   ConnectionEntitiesSyncTab,
-  ConnectionOverviewTab,
   reconcileSelectedStreamNames,
-} from '../presentation/connections/ConnectionDetailTabs';
+} from '../presentation/connections/ConnectionEntitiesSyncTab';
+import { ConnectionOverviewTab } from '../presentation/connections/ConnectionOverviewTab';
 import {
   CreateSimulatorEntityForm,
   findDuplicateSimulatorEntityError,
   inferSimulatorEntityNameFromFilename,
   parseSimulatorBlueprint,
 } from '../presentation/connections/CreateSimulatorEntityModal';
+import { resolveConnectionOverviewExtension } from '../presentation/connections/connection-overview-extensions';
 import { IpConnectionDetailPage } from '../presentation/connections/IpConnectionDetailPage';
 import { SimulatorEntitiesSection } from '../presentation/connections/SimulatorEntitiesSection';
+import { SubscribedEntitySchemaPanel } from '../presentation/connections/SubscribedEntitySchemaPanel';
 import { IpUIProvider } from '../provider/IpUIProvider';
 import {
   createInMemoryIpWorkspaceSeed,
@@ -71,7 +73,6 @@ function createEntitiesQueryClient(): QueryClient {
     ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, SEED_CONNECTION_ID),
     ok({
       connectionId: SEED_CONNECTION_ID,
-      catalogVersion: 1,
       catalogHash: 'hash-init',
       discoveredAt: '2026-11-05T10:00:00Z',
       streams: [],
@@ -151,7 +152,6 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
       ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, 'conn_new_clean'),
       ok({
         connectionId: 'conn_new_clean',
-        catalogVersion: 1,
         catalogHash: 'hash_clean',
         discoveredAt: '2026-11-06T10:00:00Z',
         streams: [],
@@ -185,7 +185,6 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
       ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, 'conn_generic_sim'),
       ok({
         connectionId: 'conn_generic_sim',
-        catalogVersion: 1,
         catalogHash: 'hash_gen_123',
         discoveredAt: '2026-11-06T10:00:00Z',
         streams: [
@@ -685,5 +684,36 @@ describe('ConnectionEntitiesSyncTab Control Plane', () => {
     expect(discoverRes.ok).toBe(true);
     if (!discoverRes.ok) return;
     expect(discoverRes.value.streams).toEqual([]);
+  });
+
+  it('renders accessible schema disclosure buttons plus design-system SubscribedEntitySchemaPanel', () => {
+    const qc = createEntitiesQueryClient();
+    const html = renderEntitiesTab(
+      <ConnectionEntitiesSyncTab
+        connectionId={SEED_CONNECTION_ID}
+        connection={SEED_CONNECTION}
+        onOpenTrace={() => undefined}
+        onProblem={() => undefined}
+      />,
+      qc,
+    );
+
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-label="records_alpha schema fields"');
+    expect(html).not.toContain('data-radix-popper-content-wrapper');
+
+    const schemaHtml = renderEntitiesTab(
+      <SubscribedEntitySchemaPanel
+        primaryKey={['record_id']}
+        fields={[{ name: 'record_id', dataType: 'string', nullable: false, description: null }]}
+      />,
+      qc,
+    );
+    expect(schemaHtml).toContain('data-slot="table"');
+    expect(schemaHtml).toContain('Primary Key: record_id');
+    expect(schemaHtml).toContain('scope="col"');
+
+    expect(resolveConnectionOverviewExtension('acme_source')).toBeNull();
+    expect(resolveConnectionOverviewExtension(UNIVERSAL_SIMULATOR_APP_ID)).not.toBeNull();
   });
 });

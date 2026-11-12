@@ -41,7 +41,7 @@ async def test_connection_entity_repository_persists_subscription_watermarks_wit
     )
     await conn_repo.save(conn)
 
-    entity = ConnectionEntity.create(
+    entity_res = ConnectionEntity.try_create(
         tenant_id=seeded_ip_tenant,
         connection_id=conn.id,
         stream_name="interval_events",
@@ -52,6 +52,9 @@ async def test_connection_entity_repository_persists_subscription_watermarks_wit
         cursor_field="event_timestamp",
         initial_cursor="2026-10-20T00:00:00Z",
     )
+    assert entity_res.is_ok and entity_res.value is not None
+    entity = entity_res.value
+
     entity.advance_checkpoint(
         new_cursor_value="2026-10-21T00:00:00Z",
         records_in_batch=250,
@@ -77,16 +80,26 @@ async def test_connection_entity_repository_persists_subscription_watermarks_wit
     assert updated.cursor_value == "2026-10-22T00:00:00Z"
     assert updated.records_synced_count == 400
 
+    config_res = updated.update_configuration(schedule=EntitySyncSchedule.EVERY_15M)
+    assert config_res.is_ok
+    updated.reset_checkpoint()
+    await entity_repo.save(updated)
+
     all_entities = await entity_repo.list_by_connection(seeded_ip_tenant, conn.id)
     assert len(all_entities) == 1
 
-    outbox_stmt = select(IpOutboxRecord).where(
-        IpOutboxRecord.tenant_id == seeded_ip_tenant,
-        IpOutboxRecord.event_type == IpEventType.CONNECTION_ENTITY_CHECKPOINTED.value,
-    )
-    outbox_rows = (await global_session.execute(outbox_stmt)).scalars().all()
-    assert len(outbox_rows) == 2
-
+    updated.mark_unsubscribed()
     await entity_repo.delete(updated)
     after_delete = await entity_repo.list_by_connection(seeded_ip_tenant, conn.id)
     assert len(after_delete) == 0
+
+    outbox_stmt = select(IpOutboxRecord).where(
+        IpOutboxRecord.tenant_id == seeded_ip_tenant,
+    )
+    outbox_rows = (await global_session.execute(outbox_stmt)).scalars().all()
+    recorded_types = [row.event_type for row in outbox_rows]
+    assert IpEventType.CONNECTION_ENTITY_SUBSCRIBED.value in recorded_types
+    assert recorded_types.count(IpEventType.CONNECTION_ENTITY_CHECKPOINTED.value) == 2
+    assert IpEventType.CONNECTION_ENTITY_CONFIGURATION_UPDATED.value in recorded_types
+    assert IpEventType.CONNECTION_ENTITY_CHECKPOINT_RESET.value in recorded_types
+    assert IpEventType.CONNECTION_ENTITY_UNSUBSCRIBED.value in recorded_types

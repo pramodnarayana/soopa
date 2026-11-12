@@ -177,7 +177,19 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             return DiscoveredCatalogDTO.from_error(connection_id, err)
 
         cleaned_tenant_id, cleaned_conn_id, _, reader = scope_res.unwrap()
-        entities = await reader.list_entities_by_connection(cleaned_tenant_id, cleaned_conn_id)
+        entities_res = await reader.list_entities_by_connection(cleaned_tenant_id, cleaned_conn_id)
+        if entities_res.is_err:
+            reader_err = entities_res.unwrap_err()
+            logger.error(
+                "universal_simulator_discover_reader_failed",
+                tenant_id=cleaned_tenant_id,
+                connection_id=cleaned_conn_id,
+                error_code=reader_err.code.value,
+                reason=reader_err.message,
+            )
+            return DiscoveredCatalogDTO.from_error(cleaned_conn_id, reader_err)
+
+        entities = entities_res.unwrap()
         streams: list[StreamSchemaDTO] = [
             extract_stream_schema_dto(entity_dto_to_stream_spec(entity)) for entity in entities
         ]
@@ -220,7 +232,22 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             )
             return ()
         cleaned_tenant_id, cleaned_conn_id, cfg, reader = scope_res.unwrap()
-        entity = await reader.get_entity_by_name(cleaned_tenant_id, cleaned_conn_id, stream_name)
+        entity_res = await reader.get_entity_by_name(
+            cleaned_tenant_id, cleaned_conn_id, stream_name
+        )
+        if entity_res.is_err:
+            reader_err = entity_res.unwrap_err()
+            self._last_error = reader_err
+            logger.error(
+                "universal_simulator_list_objects_reader_failed",
+                tenant_id=cleaned_tenant_id,
+                connection_id=cleaned_conn_id,
+                stream_name=stream_name,
+                error_code=reader_err.code.value,
+                reason=reader_err.message,
+            )
+            return ()
+        entity = entity_res.unwrap()
         if entity is None:
             logger.error(
                 "universal_simulator_list_objects_stream_not_found",
@@ -277,7 +304,22 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             return
 
         cleaned_tenant_id, cleaned_conn_id, cfg, reader = scope_res.unwrap()
-        entity = await reader.get_entity_by_name(cleaned_tenant_id, cleaned_conn_id, stream_name)
+        entity_res = await reader.get_entity_by_name(
+            cleaned_tenant_id, cleaned_conn_id, stream_name
+        )
+        if entity_res.is_err:
+            reader_err = entity_res.unwrap_err()
+            self._last_error = reader_err
+            logger.error(
+                "universal_simulator_read_stream_reader_failed",
+                tenant_id=cleaned_tenant_id,
+                connection_id=cleaned_conn_id,
+                stream_name=stream_name,
+                error_code=reader_err.code.value,
+                reason=reader_err.message,
+            )
+            return
+        entity = entity_res.unwrap()
         if entity is None:
             not_found_err = IpError(
                 code=IpErrorCode.STREAM_NOT_FOUND,
@@ -342,7 +384,23 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
             )
             return None
         cleaned_tenant_id, cleaned_conn_id, cfg, reader = scope_res.unwrap()
-        entity = await reader.get_entity_by_name(cleaned_tenant_id, cleaned_conn_id, stream_name)
+        entity_res = await reader.get_entity_by_name(
+            cleaned_tenant_id, cleaned_conn_id, stream_name
+        )
+        if entity_res.is_err:
+            reader_err = entity_res.unwrap_err()
+            self._last_error = reader_err
+            logger.error(
+                "universal_simulator_fetch_record_reader_failed",
+                tenant_id=cleaned_tenant_id,
+                connection_id=cleaned_conn_id,
+                stream_name=stream_name,
+                record_id=record_id,
+                error_code=reader_err.code.value,
+                reason=reader_err.message,
+            )
+            return None
+        entity = entity_res.unwrap()
         if entity is None:
             logger.error(
                 "universal_simulator_fetch_record_stream_not_found",
@@ -405,7 +463,29 @@ class UniversalSchemaSimulatorConnector(BaseConnector):
 
         cleaned_tenant_id, cleaned_conn_id, cfg, reader = scope_res.unwrap()
         target_url = f"simulator://{cleaned_conn_id}/{stream_name}"
-        entity = await reader.get_entity_by_name(cleaned_tenant_id, cleaned_conn_id, stream_name)
+        entity_res = await reader.get_entity_by_name(
+            cleaned_tenant_id, cleaned_conn_id, stream_name
+        )
+        if entity_res.is_err:
+            reader_err = entity_res.unwrap_err()
+            category = SimulatorWriteFailureCategory.VALIDATION_ERROR
+            logger.error(
+                "universal_simulator_write_record_reader_failed",
+                tenant_id=cleaned_tenant_id,
+                connection_id=cleaned_conn_id,
+                stream_name=stream_name,
+                record_id=command.record_id,
+                error_code=reader_err.code.value,
+                failure_category=category.value,
+            )
+            return WriteResultDTO.from_error(
+                reader_err,
+                record_id=command.record_id or category.value.lower(),
+                target_url=target_url,
+                response_status_code=reader_err.http_status,
+                failure_category=category.value,
+            )
+        entity = entity_res.unwrap()
         if entity is None:
             not_found_err = IpError(
                 code=IpErrorCode.STREAM_NOT_FOUND,

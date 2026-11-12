@@ -20,6 +20,11 @@ from ip.engine.adapters.inbound.workers.ip_orchestrator_route_registry import (
 from ip.engine.adapters.inbound.workers.ip_stitch_tick_loop import (
     IpMultiShardStitchTickLoop,
 )
+from ip.engine.application.use_cases.normalization.auto_bind_default_transformation_use_case import (
+    AutoBindDefaultTransformationCommand,
+    AutoBindDefaultTransformationOnEntitySubscribedUseCase,
+    AutoBindDefaultTransformationResultDTO,
+)
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
     BackfillStreamNormalizationResultDTO,
@@ -35,6 +40,7 @@ from ip.engine.application.use_cases.normalization.process_inbound_range_use_cas
     ProcessInboundRangeUseCase,
 )
 from ip.engine.application.worker_ports import (
+    IpAutoBindDefaultTransformationExecutorPort,
     IpBackfillStreamNormalizationExecutorPort,
     IpNormalizeReplicaExecutorPort,
     IpProcessInboundRangeExecutorPort,
@@ -117,6 +123,31 @@ class _SessionScopedIpBackfillExecutor(IpBackfillStreamNormalizationExecutorPort
             return await backfill_uc.execute(command)
 
 
+class _SessionScopedIpAutoBindTransformationExecutor(IpAutoBindDefaultTransformationExecutorPort):
+    """Opens an isolated Control Plane GlobalSession per subscribed entity default transformation check."""
+
+    def __init__(self, db_router: DatabaseRouterPort, container: Container) -> None:
+        self._db_router = db_router
+        self._container = container
+
+    async def execute(
+        self, command: AutoBindDefaultTransformationCommand
+    ) -> Result[AutoBindDefaultTransformationResultDTO, IpError]:
+        async with self._db_router.global_session_scope() as global_session:
+            cp_uow = create_ip_control_plane_uow(global_session)
+            token_mgr = self._container.token_manager(control_plane_uow=cp_uow)
+            discover_uc = self._container.discover_catalog_use_case(
+                uow=cp_uow,
+                token_manager=token_mgr,
+            )
+            auto_bind_uc = AutoBindDefaultTransformationOnEntitySubscribedUseCase(
+                control_plane_uow=cp_uow,
+                discover_catalog_use_case=discover_uc,
+                transformer_registry=self._container.transformer_registry(),
+            )
+            return await auto_bind_uc.execute(command)
+
+
 class IpOrchestratorWorkerModule(LaunchableWorker):
     """Physical worker bulkhead for IP internal data pipeline orchestration (L2, L3, L4).
 
@@ -189,6 +220,9 @@ class IpOrchestratorWorkerModule(LaunchableWorker):
             dp_uow_provider=dp_uow_provider,
             normalize_use_case=_SessionScopedIpNormalizeExecutor(self.db_router, container),
             backfill_use_case=_SessionScopedIpBackfillExecutor(self.db_router, container),
+            auto_bind_transformation_use_case=_SessionScopedIpAutoBindTransformationExecutor(
+                self.db_router, container
+            ),
             process_inbound_range_use_case=_SessionScopedIpRangeExecutor(self.db_router, container),
             process_interval_batch_use_case=container.process_interval_batch_use_case(),
             extractor_registry=container.extractor_registry(),

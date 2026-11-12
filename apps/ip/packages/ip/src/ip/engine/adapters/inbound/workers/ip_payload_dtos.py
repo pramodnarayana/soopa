@@ -328,6 +328,46 @@ class IpCanonicalRecordChunkPayloadDTO:
 
 
 @dataclass(frozen=True)
+class IpConnectionEntitySubscribedPayloadDTO:
+    """Typed payload for `ip.connection_entity.subscribed`."""
+
+    tenant_id: str
+    connection_id: str
+    entity_id: str
+    stream_name: str
+    trace_id: str
+
+    @classmethod
+    def from_envelope(
+        cls, envelope: EventEnvelope
+    ) -> Result[IpConnectionEntitySubscribedPayloadDTO, IpError]:
+        p = envelope.payload
+        tenant_id = envelope.tenant_id or _extract_non_empty_str(p, "tenant_id")
+        connection_id = _extract_non_empty_str(p, "connection_id")
+        entity_id = _extract_non_empty_str(p, "entity_id")
+        stream_name = _extract_non_empty_str(p, "stream_name") or _extract_non_empty_str(
+            p, "stream"
+        )
+        trace_id = envelope.trace_id or _extract_non_empty_str(p, "trace_id") or envelope.id
+        if not tenant_id or not connection_id or not stream_name:
+            return Result.err(
+                _validation_error(
+                    "Invalid ip.connection_entity.subscribed payload: missing tenant_id, connection_id, or stream_name.",
+                    {"event_id": envelope.id},
+                )
+            )
+        return Result.ok(
+            cls(
+                tenant_id=tenant_id,
+                connection_id=connection_id,
+                entity_id=entity_id,
+                stream_name=stream_name,
+                trace_id=trace_id,
+            )
+        )
+
+
+@dataclass(frozen=True)
 class IpStreamBackfillPayloadDTO:
     """Typed payload for `ip.transformation.changed` and `ip.transformation_version.promoted`."""
 
@@ -674,6 +714,7 @@ class IpFeederOutageDetectedPayloadDTO:
 
 __all__ = [
     "IpCanonicalRecordChunkPayloadDTO",
+    "IpConnectionEntitySubscribedPayloadDTO",
     "IpFeederOutageDetectedPayloadDTO",
     "IpFetchRecordChunkPayloadDTO",
     "IpGenerationCompletedPayloadDTO",
