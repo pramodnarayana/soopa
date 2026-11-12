@@ -32,6 +32,8 @@ RECONCILABLE_APP_DOMAINS: frozenset[str] = frozenset({"ip"})
 IP_SHARD_PREFIX = "ip_"
 IP_DEFAULT_SHARD_ID = "ip_shard_1"
 IP_DEFAULT_DSN_ENV_VAR = "IP_DATABASE_URL"
+RECONCILE_BATCH_SIZE = 500
+RECONCILE_BATCH_YIELD_SECONDS = 0.1
 
 
 def validate_reconcile_domain(domain: str) -> str:
@@ -51,6 +53,26 @@ def _load_database_settings(*, skip_dotenv: bool) -> PlatformDatabaseSettings:
         return PlatformDatabaseSettings()
     load_repo_env(override=False)
     return load_settings_safely(PlatformDatabaseSettings)
+
+
+async def _execute_chunked_mutation(
+    session: AsyncSession,
+    statement_sql: str,
+    *,
+    batch_size: int = RECONCILE_BATCH_SIZE,
+) -> int:
+    """Executes a bounded CTE UPDATE/DELETE loop, committing and yielding after every batch."""
+    total_affected = 0
+    stmt = text(statement_sql)
+    while True:
+        res = await session.execute(stmt, {"batch_size": batch_size})
+        affected = len(res.all())
+        await session.commit()
+        if affected == 0:
+            break
+        total_affected += affected
+        await asyncio.sleep(RECONCILE_BATCH_YIELD_SECONDS)
+    return total_affected
 
 
 async def resolve_ip_shard_urls(
@@ -119,12 +141,43 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
                     "ALTER TABLE public.inbound_records ADD COLUMN IF NOT EXISTS batch_seq INTEGER;"
                 )
             )
-            await shard_session.execute(
-                text("UPDATE public.inbound_records SET batch_id = id WHERE batch_id IS NULL;")
+            await shard_session.commit()
+
+            await _execute_chunked_mutation(
+                shard_session,
+                """
+                WITH batch AS (
+                    SELECT id
+                    FROM public.inbound_records
+                    WHERE batch_id IS NULL
+                    LIMIT :batch_size
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE public.inbound_records AS target
+                SET batch_id = target.id
+                FROM batch
+                WHERE target.id = batch.id
+                RETURNING target.id;
+                """,
             )
-            await shard_session.execute(
-                text("UPDATE public.inbound_records SET batch_seq = 0 WHERE batch_seq IS NULL;")
+            await _execute_chunked_mutation(
+                shard_session,
+                """
+                WITH batch AS (
+                    SELECT id
+                    FROM public.inbound_records
+                    WHERE batch_seq IS NULL
+                    LIMIT :batch_size
+                    FOR UPDATE SKIP LOCKED
+                )
+                UPDATE public.inbound_records AS target
+                SET batch_seq = 0
+                FROM batch
+                WHERE target.id = batch.id
+                RETURNING target.id;
+                """,
             )
+
             await shard_session.execute(
                 text(
                     "ALTER TABLE public.inbound_records ADD COLUMN IF NOT EXISTS causation_depth INTEGER NOT NULL DEFAULT 0;"
@@ -202,24 +255,42 @@ async def _reconcile_ip_shard(shard_url: str) -> None:
             await shard_session.execute(
                 text("ALTER TABLE public.quarantine_records DROP COLUMN IF EXISTS operation;")
             )
-            await shard_session.execute(
+            await shard_session.commit()
+
+            has_legacy_attempts = await shard_session.execute(
                 text("""
-                DO $$
-                BEGIN
-                    IF EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_schema = 'public'
-                        AND table_name = 'quarantine_records'
-                        AND column_name = 'attempts'
-                    ) THEN
-                        UPDATE public.quarantine_records
-                        SET attempt_count = attempts
-                        WHERE attempts IS NOT NULL AND (attempt_count IS NULL OR attempt_count = 1);
-                        ALTER TABLE public.quarantine_records DROP COLUMN attempts;
-                    END IF;
-                END $$;
+                SELECT 1 FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'quarantine_records'
+                  AND column_name = 'attempts'
+                LIMIT 1;
                 """)
             )
+            if has_legacy_attempts.scalar() is not None:
+                await _execute_chunked_mutation(
+                    shard_session,
+                    """
+                    WITH batch AS (
+                        SELECT id
+                        FROM public.quarantine_records
+                        WHERE attempts IS NOT NULL
+                          AND (attempt_count IS NULL OR attempt_count = 1)
+                          AND attempt_count IS DISTINCT FROM attempts
+                        LIMIT :batch_size
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE public.quarantine_records AS target
+                    SET attempt_count = target.attempts
+                    FROM batch
+                    WHERE target.id = batch.id
+                    RETURNING target.id;
+                    """,
+                )
+                await shard_session.execute(
+                    text("ALTER TABLE public.quarantine_records DROP COLUMN IF EXISTS attempts;")
+                )
+                await shard_session.commit()
+
             await shard_session.execute(
                 text(
                     "CREATE INDEX IF NOT EXISTS idx_quarantine_tenant_time ON public.quarantine_records (tenant_id, quarantined_at);"
@@ -330,60 +401,102 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
 
     try:
         async with provider.session() as session:
-            # 1. IP Domain: connection_stream_state
+            # 1. IP Domain: connection_entities (unified subscription + sync watermark table)
             if target in ("all", "ip"):
-                table_check = await session.execute(
-                    text("SELECT to_regclass('ip.connection_stream_state')")
-                )
-                plural_check = await session.execute(
-                    text("SELECT to_regclass('ip.connection_stream_states')")
-                )
-
-                if table_check.scalar() is None:
-                    if plural_check.scalar() is not None:
-                        logger.info(
-                            "renaming_table",
-                            old_name="ip.connection_stream_states",
-                            new_name="ip.connection_stream_state",
-                        )
-                        await session.execute(
-                            text(
-                                "ALTER TABLE ip.connection_stream_states RENAME TO connection_stream_state"
-                            )
-                        )
-                    else:
-                        logger.info("creating_table", table_name="ip.connection_stream_state")
-                        await session.execute(
-                            text("""
-                            CREATE TABLE IF NOT EXISTS ip.connection_stream_state (
-                                id VARCHAR(64) NOT NULL PRIMARY KEY,
-                                tenant_id VARCHAR(64) NOT NULL,
-                                connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id) ON DELETE CASCADE,
-                                stream_name VARCHAR(128) NOT NULL,
-                                cursor_field VARCHAR(128),
-                                cursor_value TEXT,
-                                records_synced_count BIGINT NOT NULL DEFAULT 0,
-                                last_synced_at TIMESTAMPTZ NOT NULL,
-                                CONSTRAINT uq_ip_stream_state_tenant_conn_stream UNIQUE (tenant_id, connection_id, stream_name)
-                            );
-                            """)
-                        )
-                        await session.execute(
-                            text(
-                                "CREATE INDEX IF NOT EXISTS idx_ip_stream_state_conn ON ip.connection_stream_state (tenant_id, connection_id);"
-                            )
-                        )
-
-                # Reconcile NO_AUTH connections to ACTIVE status and enforce DB CheckConstraint
-                conn_res = await session.execute(
+                await session.execute(
                     text("""
-                    UPDATE ip.connections
-                    SET status = 'ACTIVE', updated_at = NOW()
-                    WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'
-                    RETURNING id;
+                    CREATE TABLE IF NOT EXISTS ip.connection_entities (
+                        id VARCHAR(64) NOT NULL PRIMARY KEY,
+                        tenant_id VARCHAR(64) NOT NULL,
+                        connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id) ON DELETE CASCADE,
+                        stream_name VARCHAR(128) NOT NULL,
+                        sync_mode VARCHAR(32) NOT NULL DEFAULT 'INCREMENTAL',
+                        schedule VARCHAR(32) NOT NULL DEFAULT 'manual',
+                        sync_from VARCHAR(32) NOT NULL DEFAULT 'all',
+                        sync_from_at TIMESTAMPTZ,
+                        is_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                        primary_key JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        fields_schema JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        cursor_field VARCHAR(128),
+                        cursor_value TEXT,
+                        records_synced_count BIGINT NOT NULL DEFAULT 0,
+                        last_synced_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        CONSTRAINT uq_ip_connection_entities_tenant_conn_stream
+                            UNIQUE (tenant_id, connection_id, stream_name)
+                    );
                     """)
                 )
-                activated_count = len(conn_res.all())
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_ip_connection_entities_conn ON ip.connection_entities (tenant_id, connection_id);"
+                    )
+                )
+                await session.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS idx_ip_connection_entities_due_schedule ON ip.connection_entities (schedule) WHERE is_enabled = true AND schedule != 'manual';"
+                    )
+                )
+
+                # Migrate any legacy stream_state rows before dropping obsolete tables
+                await session.execute(
+                    text("""
+                    DO $$
+                    BEGIN
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_stream_state'
+                        ) THEN
+                            INSERT INTO ip.connection_entities (
+                                id, tenant_id, connection_id, stream_name,
+                                cursor_field, cursor_value, records_synced_count,
+                                last_synced_at, created_at, updated_at
+                            )
+                            SELECT
+                                s.id, s.tenant_id, s.connection_id, s.stream_name,
+                                s.cursor_field, s.cursor_value, s.records_synced_count,
+                                s.last_synced_at, COALESCE(s.last_synced_at, NOW()), COALESCE(s.last_synced_at, NOW())
+                            FROM ip.connection_stream_state s
+                            INNER JOIN ip.connections c ON c.id = s.connection_id
+                            ON CONFLICT (tenant_id, connection_id, stream_name) DO NOTHING;
+                            DROP TABLE ip.connection_stream_state CASCADE;
+                        END IF;
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_stream_states'
+                        ) THEN
+                            DROP TABLE ip.connection_stream_states CASCADE;
+                        END IF;
+                        IF EXISTS (
+                            SELECT 1 FROM information_schema.tables
+                            WHERE table_schema = 'ip' AND table_name = 'connection_catalogs'
+                        ) THEN
+                            DROP TABLE ip.connection_catalogs CASCADE;
+                        END IF;
+                    END $$;
+                    """)
+                )
+                await session.commit()
+
+                # Reconcile NO_AUTH connections to ACTIVE status in chunks and enforce DB CheckConstraint
+                activated_count = await _execute_chunked_mutation(
+                    session,
+                    """
+                    WITH batch AS (
+                        SELECT id
+                        FROM ip.connections
+                        WHERE auth_type = 'NO_AUTH' AND status = 'PENDING_AUTH'
+                        LIMIT :batch_size
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE ip.connections AS target
+                    SET status = 'ACTIVE', updated_at = NOW()
+                    FROM batch
+                    WHERE target.id = batch.id
+                    RETURNING target.id;
+                    """,
+                )
                 if activated_count > 0:
                     logger.info("reconciled_no_auth_connections", activated_count=activated_count)
 
@@ -413,48 +526,7 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     )
                 )
 
-                await session.execute(
-                    text("""
-                    CREATE TABLE IF NOT EXISTS ip.simulator_sandboxes (
-                        id VARCHAR(64) NOT NULL PRIMARY KEY,
-                        tenant_id VARCHAR(64) NOT NULL,
-                        name VARCHAR(255) NOT NULL,
-                        api_key_hash VARCHAR(64) NOT NULL,
-                        api_key_prefix VARCHAR(24) NOT NULL,
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        CONSTRAINT uq_ip_simulator_sandbox_tenant_name UNIQUE (tenant_id, name)
-                    );
-                    """)
-                )
-                await session.execute(
-                    text("""
-                    DO $$
-                    BEGIN
-                        IF EXISTS (
-                            SELECT 1 FROM pg_constraint
-                            WHERE conname = 'uq_ip_simulator_sandboxes_tenant_name'
-                        ) THEN
-                            ALTER TABLE ip.simulator_sandboxes
-                            RENAME CONSTRAINT uq_ip_simulator_sandboxes_tenant_name
-                            TO uq_ip_simulator_sandbox_tenant_name;
-                        END IF;
-                    END $$;
-                    """)
-                )
-                await session.execute(
-                    text(
-                        "ALTER TABLE ip.simulator_sandboxes ALTER COLUMN api_key_hash TYPE VARCHAR(64);"
-                    )
-                )
-                await session.execute(
-                    text("DROP INDEX IF EXISTS ip.ix_ip_simulator_sandboxes_tenant_id;")
-                )
-                await session.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_sandboxes_tenant ON ip.simulator_sandboxes (tenant_id);"
-                    )
-                )
+                await session.execute(text("DROP TABLE IF EXISTS ip.simulator_sandboxes CASCADE;"))
                 await session.execute(
                     text("""
                     DO $$
@@ -466,7 +538,7 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                             SELECT 1 FROM information_schema.columns
                             WHERE table_schema = 'ip'
                               AND table_name = 'simulator_entities'
-                              AND column_name = 'sandbox_id'
+                              AND column_name = 'connection_id'
                         ) THEN
                             DROP TABLE ip.simulator_entities CASCADE;
                         END IF;
@@ -478,7 +550,7 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     CREATE TABLE IF NOT EXISTS ip.simulator_entities (
                         id VARCHAR(64) NOT NULL PRIMARY KEY,
                         tenant_id VARCHAR(64) NOT NULL,
-                        sandbox_id VARCHAR(64) NOT NULL REFERENCES ip.simulator_sandboxes(id) ON DELETE CASCADE,
+                        connection_id VARCHAR(64) NOT NULL REFERENCES ip.connections(id) ON DELETE CASCADE,
                         entity_name VARCHAR(128) NOT NULL,
                         primary_key_field VARCHAR(128) NOT NULL,
                         cursor_field VARCHAR(128) NOT NULL,
@@ -491,21 +563,49 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                         version INTEGER NOT NULL DEFAULT 1,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                        CONSTRAINT uq_ip_simulator_entity_sandbox_name UNIQUE (sandbox_id, entity_name)
+                        CONSTRAINT uq_ip_simulator_entity_conn_name UNIQUE (tenant_id, connection_id, entity_name)
                     );
                     """)
                 )
+                await session.commit()
+
+                await _execute_chunked_mutation(
+                    session,
+                    """
+                    WITH batch AS (
+                        SELECT se.id
+                        FROM ip.simulator_entities AS se
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM ip.connections AS c WHERE c.id = se.connection_id
+                        )
+                        LIMIT :batch_size
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    DELETE FROM ip.simulator_entities AS target
+                    USING batch
+                    WHERE target.id = batch.id
+                    RETURNING target.id;
+                    """,
+                )
+
                 await session.execute(
                     text("""
                     DO $$
                     BEGIN
-                        IF EXISTS (
-                            SELECT 1 FROM pg_constraint
-                            WHERE conname = 'uq_ip_simulator_entities_sandbox_name'
+                        IF NOT EXISTS (
+                            SELECT 1
+                            FROM pg_constraint c
+                            JOIN pg_class rel ON rel.oid = c.conrelid
+                            JOIN pg_namespace n ON n.oid = rel.relnamespace
+                            WHERE n.nspname = 'ip'
+                              AND rel.relname = 'simulator_entities'
+                              AND c.contype = 'f'
                         ) THEN
                             ALTER TABLE ip.simulator_entities
-                            RENAME CONSTRAINT uq_ip_simulator_entities_sandbox_name
-                            TO uq_ip_simulator_entity_sandbox_name;
+                                ADD CONSTRAINT fk_ip_simulator_entities_connection_id
+                                FOREIGN KEY (connection_id)
+                                REFERENCES ip.connections(id)
+                                ON DELETE CASCADE;
                         END IF;
                     END $$;
                     """)
@@ -516,20 +616,51 @@ async def reconcile(domain: str = "all", *, skip_dotenv: bool = False) -> None:
                     )
                 )
                 await session.execute(
-                    text("DROP INDEX IF EXISTS ip.ix_ip_simulator_entities_tenant_sandbox;")
+                    text("DROP INDEX IF EXISTS ip.idx_ip_simulator_entities_tenant_sandbox;")
                 )
                 await session.execute(
                     text(
-                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_entities_tenant_sandbox ON ip.simulator_entities (tenant_id, sandbox_id);"
+                        "CREATE INDEX IF NOT EXISTS idx_ip_simulator_entities_tenant_conn ON ip.simulator_entities (tenant_id, connection_id);"
                     )
                 )
+                await session.commit()
+
+                await _execute_chunked_mutation(
+                    session,
+                    """
+                    WITH batch AS (
+                        SELECT id
+                        FROM ip.connections
+                        WHERE public_config ? 'streams'
+                        LIMIT :batch_size
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    UPDATE ip.connections AS target
+                    SET public_config = target.public_config - 'streams'
+                    FROM batch
+                    WHERE target.id = batch.id
+                    RETURNING target.id;
+                    """,
+                )
+
                 await session.execute(
                     text("""
-                    UPDATE ip.connections
-                    SET public_config = public_config - 'streams'
-                    WHERE public_config ? 'streams';
+                    DO $$
+                    BEGIN
+                        IF to_regclass('ip.alembic_version') IS NOT NULL
+                           AND to_regclass('ip.connections') IS NOT NULL THEN
+                            INSERT INTO ip.alembic_version (version_num)
+                            SELECT '0001_initial_global_schema'
+                            WHERE EXISTS (
+                                SELECT 1 FROM ip.alembic_version
+                                WHERE version_num = '0001_universal_simulator_schema'
+                            )
+                            ON CONFLICT (version_num) DO NOTHING;
+                        END IF;
+                    END $$;
                     """)
                 )
+                await session.commit()
 
             # 2. Platform Domain: Identity capabilities & RBAC
             if target in ("all", "platform", "identity"):

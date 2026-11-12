@@ -8,6 +8,7 @@ import {
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   HttpCatalogRepository,
+  HttpConnectionEntityRepository,
   HttpConnectionRepository,
   HttpIntervalRepository,
   HttpRecordRepository,
@@ -53,6 +54,7 @@ function createHttpRepositoriesBundle(
   return {
     catalog: new HttpCatalogRepository(client, logger),
     connections: new HttpConnectionRepository(client, logger),
+    entities: new HttpConnectionEntityRepository(client, logger),
     syncRuns: new HttpSyncRunRepository(client, logger),
     transformations: new HttpTransformationRepository(client, logger),
     stitches: new HttpStitchRepository(client, logger),

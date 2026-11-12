@@ -26,10 +26,8 @@ import {
   IpTransformationsPage,
   IpUIProvider,
 } from '../index';
-import {
-  ConnectionCatalogTab,
-  ConnectionOverviewTab,
-} from '../presentation/connections/ConnectionDetailTabs';
+import { ConnectionEntitiesSyncTab } from '../presentation/connections/ConnectionEntitiesSyncTab';
+import { ConnectionOverviewTab } from '../presentation/connections/ConnectionOverviewTab';
 import { ApiProblemBanner } from '../presentation/shared/ApiProblemBanner';
 import { TraceWaterfallStageContent } from '../presentation/traces/TraceWaterfallStages';
 import { TransformationWorkbenchPanel } from '../presentation/transformations/TransformationWorkbenchPanel';
@@ -37,6 +35,7 @@ import {
   createInMemoryIpWorkspaceSeed,
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
+  SEED_CONNECTION_ENTITY,
   SEED_CONNECTION_ID,
   SEED_DAILY_TOU_ROLLUPS,
   SEED_DEVICE_ID,
@@ -50,7 +49,6 @@ import {
   SEED_STITCH,
   SEED_STITCH_DEFINITION,
   SEED_STITCH_RUN,
-  SEED_STREAM_STATE,
   SEED_SYNC_RUN,
   SEED_TENANT_ID,
   SEED_TRACE,
@@ -75,16 +73,20 @@ function createHydratedQueryClient(): QueryClient {
     ok(SEED_CONNECTION),
   );
   qc.setQueryData(
-    ipQueryKeys.connections.catalog(SEED_TENANT_ID, SEED_CONNECTION_ID),
+    ipQueryKeys.connections.discoveredStreams(SEED_TENANT_ID, SEED_CONNECTION_ID),
     ok(SEED_DISCOVERED_CATALOG),
+  );
+  qc.setQueryData(
+    ipQueryKeys.connections.entities(SEED_TENANT_ID, SEED_CONNECTION_ID),
+    ok([SEED_CONNECTION_ENTITY]),
+  );
+  qc.setQueryData(
+    ipQueryKeys.syncRuns.list(SEED_TENANT_ID, SEED_CONNECTION_ID, 40),
+    ok([SEED_SYNC_RUN]),
   );
   qc.setQueryData(
     ipQueryKeys.syncRuns.list(SEED_TENANT_ID, SEED_CONNECTION_ID, 50),
     ok([SEED_SYNC_RUN]),
-  );
-  qc.setQueryData(
-    ipQueryKeys.syncRuns.streamStates(SEED_TENANT_ID, SEED_CONNECTION_ID),
-    ok([SEED_STREAM_STATE]),
   );
   qc.setQueryData(ipQueryKeys.transformations.transformers(SEED_TENANT_ID), ok(SEED_TRANSFORMERS));
   qc.setQueryData(
@@ -392,7 +394,7 @@ describe('IP Presentation Workspaces Narrow Integration', () => {
     expect(radarHtml).toContain('SAP S/4HANA Expired Vault');
   });
 
-  it('renders ConnectionOverviewTab with ConnectionCatalogTab', () => {
+  it('renders ConnectionOverviewTab with ConnectionEntitiesSyncTab', () => {
     const qc = createHydratedQueryClient();
 
     const overviewHtml = renderInIpWorkspace(
@@ -408,15 +410,18 @@ describe('IP Presentation Workspaces Narrow Integration', () => {
     expect(overviewHtml).toContain('Save Changes');
     expect(overviewHtml).toContain('Deactivate Connection');
 
-    const catalogTabHtml = renderInIpWorkspace(
-      <ConnectionCatalogTab
+    const entitiesTabHtml = renderInIpWorkspace(
+      <ConnectionEntitiesSyncTab
         connectionId={SEED_CONNECTION_ID}
+        connection={SEED_CONNECTION}
+        onOpenTrace={() => undefined}
         onProblem={() => undefined}
-        onConfigureTransformation={() => undefined}
       />,
       qc,
     );
-    expect(catalogTabHtml).toContain('Discover Schema Catalog');
+    expect(entitiesTabHtml).toContain('Discover Entities...');
+    expect(entitiesTabHtml).toContain('records_alpha');
+    expect(entitiesTabHtml).toContain('Sync Selected (1)');
   });
 
   it('renders TransformationWorkbenchPanel dry-run controls', () => {

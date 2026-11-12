@@ -1,18 +1,9 @@
 import type { ApiProblem, FrontendLoggerPort, HttpClientPort, Result } from '@soopa/ui';
-import type { StreamState, SyncRun, TriggerSyncRunInput } from '../../../domain/sync-run';
+import type { SyncRun, TriggerSyncRunInput } from '../../../domain/sync-run';
 import type { SyncRunRepositoryPort } from '../../../ports/sync-run-repository.port';
-import {
-  mapStreamStateFromWire,
-  mapSyncRunFromWire,
-  mapTriggerSyncRunToWire,
-} from '../mappers/sync-run.mapper';
+import { mapSyncRunFromWire, mapTriggerSyncRunToWire } from '../mappers/sync-run.mapper';
 import { parseAndMapResult } from '../parse-wire';
-import {
-  StreamStateListWireSchema,
-  StreamStateWireSchema,
-  SyncRunListWireSchema,
-  SyncRunWireSchema,
-} from '../schemas/sync-run.schema';
+import { SyncRunListWireSchema, SyncRunWireSchema } from '../schemas/sync-run.schema';
 
 export class HttpSyncRunRepository implements SyncRunRepositoryPort {
   private readonly httpClient: HttpClientPort;
@@ -75,41 +66,6 @@ export class HttpSyncRunRepository implements SyncRunRepositoryPort {
       SyncRunWireSchema,
       mapSyncRunFromWire,
       `POST /ip/connections/${connectionId}/sync-runs`,
-      this.logger,
-    );
-  }
-
-  public async listStreamStates(
-    tenantId: string,
-    connectionId: string,
-    signal?: AbortSignal,
-  ): Promise<Result<readonly StreamState[], ApiProblem>> {
-    const raw = await this.httpClient.get<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}/streams/state`,
-      { signal },
-    );
-    return parseAndMapResult(
-      raw,
-      StreamStateListWireSchema,
-      (items) => items.map(mapStreamStateFromWire),
-      `GET /ip/connections/${connectionId}/streams/state`,
-      this.logger,
-    );
-  }
-
-  public async resetStreamCheckpoint(
-    tenantId: string,
-    connectionId: string,
-    streamName: string,
-  ): Promise<Result<StreamState, ApiProblem>> {
-    const raw = await this.httpClient.post<unknown>(
-      `/api/v1/tenants/${encodeURIComponent(tenantId)}/ip/connections/${encodeURIComponent(connectionId)}/streams/${encodeURIComponent(streamName)}/reset`,
-    );
-    return parseAndMapResult(
-      raw,
-      StreamStateWireSchema,
-      mapStreamStateFromWire,
-      `POST /ip/connections/${connectionId}/streams/${streamName}/reset`,
       this.logger,
     );
   }

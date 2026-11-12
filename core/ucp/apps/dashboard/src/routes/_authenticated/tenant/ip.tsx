@@ -104,6 +104,7 @@ function IpLayout() {
     <IpUIProvider
       baseUrl={config.apiOrigin}
       tenantId={tenantId}
+      tenantSlug={tenant?.slug ?? ''}
       token={token}
       navigation={navigation}
     >

@@ -1,4 +1,4 @@
-"""FastAPI router for Virtual Sandbox management (`ip.simulator_sandboxes` & `ip.simulator_entities`) and simulated L1 webhook pushes."""
+"""FastAPI router for Simulator Entity management (`ip.simulator_entities`) and simulated L1 webhook pushes."""
 
 from __future__ import annotations
 
@@ -8,15 +8,15 @@ import structlog
 from fastapi import APIRouter, Depends, Request, Response, status
 from identity.domain.identity_context import IdentityContext
 from ip.engine.adapters.inbound.api.dependencies import (
-    get_inbound_ack,
-    get_inbound_decoder,
-    get_inbound_verifier,
+    get_effective_ucp_tenant_id,
+    get_ip_control_plane_uow,
     get_ip_data_plane_uow_provider,
     get_ip_global_session,
-    get_tiered_storage,
+    get_receive_push_executor_factory,
     get_token_manager,
+    require_flows_read,
     require_flows_write,
-    require_ip_permission,
+    require_sync_trigger,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ApiErrorHttpResponse,
@@ -25,19 +25,17 @@ from ip.engine.adapters.inbound.api.dtos.error_dtos import (
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
 )
-from ip.engine.domain.authorization import IpPermission
-from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
-from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
-from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
-from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
-from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
-from ip.solutions.connectors.sandbox.universal.dto import (
-    SimulatorEntityDTO,
-    SimulatorSandboxDTO,
+from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
+    ReceivePushExecutorFactory,
 )
+from ip.engine.ports.outbound.uow import (
+    IpControlPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkProviderPort,
+)
+from ip.solutions.connectors.sandbox.universal.dto import SimulatorEntityDTO
 from ip.solutions.connectors.sandbox.universal.ports import (
     SimulatorApiProviderPort,
-    SimulatorSandboxReaderPort,
+    SimulatorEntityReaderPort,
     SimulatorUnitOfWorkPort,
 )
 from ip.solutions.connectors.sandbox.universal.simulate_push_use_case import (
@@ -46,25 +44,25 @@ from ip.solutions.connectors.sandbox.universal.simulate_push_use_case import (
     TriggerSimulatedPushUseCase,
 )
 from ip.solutions.connectors.sandbox.universal.spec import (
+    DEFAULT_SIMULATED_PUSH_COUNT,
+    DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS,
+    DEFAULT_SIMULATOR_RECORDS_PER_PULL,
+    MAX_SIMULATED_PUSH_COUNT,
+    MAX_SIMULATOR_CURSOR_STEP_SECONDS,
+    MAX_SIMULATOR_RECORDS_PER_PULL,
+    MIN_SIMULATED_PUSH_COUNT,
+    MIN_SIMULATOR_CURSOR_STEP_SECONDS,
+    MIN_SIMULATOR_RECORDS_PER_PULL,
     SimulatorSubmissionStatus,
     StreamVelocityMode,
 )
 from ip.solutions.connectors.sandbox.universal.use_cases import (
     CreateSimulatorEntityCommand,
     CreateSimulatorEntityUseCase,
-    CreateSimulatorSandboxCommand,
-    CreateSimulatorSandboxResult,
-    CreateSimulatorSandboxUseCase,
     DeleteSimulatorEntityCommand,
     DeleteSimulatorEntityUseCase,
-    DeleteSimulatorSandboxCommand,
-    DeleteSimulatorSandboxUseCase,
-    GetSimulatorSandboxQuery,
-    GetSimulatorSandboxUseCase,
     ListSimulatorEntitiesQuery,
     ListSimulatorEntitiesUseCase,
-    ListSimulatorSandboxesQuery,
-    ListSimulatorSandboxesUseCase,
     UpdateSimulatorEntityCommand,
     UpdateSimulatorEntityUseCase,
 )
@@ -73,18 +71,6 @@ from seedwork.domain.types import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
-
-require_flows_read = require_ip_permission(IpPermission.IP_FLOWS_READ)
-require_sync_trigger = require_ip_permission(IpPermission.IP_SYNC_TRIGGER)
-
-
-def _resolve_ucp_tenant_id(request: Request, path_tenant_id: str) -> str:
-    """Resolves canonical `ucp_tenant_id` populated by `require_tenant_member`, falling back to `path_tenant_id`."""
-    try:
-        resolved: str = request.state.ucp_tenant_id
-    except AttributeError:
-        return path_tenant_id
-    return resolved
 
 
 def _get_simulator_provider(request: Request) -> SimulatorApiProviderPort[AsyncSession]:
@@ -110,59 +96,103 @@ def get_simulator_uow(
     return _get_simulator_provider(request).create_uow(global_session)
 
 
-def get_simulator_sandbox_reader(
+def get_simulator_entity_reader(
     request: Request,
     global_session: Annotated[AsyncSession, Depends(get_ip_global_session)],
-) -> SimulatorSandboxReaderPort:
-    """Resolves a request-scoped `SimulatorSandboxReaderPort` bound to `GlobalSession`."""
-    return _get_simulator_provider(request).get_sandbox_reader(global_session)
+) -> SimulatorEntityReaderPort:
+    """Resolves a request-scoped `SimulatorEntityReaderPort` bound to `GlobalSession`."""
+    return _get_simulator_provider(request).get_entity_reader(global_session)
 
 
-class CreateSimulatorSandboxHttpRequest(BaseModel):
-    """HTTP request payload to provision a new Virtual Sandbox."""
-
-    name: str = Field(..., min_length=1, max_length=255)
-
-
-class SimulatorSandboxHttpResponse(BaseModel):
-    """HTTP response describing an existing Virtual Sandbox (never exposes secret API key)."""
-
-    id: str
-    tenant_id: str
-    name: str
-    api_key_prefix: str
-    created_at: str
-    updated_at: str
+def get_create_simulator_entity_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> CreateSimulatorEntityUseCase:
+    """Resolves `CreateSimulatorEntityUseCase` via request-scoped DI."""
+    return CreateSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections)
 
 
-class CreatedSimulatorSandboxHttpResponse(SimulatorSandboxHttpResponse):
-    """HTTP response returned once upon Virtual Sandbox creation with the plaintext `api_key`."""
+def get_list_simulator_entities_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ListSimulatorEntitiesUseCase:
+    """Resolves `ListSimulatorEntitiesUseCase` via request-scoped DI."""
+    return ListSimulatorEntitiesUseCase(uow=uow, connections=cp_uow.connections)
 
-    api_key: str
+
+def get_update_simulator_entity_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> UpdateSimulatorEntityUseCase:
+    """Resolves `UpdateSimulatorEntityUseCase` via request-scoped DI."""
+    return UpdateSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections)
+
+
+def get_delete_simulator_entity_use_case(
+    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> DeleteSimulatorEntityUseCase:
+    """Resolves `DeleteSimulatorEntityUseCase` via request-scoped DI."""
+    return DeleteSimulatorEntityUseCase(uow=uow, connections=cp_uow.connections)
+
+
+def get_trigger_simulated_push_use_case(
+    ip_dp_uow_provider: Annotated[
+        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
+    ],
+    push_executor_factory: Annotated[
+        ReceivePushExecutorFactory, Depends(get_receive_push_executor_factory)
+    ],
+    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
+    entity_reader: Annotated[SimulatorEntityReaderPort, Depends(get_simulator_entity_reader)],
+) -> TriggerSimulatedPushUseCase:
+    """Resolves `TriggerSimulatedPushUseCase` via request-scoped DI."""
+    return TriggerSimulatedPushUseCase(
+        data_plane_uow_provider=ip_dp_uow_provider,
+        push_executor_factory=push_executor_factory,
+        token_manager=token_manager,
+        entity_reader=entity_reader,
+    )
 
 
 class CreateSimulatorEntityHttpRequest(BaseModel):
-    """HTTP request payload to configure a new entity inside a Virtual Sandbox."""
+    """HTTP request payload to configure a new entity inside a Simulator connection."""
 
     entity_name: str = Field(..., min_length=1, max_length=128)
     sample_blueprint: JsonValue
     primary_key_field: str | None = Field(default=None, max_length=128)
     cursor_field: str | None = Field(default=None, max_length=128)
-    records_per_pull: int = Field(default=25, ge=1, le=5000)
-    cursor_step_seconds: int = Field(default=60, ge=1, le=86400)
+    records_per_pull: int = Field(
+        default=DEFAULT_SIMULATOR_RECORDS_PER_PULL,
+        ge=MIN_SIMULATOR_RECORDS_PER_PULL,
+        le=MAX_SIMULATOR_RECORDS_PER_PULL,
+    )
+    cursor_step_seconds: int = Field(
+        default=DEFAULT_SIMULATOR_CURSOR_STEP_SECONDS,
+        ge=MIN_SIMULATOR_CURSOR_STEP_SECONDS,
+        le=MAX_SIMULATOR_CURSOR_STEP_SECONDS,
+    )
     velocity_mode: StreamVelocityMode = Field(default=StreamVelocityMode.ENTITY_TRANSACTIONAL)
     chaos_policy: dict[str, JsonValue] | None = None
 
 
 class UpdateSimulatorEntityHttpRequest(BaseModel):
-    """HTTP request payload to update an existing entity inside a Virtual Sandbox."""
+    """HTTP request payload to update an existing entity inside a Simulator connection."""
 
     entity_name: str | None = Field(default=None, min_length=1, max_length=128)
     sample_blueprint: JsonValue | None = None
     primary_key_field: str | None = Field(default=None, max_length=128)
     cursor_field: str | None = Field(default=None, max_length=128)
-    records_per_pull: int | None = Field(default=None, ge=1, le=5000)
-    cursor_step_seconds: int | None = Field(default=None, ge=1, le=86400)
+    records_per_pull: int | None = Field(
+        default=None,
+        ge=MIN_SIMULATOR_RECORDS_PER_PULL,
+        le=MAX_SIMULATOR_RECORDS_PER_PULL,
+    )
+    cursor_step_seconds: int | None = Field(
+        default=None,
+        ge=MIN_SIMULATOR_CURSOR_STEP_SECONDS,
+        le=MAX_SIMULATOR_CURSOR_STEP_SECONDS,
+    )
     velocity_mode: StreamVelocityMode | None = None
     chaos_policy: dict[str, JsonValue] | None = None
 
@@ -172,7 +202,7 @@ class SimulatorEntityHttpResponse(BaseModel):
 
     id: str
     tenant_id: str
-    sandbox_id: str
+    connection_id: str
     entity_name: str
     primary_key_field: str
     cursor_field: str
@@ -191,7 +221,11 @@ class SimulatePushHttpRequest(BaseModel):
     """HTTP request payload to trigger a simulated webhook push for an entity stream."""
 
     stream_name: str = Field(..., min_length=1, max_length=128)
-    count: int = Field(default=5, ge=1, le=100)
+    count: int = Field(
+        default=DEFAULT_SIMULATED_PUSH_COUNT,
+        ge=MIN_SIMULATED_PUSH_COUNT,
+        le=MAX_SIMULATED_PUSH_COUNT,
+    )
     delivery_style: SimulatedPushDeliveryStyle = Field(
         default=SimulatedPushDeliveryStyle.FULL_PAYLOAD
     )
@@ -209,37 +243,11 @@ class SimulatePushHttpResponse(BaseModel):
     status: SimulatorSubmissionStatus = SimulatorSubmissionStatus.ACCEPTED
 
 
-def _map_sandbox_response(dto: SimulatorSandboxDTO) -> SimulatorSandboxHttpResponse:
-    return SimulatorSandboxHttpResponse(
-        id=dto.id,
-        tenant_id=dto.tenant_id,
-        name=dto.name,
-        api_key_prefix=dto.api_key_prefix,
-        created_at=dto.created_at.isoformat(),
-        updated_at=dto.updated_at.isoformat(),
-    )
-
-
-def _map_created_sandbox_response(
-    result: CreateSimulatorSandboxResult,
-) -> CreatedSimulatorSandboxHttpResponse:
-    sbx = result.sandbox
-    return CreatedSimulatorSandboxHttpResponse(
-        id=sbx.id,
-        tenant_id=sbx.tenant_id,
-        name=sbx.name,
-        api_key_prefix=sbx.api_key_prefix,
-        api_key=result.api_key,
-        created_at=sbx.created_at.isoformat(),
-        updated_at=sbx.updated_at.isoformat(),
-    )
-
-
 def _map_entity_response(dto: SimulatorEntityDTO) -> SimulatorEntityHttpResponse:
     return SimulatorEntityHttpResponse(
         id=dto.id,
         tenant_id=dto.tenant_id,
-        sandbox_id=dto.sandbox_id,
+        connection_id=dto.connection_id,
         entity_name=dto.entity_name,
         primary_key_field=dto.primary_key_field,
         cursor_field=dto.cursor_field,
@@ -255,181 +263,43 @@ def _map_entity_response(dto: SimulatorEntityDTO) -> SimulatorEntityHttpResponse
     )
 
 
-sandbox_router = APIRouter(
-    prefix="/api/v1/tenants/{tenant_id}/ip/simulator/sandboxes",
-    tags=["Integration Platform - Sandbox Simulator"],
-)
-
-push_router = APIRouter(
+router = APIRouter(
     prefix="/api/v1/tenants/{tenant_id}/ip/connections",
     tags=["Integration Platform - Sandbox Simulator"],
 )
 
 
-@sandbox_router.post(
-    "",
-    response_model=CreatedSimulatorSandboxHttpResponse,
-    status_code=status.HTTP_201_CREATED,
-    responses={
-        status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
-        status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ApiErrorHttpResponse},
-    },
-)
-async def create_simulator_sandbox(
-    tenant_id: str,
-    request: Request,
-    body: CreateSimulatorSandboxHttpRequest,
-    _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-) -> CreatedSimulatorSandboxHttpResponse | Response:
-    """Provisions a new Virtual Sandbox and returns its one-time secret `api_key`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
-    log = logger.bind(
-        tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_name=body.name,
-    )
-    log.info("ip_create_simulator_sandbox_http.received")
-    res = await CreateSimulatorSandboxUseCase(uow=uow).execute(
-        CreateSimulatorSandboxCommand(tenant_id=effective_tenant_id, name=body.name)
-    )
-    if res.is_err:
-        err = res.unwrap_err()
-        log.error(
-            "ip_create_simulator_sandbox_http.failed",
-            error_code=err.code.value,
-            http_status=err.http_status,
-        )
-        return from_ip_error(err)
-    created = res.unwrap()
-    log.info("ip_create_simulator_sandbox_http.completed", sandbox_id=created.sandbox.id)
-    return _map_created_sandbox_response(created)
-
-
-@sandbox_router.get(
-    "",
-    response_model=list[SimulatorSandboxHttpResponse],
-    status_code=status.HTTP_200_OK,
-)
-async def list_simulator_sandboxes(
-    tenant_id: str,
-    request: Request,
-    _context: Annotated[IdentityContext, Depends(require_flows_read)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-) -> list[SimulatorSandboxHttpResponse]:
-    """Lists all Virtual Sandboxes owned by `tenant_id`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
-    log = logger.bind(tenant_id=effective_tenant_id, path_tenant_id=tenant_id)
-    log.info("ip_list_simulator_sandboxes_http.received")
-    sandboxes = await ListSimulatorSandboxesUseCase(uow=uow).execute(
-        ListSimulatorSandboxesQuery(tenant_id=effective_tenant_id)
-    )
-    log.info("ip_list_simulator_sandboxes_http.completed", sandbox_count=len(sandboxes))
-    return [_map_sandbox_response(sbx) for sbx in sandboxes]
-
-
-@sandbox_router.get(
-    "/{sandbox_id}",
-    response_model=SimulatorSandboxHttpResponse,
-    status_code=status.HTTP_200_OK,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
-)
-async def get_simulator_sandbox(
-    tenant_id: str,
-    sandbox_id: str,
-    request: Request,
-    _context: Annotated[IdentityContext, Depends(require_flows_read)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-) -> SimulatorSandboxHttpResponse | Response:
-    """Fetches a single Virtual Sandbox scoped to `tenant_id`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
-    log = logger.bind(
-        tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
-    )
-    log.info("ip_get_simulator_sandbox_http.received")
-    res = await GetSimulatorSandboxUseCase(uow=uow).execute(
-        GetSimulatorSandboxQuery(tenant_id=effective_tenant_id, sandbox_id=sandbox_id)
-    )
-    if res.is_err:
-        err = res.unwrap_err()
-        log.error(
-            "ip_get_simulator_sandbox_http.failed",
-            error_code=err.code.value,
-            http_status=err.http_status,
-        )
-        return from_ip_error(err)
-    log.info("ip_get_simulator_sandbox_http.completed")
-    return _map_sandbox_response(res.unwrap())
-
-
-@sandbox_router.delete(
-    "/{sandbox_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
-)
-async def delete_simulator_sandbox(
-    tenant_id: str,
-    sandbox_id: str,
-    request: Request,
-    _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
-) -> Response:
-    """Deletes a Virtual Sandbox and cascades to its `ip.simulator_entities`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
-    log = logger.bind(
-        tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
-    )
-    log.info("ip_delete_simulator_sandbox_http.received")
-    res = await DeleteSimulatorSandboxUseCase(uow=uow).execute(
-        DeleteSimulatorSandboxCommand(tenant_id=effective_tenant_id, sandbox_id=sandbox_id)
-    )
-    if res.is_err:
-        err = res.unwrap_err()
-        log.error(
-            "ip_delete_simulator_sandbox_http.failed",
-            error_code=err.code.value,
-            http_status=err.http_status,
-        )
-        return from_ip_error(err)
-    log.info("ip_delete_simulator_sandbox_http.completed")
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@sandbox_router.post(
-    "/{sandbox_id}/entities",
+@router.post(
+    "/{connection_id}/simulator/entities",
     response_model=SimulatorEntityHttpResponse,
     status_code=status.HTTP_201_CREATED,
     responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
         status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
         status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ApiErrorHttpResponse},
     },
 )
 async def create_simulator_entity(
-    tenant_id: str,
-    sandbox_id: str,
-    request: Request,
+    connection_id: str,
     body: CreateSimulatorEntityHttpRequest,
     _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        CreateSimulatorEntityUseCase, Depends(get_create_simulator_entity_use_case)
+    ],
 ) -> SimulatorEntityHttpResponse | Response:
-    """Creates and validates a new entity inside a Virtual Sandbox."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
+    """Creates and validates a new entity inside a Simulator connection."""
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
+        connection_id=connection_id,
         entity_name=body.entity_name,
     )
     log.info("ip_create_simulator_entity_http.received")
-    res = await CreateSimulatorEntityUseCase(uow=uow).execute(
+    res = await use_case.execute(
         CreateSimulatorEntityCommand(
             tenant_id=effective_tenant_id,
-            sandbox_id=sandbox_id,
+            connection_id=connection_id,
             entity_name=body.entity_name,
             sample_blueprint=body.sample_blueprint,
             primary_key_field=body.primary_key_field,
@@ -453,29 +323,31 @@ async def create_simulator_entity(
     return _map_entity_response(entity)
 
 
-@sandbox_router.get(
-    "/{sandbox_id}/entities",
+@router.get(
+    "/{connection_id}/simulator/entities",
     response_model=list[SimulatorEntityHttpResponse],
     status_code=status.HTTP_200_OK,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+    },
 )
 async def list_simulator_entities(
-    tenant_id: str,
-    sandbox_id: str,
-    request: Request,
+    connection_id: str,
     _context: Annotated[IdentityContext, Depends(require_flows_read)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        ListSimulatorEntitiesUseCase, Depends(get_list_simulator_entities_use_case)
+    ],
 ) -> list[SimulatorEntityHttpResponse] | Response:
-    """Lists all entities configured inside `sandbox_id`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
+    """Lists all entities configured inside `connection_id`."""
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
+        connection_id=connection_id,
     )
     log.info("ip_list_simulator_entities_http.received")
-    res = await ListSimulatorEntitiesUseCase(uow=uow).execute(
-        ListSimulatorEntitiesQuery(tenant_id=effective_tenant_id, sandbox_id=sandbox_id)
+    res = await use_case.execute(
+        ListSimulatorEntitiesQuery(tenant_id=effective_tenant_id, connection_id=connection_id)
     )
     if res.is_err:
         err = res.unwrap_err()
@@ -490,38 +362,38 @@ async def list_simulator_entities(
     return [_map_entity_response(ent) for ent in entities]
 
 
-@sandbox_router.patch(
-    "/{sandbox_id}/entities/{entity_id}",
+@router.patch(
+    "/{connection_id}/simulator/entities/{entity_id}",
     response_model=SimulatorEntityHttpResponse,
     status_code=status.HTTP_200_OK,
     responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
         status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
         status.HTTP_409_CONFLICT: {"model": ApiErrorHttpResponse},
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"model": ApiErrorHttpResponse},
     },
 )
 async def update_simulator_entity(
-    tenant_id: str,
-    sandbox_id: str,
+    connection_id: str,
     entity_id: str,
-    request: Request,
     body: UpdateSimulatorEntityHttpRequest,
     _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        UpdateSimulatorEntityUseCase, Depends(get_update_simulator_entity_use_case)
+    ],
 ) -> SimulatorEntityHttpResponse | Response:
-    """Updates an existing entity inside `sandbox_id` and bumps its schema version."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
+    """Updates an existing entity inside `connection_id` and bumps its schema version."""
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
+        connection_id=connection_id,
         entity_id=entity_id,
     )
     log.info("ip_update_simulator_entity_http.received")
-    res = await UpdateSimulatorEntityUseCase(uow=uow).execute(
+    res = await use_case.execute(
         UpdateSimulatorEntityCommand(
             tenant_id=effective_tenant_id,
-            sandbox_id=sandbox_id,
+            connection_id=connection_id,
             entity_id=entity_id,
             entity_name=body.entity_name,
             sample_blueprint=body.sample_blueprint,
@@ -546,32 +418,34 @@ async def update_simulator_entity(
     return _map_entity_response(updated)
 
 
-@sandbox_router.delete(
-    "/{sandbox_id}/entities/{entity_id}",
+@router.delete(
+    "/{connection_id}/simulator/entities/{entity_id}",
     status_code=status.HTTP_204_NO_CONTENT,
-    responses={status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse}},
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"model": ApiErrorHttpResponse},
+        status.HTTP_404_NOT_FOUND: {"model": ApiErrorHttpResponse},
+    },
 )
 async def delete_simulator_entity(
-    tenant_id: str,
-    sandbox_id: str,
+    connection_id: str,
     entity_id: str,
-    request: Request,
     _context: Annotated[IdentityContext, Depends(require_flows_write)],
-    uow: Annotated[SimulatorUnitOfWorkPort, Depends(get_simulator_uow)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[
+        DeleteSimulatorEntityUseCase, Depends(get_delete_simulator_entity_use_case)
+    ],
 ) -> Response:
-    """Deletes an entity from `sandbox_id`."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
+    """Deletes an entity from `connection_id`."""
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
-        sandbox_id=sandbox_id,
+        connection_id=connection_id,
         entity_id=entity_id,
     )
     log.info("ip_delete_simulator_entity_http.received")
-    res = await DeleteSimulatorEntityUseCase(uow=uow).execute(
+    res = await use_case.execute(
         DeleteSimulatorEntityCommand(
             tenant_id=effective_tenant_id,
-            sandbox_id=sandbox_id,
+            connection_id=connection_id,
             entity_id=entity_id,
         )
     )
@@ -587,7 +461,7 @@ async def delete_simulator_entity(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@push_router.post(
+@router.post(
     "/{connection_id}/simulate-push",
     response_model=SimulatePushHttpResponse,
     status_code=status.HTTP_202_ACCEPTED,
@@ -599,41 +473,21 @@ async def delete_simulator_entity(
     },
 )
 async def simulate_push(
-    tenant_id: str,
     connection_id: str,
-    request: Request,
     body: SimulatePushHttpRequest,
     _context: Annotated[IdentityContext, Depends(require_sync_trigger)],
-    ip_dp_uow_provider: Annotated[
-        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
-    ],
-    tiered_storage: Annotated[TieredStoragePort, Depends(get_tiered_storage)],
-    verifier: Annotated[InboundVerifierPort, Depends(get_inbound_verifier)],
-    decoder: Annotated[InboundPayloadDecoderPort, Depends(get_inbound_decoder)],
-    ack: Annotated[InboundAckPort, Depends(get_inbound_ack)],
-    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
-    sandbox_reader: Annotated[SimulatorSandboxReaderPort, Depends(get_simulator_sandbox_reader)],
+    effective_tenant_id: Annotated[str, Depends(get_effective_ucp_tenant_id)],
+    use_case: Annotated[TriggerSimulatedPushUseCase, Depends(get_trigger_simulated_push_use_case)],
 ) -> SimulatePushHttpResponse | Response:
-    """Synthesizes N fake records from the Virtual Sandbox entity and pushes them into L1 Ingress."""
-    effective_tenant_id = _resolve_ucp_tenant_id(request, tenant_id)
+    """Synthesizes N fake records from the Simulator connection entity and pushes them into L1 Ingress."""
     log = logger.bind(
         tenant_id=effective_tenant_id,
-        path_tenant_id=tenant_id,
         connection_id=connection_id,
         stream_name=body.stream_name,
         count=body.count,
         delivery_style=body.delivery_style.value,
     )
     log.info("ip_simulate_push_http.received")
-    use_case = TriggerSimulatedPushUseCase(
-        data_plane_uow_provider=ip_dp_uow_provider,
-        tiered_storage=tiered_storage,
-        verifier=verifier,
-        decoder=decoder,
-        ack=ack,
-        token_manager=token_manager,
-        sandbox_reader=sandbox_reader,
-    )
     res = await use_case.execute(
         TriggerSimulatedPushCommand(
             tenant_id=effective_tenant_id,
@@ -664,20 +518,18 @@ async def simulate_push(
     )
 
 
-router = APIRouter()
-router.include_router(sandbox_router)
-router.include_router(push_router)
-
 __all__ = [
     "CreateSimulatorEntityHttpRequest",
-    "CreateSimulatorSandboxHttpRequest",
-    "CreatedSimulatorSandboxHttpResponse",
     "SimulatePushHttpRequest",
     "SimulatePushHttpResponse",
     "SimulatorEntityHttpResponse",
-    "SimulatorSandboxHttpResponse",
     "UpdateSimulatorEntityHttpRequest",
-    "get_simulator_sandbox_reader",
+    "get_create_simulator_entity_use_case",
+    "get_delete_simulator_entity_use_case",
+    "get_list_simulator_entities_use_case",
+    "get_simulator_entity_reader",
     "get_simulator_uow",
+    "get_trigger_simulated_push_use_case",
+    "get_update_simulator_entity_use_case",
     "router",
 ]

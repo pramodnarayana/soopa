@@ -30,12 +30,35 @@ async def _create_sync_connection(
 
 
 @pytest.mark.asyncio
-async def test_sync_runs_trigger_conflict_list_get_and_stream_state_reset(
+async def test_sync_runs_trigger_conflict_list_get_and_entity_checkpoint_reset(
     auth_client: httpx.AsyncClient,
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
     connection_id = await _create_sync_connection(auth_client, tenant_id, "pull-1")
+
+    # 0. Triggering a sync run on an unsubscribed stream returns 404 Not Found
+    unsub_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs",
+        json={"stream_name": "meters"},
+    )
+    assert unsub_res.status_code == 404, unsub_res.text
+    assert unsub_res.json()["code"] == "CONNECTION_ENTITY_NOT_FOUND"
+
+    # Subscribe both entities on the connection
+    for stream_name in ("meters", "interval_reads"):
+        add_res = await auth_client.post(
+            f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities",
+            json={
+                "stream_name": stream_name,
+                "sync_mode": "INCREMENTAL",
+                "schedule": "manual",
+                "primary_key": ["id"],
+                "fields": [{"name": "id", "data_type": "string", "nullable": False}],
+                "cursor_field": "updated_at",
+            },
+        )
+        assert add_res.status_code == 201, add_res.text
 
     # 1. Trigger a pull sync run -> 202 Accepted
     trigger_res = await auth_client.post(
@@ -79,28 +102,28 @@ async def test_sync_runs_trigger_conflict_list_get_and_stream_state_reset(
     assert get_res.status_code == 200, get_res.text
     assert get_res.json()["run_id"] == run_id
 
-    # 5. Resetting a stream with an active PENDING sync run returns 409 Conflict
+    # 5. Resetting an entity with an active PENDING sync run returns 409 Conflict
     active_reset_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/streams/meters/reset"
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/meters/reset-checkpoint"
     )
     assert active_reset_res.status_code == 409, active_reset_res.text
     assert active_reset_res.json()["code"] == "ACTIVE_SYNC_RUN_EXISTS"
 
-    # 6. Reset stream checkpoint cursor on an idle stream -> creates/resets stream state
+    # 6. Reset checkpoint cursor on an idle subscribed entity -> 200 OK
     reset_res = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/streams/interval_reads/reset"
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/interval_reads/reset-checkpoint"
     )
     assert reset_res.status_code == 200, reset_res.text
-    state_data = reset_res.json()
-    assert state_data["connection_id"] == connection_id
-    assert state_data["stream_name"] == "interval_reads"
-    assert state_data["cursor_value"] is None
+    entity_data = reset_res.json()
+    assert entity_data["connection_id"] == connection_id
+    assert entity_data["stream_name"] == "interval_reads"
+    assert entity_data["cursor_value"] is None
 
-    # 7. List stream states for the connection
-    states_res = await auth_client.get(
-        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/streams/state"
+    # 7. List subscribed entities for the connection
+    entities_res = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities"
     )
-    assert states_res.status_code == 200, states_res.text
-    states = states_res.json()
-    assert len(states) == 1
-    assert states[0]["stream_name"] == "interval_reads"
+    assert entities_res.status_code == 200, entities_res.text
+    entities = entities_res.json()
+    assert len(entities) == 2
+    assert [e["stream_name"] for e in entities] == ["interval_reads", "meters"]

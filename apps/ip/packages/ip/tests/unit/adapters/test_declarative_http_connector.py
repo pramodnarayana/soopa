@@ -12,7 +12,6 @@ from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.declarative_http_connector import (
     DeclarativeHttpConnector,
 )
-from ip.engine.domain.connection.catalog import ConnectorProperty, ConnectorPropertySchema
 from ip.engine.domain.connection.enums import (
     PaginationType,
     PropertyType,
@@ -22,6 +21,7 @@ from ip.engine.domain.connection.http_spec import (
     HttpActionSpec,
     PaginationConfig,
 )
+from ip.engine.domain.connection.property_schema import ConnectorProperty, ConnectorPropertySchema
 from ip.engine.domain.exceptions import (
     EndpointSecurityViolationError,
     FailureDisposition,

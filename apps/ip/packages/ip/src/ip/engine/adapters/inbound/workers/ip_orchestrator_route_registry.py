@@ -12,6 +12,7 @@ from ip.engine.adapters.inbound.workers.ip_disposition import (
 )
 from ip.engine.adapters.inbound.workers.ip_payload_dtos import (
     IpCanonicalRecordChunkPayloadDTO,
+    IpConnectionEntitySubscribedPayloadDTO,
     IpFeederOutageDetectedPayloadDTO,
     IpGenerationCompletedPayloadDTO,
     IpInboundRecordChunkPayloadDTO,
@@ -22,6 +23,9 @@ from ip.engine.adapters.inbound.workers.ip_payload_dtos import (
 )
 from ip.engine.application.use_cases.intervals.process_interval_batch_use_case import (
     ProcessIntervalBatchCommand,
+)
+from ip.engine.application.use_cases.normalization.auto_bind_default_transformation_use_case import (
+    AutoBindDefaultTransformationCommand,
 )
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
@@ -52,6 +56,7 @@ from ip.engine.application.use_cases.stitch.execute_stitch_worker_tick_use_case 
     ExecuteStitchWorkerTickCommand,
 )
 from ip.engine.application.worker_ports import (
+    IpAutoBindDefaultTransformationExecutorPort,
     IpBackfillStreamNormalizationExecutorPort,
     IpNormalizeReplicaExecutorPort,
     IpProcessInboundRangeExecutorPort,
@@ -110,6 +115,8 @@ class IpOrchestratorRouteRegistry:
         dp_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
         normalize_use_case: IpNormalizeReplicaExecutorPort,
         backfill_use_case: IpBackfillStreamNormalizationExecutorPort,
+        auto_bind_transformation_use_case: IpAutoBindDefaultTransformationExecutorPort
+        | None = None,
         process_inbound_range_use_case: IpProcessInboundRangeExecutorPort | None = None,
         process_interval_batch_use_case: IpProcessIntervalBatchExecutorPort | None = None,
         extractor_registry: RecordExtractorRegistry | None = None,
@@ -124,6 +131,7 @@ class IpOrchestratorRouteRegistry:
         self._dp_uow_provider = dp_uow_provider
         self._normalize_use_case = normalize_use_case
         self._backfill_use_case = backfill_use_case
+        self._auto_bind_transformation_use_case = auto_bind_transformation_use_case
         self._process_inbound_range_use_case = process_inbound_range_use_case
         self._process_interval_batch_use_case = process_interval_batch_use_case
         self._extractor_registry = extractor_registry or RecordExtractorRegistry()
@@ -152,6 +160,10 @@ class IpOrchestratorRouteRegistry:
         dispatcher.subscribe(
             IpEventType.NORMALIZED_RECORD_CREATED.value,
             self.handle_normalized_record_created,
+        )
+        dispatcher.subscribe(
+            IpEventType.CONNECTION_ENTITY_SUBSCRIBED.value,
+            self.handle_connection_entity_subscribed,
         )
         dispatcher.subscribe(
             IpEventType.TRANSFORMATION_CHANGED.value,
@@ -553,6 +565,31 @@ class IpOrchestratorRouteRegistry:
 
         return await self._run_with_idempotency(envelope, dto.tenant_id, _execute_chunk)
 
+    async def handle_connection_entity_subscribed(self, envelope: EventEnvelope) -> ConsumerAction:
+        parsed_res = IpConnectionEntitySubscribedPayloadDTO.from_envelope(envelope)
+        if parsed_res.is_err:
+            return IpWorkerResultDispositionHandler.to_consumer_action(envelope, parsed_res)
+        dto = parsed_res.unwrap()
+
+        if self._auto_bind_transformation_use_case is None:
+            logger.info(
+                "ip_orchestrator_entity_subscribed_acknowledged_no_auto_binder",
+                event_id=envelope.id,
+                tenant_id=dto.tenant_id,
+                connection_id=dto.connection_id,
+                stream_name=dto.stream_name,
+            )
+            return ConsumerAction.ACK
+
+        res = await self._auto_bind_transformation_use_case.execute(
+            AutoBindDefaultTransformationCommand(
+                tenant_id=dto.tenant_id,
+                connection_id=dto.connection_id,
+                stream_name=dto.stream_name,
+            )
+        )
+        return IpWorkerResultDispositionHandler.to_consumer_action(envelope, res)
+
     async def handle_stream_backfill_requested(self, envelope: EventEnvelope) -> ConsumerAction:
         parsed_res = IpStreamBackfillPayloadDTO.from_envelope(envelope)
         if parsed_res.is_err:
@@ -741,6 +778,7 @@ class IpOrchestratorRouteRegistry:
 
 
 __all__ = [
+    "IpAutoBindDefaultTransformationExecutorPort",
     "IpBackfillStreamNormalizationExecutorPort",
     "IpNormalizeReplicaExecutorPort",
     "IpOrchestratorRouteRegistry",

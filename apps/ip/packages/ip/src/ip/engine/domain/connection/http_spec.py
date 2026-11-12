@@ -9,8 +9,8 @@ from typing import Literal
 
 from seedwork.domain.types import JsonValue
 
-from ip.engine.domain.connection.catalog import ConnectorPropertySchema
 from ip.engine.domain.connection.enums import AuthType, PaginationType
+from ip.engine.domain.connection.property_schema import ConnectorPropertySchema
 from ip.engine.domain.replication.stream_definition import StreamDefinition
 
 __all__ = [

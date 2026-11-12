@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.connection.catalog import (
-    ConnectorProperty,
-    ConnectorPropertySchema,
-    DropdownOption,
-    OAuthConfig,
-)
 from ip.engine.domain.connection.enums import (
     PaginationType,
     PropertyType,
@@ -16,6 +10,12 @@ from ip.engine.domain.connection.http_spec import (
     DeclarativeManifest,
     HttpActionSpec,
     PaginationConfig,
+)
+from ip.engine.domain.connection.property_schema import (
+    ConnectorProperty,
+    ConnectorPropertySchema,
+    DropdownOption,
+    OAuthConfig,
 )
 
 SALESFORCE_PROPERTY_SCHEMA = ConnectorPropertySchema(

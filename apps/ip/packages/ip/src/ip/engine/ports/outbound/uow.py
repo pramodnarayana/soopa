@@ -13,7 +13,9 @@ from strace.ports import TraceRepositoryPort
 
 from ip.engine.domain.exceptions import Result, TenantShardNotFoundError
 from ip.engine.ports.outbound.batch_manifest_repository_port import BatchManifestRepositoryPort
-from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from ip.engine.ports.outbound.connection_entity_repository_port import (
+    ConnectionEntityRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.entity_map_repository_port import GlobalEntityMapRepositoryPort
 from ip.engine.ports.outbound.inbound_record_repository_port import InboundRecordRepositoryPort
@@ -40,7 +42,6 @@ from ip.engine.ports.outbound.replica_rejection_repository_port import (
 from ip.engine.ports.outbound.stitch_repository_port import (
     StitchRepositoryPort,
 )
-from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.transformation_repository_port import (
     TransformationRepositoryPort,
@@ -64,8 +65,7 @@ class IpControlPlaneUnitOfWorkPort(UnitOfWorkPort, Protocol):
     """
 
     connections: ConnectionRepositoryPort
-    catalogs: CatalogRepositoryPort
-    stream_states: StreamStateRepositoryPort
+    entities: ConnectionEntityRepositoryPort
     sync_runs: SyncRunRepositoryPort
     transformations: TransformationRepositoryPort
     stitches: StitchRepositoryPort

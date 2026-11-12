@@ -99,13 +99,14 @@ class StreamSchemaHttpResponse(BaseModel):
     primary_key: list[str]
     cursor_field: str | None = None
     supported_sync_modes: list[str]
+    default_transformation_id: str | None = None
+    default_transformation_version: int = 1
 
 
 class DiscoveredCatalogHttpResponse(BaseModel):
     """Discovered stream catalog metadata."""
 
     connection_id: str
-    catalog_version: int
     catalog_hash: str
     streams: list[StreamSchemaHttpResponse]
     discovered_at: str

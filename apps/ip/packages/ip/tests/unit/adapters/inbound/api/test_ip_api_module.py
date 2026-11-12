@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from database.router import DatabaseRouter
 from fastapi import FastAPI, HTTPException
@@ -11,6 +13,7 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_catalog_registry,
     get_cipher,
     get_connectors,
+    get_effective_ucp_tenant_id,
     get_inbound_ack,
     get_inbound_decoder,
     get_inbound_verifier,
@@ -21,20 +24,41 @@ from ip.engine.adapters.inbound.api.dependencies import (
     get_transformer_registry,
     get_workflow_definition_registry,
     require_canonical_records_read,
+    require_flows_read,
+    require_flows_write,
     require_raw_records_read,
+    require_sync_trigger,
     require_tenant_member,
+    resolve_tenant_id_by_slug,
 )
 from ip.engine.adapters.inbound.api.dtos.error_dtos import (
     ErrorDetailHttpResponse,
     from_ip_error,
     to_error_response,
 )
-from ip.engine.domain.authorization import IpPermission, IpRole
+from ip.engine.domain.authorization import IpPermission, IpRole, TenantSummary
 from ip.engine.domain.exceptions import ConnectorNotFoundError
 from ip.engine.module import IpApiModule
+from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from seedwork.infra.api import LaunchableApiModule
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
+
+
+class _StubTenantRepository(TenantRepositoryPort):
+    def __init__(
+        self,
+        *,
+        by_slug: dict[str, TenantSummary] | None = None,
+        by_idp: dict[str, TenantSummary] | None = None,
+    ) -> None:
+        self._by_slug = by_slug or {}
+        self._by_idp = by_idp or {}
+
+    async def get_by_idp_tenant_id(self, idp_tenant_id: str) -> TenantSummary | None:
+        return self._by_idp.get(idp_tenant_id.strip())
+
+    async def get_by_slug(self, tenant_slug: str) -> TenantSummary | None:
+        return self._by_slug.get(tenant_slug.strip().lower())
 
 
 def _make_request(app: FastAPI, identity: IdentityContext | None = None) -> Request:
@@ -52,7 +76,7 @@ def _make_request(app: FastAPI, identity: IdentityContext | None = None) -> Requ
 
 
 @pytest.mark.asyncio
-async def test_ip_api_module_registers_routes_with_lifecycle_hooks() -> None:
+async def test_ip_api_module_registers_routes_with_rbac_guards() -> None:
     module = IpApiModule()
     assert isinstance(module, LaunchableApiModule)
     assert module.name == "ip"
@@ -79,7 +103,7 @@ async def test_ip_api_module_registers_routes_with_lifecycle_hooks() -> None:
         dep_calls = {dep.call for dep in catalog_route.dependant.dependencies}
         assert require_tenant_member in dep_calls
     assert "/api/v1/tenants/{tenant_id}/ip/connections" in route_paths
-    assert "/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}" in route_paths
+    assert "/api/v1/webhooks/{tenant_slug}/{app_id}/{connection_id}" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/traces/{trace_id}" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/transformations/transformers" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/transformations/preview" in route_paths
@@ -88,7 +112,15 @@ async def test_ip_api_module_registers_routes_with_lifecycle_hooks() -> None:
         in route_paths
     )
     assert "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs" in route_paths
-    assert "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/streams/state" in route_paths
+    assert "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities" in route_paths
+    assert (
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/{stream_name}"
+        in route_paths
+    )
+    assert (
+        "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/{stream_name}/reset-checkpoint"
+        in route_paths
+    )
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/definitions" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/stitches" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/stitches/dispatch" in route_paths
@@ -98,7 +130,23 @@ async def test_ip_api_module_registers_routes_with_lifecycle_hooks() -> None:
     assert "/api/v1/tenants/{tenant_id}/ip/records/replica" in route_paths
     assert "/api/v1/tenants/{tenant_id}/ip/records/inbound" in route_paths
 
-    router = DatabaseRouter(global_db_url="postgresql+asyncpg://localhost:5432/test")
+    # Verify strict RBAC guards on connection entities and sync-runs routes
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        dep_calls = {dep.call for dep in route.dependant.dependencies}
+        if route.path == "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities":
+            if "GET" in route.methods:
+                assert require_flows_read in dep_calls
+            if "POST" in route.methods:
+                assert require_flows_write in dep_calls
+        if route.path == "/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/sync-runs":
+            if "GET" in route.methods:
+                assert require_flows_read in dep_calls
+            if "POST" in route.methods:
+                assert require_sync_trigger in dep_calls
+
+    router = DatabaseRouter(global_db_url=os.environ.get("DATABASE_URL", "sqlite+aiosqlite://"))
     await module.startup(app, router)
     assert app.state.ip_container is not None
     assert app.state.ip_tenant_resolver is not None
@@ -113,50 +161,73 @@ async def test_ip_api_module_registers_routes_with_lifecycle_hooks() -> None:
 async def test_require_tenant_member_rejects_unauthenticated_requests() -> None:
     app = FastAPI()
     IpApiModule().register_routes(app)
-    session = AsyncSession()
+    tenant_repo = _StubTenantRepository()
     unauth_req = _make_request(app, identity=None)
 
     with pytest.raises(HTTPException) as exc_info:
         await require_tenant_member(
             request=unauth_req,
-            session=session,
+            tenant_repo=tenant_repo,
             tenant_id="ten_01",
         )
     assert exc_info.value.status_code == 401
-    await session.close()
 
 
 @pytest.mark.asyncio
-async def test_require_tenant_member_validates_tenant_scope() -> None:
+async def test_require_tenant_member_validates_federated_tenant_scope() -> None:
     app = FastAPI()
     IpApiModule().register_routes(app)
-    session = AsyncSession()
+    tenant_repo = _StubTenantRepository(
+        by_idp={
+            "org_01": TenantSummary(
+                id="ten_01",
+                slug="acme-tenant",
+                idp_tenant_id="org_01",
+                name="Acme",
+            )
+        }
+    )
     member_identity = IdentityContext(
         subject="usr_01",
         claims={},
-        tenant_id="ten_01",
-        authorized_tenants={"ten_01"},
+        tenant_id="org_01",
+        authorized_tenants={"org_01"},
         tenant_mapping={"org_01": "ten_01"},
+        tenant_roles={"org_01": (IpRole.CUSTOMER_SUPPORT.value,)},
     )
     member_req = _make_request(app, identity=member_identity)
     resolved = await require_tenant_member(
         request=member_req,
-        session=session,
-        tenant_id="ten_01",
+        tenant_repo=tenant_repo,
+        tenant_id="org_01",
     )
     assert resolved.subject == "usr_01"
     assert member_req.state.ucp_tenant_id == "ten_01"
+
+    effective_id = get_effective_ucp_tenant_id(
+        request=member_req,
+        tenant_id="org_01",
+        _identity=resolved,
+    )
+    assert effective_id == "ten_01"
+
+    flows_read_ctx = await require_flows_read(identity=resolved, tenant_id=effective_id)
+    assert flows_read_ctx.subject == "usr_01"
+    sync_ctx = await require_sync_trigger(identity=resolved, tenant_id=effective_id)
+    assert sync_ctx.subject == "usr_01"
+    with pytest.raises(HTTPException) as support_write_exc:
+        await require_flows_write(identity=resolved, tenant_id=effective_id)
+    assert support_write_exc.value.status_code == 403
 
     other_req = _make_request(app, identity=member_identity)
     with pytest.raises(HTTPException) as forbidden_exc:
         await require_tenant_member(
             request=other_req,
-            session=session,
+            tenant_repo=tenant_repo,
             tenant_id="ten_unauthorized",
         )
     assert forbidden_exc.value.status_code == 403
     assert PLATFORM_TENANT_ID not in member_identity.authorized_tenants
-    await session.close()
 
 
 @pytest.mark.asyncio
@@ -192,6 +263,10 @@ async def test_ip_permission_rbac_enforcement() -> None:
         await require_raw_records_read(identity=customer_identity, tenant_id="ten_01")
     assert exc_info.value.status_code == 403
     assert IpPermission.IP_RECORDS_RAW_READ.value in exc_info.value.detail
+
+    with pytest.raises(HTTPException) as sync_exc:
+        await require_sync_trigger(identity=customer_identity, tenant_id="ten_01")
+    assert sync_exc.value.status_code == 403
 
     with pytest.raises(HTTPException) as cross_exc:
         await require_canonical_records_read(identity=customer_identity, tenant_id="ten_other")
@@ -253,3 +328,50 @@ def test_ip_error_dto_responses_map_domain_errors_to_http_status() -> None:
 
     ip_err_resp = from_ip_error(ConnectorNotFoundError.for_app("unknown_app"), trace_id="ip_trc_02")
     assert ip_err_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_tenant_id_by_slug_enforces_lookup_isolation() -> None:
+    app = FastAPI()
+    tenant_repo = _StubTenantRepository(
+        by_slug={
+            "acme-tenant": TenantSummary(
+                id="ten_01",
+                slug="acme-tenant",
+                idp_tenant_id="org_01",
+                name="Acme",
+            )
+        }
+    )
+
+    unauth_req = _make_request(app, identity=None)
+    resolved_unauth = await resolve_tenant_id_by_slug(
+        request=unauth_req,
+        tenant_repo=tenant_repo,
+        tenant_slug="acme-tenant",
+    )
+    assert resolved_unauth == "ten_01"
+
+    missing_req = _make_request(app, identity=None)
+    with pytest.raises(HTTPException) as missing_exc:
+        await resolve_tenant_id_by_slug(
+            request=missing_req,
+            tenant_repo=tenant_repo,
+            tenant_slug="unknown-tenant",
+        )
+    assert missing_exc.value.status_code == 404
+
+    cross_tenant_identity = IdentityContext(
+        subject="usr_other",
+        claims={},
+        tenant_id="ten_02",
+        authorized_tenants={"ten_02"},
+    )
+    cross_req = _make_request(app, identity=cross_tenant_identity)
+    with pytest.raises(HTTPException) as cross_exc:
+        await resolve_tenant_id_by_slug(
+            request=cross_req,
+            tenant_repo=tenant_repo,
+            tenant_slug="acme-tenant",
+        )
+    assert cross_exc.value.status_code == 403

@@ -10,6 +10,28 @@ class SyncMode(StrEnum):
     INCREMENTAL = "INCREMENTAL"
 
 
+class EntitySyncSchedule(StrEnum):
+    """Cadence policy for automated pull synchronization of a subscribed connection entity."""
+
+    MANUAL = "manual"
+    EVERY_5M = "5m"
+    EVERY_15M = "15m"
+    HOURLY = "1h"
+    EVERY_6H = "6h"
+    DAILY = "24h"
+
+
+class EntitySyncFrom(StrEnum):
+    """Historical lookback boundary policy for a subscribed connection entity."""
+
+    ALL = "all"
+    LAST_24H = "24h"
+    LAST_7D = "7d"
+    LAST_30D = "30d"
+    LAST_90D = "90d"
+    CUSTOM = "custom"
+
+
 class IngestionMode(StrEnum):
     """Strategy and mode used to capture an inbound record."""
 

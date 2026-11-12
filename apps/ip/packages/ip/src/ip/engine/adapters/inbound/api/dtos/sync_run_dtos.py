@@ -1,4 +1,4 @@
-"""Pydantic HTTP request and response DTOs for SyncRuns and StreamState checkpoints."""
+"""Pydantic HTTP request and response DTOs for SyncRuns."""
 
 from __future__ import annotations
 
@@ -40,21 +40,7 @@ class SyncRunHttpResponse(BaseModel):
     created_at: datetime
 
 
-class StreamStateHttpResponse(BaseModel):
-    """HTTP response DTO representing an incremental stream state checkpoint."""
-
-    state_id: str
-    tenant_id: str
-    connection_id: str
-    stream_name: str
-    cursor_field: str | None = None
-    cursor_value: str | None = None
-    records_synced_count: int
-    last_synced_at: datetime
-
-
 __all__ = [
-    "StreamStateHttpResponse",
     "SyncRunHttpResponse",
     "TriggerSyncRunHttpRequest",
 ]

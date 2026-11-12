@@ -1,4 +1,4 @@
-"""SAVEPOINT narrow integration tests for Universal Simulator Virtual Sandboxes (`ip.simulator_sandboxes` & `ip.simulator_entities`)."""
+"""SAVEPOINT narrow integration tests for connection-scoped Universal Simulator Entities (`ip.simulator_entities`)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from ip.engine.adapters.inbound.api.dependencies import (
 )
 from ip.engine.adapters.outbound.database.models.data_plane import InboundRecordModel
 from ip.module import IpApiModule
+from ip.solutions.connectors.sandbox.universal.models import SimulatorEntityRecord
 from security.provider import SecurityProvider
 from seedwork import generate_id
 from sqlalchemy import select
@@ -58,7 +59,7 @@ def _build_test_app(
 
 
 @pytest.mark.asyncio
-async def test_sandbox_connection_lifecycle_persists_simulated_push_records(
+async def test_simulator_connection_entity_lifecycle_persists_push_records(
     global_session: GlobalSession,
     tenant_session: TenantSession,
     transactional_router: TransactionalTestRouter,
@@ -80,21 +81,44 @@ async def test_sandbox_connection_lifecycle_persists_simulated_push_records(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        # 1. Provision Virtual Sandbox
-        sbx_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes",
-            json={"name": "Integration ERP Sandbox"},
+        # 1. Pre-flight Check (`NO_AUTH`)
+        check_ok = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/check",
+            json={
+                "app_id": "universal_simulator",
+                "auth_type": "NO_AUTH",
+                "public_config": {"seed": 42, "records_per_pull": 25},
+                "raw_credentials": {},
+            },
         )
-        assert sbx_resp.status_code == 201
-        sbx_body = sbx_resp.json()
-        sandbox_id = sbx_body["id"]
-        api_key = sbx_body["api_key"]
-        assert sandbox_id.startswith("sbx_")
-        assert api_key.startswith("sbx_key_")
+        assert check_ok.status_code == 200
+        assert check_ok.json()["success"] is True
 
-        # 2. Configure Entity inside the Virtual Sandbox
+        # 2. Create Simulator Connection (`NO_AUTH`)
+        conn_resp = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections",
+            json={
+                "app_id": "universal_simulator",
+                "name": "ERP Simulator Connection",
+                "auth_type": "NO_AUTH",
+                "public_config": {"seed": 42, "records_per_pull": 25},
+                "raw_credentials": {},
+                "endpoint_for_fingerprint": "ERP Simulator Connection",
+            },
+        )
+        assert conn_resp.status_code == 201
+        connection_id = conn_resp.json()["id"]
+
+        # 3. Discover before any entities exist -> 200 OK with empty streams
+        empty_disc_resp = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/discover"
+        )
+        assert empty_disc_resp.status_code == 200
+        assert empty_disc_resp.json()["streams"] == []
+
+        # 4. Create Entity inside the Simulator Connection
         ent_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}/entities",
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities",
             json={
                 "entity_name": "purchase_orders",
                 "sample_blueprint": {
@@ -110,12 +134,13 @@ async def test_sandbox_connection_lifecycle_persists_simulated_push_records(
         ent_body = ent_resp.json()
         entity_id = ent_body["id"]
         assert entity_id.startswith("sim_ent_")
+        assert ent_body["connection_id"] == connection_id
         assert ent_body["primary_key_field"] == "po_id"
         assert ent_body["version"] == 1
 
-        # 3. PATCH Entity to verify schema re-inference, TIMESERIES_COLUMNAR wire contract, and version bump
+        # 5. PATCH Entity to verify schema re-inference, TIMESERIES_COLUMNAR wire contract, version bump
         patch_resp = await client.patch(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}/entities/{entity_id}",
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities/{entity_id}",
             json={
                 "records_per_pull": 30,
                 "velocity_mode": "TIMESERIES_COLUMNAR",
@@ -135,54 +160,12 @@ async def test_sandbox_connection_lifecycle_persists_simulated_push_records(
         assert patched_body["velocity_mode"] == "TIMESERIES_COLUMNAR"
         assert "currency" in patched_body["inferred_json_schema"]["properties"]
 
-        # 4. Pre-flight Check via Component 1 (`POST /connections/check`)
-        check_bad = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/check",
-            json={
-                "app_id": "universal_simulator",
-                "auth_type": "API_KEY",
-                "public_config": {"sandbox_id": sandbox_id, "seed": 42},
-                "raw_credentials": {"api_key": "sbx_key_invalid"},
-            },
-        )
-        assert check_bad.status_code == 200
-        assert check_bad.json()["success"] is False
-
-        check_ok = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/check",
-            json={
-                "app_id": "universal_simulator",
-                "auth_type": "API_KEY",
-                "public_config": {"sandbox_id": sandbox_id, "seed": 42},
-                "raw_credentials": {"api_key": api_key},
-            },
-        )
-        assert check_ok.status_code == 200
-        assert check_ok.json()["success"] is True
-
-        # 5. Create Connection in Component 1 (`POST /connections`)
-        conn_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections",
-            json={
-                "app_id": "universal_simulator",
-                "name": "ERP Sandbox Connection",
-                "auth_type": "API_KEY",
-                "public_config": {"sandbox_id": sandbox_id, "seed": 42},
-                "raw_credentials": {"api_key": api_key},
-                "endpoint_for_fingerprint": sandbox_id,
-            },
-        )
-        assert conn_resp.status_code == 201
-        connection_id = conn_resp.json()["id"]
-        assert "streams" not in conn_resp.json()["public_config"]
-
-        # 6. Discover Entities via Component 2 (`POST /connections/{id}/discover`)
+        # 6. Discover Entities -> returns `purchase_orders`
         disc_resp = await client.post(
             f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/discover"
         )
         assert disc_resp.status_code == 200
         disc_body = disc_resp.json()
-        assert disc_body["catalog_version"] == 1
         assert [s["name"] for s in disc_body["streams"]] == ["purchase_orders"]
 
         # 7. Trigger Simulated Push (`POST /connections/{id}/simulate-push`) -> persists L1 inbound_records on ip_shard
@@ -215,27 +198,28 @@ async def test_sandbox_connection_lifecycle_persists_simulated_push_records(
         )
         assert len(persisted_rows) == 3
 
-        # 8. Deleting Connection does NOT delete the decoupled Virtual Sandbox or its Entities
+        # 8. Permanently deleting Connection cascades to its `ip.simulator_entities`
         del_conn_resp = await client.delete(
             f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}?permanent=true"
         )
         assert del_conn_resp.status_code == 204
 
-        list_ent_resp = await client.get(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}/entities"
+        remaining_entities = (
+            (
+                await global_session.execute(
+                    select(SimulatorEntityRecord).where(
+                        SimulatorEntityRecord.connection_id == connection_id
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-        assert list_ent_resp.status_code == 200
-        assert len(list_ent_resp.json()) == 1
-
-        # 9. Deleting Virtual Sandbox cascades to its Entities
-        del_sbx_resp = await client.delete(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}"
-        )
-        assert del_sbx_resp.status_code == 204
+        assert len(remaining_entities) == 0
 
 
 @pytest.mark.asyncio
-async def test_simulator_duplicate_conflicts_recover_via_savepoint(
+async def test_simulator_duplicate_entity_conflict_recovers_via_savepoint(
     global_session: GlobalSession,
     transactional_router: TransactionalTestRouter,
     seeded_ip_tenant: str,
@@ -256,21 +240,22 @@ async def test_simulator_duplicate_conflicts_recover_via_savepoint(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        sbx_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes",
-            json={"name": "NetSuite ERP Sandbox"},
+        conn_resp = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections",
+            json={
+                "app_id": "universal_simulator",
+                "name": "NetSuite Simulator",
+                "auth_type": "NO_AUTH",
+                "public_config": {"seed": 42},
+                "raw_credentials": {},
+                "endpoint_for_fingerprint": "NetSuite Simulator",
+            },
         )
-        assert sbx_resp.status_code == 201
-        sandbox_id = sbx_resp.json()["id"]
-
-        dup_sbx_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes",
-            json={"name": "NetSuite ERP Sandbox"},
-        )
-        assert dup_sbx_resp.status_code == 409
+        assert conn_resp.status_code == 201
+        connection_id = conn_resp.json()["id"]
 
         ent_ok = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}/entities",
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities",
             json={
                 "entity_name": "customers",
                 "sample_blueprint": {"customer_id": "CUST-01", "email": "a@b.org"},
@@ -279,7 +264,7 @@ async def test_simulator_duplicate_conflicts_recover_via_savepoint(
         assert ent_ok.status_code == 201
 
         dup_ent_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}/entities",
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities",
             json={
                 "entity_name": "customers",
                 "sample_blueprint": {"customer_id": "CUST-02", "email": "c@d.org"},
@@ -288,14 +273,14 @@ async def test_simulator_duplicate_conflicts_recover_via_savepoint(
         assert dup_ent_resp.status_code == 409
 
         list_after_conflict = await client.get(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes/{sandbox_id}/entities"
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities"
         )
         assert list_after_conflict.status_code == 200
         assert len(list_after_conflict.json()) == 1
 
 
 @pytest.mark.asyncio
-async def test_simulator_enforces_cross_tenant_sandbox_isolation(
+async def test_simulator_enforces_cross_tenant_connection_isolation(
     global_session: GlobalSession,
     transactional_router: TransactionalTestRouter,
     seeded_ip_tenant: str,
@@ -326,12 +311,29 @@ async def test_simulator_enforces_cross_tenant_sandbox_isolation(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        sbx_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes",
-            json={"name": "Tenant Alpha Private Sandbox"},
+        conn_resp = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections",
+            json={
+                "app_id": "universal_simulator",
+                "name": "Tenant Alpha Private Simulator",
+                "auth_type": "NO_AUTH",
+                "public_config": {"seed": 42},
+                "raw_credentials": {},
+                "endpoint_for_fingerprint": "Tenant Alpha Private Simulator",
+            },
         )
-        assert sbx_resp.status_code == 201
-        sandbox_id = sbx_resp.json()["id"]
+        assert conn_resp.status_code == 201
+        connection_id = conn_resp.json()["id"]
+
+        ent_resp = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities",
+            json={
+                "entity_name": "invoices",
+                "sample_blueprint": {"invoice_id": "INV-01"},
+            },
+        )
+        assert ent_resp.status_code == 201
+        entity_id = ent_resp.json()["id"]
 
         active_identity["current"] = IdentityContext(
             subject="usr_other_admin",
@@ -341,12 +343,12 @@ async def test_simulator_enforces_cross_tenant_sandbox_isolation(
             roles=(StandardRole.TENANT_ADMIN.value,),
         )
         cross_get = await client.get(
-            f"/api/v1/tenants/{other_tenant_id}/ip/simulator/sandboxes/{sandbox_id}"
+            f"/api/v1/tenants/{other_tenant_id}/ip/connections/{connection_id}/simulator/entities"
         )
         assert cross_get.status_code == 404
 
         cross_del = await client.delete(
-            f"/api/v1/tenants/{other_tenant_id}/ip/simulator/sandboxes/{sandbox_id}"
+            f"/api/v1/tenants/{other_tenant_id}/ip/connections/{connection_id}/simulator/entities/{entity_id}"
         )
         assert cross_del.status_code == 404
 
@@ -373,11 +375,19 @@ async def test_simulator_enforces_granular_rbac_permissions(
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        sbx_resp = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes",
-            json={"name": "RBAC Controlled Sandbox"},
+        conn_resp = await client.post(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections",
+            json={
+                "app_id": "universal_simulator",
+                "name": "RBAC Controlled Simulator",
+                "auth_type": "NO_AUTH",
+                "public_config": {"seed": 42},
+                "raw_credentials": {},
+                "endpoint_for_fingerprint": "RBAC Controlled Simulator",
+            },
         )
-        assert sbx_resp.status_code == 201
+        assert conn_resp.status_code == 201
+        connection_id = conn_resp.json()["id"]
 
         active_identity["current"] = IdentityContext(
             subject="usr_customer_ro",
@@ -387,19 +397,22 @@ async def test_simulator_enforces_granular_rbac_permissions(
             roles=(StandardRole.CUSTOMER.value,),
         )
         customer_list = await client.get(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes"
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities"
         )
         assert customer_list.status_code == 200
-        assert len(customer_list.json()) == 1
+        assert customer_list.json() == []
 
         customer_post = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes",
-            json={"name": "Unauthorized Customer Sandbox"},
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities",
+            json={
+                "entity_name": "unauthorized_stream",
+                "sample_blueprint": {"id": "REC-1"},
+            },
         )
         assert customer_post.status_code == 403
 
         customer_push = await client.post(
-            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/conn_fake/simulate-push",
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulate-push",
             json={"stream_name": "customers", "count": 1},
         )
         assert customer_push.status_code == 403
@@ -411,5 +424,7 @@ async def test_simulator_enforces_granular_rbac_permissions(
             authorized_tenants={seeded_ip_tenant},
             roles=(StandardRole.VIEWER.value,),
         )
-        viewer_get = await client.get(f"/api/v1/tenants/{seeded_ip_tenant}/ip/simulator/sandboxes")
+        viewer_get = await client.get(
+            f"/api/v1/tenants/{seeded_ip_tenant}/ip/connections/{connection_id}/simulator/entities"
+        )
         assert viewer_get.status_code == 403

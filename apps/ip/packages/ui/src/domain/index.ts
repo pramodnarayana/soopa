@@ -1,6 +1,7 @@
 export * from './catalog';
 export * from './catalog-auth';
 export * from './connection';
+export * from './connection-entity';
 export * from './dag/compute-dag-layout';
 export * from './enums';
 export * from './intervals';

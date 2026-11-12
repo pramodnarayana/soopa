@@ -107,7 +107,7 @@ export interface IpConnectionsPageProps {
 export function IpConnectionsPage({
   initialTab = MAIN_TAB_DIRECTORY,
 }: IpConnectionsPageProps = {}) {
-  const { navigation, tenantId, baseUrl } = useIpWorkspace();
+  const { navigation, tenantSlug, baseUrl } = useIpWorkspace();
   const [mainTab, setMainTab] = useState<string>(initialTab);
   const [activeSearch, setActiveSearch] = useState('');
   const [search, setSearch] = useState('');
@@ -366,7 +366,7 @@ export function IpConnectionsPage({
                     catalogApp={catalogApp}
                     appIcon={getAppIcon(catalogApp?.category, catalogApp?.runtimeArchitecture)}
                     baseUrl={baseUrl}
-                    tenantId={tenantId}
+                    tenantSlug={tenantSlug}
                     onOpenDetail={(id) => navigation.toConnectionDetail(id)}
                     onRequestDelete={(c) => setConnectionToDelete(c)}
                   />

@@ -1,44 +1,20 @@
 import {
-  type CreatedSimulatorSandbox,
   type CreateSimulatorEntityInput,
-  type CreateSimulatorSandboxInput,
   SIMULATOR_STREAM_LIMITS,
+  SimulatedPushDeliveryStyle,
+  type SimulatePushInput,
+  type SimulatePushResult,
   type SimulatorEntity,
-  type SimulatorSandbox,
   SimulatorVelocityMode,
   type UpdateSimulatorEntityInput,
 } from '../../../domain/simulator';
-import type {
-  CreatedSimulatorSandboxWire,
-  SimulatorEntityWire,
-  SimulatorSandboxWire,
-} from '../schemas/simulator.schema';
-
-export function mapSimulatorSandboxFromWire(wire: SimulatorSandboxWire): SimulatorSandbox {
-  return {
-    id: wire.id,
-    tenantId: wire.tenant_id,
-    name: wire.name,
-    apiKeyPrefix: wire.api_key_prefix,
-    createdAt: wire.created_at,
-    updatedAt: wire.updated_at,
-  };
-}
-
-export function mapCreatedSimulatorSandboxFromWire(
-  wire: CreatedSimulatorSandboxWire,
-): CreatedSimulatorSandbox {
-  return {
-    ...mapSimulatorSandboxFromWire(wire),
-    apiKey: wire.api_key,
-  };
-}
+import type { SimulatePushWire, SimulatorEntityWire } from '../schemas/simulator.schema';
 
 export function mapSimulatorEntityFromWire(wire: SimulatorEntityWire): SimulatorEntity {
   return {
     id: wire.id,
     tenantId: wire.tenant_id,
-    sandboxId: wire.sandbox_id,
+    connectionId: wire.connection_id,
     entityName: wire.entity_name,
     primaryKeyField: wire.primary_key_field,
     cursorField: wire.cursor_field,
@@ -51,14 +27,6 @@ export function mapSimulatorEntityFromWire(wire: SimulatorEntityWire): Simulator
     version: wire.version,
     createdAt: wire.created_at,
     updatedAt: wire.updated_at,
-  };
-}
-
-export function mapCreateSimulatorSandboxToWire(
-  input: CreateSimulatorSandboxInput,
-): Record<string, unknown> {
-  return {
-    name: input.name,
   };
 }
 
@@ -107,4 +75,24 @@ export function mapUpdateSimulatorEntityToWire(
     payload.chaos_policy = input.chaosPolicy;
   }
   return payload;
+}
+
+export function mapSimulatePushToWire(input: SimulatePushInput): Record<string, unknown> {
+  return {
+    stream_name: input.streamName,
+    count: input.count ?? 1,
+    delivery_style: input.deliveryStyle ?? SimulatedPushDeliveryStyle.FULL_PAYLOAD,
+    correlation_id: input.correlationId ?? null,
+  };
+}
+
+export function mapSimulatePushFromWire(wire: SimulatePushWire): SimulatePushResult {
+  return {
+    connectionId: wire.connection_id,
+    streamName: wire.stream_name,
+    recordsPushed: wire.records_pushed,
+    recordIds: wire.record_ids,
+    traceIds: wire.trace_ids,
+    status: wire.status,
+  };
 }

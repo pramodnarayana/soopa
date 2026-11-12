@@ -37,8 +37,10 @@ export const ipQueryKeys = {
       ['ip', 'tenant', tenantId, 'connections', 'list', status ?? 'ALL'] as const,
     detail: (tenantId: string, connectionId: string) =>
       ['ip', 'tenant', tenantId, 'connections', 'detail', connectionId] as const,
-    catalog: (tenantId: string, connectionId: string) =>
-      ['ip', 'tenant', tenantId, 'connections', 'catalog', connectionId] as const,
+    discoveredStreams: (tenantId: string, connectionId: string) =>
+      ['ip', 'tenant', tenantId, 'connections', connectionId, 'discovered-streams'] as const,
+    entities: (tenantId: string, connectionId: string) =>
+      ['ip', 'tenant', tenantId, 'connections', connectionId, 'entities'] as const,
   },
   syncRuns: {
     all: (tenantId: string, connectionId: string) =>
@@ -56,8 +58,6 @@ export const ipQueryKeys = {
         'detail',
         runId,
       ] as const,
-    streamStates: (tenantId: string, connectionId: string) =>
-      ['ip', 'tenant', tenantId, 'connections', connectionId, 'stream-states'] as const,
   },
   transformations: {
     transformers: (tenantId: string) =>
@@ -116,6 +116,7 @@ export const ipQueryKeys = {
       ['ip', 'tenant', tenantId, 'traces', 'lineage', traceId] as const,
   },
   records: {
+    all: (tenantId: string) => ['ip', 'tenant', tenantId, 'records'] as const,
     normalized: (tenantId: string, filter?: ListNormalizedRecordsFilter) =>
       [
         'ip',
@@ -213,10 +214,7 @@ export const ipQueryKeys = {
   },
   simulator: {
     all: (tenantId: string) => ['ip', 'tenant', tenantId, 'simulator'] as const,
-    sandboxes: (tenantId: string) => ['ip', 'tenant', tenantId, 'simulator', 'sandboxes'] as const,
-    sandboxDetail: (tenantId: string, sandboxId: string) =>
-      ['ip', 'tenant', tenantId, 'simulator', 'sandboxes', sandboxId] as const,
-    entities: (tenantId: string, sandboxId: string) =>
-      ['ip', 'tenant', tenantId, 'simulator', 'sandboxes', sandboxId, 'entities'] as const,
+    entities: (tenantId: string, connectionId: string) =>
+      ['ip', 'tenant', tenantId, 'connections', connectionId, 'simulator-entities'] as const,
   },
 } as const;

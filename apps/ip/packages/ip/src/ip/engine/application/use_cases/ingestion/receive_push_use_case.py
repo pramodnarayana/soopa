@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import Protocol
 
 import structlog
 from seedwork.domain.types import JsonDict, JsonValue
@@ -68,7 +69,16 @@ class ReceivePushResultDTO:
     is_inlined: bool = True
 
 
-class ReceivePushUseCase:
+class ReceivePushExecutorPort(Protocol):
+    """Inbound port for executing a single L1 push ingestion command."""
+
+    async def execute(self, command: ReceivePushCommand) -> ReceivePushResultDTO: ...
+
+
+ReceivePushExecutorFactory = Callable[[IpDataPlaneUnitOfWorkPort], ReceivePushExecutorPort]
+
+
+class ReceivePushUseCase(ReceivePushExecutorPort):
     """Ingress Gateway coordinator for receiving, verifying, and persisting push notifications in L1."""
 
     def __init__(

@@ -474,6 +474,8 @@ class DeliverOutboundRecordUseCase:
             command=write_cmd,
             public_config=resolved_creds.public_config,
             credentials=resolved_creds.credentials,
+            tenant_id=command.tenant_id,
+            connection_id=command.connection_id,
         )
         was_token_refreshed = resolved_creds.was_refreshed
         if write_result.response_status_code == 401 and resolved_creds.auth_type in (
@@ -497,6 +499,8 @@ class DeliverOutboundRecordUseCase:
                     command=write_cmd,
                     public_config=refreshed_dto.public_config,
                     credentials=refreshed_dto.credentials,
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
                 )
         return write_result, was_token_refreshed
 

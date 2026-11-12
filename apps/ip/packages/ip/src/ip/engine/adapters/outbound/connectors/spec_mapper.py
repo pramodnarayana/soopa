@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ip.engine.domain.connection.catalog import (
+from ip.engine.domain.connection.property_schema import (
     ConnectorProperty,
     ConnectorPropertySchema,
     DropdownOption,

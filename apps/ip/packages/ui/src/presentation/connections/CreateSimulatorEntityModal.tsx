@@ -32,14 +32,14 @@ import {
 export interface CreateSimulatorEntityModalProps {
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  readonly sandboxId: string;
+  readonly connectionId: string;
   readonly editingEntity?: SimulatorEntity | null;
   readonly onProblem: (problem: ApiProblem | null) => void;
   readonly onEntitySaved?: (entity: SimulatorEntity) => void;
 }
 
 export interface CreateSimulatorEntityFormProps {
-  readonly sandboxId: string;
+  readonly connectionId: string;
   readonly editingEntity?: SimulatorEntity | null;
   readonly onProblem: (problem: ApiProblem | null) => void;
   readonly onCancel: () => void;
@@ -139,11 +139,11 @@ export function findDuplicateSimulatorEntityError(
   if (!hasDuplicate) {
     return null;
   }
-  return `An entity named "${cleanName}" already exists in this Virtual Sandbox. Choose a unique entity name.`;
+  return `An entity named "${cleanName}" already exists in this Simulator connection. Choose a unique entity name.`;
 }
 
 export function CreateSimulatorEntityForm({
-  sandboxId,
+  connectionId,
   editingEntity,
   onProblem,
   onCancel,
@@ -170,9 +170,9 @@ export function CreateSimulatorEntityForm({
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const existingEntitiesView = useSimulatorEntitiesQuery(sandboxId);
-  const createMutation = useCreateSimulatorEntityMutation(sandboxId);
-  const updateMutation = useUpdateSimulatorEntityMutation(sandboxId);
+  const existingEntitiesView = useSimulatorEntitiesQuery(connectionId);
+  const createMutation = useCreateSimulatorEntityMutation(connectionId);
+  const updateMutation = useUpdateSimulatorEntityMutation(connectionId);
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   const handleFormatBlueprint = (): void => {
@@ -244,8 +244,8 @@ export function CreateSimulatorEntityForm({
 
     toast.success(
       isEditing
-        ? `Entity "${res.value.entityName}" updated in Virtual Sandbox (v${res.value.version}).`
-        : `Entity "${res.value.entityName}" created in Virtual Sandbox. Run "Discover Entities" when ready to sync.`,
+        ? `Entity "${res.value.entityName}" updated in this Simulator connection (v${res.value.version}).`
+        : `Entity "${res.value.entityName}" created in this Simulator connection.`,
     );
     onEntitySaved?.(res.value);
   };
@@ -273,7 +273,7 @@ export function CreateSimulatorEntityForm({
               setLocalError(null);
               setEntityName(e.target.value);
             }}
-            placeholder="e.g. orders, customers, invoices"
+            placeholder="orders"
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
@@ -282,7 +282,7 @@ export function CreateSimulatorEntityForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="sim-entity-pk">Primary Key Field (optional)</Label>
+          <Label htmlFor="sim-entity-pk">Primary Key</Label>
           <Input
             id="sim-entity-pk"
             name="primary_key_field"
@@ -291,7 +291,7 @@ export function CreateSimulatorEntityForm({
               setLocalError(null);
               setPrimaryKeyField(e.target.value);
             }}
-            placeholder="Auto-detected (e.g. order_id or id)"
+            placeholder="id"
             autoCorrect="off"
             autoCapitalize="off"
             spellCheck={false}
@@ -299,7 +299,7 @@ export function CreateSimulatorEntityForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="sim-entity-cursor">Cursor Timestamp Field</Label>
+          <Label htmlFor="sim-entity-cursor">Cursor</Label>
           <Input
             id="sim-entity-cursor"
             name="cursor_field"
@@ -316,7 +316,7 @@ export function CreateSimulatorEntityForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="sim-entity-batch">Records Generated per Pull</Label>
+          <Label htmlFor="sim-entity-batch">Records per Pull</Label>
           <Input
             id="sim-entity-batch"
             name="records_per_pull"
@@ -335,35 +335,27 @@ export function CreateSimulatorEntityForm({
       <fieldset className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
         <legend className="px-1 text-xs font-medium text-foreground">Stream Velocity Mode</legend>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
             <input
               type="radio"
               name="velocity_mode"
               value={SimulatorVelocityMode.ENTITY_TRANSACTIONAL}
               checked={velocityMode === SimulatorVelocityMode.ENTITY_TRANSACTIONAL}
               onChange={() => setVelocityMode(SimulatorVelocityMode.ENTITY_TRANSACTIONAL)}
-              className="mt-0.5 accent-primary"
+              className="accent-primary"
             />
-            <span>
-              <span className="block font-semibold text-foreground">Transactional Entity</span>
-              <span className="text-muted-foreground">Gear 1 OLTP records (orders, invoices)</span>
-            </span>
+            <span className="font-semibold text-foreground">Transactional Entity</span>
           </label>
-          <label className="flex cursor-pointer items-start gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border bg-card p-2.5 text-xs">
             <input
               type="radio"
               name="velocity_mode"
               value={SimulatorVelocityMode.TIMESERIES_COLUMNAR}
               checked={velocityMode === SimulatorVelocityMode.TIMESERIES_COLUMNAR}
               onChange={() => setVelocityMode(SimulatorVelocityMode.TIMESERIES_COLUMNAR)}
-              className="mt-0.5 accent-primary"
+              className="accent-primary"
             />
-            <span>
-              <span className="block font-semibold text-foreground">Time-Series Columnar</span>
-              <span className="text-muted-foreground">
-                Gear 2 columnar batches (telemetry, logs)
-              </span>
-            </span>
+            <span className="font-semibold text-foreground">Time-Series Columnar</span>
           </label>
         </div>
       </fieldset>
@@ -444,14 +436,14 @@ export function CreateSimulatorEntityForm({
 export function CreateSimulatorEntityModal({
   open,
   onOpenChange,
-  sandboxId,
+  connectionId,
   editingEntity,
   onProblem,
   onEntitySaved,
 }: CreateSimulatorEntityModalProps): React.JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{editingEntity ? 'Edit Entity' : 'Create Entity'}</DialogTitle>
         </DialogHeader>
@@ -459,7 +451,7 @@ export function CreateSimulatorEntityModal({
         {open ? (
           <CreateSimulatorEntityForm
             key={editingEntity?.id ?? 'new'}
-            sandboxId={sandboxId}
+            connectionId={connectionId}
             editingEntity={editingEntity}
             onProblem={onProblem}
             onCancel={() => onOpenChange(false)}

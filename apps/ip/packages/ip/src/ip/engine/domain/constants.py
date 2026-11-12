@@ -16,6 +16,7 @@ __all__ = [
     "DEFAULT_MAX_CAUSATION_DEPTH",
     "DEFAULT_MAX_DELIVERY_ATTEMPTS",
     "DEFAULT_TOKEN_REFRESH_BUFFER_SECONDS",
+    "DEFAULT_WEBHOOK_STREAM",
     "MAX_RETRY_AFTER_SECONDS",
     "REDACTED_SECRET_VALUE",
     "RESERVED_RAW_BYTES_KEY",
@@ -24,6 +25,9 @@ __all__ = [
     "WRAPPED_SCALAR_KEY",
     "IpIdPrefix",
 ]
+
+# ── Layer 1 Inbound Webhook Constants ─────────────────────────────────────────
+DEFAULT_WEBHOOK_STREAM: Final[str] = "events"
 
 # ── Storage & Payload Inlining Constants ─────────────────────────────────────
 # Payloads below this threshold are inlined into PostgreSQL JSONB; larger payloads offload to S3.

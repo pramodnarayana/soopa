@@ -16,28 +16,29 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
 )
 from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
     ReceivePushCommand,
-    ReceivePushUseCase,
+    ReceivePushExecutorFactory,
 )
 from ip.engine.domain.exceptions import (
     IpError,
     IpErrorCode,
     Result,
 )
-from ip.engine.ports.outbound.inbound_ack_port import InboundAckPort
-from ip.engine.ports.outbound.inbound_payload_decoder_port import InboundPayloadDecoderPort
-from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
-from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.uow import IpDataPlaneUnitOfWorkProviderPort
 from ip.solutions.connectors.sandbox.universal.dto import entity_dto_to_stream_spec
 from ip.solutions.connectors.sandbox.universal.inference import (
     parse_simulator_connection_config,
 )
-from ip.solutions.connectors.sandbox.universal.ports import SimulatorSandboxReaderPort
+from ip.solutions.connectors.sandbox.universal.ports import SimulatorEntityReaderPort
 from ip.solutions.connectors.sandbox.universal.spec import (
-    UNIVERSAL_SIMULATOR_APP_ID,
+    DEFAULT_SIMULATED_PUSH_COUNT,
+    MAX_SIMULATED_PUSH_COUNT,
+    MIN_SIMULATED_PUSH_COUNT,
     SimulatorStreamSpec,
 )
 from ip.solutions.connectors.sandbox.universal.synthesizer import JsonSchemaRecordSynthesizer
+from ip.solutions.connectors.sandbox.universal.use_cases.connection_guard import (
+    validate_simulator_app_id,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -56,7 +57,7 @@ class TriggerSimulatedPushCommand:
     tenant_id: str
     connection_id: str
     stream_name: str
-    count: int = 5
+    count: int = DEFAULT_SIMULATED_PUSH_COUNT
     delivery_style: SimulatedPushDeliveryStyle = SimulatedPushDeliveryStyle.FULL_PAYLOAD
     correlation_id: str | None = None
 
@@ -73,26 +74,20 @@ class SimulatePushResultDTO:
 
 
 class TriggerSimulatedPushUseCase:
-    """Authenticates a Virtual Sandbox connection, synthesizes fake records, and emits them into L1 `ReceivePushUseCase`."""
+    """Verifies a Simulator connection, synthesizes fake records from `ip.simulator_entities`, and emits them via `ReceivePushExecutorFactory`."""
 
     def __init__(
         self,
         *,
         data_plane_uow_provider: IpDataPlaneUnitOfWorkProviderPort,
-        tiered_storage: TieredStoragePort,
-        verifier: InboundVerifierPort,
-        decoder: InboundPayloadDecoderPort,
-        ack: InboundAckPort,
-        sandbox_reader: SimulatorSandboxReaderPort,
+        push_executor_factory: ReceivePushExecutorFactory,
+        entity_reader: SimulatorEntityReaderPort,
         token_manager: TokenManagerService,
         synthesizer: JsonSchemaRecordSynthesizer | None = None,
     ) -> None:
         self._dp_uow_provider = data_plane_uow_provider
-        self._tiered_storage = tiered_storage
-        self._verifier = verifier
-        self._decoder = decoder
-        self._ack = ack
-        self._sandbox_reader = sandbox_reader
+        self._push_executor_factory = push_executor_factory
+        self._entity_reader = entity_reader
         self._token_manager = token_manager
         self._synthesizer = synthesizer or JsonSchemaRecordSynthesizer()
 
@@ -109,36 +104,27 @@ class TriggerSimulatedPushUseCase:
             return Result.fail(creds_res.unwrap_err())
 
         resolved = creds_res.unwrap()
-        if resolved.app_id != UNIVERSAL_SIMULATOR_APP_ID:
-            return Result.fail(
-                IpError(
-                    code=IpErrorCode.INVALID_CONFIGURATION,
-                    message=(
-                        f"Connection '{command.connection_id}' (app_id='{resolved.app_id}') is not a "
-                        f"Universal Sandbox Simulator connection."
-                    ),
-                    http_status=422,
-                )
-            )
+        app_err = validate_simulator_app_id(
+            connection_id=command.connection_id,
+            app_id=resolved.app_id,
+        )
+        if app_err is not None:
+            return Result.fail(app_err)
 
         cfg = parse_simulator_connection_config(dict(resolved.public_config))
-        raw_api_key = str(resolved.credentials.get("api_key") or "")
-        auth_res = await self._sandbox_reader.authenticate_sandbox(
-            sandbox_id=cfg.sandbox_id,
-            raw_api_key=raw_api_key,
+        entity_res = await self._entity_reader.get_entity_by_name(
+            command.tenant_id, command.connection_id, command.stream_name
         )
-        if auth_res.is_err:
-            return Result.fail(auth_res.unwrap_err())
-
-        sandbox = auth_res.unwrap()
-        entity = await self._sandbox_reader.get_entity_by_name(sandbox.id, command.stream_name)
+        if entity_res.is_err:
+            return Result.fail(entity_res.unwrap_err())
+        entity = entity_res.unwrap()
         if entity is None:
             return Result.fail(
                 IpError(
                     code=IpErrorCode.STREAM_NOT_FOUND,
                     message=(
-                        f"Entity '{command.stream_name}' is not configured in Virtual Sandbox "
-                        f"'{sandbox.id}'."
+                        f"Entity '{command.stream_name}' is not configured in Simulator connection "
+                        f"'{command.connection_id}'."
                     ),
                     http_status=404,
                 )
@@ -161,7 +147,7 @@ class TriggerSimulatedPushUseCase:
             return Result.fail(err)
         app_id, seed, spec = resolved_res.unwrap()
 
-        bounded_count = max(1, min(command.count, 100))
+        bounded_count = max(MIN_SIMULATED_PUSH_COUNT, min(command.count, MAX_SIMULATED_PUSH_COUNT))
         now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         nonce_offset = (int.from_bytes(os.urandom(2), "big") % 50_000) + 1
         synthesized = self._synthesizer.synthesize_batch(
@@ -193,13 +179,7 @@ class TriggerSimulatedPushUseCase:
             shard_id=shard_id,
             shard_dsn=shard_dsn,
         ) as dp_uow:
-            push_uc = ReceivePushUseCase(
-                uow=dp_uow,
-                tiered_storage=self._tiered_storage,
-                verifier=self._verifier,
-                decoder=self._decoder,
-                ack=self._ack,
-            )
+            push_executor = self._push_executor_factory(dp_uow)
             for env in synthesized:
                 wire_payload = (
                     {
@@ -211,7 +191,7 @@ class TriggerSimulatedPushUseCase:
                     else env.data
                 )
                 raw_bytes = json.dumps(wire_payload).encode("utf-8")
-                push_res = await push_uc.execute(
+                push_res = await push_executor.execute(
                     ReceivePushCommand(
                         tenant_id=command.tenant_id,
                         connection_id=command.connection_id,

@@ -65,7 +65,6 @@ class StreamSchemaDTO:
 @dataclass(frozen=True)
 class DiscoveredCatalogDTO:
     connection_id: str
-    catalog_version: int = 1
     catalog_hash: str = ""
     streams: Sequence[StreamSchemaDTO] = ()
     discovered_at: str = ""
@@ -241,6 +240,8 @@ class ConnectorMetadataPort(Protocol):
         connection_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str,
     ) -> DiscoveredCatalogDTO:
         """Introspects the external system to discover available objects and schemas."""
         ...
@@ -262,6 +263,9 @@ class SourceConnectorPort(ConnectorMetadataPort, Protocol):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str,
+        connection_id: str,
     ) -> Sequence[str]:
         """Lists discrete object identifiers from a stream for browsing or AI agent inspection."""
         ...
@@ -274,6 +278,9 @@ class SourceConnectorPort(ConnectorMetadataPort, Protocol):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str,
+        connection_id: str,
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         """Streams records asynchronously from the external system."""
         ...
@@ -285,6 +292,9 @@ class SourceConnectorPort(ConnectorMetadataPort, Protocol):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str,
+        connection_id: str,
     ) -> RecordEnvelopeDTO | None:
         """Fetches a single record by primary key (Fetch-on-Notify / Thin Push)."""
         ...
@@ -300,6 +310,9 @@ class DestinationConnectorPort(ConnectorMetadataPort, Protocol):
         command: WriteRecordCommand,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str,
+        connection_id: str,
     ) -> WriteResultDTO:
         """Writes/mutates a record in the external application."""
         ...

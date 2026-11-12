@@ -1,5 +1,5 @@
-import type { StreamState, SyncRun, TriggerSyncRunInput } from '../../../domain/sync-run';
-import type { StreamStateWire, SyncRunWire } from '../schemas/sync-run.schema';
+import type { SyncRun, TriggerSyncRunInput } from '../../../domain/sync-run';
+import type { SyncRunWire } from '../schemas/sync-run.schema';
 
 export function mapSyncRunFromWire(wire: SyncRunWire): SyncRun {
   return {
@@ -22,19 +22,6 @@ export function mapSyncRunFromWire(wire: SyncRunWire): SyncRun {
     startedAt: wire.started_at,
     finishedAt: wire.finished_at,
     createdAt: wire.created_at,
-  };
-}
-
-export function mapStreamStateFromWire(wire: StreamStateWire): StreamState {
-  return {
-    stateId: wire.state_id,
-    tenantId: wire.tenant_id,
-    connectionId: wire.connection_id,
-    streamName: wire.stream_name,
-    cursorField: wire.cursor_field,
-    cursorValue: wire.cursor_value,
-    recordsSyncedCount: wire.records_synced_count,
-    lastSyncedAt: wire.last_synced_at,
   };
 }
 

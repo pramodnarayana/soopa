@@ -7,13 +7,18 @@ import type {
   CreateConnectionInput,
   DiscoveredCatalog,
   RelinkConnectionInput,
-  SimulatePushInput,
-  SimulatePushResult,
   UpdateConnectionInput,
 } from '../domain/connection';
+import type {
+  AddConnectionEntityInput,
+  ConnectionEntity,
+  UpdateConnectionEntityInput,
+} from '../domain/connection-entity';
 import {
   ConnectionHandshakeStatus,
   ConnectionStatus,
+  EntitySyncFrom,
+  EntitySyncSchedule,
   type JsonRecord,
   PipelineLayer,
   ReplayDispatchStatus,
@@ -32,14 +37,11 @@ import type {
   IntervalWindowCompleteness,
 } from '../domain/intervals';
 import {
-  type CreatedSimulatorSandbox,
   type CreateSimulatorEntityInput,
-  type CreateSimulatorSandboxInput,
-  extractSimulatorSandboxId,
-  SIMULATOR_CONFIG_KEYS,
   SIMULATOR_STREAM_LIMITS,
+  type SimulatePushInput,
+  type SimulatePushResult,
   type SimulatorEntity,
-  type SimulatorSandbox,
   SimulatorVelocityMode,
   type UpdateSimulatorEntityInput,
 } from '../domain/simulator';
@@ -52,7 +54,7 @@ import type {
   TriggerStitchEventInput,
   TriggerStitchEventResult,
 } from '../domain/stitch';
-import type { StreamState, SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
+import type { SyncRun, TriggerSyncRunInput } from '../domain/sync-run';
 import type {
   BulkReplayResult,
   GlobalEntityMapEntry,
@@ -73,6 +75,7 @@ import type {
   TransformationPreviewResult,
 } from '../domain/transformation';
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
+import type { ConnectionEntityRepositoryPort } from '../ports/connection-entity-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
 import type {
   GetCompletenessParams,
@@ -96,20 +99,18 @@ import type { IpNavigationPort, IpRepositoriesBundle } from '../provider/IpRepos
 import {
   SEED_CATALOG_APPS,
   SEED_CONNECTION,
+  SEED_CONNECTION_ENTITY,
   SEED_DAILY_TOU_ROLLUPS,
   SEED_DISCOVERED_CATALOG,
   SEED_INTERVAL_COMPLETENESS,
   SEED_INTERVAL_LINEAGE_TRACE,
   SEED_RECONCILIATION_OVERVIEW,
-  SEED_SIMULATOR_API_KEY,
   SEED_SIMULATOR_APP_SPEC,
   SEED_SIMULATOR_ENTITY,
-  SEED_SIMULATOR_SANDBOX,
   SEED_SOURCE_APP_SPEC,
   SEED_STITCH,
   SEED_STITCH_DEFINITION,
   SEED_STITCH_RUN,
-  SEED_STREAM_STATE,
   SEED_SYNC_RUN,
   SEED_TRACE,
   SEED_TRACE_LINEAGE,
@@ -133,125 +134,52 @@ function conflictProblem(message: string): ApiProblem {
   };
 }
 
+function validationProblem(message: string): ApiProblem {
+  return {
+    code: ApiErrorCode.VALIDATION_ERROR,
+    status: 400,
+    message,
+  };
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
-  public readonly sandboxes: SimulatorSandbox[];
   public readonly entities: SimulatorEntity[];
-  private readonly sandboxKeys: Map<string, string>;
-  private nextSandboxIndex = 1;
   private nextEntityIndex = 1;
 
-  constructor(
-    sandboxes: readonly SimulatorSandbox[] = [SEED_SIMULATOR_SANDBOX],
-    entities: readonly SimulatorEntity[] = [SEED_SIMULATOR_ENTITY],
-    initialKeys: Readonly<Record<string, string>> = {
-      [SEED_SIMULATOR_SANDBOX.id]: SEED_SIMULATOR_API_KEY,
-    },
-  ) {
-    this.sandboxes = [...sandboxes];
+  constructor(entities: readonly SimulatorEntity[] = [SEED_SIMULATOR_ENTITY]) {
     this.entities = [...entities];
-    this.sandboxKeys = new Map(Object.entries(initialKeys));
-  }
-
-  public authenticate(sandboxId: string, apiKey: string): SimulatorSandbox | null {
-    const cleanId = sandboxId.trim();
-    const cleanKey = apiKey.trim();
-    if (!cleanId || !cleanKey) {
-      return null;
-    }
-    const found = this.sandboxes.find((s) => s.id === cleanId);
-    if (!found) {
-      return null;
-    }
-    const expected = this.sandboxKeys.get(cleanId);
-    return expected === cleanKey ? found : null;
-  }
-
-  public async createSandbox(
-    tenantId: string,
-    input: CreateSimulatorSandboxInput,
-  ): Promise<Result<CreatedSimulatorSandbox, ApiProblem>> {
-    const cleanName = input.name.trim();
-    if (this.sandboxes.some((s) => s.tenantId === tenantId && s.name === cleanName)) {
-      return err(conflictProblem(`Sandbox "${cleanName}" already exists.`));
-    }
-    const idx = this.nextSandboxIndex++;
-    const id = `sbx_${String(idx).padStart(24, '0')}`;
-    const apiKey = `sbx_key_${String(idx).padStart(32, '0')}`;
-    const sandbox: SimulatorSandbox = {
-      id,
-      tenantId,
-      name: cleanName,
-      apiKeyPrefix: apiKey.slice(0, 16),
-      createdAt: '2026-11-11T10:00:00Z',
-      updatedAt: '2026-11-11T10:00:00Z',
-    };
-    this.sandboxes.push(sandbox);
-    this.sandboxKeys.set(id, apiKey);
-    return ok({
-      ...sandbox,
-      apiKey,
-    });
-  }
-
-  public async listSandboxes(
-    tenantId: string,
-  ): Promise<Result<readonly SimulatorSandbox[], ApiProblem>> {
-    return ok(this.sandboxes.filter((s) => s.tenantId === tenantId));
-  }
-
-  public async getSandbox(
-    tenantId: string,
-    sandboxId: string,
-  ): Promise<Result<SimulatorSandbox, ApiProblem>> {
-    const found = this.sandboxes.find((s) => s.tenantId === tenantId && s.id === sandboxId);
-    return found ? ok(found) : err(notFoundProblem(`Sandbox ${sandboxId} not found`));
-  }
-
-  public async deleteSandbox(
-    tenantId: string,
-    sandboxId: string,
-  ): Promise<Result<void, ApiProblem>> {
-    const idx = this.sandboxes.findIndex((s) => s.tenantId === tenantId && s.id === sandboxId);
-    if (idx < 0) {
-      return err(notFoundProblem(`Sandbox ${sandboxId} not found`));
-    }
-    this.sandboxes.splice(idx, 1);
-    this.sandboxKeys.delete(sandboxId);
-    for (let i = this.entities.length - 1; i >= 0; i -= 1) {
-      if (this.entities[i]?.sandboxId === sandboxId) {
-        this.entities.splice(i, 1);
-      }
-    }
-    return ok(undefined);
   }
 
   public async listEntities(
     tenantId: string,
-    sandboxId: string,
+    connectionId: string,
   ): Promise<Result<readonly SimulatorEntity[], ApiProblem>> {
-    const sbx = this.sandboxes.find((s) => s.tenantId === tenantId && s.id === sandboxId);
-    if (!sbx) {
-      return err(notFoundProblem(`Sandbox ${sandboxId} not found`));
-    }
-    return ok(this.entities.filter((e) => e.tenantId === tenantId && e.sandboxId === sandboxId));
+    return ok(
+      this.entities.filter((e) => e.tenantId === tenantId && e.connectionId === connectionId),
+    );
   }
 
   public async createEntity(
     tenantId: string,
-    sandboxId: string,
+    connectionId: string,
     input: CreateSimulatorEntityInput,
   ): Promise<Result<SimulatorEntity, ApiProblem>> {
-    const sbx = this.sandboxes.find((s) => s.tenantId === tenantId && s.id === sandboxId);
-    if (!sbx) {
-      return err(notFoundProblem(`Sandbox ${sandboxId} not found`));
-    }
     const cleanName = input.entityName.trim();
-    if (this.entities.some((e) => e.sandboxId === sandboxId && e.entityName === cleanName)) {
-      return err(conflictProblem(`Entity "${cleanName}" already exists in sandbox ${sandboxId}.`));
+    if (
+      this.entities.some(
+        (e) =>
+          e.tenantId === tenantId &&
+          e.connectionId === connectionId &&
+          e.entityName.toLowerCase() === cleanName.toLowerCase(),
+      )
+    ) {
+      return err(
+        conflictProblem(`Entity "${cleanName}" already exists in connection ${connectionId}.`),
+      );
     }
     const idx = this.nextEntityIndex++;
     const candidate =
@@ -266,7 +194,7 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
     const entity: SimulatorEntity = {
       id: `sim_ent_${String(idx).padStart(24, '0')}`,
       tenantId,
-      sandboxId,
+      connectionId,
       entityName: cleanName,
       primaryKeyField: input.primaryKeyField?.trim() || 'id',
       cursorField: input.cursorField?.trim() || SIMULATOR_STREAM_LIMITS.DEFAULT_CURSOR_FIELD,
@@ -290,12 +218,12 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
 
   public async updateEntity(
     tenantId: string,
-    sandboxId: string,
+    connectionId: string,
     entityId: string,
     input: UpdateSimulatorEntityInput,
   ): Promise<Result<SimulatorEntity, ApiProblem>> {
     const idx = this.entities.findIndex(
-      (e) => e.tenantId === tenantId && e.sandboxId === sandboxId && e.id === entityId,
+      (e) => e.tenantId === tenantId && e.connectionId === connectionId && e.id === entityId,
     );
     const existing = this.entities[idx];
     if (idx < 0 || !existing) {
@@ -304,9 +232,16 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
     const nextName = input.entityName?.trim() || existing.entityName;
     if (
       nextName !== existing.entityName &&
-      this.entities.some((e) => e.sandboxId === sandboxId && e.entityName === nextName)
+      this.entities.some(
+        (e) =>
+          e.tenantId === tenantId &&
+          e.connectionId === connectionId &&
+          e.entityName.toLowerCase() === nextName.toLowerCase(),
+      )
     ) {
-      return err(conflictProblem(`Entity "${nextName}" already exists in sandbox ${sandboxId}.`));
+      return err(
+        conflictProblem(`Entity "${nextName}" already exists in connection ${connectionId}.`),
+      );
     }
     const updated: SimulatorEntity = {
       ...existing,
@@ -327,17 +262,45 @@ export class InMemorySimulatorRepository implements SimulatorRepositoryPort {
 
   public async deleteEntity(
     tenantId: string,
-    sandboxId: string,
+    connectionId: string,
     entityId: string,
   ): Promise<Result<void, ApiProblem>> {
     const idx = this.entities.findIndex(
-      (e) => e.tenantId === tenantId && e.sandboxId === sandboxId && e.id === entityId,
+      (e) => e.tenantId === tenantId && e.connectionId === connectionId && e.id === entityId,
     );
     if (idx < 0) {
       return err(notFoundProblem(`Entity ${entityId} not found`));
     }
     this.entities.splice(idx, 1);
     return ok(undefined);
+  }
+
+  public async simulatePush(
+    tenantId: string,
+    connectionId: string,
+    input: SimulatePushInput,
+  ): Promise<Result<SimulatePushResult, ApiProblem>> {
+    const found = this.entities.find(
+      (e) =>
+        e.tenantId === tenantId &&
+        e.connectionId === connectionId &&
+        e.entityName === input.streamName,
+    );
+    if (!found) {
+      return err(notFoundProblem(`Simulator entity ${input.streamName} not found`));
+    }
+    const count = Math.max(1, input.count ?? 1);
+    return ok({
+      connectionId,
+      streamName: input.streamName,
+      recordsPushed: count,
+      recordIds: Array.from({ length: count }, (_, i) => `SIM-${String(i + 1).padStart(6, '0')}`),
+      traceIds: Array.from(
+        { length: count },
+        (_, i) => `trc_sim_${String(i + 1).padStart(3, '0')}`,
+      ),
+      status: 'ACCEPTED',
+    });
   }
 }
 
@@ -375,19 +338,30 @@ export class InMemoryCatalogRepository implements CatalogRepositoryPort {
   }
 }
 
+export interface InMemoryConnectorDiscoveryPlugin {
+  checkConnection?(
+    tenantId: string,
+    input: CheckConnectionInput,
+  ): Promise<Result<ConnectionCheckResult, ApiProblem>>;
+  discoverCatalog(
+    tenantId: string,
+    connection: Connection,
+  ): Promise<Result<DiscoveredCatalog, ApiProblem>>;
+}
+
 export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
   public readonly items: Connection[];
   private readonly catalogs: Map<string, DiscoveredCatalog>;
-  private readonly simulator?: InMemorySimulatorRepository;
+  private readonly plugins: ReadonlyMap<string, InMemoryConnectorDiscoveryPlugin>;
 
   constructor(
     initial: readonly Connection[] = [SEED_CONNECTION],
     catalogs: readonly DiscoveredCatalog[] = [SEED_DISCOVERED_CATALOG],
-    simulator?: InMemorySimulatorRepository,
+    plugins: ReadonlyMap<string, InMemoryConnectorDiscoveryPlugin> = new Map(),
   ) {
     this.items = [...initial];
     this.catalogs = new Map(catalogs.map((cat) => [cat.connectionId, cat]));
-    this.simulator = simulator;
+    this.plugins = plugins;
   }
 
   public async listConnections(
@@ -410,24 +384,12 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
   }
 
   public async checkConnection(
-    _tenantId: string,
+    tenantId: string,
     input: CheckConnectionInput,
   ): Promise<Result<ConnectionCheckResult, ApiProblem>> {
-    if (input.appId === UNIVERSAL_SIMULATOR_APP_ID && this.simulator) {
-      const sandboxId = extractSimulatorSandboxId(input.publicConfig) ?? '';
-      const rawKey = input.rawCredentials[SIMULATOR_CONFIG_KEYS.API_KEY];
-      const apiKey = typeof rawKey === 'string' ? rawKey : '';
-      const authenticated = this.simulator.authenticate(sandboxId, apiKey);
-      return ok({
-        success: authenticated !== null,
-        status: authenticated
-          ? ConnectionHandshakeStatus.VERIFIED
-          : ConnectionHandshakeStatus.AUTH_FAILED,
-        message: authenticated
-          ? `Authenticated against Virtual Sandbox "${authenticated.name}".`
-          : 'Invalid sandbox_id or api_key.',
-        errorCode: authenticated ? null : 'SIMULATOR_AUTH_FAILED',
-      });
+    const plugin = this.plugins.get(input.appId);
+    if (plugin?.checkConnection) {
+      return plugin.checkConnection(tenantId, input);
     }
     const hasSecret = Object.keys(input.rawCredentials).length > 0;
     return ok({
@@ -476,40 +438,13 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     if (!conn) {
       return err(notFoundProblem(`Connection ${connectionId} not found`));
     }
-    if (conn.appId === UNIVERSAL_SIMULATOR_APP_ID && this.simulator) {
-      const sandboxId = extractSimulatorSandboxId(conn.publicConfig);
-      if (!sandboxId) {
-        return err(notFoundProblem('Connection public_config is missing sandbox_id'));
+    const plugin = this.plugins.get(conn.appId);
+    if (plugin) {
+      const pluginRes = await plugin.discoverCatalog(tenantId, conn);
+      if (pluginRes.ok) {
+        this.catalogs.set(connectionId, pluginRes.value);
       }
-      const entitiesRes = await this.simulator.listEntities(tenantId, sandboxId);
-      if (!entitiesRes.ok) {
-        return err(entitiesRes.error);
-      }
-      const discovered: DiscoveredCatalog = {
-        connectionId,
-        catalogVersion: (this.catalogs.get(connectionId)?.catalogVersion ?? 0) + 1,
-        catalogHash: `hash_sim_${sandboxId}_${entitiesRes.value.length}`,
-        discoveredAt: '2026-11-11T10:15:00Z',
-        streams: entitiesRes.value.map((ent) => {
-          const schemaProps = isPlainObject(ent.inferredJsonSchema.properties)
-            ? ent.inferredJsonSchema.properties
-            : {};
-          return {
-            name: ent.entityName,
-            primaryKey: [ent.primaryKeyField],
-            cursorField: ent.cursorField,
-            supportedSyncModes: [SyncRunKind.INCREMENTAL, SyncRunKind.FULL_REFRESH],
-            fields: Object.keys(schemaProps).map((fieldName) => ({
-              name: fieldName,
-              dataType: 'string',
-              nullable: fieldName !== ent.primaryKeyField,
-              description: null,
-            })),
-          };
-        }),
-      };
-      this.catalogs.set(connectionId, discovered);
-      return ok(discovered);
+      return pluginRes;
     }
     const catalog = this.catalogs.get(connectionId);
     if (catalog) {
@@ -525,7 +460,6 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
             : ['posts', 'users', 'comments'];
     const generated: DiscoveredCatalog = {
       connectionId,
-      catalogVersion: 1,
       catalogHash: `hash_${connectionId}`,
       discoveredAt: '2026-11-05T12:00:00Z',
       streams: sampleNames.map((name) => ({
@@ -614,41 +548,190 @@ export class InMemoryConnectionRepository implements ConnectionRepositoryPort {
     this.items.splice(idx, 1);
     return ok(undefined);
   }
+}
 
-  public async simulatePush(
+export class InMemoryConnectionEntityRepository implements ConnectionEntityRepositoryPort {
+  public readonly items: ConnectionEntity[];
+  private readonly connections?: ConnectionRepositoryPort;
+  private nextEntityIndex = 1;
+
+  constructor(
+    initial: readonly ConnectionEntity[] = [SEED_CONNECTION_ENTITY],
+    connections?: ConnectionRepositoryPort,
+  ) {
+    this.items = [...initial];
+    this.connections = connections;
+  }
+
+  public async listEntities(
     tenantId: string,
     connectionId: string,
-    input: SimulatePushInput,
-  ): Promise<Result<SimulatePushResult, ApiProblem>> {
-    const existing = this.items.find((c) => c.tenantId === tenantId && c.id === connectionId);
-    if (!existing) {
-      return err(notFoundProblem(`Connection ${connectionId} not found`));
+  ): Promise<Result<readonly ConnectionEntity[], ApiProblem>> {
+    if (this.connections) {
+      const connRes = await this.connections.getConnection(tenantId, connectionId);
+      if (!connRes.ok) {
+        return err(connRes.error);
+      }
     }
-    const count = Math.max(1, input.count ?? 1);
-    return ok({
-      connectionId,
-      streamName: input.streamName,
-      recordsPushed: count,
-      recordIds: Array.from({ length: count }, (_, i) => `SIM-${String(i + 1).padStart(6, '0')}`),
-      traceIds: Array.from(
-        { length: count },
-        (_, i) => `trc_sim_${String(i + 1).padStart(3, '0')}`,
+    return ok(
+      this.items.filter(
+        (entity) => entity.tenantId === tenantId && entity.connectionId === connectionId,
       ),
-      status: 'ACCEPTED',
-    });
+    );
+  }
+
+  public async addEntity(
+    tenantId: string,
+    connectionId: string,
+    input: AddConnectionEntityInput,
+  ): Promise<Result<ConnectionEntity, ApiProblem>> {
+    if (this.connections) {
+      const connRes = await this.connections.getConnection(tenantId, connectionId);
+      if (!connRes.ok) {
+        return err(connRes.error);
+      }
+    }
+    const cleanStream = input.streamName.trim();
+    if (!cleanStream) {
+      return err(validationProblem('stream_name cannot be empty.'));
+    }
+    const syncFrom = input.syncFrom ?? EntitySyncFrom.ALL;
+    const syncFromAt = syncFrom === EntitySyncFrom.CUSTOM ? (input.syncFromAt ?? null) : null;
+    if (syncFrom === EntitySyncFrom.CUSTOM && !syncFromAt) {
+      return err(validationProblem("sync_from_at is required when sync_from is 'custom'."));
+    }
+
+    const existingIdx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === cleanStream,
+    );
+    const existing = this.items[existingIdx];
+    let saved: ConnectionEntity;
+    if (existingIdx >= 0 && existing) {
+      saved = {
+        ...existing,
+        primaryKey:
+          input.primaryKey && input.primaryKey.length > 0 ? input.primaryKey : existing.primaryKey,
+        fields: input.fields && input.fields.length > 0 ? input.fields : existing.fields,
+        cursorField: input.cursorField !== undefined ? input.cursorField : existing.cursorField,
+        syncMode: input.syncMode ?? existing.syncMode,
+        updatedAt: '2026-11-12T10:00:00Z',
+      };
+      this.items[existingIdx] = saved;
+    } else {
+      const idx = this.nextEntityIndex++;
+      saved = {
+        entityId: `ip_cent_${String(idx).padStart(24, '0')}`,
+        tenantId,
+        connectionId,
+        streamName: cleanStream,
+        syncMode: input.syncMode ?? SyncRunKind.INCREMENTAL,
+        schedule: input.schedule ?? EntitySyncSchedule.MANUAL,
+        syncFrom,
+        syncFromAt,
+        isEnabled: input.isEnabled ?? true,
+        primaryKey: input.primaryKey ?? [],
+        fields: input.fields ?? [],
+        cursorField: input.cursorField ?? null,
+        cursorValue: null,
+        recordsSyncedCount: 0,
+        lastSyncedAt: null,
+        createdAt: '2026-11-12T10:00:00Z',
+        updatedAt: '2026-11-12T10:00:00Z',
+      };
+      this.items.push(saved);
+    }
+
+    return ok(saved);
+  }
+
+  public async updateEntity(
+    tenantId: string,
+    connectionId: string,
+    streamName: string,
+    input: UpdateConnectionEntityInput,
+  ): Promise<Result<ConnectionEntity, ApiProblem>> {
+    const idx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === streamName,
+    );
+    const existing = this.items[idx];
+    if (idx < 0 || !existing) {
+      return err(notFoundProblem(`ConnectionEntity ${streamName} not found`));
+    }
+    const nextSyncFrom = input.syncFrom ?? existing.syncFrom;
+    const nextSyncFromAt =
+      nextSyncFrom === EntitySyncFrom.CUSTOM ? (input.syncFromAt ?? existing.syncFromAt) : null;
+    if (nextSyncFrom === EntitySyncFrom.CUSTOM && !nextSyncFromAt) {
+      return err(validationProblem("sync_from_at is required when sync_from is 'custom'."));
+    }
+    const updated: ConnectionEntity = {
+      ...existing,
+      syncMode: input.syncMode ?? existing.syncMode,
+      schedule: input.schedule ?? existing.schedule,
+      syncFrom: nextSyncFrom,
+      syncFromAt: nextSyncFromAt,
+      isEnabled: input.isEnabled ?? existing.isEnabled,
+      updatedAt: '2026-11-12T10:05:00Z',
+    };
+    this.items[idx] = updated;
+    return ok(updated);
+  }
+
+  public async removeEntity(
+    tenantId: string,
+    connectionId: string,
+    streamName: string,
+  ): Promise<Result<void, ApiProblem>> {
+    const idx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === streamName,
+    );
+    if (idx < 0) {
+      return err(notFoundProblem(`ConnectionEntity ${streamName} not found`));
+    }
+    this.items.splice(idx, 1);
+    return ok(undefined);
+  }
+
+  public async resetCheckpoint(
+    tenantId: string,
+    connectionId: string,
+    streamName: string,
+  ): Promise<Result<ConnectionEntity, ApiProblem>> {
+    const idx = this.items.findIndex(
+      (entity) =>
+        entity.tenantId === tenantId &&
+        entity.connectionId === connectionId &&
+        entity.streamName === streamName,
+    );
+    const existing = this.items[idx];
+    if (idx < 0 || !existing) {
+      return err(notFoundProblem(`ConnectionEntity ${streamName} not found`));
+    }
+    const reset: ConnectionEntity = {
+      ...existing,
+      cursorValue: null,
+      recordsSyncedCount: 0,
+      lastSyncedAt: null,
+      updatedAt: '2026-11-12T10:10:00Z',
+    };
+    this.items[idx] = reset;
+    return ok(reset);
   }
 }
 
 export class InMemorySyncRunRepository implements SyncRunRepositoryPort {
   public readonly runs: SyncRun[];
-  public readonly states: StreamState[];
 
-  constructor(
-    runs: readonly SyncRun[] = [SEED_SYNC_RUN],
-    states: readonly StreamState[] = [SEED_STREAM_STATE],
-  ) {
+  constructor(runs: readonly SyncRun[] = [SEED_SYNC_RUN]) {
     this.runs = [...runs];
-    this.states = [...states];
   }
 
   public async listSyncRuns(
@@ -702,37 +785,6 @@ export class InMemorySyncRunRepository implements SyncRunRepositoryPort {
     };
     this.runs.unshift(created);
     return ok(created);
-  }
-
-  public async listStreamStates(
-    tenantId: string,
-    connectionId: string,
-  ): Promise<Result<readonly StreamState[], ApiProblem>> {
-    return ok(
-      this.states.filter((s) => s.tenantId === tenantId && s.connectionId === connectionId),
-    );
-  }
-
-  public async resetStreamCheckpoint(
-    tenantId: string,
-    connectionId: string,
-    streamName: string,
-  ): Promise<Result<StreamState, ApiProblem>> {
-    const idx = this.states.findIndex(
-      (s) =>
-        s.tenantId === tenantId && s.connectionId === connectionId && s.streamName === streamName,
-    );
-    const existing = this.states[idx];
-    if (idx < 0 || !existing) {
-      return err(notFoundProblem(`StreamState ${streamName} not found`));
-    }
-    const reset: StreamState = {
-      ...existing,
-      cursorValue: null,
-      recordsSyncedCount: 0,
-    };
-    this.states[idx] = reset;
-    return ok(reset);
   }
 }
 
@@ -1363,6 +1415,7 @@ export interface InMemoryIpWorkspaceHarness {
   readonly repositories: IpRepositoriesBundle;
   readonly catalog: InMemoryCatalogRepository;
   readonly connections: InMemoryConnectionRepository;
+  readonly entities: InMemoryConnectionEntityRepository;
   readonly syncRuns: InMemorySyncRunRepository;
   readonly transformations: InMemoryTransformationRepository;
   readonly stitches: InMemoryStitchRepository;
@@ -1373,16 +1426,66 @@ export interface InMemoryIpWorkspaceHarness {
   readonly navigation: InMemoryNavigationFake;
 }
 
+export function createSimulatorDiscoveryPlugin(
+  simulator: SimulatorRepositoryPort,
+): InMemoryConnectorDiscoveryPlugin {
+  return {
+    async checkConnection(): Promise<Result<ConnectionCheckResult, ApiProblem>> {
+      return ok({
+        success: true,
+        status: ConnectionHandshakeStatus.VERIFIED,
+        message: 'Universal Schema Simulator connection ready.',
+        errorCode: null,
+      });
+    },
+    async discoverCatalog(
+      tenantId: string,
+      connection: Connection,
+    ): Promise<Result<DiscoveredCatalog, ApiProblem>> {
+      const entitiesRes = await simulator.listEntities(tenantId, connection.id);
+      if (!entitiesRes.ok) {
+        return err(entitiesRes.error);
+      }
+      return ok({
+        connectionId: connection.id,
+        catalogHash: `hash_sim_${connection.id}_${entitiesRes.value.length}`,
+        discoveredAt: '2026-11-11T10:15:00Z',
+        streams: entitiesRes.value.map((ent) => {
+          const schemaProps = isPlainObject(ent.inferredJsonSchema.properties)
+            ? ent.inferredJsonSchema.properties
+            : {};
+          return {
+            name: ent.entityName,
+            primaryKey: [ent.primaryKeyField],
+            cursorField: ent.cursorField,
+            supportedSyncModes: [SyncRunKind.INCREMENTAL, SyncRunKind.FULL_REFRESH],
+            fields: Object.keys(schemaProps).map((fieldName) => ({
+              name: fieldName,
+              dataType: 'string',
+              nullable: fieldName !== ent.primaryKeyField,
+              description: null,
+            })),
+          };
+        }),
+      });
+    },
+  };
+}
+
 export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
   const catalog = new InMemoryCatalogRepository();
   const simulator = new InMemorySimulatorRepository();
+  const plugins = new Map<string, InMemoryConnectorDiscoveryPlugin>([
+    [UNIVERSAL_SIMULATOR_APP_ID, createSimulatorDiscoveryPlugin(simulator)],
+  ]);
   const connections = new InMemoryConnectionRepository(
     [SEED_CONNECTION],
     [SEED_DISCOVERED_CATALOG],
-    simulator,
+    plugins,
   );
-  const syncRuns = new InMemorySyncRunRepository();
   const transformations = new InMemoryTransformationRepository();
+  const entities = new InMemoryConnectionEntityRepository([SEED_CONNECTION_ENTITY], connections);
+  const syncRuns = new InMemorySyncRunRepository();
   const stitches = new InMemoryStitchRepository();
   const traces = new InMemoryTraceRepository();
   const records = new InMemoryRecordRepository();
@@ -1393,6 +1496,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     repositories: {
       catalog,
       connections,
+      entities,
       syncRuns,
       transformations,
       stitches,
@@ -1403,6 +1507,7 @@ export function createInMemoryIpWorkspaceSeed(): InMemoryIpWorkspaceHarness {
     },
     catalog,
     connections,
+    entities,
     syncRuns,
     transformations,
     stitches,

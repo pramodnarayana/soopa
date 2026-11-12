@@ -15,7 +15,7 @@ from sqlalchemy.dialects import postgresql
 # revision identifiers, used by Alembic.
 revision: str = "0001_initial_global_schema"
 down_revision: str | Sequence[str] | None = None
-branch_labels: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = ("global_engine",)
 depends_on: str | Sequence[str] | None = None
 
 
@@ -73,33 +73,6 @@ def upgrade() -> None:
         schema="ip",
     )
     op.create_table(
-        "connection_catalogs",
-        sa.Column("id", sa.String(length=64), nullable=False),
-        sa.Column("connection_id", sa.String(length=64), nullable=False),
-        sa.Column(
-            "catalog_version",
-            sa.Integer(),
-            server_default=sa.text("1"),
-            nullable=False,
-        ),
-        sa.Column("catalog_hash", sa.String(length=64), nullable=False),
-        sa.Column("schema_definition", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
-        sa.Column("is_active", sa.Boolean(), server_default=sa.text("true"), nullable=False),
-        sa.Column("discovered_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint(
-            "connection_id", "catalog_version", name="uq_ip_catalog_connection_version"
-        ),
-        schema="ip",
-    )
-    op.create_index(
-        op.f("ix_ip_connection_catalogs_connection_id"),
-        "connection_catalogs",
-        ["connection_id"],
-        unique=False,
-        schema="ip",
-    )
-    op.create_table(
         "outbox",
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("tenant_id", sa.String(length=64), nullable=False),
@@ -147,20 +120,70 @@ def upgrade() -> None:
         schema="ip",
     )
     op.create_table(
-        "connection_stream_state",
+        "connection_entities",
         sa.Column("id", sa.String(length=64), nullable=False),
         sa.Column("tenant_id", sa.String(length=64), nullable=False),
         sa.Column("connection_id", sa.String(length=64), nullable=False),
         sa.Column("stream_name", sa.String(length=128), nullable=False),
+        sa.Column(
+            "sync_mode",
+            sa.String(length=32),
+            server_default="INCREMENTAL",
+            nullable=False,
+        ),
+        sa.Column(
+            "schedule",
+            sa.String(length=32),
+            server_default="manual",
+            nullable=False,
+        ),
+        sa.Column(
+            "sync_from",
+            sa.String(length=32),
+            server_default="all",
+            nullable=False,
+        ),
+        sa.Column("sync_from_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "is_enabled",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column(
+            "primary_key",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
+        sa.Column(
+            "fields_schema",
+            postgresql.JSONB(astext_type=sa.Text()),
+            server_default=sa.text("'[]'::jsonb"),
+            nullable=False,
+        ),
         sa.Column("cursor_field", sa.String(length=128), nullable=True),
         sa.Column("cursor_value", sa.Text(), nullable=True),
         sa.Column(
             "records_synced_count", sa.BigInteger(), server_default=sa.text("0"), nullable=False
         ),
-        sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("last_synced_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(
             ["connection_id"],
             ["ip.connections.id"],
+            name="fk_ip_connection_entities_connection_id",
             ondelete="CASCADE",
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -168,15 +191,23 @@ def upgrade() -> None:
             "tenant_id",
             "connection_id",
             "stream_name",
-            name="uq_ip_stream_state_tenant_conn_stream",
+            name="uq_ip_connection_entities_tenant_conn_stream",
         ),
         schema="ip",
     )
     op.create_index(
-        "idx_ip_stream_state_conn",
-        "connection_stream_state",
+        "idx_ip_connection_entities_conn",
+        "connection_entities",
         ["tenant_id", "connection_id"],
         unique=False,
+        schema="ip",
+    )
+    op.create_index(
+        "idx_ip_connection_entities_due_schedule",
+        "connection_entities",
+        ["schedule"],
+        unique=False,
+        postgresql_where=sa.text("is_enabled = true AND schedule != 'manual'"),
         schema="ip",
     )
     op.create_table(
@@ -393,11 +424,18 @@ def downgrade() -> None:
     )
     op.drop_table("sync_runs", schema="ip", if_exists=True)
     op.drop_index(
-        "idx_ip_stream_state_conn",
-        table_name="connection_stream_state",
+        "idx_ip_connection_entities_due_schedule",
+        table_name="connection_entities",
         schema="ip",
+        if_exists=True,
     )
-    op.drop_table("connection_stream_state", schema="ip")
+    op.drop_index(
+        "idx_ip_connection_entities_conn",
+        table_name="connection_entities",
+        schema="ip",
+        if_exists=True,
+    )
+    op.drop_table("connection_entities", schema="ip", if_exists=True)
     op.drop_index(
         "ix_ip_outbox_pending",
         table_name="outbox",
@@ -411,13 +449,6 @@ def downgrade() -> None:
         if_exists=True,
     )
     op.drop_table("outbox", schema="ip", if_exists=True)
-    op.drop_index(
-        op.f("ix_ip_connection_catalogs_connection_id"),
-        table_name="connection_catalogs",
-        schema="ip",
-        if_exists=True,
-    )
-    op.drop_table("connection_catalogs", schema="ip", if_exists=True)
     op.drop_index(
         op.f("ix_ip_connections_tenant_id"),
         table_name="connections",

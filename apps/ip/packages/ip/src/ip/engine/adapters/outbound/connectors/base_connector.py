@@ -197,7 +197,6 @@ class BaseConnector(ConnectorPort, ABC):
     def build_catalog_dto(
         connection_id: str,
         streams: Sequence[StreamSchemaDTO],
-        catalog_version: int = 1,
         discovered_at: str | None = None,
     ) -> DiscoveredCatalogDTO:
         """Helper to construct DiscoveredCatalogDTO with deterministic SHA-256 hash."""
@@ -215,7 +214,6 @@ class BaseConnector(ConnectorPort, ABC):
 
         return DiscoveredCatalogDTO(
             connection_id=connection_id,
-            catalog_version=catalog_version,
             catalog_hash=catalog_hash,
             streams=streams,
             discovered_at=discovered_at or datetime.now(UTC).isoformat(),
@@ -227,8 +225,12 @@ class BaseConnector(ConnectorPort, ABC):
         record_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str,
+        connection_id: str,
     ) -> RecordEnvelopeDTO | None:
         """Default fetch_record implementation returning None when unsupported."""
+        _ = (tenant_id, connection_id)
         return None
 
     @staticmethod

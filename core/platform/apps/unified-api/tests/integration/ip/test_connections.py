@@ -149,7 +149,7 @@ async def test_discover_connection_catalog(
     assert discover_response.status_code == 200, discover_response.text
     catalog_data = discover_response.json()
     assert catalog_data["connection_id"] == connection_id
-    assert catalog_data["catalog_version"] == 1
+    assert "catalog_version" not in catalog_data
     assert len(catalog_data["streams"]) == 3
     stream_names = [s["name"] for s in catalog_data["streams"]]
     assert "meters" in stream_names
@@ -369,3 +369,89 @@ async def test_update_nonexistent_connection_returns_404_not_found(
     )
     assert res.status_code == 404, res.text
     assert res.json()["code"] == "CONNECTION_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_connection_entities_subscription_lifecycle(
+    auth_client: httpx.AsyncClient,
+    seeded_api_token: dict[str, str],
+) -> None:
+    tenant_id = seeded_api_token["tenant_id"]
+
+    create_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections",
+        json={
+            "app_id": "http",
+            "name": "Entities Control Plane Connection",
+            "auth_type": "API_KEY",
+            "public_config": {"endpoint_url": "https://entities.gridpower.com"},
+            "raw_credentials": {"api_key": "token_entities"},
+            "endpoint_for_fingerprint": "https://entities.gridpower.com",
+        },
+    )
+    assert create_res.status_code == 201, create_res.text
+    connection_id = create_res.json()["id"]
+
+    # 1. Subscribe an entity on the connection
+    add_res = await auth_client.post(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities",
+        json={
+            "stream_name": "orders",
+            "sync_mode": "INCREMENTAL",
+            "schedule": "1h",
+            "sync_from": "all",
+            "primary_key": ["order_id"],
+            "fields": [
+                {"name": "order_id", "data_type": "string", "nullable": False},
+                {"name": "total_cents", "data_type": "integer", "nullable": False},
+            ],
+            "cursor_field": "updated_at",
+        },
+    )
+    assert add_res.status_code == 201, add_res.text
+    added = add_res.json()
+    assert added["entity_id"].startswith("ip_cent_")
+    assert added["stream_name"] == "orders"
+    assert added["schedule"] == "1h"
+    assert added["sync_from"] == "all"
+    assert added["primary_key"] == ["order_id"]
+    assert len(added["fields"]) == 2
+    assert added["records_synced_count"] == 0
+    assert added["last_synced_at"] is None
+
+    # 2. Subsequent GET returns persisted subscribed entity across navigation/reloads
+    list_res = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities"
+    )
+    assert list_res.status_code == 200, list_res.text
+    listed = list_res.json()
+    assert len(listed) == 1
+    assert listed[0]["stream_name"] == "orders"
+    assert len(listed[0]["fields"]) == 2
+
+    # 3. Update sync schedule and custom start date
+    patch_res = await auth_client.patch(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/orders",
+        json={
+            "schedule": "15m",
+            "sync_from": "custom",
+            "sync_from_at": "2026-01-15T00:00:00Z",
+        },
+    )
+    assert patch_res.status_code == 200, patch_res.text
+    patched = patch_res.json()
+    assert patched["schedule"] == "15m"
+    assert patched["sync_from"] == "custom"
+    assert patched["sync_from_at"] is not None
+
+    # 4. Unsubscribe / remove entity
+    del_res = await auth_client.delete(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities/orders"
+    )
+    assert del_res.status_code == 204, del_res.text
+
+    after_del_res = await auth_client.get(
+        f"/api/v1/tenants/{tenant_id}/ip/connections/{connection_id}/entities"
+    )
+    assert after_del_res.status_code == 200, after_del_res.text
+    assert after_del_res.json() == []

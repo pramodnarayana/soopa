@@ -2,6 +2,7 @@ import type { FrontendLoggerPort } from '@soopa/ui';
 import { createContext, useContext } from 'react';
 import type { IpUserRole } from '../domain/role';
 import type { CatalogRepositoryPort } from '../ports/catalog-repository.port';
+import type { ConnectionEntityRepositoryPort } from '../ports/connection-entity-repository.port';
 import type { ConnectionRepositoryPort } from '../ports/connection-repository.port';
 import type { IntervalRepositoryPort } from '../ports/interval-repository.port';
 import type { RecordRepositoryPort } from '../ports/record-repository.port';
@@ -14,6 +15,7 @@ import type { TransformationRepositoryPort } from '../ports/transformation-repos
 export interface IpRepositoriesBundle {
   readonly catalog: CatalogRepositoryPort;
   readonly connections: ConnectionRepositoryPort;
+  readonly entities: ConnectionEntityRepositoryPort;
   readonly syncRuns: SyncRunRepositoryPort;
   readonly transformations: TransformationRepositoryPort;
   readonly stitches: StitchRepositoryPort;

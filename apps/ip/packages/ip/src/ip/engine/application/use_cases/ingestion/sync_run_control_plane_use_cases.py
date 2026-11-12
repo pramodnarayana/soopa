@@ -1,4 +1,4 @@
-"""Control Plane use cases for triggering and inspecting pull sync runs and stream checkpoints."""
+"""Control Plane use cases for triggering and inspecting pull sync runs."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from ip.engine.domain.connection.enums import ConnectionStatus
 from ip.engine.domain.exceptions import (
     ActiveSyncRunAlreadyExistsError,
     ConnectionDeactivatedError,
+    ConnectionEntityNotFoundError,
     ConnectionNotFoundError,
     IpError,
     Result,
     SyncRunNotFoundError,
 )
 from ip.engine.domain.replication.enums import SyncRunKind
-from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.uow import IpControlPlaneUnitOfWorkPort
 
@@ -50,20 +50,6 @@ class SyncRunSummaryDTO:
 
 
 @dataclass(frozen=True)
-class StreamStateSummaryDTO:
-    """Pure boundary DTO representing a ConnectionStreamState checkpoint aggregate."""
-
-    state_id: str
-    tenant_id: str
-    connection_id: str
-    stream_name: str
-    cursor_field: str | None
-    cursor_value: str | None
-    records_synced_count: int
-    last_synced_at: datetime
-
-
-@dataclass(frozen=True)
 class TriggerSyncRunCommand:
     """Command to request an asynchronous pull synchronization run via the Control Plane outbox."""
 
@@ -92,23 +78,6 @@ class GetSyncRunQuery:
     run_id: str
 
 
-@dataclass(frozen=True)
-class ListStreamStatesQuery:
-    """Query to list all stream state checkpoints for a connection."""
-
-    tenant_id: str
-    connection_id: str
-
-
-@dataclass(frozen=True)
-class ResetStreamCheckpointCommand:
-    """Command to reset a stream's incremental checkpoint cursor to force full historical re-sync."""
-
-    tenant_id: str
-    connection_id: str
-    stream_name: str
-
-
 def _to_sync_run_dto(run: SyncRun) -> SyncRunSummaryDTO:
     return SyncRunSummaryDTO(
         run_id=run.id,
@@ -130,19 +99,6 @@ def _to_sync_run_dto(run: SyncRun) -> SyncRunSummaryDTO:
         started_at=run.started_at,
         finished_at=run.finished_at,
         created_at=run.created_at,
-    )
-
-
-def _to_stream_state_dto(state: ConnectionStreamState) -> StreamStateSummaryDTO:
-    return StreamStateSummaryDTO(
-        state_id=state.id,
-        tenant_id=state.tenant_id,
-        connection_id=state.connection_id,
-        stream_name=state.stream_name,
-        cursor_field=state.cursor_field,
-        cursor_value=state.cursor_value,
-        records_synced_count=state.records_synced_count,
-        last_synced_at=state.last_synced_at,
     )
 
 
@@ -186,40 +142,41 @@ class TriggerSyncRunUseCase:
                     )
                 )
 
-            state = await self._cp_uow.stream_states.get_by_stream(
+            entity = await self._cp_uow.entities.get_by_stream(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream_name=command.stream_name,
             )
+            if entity is None:
+                bound.error("trigger_sync_run.entity_not_subscribed")
+                return Result.err(
+                    ConnectionEntityNotFoundError.for_stream(
+                        command.connection_id, command.stream_name
+                    )
+                )
+
             latest_gen = await self._cp_uow.sync_runs.get_latest_generation_id(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
             )
-
-            if command.forced_kind is not None:
-                kind = command.forced_kind
-            elif state is None or not state.cursor_value:
-                kind = SyncRunKind.INITIAL
-            else:
-                kind = SyncRunKind.INCREMENTAL
-
-            generation_id = (
-                latest_gen + 1 if kind == SyncRunKind.FULL_REFRESH else max(1, latest_gen)
+            plan_res = entity.plan_sync_execution(
+                latest_generation_id=latest_gen,
+                forced_kind=command.forced_kind,
             )
-            start_cursor = (
-                None
-                if kind == SyncRunKind.FULL_REFRESH
-                else (state.cursor_value if state is not None else None)
-            )
+            if plan_res.is_err or plan_res.value is None:
+                plan_err = plan_res.unwrap_err()
+                bound.error("trigger_sync_run.policy_rejected", error_code=plan_err.code.value)
+                return Result.err(plan_err)
+            plan = plan_res.value
 
             sync_run = SyncRun.request(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
-                kind=kind,
-                generation_id=generation_id,
-                start_checkpoint=start_cursor,
+                kind=plan.kind,
+                generation_id=plan.generation_id,
+                start_checkpoint=plan.start_checkpoint,
                 correlation_id=command.correlation_id,
             )
             await self._cp_uow.sync_runs.save(sync_run)
@@ -228,8 +185,8 @@ class TriggerSyncRunUseCase:
             bound.info(
                 "trigger_sync_run.completed",
                 run_id=sync_run.id,
-                kind=kind.value,
-                generation_id=generation_id,
+                kind=plan.kind.value,
+                generation_id=plan.generation_id,
                 trace_id=sync_run.trace_id,
             )
             return Result.ok(_to_sync_run_dto(sync_run))
@@ -296,103 +253,11 @@ class GetSyncRunUseCase:
             return Result.ok(_to_sync_run_dto(run))
 
 
-class ListStreamStatesUseCase:
-    """Lists all stream state checkpoints recorded for a connection."""
-
-    def __init__(self, *, control_plane_uow: IpControlPlaneUnitOfWorkPort) -> None:
-        self._cp_uow = control_plane_uow
-
-    async def execute(
-        self, query: ListStreamStatesQuery
-    ) -> Result[tuple[StreamStateSummaryDTO, ...], IpError]:
-        bound = logger.bind(
-            tenant_id=query.tenant_id,
-            connection_id=query.connection_id,
-        )
-        bound.info("list_stream_states.received")
-        async with self._cp_uow:
-            conn = await self._cp_uow.connections.get_by_id(query.connection_id)
-            if conn is None or conn.tenant_id != query.tenant_id:
-                bound.error("list_stream_states.connection_not_found")
-                return Result.err(ConnectionNotFoundError.for_id(query.connection_id))
-
-            states = await self._cp_uow.stream_states.list_by_connection(
-                tenant_id=query.tenant_id,
-                connection_id=query.connection_id,
-            )
-            dtos = tuple(_to_stream_state_dto(s) for s in states)
-            bound.info("list_stream_states.completed", count=len(dtos))
-            return Result.ok(dtos)
-
-
-class ResetStreamCheckpointUseCase:
-    """Resets a stream's incremental checkpoint cursor to force full historical re-sync."""
-
-    def __init__(self, *, control_plane_uow: IpControlPlaneUnitOfWorkPort) -> None:
-        self._cp_uow = control_plane_uow
-
-    async def execute(
-        self, command: ResetStreamCheckpointCommand
-    ) -> Result[StreamStateSummaryDTO, IpError]:
-        bound = logger.bind(
-            tenant_id=command.tenant_id,
-            connection_id=command.connection_id,
-            stream=command.stream_name,
-        )
-        bound.info("reset_stream_checkpoint.received")
-        async with self._cp_uow:
-            conn = await self._cp_uow.connections.get_by_id(command.connection_id)
-            if conn is None or conn.tenant_id != command.tenant_id:
-                bound.error("reset_stream_checkpoint.connection_not_found")
-                return Result.err(ConnectionNotFoundError.for_id(command.connection_id))
-
-            active_run = await self._cp_uow.sync_runs.get_active_run(
-                connection_id=command.connection_id,
-                stream=command.stream_name,
-                tenant_id=command.tenant_id,
-            )
-            if active_run is not None:
-                bound.error(
-                    "reset_stream_checkpoint.active_run_exists",
-                    existing_run_id=active_run.id,
-                )
-                return Result.err(
-                    ActiveSyncRunAlreadyExistsError.for_stream(
-                        command.connection_id, command.stream_name
-                    )
-                )
-
-            state = await self._cp_uow.stream_states.get_by_stream(
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                stream_name=command.stream_name,
-            )
-            if state is None:
-                state = ConnectionStreamState.create(
-                    tenant_id=command.tenant_id,
-                    connection_id=command.connection_id,
-                    stream_name=command.stream_name,
-                )
-            else:
-                state.reset_checkpoint()
-
-            await self._cp_uow.stream_states.save(state)
-            await self._cp_uow.commit()
-
-            bound.info("reset_stream_checkpoint.completed", state_id=state.id)
-            return Result.ok(_to_stream_state_dto(state))
-
-
 __all__ = [
     "GetSyncRunQuery",
     "GetSyncRunUseCase",
-    "ListStreamStatesQuery",
-    "ListStreamStatesUseCase",
     "ListSyncRunsQuery",
     "ListSyncRunsUseCase",
-    "ResetStreamCheckpointCommand",
-    "ResetStreamCheckpointUseCase",
-    "StreamStateSummaryDTO",
     "SyncRunSummaryDTO",
     "TriggerSyncRunCommand",
     "TriggerSyncRunUseCase",

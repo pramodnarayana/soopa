@@ -23,7 +23,7 @@ import {
   extractModifiablePayloadSeed,
 } from '../domain/replay/derive-replay-eligibility';
 import { isPlainJsonRecord, parseJsonObject } from '../domain/replay/parse-json-object';
-import { clampSimulatorRecordsPerPull, extractSimulatorSandboxId } from '../domain/simulator';
+import { clampSimulatorRecordsPerPull } from '../domain/simulator';
 import { buildRegisterStitchInput } from '../domain/stitch-registration';
 import type { IpTrace } from '../domain/trace';
 import {
@@ -557,16 +557,5 @@ describe('IP Domain: Type Guards', () => {
     expect(clampSimulatorRecordsPerPull('99999')).toBe(5_000);
     expect(clampSimulatorRecordsPerPull('not-a-number')).toBe(25);
     expect(clampSimulatorRecordsPerPull('120')).toBe(120);
-  });
-
-  it('extracts trimmed simulator sandboxId from connection publicConfig', () => {
-    expect(extractSimulatorSandboxId({ sandbox_id: '  sbx_00112233445566778899aabb  ' })).toBe(
-      'sbx_00112233445566778899aabb',
-    );
-    expect(extractSimulatorSandboxId({ sandbox_id: '   ' })).toBeNull();
-    expect(extractSimulatorSandboxId({ sandbox_id: 42 })).toBeNull();
-    expect(extractSimulatorSandboxId({ seed: 42 })).toBeNull();
-    expect(extractSimulatorSandboxId(null)).toBeNull();
-    expect(extractSimulatorSandboxId(undefined)).toBeNull();
   });
 });

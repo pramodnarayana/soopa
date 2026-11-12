@@ -85,6 +85,14 @@ def build_ip_cp_outbox_router(
     """Assembles the Two-Lane EventTypeOutboxRouter for IP Control Plane (`ip.outbox`)."""
     routes: dict[RouteKey, OutboxPublisherPort] = {
         (
+            IpEventType.CONNECTION_ENTITY_SUBSCRIBED,
+            EventProcessingLane.REALTIME,
+        ): orchestrator_realtime_publisher,
+        (
+            IpEventType.CONNECTION_ENTITY_SUBSCRIBED,
+            EventProcessingLane.BULK,
+        ): orchestrator_bulk_publisher,
+        (
             IpEventType.TRANSFORMATION_CHANGED,
             EventProcessingLane.REALTIME,
         ): orchestrator_realtime_publisher,

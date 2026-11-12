@@ -23,7 +23,9 @@ from ip.engine.domain.exceptions import (
 )
 from ip.engine.domain.replication.enums import IngestionMode
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.ports.outbound.catalog_repository_port import CatalogRepositoryPort
+from ip.engine.ports.outbound.connection_entity_repository_port import (
+    ConnectionEntityRepositoryPort,
+)
 from ip.engine.ports.outbound.connection_repository_port import ConnectionRepositoryPort
 from ip.engine.ports.outbound.connector_port import (
     AppSpecDTO,
@@ -45,7 +47,6 @@ from ip.engine.ports.outbound.replica_record_repository_port import ReplicaRecor
 from ip.engine.ports.outbound.replica_rejection_repository_port import (
     ReplicaRejectionRepositoryPort,
 )
-from ip.engine.ports.outbound.stream_state_repository_port import StreamStateRepositoryPort
 from ip.engine.ports.outbound.sync_run_repository_port import SyncRunRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import (
     TieredStoragePort,
@@ -152,11 +153,7 @@ class FakeControlPlaneUnitOfWork(IpControlPlaneUnitOfWorkPort):
         self.committed = False
 
     @property
-    def catalogs(self) -> CatalogRepositoryPort:
-        raise NotImplementedError
-
-    @property
-    def stream_states(self) -> StreamStateRepositoryPort:
+    def entities(self) -> ConnectionEntityRepositoryPort:
         raise NotImplementedError
 
     @property
@@ -279,7 +276,12 @@ class FakeSourceConnector(SourceConnectorPort):
         raise NotImplementedError
 
     async def discover(
-        self, connection_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        connection_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
         raise NotImplementedError
 
@@ -290,6 +292,9 @@ class FakeSourceConnector(SourceConnectorPort):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         return list(self._records.keys())
 
@@ -300,6 +305,9 @@ class FakeSourceConnector(SourceConnectorPort):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
         for k, v in self._records.items():
             yield RecordEnvelopeDTO(
@@ -311,8 +319,16 @@ class FakeSourceConnector(SourceConnectorPort):
             )
 
     async def fetch_record(
-        self, stream_name: str, record_id: str, public_config: JsonDict, credentials: JsonDict
+        self,
+        stream_name: str,
+        record_id: str,
+        public_config: JsonDict,
+        credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> RecordEnvelopeDTO | None:
+        _ = (tenant_id, connection_id)
         if record_id in self._records:
             return RecordEnvelopeDTO(
                 stream_name=stream_name,

@@ -16,30 +16,12 @@ export const SimulatorVelocityMode = {
 export type SimulatorVelocityModeValue =
   (typeof SimulatorVelocityMode)[keyof typeof SimulatorVelocityMode];
 
-export const SIMULATOR_CONFIG_KEYS = {
-  SANDBOX_ID: 'sandbox_id',
-  API_KEY: 'api_key',
-} as const;
-
 export type SimulatorBlueprintJson = JsonRecord | readonly unknown[];
-
-export interface SimulatorSandbox {
-  readonly id: string;
-  readonly tenantId: string;
-  readonly name: string;
-  readonly apiKeyPrefix: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface CreatedSimulatorSandbox extends SimulatorSandbox {
-  readonly apiKey: string;
-}
 
 export interface SimulatorEntity {
   readonly id: string;
   readonly tenantId: string;
-  readonly sandboxId: string;
+  readonly connectionId: string;
   readonly entityName: string;
   readonly primaryKeyField: string;
   readonly cursorField: string;
@@ -52,10 +34,6 @@ export interface SimulatorEntity {
   readonly version: number;
   readonly createdAt: string;
   readonly updatedAt: string;
-}
-
-export interface CreateSimulatorSandboxInput {
-  readonly name: string;
 }
 
 export interface CreateSimulatorEntityInput {
@@ -80,6 +58,30 @@ export interface UpdateSimulatorEntityInput {
   readonly chaosPolicy?: JsonRecord | null;
 }
 
+export const SimulatedPushDeliveryStyle = {
+  FULL_PAYLOAD: 'FULL_PAYLOAD',
+  THIN_PING: 'THIN_PING',
+} as const;
+
+export type SimulatedPushDeliveryStyleValue =
+  (typeof SimulatedPushDeliveryStyle)[keyof typeof SimulatedPushDeliveryStyle];
+
+export interface SimulatePushInput {
+  readonly streamName: string;
+  readonly count?: number;
+  readonly deliveryStyle?: SimulatedPushDeliveryStyleValue;
+  readonly correlationId?: string | null;
+}
+
+export interface SimulatePushResult {
+  readonly connectionId: string;
+  readonly streamName: string;
+  readonly recordsPushed: number;
+  readonly recordIds: readonly string[];
+  readonly traceIds: readonly string[];
+  readonly status: string;
+}
+
 export function clampSimulatorRecordsPerPull(rawInput: string | number): number {
   const parsed =
     typeof rawInput === 'number' ? Math.trunc(rawInput) : Number.parseInt(rawInput, 10);
@@ -90,18 +92,4 @@ export function clampSimulatorRecordsPerPull(rawInput: string | number): number 
     SIMULATOR_STREAM_LIMITS.MIN_RECORDS_PER_PULL,
     Math.min(SIMULATOR_STREAM_LIMITS.MAX_RECORDS_PER_PULL, parsed),
   );
-}
-
-export function extractSimulatorSandboxId(
-  publicConfig: JsonRecord | null | undefined,
-): string | null {
-  if (!publicConfig) {
-    return null;
-  }
-  const raw = publicConfig[SIMULATOR_CONFIG_KEYS.SANDBOX_ID];
-  if (typeof raw !== 'string') {
-    return null;
-  }
-  const trimmed = raw.trim();
-  return trimmed.length > 0 ? trimmed : null;
 }

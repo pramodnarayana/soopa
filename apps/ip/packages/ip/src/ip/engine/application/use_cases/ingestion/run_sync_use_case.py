@@ -20,14 +20,17 @@ from ip.engine.application.use_cases.connections.token_manager_service import (
 )
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.constants import IpIdPrefix
-from ip.engine.domain.exceptions import InvalidSyncRunStateError
+from ip.engine.domain.exceptions import (
+    ConnectionEntityNotFoundError,
+    InvalidSyncRunStateError,
+    IpErrorCode,
+)
 from ip.engine.domain.replication.enums import (
     IngestionMode,
     SyncRunKind,
     SyncRunStatus,
 )
 from ip.engine.domain.replication.inbound_record import InboundRecord
-from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from ip.engine.domain.replication.sync_run import SyncRun
 from ip.engine.ports.outbound.connector_port import RecordEnvelopeDTO, SourceConnectorPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
@@ -194,6 +197,8 @@ class RunSyncUseCase:
             )
             if pull_res.is_err:
                 state_err = pull_res.unwrap_err()
+                if sync_run.status == SyncRunStatus.RUNNING:
+                    return await self._fail_run(sync_run, state_err.code.value, state_err.message)
                 return RunSyncResultDTO(
                     run_id=sync_run.id,
                     tenant_id=sync_run.tenant_id,
@@ -251,6 +256,11 @@ class RunSyncUseCase:
         self, command: RunSyncCommand, trace_id: str
     ) -> tuple[SyncRun, str | None, SyncRunKind, int] | RunSyncResultDTO:
         async with self._control_plane_uow:
+            entity = await self._control_plane_uow.entities.get_by_stream(
+                tenant_id=command.tenant_id,
+                connection_id=command.connection_id,
+                stream_name=command.stream_name,
+            )
             active_run = await self._control_plane_uow.sync_runs.get_active_run(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
@@ -263,6 +273,60 @@ class RunSyncUseCase:
                     and command.trace_id is not None
                     and active_run.trace_id == command.trace_id
                 ):
+                    if entity is None:
+                        missing_err = ConnectionEntityNotFoundError.for_stream(
+                            command.connection_id, command.stream_name
+                        )
+                        active_run.fail(
+                            error_code=missing_err.code.value,
+                            error_message=missing_err.message,
+                        )
+                        await self._control_plane_uow.sync_runs.save(active_run)
+                        await self._control_plane_uow.commit()
+                        return RunSyncResultDTO(
+                            run_id=active_run.id,
+                            tenant_id=command.tenant_id,
+                            connection_id=command.connection_id,
+                            stream_name=command.stream_name,
+                            kind=active_run.kind.value,
+                            status=SyncRunStatus.FAILED.value,
+                            pages_synced=0,
+                            records_synced=0,
+                            bytes_synced=0,
+                            start_checkpoint=active_run.start_checkpoint,
+                            end_checkpoint=active_run.end_checkpoint,
+                            error_code=missing_err.code.value,
+                            error_message=missing_err.message,
+                        )
+
+                    pending_plan_res = entity.plan_sync_execution(
+                        latest_generation_id=active_run.generation_id,
+                        forced_kind=active_run.kind,
+                    )
+                    if pending_plan_res.is_err:
+                        pending_err = pending_plan_res.unwrap_err()
+                        active_run.fail(
+                            error_code=pending_err.code.value,
+                            error_message=pending_err.message,
+                        )
+                        await self._control_plane_uow.sync_runs.save(active_run)
+                        await self._control_plane_uow.commit()
+                        return RunSyncResultDTO(
+                            run_id=active_run.id,
+                            tenant_id=command.tenant_id,
+                            connection_id=command.connection_id,
+                            stream_name=command.stream_name,
+                            kind=active_run.kind.value,
+                            status="CONFLICT",
+                            pages_synced=0,
+                            records_synced=0,
+                            bytes_synced=0,
+                            start_checkpoint=active_run.start_checkpoint,
+                            end_checkpoint=active_run.end_checkpoint,
+                            error_code=pending_err.code.value,
+                            error_message=pending_err.message,
+                        )
+
                     start_res = active_run.start()
                     if start_res.is_err:
                         err = start_res.unwrap_err()
@@ -317,28 +381,69 @@ class RunSyncUseCase:
                     ),
                 )
 
-            state = await self._control_plane_uow.stream_states.get_by_stream(
-                tenant_id=command.tenant_id,
-                connection_id=command.connection_id,
-                stream_name=command.stream_name,
-            )
+            if entity is None:
+                missing_err = ConnectionEntityNotFoundError.for_stream(
+                    command.connection_id, command.stream_name
+                )
+                logger.error(
+                    "sync_run_entity_not_subscribed",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    stream=command.stream_name,
+                    error_code=missing_err.code.value,
+                    trace_id=trace_id,
+                )
+                return RunSyncResultDTO(
+                    run_id="",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    stream_name=command.stream_name,
+                    kind=(command.forced_kind or SyncRunKind.INITIAL).value,
+                    status=SyncRunStatus.FAILED.value,
+                    pages_synced=0,
+                    records_synced=0,
+                    bytes_synced=0,
+                    error_code=missing_err.code.value,
+                    error_message=missing_err.message,
+                )
+
             latest_gen = await self._control_plane_uow.sync_runs.get_latest_generation_id(
                 tenant_id=command.tenant_id,
                 connection_id=command.connection_id,
                 stream=command.stream_name,
             )
-
-            if command.forced_kind is not None:
-                kind = command.forced_kind
-            elif state is None or not state.cursor_value:
-                kind = SyncRunKind.INITIAL
-            else:
-                kind = SyncRunKind.INCREMENTAL
-
-            generation_id = (
-                latest_gen + 1 if kind == SyncRunKind.FULL_REFRESH else max(1, latest_gen)
+            plan_res = entity.plan_sync_execution(
+                latest_generation_id=latest_gen,
+                forced_kind=command.forced_kind,
             )
-            start_cursor = state.cursor_value if state else None
+            if plan_res.is_err or plan_res.value is None:
+                plan_err = plan_res.unwrap_err()
+                logger.error(
+                    "sync_run_entity_policy_rejected",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    stream=command.stream_name,
+                    error_code=plan_err.code.value,
+                    trace_id=trace_id,
+                )
+                return RunSyncResultDTO(
+                    run_id="",
+                    tenant_id=command.tenant_id,
+                    connection_id=command.connection_id,
+                    stream_name=command.stream_name,
+                    kind=(command.forced_kind or SyncRunKind.INITIAL).value,
+                    status="CONFLICT",
+                    pages_synced=0,
+                    records_synced=0,
+                    bytes_synced=0,
+                    error_code=plan_err.code.value,
+                    error_message=plan_err.message,
+                )
+
+            plan = plan_res.value
+            kind = plan.kind
+            generation_id = plan.generation_id
+            start_cursor = plan.start_checkpoint
 
             sync_run = SyncRun.create(
                 tenant_id=command.tenant_id,
@@ -414,6 +519,8 @@ class RunSyncUseCase:
             credentials=credentials,
             cursor=read_cursor,
             limit=command.page_batch_size,
+            tenant_id=connection.tenant_id,
+            connection_id=connection.id,
         ):
             if page_index >= command.max_pages:
                 logger.info(
@@ -587,24 +694,34 @@ class RunSyncUseCase:
 
         # 4. Update cursor checkpoint and SyncRun counters in Control Plane
         async with self._control_plane_uow:
-            state = await self._control_plane_uow.stream_states.get_by_stream(
+            entity = await self._control_plane_uow.entities.get_by_stream(
                 tenant_id=tenant_id,
                 connection_id=connection_id,
                 stream_name=stream_name,
             )
-            if state is None:
-                state = ConnectionStreamState.create(
-                    tenant_id=tenant_id,
+            if entity is None:
+                missing_err = InvalidSyncRunStateError(
+                    run_id=sync_run.id,
+                    current_status=sync_run.status.value,
+                    attempted_action="advance_checkpoint",
+                    code=IpErrorCode.CONNECTION_ENTITY_NOT_FOUND,
+                    message=(
+                        f"Subscribed entity '{stream_name}' on connection '{connection_id}' "
+                        "was removed during sync execution."
+                    ),
+                )
+                logger.error(
+                    "sync_run_persist_page_entity_missing",
+                    run_id=sync_run.id,
                     connection_id=connection_id,
-                    stream_name=stream_name,
-                    initial_cursor=next_cursor,
+                    stream=stream_name,
                 )
-            if next_cursor:
-                state.advance_checkpoint(
-                    new_cursor_value=next_cursor,
-                    records_in_batch=len(page),
-                )
-            await self._control_plane_uow.stream_states.save(state)
+                return Result.fail(missing_err)
+            entity.advance_checkpoint(
+                new_cursor_value=next_cursor,
+                records_in_batch=len(page),
+            )
+            await self._control_plane_uow.entities.save(entity)
             await self._control_plane_uow.sync_runs.save(sync_run)
             await self._control_plane_uow.commit()
 

@@ -7,8 +7,12 @@ from collections.abc import Callable
 import structlog
 from database.router import DatabaseRouterPort
 from fastapi import FastAPI
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ip.engine.adapters.inbound.api.routers.catalog_router import router as catalog_router
+from ip.engine.adapters.inbound.api.routers.connection_entities_router import (
+    router as connection_entities_router,
+)
 from ip.engine.adapters.inbound.api.routers.connections_router import router as connections_router
 from ip.engine.adapters.inbound.api.routers.ingress_router import router as ingress_router
 from ip.engine.adapters.inbound.api.routers.interval_streams_router import (
@@ -38,7 +42,8 @@ class IpApiModule:
     def __init__(
         self,
         *,
-        api_provider_factory: Callable[[], IpApiProviderPort] | None = None,
+        api_provider_factory: Callable[[], IpApiProviderPort[AsyncSession, DatabaseRouterPort]]
+        | None = None,
         container_configurator: Callable[[Container], object] | None = None,
     ) -> None:
         self._api_provider_factory = api_provider_factory or IpApiProvider
@@ -52,6 +57,7 @@ class IpApiModule:
         """Registers all Integration Platform HTTP routers and attaches IpApiProvider onto `app.state`."""
         app.state.ip_api_provider = self._api_provider_factory()
         app.include_router(connections_router)
+        app.include_router(connection_entities_router)
         app.include_router(catalog_router)
         app.include_router(ingress_router)
         app.include_router(transformations_router)

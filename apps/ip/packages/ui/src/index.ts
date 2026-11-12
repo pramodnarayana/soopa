@@ -8,21 +8,42 @@ export {
   type ActiveConnectionCardProps,
 } from './presentation/connections/ActiveConnectionCard';
 export {
-  ConnectionCatalogTab,
   ConnectionEntitiesSyncTab,
   type ConnectionEntitiesSyncTabProps,
+  reconcileSelectedStreamNames,
+} from './presentation/connections/ConnectionEntitiesSyncTab';
+export {
   ConnectionOverviewTab,
-  ConnectionStreamsSyncTab,
-} from './presentation/connections/ConnectionDetailTabs';
+  type ConnectionOverviewTabProps,
+} from './presentation/connections/ConnectionOverviewTab';
+export {
+  ConnectionSyncRunsSection,
+  type ConnectionSyncRunsSectionProps,
+} from './presentation/connections/ConnectionSyncRunsSection';
 export {
   CreateSimulatorEntityModal,
   type CreateSimulatorEntityModalProps,
 } from './presentation/connections/CreateSimulatorEntityModal';
 export {
+  CONNECTION_OVERVIEW_EXTENSIONS,
+  type ConnectionOverviewExtensionProps,
+  resolveConnectionOverviewExtension,
+} from './presentation/connections/connection-overview-extensions';
+export {
+  ConnectionDetailTab,
+  type ConnectionDetailTabValue,
   IpConnectionDetailPage,
   type IpConnectionDetailPageProps,
 } from './presentation/connections/IpConnectionDetailPage';
 export { IpConnectionsPage } from './presentation/connections/IpConnectionsPage';
+export {
+  SimulatorEntitiesSection,
+  type SimulatorEntitiesSectionProps,
+} from './presentation/connections/SimulatorEntitiesSection';
+export {
+  SubscribedEntitySchemaPanel,
+  type SubscribedEntitySchemaPanelProps,
+} from './presentation/connections/SubscribedEntitySchemaPanel';
 export {
   DailyCompletenessRibbonPanel,
   type DailyCompletenessRibbonPanelProps,

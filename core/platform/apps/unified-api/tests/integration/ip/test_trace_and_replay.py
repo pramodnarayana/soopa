@@ -11,6 +11,7 @@ pytestmark = pytest.mark.integration
 async def _create_connection_and_ingest_record(
     auth_client: httpx.AsyncClient,
     tenant_id: str,
+    tenant_slug: str,
     *,
     correlation_id: str = "CORR-MTR-900",
 ) -> str:
@@ -29,7 +30,7 @@ async def _create_connection_and_ingest_record(
     connection_id: str = conn_response.json()["id"]
 
     ingress_response = await auth_client.post(
-        f"/api/v1/tenants/{tenant_id}/ip/ingress/{connection_id}?stream=meters",
+        f"/api/v1/webhooks/{tenant_slug}/itron_mdm/{connection_id}?stream=meters",
         json={
             "meter_serial": correlation_id,
             "timestamp": "2026-10-27T08:00:00Z",
@@ -48,9 +49,11 @@ async def test_get_ip_trace_and_correlation_search(
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
     trace_id = await _create_connection_and_ingest_record(
         auth_client,
         tenant_id,
+        tenant_slug,
         correlation_id="CORR-MTR-101",
     )
 
@@ -100,9 +103,11 @@ async def test_replay_modify_and_replay_and_lineage_endpoints(
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
     root_trace_id = await _create_connection_and_ingest_record(
         auth_client,
         tenant_id,
+        tenant_slug,
         correlation_id="CORR-MTR-202",
     )
 
@@ -182,14 +187,17 @@ async def test_bulk_replay_stages_endpoint(
     seeded_api_token: dict[str, str],
 ) -> None:
     tenant_id = seeded_api_token["tenant_id"]
+    tenant_slug = seeded_api_token["tenant_slug"]
     trace_1 = await _create_connection_and_ingest_record(
         auth_client,
         tenant_id,
+        tenant_slug,
         correlation_id="CORR-BULK-01",
     )
     trace_2 = await _create_connection_and_ingest_record(
         auth_client,
         tenant_id,
+        tenant_slug,
         correlation_id="CORR-BULK-02",
     )
 

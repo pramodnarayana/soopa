@@ -29,6 +29,10 @@ from ip.engine.adapters.inbound.workers import (
     IpMultiShardStitchTickLoop,
     IpOrchestratorRouteRegistry,
 )
+from ip.engine.application.use_cases.normalization.auto_bind_default_transformation_use_case import (
+    AutoBindDefaultTransformationCommand,
+    AutoBindDefaultTransformationResultDTO,
+)
 from ip.engine.application.use_cases.normalization.process_inbound_range_use_case import (
     CanonicalChangeItemDTO,
 )
@@ -44,6 +48,7 @@ from ip.engine.bootstrap.workers import (
 )
 from ip.engine.domain.dispatch.enums import OutboundDispatchStatus
 from ip.engine.domain.enums import IpEventType, IpJobName
+from ip.engine.domain.exceptions import IpError, Result
 from ip.engine.domain.normalization.enums import NormalizationOutcome
 from ip.engine.domain.normalization.normalized_record import NormalizedRecord
 from ip.engine.domain.replication.enums import IngestionMode, SyncRunStatus
@@ -659,6 +664,74 @@ async def test_ip_outbox_routers_route_processing_lanes_to_matching_publishers()
     )
     await cp_router.publish(sync_evt)
     assert [e.id for e in deliv_bulk.published] == ["e4", "e5"]
+
+    entity_sub_evt = EventEnvelope(
+        id="e6",
+        source="ip.control_plane",
+        event_type=IpEventType.CONNECTION_ENTITY_SUBSCRIBED.value,
+        tenant_id="t_01",
+        idempotency_key="k6",
+        payload={
+            "entity_id": "ip_cent_01",
+            "tenant_id": "t_01",
+            "connection_id": "conn_01",
+            "stream_name": "orders",
+        },
+        lane=EventProcessingLane.REALTIME,
+    )
+    await cp_router.publish(entity_sub_evt)
+    assert [e.id for e in orch_rt.published] == ["e1", "e6"]
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_route_registry_dispatches_connection_entity_subscribed() -> None:
+    uow = FakeDataPlaneUoW()
+    uow_provider = FakeDataPlaneUoWProvider(uow)
+    recorded_commands: list[AutoBindDefaultTransformationCommand] = []
+
+    class _StubAutoBindExecutor:
+        async def execute(
+            self, command: AutoBindDefaultTransformationCommand
+        ) -> Result[AutoBindDefaultTransformationResultDTO, IpError]:
+            recorded_commands.append(command)
+            return Result.ok(
+                AutoBindDefaultTransformationResultDTO(
+                    bound=True,
+                    transformation_id="canonical.orders",
+                    transformation_version=1,
+                )
+            )
+
+    registry = IpOrchestratorRouteRegistry(
+        dp_uow_provider=uow_provider,
+        normalize_use_case=FakeNormalizeExecutor(),
+        backfill_use_case=FakeBackfillExecutor(),
+        auto_bind_transformation_use_case=_StubAutoBindExecutor(),
+    )
+    dispatcher = EventEnvelopeDispatcher()
+    registry.register_routes(dispatcher)
+
+    envelope = EventEnvelope(
+        id="evt_cent_sub_1",
+        source="ip.control_plane",
+        event_type=IpEventType.CONNECTION_ENTITY_SUBSCRIBED.value,
+        tenant_id="t_01",
+        idempotency_key="idem_cent_sub_1",
+        trace_id="tr_cent_01",
+        lane=EventProcessingLane.REALTIME,
+        payload={
+            "entity_id": "ip_cent_01",
+            "tenant_id": "t_01",
+            "connection_id": "conn_01",
+            "stream_name": "orders",
+        },
+    )
+    action = await dispatcher.dispatch_envelope(envelope)
+    assert action == ConsumerAction.ACK
+    assert len(recorded_commands) == 1
+    assert recorded_commands[0].tenant_id == "t_01"
+    assert recorded_commands[0].connection_id == "conn_01"
+    assert recorded_commands[0].stream_name == "orders"
 
 
 def test_unified_worker_registry_resolves_all_four_ip_workers() -> None:

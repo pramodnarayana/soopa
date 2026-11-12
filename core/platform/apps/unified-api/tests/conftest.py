@@ -399,6 +399,7 @@ async def seeded_api_token(db_session_factory):
 
         return {
             "tenant_id": tenant_id,
+            "tenant_slug": "test-auth-tenant",
             "client_id": client_id,
             "raw_secret": raw_secret,
             "header_value": f"sp_api_{client_id}.{raw_secret}",

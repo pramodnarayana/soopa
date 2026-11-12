@@ -278,7 +278,10 @@ class DeclarativeHttpConnector(BaseConnector):
         connection_id: str,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
     ) -> DiscoveredCatalogDTO:
+        _ = tenant_id
         streams: list[StreamSchemaDTO] = []
         for stream_name, _action in self._manifest.streams.items():
             streams.append(
@@ -305,6 +308,9 @@ class DeclarativeHttpConnector(BaseConnector):
         credentials: JsonDict,
         limit: int = 100,
         cursor: str | None = None,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> Sequence[str]:
         ids: list[str] = []
         async for record in self.read_stream(
@@ -313,6 +319,8 @@ class DeclarativeHttpConnector(BaseConnector):
             credentials=credentials,
             cursor=cursor,
             limit=limit,
+            tenant_id=tenant_id,
+            connection_id=connection_id,
         ):
             ids.append(record.record_id)
         return ids
@@ -586,7 +594,11 @@ class DeclarativeHttpConnector(BaseConnector):
         credentials: JsonDict,
         cursor: str | None = None,
         limit: int = 100,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> AsyncIterator[RecordEnvelopeDTO]:
+        _ = (tenant_id, connection_id)
         self._last_error = None
         action = self._manifest.streams.get(stream_name)
         if not action:
@@ -657,7 +669,11 @@ class DeclarativeHttpConnector(BaseConnector):
         command: WriteRecordCommand,
         public_config: JsonDict,
         credentials: JsonDict,
+        *,
+        tenant_id: str = "",
+        connection_id: str = "",
     ) -> WriteResultDTO:
+        _ = (tenant_id, connection_id)
         action_res = self._resolve_declarative_write_action(stream_name, command.operation)
         if action_res.error is not None or action_res.value is None:
             return WriteResultDTO.from_error(

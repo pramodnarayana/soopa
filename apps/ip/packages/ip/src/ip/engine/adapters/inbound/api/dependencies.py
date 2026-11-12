@@ -11,8 +11,31 @@ from database.router import DatabaseRouterPort
 from fastapi import Depends, HTTPException, Path, Request, status
 from identity.domain.identity_context import IdentityContext
 from ip.engine.application.api_provider_port import IpApiProviderPort
+from ip.engine.application.use_cases.connections.connection_entity_use_cases import (
+    AddConnectionEntityUseCase,
+    ListConnectionEntitiesUseCase,
+    RemoveConnectionEntityUseCase,
+    ResetConnectionEntityCheckpointUseCase,
+    UpdateConnectionEntityUseCase,
+)
+from ip.engine.application.use_cases.connections.discover_catalog_use_case import (
+    DiscoverCatalogUseCase,
+)
 from ip.engine.application.use_cases.connections.token_manager_service import (
     TokenManagerService,
+)
+from ip.engine.application.use_cases.ingestion.ingest_connection_webhook_use_case import (
+    IngestConnectionWebhookUseCase,
+)
+from ip.engine.application.use_cases.ingestion.receive_push_use_case import (
+    ReceivePushExecutorFactory,
+    ReceivePushExecutorPort,
+    ReceivePushUseCase,
+)
+from ip.engine.application.use_cases.ingestion.sync_run_control_plane_use_cases import (
+    GetSyncRunUseCase,
+    ListSyncRunsUseCase,
+    TriggerSyncRunUseCase,
 )
 from ip.engine.application.use_cases.replay.stage_replay_processor import StageReplayProcessorPort
 from ip.engine.domain.authorization import IpPermission, has_ip_permission
@@ -31,6 +54,7 @@ from ip.engine.ports.outbound.stitch_catalog_registry_port import (
     StitchCatalogRegistryPort,
     StitchShardGatewayPort,
 )
+from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
@@ -39,6 +63,7 @@ from ip.engine.ports.outbound.token_refresh_lock_port import (
 from ip.engine.ports.outbound.transformer_port import TransformerRegistryPort
 from ip.engine.ports.outbound.uow import (
     IpControlPlaneUnitOfWorkPort,
+    IpDataPlaneUnitOfWorkPort,
     IpDataPlaneUnitOfWorkProviderPort,
     IpTenantResolverPort,
 )
@@ -49,9 +74,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 logger = structlog.get_logger(__name__)
 
 
-def _get_api_provider(request: Request) -> IpApiProviderPort:
+def _get_api_provider(request: Request) -> IpApiProviderPort[AsyncSession, DatabaseRouterPort]:
     try:
-        provider: IpApiProviderPort | None = request.app.state.ip_api_provider
+        provider: IpApiProviderPort[AsyncSession, DatabaseRouterPort] | None = (
+            request.app.state.ip_api_provider
+        )
     except AttributeError:
         provider = None
     if provider is None:
@@ -77,6 +104,14 @@ def get_ip_control_plane_uow(
 ) -> IpControlPlaneUnitOfWorkPort:
     """Resolves an IpControlPlaneUnitOfWorkPort bound to the request Control Plane session."""
     return _get_api_provider(request).create_control_plane_uow(global_session)
+
+
+def get_tenant_repository(
+    request: Request,
+) -> TenantRepositoryPort:
+    """Resolves a short-lived session-scoped TenantRepositoryPort from the host DatabaseProvider."""
+    db_provider: DatabaseProvider = request.app.state.db_provider
+    return _get_api_provider(request).create_scoped_tenant_repository(db_provider.session)
 
 
 def get_ip_data_plane_uow_provider(request: Request) -> IpDataPlaneUnitOfWorkProviderPort:
@@ -105,7 +140,7 @@ def get_ip_data_plane_uow_provider(request: Request) -> IpDataPlaneUnitOfWorkPro
 
 async def require_tenant_member(
     request: Request,
-    session: Annotated[AsyncSession, Depends(get_ip_global_session)],
+    tenant_repo: Annotated[TenantRepositoryPort, Depends(get_tenant_repository)],
     tenant_id: Annotated[str, Path(...)],
 ) -> IdentityContext:
     """Enforces authenticated tenant membership for tenant-scoped IP routes."""
@@ -122,11 +157,8 @@ async def require_tenant_member(
         )
 
     if identity.is_platform_admin:
-        provider = _get_api_provider(request)
-        resolved_id = await provider.resolve_canonical_tenant_id(session, tenant_id)
-        canonical_tenant_id = resolved_id if resolved_id is not None else tenant_id
-        if session.in_transaction():
-            await session.commit()
+        tenant_summary = await tenant_repo.get_by_idp_tenant_id(tenant_id)
+        canonical_tenant_id = tenant_summary.id if tenant_summary is not None else tenant_id
         request.state.identity = identity
         request.state.ucp_tenant_id = canonical_tenant_id
         return identity
@@ -147,6 +179,72 @@ async def require_tenant_member(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=f"User does not belong to tenant {tenant_id}.",
     )
+
+
+def get_effective_ucp_tenant_id(
+    request: Request,
+    tenant_id: Annotated[str, Path(...)],
+    _identity: Annotated[IdentityContext, Depends(require_tenant_member)],
+) -> str:
+    """Returns the canonical UCP tenant ID resolved by the perimeter tenant guard."""
+    try:
+        resolved: str | None = request.state.ucp_tenant_id
+    except AttributeError:
+        resolved = None
+    if isinstance(resolved, str) and resolved.strip():
+        return resolved.strip()
+    return tenant_id
+
+
+async def resolve_tenant_id_by_slug(
+    request: Request,
+    tenant_repo: Annotated[TenantRepositoryPort, Depends(get_tenant_repository)],
+    tenant_slug: Annotated[str, Path(...)],
+) -> str:
+    """Resolves `{tenant_slug}` to canonical `tenant_id` for slug-addressed ingress routes."""
+    tenant_summary = await tenant_repo.get_by_slug(tenant_slug)
+    resolved_id = tenant_summary.id if tenant_summary is not None else None
+
+    try:
+        identity: IdentityContext | None = request.state.identity
+    except AttributeError:
+        identity = None
+
+    if (
+        identity is not None
+        and not identity.is_platform_admin
+        and (
+            resolved_id is None
+            or (
+                resolved_id not in identity.authorized_tenants and identity.tenant_id != resolved_id
+            )
+        )
+    ):
+        logger.error(
+            "ip_tenant_slug_authorization_failed",
+            requested_tenant_slug=tenant_slug,
+            context_tenant_id=identity.tenant_id,
+            authorized_tenants=sorted(identity.authorized_tenants),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"User does not belong to tenant '{tenant_slug}'.",
+        )
+
+    if resolved_id is None:
+        logger.error("ip_tenant_slug_not_found", requested_tenant_slug=tenant_slug)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Tenant '{tenant_slug}' was not found.",
+        )
+
+    canonical_tenant_id = (
+        str(identity.tenant_mapping.get(resolved_id, resolved_id))
+        if identity is not None
+        else resolved_id
+    )
+    request.state.ucp_tenant_id = canonical_tenant_id
+    return canonical_tenant_id
 
 
 def require_ip_permission(
@@ -177,7 +275,9 @@ def require_ip_permission(
 
 require_raw_records_read = require_ip_permission(IpPermission.IP_RECORDS_RAW_READ)
 require_canonical_records_read = require_ip_permission(IpPermission.IP_RECORDS_CANONICAL_READ)
+require_flows_read = require_ip_permission(IpPermission.IP_FLOWS_READ)
 require_flows_write = require_ip_permission(IpPermission.IP_FLOWS_WRITE)
+require_sync_trigger = require_ip_permission(IpPermission.IP_SYNC_TRIGGER)
 
 
 def get_catalog_registry(request: Request) -> CatalogRegistryPort:
@@ -259,6 +359,114 @@ def get_token_manager(
         cipher=cipher,
         token_refresher=token_refresher,
         lock_port=lock_port,
+    )
+
+
+def get_list_connection_entities_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ListConnectionEntitiesUseCase:
+    """Resolves ListConnectionEntitiesUseCase bound to the request Control Plane UoW."""
+    return ListConnectionEntitiesUseCase(control_plane_uow=cp_uow)
+
+
+def get_add_connection_entity_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> AddConnectionEntityUseCase:
+    """Resolves AddConnectionEntityUseCase bound to the request Control Plane UoW."""
+    return AddConnectionEntityUseCase(control_plane_uow=cp_uow)
+
+
+def get_update_connection_entity_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> UpdateConnectionEntityUseCase:
+    """Resolves UpdateConnectionEntityUseCase bound to the request Control Plane UoW."""
+    return UpdateConnectionEntityUseCase(control_plane_uow=cp_uow)
+
+
+def get_remove_connection_entity_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> RemoveConnectionEntityUseCase:
+    """Resolves RemoveConnectionEntityUseCase bound to the request Control Plane UoW."""
+    return RemoveConnectionEntityUseCase(control_plane_uow=cp_uow)
+
+
+def get_reset_connection_entity_checkpoint_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ResetConnectionEntityCheckpointUseCase:
+    """Resolves ResetConnectionEntityCheckpointUseCase bound to the request Control Plane UoW."""
+    return ResetConnectionEntityCheckpointUseCase(control_plane_uow=cp_uow)
+
+
+def get_discover_catalog_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    cipher: Annotated[CipherPort, Depends(get_cipher)],
+    connectors: Annotated[Mapping[str, ConnectorPort], Depends(get_connectors)],
+    token_manager: Annotated[TokenManagerService, Depends(get_token_manager)],
+) -> DiscoverCatalogUseCase:
+    """Resolves DiscoverCatalogUseCase bound to request-scoped Control Plane dependencies."""
+    return DiscoverCatalogUseCase(
+        uow=cp_uow,
+        cipher=cipher,
+        connectors=connectors,
+        token_manager=token_manager,
+    )
+
+
+def get_trigger_sync_run_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> TriggerSyncRunUseCase:
+    """Resolves TriggerSyncRunUseCase bound to the request Control Plane UoW."""
+    return TriggerSyncRunUseCase(control_plane_uow=cp_uow)
+
+
+def get_list_sync_runs_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> ListSyncRunsUseCase:
+    """Resolves ListSyncRunsUseCase bound to the request Control Plane UoW."""
+    return ListSyncRunsUseCase(control_plane_uow=cp_uow)
+
+
+def get_get_sync_run_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+) -> GetSyncRunUseCase:
+    """Resolves GetSyncRunUseCase bound to the request Control Plane UoW."""
+    return GetSyncRunUseCase(control_plane_uow=cp_uow)
+
+
+def get_receive_push_executor_factory(
+    tiered_storage: Annotated[TieredStoragePort, Depends(get_tiered_storage)],
+    verifier: Annotated[InboundVerifierPort, Depends(get_inbound_verifier)],
+    decoder: Annotated[InboundPayloadDecoderPort, Depends(get_inbound_decoder)],
+    ack: Annotated[InboundAckPort, Depends(get_inbound_ack)],
+) -> ReceivePushExecutorFactory:
+    """Resolves a factory creating ReceivePushExecutorPort instances for Data Plane UoWs."""
+
+    def _create_push_executor(dp_uow: IpDataPlaneUnitOfWorkPort) -> ReceivePushExecutorPort:
+        return ReceivePushUseCase(
+            uow=dp_uow,
+            tiered_storage=tiered_storage,
+            verifier=verifier,
+            decoder=decoder,
+            ack=ack,
+        )
+
+    return _create_push_executor
+
+
+def get_ingest_connection_webhook_use_case(
+    cp_uow: Annotated[IpControlPlaneUnitOfWorkPort, Depends(get_ip_control_plane_uow)],
+    dp_uow_provider: Annotated[
+        IpDataPlaneUnitOfWorkProviderPort, Depends(get_ip_data_plane_uow_provider)
+    ],
+    push_executor_factory: Annotated[
+        ReceivePushExecutorFactory, Depends(get_receive_push_executor_factory)
+    ],
+) -> IngestConnectionWebhookUseCase:
+    """Resolves IngestConnectionWebhookUseCase orchestrating L1 webhook ingestion."""
+    return IngestConnectionWebhookUseCase(
+        control_plane_uow=cp_uow,
+        data_plane_uow_provider=dp_uow_provider,
+        push_executor_factory=push_executor_factory,
     )
 
 
@@ -352,29 +560,45 @@ def get_interval_rollup_repository(
 
 
 __all__ = [
+    "get_add_connection_entity_use_case",
     "get_catalog_registry",
     "get_cipher",
     "get_columnar_batch_processor",
     "get_connectors",
+    "get_discover_catalog_use_case",
+    "get_effective_ucp_tenant_id",
+    "get_get_sync_run_use_case",
     "get_inbound_ack",
     "get_inbound_decoder",
     "get_inbound_verifier",
+    "get_ingest_connection_webhook_use_case",
     "get_interval_rollup_repository",
     "get_ip_control_plane_uow",
     "get_ip_data_plane_uow_provider",
     "get_ip_global_session",
     "get_ip_stage_replay_processors",
+    "get_list_connection_entities_use_case",
+    "get_list_sync_runs_use_case",
+    "get_receive_push_executor_factory",
+    "get_remove_connection_entity_use_case",
+    "get_reset_connection_entity_checkpoint_use_case",
     "get_stitch_catalog_registry",
     "get_stitch_shard_gateway",
+    "get_tenant_repository",
     "get_tiered_storage",
     "get_token_manager",
     "get_token_refresh_lock",
     "get_token_refresher",
     "get_transformer_registry",
+    "get_trigger_sync_run_use_case",
+    "get_update_connection_entity_use_case",
     "get_workflow_definition_registry",
     "require_canonical_records_read",
+    "require_flows_read",
     "require_flows_write",
     "require_ip_permission",
     "require_raw_records_read",
+    "require_sync_trigger",
     "require_tenant_member",
+    "resolve_tenant_id_by_slug",
 ]

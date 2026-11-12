@@ -11,8 +11,8 @@ from database.types import GlobalSession, TenantSession
 from ip.engine.adapters.outbound.auth.resolver import AuthStrategyResolver
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
 from ip.engine.bootstrap.container import Container
-from ip.engine.domain.connection.catalog import ConnectorPropertySchema
 from ip.engine.domain.connection.http_spec import DeclarativeManifest, HttpActionSpec
+from ip.engine.domain.connection.property_schema import ConnectorPropertySchema
 from ip.engine.domain.exceptions import ConnectorNotFoundError, Result, TenantShardNotFoundError
 from ip.engine.ports.outbound.catalog_registry_port import CatalogConnectorMapping
 from ip.engine.ports.outbound.uow import IpTenantResolverPort

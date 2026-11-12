@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from contextlib import AbstractAsyncContextManager
 
 from database.provider import DatabaseProvider
 from database.router import DatabaseRouterPort
@@ -51,8 +52,8 @@ from ip.engine.adapters.outbound.auth.token_refresh_lock import (
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
 from ip.engine.adapters.outbound.connectors.generic_http_connector import GenericHttpConnector
 from ip.engine.adapters.outbound.connectors.sftp_connector import SftpConnector
-from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
-    SqlAlchemyCatalogRepository,
+from ip.engine.adapters.outbound.database.control_plane.connection_entity_repository import (
+    SqlAlchemyConnectionEntityRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
@@ -60,11 +61,12 @@ from ip.engine.adapters.outbound.database.control_plane.connection_repository im
 from ip.engine.adapters.outbound.database.control_plane.stitch_repository import (
     SqlAlchemyStitchRepository,
 )
-from ip.engine.adapters.outbound.database.control_plane.stream_state_repository import (
-    SqlAlchemyStreamStateRepository,
-)
 from ip.engine.adapters.outbound.database.control_plane.sync_run_repository import (
     SqlAlchemySyncRunRepository,
+)
+from ip.engine.adapters.outbound.database.control_plane.tenant_repository import (
+    SessionScopedTenantRepository,
+    SqlAlchemyTenantRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.transformation_repository import (
     SqlAlchemyTransformationRepository,
@@ -277,6 +279,7 @@ from ip.engine.ports.outbound.inbound_verifier_port import InboundVerifierPort
 from ip.engine.ports.outbound.interval_rollup_repository_port import IntervalRollupRepositoryPort
 from ip.engine.ports.outbound.record_extractor_port import RecordExtractorRegistry
 from ip.engine.ports.outbound.stitch_catalog_registry_port import StitchCatalogRegistryPort
+from ip.engine.ports.outbound.tenant_repository_port import TenantRepositoryPort
 from ip.engine.ports.outbound.tiered_storage_port import TieredStoragePort
 from ip.engine.ports.outbound.token_refresh_lock_port import (
     OAuth2TokenRefresherPort,
@@ -345,11 +348,25 @@ def create_ip_control_plane_uow(
     return SqlAlchemyIpControlPlaneUnitOfWork(
         global_session,
         connections=SqlAlchemyConnectionRepository(global_session),
-        catalogs=SqlAlchemyCatalogRepository(global_session),
-        stream_states=SqlAlchemyStreamStateRepository(global_session),
+        entities=SqlAlchemyConnectionEntityRepository(global_session),
         sync_runs=SqlAlchemySyncRunRepository(global_session),
         transformations=SqlAlchemyTransformationRepository(global_session),
         stitches=SqlAlchemyStitchRepository(global_session),
+    )
+
+
+def create_ip_tenant_repository(global_session: AsyncSession) -> TenantRepositoryPort:
+    """Composition root factory assembling SqlAlchemyTenantRepository."""
+    return SqlAlchemyTenantRepository(global_session)
+
+
+def create_ip_scoped_tenant_repository(
+    session_scope: Callable[[], AbstractAsyncContextManager[AsyncSession]],
+) -> TenantRepositoryPort:
+    """Composition root factory assembling short-lived SessionScopedTenantRepository."""
+    return SessionScopedTenantRepository(
+        session_scope=session_scope,
+        repository_factory=create_ip_tenant_repository,
     )
 
 
@@ -994,8 +1011,10 @@ __all__ = [
     "create_ip_inbound_decoder",
     "create_ip_inbound_verifier",
     "create_ip_interval_rollup_repository",
+    "create_ip_scoped_tenant_repository",
     "create_ip_stitch_dispatcher",
     "create_ip_stitch_worker_tick",
+    "create_ip_tenant_repository",
     "create_ip_tenant_resolver",
     "create_ip_tenant_uow_provider",
     "create_ip_tiered_storage",

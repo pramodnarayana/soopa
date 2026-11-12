@@ -10,12 +10,6 @@ from typing import Literal
 import structlog
 import yaml
 from ip.engine.adapters.outbound.connectors.catalog_registry import ConnectorCatalogRegistry
-from ip.engine.domain.connection.catalog import (
-    ConnectorProperty,
-    ConnectorPropertySchema,
-    DropdownOption,
-    OAuthConfig,
-)
 from ip.engine.domain.connection.enums import (
     PaginationType,
     PropertyType,
@@ -24,6 +18,12 @@ from ip.engine.domain.connection.http_spec import (
     DeclarativeManifest,
     HttpActionSpec,
     PaginationConfig,
+)
+from ip.engine.domain.connection.property_schema import (
+    ConnectorProperty,
+    ConnectorPropertySchema,
+    DropdownOption,
+    OAuthConfig,
 )
 from ip.engine.domain.exceptions import ManifestParseFailureError, Result
 

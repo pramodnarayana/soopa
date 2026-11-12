@@ -28,6 +28,10 @@ from ip.engine.application.use_cases.intervals.process_interval_batch_use_case i
     ProcessIntervalBatchCommand,
     ProcessIntervalBatchResponse,
 )
+from ip.engine.application.use_cases.normalization.auto_bind_default_transformation_use_case import (
+    AutoBindDefaultTransformationCommand,
+    AutoBindDefaultTransformationResultDTO,
+)
 from ip.engine.application.use_cases.normalization.backfill_stream_normalization_use_case import (
     BackfillStreamNormalizationCommand,
     BackfillStreamNormalizationResultDTO,
@@ -76,6 +80,14 @@ class IpBackfillStreamNormalizationExecutorPort(Protocol):
     ) -> Result[BackfillStreamNormalizationResultDTO, IpError]: ...
 
 
+class IpAutoBindDefaultTransformationExecutorPort(Protocol):
+    """Port for auto-binding connector-recommended default L3 transformations upon entity subscription."""
+
+    async def execute(
+        self, command: AutoBindDefaultTransformationCommand
+    ) -> Result[AutoBindDefaultTransformationResultDTO, IpError]: ...
+
+
 class IpStitchCanonicalDispatcherPort(Protocol):
     """Port for routing Layer-3 canonical events to Layer-4 Stitch runs and waiting steps."""
 
@@ -121,6 +133,7 @@ class IpProcessIntervalBatchExecutorPort(Protocol):
 
 
 __all__ = [
+    "IpAutoBindDefaultTransformationExecutorPort",
     "IpBackfillStreamNormalizationExecutorPort",
     "IpFetchRecordExecutorPort",
     "IpNormalizeReplicaExecutorPort",

@@ -5,14 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from identity.domain.constants import IdentityIdPrefix
-from ip.engine.adapters.outbound.database.control_plane.catalog_repository import (
-    SqlAlchemyCatalogRepository,
+from ip.engine.adapters.outbound.database.control_plane.connection_entity_repository import (
+    SqlAlchemyConnectionEntityRepository,
 )
 from ip.engine.adapters.outbound.database.control_plane.connection_repository import (
     SqlAlchemyConnectionRepository,
-)
-from ip.engine.adapters.outbound.database.control_plane.stream_state_repository import (
-    SqlAlchemyStreamStateRepository,
 )
 from ip.engine.adapters.outbound.database.data_plane.entity_map_repository import (
     SqlAlchemyGlobalEntityMapRepository,
@@ -23,15 +20,20 @@ from ip.engine.adapters.outbound.database.data_plane.replica_record_repository i
 from ip.engine.adapters.outbound.database.data_plane.replica_rejection_repository import (
     SqlAlchemyReplicaRejectionRepository,
 )
-from ip.engine.domain.connection.catalog import ConnectionCatalog
 from ip.engine.domain.connection.connection import Connection
 from ip.engine.domain.connection.enums import AuthType, ConnectionStatus
-from ip.engine.domain.connection.stream_schema import StreamField, StreamSchema
+from ip.engine.domain.connection.stream_schema import StreamField
 from ip.engine.domain.enums import IpIdPrefix
 from ip.engine.domain.normalization.normalized_record import GlobalEntityMap
-from ip.engine.domain.replication.enums import CursorKind, RejectionReason, SyncMode
+from ip.engine.domain.replication.connection_entity import ConnectionEntity
+from ip.engine.domain.replication.enums import (
+    CursorKind,
+    EntitySyncFrom,
+    EntitySyncSchedule,
+    RejectionReason,
+    SyncMode,
+)
 from ip.engine.domain.replication.replica_record import ReplicaRecord, ReplicaRejection
-from ip.engine.domain.replication.stream_state import ConnectionStreamState
 from seedwork.id_registry import SystemIdPrefix
 from seedwork.utils import generate_id
 
@@ -146,26 +148,6 @@ def test_control_plane_repository_bidirectional_mappers() -> None:
     tenant_id = generate_id(IdentityIdPrefix.TENANT.value)
     connection_id = generate_id(IpIdPrefix.CONNECTION.value)
 
-    catalog = ConnectionCatalog(
-        id=generate_id(IpIdPrefix.CATALOG.value),
-        connection_id=connection_id,
-        catalog_version=1,
-        catalog_hash="sha256_catalog_digest",
-        streams=[
-            StreamSchema(
-                name="records_alpha",
-                fields=[StreamField(name="id", data_type="string", nullable=False)],
-                primary_key=["id"],
-                cursor_field="updated_at",
-                supported_sync_modes=[SyncMode.INCREMENTAL],
-            )
-        ],
-        is_active=True,
-        discovered_at=now.isoformat(),
-    )
-    cat_orm = SqlAlchemyCatalogRepository._to_orm_model(catalog)
-    assert SqlAlchemyCatalogRepository._to_domain_model(cat_orm).streams[0].name == "records_alpha"
-
     connection = Connection(
         id=connection_id,
         tenant_id=tenant_id,
@@ -188,15 +170,27 @@ def test_control_plane_repository_bidirectional_mappers() -> None:
     conn_orm = SqlAlchemyConnectionRepository._to_orm_model(connection)
     assert SqlAlchemyConnectionRepository._to_domain_model(conn_orm).name == "Acme Prod"
 
-    state = ConnectionStreamState(
-        id=generate_id(IpIdPrefix.STREAM_STATE.value),
+    entity = ConnectionEntity(
+        id=generate_id(IpIdPrefix.CONNECTION_ENTITY.value),
         tenant_id=tenant_id,
         connection_id=connection_id,
         stream_name="records_alpha",
+        sync_mode=SyncMode.INCREMENTAL,
+        schedule=EntitySyncSchedule.HOURLY,
+        sync_from=EntitySyncFrom.ALL,
+        sync_from_at=None,
+        is_enabled=True,
+        primary_key=("id",),
+        fields=(StreamField(name="id", data_type="string", nullable=False),),
         cursor_field="updated_at",
         cursor_value="2026-11-02T00:00:00Z",
         records_synced_count=25,
         last_synced_at=now,
+        created_at=now,
+        updated_at=now,
     )
-    state_orm = SqlAlchemyStreamStateRepository._to_orm_model(state)
-    assert SqlAlchemyStreamStateRepository._to_domain_model(state_orm).records_synced_count == 25
+    entity_orm = SqlAlchemyConnectionEntityRepository._to_orm_model(entity)
+    restored_entity = SqlAlchemyConnectionEntityRepository._to_domain_model(entity_orm)
+    assert restored_entity.records_synced_count == 25
+    assert restored_entity.schedule == EntitySyncSchedule.HOURLY
+    assert restored_entity.fields[0].name == "id"
